@@ -73,3 +73,31 @@
 
 - Apply available Rust guidance when writing or reviewing Rust. Do not vendor
   agent skills or their supporting rule libraries into this repository.
+
+## Credentials and access
+
+- Never read, store, print, export, inspect, modify, or work around secrets.
+- Never invoke 1Password, keychain, SSH agents, credential helpers, or
+  authentication tooling unless the user explicitly authorizes that exact action
+  in the current request.
+- A request to push authorizes only use of the existing GitHub CLI session. Do
+  not expose tokens or alter credential configuration.
+- If authentication is unavailable, stop and report that fact. Do not retry via
+  another secret source.
+- Work only in repositories and GitHub organizations explicitly placed in scope;
+  do not inspect, list, modify, or infer access to another organization.
+
+## Change discipline and reporting
+
+- Preserve implementation unless the requested task requires code changes.
+- Treat security boundaries, repository identity, provider behavior,
+  control-plane safety, and account capabilities as first-class correctness
+  concerns.
+- Regenerate generated files with the project’s own tooling; never hand-edit
+  fingerprints, locks, checksums, or generated documentation.
+- Do not mechanically rewrite historical references when that makes provenance
+  or old release links false.
+- Distinguish a product failure from an upstream transient failure. Keep PR and
+  change descriptions factual: scope, security impact, validation, and known
+  follow-up work.
+- Commit with a DCO sign-off and, where configured, a cryptographic signature.
