@@ -153,5 +153,5 @@ build, preparation, and source-snapshot state. Simply running its host execution
 mode inside a pod would not supply the managed evidence contract. A Kubernetes
 path must preserve or explicitly evolve that contract.
 
-Reference: [Ayni architecture](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/ARCHITECTURE.md)
-and [managed environments](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/docs/product/environments.md).
+Reference: [Ayni architecture](https://github.com/ayni-oss/ayni/blob/main/ARCHITECTURE.md)
+and [managed environments](https://github.com/ayni-oss/ayni/blob/main/docs/product/environments.md).

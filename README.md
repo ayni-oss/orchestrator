@@ -83,6 +83,6 @@ commercial boundaries remain undecided.
 The primary source of intent is the product exploration on 2026-09-15. Technical
 claims about Ayni were checked against revision
 `f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee` of
-[`gdurandvadas/ayni`](https://github.com/gdurandvadas/ayni/tree/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee).
+[`ayni-oss/ayni`](https://github.com/ayni-oss/ayni).
 External product and library references are linked in the relevant documents;
 recheck their capabilities before implementation or public claims.

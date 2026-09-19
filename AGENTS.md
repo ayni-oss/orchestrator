@@ -71,7 +71,5 @@
 
 ## Rust guidance
 
-- Apply the pinned `rust-skills` guidance at `.agents/skills/rust/SKILL.md` when
-  writing or reviewing Rust. Its complete upstream rules are vendored alongside
-  the skill; attribution and the preserved MIT license are in
-  `third_party/rust-skills/`.
+- Apply available Rust guidance when writing or reviewing Rust. Do not vendor
+  agent skills or their supporting rule libraries into this repository.

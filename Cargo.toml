@@ -6,8 +6,8 @@ resolver = "3"
 edition = "2024"
 rust-version = "1.94"
 version = "0.1.0"
-license = "UNLICENSED"
-repository = "https://github.com/gdurandvadas/ayni-operator"
+license = "Apache-2.0"
+repository = "https://github.com/ayni-oss/orchestrator"
 publish = false
 
 [workspace.dependencies]

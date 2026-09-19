@@ -34,7 +34,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 
 | Milestone | Intended delivery PR title | Observable result | Status |
 | --- | --- | --- | --- |
-| M0: foundation and first deployment | `chore(workspace): establish Rust workspace and local deployment` | A checkout-built control-plane service runs on Docker Desktop Kubernetes | Complete — [PR #3](https://github.com/gdurandvadas/ayni-operator/pull/3) |
+| M0: foundation and first deployment | `chore(workspace): establish Rust workspace and local deployment` | A checkout-built control-plane service runs on Docker Desktop Kubernetes | Complete — evidence predates this repository import |
 | M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | In progress |
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | In progress |
 | M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Planned |

@@ -17,8 +17,8 @@ and actual built image. The lock hash alone does not identify every execution by
 Lock-consuming commands do not implicitly refresh stale locks. Quality commands
 own their managed launch; ordinary `env run` and `env shell` are development
 access and do not normalize quality evidence. Reference:
-[managed environments](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/docs/product/environments.md)
-and [capabilities](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/docs/product/capabilities.md).
+[managed environments](https://github.com/ayni-oss/ayni/blob/main/docs/product/environments.md)
+and [capabilities](https://github.com/ayni-oss/ayni/blob/main/docs/product/capabilities.md).
 
 ## Flow 1: enroll and prepare repositories
 
@@ -118,4 +118,4 @@ orchestrator authorization. Preserve that distinction. Build-time package hooks 
 execute and access the network even when the eventual quality runtime is more
 restricted. Isolate builders and validate outer resource limits independently.
 
-Reference: [Ayni security model](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/docs/product/security.md).
+Reference: [Ayni security model](https://github.com/ayni-oss/ayni/blob/main/docs/product/security.md).

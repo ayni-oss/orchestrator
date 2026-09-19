@@ -85,7 +85,7 @@ them. Treat missing or incomplete required evidence as an explicit incomplete
 outcome. Distinguish infrastructure/setup failure from a code-quality failure and
 from an unverified product claim.
 
-Reference: [Ayni signal schema v4](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/docs/product/signals/v4.md).
+Reference: [Ayni signal schema v4](https://github.com/ayni-oss/ayni/blob/main/docs/product/signals/v4.md).
 
 ## Evidence trust
 
@@ -102,7 +102,7 @@ Deterministic measurements are useful but do not prove the completeness of an
 agent's test selection. State that limitation in the outcome rather than requiring
 humans to specify every workflow in advance.
 
-Reference: [Ayni evidence limitations](https://github.com/gdurandvadas/ayni/blob/f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee/docs/product/security.md#persistent-state-and-evidence-limitations).
+Reference: [Ayni evidence limitations](https://github.com/ayni-oss/ayni/blob/main/docs/product/security.md#persistent-state-and-evidence-limitations).
 
 ## Concurrent edits and integration
 
