@@ -1,0 +1,2 @@
+# The vendored rust-skills source is retained byte-for-byte at its pinned upstream revision.
+/.agents/skills/rust/** -whitespace
