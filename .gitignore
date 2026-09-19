@@ -1,0 +1,7 @@
+/target/
+/.ayni/
+/.ayni.lock
+/.local/
+**/.DS_Store
+.agents/
+.codex/

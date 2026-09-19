@@ -1,0 +1,28 @@
+[checks]
+test = true
+coverage = false
+size = true
+complexity = true
+deps = true
+mutation = false
+
+[languages]
+enabled = ["rust"]
+
+[concurrency]
+amount = 1
+
+[rust]
+roots = ["."]
+
+[rust.size]
+"*.rs" = { warn = 400, fail = 700, exclude = ["target/**", ".ayni/**"] }
+
+[rust.complexity]
+fn_cyclomatic = { warn = 10, fail = 15 }
+fn_cognitive = { warn = 20, fail = 29 }
+
+[rust.deps.forbidden]
+"crates/domain" = ["crates/control-plane", "crates/worker"]
+"crates/control-plane" = ["crates/worker"]
+"crates/worker" = ["crates/control-plane"]

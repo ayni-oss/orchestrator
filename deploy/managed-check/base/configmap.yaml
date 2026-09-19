@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: managed-check-inputs
+data:
+  ORCHESTRATOR_REPOSITORY_URL: https://github.com/gdurandvadas/ayni.git
+  ORCHESTRATOR_REVISION: 42f2605d14aa980d14608a8d2f518bc05fcc47b6
+  ORCHESTRATOR_LOCK_SHA256: 606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f
+  ORCHESTRATOR_AYNI_VERSION: 0.12.1
+  ORCHESTRATOR_WORKSPACE: /workspace/repository
+  ORCHESTRATOR_EVIDENCE_ROOT: /evidence
