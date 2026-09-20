@@ -61,6 +61,7 @@
   branch or implement directly on main.
 - After repository changes, commit and push unless explicitly instructed otherwise,
   and open a PR with an accurate scope and validation results.
+- Sign every commit with the Developer Certificate of Origin using `git commit -s`.
 - Once executable code exists, pin the Rust toolchain and run formatting, Clippy,
   tests, and compile checks with that toolchain, plus required CI checks locally.
   Exercise affected Kubernetes behavior on a disposable cluster before claiming
