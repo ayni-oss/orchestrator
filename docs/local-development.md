@@ -81,6 +81,19 @@ orchestrator action. A quality failure leaves validated artifacts and causes the
 Job to fail. Missing or mismatched artifacts are infrastructure failures and
 are never recorded as a successful managed result.
 
+To exercise the final-artifact gate, run:
+
+```sh
+scripts/local/run-artifact-rejection-check.sh
+```
+
+It runs the normal managed check in the selected topology, then a test-only
+wrapper removes `execution.json` before the worker's existing artifact-binding
+step. The Job must fail with `missing execution artifact`; a completed Job or a
+different failure does not satisfy the gate. The wrapper is mounted only by this
+dedicated test Job and does not alter the worker image or normal managed-check
+manifest. Inspect retained command logs before explicitly deleting its Job.
+
 ## M2: durable task API
 
 After `scripts/local/deploy.sh`, submit the same immutable managed-check inputs
