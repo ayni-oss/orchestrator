@@ -1,8 +1,8 @@
 # MVP delivery milestones
 
 Status: agreed delivery sequence. Each milestone has one delivery PR and an
-observable completion gate. M0 is complete; M1 and M2 have executable work and
-recorded local deployment evidence but remain incomplete until their gates pass.
+observable completion gate. M0 through M2 are complete with recorded local
+deployment evidence.
 
 Read the [MVP scope](mvp.md) for the product boundary and the
 [validation plan](mvp-validation.md) for engineering gates and pilot evaluation.
@@ -35,8 +35,8 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | Milestone | Intended delivery PR title | Observable result | Status |
 | --- | --- | --- | --- |
 | M0: foundation and first deployment | `chore(workspace): establish Rust workspace and local deployment` | A checkout-built control-plane service runs on Docker Desktop Kubernetes | Complete — evidence predates this repository import |
-| M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | In progress |
-| M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | In progress |
+| M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | Complete |
+| M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
 | M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Planned |
 | M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Planned |
 | M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | Planned |
@@ -128,11 +128,24 @@ and SHA-256 digests for `signals.json`, `execution.json`, and `build.json`.
 The test Job and temporary sidecar were removed only after that manifest was
 read through a temporary read-only inspector; retained evidence was preserved.
 
-**Completion gate:** deploy the worker and demonstrate managed success, an
+**Final completion evidence (2026-09-20, commit `9ec53c5`):** A clean detached
+validation worktree at `9ec53c5e3fe0b40610f23dec2f77bce10aaf276e` rebuilt and
+loaded `local/ayni-orchestrator-worker:git-9ec53c5e3fe0` (image index
+`sha256:5f7b522606728acca37efd7433f82a13c77a5ad77cb48842fb24a632f989d9c4`)
+into Docker Desktop Kubernetes `v1.36.1`. The dedicated, separately named
+artifact-rejection Job ran the real managed check through the normal isolated
+engine, then a test-only mounted wrapper removed `execution.json` before the
+unchanged worker's artifact-binding step. After 4m51s the worker failed with
+`missing execution artifact: /workspace/repository/.ayni/last/execution.json`;
+the Job did not complete and `managed-check-evidence` remained `Bound`. The
+wrapper exists only in the dedicated test manifest and does not alter the worker
+image or normal managed-check Job. This provides the required missing-artifact
+rejection and fresh-workspace reproduction evidence.
+
+**Completion gate: complete.** The worker was deployed with managed success, an
 intentional quality failure, stale-lock rejection, and missing or mismatched
-artifact rejection. Reproduce a result in a fresh validation workspace. Record
-all preparation, image, storage, and engine requirements. If the managed engine
-cannot run correctly on the selected local topology, the milestone remains blocked.
+artifact rejection. A result was reproduced from a fresh validation workspace;
+the preparation, image, storage, and engine requirements are recorded above.
 
 ## M2: durable orchestration
 
@@ -201,16 +214,17 @@ code `0` and SHA-256 digests for `signals.json`, `execution.json`, and
 `build.json`; the retained evidence PVC remained `Bound` and the temporary
 inspector pod was deleted.
 
-**Remaining M2 evidence:** Controller-driven managed success, intentional
-quality failure, and stale-lock rejection are retained. The required missing-or-
-mismatched-artifact rejection and a fresh validation-workspace reproduction
-still need managed evidence. Complete those M1 gates before marking either
-milestone complete.
+**Final M2 completion evidence (2026-09-20, commit `9ec53c5`):** M1's remaining
+missing-artifact rejection and fresh-workspace reproduction gates passed in the
+same selected Docker Desktop topology; see M1's final completion evidence above.
+Together with the controller-driven success, quality failure, stale-lock
+rejection, restart, duplicate-report, worker-loss, cancellation, late-report,
+retry-limit, and cleanup evidence recorded above, this completes M2.
 
-**Completion gate:** deploy the orchestration slice and exercise controller
-restart, duplicate events/reports, worker loss, cancellation, late completion,
-and cleanup alongside another active attempt. Task history and retained evidence
-survive replacement. PR-creation recovery is exercised in M3 when that action exists.
+**Completion gate: complete.** The orchestration slice was deployed and exercised
+for controller restart, duplicate events/reports, worker loss, cancellation, late
+completion, and cleanup alongside another active attempt. Task history and
+retained evidence survived replacement. PR-creation recovery remains M3 work.
 
 ## M3: request to draft PR
 

@@ -6,13 +6,12 @@ software development, built around Ayni's environment and quality contracts.
 The repository remains `ayni-operator` until its GitHub rename is completed.
 Product-facing names use **Ayni Orchestrator**.
 
-**Status: private M2 durable orchestration in progress.** This repository contains
+**Status: private M2 durable orchestration complete.** This repository contains
 the Rust workspace, the M1 managed-check worker, and a locally deployable control
-plane with persistent task and attempt state. Managed-execution and orchestration
-completion evidence is still in progress; it does not yet contain an agent runtime
-or a supported integration. The name is provisional; architecture proposals
-remain subject to implementation evidence. No delivery date or public launch is
-committed by these documents.
+plane with persistent task and attempt state. It does not yet contain an agent
+runtime or a supported integration. The name is provisional; architecture
+proposals remain subject to implementation evidence. No delivery date or public
+launch is committed by these documents.
 
 ## Intent
 
