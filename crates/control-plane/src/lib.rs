@@ -520,7 +520,7 @@ mod tests {
         let binding = serde_json::json!({"id":"trial","owner":"ayni-oss",
             "repository":"orchestrator","installation_id":1,
             "base_branch":"feat/request-to-draft-pr",
-            "lock_sha256":"606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f"});
+            "lock_sha256":"d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7"});
         let profile = serde_json::json!({"id":"other","provider":"anthropic",
             "model":"example","secret_ref":"other-key"});
         for (path, payload) in [

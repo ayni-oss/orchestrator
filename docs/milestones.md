@@ -85,8 +85,9 @@ Validate the engine/worker arrangement described in the
 A standalone Linux experiment may inform that choice, but does not replace the
 Docker Desktop deployment gate.
 
-**Selected initial inputs and topology (2026-09-17):** Ayni `0.12.1` is the
-pinned worker executable. The only supported source is the public Ayni Rust
+**Selected initial inputs and topology (2026-09-17; historical, superseded by
+the 2026-09-24 migration):** Ayni `0.12.1` was the pinned worker executable.
+The initially supported source was the public Ayni Rust
 workspace at release commit `42f2605d14aa980d14608a8d2f518bc05fcc47b6`, with
 `.ayni.lock` SHA-256
 `606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f`.
@@ -230,7 +231,7 @@ retained evidence survived replacement. PR-creation recovery remains M3 work.
 
 **Selected M3 design (2026-09-23):** Only the private
 `ayni-oss/orchestrator` Rust workspace is accepted. A generated `.ayni.lock`
-from pinned Ayni 0.12.1 binds the environment. An OpenAI-backed Rig coding Job receives fixed file and
+from pinned Ayni 0.13.0 binds the environment. An OpenAI-backed Rig coding Job receives fixed file and
 command tools in an attempt-owned checkout, then writes a local commit and Git
 bundle to a retained checkpoint. A separate Job checks out that frozen bundle,
 runs the unscoped managed Ayni check, and retains hash-bound evidence outside
@@ -259,6 +260,25 @@ dependencies) using the generated lock SHA-256
 `env build` and `env doctor` succeeded. The M3 Kustomize overlay rendered.
 The worker image built and a read-only-root smoke test found Ayni 0.12.1,
 Rust/Cargo 1.94.0, Git 2.39.5, and all three M3 executables.
+
+**Ayni source migration (2026-09-24):** The active worker binary download,
+managed-check source fixture, and generated orchestrator lock now target the
+supported [`ayni-oss/ayni` 0.13.0 release](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0).
+The source fixture pins release commit
+`4e67795c0cba21bd82c21bdd6c921417fbe29ff6` and its `.ayni.lock` SHA-256
+`d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7`.
+The orchestrator's regenerated lock SHA-256 is
+`7e324054c9f5663ab361ef7d168dbe1a7813fecea1072f0ec9f2cdaf7b901515`.
+The earlier 0.12.1 validation above remains historical evidence, not validation
+of this migration. Ayni 0.13.0's lock pins
+`ghcr.io/ayni-oss/ayni-provisioning@sha256:30453fcd751acff069c7b16a1cd2eba01051bd94b64cd9d333c4ce82a9ff0961`,
+which GHCR currently reports as `not found`; managed environment build and the
+live M3 proof therefore remain blocked pending a published supported image.
+For this migration, `cargo fmt --check`, Clippy, workspace tests (23 passing),
+`cargo check`, the M3 Kustomize render, and Ayni 0.13.0's unscoped host check
+(4/4 signals) passed. A managed `env build` with the published, digest-pinned
+`ayni-oss/ayni-env:0.13.0-debian` executor failed resolving that provisioning
+image; this is not a passing managed check or deployment result.
 
 **Blocked Docker Desktop deployment (2026-09-24, code commit `6dc4210`):**
 `scripts/local/deploy.sh m2` built and loaded

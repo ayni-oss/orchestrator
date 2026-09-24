@@ -282,18 +282,18 @@ mod tests {
 
     #[test]
     fn accepts_complete_lowercase_immutable_identities() -> Result<(), super::IdentityError> {
-        let revision = GitRevision::parse("42f2605d14aa980d14608a8d2f518bc05fcc47b6")?;
+        let revision = GitRevision::parse("4e67795c0cba21bd82c21bdd6c921417fbe29ff6")?;
         let digest = Sha256Digest::parse(
-            "606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f",
+            "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7",
         )?;
 
         assert_eq!(
             revision.as_str(),
-            "42f2605d14aa980d14608a8d2f518bc05fcc47b6"
+            "4e67795c0cba21bd82c21bdd6c921417fbe29ff6"
         );
         assert_eq!(
             digest.as_str(),
-            "606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f"
+            "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7"
         );
         Ok(())
     }
@@ -304,7 +304,7 @@ mod tests {
         assert!(GitRevision::parse("42F2605D14AA980D14608A8D2F518BC05FCC47B6").is_err());
         assert!(
             Sha256Digest::parse(
-                "sha256:606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f"
+                "sha256:d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7"
             )
             .is_err()
         );

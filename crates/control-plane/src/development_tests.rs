@@ -9,7 +9,7 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
         repository: "orchestrator".into(),
         installation_id: 1,
         base_branch: "feat/request-to-draft-pr".into(),
-        lock_sha256: "606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
     })?;
     store.put_agent_profile(&AgentProfile {
         id: "other".into(),
@@ -41,7 +41,7 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         repository: "orchestrator".into(),
         installation_id: 11,
         base_branch: "feat/request-to-draft-pr".into(),
-        lock_sha256: "606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
     })?;
     store.put_agent_profile(&AgentProfile {
         id: "coding".into(),
@@ -98,7 +98,7 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         repository: "orchestrator".into(),
         installation_id: 11,
         base_branch: "feat/request-to-draft-pr".into(),
-        lock_sha256: "606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
     })?;
     store.put_agent_profile(&AgentProfile {
         id: "coding".into(),
@@ -121,7 +121,7 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         DevelopmentPhase::Queued,
         DevelopmentPhase::Coding
     )?);
-    let candidate = "42f2605d14aa980d14608a8d2f518bc05fcc47b6";
+    let candidate = "4e67795c0cba21bd82c21bdd6c921417fbe29ff6";
     assert!(store.record_candidate(task.id, candidate)?);
     assert!(store.development_phase(
         task.id,

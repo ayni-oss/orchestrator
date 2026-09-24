@@ -5,11 +5,11 @@ mod tests {
 
     fn input() -> TaskInput {
         TaskInput {
-            repository_url: "https://github.com/gdurandvadas/ayni.git".to_owned(),
-            revision: "42f2605d14aa980d14608a8d2f518bc05fcc47b6".to_owned(),
-            lock_sha256: "606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f"
+            repository_url: "https://github.com/ayni-oss/ayni.git".to_owned(),
+            revision: "4e67795c0cba21bd82c21bdd6c921417fbe29ff6".to_owned(),
+            lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7"
                 .to_owned(),
-            ayni_version: "0.12.1".to_owned(),
+            ayni_version: "0.13.0".to_owned(),
         }
     }
     fn key(value: &str) -> Result<IdempotencyKey, StoreError> {

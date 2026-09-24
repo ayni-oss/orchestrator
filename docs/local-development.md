@@ -121,9 +121,13 @@ fixture is `examples/m3-retry-backoff/main.rs`; running
 Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This fixture is
 not the control plane's own retry schedule.
 
-Generate or refresh the lock with the pinned Ayni **0.12.1** executable used by
-the worker image. A lock made with the host's newer Ayni 0.13.0 is incompatible
-with this deployment and may reference a different provisioning registry.
+Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
+[`ayni-oss/ayni`](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0),
+the same release used by the worker image. Verify that the generated lock uses
+`ghcr.io/ayni-oss/ayni-provisioning`; the deprecated `gdurandvadas/ayni`
+release and registry are not supported. The 0.13.0 lock currently names a
+provisioning-image digest that GHCR returns as `not found`, so managed `env
+build` and deployed validation cannot pass until that image is available.
 
 Immediately before the live exercise, create a GitHub App and install it only
 on `ayni-oss/orchestrator`. Grant Metadata **read**, Contents **write**, and Pull

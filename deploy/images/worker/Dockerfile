@@ -23,11 +23,11 @@ COPY --from=builder /usr/local/rustup /usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 ENV RUSTUP_HOME=/usr/local/rustup
 RUN case "$TARGETARCH" in \
-      amd64) archive=ayni-ayni-v0.12.1-x86_64-unknown-linux-gnu.tar.gz; checksum=4ea58b517857de5ee18af2f1dc55fd9e4d9879ad28662c720e08c9eee37cc246 ;; \
-      arm64) archive=ayni-ayni-v0.12.1-aarch64-unknown-linux-gnu.tar.gz; checksum=8c05d56fbc4f64b2bc7e2f7361df00942b2d61f117c0a0d8a1ca79658b670980 ;; \
+      amd64) archive=ayni-ayni-v0.13.0-x86_64-unknown-linux-gnu.tar.gz; checksum=d0348577b129d9dac115b9a0bec164a73207c0d6a4bfdeb22ce8899060080ff8 ;; \
+      arm64) archive=ayni-ayni-v0.13.0-aarch64-unknown-linux-gnu.tar.gz; checksum=10219e359e9059637589dd10fee62c731a814717e3dfcc16cbe22cdee48ff581 ;; \
       *) echo "unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
-    && curl --fail --location --retry 3 --output /tmp/ayni.tar.gz "https://github.com/gdurandvadas/ayni/releases/download/ayni-v0.12.1/$archive" \
+    && curl --fail --location --retry 3 --output /tmp/ayni.tar.gz "https://github.com/ayni-oss/ayni/releases/download/ayni-v0.13.0/$archive" \
     && echo "$checksum  /tmp/ayni.tar.gz" | sha256sum --check \
     && tar --extract --gzip --strip-components=1 --file /tmp/ayni.tar.gz --directory /tmp \
     && install --mode=0755 /tmp/ayni /usr/local/bin/ayni \
