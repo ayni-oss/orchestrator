@@ -139,29 +139,25 @@ secrets; the App private key and OpenAI API key are. Keep credentials out of Git
 terminal arguments, and transcripts. The project does not require a particular
 password manager or secret-store vendor.
 
-For local development, put four files under the gitignored `.local/secrets/`
-directory: `app-id` (decimal App ID without a trailing newline),
-`private-key.pem` (the downloaded GitHub App key, retaining its newlines),
-`api-key` (the OpenAI key without a trailing newline), and `publisher-token`
-(a random token of at least 32 characters, without a trailing newline). Keep
-the directory accessible only to your user (`umask 077` before creating it).
-
-Copy the public `.env.example` to `.env`, keep its values as plain file paths,
-and run the local bootstrap script. It parses only the documented keys; it does
-not source the file, evaluate shell syntax, print values, or use a particular
-password manager. It creates or updates the three local Kubernetes Secrets:
+For local development, copy the public `.env.example` to the gitignored `.env`.
+Set the App ID, App installation ID, OpenAI key, and the downloaded GitHub App
+PEM encoded as one base64 line. Base64 makes the multiline PEM convenient for a
+dotenv file; it is not a security mechanism. The bootstrap script parses only
+the documented keys, does not source or evaluate the file, and removes its
+temporary decoded files on exit. It creates or updates the GitHub App and
+OpenAI Secrets, and creates the internal publisher Secret only if it is absent:
 
 ```sh
 cp .env.example .env
 scripts/local/configure-development-secrets.sh
 ```
 
-The App ID, PEM, OpenAI key, and publisher token become file-backed Kubernetes
-Secret keys. The App installation ID remains outside the Secret and is entered
-through the binding API. Do not commit the local files, print the Secrets as
-YAML, or put credential values in `--from-literal` arguments. Kubernetes
-Secrets are separate from Git but are not automatically encrypted at rest;
-treat Docker Desktop cluster data and backups as sensitive.
+The App ID, PEM, and OpenAI key become Kubernetes Secret keys. The App
+installation ID remains outside the Secret and is entered through the binding
+API. You do not create or manage the internal publisher token. Do not commit
+`.env` or print the Secrets as YAML. Kubernetes Secrets are separate from Git
+but are not automatically encrypted at rest; treat Docker Desktop cluster data
+and backups as sensitive.
 
 From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
 both images, renders the M3 overlay, and replaces the local control plane. It
