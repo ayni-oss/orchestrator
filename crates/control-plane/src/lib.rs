@@ -1,6 +1,10 @@
 //! HTTP API and durable orchestration surface for Ayni Orchestrator.
 
+mod development;
+mod development_jobs;
+mod github;
 mod orchestration;
+mod publication;
 
 use axum::{
     Json, Router,
@@ -10,6 +14,7 @@ use axum::{
     routing::{get, post},
 };
 use ayni_orchestrator_domain::{AttemptId, AttemptOutcome, IdempotencyKey, TaskId};
+use development::{AgentProfile, DevelopmentInput, DevelopmentTask, RepositoryBinding};
 use orchestration::{Store, StoreError, StoreHandle, TaskInput, TaskView};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -21,7 +26,9 @@ use std::{
 };
 use thiserror::Error;
 
+pub use development_jobs::DevelopmentReconciler;
 pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
+pub use publication::PublisherState;
 
 /// Configuration validated before the control plane starts accepting traffic.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -179,6 +186,7 @@ pub enum ConfigurationError {
 #[derive(Clone)]
 pub struct AppState {
     store: StoreHandle,
+    publisher: Option<Arc<PublisherState>>,
 }
 
 impl AppState {
@@ -193,13 +201,25 @@ impl AppState {
     ) -> Result<Self, StoreError> {
         Ok(Self {
             store: Arc::new(Mutex::new(Store::open(database_path, max_attempts)?)),
+            publisher: None,
         })
+    }
+
+    #[must_use]
+    pub fn with_publisher(mut self, publisher: Option<PublisherState>) -> Self {
+        self.publisher = publisher.map(Arc::new);
+        self
     }
 
     /// Returns the shared durable-store handle for the reconciler.
     #[must_use]
     pub fn store(&self) -> StoreHandle {
         Arc::clone(&self.store)
+    }
+
+    #[must_use]
+    pub fn publisher(&self) -> Option<Arc<PublisherState>> {
+        self.publisher.clone()
     }
 }
 
@@ -213,7 +233,68 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/tasks/{task_id}/retry", post(retry_task))
         .route("/v1/tasks/{task_id}/cancel", post(cancel_task))
         .route("/v1/attempts/{attempt_id}/reports", post(report_attempt))
+        .route("/v1/repository-bindings", post(put_repository_binding))
+        .route("/v1/agent-profiles", post(put_agent_profile))
+        .route("/v1/development-tasks", post(submit_development_task))
+        .route("/v1/development-tasks/{task_id}", get(development_task))
+        .route(
+            "/v1/development-tasks/{task_id}/cancel",
+            post(cancel_development_task),
+        )
+        .route(
+            "/v1/development-tasks/{task_id}/publish",
+            post(publication::publish),
+        )
         .with_state(state)
+}
+
+async fn put_repository_binding(
+    State(state): State<AppState>,
+    Json(binding): Json<RepositoryBinding>,
+) -> Result<StatusCode, ApiError> {
+    with_store(&state, |store| store.put_repository_binding(&binding))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn put_agent_profile(
+    State(state): State<AppState>,
+    Json(profile): Json<AgentProfile>,
+) -> Result<StatusCode, ApiError> {
+    with_store(&state, |store| store.put_agent_profile(&profile))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn submit_development_task(
+    State(state): State<AppState>,
+    Json(request): Json<SubmitDevelopmentRequest>,
+) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
+    let key = parse_key(request.idempotency_key)?;
+    let task = with_store(&state, |store| {
+        store.submit_development(&key, &request.input)
+    })?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn development_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<DevelopmentTask>, ApiError> {
+    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
+    Ok(Json(with_store(&state, |store| {
+        store.development_task(id)
+    })?))
+}
+
+async fn cancel_development_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    Json(request): Json<ActionRequest>,
+) -> Result<Json<DevelopmentTask>, ApiError> {
+    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
+    let key = parse_key(request.idempotency_key)?;
+    Ok(Json(with_store(&state, |store| {
+        store.cancel_development(id, &key)
+    })?))
 }
 
 async fn liveness() -> impl IntoResponse {
@@ -293,6 +374,13 @@ struct SubmitTaskRequest {
     idempotency_key: String,
     #[serde(flatten)]
     input: TaskInput,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SubmitDevelopmentRequest {
+    idempotency_key: String,
+    #[serde(flatten)]
+    input: DevelopmentInput,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -384,6 +472,7 @@ mod tests {
     fn state() -> Result<AppState, StoreError> {
         Ok(AppState {
             store: Arc::new(Mutex::new(Store::in_memory()?)),
+            publisher: None,
         })
     }
     #[test]
@@ -422,5 +511,63 @@ mod tests {
             r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"domain_model_revision":2}"#
         );
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn development_api_snapshots_configuration_and_reports_unsupported_provider()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let api = router(state()?);
+        let binding = serde_json::json!({"id":"trial","owner":"ayni-oss",
+            "repository":"orchestrator","installation_id":1,
+            "base_branch":"feat/request-to-draft-pr",
+            "lock_sha256":"606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f"});
+        let profile = serde_json::json!({"id":"other","provider":"anthropic",
+            "model":"example","secret_ref":"other-key"});
+        for (path, payload) in [
+            ("/v1/repository-bindings", binding),
+            ("/v1/agent-profiles", profile),
+        ] {
+            let response = api.clone().oneshot(json_request(path, &payload)?).await?;
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        }
+        let payload = serde_json::json!({"idempotency_key":"api-trial",
+            "repository_id":"trial","profile_id":"other",
+            "start_revision":"8a555ada2f6e3ee41de2485ed13da508beaebaeb",
+            "request":"Correct the retry formula",
+            "acceptance_criteria":["3 -> 8"]});
+        let response = api
+            .clone()
+            .oneshot(json_request("/v1/development-tasks", &payload)?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(body["phase"], "unsupported");
+        let task_id = body["id"].as_str().ok_or("task has no id")?;
+        let response = api
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/development-tasks/{task_id}"))
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let duplicate = api
+            .oneshot(json_request("/v1/development-tasks", &payload)?)
+            .await?;
+        assert_eq!(duplicate.status(), StatusCode::ACCEPTED);
+        Ok(())
+    }
+
+    fn json_request(
+        path: &str,
+        value: &serde_json::Value,
+    ) -> Result<Request<Body>, axum::http::Error> {
+        Request::builder()
+            .method("POST")
+            .uri(path)
+            .header("content-type", "application/json")
+            .body(Body::from(value.to_string()))
     }
 }

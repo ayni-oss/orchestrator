@@ -1,9 +1,10 @@
 # Local development
 
 M2 deploys a persistent control plane that accepts durable managed-check tasks
-and reconciles attempt-owned Jobs. It does not yet run an agent or create draft
-pull requests. Its readiness response reports `managed_execution: true` and
-`durable_orchestration: true`.
+and reconciles attempt-owned Jobs. The optional M3 overlay adds an API-driven
+coding agent, independent managed validation, and draft-PR publication. It has
+no browser UI. Its readiness response does not establish that M3 secrets or
+external services are available.
 
 ## Prerequisites
 
@@ -110,3 +111,65 @@ only failed or interrupted attempts can create a new attempt. Each task retains
 the configured `ORCHESTRATOR_MAX_ATTEMPTS` bound at submission (three by default;
 the local profile accepts one through ten), so a later deployment change does not
 expand its retries.
+
+## M3: API request to draft PR
+
+M3 supports only the private `ayni-oss/orchestrator` Rust workspace. The
+committed `.ayni.lock` must match the repository binding. The deliberately wrong
+fixture is `examples/m3-retry-backoff/main.rs`; running
+`scripts/local/check-m3-fixture.sh` before the task must fail at attempt 3.
+Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This fixture is
+not the control plane's own retry schedule.
+
+Generate or refresh the lock with the pinned Ayni **0.12.1** executable used by
+the worker image. A lock made with the host's newer Ayni 0.13.0 is incompatible
+with this deployment and may reference a different provisioning registry.
+
+Immediately before the live exercise, create a GitHub App and install it only
+on `ayni-oss/orchestrator`. Grant Metadata **read**, Contents **write**, and Pull
+requests **write**. Do not enable webhooks, organization permissions, workflow
+access, or a user authorization flow. Keep the App private key and OpenAI key
+outside Git and terminal transcripts. Create these Kubernetes Secrets in
+`ayni-orchestrator-dev`: `m3-github-app` with `app-id` and `private-key.pem`,
+`m3-publisher` with a randomly generated `token` of at least 32 characters,
+and `m3-openai` with `api-key`. The App installation ID is entered through the
+binding API, not placed in a Secret. Use the explicit `docker-desktop` context.
+
+From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
+both images, renders the M3 overlay, and replaces the local control plane. It
+preserves M2 SQLite and evidence PVCs and adds the `m3-checkpoints` PVC. Check
+`scripts/local/check.sh`, then use loopback `kubectl --context docker-desktop
+-n ayni-orchestrator-dev port-forward svc/control-plane 8080:8080` for the API.
+No endpoint should be publicly exposed.
+
+Configure one binding via `POST /v1/repository-bindings` with JSON fields
+`id`, `owner: "ayni-oss"`, `repository: "orchestrator"`, `installation_id`,
+`base_branch: "feat/request-to-draft-pr"`, and `lock_sha256` (lowercase SHA-256
+hex of `.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
+`provider: "openai"`, `model`, and `secret_ref: "m3-openai"`. Submit
+`POST /v1/development-tasks` with a unique `idempotency_key`, the binding and
+profile IDs, the exact 40-hex `start_revision`, a `request` to correct the
+fixture to `min(60, 2 × 2^(attempt−1))`, and `acceptance_criteria` containing
+the four empirical cases. Repeating a submission key with different content
+is rejected. Inspect `GET /v1/development-tasks/{task_id}`. Cancellation is
+`POST /v1/development-tasks/{task_id}/cancel` with a new idempotency key.
+Configured non-OpenAI providers return `unsupported` without a Job.
+
+The coding Job has only fixed checkout file/command tools, no Kubernetes
+service-account token, and no GitHub App key. Its frozen candidate bundle is
+retained on `m3-checkpoints`. The independent validation Job mounts that bundle
+read-only, writes original Ayni artifacts and a manifest to
+`managed-check-evidence`, and refuses to publish an unverified candidate. A
+quality failure or protected policy edit remains a failed task; test-file edits
+are disclosed in the task and draft PR. The PR-author Job has only the
+structured publish capability; the control plane owns GitHub token minting and
+deterministic branch/PR reconciliation. The draft PR targets the M3 delivery
+branch; neither PR is merged by this workflow.
+
+For the completion record, retain the deployed commit, image IDs, Docker and
+Kubernetes versions, rendered overlay, task and candidate IDs, evidence
+manifest digest, draft PR URL, failure and cancellation task IDs, and the
+result of restart/duplicate-action checks. A failed or unavailable external
+service must be reported as blocked; local tests cannot substitute for this
+live exercise. Checkpoints, SQLite state, and evidence PVCs are retained by
+normal Job cleanup. Do not delete these PVCs merely to repeat a task.

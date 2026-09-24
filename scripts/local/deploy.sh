@@ -2,6 +2,7 @@
 set -euo pipefail
 
 readonly repository_root="$(git rev-parse --show-toplevel)"
+readonly mode="${1:-m2}"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
 readonly namespace="ayni-orchestrator-dev"
@@ -20,7 +21,7 @@ metadata:
   name: $namespace
 EOF
 
-"$repository_root/scripts/local/render.sh" "$control_plane_image_ref" "$worker_image_ref" \
+"$repository_root/scripts/local/render.sh" "$control_plane_image_ref" "$worker_image_ref" "$mode" \
   | kubectl --context "$context" apply --server-side --field-manager ayni-orchestrator-local -f -
 kubectl --context "$context" --namespace "$namespace" rollout status deployment/control-plane --timeout=120s
 

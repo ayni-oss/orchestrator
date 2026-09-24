@@ -15,6 +15,13 @@ RUN apt-get update \
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY --from=builder /workspace/target/release/ayni-orchestrator-worker /usr/local/bin/ayni-orchestrator-worker
+COPY --from=builder /workspace/target/release/development-agent /usr/local/bin/development-agent
+COPY --from=builder /workspace/target/release/pr-agent /usr/local/bin/pr-agent
+COPY --from=builder /workspace/target/release/validate-candidate /usr/local/bin/validate-candidate
+COPY --from=builder /usr/local/cargo /usr/local/cargo
+COPY --from=builder /usr/local/rustup /usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:${PATH}"
+ENV RUSTUP_HOME=/usr/local/rustup
 RUN case "$TARGETARCH" in \
       amd64) archive=ayni-ayni-v0.12.1-x86_64-unknown-linux-gnu.tar.gz; checksum=4ea58b517857de5ee18af2f1dc55fd9e4d9879ad28662c720e08c9eee37cc246 ;; \
       arm64) archive=ayni-ayni-v0.12.1-aarch64-unknown-linux-gnu.tar.gz; checksum=8c05d56fbc4f64b2bc7e2f7361df00942b2d61f117c0a0d8a1ca79658b670980 ;; \

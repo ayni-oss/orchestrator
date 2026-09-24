@@ -37,7 +37,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M0: foundation and first deployment | `chore(workspace): establish Rust workspace and local deployment` | A checkout-built control-plane service runs on Docker Desktop Kubernetes | Complete — evidence predates this repository import |
 | M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | Complete |
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
-| M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Planned |
+| M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | In progress — live proof pending |
 | M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Planned |
 | M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | Planned |
 
@@ -227,6 +227,29 @@ completion, and cleanup alongside another active attempt. Task history and
 retained evidence survived replacement. PR-creation recovery remains M3 work.
 
 ## M3: request to draft PR
+
+**Selected M3 design (2026-09-23):** Only the private
+`ayni-oss/orchestrator` Rust workspace is accepted. A generated `.ayni.lock`
+from pinned Ayni 0.12.1 binds the environment. An OpenAI-backed Rig coding Job receives fixed file and
+command tools in an attempt-owned checkout, then writes a local commit and Git
+bundle to a retained checkpoint. A separate Job checks out that frozen bundle,
+runs the unscoped managed Ayni check, and retains hash-bound evidence outside
+the coding workspace. Only after success does a separate Rig PR-author Job call
+the control plane's structured, idempotent draft-PR action. The control plane
+holds the GitHub App key, mints repository-scoped installation tokens, and
+reconciles the deterministic task branch and PR. Other agent providers can be
+configured but receive an explicit unsupported result. The live proof uses the
+simple retry-backoff fixture, with expected seconds `1→2`, `2→4`, `3→8`, and
+`6→60`; its starting formula is deliberately incorrect.
+
+**Validation status:** Local Rust formatting, Clippy, tests, compile checks,
+Kustomize rendering, generated-lock verification, Docker Desktop deployment,
+and live API-to-draft-PR evidence must all be recorded against the final
+committed revision. A local test or simulated GitHub response is not a
+substitute for the deployed live proof. The narrow GitHub App installation and
+local Kubernetes Secrets are prerequisites for that final exercise. The draft
+PR targets the M3 delivery branch, which contains the new lock and fixture;
+neither draft PR nor delivery PR is merged automatically.
 
 Select one agent integration and the GitHub access mechanism. Provide an
 attempt-owned development checkout, scoped permissions, repository instructions,
