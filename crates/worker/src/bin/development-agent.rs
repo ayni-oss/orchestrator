@@ -214,12 +214,12 @@ fn git(workspace: &Path, args: &[&str]) -> Result<String, io::Error> {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let workspace = PathBuf::from(env::var("M3_WORKSPACE")?).canonicalize()?;
-    let checkpoint = PathBuf::from(env::var("M3_CHECKPOINT")?);
-    let start_revision = env::var("M3_START_REVISION")?;
-    let request = env::var("M3_REQUEST")?;
-    let criteria = env::var("M3_ACCEPTANCE_CRITERIA")?;
-    let model = env::var("M3_MODEL")?;
+    let workspace = PathBuf::from(env::var("DEVELOPMENT_WORKSPACE")?).canonicalize()?;
+    let checkpoint = PathBuf::from(env::var("DEVELOPMENT_CHECKPOINT")?);
+    let start_revision = env::var("DEVELOPMENT_START_REVISION")?;
+    let request = env::var("DEVELOPMENT_REQUEST")?;
+    let criteria = env::var("DEVELOPMENT_ACCEPTANCE_CRITERIA")?;
+    let model = env::var("AGENT_MODEL")?;
     let key = env::var("OPENAI_API_KEY")?;
     if git(&workspace, &["rev-parse", "HEAD"])? != start_revision {
         return Err("checkout does not match the task starting revision".into());

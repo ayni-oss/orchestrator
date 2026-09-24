@@ -97,16 +97,16 @@ impl Tool for PublishDraftPr {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let model = env::var("M3_MODEL")?;
+    let model = env::var("AGENT_MODEL")?;
     let key = env::var("OPENAI_API_KEY")?;
-    let context = match env::var("M3_PR_CONTEXT") {
+    let context = match env::var("DEVELOPMENT_PR_CONTEXT") {
         Ok(context) => context,
-        Err(_) => fs::read_to_string(env::var("M3_PR_CONTEXT_PATH")?)?,
+        Err(_) => fs::read_to_string(env::var("DEVELOPMENT_PR_CONTEXT_PATH")?)?,
     };
     let publisher = PublishDraftPr {
         client: Client::new(),
-        endpoint: env::var("M3_PUBLISH_ENDPOINT")?,
-        token: env::var("M3_PUBLISH_TOKEN")?,
+        endpoint: env::var("DEVELOPMENT_PUBLISH_ENDPOINT")?,
+        token: env::var("DEVELOPMENT_PUBLISH_TOKEN")?,
         result: Arc::new(Mutex::new(None)),
     };
     let client = openai::Client::new(&key)?;

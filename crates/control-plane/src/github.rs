@@ -1,4 +1,4 @@
-//! GitHub App operations for the one private M3 repository.
+//! GitHub App operations for the one private M3 sandbox repository.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -12,7 +12,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::development::DevelopmentTask;
+use crate::development::{DevelopmentTask, RepositoryBinding};
 
 #[derive(Clone)]
 pub struct GitHubApp {
@@ -90,20 +90,23 @@ impl GitHubApp {
         .map_err(|_| "could not sign GitHub App JWT".into())
     }
 
-    pub async fn installation_token(&self, installation_id: i64) -> Result<String, String> {
-        self.token_with_permissions(installation_id, true).await
+    pub async fn installation_token(
+        &self,
+        repository: &RepositoryBinding,
+    ) -> Result<String, String> {
+        self.token_with_permissions(repository, true).await
     }
 
-    pub async fn clone_token(&self, installation_id: i64) -> Result<String, String> {
-        self.token_with_permissions(installation_id, false).await
+    pub async fn clone_token(&self, repository: &RepositoryBinding) -> Result<String, String> {
+        self.token_with_permissions(repository, false).await
     }
 
     async fn token_with_permissions(
         &self,
-        installation_id: i64,
+        repository: &RepositoryBinding,
         publish: bool,
     ) -> Result<String, String> {
-        if installation_id <= 0 {
+        if repository.installation_id <= 0 {
             return Err("invalid installation ID".into());
         }
         let permissions = if publish {
@@ -114,12 +117,13 @@ impl GitHubApp {
         let response = self
             .client
             .post(format!(
-                "https://api.github.com/app/installations/{installation_id}/access_tokens"
+                "https://api.github.com/app/installations/{}/access_tokens",
+                repository.installation_id
             ))
             .header("User-Agent", "ayni-orchestrator-m3")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .bearer_auth(self.app_jwt()?)
-            .json(&json!({"repositories": ["orchestrator"], "permissions": permissions}))
+            .json(&json!({"repositories": [repository.repository], "permissions": permissions}))
             .send()
             .await
             .map_err(|error| format!("GitHub token request failed: {error}"))?;
@@ -150,14 +154,9 @@ impl GitHubApp {
             .candidate_commit
             .as_deref()
             .ok_or("task has no frozen candidate")?;
-        let token = self
-            .installation_token(task.repository.installation_id)
-            .await?;
+        let token = self.installation_token(&task.repository).await?;
         let branch = format!("m3/task-{}", task.id);
-        if let Some(pr) = self
-            .find_pr(&token, &task.repository.base_branch, &branch)
-            .await?
-        {
+        if let Some(pr) = self.find_pr(&token, &task.repository, &branch).await? {
             return pr.verified(candidate);
         }
         push_bundle(
@@ -166,28 +165,19 @@ impl GitHubApp {
             &task.input.start_revision,
             &branch,
             &token,
+            &task.repository,
         )?;
-        if let Some(pr) = self
-            .find_pr(&token, &task.repository.base_branch, &branch)
-            .await?
-        {
+        if let Some(pr) = self.find_pr(&token, &task.repository, &branch).await? {
             return pr.verified(candidate);
         }
-        self.create_pr(
-            &token,
-            &task.repository.base_branch,
-            &branch,
-            candidate,
-            title,
-            body,
-        )
-        .await
+        self.create_pr(&token, &task.repository, &branch, candidate, title, body)
+            .await
     }
 
     async fn create_pr(
         &self,
         token: &str,
-        base: &str,
+        repository: &RepositoryBinding,
         branch: &str,
         candidate: &str,
         title: &str,
@@ -195,12 +185,12 @@ impl GitHubApp {
     ) -> Result<(u64, String), String> {
         let response = self
             .client
-            .post("https://api.github.com/repos/ayni-oss/orchestrator/pulls")
+            .post(pulls_url(repository))
             .header("User-Agent", "ayni-orchestrator-m3")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .bearer_auth(token)
             .json(&json!({"title": title, "body": body, "head": branch,
-                "base": base, "draft": true}))
+                "base": repository.base_branch, "draft": true}))
             .send()
             .await;
         match response {
@@ -214,7 +204,7 @@ impl GitHubApp {
             _ => {
                 // A timeout or error may follow a successful GitHub create.
                 let pr = self
-                    .find_pr(token, base, branch)
+                    .find_pr(token, repository, branch)
                     .await?
                     .ok_or("PR creation outcome is uncertain; retry will reconcile")?;
                 pr.verified(candidate)
@@ -225,18 +215,18 @@ impl GitHubApp {
     async fn find_pr(
         &self,
         token: &str,
-        base: &str,
+        repository: &RepositoryBinding,
         branch: &str,
     ) -> Result<Option<PullRequest>, String> {
         let response = self
             .client
-            .get("https://api.github.com/repos/ayni-oss/orchestrator/pulls")
+            .get(pulls_url(repository))
             .header("User-Agent", "ayni-orchestrator-m3")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .bearer_auth(token)
             .query(&[
-                ("head", format!("ayni-oss:{branch}")),
-                ("base", base.to_owned()),
+                ("head", format!("{}:{branch}", repository.owner)),
+                ("base", repository.base_branch.clone()),
                 ("state", "all".to_owned()),
             ])
             .send()
@@ -262,6 +252,7 @@ fn push_bundle(
     start: &str,
     branch: &str,
     token: &str,
+    repository: &RepositoryBinding,
 ) -> Result<(), String> {
     let directory =
         tempfile::tempdir().map_err(|error| format!("scratch creation failed: {error}"))?;
@@ -285,12 +276,22 @@ fn push_bundle(
         directory.path(),
         &[
             "push",
-            "https://github.com/ayni-oss/orchestrator.git",
+            &format!(
+                "https://github.com/{}/{}.git",
+                repository.owner, repository.repository
+            ),
             &refspec,
         ],
         Some(token),
     )?;
     Ok(())
+}
+
+fn pulls_url(repository: &RepositoryBinding) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}/pulls",
+        repository.owner, repository.repository
+    )
 }
 
 fn git(directory: &Path, args: &[&str], token: Option<&str>) -> Result<(), String> {

@@ -8,42 +8,42 @@ spec:
       containers:
         - name: control-plane
           env:
-            - name: M3_GITHUB_APP_ID
+            - name: GITHUB_APP_ID
               valueFrom:
                 secretKeyRef:
-                  name: m3-github-app
+                  name: github-app-credentials
                   key: app-id
-            - name: M3_GITHUB_PRIVATE_KEY_PATH
+            - name: GITHUB_APP_PRIVATE_KEY_PATH
               value: /run/secrets/github/private-key.pem
-            - name: M3_CHECKPOINT_ROOT
+            - name: DEVELOPMENT_CHECKPOINT_ROOT
               value: /checkpoints
-            - name: M3_EVIDENCE_ROOT
+            - name: DEVELOPMENT_EVIDENCE_ROOT
               value: /evidence
-            - name: M3_INTERNAL_PUBLISH_TOKEN
+            - name: DEVELOPMENT_PUBLISH_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: m3-publisher
+                  name: development-publisher-auth
                   key: token
           volumeMounts:
             - name: github-app-key
               mountPath: /run/secrets/github
               readOnly: true
-            - name: m3-checkpoints
+            - name: development-checkpoints
               mountPath: /checkpoints
               readOnly: true
-            - name: m3-evidence
+            - name: development-evidence
               mountPath: /evidence
               readOnly: true
       volumes:
         - name: github-app-key
           secret:
-            secretName: m3-github-app
+            secretName: github-app-credentials
             defaultMode: 288
-        - name: m3-checkpoints
+        - name: development-checkpoints
           persistentVolumeClaim:
-            claimName: m3-checkpoints
+            claimName: development-checkpoints
             readOnly: true
-        - name: m3-evidence
+        - name: development-evidence
           persistentVolumeClaim:
             claimName: managed-check-evidence
             readOnly: true

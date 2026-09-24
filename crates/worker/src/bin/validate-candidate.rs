@@ -43,12 +43,12 @@ struct ValidationInput {
 impl ValidationInput {
     fn from_environment() -> Result<Self, io::Error> {
         Ok(Self {
-            candidate_bundle: PathBuf::from(required("M3_CANDIDATE_BUNDLE")?),
-            candidate_commit: required("M3_CANDIDATE_COMMIT")?,
-            start_revision: required("M3_START_REVISION")?,
-            expected_lock: required("M3_LOCK_SHA256")?,
-            workspace: PathBuf::from(required("M3_WORKSPACE")?),
-            evidence: PathBuf::from(required("M3_EVIDENCE_DIR")?),
+            candidate_bundle: PathBuf::from(required("DEVELOPMENT_CANDIDATE_BUNDLE")?),
+            candidate_commit: required("DEVELOPMENT_CANDIDATE_COMMIT")?,
+            start_revision: required("DEVELOPMENT_START_REVISION")?,
+            expected_lock: required("DEVELOPMENT_LOCK_SHA256")?,
+            workspace: PathBuf::from(required("DEVELOPMENT_WORKSPACE")?),
+            evidence: PathBuf::from(required("DEVELOPMENT_EVIDENCE_DIR")?),
         })
     }
 }

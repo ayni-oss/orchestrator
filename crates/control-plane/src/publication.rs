@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     AppState,
-    development::{DevelopmentTask, PublicationAction},
+    development::{DevelopmentTask, PublicationAction, RepositoryBinding},
     github::GitHubApp,
     orchestration::StoreError,
 };
@@ -112,8 +112,11 @@ impl PublisherState {
     /// # Errors
     ///
     /// Returns an error when GitHub rejects the installation or token request.
-    pub async fn installation_token(&self, installation_id: i64) -> Result<String, String> {
-        self.app.installation_token(installation_id).await
+    pub async fn installation_token(
+        &self,
+        repository: &RepositoryBinding,
+    ) -> Result<String, String> {
+        self.app.installation_token(repository).await
     }
 
     /// Mint a read-scoped token for checkout setup.
@@ -121,8 +124,8 @@ impl PublisherState {
     /// # Errors
     ///
     /// Returns an error when GitHub rejects the installation or token request.
-    pub async fn clone_token(&self, installation_id: i64) -> Result<String, String> {
-        self.app.clone_token(installation_id).await
+    pub async fn clone_token(&self, repository: &RepositoryBinding) -> Result<String, String> {
+        self.app.clone_token(repository).await
     }
 
     #[must_use]
@@ -135,25 +138,25 @@ impl PublisherState {
         &self.evidence_root
     }
 
-    /// Returns `None` when M3 publishing has not been configured locally.
+    /// Returns `None` when development publishing has not been configured locally.
     ///
     /// # Errors
     ///
     /// Returns an error when configuration is partial or the App key is invalid.
     pub fn from_environment() -> Result<Option<Self>, String> {
         let vars = [
-            "M3_GITHUB_APP_ID",
-            "M3_GITHUB_PRIVATE_KEY_PATH",
-            "M3_CHECKPOINT_ROOT",
-            "M3_EVIDENCE_ROOT",
-            "M3_INTERNAL_PUBLISH_TOKEN",
+            "GITHUB_APP_ID",
+            "GITHUB_APP_PRIVATE_KEY_PATH",
+            "DEVELOPMENT_CHECKPOINT_ROOT",
+            "DEVELOPMENT_EVIDENCE_ROOT",
+            "DEVELOPMENT_PUBLISH_TOKEN",
         ];
         let present = vars.iter().filter(|name| env::var(name).is_ok()).count();
         if present == 0 {
             return Ok(None);
         }
         if present != vars.len() {
-            return Err("M3 publisher configuration is incomplete".into());
+            return Err("development publisher configuration is incomplete".into());
         }
         let app_id = env::var(vars[0])
             .map_err(|_| "missing app id")?

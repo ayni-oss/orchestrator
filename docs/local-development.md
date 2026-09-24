@@ -114,12 +114,14 @@ expand its retries.
 
 ## M3: API request to draft PR
 
-M3 supports only the private `ayni-oss/orchestrator` Rust workspace. The
-committed `.ayni.lock` must match the repository binding. The deliberately wrong
-fixture is `examples/m3-retry-backoff/main.rs`; running
-`scripts/local/check-m3-fixture.sh` before the task must fail at attempt 3.
-Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This fixture is
-not the control plane's own retry schedule.
+M3 supports only the private `ayni-oss/sandbox` Rust workspace. The committed
+`.ayni.lock` in that repository must match the repository binding. Initialize
+the sandbox once with the M3 Rust workspace contract and deliberately wrong
+`examples/m3-retry-backoff/main.rs` fixture; it must contain the Ayni contract,
+generated lock, Rust workspace files, and fixture test script. Running
+`scripts/local/check-m3-fixture.sh` in the sandbox before the task must fail at
+attempt 3. Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This
+fixture is not the control plane's own retry schedule.
 
 Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
 [`ayni-oss/ayni`](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0),
@@ -130,62 +132,45 @@ provisioning-image digest that GHCR returns as `not found`, so managed `env
 build` and deployed validation cannot pass until that image is available.
 
 Immediately before the live exercise, create a GitHub App and install it only
-on `ayni-oss/orchestrator`. Grant Metadata **read**, Contents **write**, and Pull
+on `ayni-oss/sandbox`. Grant Metadata **read**, Contents **write**, and Pull
 requests **write**. Do not enable webhooks, organization permissions, workflow
 access, or a user authorization flow. The App ID and installation ID are not
 secrets; the App private key and OpenAI API key are. Keep credentials out of Git,
 terminal arguments, and transcripts. The project does not require a particular
 password manager or secret-store vendor.
 
-For local development, put four files under the gitignored `.local/secrets/`
-directory: `app-id` (decimal App ID without a trailing newline),
-`private-key.pem` (the downloaded GitHub
-App key, retaining its newlines), `api-key` (the OpenAI key without a trailing
-newline), and `publisher-token` (a random token of at least 32 characters,
-without a trailing newline). For example, run `umask 077`, create the directory
-with `mkdir -p .local/secrets`, and generate the local publisher token with
-`openssl rand -hex 32 | tr -d '\n' > .local/secrets/publisher-token`. Save the
-App ID, downloaded PEM, and API key there using a local editor or credential
-export that does not print their values.
-Keep the directory accessible only to your user (`umask 077` before creating
-it). The file-based layout is equivalent to a local `.env` but handles the
-multiline PEM key without quoting or shell evaluation. Root `.env` and `.env.*`
-files are also ignored, except for a possible public `.env.example` template;
-the current setup reads the files, not a shell-sourced `.env`.
-
-After the `ayni-orchestrator-dev` namespace exists, create the three local
-Kubernetes Secrets without putting values in command-line arguments:
+For local development, copy the public `.env.example` to the gitignored `.env`.
+Set the App ID, App installation ID, OpenAI key, and the downloaded GitHub App
+PEM encoded as one base64 line. Base64 makes the multiline PEM convenient for a
+dotenv file; it is not a security mechanism. The bootstrap script parses only
+the documented keys, does not source or evaluate the file, and removes its
+temporary decoded files on exit. It creates or updates the GitHub App and
+OpenAI Secrets, and creates the internal publisher Secret only if it is absent:
 
 ```sh
-kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-github-app \
-  --from-file=app-id=.local/secrets/app-id \
-  --from-file=private-key.pem=.local/secrets/private-key.pem
-kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-publisher \
-  --from-file=token=.local/secrets/publisher-token
-kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-openai \
-  --from-file=api-key=.local/secrets/api-key
-kubectl --context docker-desktop -n ayni-orchestrator-dev get secret \
-  m3-github-app m3-publisher m3-openai
+cp .env.example .env
+scripts/local/configure-development-secrets.sh
 ```
 
-Do not commit the local files, print the Secrets as YAML, or put credential
-values in `--from-literal` arguments. Kubernetes Secrets are separate from Git
+The App ID, PEM, and OpenAI key become Kubernetes Secret keys. The App
+installation ID remains outside the Secret and is entered through the binding
+API. You do not create or manage the internal publisher token. Do not commit
+`.env` or print the Secrets as YAML. Kubernetes Secrets are separate from Git
 but are not automatically encrypted at rest; treat Docker Desktop cluster data
-and backups as sensitive. The App installation ID is entered through the
-binding API, not placed in a Secret.
+and backups as sensitive.
 
 From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
 both images, renders the M3 overlay, and replaces the local control plane. It
-preserves M2 SQLite and evidence PVCs and adds the `m3-checkpoints` PVC. Check
+preserves M2 SQLite and evidence PVCs and adds the `development-checkpoints` PVC. Check
 `scripts/local/check.sh`, then use loopback `kubectl --context docker-desktop
 -n ayni-orchestrator-dev port-forward svc/control-plane 8080:8080` for the API.
 No endpoint should be publicly exposed.
 
 Configure one binding via `POST /v1/repository-bindings` with JSON fields
-`id`, `owner: "ayni-oss"`, `repository: "orchestrator"`, `installation_id`,
-`base_branch: "feat/request-to-draft-pr"`, and `lock_sha256` (lowercase SHA-256
-hex of `.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
-`provider: "openai"`, `model`, and `secret_ref: "m3-openai"`. Submit
+`id`, `owner: "ayni-oss"`, `repository: "sandbox"`, `installation_id`,
+`base_branch: "main"`, and `lock_sha256` (lowercase SHA-256 hex of the sandbox
+`.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
+`provider: "openai"`, `model`, and `secret_ref: "openai-api"`. Submit
 `POST /v1/development-tasks` with a unique `idempotency_key`, the binding and
 profile IDs, the exact 40-hex `start_revision`, a `request` to correct the
 fixture to `min(60, 2 × 2^(attempt−1))`, and `acceptance_criteria` containing
@@ -196,14 +181,14 @@ Configured non-OpenAI providers return `unsupported` without a Job.
 
 The coding Job has only fixed checkout file/command tools, no Kubernetes
 service-account token, and no GitHub App key. Its frozen candidate bundle is
-retained on `m3-checkpoints`. The independent validation Job mounts that bundle
+retained on `development-checkpoints`. The independent validation Job mounts that bundle
 read-only, writes original Ayni artifacts and a manifest to
 `managed-check-evidence`, and refuses to publish an unverified candidate. A
 quality failure or protected policy edit remains a failed task; test-file edits
 are disclosed in the task and draft PR. The PR-author Job has only the
 structured publish capability; the control plane owns GitHub token minting and
-deterministic branch/PR reconciliation. The draft PR targets the M3 delivery
-branch; neither PR is merged by this workflow.
+deterministic branch/PR reconciliation. The draft PR targets the sandbox's
+`main` branch; neither it nor its task branch is merged by this workflow.
 
 For the completion record, retain the deployed commit, image IDs, Docker and
 Kubernetes versions, rendered overlay, task and candidate IDs, evidence

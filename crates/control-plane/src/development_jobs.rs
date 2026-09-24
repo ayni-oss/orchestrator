@@ -97,10 +97,7 @@ impl DevelopmentReconciler {
 
     async fn start_stage(&self, task: &DevelopmentTask, stage: Stage) -> Result<(), String> {
         if matches!(stage, Stage::Code) {
-            let token = self
-                .publisher
-                .clone_token(task.repository.installation_id)
-                .await?;
+            let token = self.publisher.clone_token(&task.repository).await?;
             self.ensure_clone_secret(task.id, &token).await?;
         }
         self.ensure_job(task, stage).await?;
@@ -259,7 +256,7 @@ impl DevelopmentReconciler {
         let name = secret_name(id);
         let secret: Secret = serde_json::from_value(json!({
             "apiVersion": "v1", "kind": "Secret",
-            "metadata": {"name": name, "labels": {"orchestrator.ayni.dev/m3-task-id": id.to_string()}},
+            "metadata": {"name": name, "labels": {"orchestrator.ayni.dev/development-task-id": id.to_string()}},
             "type": "Opaque", "stringData": {"token": token}
         })).map_err(|_| "could not build clone secret")?;
         self.secrets()
@@ -308,8 +305,9 @@ impl DevelopmentReconciler {
                     })?
                     .ok_or_else(|| format!("Job create failed: {error}"))?;
                 let labels = existing.metadata.labels.unwrap_or_default();
-                if labels.get("orchestrator.ayni.dev/m3-task-id") != Some(&task.id.to_string())
-                    || labels.get("orchestrator.ayni.dev/m3-stage")
+                if labels.get("orchestrator.ayni.dev/development-task-id")
+                    != Some(&task.id.to_string())
+                    || labels.get("orchestrator.ayni.dev/development-stage")
                         != Some(&stage.name().to_owned())
                 {
                     return Err("deterministic Job name belongs to another task".into());
@@ -357,7 +355,7 @@ impl DevelopmentReconciler {
             .map_err(|error| error.to_string())?
         {
             let labels = job.metadata.labels.unwrap_or_default();
-            if labels.get("orchestrator.ayni.dev/m3-task-id") != Some(&id.to_string()) {
+            if labels.get("orchestrator.ayni.dev/development-task-id") != Some(&id.to_string()) {
                 return Err("refusing to delete unowned Job".into());
             }
             self.jobs()
@@ -372,8 +370,8 @@ impl DevelopmentReconciler {
         let name = job_name(task.id, stage);
         let task_id = task.id.to_string();
         let labels = json!({"app.kubernetes.io/name":"ayni-orchestrator-m3",
-            "orchestrator.ayni.dev/m3-task-id": task_id,
-            "orchestrator.ayni.dev/m3-stage": stage.name()});
+            "orchestrator.ayni.dev/development-task-id": task_id,
+            "orchestrator.ayni.dev/development-stage": stage.name()});
         let (init_containers, container, volumes) = match stage {
             Stage::Code => self.code_spec(task)?,
             Stage::Validate => self.validation_spec(task)?,
@@ -400,10 +398,10 @@ impl DevelopmentReconciler {
         );
         let init = json!({"name":"checkout","image":self.worker_image,"imagePullPolicy":"Never",
             "command":["/bin/sh","-ec"],
-            "args":["AUTH=$(printf 'x-access-token:%s' \"$M3_CLONE_TOKEN\" | base64 | tr -d '\\n'); git -c http.https://github.com/.extraheader=\"Authorization: Basic $AUTH\" clone \"$M3_REPOSITORY_URL\" /workspace/repository; git -C /workspace/repository checkout --detach \"$M3_START_REVISION\"; test \"$(git -C /workspace/repository rev-parse HEAD)\" = \"$M3_START_REVISION\"; mkdir -p /workspace/.cargo; cp -R /usr/local/cargo/. /workspace/.cargo/"],
-            "env":[{"name":"M3_CLONE_TOKEN","valueFrom":{"secretKeyRef":{"name":secret_name(task.id),"key":"token"}}},
-                {"name":"M3_REPOSITORY_URL","value":repository},
-                {"name":"M3_START_REVISION","value":task.input.start_revision}],
+            "args":["AUTH=$(printf 'x-access-token:%s' \"$GITHUB_CLONE_TOKEN\" | base64 | tr -d '\\n'); git -c http.https://github.com/.extraheader=\"Authorization: Basic $AUTH\" clone \"$DEVELOPMENT_REPOSITORY_URL\" /workspace/repository; git -C /workspace/repository checkout --detach \"$DEVELOPMENT_START_REVISION\"; test \"$(git -C /workspace/repository rev-parse HEAD)\" = \"$DEVELOPMENT_START_REVISION\"; mkdir -p /workspace/.cargo; cp -R /usr/local/cargo/. /workspace/.cargo/"],
+            "env":[{"name":"GITHUB_CLONE_TOKEN","valueFrom":{"secretKeyRef":{"name":secret_name(task.id),"key":"token"}}},
+                {"name":"DEVELOPMENT_REPOSITORY_URL","value":repository},
+                {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision}],
             "securityContext":worker_security(),
             "volumeMounts":[{"name":"workspace","mountPath":"/workspace"}]
         });
@@ -411,12 +409,12 @@ impl DevelopmentReconciler {
             .map_err(|error| error.to_string())?;
         let container = json!({"name":"coding-agent","image":self.worker_image,
             "imagePullPolicy":"Never","command":["/usr/local/bin/development-agent"],
-            "env":[{"name":"M3_WORKSPACE","value":"/workspace/repository"},
-                {"name":"M3_CHECKPOINT","value":"/checkpoint"},
-                {"name":"M3_START_REVISION","value":task.input.start_revision},
-                {"name":"M3_REQUEST","value":task.input.request},
-                {"name":"M3_ACCEPTANCE_CRITERIA","value":criteria},
-                {"name":"M3_MODEL","value":task.agent_profile.model},
+            "env":[{"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
+                {"name":"DEVELOPMENT_CHECKPOINT","value":"/checkpoint"},
+                {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
+                {"name":"DEVELOPMENT_REQUEST","value":task.input.request},
+                {"name":"DEVELOPMENT_ACCEPTANCE_CRITERIA","value":criteria},
+                {"name":"AGENT_MODEL","value":task.agent_profile.model},
                 {"name":"CARGO_HOME","value":"/workspace/.cargo"},
                 {"name":"OPENAI_API_KEY","valueFrom":{"secretKeyRef":{"name":task.agent_profile.secret_ref,"key":"api-key"}}}],
             "securityContext":worker_security(),
@@ -431,7 +429,7 @@ impl DevelopmentReconciler {
             container,
             vec![
                 json!({"name":"workspace","emptyDir":{"sizeLimit":"5Gi"}}),
-                json!({"name":"checkpoint","persistentVolumeClaim":{"claimName":"m3-checkpoints"}}),
+                json!({"name":"checkpoint","persistentVolumeClaim":{"claimName":"development-checkpoints"}}),
                 json!({"name":"scratch","emptyDir":{}}),
             ],
         ))
@@ -458,12 +456,12 @@ impl DevelopmentReconciler {
                 {"name":"DOCKER_BUILDKIT","value":"1"},
                 {"name":"DOCKER_CONFIG","value":"/tmp/docker"},
                 {"name":"TMPDIR","value":"/workspace"},
-                {"name":"M3_CANDIDATE_BUNDLE","value":"/candidate/candidate.bundle"},
-                {"name":"M3_CANDIDATE_COMMIT","value":candidate},
-                {"name":"M3_START_REVISION","value":task.input.start_revision},
-                {"name":"M3_LOCK_SHA256","value":task.repository.lock_sha256},
-                {"name":"M3_WORKSPACE","value":"/workspace/repository"},
-                {"name":"M3_EVIDENCE_DIR","value":"/evidence"}],
+                {"name":"DEVELOPMENT_CANDIDATE_BUNDLE","value":"/candidate/candidate.bundle"},
+                {"name":"DEVELOPMENT_CANDIDATE_COMMIT","value":candidate},
+                {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
+                {"name":"DEVELOPMENT_LOCK_SHA256","value":task.repository.lock_sha256},
+                {"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
+                {"name":"DEVELOPMENT_EVIDENCE_DIR","value":"/evidence"}],
             "securityContext":worker_security(),
             "resources":{"requests":{"cpu":"250m","memory":"256Mi"},
                 "limits":{"cpu":"500m","memory":"512Mi"}},
@@ -477,7 +475,7 @@ impl DevelopmentReconciler {
             container,
             vec![
                 json!({"name":"workspace","emptyDir":{"sizeLimit":"5Gi"}}),
-                json!({"name":"candidate","persistentVolumeClaim":{"claimName":"m3-checkpoints","readOnly":true}}),
+                json!({"name":"candidate","persistentVolumeClaim":{"claimName":"development-checkpoints","readOnly":true}}),
                 json!({"name":"evidence","persistentVolumeClaim":{"claimName":"managed-check-evidence"}}),
                 json!({"name":"scratch","emptyDir":{}}),
                 json!({"name":"engine-storage","emptyDir":{"sizeLimit":"20Gi"}}),
@@ -518,10 +516,10 @@ impl DevelopmentReconciler {
         );
         let container = json!({"name":"pr-agent","image":self.worker_image,
             "imagePullPolicy":"Never","command":["/usr/local/bin/pr-agent"],
-            "env":[{"name":"M3_MODEL","value":task.agent_profile.model},
-                {"name":"M3_PR_CONTEXT","value":context},
-                {"name":"M3_PUBLISH_ENDPOINT","value":endpoint},
-                {"name":"M3_PUBLISH_TOKEN","valueFrom":{"secretKeyRef":{"name":"m3-publisher","key":"token"}}},
+            "env":[{"name":"AGENT_MODEL","value":task.agent_profile.model},
+                {"name":"DEVELOPMENT_PR_CONTEXT","value":context},
+                {"name":"DEVELOPMENT_PUBLISH_ENDPOINT","value":endpoint},
+                {"name":"DEVELOPMENT_PUBLISH_TOKEN","valueFrom":{"secretKeyRef":{"name":"development-publisher-auth","key":"token"}}},
                 {"name":"OPENAI_API_KEY","valueFrom":{"secretKeyRef":{"name":task.agent_profile.secret_ref,"key":"api-key"}}}],
             "securityContext":worker_security(),
             "resources":{"requests":{"cpu":"250m","memory":"256Mi"},
@@ -545,11 +543,15 @@ enum JobState {
 }
 
 fn job_name(id: TaskId, stage: Stage) -> String {
-    format!("m3-{}-{}", stage.name(), id.to_string().replace('-', ""))
+    format!(
+        "development-{}-{}",
+        stage.name(),
+        id.to_string().replace('-', "")
+    )
 }
 
 fn secret_name(id: TaskId) -> String {
-    format!("m3-clone-{}", id.to_string().replace('-', ""))
+    format!("development-clone-{}", id.to_string().replace('-', ""))
 }
 
 fn worker_security() -> Value {

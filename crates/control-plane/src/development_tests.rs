@@ -6,9 +6,9 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
     store.put_repository_binding(&RepositoryBinding {
         id: "trial".into(),
         owner: "ayni-oss".into(),
-        repository: "orchestrator".into(),
+        repository: "sandbox".into(),
         installation_id: 1,
-        base_branch: "feat/request-to-draft-pr".into(),
+        base_branch: "main".into(),
         lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
     })?;
     store.put_agent_profile(&AgentProfile {
@@ -38,16 +38,16 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
     store.put_repository_binding(&RepositoryBinding {
         id: "trial".into(),
         owner: "ayni-oss".into(),
-        repository: "orchestrator".into(),
+        repository: "sandbox".into(),
         installation_id: 11,
-        base_branch: "feat/request-to-draft-pr".into(),
+        base_branch: "main".into(),
         lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
     })?;
     store.put_agent_profile(&AgentProfile {
         id: "coding".into(),
         provider: "openai".into(),
         model: "model-a".into(),
-        secret_ref: "m3-openai".into(),
+        secret_ref: "openai-api".into(),
     })?;
     let input = DevelopmentInput {
         repository_id: "trial".into(),
@@ -95,16 +95,16 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
     store.put_repository_binding(&RepositoryBinding {
         id: "trial".into(),
         owner: "ayni-oss".into(),
-        repository: "orchestrator".into(),
+        repository: "sandbox".into(),
         installation_id: 11,
-        base_branch: "feat/request-to-draft-pr".into(),
+        base_branch: "main".into(),
         lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
     })?;
     store.put_agent_profile(&AgentProfile {
         id: "coding".into(),
         provider: "openai".into(),
         model: "model-a".into(),
-        secret_ref: "m3-openai".into(),
+        secret_ref: "openai-api".into(),
     })?;
     let input = DevelopmentInput {
         repository_id: "trial".into(),
@@ -142,14 +142,32 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         task.id,
         candidate,
         42,
-        "https://github.com/ayni-oss/orchestrator/pull/42",
+        "https://github.com/ayni-oss/sandbox/pull/42",
     )?;
     let (done, action) =
         store.begin_publication(task.id, "fix(example): repair formula", "third")?;
     assert_eq!(done.phase, DevelopmentPhase::Completed);
     assert_eq!(
         action.completed_url.as_deref(),
-        Some("https://github.com/ayni-oss/orchestrator/pull/42")
+        Some("https://github.com/ayni-oss/sandbox/pull/42")
     );
+    Ok(())
+}
+
+#[test]
+fn rejects_a_repository_outside_the_m3_sandbox() -> Result<(), StoreError> {
+    let store = Store::in_memory()?;
+    let error = store
+        .put_repository_binding(&RepositoryBinding {
+            id: "wrong-target".into(),
+            owner: "ayni-oss".into(),
+            repository: "orchestrator".into(),
+            installation_id: 1,
+            base_branch: "main".into(),
+            lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+        })
+        .err()
+        .ok_or(StoreError::InvalidInput("non-sandbox target was accepted"))?;
+    assert!(error.to_string().contains("ayni-oss/sandbox"));
     Ok(())
 }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::orchestration::{Store, StoreError};
 
-const SUPPORTED_REPOSITORY: &str = "ayni-oss/orchestrator";
+const SUPPORTED_REPOSITORY: &str = "ayni-oss/sandbox";
 
 /// One explicitly granted GitHub repository.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -30,7 +30,7 @@ impl RepositoryBinding {
         }
         if format!("{}/{}", self.owner, self.repository) != SUPPORTED_REPOSITORY {
             return Err(StoreError::InvalidInput(
-                "M3 supports only ayni-oss/orchestrator",
+                "M3 supports only ayni-oss/sandbox",
             ));
         }
         if self.installation_id <= 0 || !git_branch(&self.base_branch) {
