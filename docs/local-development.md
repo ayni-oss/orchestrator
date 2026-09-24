@@ -132,12 +132,47 @@ build` and deployed validation cannot pass until that image is available.
 Immediately before the live exercise, create a GitHub App and install it only
 on `ayni-oss/orchestrator`. Grant Metadata **read**, Contents **write**, and Pull
 requests **write**. Do not enable webhooks, organization permissions, workflow
-access, or a user authorization flow. Keep the App private key and OpenAI key
-outside Git and terminal transcripts. Create these Kubernetes Secrets in
-`ayni-orchestrator-dev`: `m3-github-app` with `app-id` and `private-key.pem`,
-`m3-publisher` with a randomly generated `token` of at least 32 characters,
-and `m3-openai` with `api-key`. The App installation ID is entered through the
-binding API, not placed in a Secret. Use the explicit `docker-desktop` context.
+access, or a user authorization flow. The App ID and installation ID are not
+secrets; the App private key and OpenAI API key are. Keep credentials out of Git,
+terminal arguments, and transcripts. The project does not require a particular
+password manager or secret-store vendor.
+
+For local development, put four files under the gitignored `.local/secrets/`
+directory: `app-id` (decimal App ID without a trailing newline),
+`private-key.pem` (the downloaded GitHub
+App key, retaining its newlines), `api-key` (the OpenAI key without a trailing
+newline), and `publisher-token` (a random token of at least 32 characters,
+without a trailing newline). For example, run `umask 077`, create the directory
+with `mkdir -p .local/secrets`, and generate the local publisher token with
+`openssl rand -hex 32 | tr -d '\n' > .local/secrets/publisher-token`. Save the
+App ID, downloaded PEM, and API key there using a local editor or credential
+export that does not print their values.
+Keep the directory accessible only to your user (`umask 077` before creating
+it). The file-based layout is equivalent to a local `.env` but handles the
+multiline PEM key without quoting or shell evaluation. Root `.env` and `.env.*`
+files are also ignored, except for a possible public `.env.example` template;
+the current setup reads the files, not a shell-sourced `.env`.
+
+After the `ayni-orchestrator-dev` namespace exists, create the three local
+Kubernetes Secrets without putting values in command-line arguments:
+
+```sh
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-github-app \
+  --from-file=app-id=.local/secrets/app-id \
+  --from-file=private-key.pem=.local/secrets/private-key.pem
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-publisher \
+  --from-file=token=.local/secrets/publisher-token
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-openai \
+  --from-file=api-key=.local/secrets/api-key
+kubectl --context docker-desktop -n ayni-orchestrator-dev get secret \
+  m3-github-app m3-publisher m3-openai
+```
+
+Do not commit the local files, print the Secrets as YAML, or put credential
+values in `--from-literal` arguments. Kubernetes Secrets are separate from Git
+but are not automatically encrypted at rest; treat Docker Desktop cluster data
+and backups as sensitive. The App installation ID is entered through the
+binding API, not placed in a Secret.
 
 From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
 both images, renders the M3 overlay, and replaces the local control plane. It
