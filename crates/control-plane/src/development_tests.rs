@@ -47,7 +47,7 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         id: "coding".into(),
         provider: "openai".into(),
         model: "model-a".into(),
-        secret_ref: "m3-openai".into(),
+        secret_ref: "openai-api".into(),
     })?;
     let input = DevelopmentInput {
         repository_id: "trial".into(),
@@ -104,7 +104,7 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         id: "coding".into(),
         provider: "openai".into(),
         model: "model-a".into(),
-        secret_ref: "m3-openai".into(),
+        secret_ref: "openai-api".into(),
     })?;
     let input = DevelopmentInput {
         repository_id: "trial".into(),

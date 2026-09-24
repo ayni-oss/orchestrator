@@ -159,15 +159,15 @@ After the `ayni-orchestrator-dev` namespace exists, create the three local
 Kubernetes Secrets without putting values in command-line arguments:
 
 ```sh
-kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-github-app \
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic github-app-credentials \
   --from-file=app-id=.local/secrets/app-id \
   --from-file=private-key.pem=.local/secrets/private-key.pem
-kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-publisher \
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic development-publisher-auth \
   --from-file=token=.local/secrets/publisher-token
-kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-openai \
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic openai-api \
   --from-file=api-key=.local/secrets/api-key
 kubectl --context docker-desktop -n ayni-orchestrator-dev get secret \
-  m3-github-app m3-publisher m3-openai
+  github-app-credentials development-publisher-auth openai-api
 ```
 
 Do not commit the local files, print the Secrets as YAML, or put credential
@@ -178,7 +178,7 @@ binding API, not placed in a Secret.
 
 From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
 both images, renders the M3 overlay, and replaces the local control plane. It
-preserves M2 SQLite and evidence PVCs and adds the `m3-checkpoints` PVC. Check
+preserves M2 SQLite and evidence PVCs and adds the `development-checkpoints` PVC. Check
 `scripts/local/check.sh`, then use loopback `kubectl --context docker-desktop
 -n ayni-orchestrator-dev port-forward svc/control-plane 8080:8080` for the API.
 No endpoint should be publicly exposed.
@@ -187,7 +187,7 @@ Configure one binding via `POST /v1/repository-bindings` with JSON fields
 `id`, `owner: "ayni-oss"`, `repository: "sandbox"`, `installation_id`,
 `base_branch: "main"`, and `lock_sha256` (lowercase SHA-256 hex of the sandbox
 `.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
-`provider: "openai"`, `model`, and `secret_ref: "m3-openai"`. Submit
+`provider: "openai"`, `model`, and `secret_ref: "openai-api"`. Submit
 `POST /v1/development-tasks` with a unique `idempotency_key`, the binding and
 profile IDs, the exact 40-hex `start_revision`, a `request` to correct the
 fixture to `min(60, 2 × 2^(attempt−1))`, and `acceptance_criteria` containing
@@ -198,7 +198,7 @@ Configured non-OpenAI providers return `unsupported` without a Job.
 
 The coding Job has only fixed checkout file/command tools, no Kubernetes
 service-account token, and no GitHub App key. Its frozen candidate bundle is
-retained on `m3-checkpoints`. The independent validation Job mounts that bundle
+retained on `development-checkpoints`. The independent validation Job mounts that bundle
 read-only, writes original Ayni artifacts and a manifest to
 `managed-check-evidence`, and refuses to publish an unverified candidate. A
 quality failure or protected policy edit remains a failed task; test-file edits
