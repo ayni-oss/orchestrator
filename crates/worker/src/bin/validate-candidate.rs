@@ -119,8 +119,8 @@ fn checkout_candidate(
 ) -> Result<(String, Vec<String>), Box<dyn std::error::Error>> {
     let workspace = &input.workspace;
     let evidence = &input.evidence;
-    fs::create_dir(workspace)?;
-    fs::create_dir(evidence)?;
+    fs::create_dir_all(workspace)?;
+    fs::create_dir_all(evidence)?;
     checked(
         workspace,
         "git",
