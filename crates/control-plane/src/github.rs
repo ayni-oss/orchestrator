@@ -37,7 +37,18 @@ struct InstallationToken {
 struct PullRequest {
     number: u64,
     html_url: String,
+    draft: bool,
+    state: String,
     head: PullHead,
+}
+
+impl PullRequest {
+    fn verified(self, candidate: &str) -> Result<(u64, String), String> {
+        if self.head.sha != candidate || !self.draft || self.state != "open" {
+            return Err("task PR is not an open draft for the frozen candidate".into());
+        }
+        Ok((self.number, self.html_url))
+    }
 }
 
 #[derive(Deserialize)]
@@ -147,10 +158,7 @@ impl GitHubApp {
             .find_pr(&token, &task.repository.base_branch, &branch)
             .await?
         {
-            if pr.head.sha != candidate {
-                return Err("existing task PR points to a different candidate".into());
-            }
-            return Ok((pr.number, pr.html_url));
+            return pr.verified(candidate);
         }
         push_bundle(
             candidate_bundle,
@@ -163,10 +171,7 @@ impl GitHubApp {
             .find_pr(&token, &task.repository.base_branch, &branch)
             .await?
         {
-            if pr.head.sha != candidate {
-                return Err("existing task PR points to a different candidate".into());
-            }
-            return Ok((pr.number, pr.html_url));
+            return pr.verified(candidate);
         }
         self.create_pr(
             &token,
@@ -204,10 +209,7 @@ impl GitHubApp {
                     .json()
                     .await
                     .map_err(|_| "GitHub PR response was invalid".to_owned())?;
-                if pr.head.sha != candidate {
-                    return Err("created PR points to a different candidate".into());
-                }
-                Ok((pr.number, pr.html_url))
+                pr.verified(candidate)
             }
             _ => {
                 // A timeout or error may follow a successful GitHub create.
@@ -215,10 +217,7 @@ impl GitHubApp {
                     .find_pr(token, base, branch)
                     .await?
                     .ok_or("PR creation outcome is uncertain; retry will reconcile")?;
-                if pr.head.sha != candidate {
-                    return Err("reconciled PR points to a different candidate".into());
-                }
-                Ok((pr.number, pr.html_url))
+                pr.verified(candidate)
             }
         }
     }
