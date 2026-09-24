@@ -18,8 +18,8 @@ COPY --from=builder /workspace/target/release/ayni-orchestrator-worker /usr/loca
 COPY --from=builder /workspace/target/release/development-agent /usr/local/bin/development-agent
 COPY --from=builder /workspace/target/release/pr-agent /usr/local/bin/pr-agent
 COPY --from=builder /workspace/target/release/validate-candidate /usr/local/bin/validate-candidate
-COPY --from=builder /usr/local/cargo /usr/local/cargo
-COPY --from=builder /usr/local/rustup /usr/local/rustup
+COPY --chown=10001:10001 --from=builder /usr/local/cargo /usr/local/cargo
+COPY --chown=10001:10001 --from=builder /usr/local/rustup /usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 ENV RUSTUP_HOME=/usr/local/rustup
 RUN case "$TARGETARCH" in \
