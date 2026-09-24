@@ -114,12 +114,14 @@ expand its retries.
 
 ## M3: API request to draft PR
 
-M3 supports only the private `ayni-oss/orchestrator` Rust workspace. The
-committed `.ayni.lock` must match the repository binding. The deliberately wrong
-fixture is `examples/m3-retry-backoff/main.rs`; running
-`scripts/local/check-m3-fixture.sh` before the task must fail at attempt 3.
-Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This fixture is
-not the control plane's own retry schedule.
+M3 supports only the private `ayni-oss/sandbox` Rust workspace. The committed
+`.ayni.lock` in that repository must match the repository binding. Initialize
+the sandbox once with the M3 Rust workspace contract and deliberately wrong
+`examples/m3-retry-backoff/main.rs` fixture; it must contain the Ayni contract,
+generated lock, Rust workspace files, and fixture test script. Running
+`scripts/local/check-m3-fixture.sh` in the sandbox before the task must fail at
+attempt 3. Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This
+fixture is not the control plane's own retry schedule.
 
 Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
 [`ayni-oss/ayni`](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0),
@@ -130,7 +132,7 @@ provisioning-image digest that GHCR returns as `not found`, so managed `env
 build` and deployed validation cannot pass until that image is available.
 
 Immediately before the live exercise, create a GitHub App and install it only
-on `ayni-oss/orchestrator`. Grant Metadata **read**, Contents **write**, and Pull
+on `ayni-oss/sandbox`. Grant Metadata **read**, Contents **write**, and Pull
 requests **write**. Do not enable webhooks, organization permissions, workflow
 access, or a user authorization flow. The App ID and installation ID are not
 secrets; the App private key and OpenAI API key are. Keep credentials out of Git,
@@ -182,9 +184,9 @@ preserves M2 SQLite and evidence PVCs and adds the `m3-checkpoints` PVC. Check
 No endpoint should be publicly exposed.
 
 Configure one binding via `POST /v1/repository-bindings` with JSON fields
-`id`, `owner: "ayni-oss"`, `repository: "orchestrator"`, `installation_id`,
-`base_branch: "feat/request-to-draft-pr"`, and `lock_sha256` (lowercase SHA-256
-hex of `.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
+`id`, `owner: "ayni-oss"`, `repository: "sandbox"`, `installation_id`,
+`base_branch: "main"`, and `lock_sha256` (lowercase SHA-256 hex of the sandbox
+`.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
 `provider: "openai"`, `model`, and `secret_ref: "m3-openai"`. Submit
 `POST /v1/development-tasks` with a unique `idempotency_key`, the binding and
 profile IDs, the exact 40-hex `start_revision`, a `request` to correct the
@@ -202,8 +204,8 @@ read-only, writes original Ayni artifacts and a manifest to
 quality failure or protected policy edit remains a failed task; test-file edits
 are disclosed in the task and draft PR. The PR-author Job has only the
 structured publish capability; the control plane owns GitHub token minting and
-deterministic branch/PR reconciliation. The draft PR targets the M3 delivery
-branch; neither PR is merged by this workflow.
+deterministic branch/PR reconciliation. The draft PR targets the sandbox's
+`main` branch; neither it nor its task branch is merged by this workflow.
 
 For the completion record, retain the deployed commit, image IDs, Docker and
 Kubernetes versions, rendered overlay, task and candidate IDs, evidence

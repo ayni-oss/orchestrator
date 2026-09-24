@@ -229,9 +229,12 @@ retained evidence survived replacement. PR-creation recovery remains M3 work.
 
 ## M3: request to draft PR
 
-**Selected M3 design (2026-09-23):** Only the private
-`ayni-oss/orchestrator` Rust workspace is accepted. A generated `.ayni.lock`
-from pinned Ayni 0.13.0 binds the environment. An OpenAI-backed Rig coding Job receives fixed file and
+**Selected M3 design (updated 2026-09-24):** Only the private
+`ayni-oss/sandbox` Rust workspace is accepted for live M3 tasks. Its generated
+`.ayni.lock` from pinned Ayni 0.13.0 binds the environment. The sandbox is
+initialized with the M3 fixture and workspace contract before testing, keeping
+deliberately broken formulas, generated branches, and draft PRs out of the
+control-plane repository. An OpenAI-backed Rig coding Job receives fixed file and
 command tools in an attempt-owned checkout, then writes a local commit and Git
 bundle to a retained checkpoint. A separate Job checks out that frozen bundle,
 runs the unscoped managed Ayni check, and retains hash-bound evidence outside
@@ -249,8 +252,8 @@ and live API-to-draft-PR evidence must all be recorded against the final
 committed revision. A local test or simulated GitHub response is not a
 substitute for the deployed live proof. The narrow GitHub App installation and
 local Kubernetes Secrets are prerequisites for that final exercise. The draft
-PR targets the M3 delivery branch, which contains the new lock and fixture;
-neither draft PR nor delivery PR is merged automatically.
+PR targets the sandbox's `main` branch; neither draft PR nor task branch is
+merged automatically.
 
 **Local validation evidence (2026-09-24, code commit `6dc4210`):** Rust formatting,
 Clippy, workspace tests (23 passing), and compile checks passed. The unscoped

@@ -97,10 +97,7 @@ impl DevelopmentReconciler {
 
     async fn start_stage(&self, task: &DevelopmentTask, stage: Stage) -> Result<(), String> {
         if matches!(stage, Stage::Code) {
-            let token = self
-                .publisher
-                .clone_token(task.repository.installation_id)
-                .await?;
+            let token = self.publisher.clone_token(&task.repository).await?;
             self.ensure_clone_secret(task.id, &token).await?;
         }
         self.ensure_job(task, stage).await?;

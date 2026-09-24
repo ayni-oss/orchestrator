@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     AppState,
-    development::{DevelopmentTask, PublicationAction},
+    development::{DevelopmentTask, PublicationAction, RepositoryBinding},
     github::GitHubApp,
     orchestration::StoreError,
 };
@@ -112,8 +112,11 @@ impl PublisherState {
     /// # Errors
     ///
     /// Returns an error when GitHub rejects the installation or token request.
-    pub async fn installation_token(&self, installation_id: i64) -> Result<String, String> {
-        self.app.installation_token(installation_id).await
+    pub async fn installation_token(
+        &self,
+        repository: &RepositoryBinding,
+    ) -> Result<String, String> {
+        self.app.installation_token(repository).await
     }
 
     /// Mint a read-scoped token for checkout setup.
@@ -121,8 +124,8 @@ impl PublisherState {
     /// # Errors
     ///
     /// Returns an error when GitHub rejects the installation or token request.
-    pub async fn clone_token(&self, installation_id: i64) -> Result<String, String> {
-        self.app.clone_token(installation_id).await
+    pub async fn clone_token(&self, repository: &RepositoryBinding) -> Result<String, String> {
+        self.app.clone_token(repository).await
     }
 
     #[must_use]
