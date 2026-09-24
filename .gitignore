@@ -1,7 +1,9 @@
 /target/
 /.ayni/
-/.ayni.lock
 /.local/
+/.env
+/.env.*
+!/.env.example
 **/.DS_Store
 .agents/
 .codex/

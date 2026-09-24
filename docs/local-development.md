@@ -1,9 +1,10 @@
 # Local development
 
 M2 deploys a persistent control plane that accepts durable managed-check tasks
-and reconciles attempt-owned Jobs. It does not yet run an agent or create draft
-pull requests. Its readiness response reports `managed_execution: true` and
-`durable_orchestration: true`.
+and reconciles attempt-owned Jobs. The optional M3 overlay adds an API-driven
+coding agent, independent managed validation, and draft-PR publication. It has
+no browser UI. Its readiness response does not establish that M3 secrets or
+external services are available.
 
 ## Prerequisites
 
@@ -110,3 +111,111 @@ only failed or interrupted attempts can create a new attempt. Each task retains
 the configured `ORCHESTRATOR_MAX_ATTEMPTS` bound at submission (three by default;
 the local profile accepts one through ten), so a later deployment change does not
 expand its retries.
+
+## M3: API request to draft PR
+
+M3 supports only the private `ayni-oss/orchestrator` Rust workspace. The
+committed `.ayni.lock` must match the repository binding. The deliberately wrong
+fixture is `examples/m3-retry-backoff/main.rs`; running
+`scripts/local/check-m3-fixture.sh` before the task must fail at attempt 3.
+Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This fixture is
+not the control plane's own retry schedule.
+
+Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
+[`ayni-oss/ayni`](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0),
+the same release used by the worker image. Verify that the generated lock uses
+`ghcr.io/ayni-oss/ayni-provisioning`; the deprecated `gdurandvadas/ayni`
+release and registry are not supported. The 0.13.0 lock currently names a
+provisioning-image digest that GHCR returns as `not found`, so managed `env
+build` and deployed validation cannot pass until that image is available.
+
+Immediately before the live exercise, create a GitHub App and install it only
+on `ayni-oss/orchestrator`. Grant Metadata **read**, Contents **write**, and Pull
+requests **write**. Do not enable webhooks, organization permissions, workflow
+access, or a user authorization flow. The App ID and installation ID are not
+secrets; the App private key and OpenAI API key are. Keep credentials out of Git,
+terminal arguments, and transcripts. The project does not require a particular
+password manager or secret-store vendor.
+
+For local development, put four files under the gitignored `.local/secrets/`
+directory: `app-id` (decimal App ID without a trailing newline),
+`private-key.pem` (the downloaded GitHub
+App key, retaining its newlines), `api-key` (the OpenAI key without a trailing
+newline), and `publisher-token` (a random token of at least 32 characters,
+without a trailing newline). For example, run `umask 077`, create the directory
+with `mkdir -p .local/secrets`, and generate the local publisher token with
+`openssl rand -hex 32 | tr -d '\n' > .local/secrets/publisher-token`. Save the
+App ID, downloaded PEM, and API key there using a local editor or credential
+export that does not print their values.
+Keep the directory accessible only to your user (`umask 077` before creating
+it). The file-based layout is equivalent to a local `.env` but handles the
+multiline PEM key without quoting or shell evaluation. Root `.env` and `.env.*`
+files are also ignored, except for a possible public `.env.example` template;
+the current setup reads the files, not a shell-sourced `.env`.
+
+After the `ayni-orchestrator-dev` namespace exists, create the three local
+Kubernetes Secrets without putting values in command-line arguments:
+
+```sh
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-github-app \
+  --from-file=app-id=.local/secrets/app-id \
+  --from-file=private-key.pem=.local/secrets/private-key.pem
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-publisher \
+  --from-file=token=.local/secrets/publisher-token
+kubectl --context docker-desktop -n ayni-orchestrator-dev create secret generic m3-openai \
+  --from-file=api-key=.local/secrets/api-key
+kubectl --context docker-desktop -n ayni-orchestrator-dev get secret \
+  m3-github-app m3-publisher m3-openai
+```
+
+Do not commit the local files, print the Secrets as YAML, or put credential
+values in `--from-literal` arguments. Kubernetes Secrets are separate from Git
+but are not automatically encrypted at rest; treat Docker Desktop cluster data
+and backups as sensitive. The App installation ID is entered through the
+binding API, not placed in a Secret.
+
+From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
+both images, renders the M3 overlay, and replaces the local control plane. It
+preserves M2 SQLite and evidence PVCs and adds the `m3-checkpoints` PVC. Check
+`scripts/local/check.sh`, then use loopback `kubectl --context docker-desktop
+-n ayni-orchestrator-dev port-forward svc/control-plane 8080:8080` for the API.
+No endpoint should be publicly exposed.
+
+Configure one binding via `POST /v1/repository-bindings` with JSON fields
+`id`, `owner: "ayni-oss"`, `repository: "orchestrator"`, `installation_id`,
+`base_branch: "feat/request-to-draft-pr"`, and `lock_sha256` (lowercase SHA-256
+hex of `.ayni.lock`). Configure `POST /v1/agent-profiles` with `id`,
+`provider: "openai"`, `model`, and `secret_ref: "m3-openai"`. Submit
+`POST /v1/development-tasks` with a unique `idempotency_key`, the binding and
+profile IDs, the exact 40-hex `start_revision`, a `request` to correct the
+fixture to `min(60, 2 × 2^(attempt−1))`, and `acceptance_criteria` containing
+the four empirical cases. Repeating a submission key with different content
+is rejected. Inspect `GET /v1/development-tasks/{task_id}`. Cancellation is
+`POST /v1/development-tasks/{task_id}/cancel` with a new idempotency key.
+Configured non-OpenAI providers return `unsupported` without a Job.
+
+The coding Job has only fixed checkout file/command tools, no Kubernetes
+service-account token, and no GitHub App key. Its frozen candidate bundle is
+retained on `m3-checkpoints`. The independent validation Job mounts that bundle
+read-only, writes original Ayni artifacts and a manifest to
+`managed-check-evidence`, and refuses to publish an unverified candidate. A
+quality failure or protected policy edit remains a failed task; test-file edits
+are disclosed in the task and draft PR. The PR-author Job has only the
+structured publish capability; the control plane owns GitHub token minting and
+deterministic branch/PR reconciliation. The draft PR targets the M3 delivery
+branch; neither PR is merged by this workflow.
+
+For the completion record, retain the deployed commit, image IDs, Docker and
+Kubernetes versions, rendered overlay, task and candidate IDs, evidence
+manifest digest, draft PR URL, failure and cancellation task IDs, and the
+result of restart/duplicate-action checks. A failed or unavailable external
+service must be reported as blocked; local tests cannot substitute for this
+live exercise. Checkpoints, SQLite state, and evidence PVCs are retained by
+normal Job cleanup. Do not delete these PVCs merely to repeat a task.
+
+On 2026-09-24, a Docker Desktop deployment of code commit `6dc4210` built and
+loaded both images but the control plane could not initialize SQLite: the
+Docker Desktop VM filesystem had 0 available space. The node reported no
+`DiskPressure` despite the full filesystem. Before retrying deployment, inspect
+VM and Docker usage and arrange capacity or explicitly approved cleanup. Do not
+prune shared Docker volumes or caches as an implicit part of these scripts.

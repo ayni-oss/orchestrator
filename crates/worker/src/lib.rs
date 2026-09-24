@@ -14,9 +14,9 @@ use thiserror::Error;
 use tracing::info;
 
 /// The first supported repository shape.
-pub const SUPPORTED_REPOSITORY_URL: &str = "https://github.com/gdurandvadas/ayni.git";
+pub const SUPPORTED_REPOSITORY_URL: &str = "https://github.com/ayni-oss/ayni.git";
 /// The pinned Ayni binary release.
-pub const SUPPORTED_AYNI_VERSION: &str = "0.12.1";
+pub const SUPPORTED_AYNI_VERSION: &str = "0.13.0";
 
 /// Immutable worker inputs supplied by the manually submitted Job.
 #[derive(Clone, Debug, Eq, PartialEq)]

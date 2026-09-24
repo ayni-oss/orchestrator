@@ -6,10 +6,11 @@ software development, built around Ayni's environment and quality contracts.
 The repository remains `ayni-operator` until its GitHub rename is completed.
 Product-facing names use **Ayni Orchestrator**.
 
-**Status: private M2 durable orchestration complete.** This repository contains
-the Rust workspace, the M1 managed-check worker, and a locally deployable control
-plane with persistent task and attempt state. It does not yet contain an agent
-runtime or a supported integration. The name is provisional; architecture
+**Status: private M2 complete; M3 implementation under validation.** This repository contains
+the Rust workspace, the M1 managed-check worker, persistent M2 task state, and
+an API-driven M3 coding/validation/draft-PR path. M3's live GitHub App and
+OpenAI proof is not complete until the deployed run and failure exercises are
+recorded. There is no browser UI; that begins in M4. The name is provisional; architecture
 proposals remain subject to implementation evidence. No delivery date or public
 launch is committed by these documents.
 

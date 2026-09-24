@@ -37,7 +37,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M0: foundation and first deployment | `chore(workspace): establish Rust workspace and local deployment` | A checkout-built control-plane service runs on Docker Desktop Kubernetes | Complete — evidence predates this repository import |
 | M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | Complete |
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
-| M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Planned |
+| M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | In progress — live proof pending |
 | M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Planned |
 | M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | Planned |
 
@@ -85,8 +85,9 @@ Validate the engine/worker arrangement described in the
 A standalone Linux experiment may inform that choice, but does not replace the
 Docker Desktop deployment gate.
 
-**Selected initial inputs and topology (2026-09-17):** Ayni `0.12.1` is the
-pinned worker executable. The only supported source is the public Ayni Rust
+**Selected initial inputs and topology (2026-09-17; historical, superseded by
+the 2026-09-24 migration):** Ayni `0.12.1` was the pinned worker executable.
+The initially supported source was the public Ayni Rust
 workspace at release commit `42f2605d14aa980d14608a8d2f518bc05fcc47b6`, with
 `.ayni.lock` SHA-256
 `606972cd98e464c8a8befc5191b770539637a9ef3b872ea3ec52abae92928e4f`.
@@ -227,6 +228,75 @@ completion, and cleanup alongside another active attempt. Task history and
 retained evidence survived replacement. PR-creation recovery remains M3 work.
 
 ## M3: request to draft PR
+
+**Selected M3 design (2026-09-23):** Only the private
+`ayni-oss/orchestrator` Rust workspace is accepted. A generated `.ayni.lock`
+from pinned Ayni 0.13.0 binds the environment. An OpenAI-backed Rig coding Job receives fixed file and
+command tools in an attempt-owned checkout, then writes a local commit and Git
+bundle to a retained checkpoint. A separate Job checks out that frozen bundle,
+runs the unscoped managed Ayni check, and retains hash-bound evidence outside
+the coding workspace. Only after success does a separate Rig PR-author Job call
+the control plane's structured, idempotent draft-PR action. The control plane
+holds the GitHub App key, mints repository-scoped installation tokens, and
+reconciles the deterministic task branch and PR. Other agent providers can be
+configured but receive an explicit unsupported result. The live proof uses the
+simple retry-backoff fixture, with expected seconds `1→2`, `2→4`, `3→8`, and
+`6→60`; its starting formula is deliberately incorrect.
+
+**Validation status:** Local Rust formatting, Clippy, tests, compile checks,
+Kustomize rendering, generated-lock verification, Docker Desktop deployment,
+and live API-to-draft-PR evidence must all be recorded against the final
+committed revision. A local test or simulated GitHub response is not a
+substitute for the deployed live proof. The narrow GitHub App installation and
+local Kubernetes Secrets are prerequisites for that final exercise. The draft
+PR targets the M3 delivery branch, which contains the new lock and fixture;
+neither draft PR nor delivery PR is merged automatically.
+
+**Local validation evidence (2026-09-24, code commit `6dc4210`):** Rust formatting,
+Clippy, workspace tests (23 passing), and compile checks passed. The unscoped
+managed Ayni 0.12.1 check passed all four signals (tests, size, complexity,
+dependencies) using the generated lock SHA-256
+`b450f91e0b4f1d1733ab47cfa256a5ad59fb273ac615039d30da22b1d46f44e9`;
+`env build` and `env doctor` succeeded. The M3 Kustomize overlay rendered.
+The worker image built and a read-only-root smoke test found Ayni 0.12.1,
+Rust/Cargo 1.94.0, Git 2.39.5, and all three M3 executables.
+
+**Ayni source migration (2026-09-24):** The active worker binary download,
+managed-check source fixture, and generated orchestrator lock now target the
+supported [`ayni-oss/ayni` 0.13.0 release](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0).
+The source fixture pins release commit
+`4e67795c0cba21bd82c21bdd6c921417fbe29ff6` and its `.ayni.lock` SHA-256
+`d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7`.
+The orchestrator's regenerated lock SHA-256 is
+`7e324054c9f5663ab361ef7d168dbe1a7813fecea1072f0ec9f2cdaf7b901515`.
+The earlier 0.12.1 validation above remains historical evidence, not validation
+of this migration. Ayni 0.13.0's lock pins
+`ghcr.io/ayni-oss/ayni-provisioning@sha256:30453fcd751acff069c7b16a1cd2eba01051bd94b64cd9d333c4ce82a9ff0961`,
+which GHCR currently reports as `not found`; managed environment build and the
+live M3 proof therefore remain blocked pending a published supported image.
+For this migration, `cargo fmt --check`, Clippy, workspace tests (23 passing),
+`cargo check`, the M3 Kustomize render, and Ayni 0.13.0's unscoped host check
+(4/4 signals) passed. A managed `env build` with the published, digest-pinned
+`ayni-oss/ayni-env:0.13.0-debian` executor failed resolving that provisioning
+image; this is not a passing managed check or deployment result.
+
+**Blocked Docker Desktop deployment (2026-09-24, code commit `6dc4210`):**
+`scripts/local/deploy.sh m2` built and loaded
+`local/ayni-orchestrator-control-plane:git-6dc421069608` (image index
+`sha256:fd755e3e13ac59756046f9cf69302ea9cfffa21d5750c8bbd95268da725f1a8f`)
+and `local/ayni-orchestrator-worker:git-6dc421069608` (image index
+`sha256:2db0c6fe418ad418ddd7d97c77bc2bcff5a5f292ad5c926772cb909581b7b45c`).
+The pod reported control-plane image ID
+`sha256:9c6332c90e6be574c69c43d91995bf1d84b08522c57ad091b09cb52facc0e3e3`,
+but SQLite startup failed with `database or disk is full`. Docker Desktop's
+Kubernetes node filesystem reported 59 GiB total, 0 available, 100% used;
+the fresh namespace had no prior task state to preserve. Docker Engine was
+29.8.0, Kubernetes 1.36.1, kubectl 1.35.2, and Kustomize 5.7.1. No Docker
+cache, images, or volumes were pruned. The M3 overlay was not deployed because
+the App/OpenAI Secrets and live test were explicitly deferred. State-survival,
+negative-path, and GitHub reconciliation exercises remain unverified. The
+milestone is incomplete; draft delivery PR #5 must not be merged as completion
+evidence.
 
 Select one agent integration and the GitHub access mechanism. Provide an
 attempt-owned development checkout, scoped permissions, repository instructions,
