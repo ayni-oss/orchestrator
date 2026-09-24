@@ -251,6 +251,33 @@ local Kubernetes Secrets are prerequisites for that final exercise. The draft
 PR targets the M3 delivery branch, which contains the new lock and fixture;
 neither draft PR nor delivery PR is merged automatically.
 
+**Local validation evidence (2026-09-24, code commit `6dc4210`):** Rust formatting,
+Clippy, workspace tests (23 passing), and compile checks passed. The unscoped
+managed Ayni 0.12.1 check passed all four signals (tests, size, complexity,
+dependencies) using the generated lock SHA-256
+`b450f91e0b4f1d1733ab47cfa256a5ad59fb273ac615039d30da22b1d46f44e9`;
+`env build` and `env doctor` succeeded. The M3 Kustomize overlay rendered.
+The worker image built and a read-only-root smoke test found Ayni 0.12.1,
+Rust/Cargo 1.94.0, Git 2.39.5, and all three M3 executables.
+
+**Blocked Docker Desktop deployment (2026-09-24, code commit `6dc4210`):**
+`scripts/local/deploy.sh m2` built and loaded
+`local/ayni-orchestrator-control-plane:git-6dc421069608` (image index
+`sha256:fd755e3e13ac59756046f9cf69302ea9cfffa21d5750c8bbd95268da725f1a8f`)
+and `local/ayni-orchestrator-worker:git-6dc421069608` (image index
+`sha256:2db0c6fe418ad418ddd7d97c77bc2bcff5a5f292ad5c926772cb909581b7b45c`).
+The pod reported control-plane image ID
+`sha256:9c6332c90e6be574c69c43d91995bf1d84b08522c57ad091b09cb52facc0e3e3`,
+but SQLite startup failed with `database or disk is full`. Docker Desktop's
+Kubernetes node filesystem reported 59 GiB total, 0 available, 100% used;
+the fresh namespace had no prior task state to preserve. Docker Engine was
+29.8.0, Kubernetes 1.36.1, kubectl 1.35.2, and Kustomize 5.7.1. No Docker
+cache, images, or volumes were pruned. The M3 overlay was not deployed because
+the App/OpenAI Secrets and live test were explicitly deferred. State-survival,
+negative-path, and GitHub reconciliation exercises remain unverified. The
+milestone is incomplete; draft delivery PR #5 must not be merged as completion
+evidence.
+
 Select one agent integration and the GitHub access mechanism. Provide an
 attempt-owned development checkout, scoped permissions, repository instructions,
 focused Ayni verification, and useful source checkpoints. A request can finish,

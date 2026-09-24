@@ -173,3 +173,10 @@ result of restart/duplicate-action checks. A failed or unavailable external
 service must be reported as blocked; local tests cannot substitute for this
 live exercise. Checkpoints, SQLite state, and evidence PVCs are retained by
 normal Job cleanup. Do not delete these PVCs merely to repeat a task.
+
+On 2026-09-24, a Docker Desktop deployment of code commit `6dc4210` built and
+loaded both images but the control plane could not initialize SQLite: the
+Docker Desktop VM filesystem had 0 available space. The node reported no
+`DiskPressure` despite the full filesystem. Before retrying deployment, inspect
+VM and Docker usage and arrange capacity or explicitly approved cleanup. Do not
+prune shared Docker volumes or caches as an implicit part of these scripts.
