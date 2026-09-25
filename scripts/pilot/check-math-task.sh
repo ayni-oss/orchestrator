@@ -63,6 +63,7 @@ git clone --quiet --no-hardlinks "$checkout" "$validation_checkout"
 git -C "$validation_checkout" checkout --quiet --detach "$expected_commit"
 cp -R "$checkout/.ayni" "$validation_checkout/.ayni"
 chmod -R a-w "$validation_checkout"
+chmod -R u+w "$validation_checkout/.ayni"
 
 assert_snapshot_unchanged() {
   [[ "$(git -C "$validation_checkout" rev-parse HEAD)" == "$expected_commit" ]] || {
@@ -209,5 +210,13 @@ case "$task" in
     exit 2
     ;;
 esac
+
+readonly quality_output="$snapshot_parent/quality.json"
+if ! (cd "$validation_checkout" && run_with_timeout ayni check --output json >"$quality_output"); then
+  assert_snapshot_unchanged || exit 125
+  echo "committed Ayni quality contract failed" >&2
+  exit 1
+fi
+assert_snapshot_unchanged || exit 125
 
 echo "task=$task commit=$actual_commit lock=$actual_lock acceptance=passed"
