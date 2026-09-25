@@ -1,157 +1,99 @@
-# Architecture options
+# Architecture
 
-Status: proposed technical model; no implementation or API is selected.
+Ayni Orchestrator is an application-API-first control plane that uses Kubernetes
+Jobs as bounded execution resources. Application storage, not Kubernetes object
+status, is the source of truth for task lifecycle and external actions.
 
-## Domain model
+## Workspace
 
-| Concept | Meaning |
+| Crate | Responsibility |
 | --- | --- |
-| Project | Persistent context and policy references for related repositories |
-| Repository binding | Provider identity, access grant, and branch or revision selection |
-| Environment revision | Validated locked inputs plus executor, image, platform, and preparation identity |
-| Task | Durable request, conversation, scope, outcomes, and external correlation identifiers |
-| Attempt | Execution attempt with pinned inputs, agent profile, budgets, checkpoints, and status |
-| Workspace | Attempt-owned checkouts, execution environments, and supporting services |
-| Agent profile | Resolved implementation, model settings, skills, tools, MCP connections, and permitted capabilities |
-| Evidence bundle | Measured sources, environment identities, quality artifacts, integration results, and execution records |
+| `domain` | Validated task, attempt, result, and state-transition types |
+| `control-plane` | HTTP API and UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
+| `worker` | Source preparation, managed Ayni execution, coding-agent tools, frozen-candidate validation, and structured PR authoring |
 
-A project is not an agent process. An agent participates in a task. Tasks survive
-containers and may have multiple attempts. Project membership does not
-automatically grant every agent write access to every repository.
+Dependencies point toward `domain`; workers do not own durable lifecycle state.
 
-## Proposed component responsibilities
+## Durable state and retained data
 
-| Component | Responsibility |
+The local profile uses four persistent volume claims:
+
+| Claim | Contents |
 | --- | --- |
-| Provider adapters | Enrollment, access changes, event validation, provider APIs, and PR/MR integration |
-| Task service | Conversation, routing, state transitions, checkpoints, policy, and durable external-action records |
-| Environment controller | Reconcile readiness, request builds, track image identity, and manage retention |
-| Workspace controller | Provision execution and service resources, readiness, deadlines, and cleanup |
-| Agent integration | Translate context and workspace tools into a supported agent runtime |
-| Workspace gateway | Authorize and route repository-qualified file and command operations |
-| Evidence service | Collect controlled-runner outputs and bind them to actual inputs |
-| Notification adapters | Deliver meaningful task events to authorized destinations |
+| `control-plane-state` | SQLite task, attempt, idempotency, preparation, and external-action state |
+| `development-checkpoints` | Candidate Git bundles and bounded agent checkpoints |
+| `managed-check-evidence` | Original Ayni artifacts and digest-bound validation manifests |
+| `prepared-environments` | Ayni image archives, build records, and preparation manifests |
 
-These are responsibility boundaries, not a requirement for separate services.
-An initial implementation may combine several in one process. Kubernetes custom
-resources could represent resource lifecycle, with conversations and detailed
-logs in durable application storage. The database and custom-resource design
-remain open.
+Disposable Jobs never become the authoritative record. Normal cleanup preserves
+all four claims. The single-writer SQLite volume constrains the current profile
+to one control-plane replica.
 
-## Access model
-
-Agents need source access and command execution in the appropriate toolchain.
-Sharing a checkout does not share another container's compiler, libraries, PATH,
-or environment variables.
-
-This diagram explores separate repository workspaces behind one tool interface.
-Services and repository names are examples.
+## Repository and task flow
 
 ```mermaid
-flowchart TB
-    request["Slack, UI, or provider event"] --> task["Task in a multi-repo project"]
-    task --> agent["One agent or an agent team"]
-    agent <-->|"Repository-qualified tools"| gateway["Workspace gateway: routing and authorization"]
-
-    subgraph workspace["Task workspace"]
-        subgraph frontendPod["Frontend pod"]
-            frontendExec["Executor in frontend tool environment"]
-            frontendFiles[("Frontend checkout and working branch")]
-            frontendExec <-->|"Read and edit"| frontendFiles
-        end
-        subgraph apiPod["API pod"]
-            apiExec["Executor in API tool environment"]
-            apiFiles[("API checkout and working branch")]
-            apiExec <-->|"Read and edit"| apiFiles
-        end
-        services["Disposable database and supporting services"]
-        frontendExec <-->|"Application requests"| apiExec
-        apiExec <-->|"Service connections"| services
-    end
-
-    gateway <-->|"Files, commands, output"| frontendExec
-    gateway <-->|"Files, commands, output"| apiExec
-    task --> validator["Independent validation of frozen candidate inputs"]
-    validator --> evidence["Repository evidence and integration results"]
+flowchart TD
+    enroll["Repository enrollment"] --> prepare["Preparation Job"]
+    prepare --> ready["Content-addressed ready preparation"]
+    ready --> task["Durable development task"]
+    task --> coding["Coding Job"]
+    coding --> bundle["Frozen candidate Git bundle"]
+    bundle --> validation["Independent validation Job"]
+    validation --> evidence["Ayni artifacts and bound manifest"]
+    evidence --> publication["Structured publication Job"]
+    publication --> pr["Draft pull request"]
 ```
 
-Illustrative agent-facing operations:
+1. Enrollment records the GitHub repository, installation, base branch, and
+   expected Ayni lock digest.
+2. Preparation checks out one exact revision, validates its Ayni contract,
+   builds and doctors the managed environment, and retains an immutable archive
+   and build record.
+3. Task submission freezes repository, profile, revision, request, acceptance
+   criteria, lock, preparation identity, and optional deadline.
+4. The coding Job receives fixed file and command tools but no Kubernetes token
+   or GitHub App private key. It stores a local commit and Git bundle on retained
+   checkpoint storage.
+5. Validation mounts the bundle read-only, reconstructs the candidate, loads the
+   retained environment into a fresh isolated engine, runs Ayni, and writes
+   artifacts outside the editable workspace.
+6. Publication proceeds only from the validated candidate identity. The control
+   plane mints repository-scoped GitHub App credentials and reconciles a
+   deterministic branch and draft PR.
 
-```text
-read_file(repo="frontend", path="src/payments.ts")
-apply_patch(repo="api", patch=...)
-exec(repo="api", command="cargo test")
-verify(repo="frontend", signal="test")
-```
+## Reconciliation and idempotency
 
-The gateway resolves attempt, repository, working directory, runtime, permissions,
-output stream, deadline, and cancellation. Commands execute inside the selected
-repository's tool environment. MCP is one possible presentation of these tools,
-not a selected transport.
+Every state-changing API action has a durable idempotency identity. Attempt Jobs
+use names derived from durable UUIDs. A control-plane restart observes an
+existing Job rather than creating a second logical attempt. Cancellation records
+durable intent before deleting an owned Job, and a late worker report cannot
+replace a terminal or cancelled state.
 
-## Workspace topology alternatives
+External publication is also reconciled. After an uncertain provider response,
+the control plane searches for the deterministic branch and existing pull
+request before repeating creation.
 
-| Alternative | Benefits | Costs and limits |
-| --- | --- | --- |
-| One combined container or VM | Local directories and ordinary filesystem/shell tools suit existing agents | Toolchain conflicts, combined preparation, larger footprint; composing locks is not automatic |
-| One pod with several environment containers | Shared volumes give quick file access; commands can target a container | Same-node placement, shared networking, and lifecycle coupling; sharing files does not route execution |
-| One pod per repository workspace | Independent environment revisions, sizing, startup, and replacement | Remote file/command interface; cross-repo search and agent compatibility need work |
+## Trust boundaries
 
-Separate pods are an initial preference to test, not an accepted architecture.
-Cursor integration may favor a combined worker environment for the first
-prototype. Do not require every repository to start on every request: task
-discovery can determine the working set, with optional prewarming.
+- Repository source, build hooks, and agent-edited files are executable,
+  untrusted inputs.
+- Coding, final validation, and publication use separate Jobs and credentials.
+- Agent Jobs do not receive Kubernetes service-account tokens.
+- GitHub App and model credentials are held in Kubernetes Secrets and injected
+  only where required.
+- Final artifacts are collected outside agent-writable storage and bound to the
+  exact candidate and environment identities.
+- Managed Ayni execution uses an isolated privileged Docker-in-Docker engine;
+  the worker itself remains non-root and does not receive the host Docker socket.
+- The browser/API Service has no end-user authentication in the current profile
+  and is restricted operationally to loopback port-forwarding on a trusted
+  local cluster.
 
-### Sidecars and command transport
+## Supported boundary
 
-Containers in one Kubernetes pod can share explicitly mounted volumes and a
-network namespace. They do not automatically share root filesystems or toolchains.
-See [Pods](https://kubernetes.io/docs/concepts/workloads/pods/).
-
-SSH is not required. A trusted service can use Kubernetes container execution, or
-an authenticated executor can run inside each development environment. See
-[executing in a selected container](https://kubernetes.io/docs/tasks/debug/debug-application/get-shell-running-container/).
-
-A shell launched by a sidecar runs in that sidecar's environment unless it
-explicitly delegates. Do not give agents broad cluster credentials for routing.
-Evaluate gateway-mediated execution against in-environment executors for
-compatibility, streaming, interactive sessions, cancellation, and recovery.
-
-## Durable execution
-
-Keep task state outside disposable workers. A tentative attempt lifecycle is
-`queued → preparing → running → validating → completed`, with explicit waiting,
-failed, cancelled, and interrupted outcomes. Names and transitions are provisional.
-
-Webhooks, reconciliation, and worker retries can repeat. Kubernetes documents that
-a Job program can sometimes start twice. Store stable task, attempt, and
-external-action identities so retries do not duplicate PRs, branches, or
-notifications. Reconcile provider state after uncertain outcomes before repeating
-an action. [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/)
-
-Persist useful source checkpoints and conversation state. A surviving filesystem
-does not guarantee a resumable agent conversation; a restarted process does not
-necessarily represent an unchanged attempt.
-
-## Execution boundaries
-
-Treat build hooks, repository commands, and agent-editable configuration as
-executable inputs. Separate builder, development, final validation, and publishing
-privileges. Resource limits and egress permissions come from orchestrator policy,
-not solely repository requests. Scope credentials and caches by trust domain.
-Namespaces alone are not a complete hostile-code boundary; isolation and tenancy
-remain design decisions.
-
-Capture final evidence outside agent-writable storage and revalidate exact
-candidate inputs. Signing is an optional later mechanism, not a substitute for
-a controlled execution path.
-
-## Ayni backend gap
-
-Existing Ayni managed commands launch through Docker/Podman and validate lock,
-build, preparation, and source-snapshot state. Simply running its host execution
-mode inside a pod would not supply the managed evidence contract. A Kubernetes
-path must preserve or explicitly evolve that contract.
-
-Reference: [Ayni architecture](https://github.com/ayni-oss/ayni/blob/main/ARCHITECTURE.md)
-and [managed environments](https://github.com/ayni-oss/ayni/blob/main/docs/product/environments.md).
+The current implementation supports one allowlisted private Rust repository,
+Ayni `0.13.0`, a GitHub App integration, an OpenAI agent profile, Docker Desktop
+Kubernetes, and single-node retained storage. Dependency-manifest changes return
+an explicit unsupported result. Requirements beyond this boundary are tracked in
+the [Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2), not in
+this architecture document.

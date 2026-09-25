@@ -13,7 +13,9 @@ jobs:
     name: policy
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Verify baseline files
         run: |
           test -f SECURITY.md
@@ -23,22 +25,17 @@ jobs:
           test -f MAINTAINERS.md
           test -f ROADMAP.md
           test -f .github/dco.yml
-      - name: Reject milestone IDs in runtime files
+          test -f docs/architecture.md
+          test -f docs/local-development.md
+          test -f docs/operations.md
+      - name: Reject delivery-phase identifiers
         run: |
-          historical_docs=(
-            ':!docs/milestones.md'
-            ':!docs/decisions/**'
-            ':!docs/first-iteration.md'
-            ':!docs/pilot-engineering-gates.md'
-            ':!docs/product-validation-pilot.md'
-          )
-          if git grep -nE '(^|[^[:alnum:]])[mM][0-9]+([^[:alnum:]]|$)' -- \
-            . "${historical_docs[@]}"; then
-            echo 'milestone IDs must not become current product concepts' >&2
+          if git grep -nE '(^|[^[:alnum:]])[mM][0-9]+([^[:alnum:]]|$)' -- .; then
+            echo 'delivery-phase identifiers belong in linked issues and pull requests' >&2
             exit 1
           fi
-          if find crates deploy examples scripts -type f -print \
+          if find crates deploy docs examples scripts -type f -print \
             | grep -E '(^|/)[^/]*[mM][0-9]+[^/]*(/|$)'; then
-            echo 'milestone IDs must not appear in runtime paths' >&2
+            echo 'delivery-phase identifiers must not appear in repository paths' >&2
             exit 1
           fi
