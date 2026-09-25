@@ -9,8 +9,8 @@ readonly namespace="ayni-orchestrator-dev"
 readonly start_revision="916f0184bab0999c1a7172dce84898137923505c"
 readonly script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly cohort="$script_dir/math-cohort.json"
-readonly results_dir="${M5_RESULTS_DIR:-/tmp/m5-results}"
-readonly harness_probe="${M5_HARNESS_PROBE:-0}"
+readonly results_dir="${PILOT_RESULTS_DIR:-/tmp/pilot-results}"
+readonly harness_probe="${PILOT_HARNESS_PROBE:-0}"
 
 [[ "$run_id" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { echo "run id must be a lowercase slug" >&2; exit 2; }
 [[ "$api" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+$ ]] || { echo "API must be a loopback HTTP URL" >&2; exit 2; }
@@ -30,7 +30,7 @@ if task not in cohort: raise SystemExit(f"unsupported task: {task}")
 value=cohort[task]
 if probe == "1":
     value={"request":"Deadline harness probe. Make no publication; the one-second task deadline must expire before coding starts.","acceptance_criteria":["the durable task deadline stops all owned execution"]}
-payload={"idempotency_key":f"m5-{task}-orchestrator-{run_id}","repository_id":"sandbox-main","profile_id":"openai-gpt5","start_revision":revision,"request":value["request"],"acceptance_criteria":value["acceptance_criteria"],"deadline_seconds":1 if probe == "1" else 300}
+payload={"idempotency_key":f"pilot-{task}-orchestrator-{run_id}","repository_id":"sandbox-main","profile_id":"openai-gpt5","start_revision":revision,"request":value["request"],"acceptance_criteria":value["acceptance_criteria"],"deadline_seconds":1 if probe == "1" else 300}
 with open(path,"w",encoding="utf-8") as handle: json.dump(payload,handle,separators=(",",":"))
 PY
 
@@ -61,7 +61,7 @@ PY
   esac
   now="$(date +%s)"
   if ((now > deadline_at + 10)); then
-    cancel_payload="$(printf '{"idempotency_key":"m5-%s-cutoff-cancel"}' "$task_id")"
+    cancel_payload="$(printf '{"idempotency_key":"pilot-%s-cutoff-cancel"}' "$task_id")"
     curl --fail --silent --show-error -H 'content-type: application/json' --data-binary "$cancel_payload" "$api/v1/development-tasks/$task_id/cancel" >/dev/null || true
     selector="orchestrator.ayni.dev/development-task-id=$task_id"
     kubectl --context "$context" -n "$namespace" delete jobs -l "$selector" --cascade=foreground --wait=true --timeout=10s >/dev/null 2>&1 || true
@@ -99,7 +99,7 @@ readonly ended_epoch="$(date +%s)"
 readonly ended="$(date -u -r "$ended_epoch" +%Y-%m-%dT%H:%M:%SZ)"
 readonly elapsed="$((ended_epoch - created_at))"
 mkdir -p "$results_dir"
-readonly record="$results_dir/m5-${task//_/-}-orchestrator-$run_id.json"
+readonly record="$results_dir/pilot-${task//_/-}-orchestrator-$run_id.json"
 python3 - "$record" "$task" "$task_id" "$started" "$ended" "$elapsed" "$outcome" "$reason" "$created_at" "$deadline_at" <<'PY'
 import json, sys
 path,task,task_id,started,ended,elapsed,outcome,reason,created_at,deadline_at=sys.argv[1:]

@@ -30,6 +30,7 @@ jobs:
             ':!docs/decisions/**'
             ':!docs/first-iteration.md'
             ':!docs/pilot-engineering-gates.md'
+            ':!docs/product-validation-pilot.md'
           )
           if git grep -nE '(^|[^[:alnum:]])[mM][0-9]+([^[:alnum:]]|$)' -- \
             . "${historical_docs[@]}"; then

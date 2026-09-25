@@ -9,8 +9,8 @@ readonly namespace="ayni-orchestrator-dev"
 readonly start_revision="916f0184bab0999c1a7172dce84898137923505c"
 readonly script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly cohort="$script_dir/math-cohort.json"
-readonly results_dir="${M5_RESULTS_DIR:-/tmp/m5-results}"
-readonly harness_probe="${M5_HARNESS_PROBE:-0}"
+readonly results_dir="${PILOT_RESULTS_DIR:-/tmp/pilot-results}"
+readonly harness_probe="${PILOT_HARNESS_PROBE:-0}"
 if [[ "$harness_probe" == 1 ]]; then readonly deadline_seconds=3; else readonly deadline_seconds=300; fi
 
 [[ "$run_id" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || {
@@ -25,13 +25,13 @@ if sys.argv[2] not in cohort:
     raise SystemExit(f"unsupported task: {sys.argv[2]}")
 PY
 
-readonly name="m5-${task//_/-}-manual-$run_id"
+readonly name="pilot-${task//_/-}-manual-$run_id"
 ((${#name} <= 52)) || { echo "generated run name is too long" >&2; exit 2; }
 readonly prep_job="$name-prepare"
 readonly agent_job="$name-agent"
-readonly run_path="m5/$name"
+readonly run_path="pilot/$name"
 
-kubectl --context "$context" -n "$namespace" get configmap m5-sandbox-baseline >/dev/null
+kubectl --context "$context" -n "$namespace" get configmap pilot-sandbox-baseline >/dev/null
 kubectl --context "$context" -n "$namespace" get secret openai-api >/dev/null
 kubectl --context "$context" -n "$namespace" get pvc development-checkpoints >/dev/null
 
@@ -56,7 +56,7 @@ mkdir -p "$root/workspace/.cargo"
 cp -R /usr/local/cargo/. "$root/workspace/.cargo/"
 test -z "$(git -C "$root/workspace/repository" status --porcelain --untracked-files=all)"
 '''
-spec = {"apiVersion":"batch/v1","kind":"Job","metadata":{"name":job,"labels":{"orchestrator.ayni.dev/m5-run":run}},"spec":{"backoffLimit":0,"activeDeadlineSeconds":300,"ttlSecondsAfterFinished":3600,"template":{"metadata":{"labels":{"orchestrator.ayni.dev/m5-run":run}},"spec":{"restartPolicy":"Never","automountServiceAccountToken":False,"securityContext":{"seccompProfile":{"type":"RuntimeDefault"},"fsGroup":10001},"containers":[{"name":"prepare","image":image,"imagePullPolicy":"Never","command":["/bin/sh","-ec",command],"env":[{"name":"RUN_PATH","value":run_path},{"name":"START_REVISION","value":revision}],"securityContext":security,"resources":{"requests":{"cpu":"250m","memory":"256Mi"},"limits":{"cpu":"500m","memory":"512Mi"}},"volumeMounts":[{"name":"manual","mountPath":"/manual"},{"name":"baseline","mountPath":"/baseline","readOnly":True},{"name":"scratch","mountPath":"/tmp"}]}],"volumes":[{"name":"manual","persistentVolumeClaim":{"claimName":"development-checkpoints"}},{"name":"baseline","configMap":{"name":"m5-sandbox-baseline"}},{"name":"scratch","emptyDir":{}}]}}}}
+spec = {"apiVersion":"batch/v1","kind":"Job","metadata":{"name":job,"labels":{"orchestrator.ayni.dev/pilot-run":run}},"spec":{"backoffLimit":0,"activeDeadlineSeconds":300,"ttlSecondsAfterFinished":3600,"template":{"metadata":{"labels":{"orchestrator.ayni.dev/pilot-run":run}},"spec":{"restartPolicy":"Never","automountServiceAccountToken":False,"securityContext":{"seccompProfile":{"type":"RuntimeDefault"},"fsGroup":10001},"containers":[{"name":"prepare","image":image,"imagePullPolicy":"Never","command":["/bin/sh","-ec",command],"env":[{"name":"RUN_PATH","value":run_path},{"name":"START_REVISION","value":revision}],"securityContext":security,"resources":{"requests":{"cpu":"250m","memory":"256Mi"},"limits":{"cpu":"500m","memory":"512Mi"}},"volumeMounts":[{"name":"manual","mountPath":"/manual"},{"name":"baseline","mountPath":"/baseline","readOnly":True},{"name":"scratch","mountPath":"/tmp"}]}],"volumes":[{"name":"manual","persistentVolumeClaim":{"claimName":"development-checkpoints"}},{"name":"baseline","configMap":{"name":"pilot-sandbox-baseline"}},{"name":"scratch","emptyDir":{}}]}}}}
 with open(path,"w",encoding="utf-8") as handle: json.dump(spec,handle,separators=(",",":"))
 PY
 
@@ -76,7 +76,7 @@ with open(cohort_path, encoding="utf-8") as handle: task_input=json.load(handle)
 criteria=json.dumps(task_input["acceptance_criteria"],separators=(",",":"))
 security={"allowPrivilegeEscalation":False,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":True,"runAsNonRoot":True,"runAsUser":10001}
 agent_command=["/bin/sh","-ec","sleep 30"] if probe == "1" else ["/usr/local/bin/development-agent"]
-spec={"apiVersion":"batch/v1","kind":"Job","metadata":{"name":job,"labels":{"orchestrator.ayni.dev/m5-run":run}},"spec":{"backoffLimit":0,"activeDeadlineSeconds":deadline,"ttlSecondsAfterFinished":3600,"template":{"metadata":{"labels":{"orchestrator.ayni.dev/m5-run":run}},"spec":{"restartPolicy":"Never","automountServiceAccountToken":False,"terminationGracePeriodSeconds":10,"securityContext":{"seccompProfile":{"type":"RuntimeDefault"},"fsGroup":10001},"containers":[{"name":"coding-agent","image":image,"imagePullPolicy":"Never","command":agent_command,"env":[{"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},{"name":"DEVELOPMENT_CHECKPOINT","value":"/checkpoint"},{"name":"DEVELOPMENT_START_REVISION","value":revision},{"name":"DEVELOPMENT_REQUEST","value":task_input["request"]},{"name":"DEVELOPMENT_ACCEPTANCE_CRITERIA","value":criteria},{"name":"AGENT_MODEL","value":"gpt-5"},{"name":"CARGO_HOME","value":"/workspace/.cargo"},{"name":"OPENAI_API_KEY","valueFrom":{"secretKeyRef":{"name":"openai-api","key":"api-key"}}}],"securityContext":security,"resources":{"requests":{"cpu":"500m","memory":"1Gi"},"limits":{"cpu":"2","memory":"3Gi"}},"volumeMounts":[{"name":"workspace","mountPath":"/workspace","subPath":f"{run_path}/workspace"},{"name":"checkpoint","mountPath":"/checkpoint","subPath":f"{run_path}/checkpoint"},{"name":"scratch","mountPath":"/tmp"}]}],"volumes":[{"name":"workspace","persistentVolumeClaim":{"claimName":"development-checkpoints"}},{"name":"checkpoint","persistentVolumeClaim":{"claimName":"development-checkpoints"}},{"name":"scratch","emptyDir":{}}]}}}}
+spec={"apiVersion":"batch/v1","kind":"Job","metadata":{"name":job,"labels":{"orchestrator.ayni.dev/pilot-run":run}},"spec":{"backoffLimit":0,"activeDeadlineSeconds":deadline,"ttlSecondsAfterFinished":3600,"template":{"metadata":{"labels":{"orchestrator.ayni.dev/pilot-run":run}},"spec":{"restartPolicy":"Never","automountServiceAccountToken":False,"terminationGracePeriodSeconds":10,"securityContext":{"seccompProfile":{"type":"RuntimeDefault"},"fsGroup":10001},"containers":[{"name":"coding-agent","image":image,"imagePullPolicy":"Never","command":agent_command,"env":[{"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},{"name":"DEVELOPMENT_CHECKPOINT","value":"/checkpoint"},{"name":"DEVELOPMENT_START_REVISION","value":revision},{"name":"DEVELOPMENT_REQUEST","value":task_input["request"]},{"name":"DEVELOPMENT_ACCEPTANCE_CRITERIA","value":criteria},{"name":"AGENT_MODEL","value":"gpt-5"},{"name":"CARGO_HOME","value":"/workspace/.cargo"},{"name":"OPENAI_API_KEY","valueFrom":{"secretKeyRef":{"name":"openai-api","key":"api-key"}}}],"securityContext":security,"resources":{"requests":{"cpu":"500m","memory":"1Gi"},"limits":{"cpu":"2","memory":"3Gi"}},"volumeMounts":[{"name":"workspace","mountPath":"/workspace","subPath":f"{run_path}/workspace"},{"name":"checkpoint","mountPath":"/checkpoint","subPath":f"{run_path}/checkpoint"},{"name":"scratch","mountPath":"/tmp"}]}],"volumes":[{"name":"workspace","persistentVolumeClaim":{"claimName":"development-checkpoints"}},{"name":"checkpoint","persistentVolumeClaim":{"claimName":"development-checkpoints"}},{"name":"scratch","emptyDir":{}}]}}}}
 with open(path,"w",encoding="utf-8") as handle: json.dump(spec,handle,separators=(",",":"))
 PY
 
@@ -102,7 +102,7 @@ readonly end_epoch="$(date +%s)"
 readonly elapsed="$((end_epoch - start_epoch))"
 
 if [[ "$outcome" != candidate_produced ]]; then
-  selector="orchestrator.ayni.dev/m5-run=$name"
+  selector="orchestrator.ayni.dev/pilot-run=$name"
   kubectl --context "$context" -n "$namespace" delete "job/$agent_job" --cascade=foreground --wait=true --timeout=10s >/dev/null 2>&1 || true
   kubectl --context "$context" -n "$namespace" delete pods -l "$selector" --force --grace-period=0 --wait=true >/dev/null 2>&1 || true
   test -z "$(kubectl --context "$context" -n "$namespace" get jobs,pods -l "$selector" -o name)" || { echo "manual run resources remain after cutoff" >&2; exit 1; }

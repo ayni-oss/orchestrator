@@ -136,9 +136,9 @@ For every eligible task:
 Operate one arm at a time with `run-orchestrator-math-arm.sh TASK RUN_ID
 http://127.0.0.1:18080` or `run-manual-math-arm.sh TASK RUN_ID WORKER_IMAGE`.
 Use unique lowercase run IDs, the recorded worker image, and a loopback-only API
-port-forward. Before the manual arm, retain the verified baseline Git bundle as
-ConfigMap `m5-sandbox-baseline`; its checkout preparation remains outside the run
-clock. The launchers emit only phase/timing records and do not reveal candidates.
+port-forward. Before the manual arm, retain the verified baseline Git bundle as ConfigMap
+`pilot-sandbox-baseline`; the completed run evidence uses its original
+`m5-sandbox-baseline` name. Checkout preparation remains outside the run clock. The launchers emit only phase/timing records and do not reveal candidates.
 
 Complete provider usage and full tool transcripts are not exposed by this build.
 Record provider cost as missing unless independently available, and do not infer
@@ -248,6 +248,10 @@ effort comparison.
 - The product's conservative test-edit disclosure marked `O-GCD` even though an
   exact comparison of the sandbox's inline test regions found no test edit. The
   final scope oracle uses the exact region comparison for this fixed repository.
+- After the cohort, harness-only resource, output, and environment-variable
+  prefixes changed from the milestone identifier to `pilot` so current runtime
+  files follow the repository naming policy. Frozen payloads and deadlines did not
+  change; the evidence registry retains the original run identities.
 - Full model/tool transcripts, token use, provider cost, setup time, review time,
   and active human minutes were unavailable. Manual checkout setup was performed
   by the repeatable launcher outside its clock.
