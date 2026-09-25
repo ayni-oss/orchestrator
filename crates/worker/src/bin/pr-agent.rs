@@ -7,7 +7,7 @@ use rig_agent::{
     completion::Prompt,
     tool::{Tool, ToolContext},
 };
-use rig_core::providers::openai;
+use rig_core::{message::ToolChoice, providers::openai};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -112,7 +112,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let client = openai::Client::new(&key)?;
     let agent = client.agent(&model)
         .preamble("You author a factual draft PR for one independently validated candidate. Summarize the change, exact candidate commit, validation result, limitations, and any policy or test edits. Invoke publish_draft_pr exactly once. You have no other tools and cannot change source or evidence.")
-        .tool(publisher.clone()).build();
+        .tool(publisher.clone())
+        .tool_choice(ToolChoice::Required)
+        .build();
     let _ = agent.prompt(context).max_turns(4).await?;
     if publisher
         .result
