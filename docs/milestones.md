@@ -390,17 +390,17 @@ evolution is explicitly `dependency_change_unsupported`. Decision
 security boundaries, and operating limits; the [pilot runbook](pilot-operations.md)
 records installation and operations.
 
-**Final deployment evidence (2026-09-25, runtime commit
-`61f5d2cec9c3f83c456170daea67c185af5a5995`):** formatting, Clippy, 33 workspace
+**Final deployment evidence (2026-09-25, signed runtime commit
+`e17e932fd1c21c43fec1912b84197c4c95c1fc56`):** formatting, Clippy, 33 workspace
 tests, compile checks, shell syntax, M4 Kustomize rendering, client dry-run,
 isolated clean installation, and the live M4 check passed. Docker Engine `29.8.0`
 and Docker Desktop Kubernetes client/server `v1.36.1` with Kustomize `v5.8.1`
-ran `local/ayni-orchestrator-control-plane:git-61f5d2cec9c3` (OCI index
-`sha256:6e0adfd64bb4781e09e03b0fbe5a8ae3d0c73037e68eab8af0d5e6375920c82a`,
+ran `local/ayni-orchestrator-control-plane:git-e17e932fd1c2` (OCI index
+`sha256:85cf0a9b791fe1e1e1b91a9c6cb1bc55322b2f538c9a916834632753b6edf774`,
 running image
-`sha256:369023c4ddedacea902fa7af3591f91fb02bf389ee90d7d485e5c794b5b9bbf7`)
-and loaded `local/ayni-orchestrator-worker:git-61f5d2cec9c3` (OCI index
-`sha256:f413d9b6c644f84b658c126702de5f990ff819788c797a6d4645b6827ab1b929`).
+`sha256:bee47efb009b298efcbf183a737cdfc21546809dd0fb4d1118535a4838709f93`)
+and loaded `local/ayni-orchestrator-worker:git-e17e932fd1c2` (OCI index
+`sha256:67f883d92d967b76a195c1652857ef5d6f0624f4610d6efe5933b2bf62285cb6`).
 The rollout retained all four PVCs and prior tasks. `pilot_ready: true` records
 publisher/control-plane configuration; each repository has its own preparation
 readiness state.

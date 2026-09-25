@@ -4,12 +4,12 @@ Status: all applicable engineering gates passed on the selected Docker Desktop p
 
 ## Candidate and topology
 
-- Runtime source: `61f5d2cec9c3f83c456170daea67c185af5a5995`
-- Control plane: `local/ayni-orchestrator-control-plane:git-61f5d2cec9c3`
-  - OCI index: `sha256:6e0adfd64bb4781e09e03b0fbe5a8ae3d0c73037e68eab8af0d5e6375920c82a`
-  - running image: `sha256:369023c4ddedacea902fa7af3591f91fb02bf389ee90d7d485e5c794b5b9bbf7`
-- Worker: `local/ayni-orchestrator-worker:git-61f5d2cec9c3`
-  - OCI index: `sha256:f413d9b6c644f84b658c126702de5f990ff819788c797a6d4645b6827ab1b929`
+- Runtime source: `e17e932fd1c21c43fec1912b84197c4c95c1fc56`
+- Control plane: `local/ayni-orchestrator-control-plane:git-e17e932fd1c2`
+  - OCI index: `sha256:85cf0a9b791fe1e1e1b91a9c6cb1bc55322b2f538c9a916834632753b6edf774`
+  - running image: `sha256:bee47efb009b298efcbf183a737cdfc21546809dd0fb4d1118535a4838709f93`
+- Worker: `local/ayni-orchestrator-worker:git-e17e932fd1c2`
+  - OCI index: `sha256:67f883d92d967b76a195c1652857ef5d6f0624f4610d6efe5933b2bf62285cb6`
 - Docker Engine client/server: `29.8.0`
 - Kubernetes client/server: `v1.36.1`; Kustomize: `v5.8.1`
 - Context/node/namespace: `docker-desktop`, `desktop-control-plane`, `ayni-orchestrator-dev`
@@ -48,7 +48,7 @@ The browser surface is unauthenticated inside the cluster and is operationally r
 
 ## Installation and update
 
-At runtime source `61f5d2c`, the separate `ayni-orchestrator-clean-check` namespace exposed empty task state, reported `pilot_ready: true`, and bound all four claims before it was deleted. Namespace and local-port overrides make that check reproducible. `pilot_ready: true` established publisher/control-plane configuration, not enrollment.
+At runtime source `e17e932`, the separate `ayni-orchestrator-clean-check` namespace exposed empty task state, reported `pilot_ready: true`, and bound all four claims before it was deleted. Namespace and local-port overrides make that check reproducible. `pilot_ready: true` established publisher/control-plane configuration, not enrollment.
 
 The M3-to-M4 update retained tasks `01a0d75c-5766-7509-b04d-ae856bdb56f0` and `01a0d4d8-1dc8-7694-acb1-b6f38f43316c` and PVC UIDs:
 
@@ -57,7 +57,7 @@ The M3-to-M4 update retained tasks `01a0d75c-5766-7509-b04d-ae856bdb56f0` and `0
 - managed evidence: `9b598de1-c274-41bf-9065-3938483072a9`
 - prepared environments: `f4b0ff2f-9601-4a6d-a2ae-deb1e99adf06`
 
-The rollouts from runtime `132998e` through `b42e86d` to `61f5d2c` again retained those claims and records.
+The rollouts from runtime `132998e` through `b42e86d` to signed runtime `e17e932` again retained those claims and records.
 
 ## Limitations
 
