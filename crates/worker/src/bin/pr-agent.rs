@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn accepts_only_scoped_conventional_titles() {
         assert!(conventional_title("fix(retry): correct backoff formula"));
-        assert!(!conventional_title("Fix retry backoff formula"));
+        assert!(!conventional_title("Fix requested behavior"));
         assert!(!conventional_title("fix: correct backoff formula"));
     }
 }
