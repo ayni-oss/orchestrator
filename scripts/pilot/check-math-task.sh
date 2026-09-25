@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly task="${1:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT}"
-readonly checkout="${2:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT}"
-readonly expected_commit="${3:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT}"
-readonly expected_lock="${4:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT}"
+readonly task="${1:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT}"
+readonly checkout="${2:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT}"
+readonly expected_commit="${3:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT}"
+readonly expected_lock="${4:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT}"
+readonly expected_start="${5:?usage: scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT}"
 readonly manifest="$checkout/Cargo.toml"
 readonly lock="$checkout/.ayni.lock"
 readonly command_timeout_seconds=60
@@ -24,6 +25,14 @@ grep -Fxq 'name = "math-validation"' "$manifest" || {
 readonly actual_commit="$(git -C "$checkout" rev-parse HEAD)"
 [[ "$actual_commit" == "$expected_commit" ]] || {
   echo "checkout commit $actual_commit does not match $expected_commit" >&2
+  exit 2
+}
+git -C "$checkout" cat-file -e "$expected_start^{commit}" 2>/dev/null || {
+  echo "expected start commit is absent: $expected_start" >&2
+  exit 2
+}
+git -C "$checkout" merge-base --is-ancestor "$expected_start" "$expected_commit" || {
+  echo "candidate $expected_commit does not descend from $expected_start" >&2
   exit 2
 }
 [[ -z "$(git -C "$checkout" status --porcelain --untracked-files=all)" ]] || {

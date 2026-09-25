@@ -1,5 +1,37 @@
 use super::*;
 use crate::preparation::{PreparationStatus, PrepareRepositoryInput};
+use rusqlite::Connection;
+
+#[test]
+fn opening_a_legacy_development_database_adds_deadline_columns() -> Result<(), StoreError> {
+    let connection = Connection::open_in_memory().map_err(StoreError::Database)?;
+    connection
+        .execute_batch(
+            "CREATE TABLE development_tasks (
+                id TEXT PRIMARY KEY, repository_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                repository_snapshot TEXT NOT NULL, profile_snapshot TEXT NOT NULL,
+                start_revision TEXT NOT NULL, request TEXT NOT NULL,
+                acceptance_criteria TEXT NOT NULL, phase TEXT NOT NULL,
+                preparation_id TEXT, retry_of TEXT, requested_input TEXT,
+                candidate_commit TEXT, validation_manifest TEXT,
+                policy_or_test_edits INTEGER, draft_pr_url TEXT, failure TEXT,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+            );",
+        )
+        .map_err(StoreError::Database)?;
+    let store = Store::from_connection(connection, 2)?;
+    let columns = store
+        .connection
+        .prepare("PRAGMA table_info(development_tasks)")
+        .map_err(StoreError::Database)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(StoreError::Database)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::Database)?;
+    assert!(columns.iter().any(|column| column == "deadline_seconds"));
+    assert!(columns.iter().any(|column| column == "deadline_at"));
+    Ok(())
+}
 
 fn mark_ready(store: &mut Store, repository_id: &str, revision: &str) -> Result<(), StoreError> {
     let key = IdempotencyKey::try_from(format!("prepare-{repository_id}"))
@@ -43,12 +75,27 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
         start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
+        deadline_seconds: None,
     };
     let key = IdempotencyKey::try_from("development-submit".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
     let first = store.submit_development(&key, &input)?;
     assert_eq!(first.phase, DevelopmentPhase::Unsupported);
     assert_eq!(first, store.submit_development(&key, &input)?);
+    for invalid_deadline in [0, 86_401] {
+        let invalid = DevelopmentInput {
+            deadline_seconds: Some(invalid_deadline),
+            ..input.clone()
+        };
+        let invalid_key = IdempotencyKey::try_from(format!("invalid-{invalid_deadline}"))
+            .map_err(StoreError::InvalidLifecycleData)?;
+        assert!(matches!(
+            store.submit_development(&invalid_key, &invalid),
+            Err(StoreError::InvalidInput(
+                "deadline seconds must be between 1 and 86400"
+            ))
+        ));
+    }
     Ok(())
 }
 
@@ -75,6 +122,7 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
+        deadline_seconds: Some(300),
     };
     mark_ready(
         &mut store,
@@ -85,6 +133,8 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         .map_err(StoreError::InvalidLifecycleData)?;
     let task = store.submit_development(&submit, &input)?;
     assert_eq!(task.phase, DevelopmentPhase::Queued);
+    assert_eq!(task.input.deadline_seconds, Some(300));
+    assert_eq!(task.deadline_at, Some(task.created_at + 300));
     store.put_agent_profile(&AgentProfile {
         id: "coding".into(),
         provider: "anthropic".into(),
@@ -137,6 +187,7 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
+        deadline_seconds: Some(300),
     };
     mark_ready(
         &mut store,
@@ -238,6 +289,7 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
             start_revision: revision.into(),
             request: "Fix the formula".into(),
             acceptance_criteria: vec!["3 -> 8".into()],
+            deadline_seconds: Some(300),
         },
     )?;
     assert!(store.development_phase(
@@ -250,6 +302,8 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
         .map_err(StoreError::InvalidLifecycleData)?;
     let follow_up = store.retry_development(task.id, &key, Some("Round down"))?;
     assert_eq!(follow_up.retry_of, Some(task.id));
+    assert_eq!(follow_up.deadline_at, task.deadline_at);
+    assert_eq!(follow_up.input.deadline_seconds, Some(300));
     assert!(follow_up.input.request.contains("Round down"));
     assert_eq!(
         store
@@ -257,6 +311,21 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
             .id,
         follow_up.id
     );
+    store
+        .connection
+        .execute(
+            "UPDATE development_tasks SET deadline_at=0 WHERE id=?1",
+            [task.id.to_string()],
+        )
+        .map_err(StoreError::Database)?;
+    let expired_key = IdempotencyKey::try_from("provide-input-expired".to_owned())
+        .map_err(StoreError::InvalidLifecycleData)?;
+    assert!(matches!(
+        store.retry_development(task.id, &expired_key, Some("Round up")),
+        Err(StoreError::InvalidInput(
+            "development task deadline has expired"
+        ))
+    ));
     Ok(())
 }
 
