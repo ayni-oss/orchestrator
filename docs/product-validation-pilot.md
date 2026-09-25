@@ -249,6 +249,11 @@ effort comparison.
 - The product's conservative test-edit disclosure marked `O-GCD` even though an
   exact comparison of the sandbox's inline test regions found no test edit. The
   final scope oracle uses the exact region comparison for this fixed repository.
+- A post-run DCO-only history normalization produced tree-identical signed
+  replacements for the deployed source (`8d01e5e` → `d0ee95f`), quality validator
+  (`59b06f5` → `7ceefe4`), and scope validator (`eaf7fd9` → `c50fae3`). The original
+  identities remain above because they name the code and images actually used for
+  the run; the replacements preserve those trees in the final branch.
 - After the cohort, harness-only resource, output, and environment-variable
   prefixes changed from the milestone identifier to `pilot` so current runtime
   files follow the repository naming policy. Frozen payloads and deadlines did not
