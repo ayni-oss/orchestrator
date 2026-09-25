@@ -170,12 +170,12 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
     store
         .connection
         .execute(
-            "UPDATE publication_actions SET branch_name='legacy/task-preserved' WHERE task_id=?1",
+            "UPDATE publication_actions SET branch_name='existing/task-preserved' WHERE task_id=?1",
             [task.id.to_string()],
         )
         .map_err(StoreError::Database)?;
     let (_, action) = store.begin_publication(task.id, "fix(example): repair formula", "second")?;
-    assert_eq!(action.branch_name, "legacy/task-preserved");
+    assert_eq!(action.branch_name, "existing/task-preserved");
     assert_eq!(action.body, "first");
     let changed_candidate = "9c876bca1b61229971900009f4ea9a81f2258909";
     assert!(!store.record_candidate(task.id, changed_candidate)?);
