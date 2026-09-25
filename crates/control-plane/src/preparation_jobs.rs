@@ -76,6 +76,9 @@ impl PreparationReconciler {
     }
 
     async fn start(&self, preparation: &PreparationView) -> Result<(), String> {
+        if self.delete_terminal_job(preparation).await? {
+            return Ok(());
+        }
         let repository =
             self.with_store(|store| store.repository_view(&preparation.repository_id))?;
         let token = match self.publisher.clone_token(&repository.binding).await {
@@ -217,6 +220,29 @@ impl PreparationReconciler {
                 .map_err(|error| format!("preparation Secret deletion failed: {error}"))?;
         }
         Ok(())
+    }
+
+    async fn delete_terminal_job(&self, preparation: &PreparationView) -> Result<bool, String> {
+        let name = job_name(&preparation.id);
+        let Some(job) = self
+            .jobs()
+            .get_opt(&name)
+            .await
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(false);
+        };
+        let status = job.status.as_ref();
+        let terminal = status.and_then(|value| value.succeeded).unwrap_or(0) > 0
+            || status.and_then(|value| value.failed).unwrap_or(0) > 0;
+        if !terminal {
+            return Ok(false);
+        }
+        self.jobs()
+            .delete(&name, &DeleteParams::default())
+            .await
+            .map_err(|error| format!("terminal preparation Job deletion failed: {error}"))?;
+        Ok(true)
     }
 
     async fn ensure_job(
