@@ -451,3 +451,91 @@ impl IntoResponse for PublishError {
         (status, Json(serde_json::json!({"error": message}))).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_fixture(directory: &FilePath) -> Result<Manifest, Box<dyn std::error::Error>> {
+        let signals = br#"{"tests":"passed"}"#;
+        fs::write(directory.join("signals.json"), signals)?;
+        let signals_sha = format!("{:x}", Sha256::digest(signals));
+        let execution = serde_json::to_vec(&serde_json::json!({
+            "artifact_digest": format!("sha256:{signals_sha}")
+        }))?;
+        fs::write(directory.join("execution.json"), &execution)?;
+        let build = br#"{"image":"fixture"}"#;
+        fs::write(directory.join("build.json"), build)?;
+        Ok(Manifest {
+            schema_version: 1,
+            start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
+            candidate_commit: "4e67795c0cba21bd82c21bdd6c921417fbe29ff6".into(),
+            lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+            outcome: "success".into(),
+            check_exit_code: 0,
+            policy_edited: false,
+            tests_edited: false,
+            changed_paths: vec!["src/main.rs".into()],
+            preparation_id: Some("prep-fixture".into()),
+            preparation_reused: true,
+            artifacts: vec![
+                Artifact {
+                    name: "signals.json".into(),
+                    sha256: signals_sha,
+                },
+                Artifact {
+                    name: "execution.json".into(),
+                    sha256: format!("{:x}", Sha256::digest(&execution)),
+                },
+                Artifact {
+                    name: "build.json".into(),
+                    sha256: format!("{:x}", Sha256::digest(build)),
+                },
+            ],
+        })
+    }
+
+    #[test]
+    fn retained_artifacts_must_be_present_and_unchanged() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = tempfile::tempdir()?;
+        let manifest = write_fixture(directory.path())?;
+        verify_artifacts(directory.path(), &manifest)?;
+
+        fs::write(directory.path().join("signals.json"), b"altered")?;
+        assert_eq!(
+            verify_artifacts(directory.path(), &manifest),
+            Err("retained validation artifact digest differs".into())
+        );
+
+        write_fixture(directory.path())?;
+        fs::remove_file(directory.path().join("build.json"))?;
+        assert_eq!(
+            verify_artifacts(directory.path(), &manifest),
+            Err("retained validation artifact is absent".into())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn execution_artifact_must_bind_the_retained_signals() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = tempfile::tempdir()?;
+        let mut manifest = write_fixture(directory.path())?;
+        let execution = serde_json::to_vec(&serde_json::json!({
+            "artifact_digest": "sha256:not-the-signals-digest"
+        }))?;
+        fs::write(directory.path().join("execution.json"), &execution)?;
+        manifest
+            .artifacts
+            .iter_mut()
+            .find(|artifact| artifact.name == "execution.json")
+            .ok_or("fixture lacks execution artifact")?
+            .sha256 = format!("{:x}", Sha256::digest(execution));
+        assert_eq!(
+            verify_artifacts(directory.path(), &manifest),
+            Err("execution artifact does not bind signals".into())
+        );
+        Ok(())
+    }
+}

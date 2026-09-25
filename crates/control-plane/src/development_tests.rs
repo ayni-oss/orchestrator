@@ -168,6 +168,22 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
     assert_eq!(action.body, "first");
     let (_, action) = store.begin_publication(task.id, "fix(example): repair formula", "second")?;
     assert_eq!(action.body, "first");
+    let changed_candidate = "9c876bca1b61229971900009f4ea9a81f2258909";
+    assert!(!store.record_candidate(task.id, changed_candidate)?);
+    assert!(
+        store
+            .complete_publication(
+                task.id,
+                changed_candidate,
+                41,
+                "https://github.com/ayni-oss/sandbox/pull/41",
+            )
+            .is_err()
+    );
+    assert_eq!(
+        store.development_task(task.id)?.candidate_commit.as_deref(),
+        Some(candidate)
+    );
     store.complete_publication(
         task.id,
         candidate,

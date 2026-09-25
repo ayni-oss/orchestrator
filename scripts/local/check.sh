@@ -17,7 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 for _ in {1..20}; do
-  if response="$(curl --fail --silent --show-error "http://127.0.0.1:$local_port/readyz")"; then
+  if response="$(curl --fail --silent --show-error "http://127.0.0.1:$local_port/readyz" 2>/dev/null)"; then
     if [[ "$mode" == "m4" ]]; then
       grep -q '"pilot_ready":true' <<<"$response"
       curl --fail --silent --show-error "http://127.0.0.1:$local_port/" | grep -q 'Ayni Orchestrator'

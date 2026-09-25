@@ -104,6 +104,22 @@ fn sha256(path: &Path) -> Result<String, io::Error> {
     Ok(format!("{:x}", Sha256::digest(fs::read(path)?)))
 }
 
+fn test_edits_disclosed(changed_paths: &[String], function_context_diff: &str) -> bool {
+    changed_paths
+        .iter()
+        .any(|path| path.contains("test") || path.contains("spec"))
+        || function_context_diff.lines().any(|line| {
+            let line = line.trim_start_matches(['+', '-', ' ']).trim_start();
+            line.starts_with("#[test]")
+                || (line.starts_with("#[") && line.ends_with("::test]"))
+                || line.starts_with("#[cfg(test)]")
+                || line.starts_with("mod tests")
+                || line.starts_with("assert!(")
+                || line.starts_with("assert_eq!(")
+                || line.starts_with("assert_ne!(")
+        })
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let input = ValidationInput::from_environment()?;
     let (lock_digest, changed_paths) = checkout_candidate(&input)?;
@@ -114,9 +130,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             ".ayni.lock" | "Cargo.toml" | "Cargo.lock" | "rust-toolchain.toml"
         )
     });
-    let tests_edited = changed_paths
-        .iter()
-        .any(|path| path.contains("test") || path.contains("spec"));
+    let diff = fs::read_to_string(input.evidence.join("git-diff-patch.stdout"))?;
+    let tests_edited = test_edits_disclosed(&changed_paths, &diff);
     if policy_edited {
         write_manifest(
             &input.evidence,
@@ -232,6 +247,17 @@ fn checkout_candidate(
             &input.candidate_commit,
         ],
         &evidence.join("git-diff"),
+    )?;
+    checked(
+        workspace,
+        "git",
+        &[
+            "diff",
+            "--function-context",
+            &input.start_revision,
+            &input.candidate_commit,
+        ],
+        &evidence.join("git-diff-patch"),
     )?;
     let changed_paths: Vec<String> = fs::read_to_string(evidence.join("git-diff.stdout"))?
         .lines()
@@ -453,5 +479,34 @@ fn main() -> ExitCode {
             eprintln!("candidate validation failed: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_edits_disclosed;
+
+    #[test]
+    fn discloses_dedicated_and_inline_test_edits() {
+        assert!(test_edits_disclosed(
+            &["tests/retry.rs".into()],
+            "diff --git a/tests/retry.rs b/tests/retry.rs"
+        ));
+        assert!(test_edits_disclosed(
+            &["src/main.rs".into()],
+            "@@ fn verifies_backoff() {\n #[test]\n fn verifies_backoff() {\n-    assert_eq!(retry(2), 3);\n+    assert_eq!(retry(2), 4);"
+        ));
+        assert!(test_edits_disclosed(
+            &["src/lib.rs".into()],
+            "@@ mod tests {\n #[tokio::test]\n async fn reports_failure() {"
+        ));
+    }
+
+    #[test]
+    fn does_not_label_implementation_only_edits_as_test_edits() {
+        assert!(!test_edits_disclosed(
+            &["src/main.rs".into()],
+            "@@ fn retry_delay(attempt: u32) -> u32 {\n-    attempt * 2\n+    1 << attempt"
+        ));
     }
 }
