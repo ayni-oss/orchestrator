@@ -10,6 +10,7 @@ readonly start_revision="916f0184bab0999c1a7172dce84898137923505c"
 readonly script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly cohort="$script_dir/math-cohort.json"
 readonly results_dir="${M5_RESULTS_DIR:-/tmp/m5-results}"
+readonly harness_probe="${M5_HARNESS_PROBE:-0}"
 
 [[ "$run_id" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { echo "run id must be a lowercase slug" >&2; exit 2; }
 [[ "$api" =~ ^http://(127\.0\.0\.1|localhost):[0-9]+$ ]] || { echo "API must be a loopback HTTP URL" >&2; exit 2; }
@@ -21,13 +22,15 @@ status_json="$(mktemp)"
 cleanup() { rm -f "$payload" "$response" "$status_json"; }
 trap cleanup EXIT
 
-python3 - "$payload" "$cohort" "$task" "$run_id" "$start_revision" <<'PY'
+python3 - "$payload" "$cohort" "$task" "$run_id" "$start_revision" "$harness_probe" <<'PY'
 import json, sys
-path, cohort_path, task, run_id, revision = sys.argv[1:]
+path, cohort_path, task, run_id, revision, probe = sys.argv[1:]
 with open(cohort_path, encoding="utf-8") as handle: cohort=json.load(handle)
 if task not in cohort: raise SystemExit(f"unsupported task: {task}")
 value=cohort[task]
-payload={"idempotency_key":f"m5-{task}-orchestrator-{run_id}","repository_id":"sandbox-main","profile_id":"openai-gpt5","start_revision":revision,"request":value["request"],"acceptance_criteria":value["acceptance_criteria"],"deadline_seconds":300}
+if probe == "1":
+    value={"request":"Deadline harness probe. Make no publication; the one-second task deadline must expire before coding starts.","acceptance_criteria":["the durable task deadline stops all owned execution"]}
+payload={"idempotency_key":f"m5-{task}-orchestrator-{run_id}","repository_id":"sandbox-main","profile_id":"openai-gpt5","start_revision":revision,"request":value["request"],"acceptance_criteria":value["acceptance_criteria"],"deadline_seconds":1 if probe == "1" else 300}
 with open(path,"w",encoding="utf-8") as handle: json.dump(payload,handle,separators=(",",":"))
 PY
 
@@ -77,6 +80,20 @@ PY
 )"
   fi
 done
+
+if [[ "$outcome" == timed_out ]]; then
+  selector="orchestrator.ayni.dev/development-task-id=$task_id"
+  for _ in $(seq 1 10); do
+    resources="$(kubectl --context "$context" -n "$namespace" get jobs,pods -l "$selector" -o name)"
+    [[ -z "$resources" ]] && break
+    sleep 1
+  done
+  if [[ -n "$resources" ]]; then
+    kubectl --context "$context" -n "$namespace" delete jobs -l "$selector" --cascade=foreground --wait=true --timeout=10s >/dev/null 2>&1 || true
+    kubectl --context "$context" -n "$namespace" delete pods -l "$selector" --force --grace-period=0 --wait=true >/dev/null 2>&1 || true
+  fi
+  test -z "$(kubectl --context "$context" -n "$namespace" get jobs,pods -l "$selector" -o name)" || { echo "orchestrator resources remain after cutoff" >&2; exit 1; }
+fi
 
 readonly ended_epoch="$(date +%s)"
 readonly ended="$(date -u -r "$ended_epoch" +%Y-%m-%dT%H:%M:%SZ)"

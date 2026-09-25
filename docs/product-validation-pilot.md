@@ -1,9 +1,9 @@
 # Product-validation pilot record
 
-Status: preparation started on 2026-09-25. No pilot run has started and no
-product-value outcome is claimed. The five-task synthetic cohort remains blocked
-until the clean sandbox start revision and paired baseline and five-minute
-cancellation harnesses are validated.
+Status: ready to run on 2026-09-25. No paid pilot run has started and no
+product-value outcome is claimed. The merged sandbox baseline, five independent
+baseline failures, exact paired inputs, and both five-minute cancellation paths
+are validated. The next action is the first frozen pair, not an additional probe.
 
 ## Agreed protocol
 
@@ -26,45 +26,50 @@ when the immutable development request is accepted. For the manual arm, start it
 when the prepared checkout and identical immutable request are handed to the
 baseline harness and the agent process is launched.
 
-Run the baseline arm in a dedicated process group or container so its agent and
-all commands it spawns share one termination boundary. At 300 seconds, classify
-unfinished work as timed out and initiate cancellation: use the supported task
-action for Orchestrator and send `SIGTERM` to the complete baseline process group
-or stop its container. No candidate produced after the cutoff is eligible.
+Every Orchestrator submission carries `deadline_seconds: 300`. The control plane
+persists one absolute deadline, gives every stage Job no more than the remaining
+time, fails an unfinished task closed at the cutoff, and removes its owned Jobs,
+Pods, and clone secret. The manual arm runs the same agent binary in a dedicated
+Kubernetes Job with a 300-second active deadline and ten-second termination
+grace. No candidate produced after the cutoff is eligible.
 
-Allow at most ten additional seconds for shutdown. Then send `SIGKILL` to the
-complete baseline group or remove its container. For Orchestrator, force-delete
-all Jobs and Pods owned by that development task if reconciliation has not removed
-them. Verify that no owned process, Job, or Pod remains, and record both cutoff and
-actual shutdown latency. Orchestrator cancellation is asynchronous, so 300
-seconds is the outcome cutoff rather than a claim that compute has already
-stopped. Validate both paths before the cohort starts. Retries remain part of the
-original run and do not restart its clock. Any provider charge is recorded when
-available; a time bound must not be represented as a guarantee of zero cost.
+The harnesses verify that no owned Job or Pod remains and use forced, label-scoped
+deletion only if normal deadline cleanup does not finish. The non-provider cutoff
+probes completed before the cohort: Orchestrator task
+`01a0d998-4d0c-76a2-8f57-722bee79f39d` failed with `task deadline exceeded`
+and no resources remaining; manual Job `m5-gcd-manual-cutoff-v3-agent` reached
+`DeadlineExceeded` and had no resources remaining. Primary runs do not retry or
+accept follow-up input: failure, timeout, or requested input is the row outcome.
+Any diagnostic retry remains associated with the row and cannot reset its durable
+deadline or create another primary success opportunity. Record provider charge
+when available; a time bound is not a guarantee of zero cost.
 
 ## Implementation-readiness baseline
 
-The final implementation-readiness candidate is based on the latest pulled
-`main` revision `f85a3cae0a7bb297664770b753534ed0d3e0e50d`:
+The M5 implementation-readiness candidate is based on pulled `main` revision
+`f85a3cae0a7bb297664770b753534ed0d3e0e50d` and deployed from the clean pilot
+branch:
 
-- source: `e4464ea4be7e3253a67f78a3f64a49b4b53df1aa`
-- control-plane image: `local/ayni-orchestrator-control-plane:git-e4464ea4be7e`
-- running image ID: `sha256:f6488f641b72f892421d7b2e44bc07a67a3e538bb8991293df5cc4966d1e29d3`
-- worker image: `local/ayni-orchestrator-worker:git-e4464ea4be7e`
-- worker OCI index: `sha256:5ad13ed5fb9019aa66ed172b21e29c37a01d76a8771684ce4664fd057c8ce0fc`
-- topology: Docker Desktop Kubernetes, `docker-desktop` context,
-  `ayni-orchestrator-dev` namespace
+- source: `8d01e5e3b45b37813ba707663f03f578e82b2174`
+- control-plane image: `local/ayni-orchestrator-control-plane:git-8d01e5e3b45b`
+- control-plane OCI index: `sha256:ada65e92847feb61686fad104329f96611930281f5152e42c8d706886c3a6798`
+- running image ID: `sha256:237bcbf8d7f8796d85b8853d477a12eb1bf7051840a3ad0cbfc7a249f0286b77`
+- worker image: `local/ayni-orchestrator-worker:git-8d01e5e3b45b`
+- worker OCI index: `sha256:9b6a91e4bfcb9914937e9d45dfe12679544d1f4de42ea4edf4ee28f16c9afd29`
+- topology: Docker `29.8.0`; Kubernetes `v1.36.1`; Kustomize `v5.8.1`;
+  `docker-desktop` context and `ayni-orchestrator-dev` namespace
 - readiness: managed execution, durable orchestration, task UI, repository
   preparation, and pilot configuration all available
 - retained storage: all four expected PVCs `Bound`
-- enrolled sandbox revision: `589fb2a2fae67d87e00da1ddc4c9a576a207d2ff`
-- sandbox lock SHA-256: `f91be39b21d1af3506e25caf246c0d7178c339669ed511582547acacec8b54d4`
-- ready preparation: `prep-c536767dd800a652ba3f8e7a8c23aed7bda3e4c11e1edeb73b94fda063359d02`
+- enrolled sandbox revision: `916f0184bab0999c1a7172dce84898137923505c`
+- sandbox lock file SHA-256: `c81a8359c237dd1ef0583167617ee5d36c9e83789ca11e510f2b1f80bc7b325a`
+- ready cold preparation: `prep-20b20e9229c2491d27e3c07b1283d89e7e72398094f957d6d72c320eba0bc871`
+  in 103 seconds
 
-Formatting, Clippy with warnings denied, all-feature workspace tests (34 passing),
-compile checks, shell syntax checks, deployment, rollout, and the local readiness
-check passed from this revision. This confirms implementation readiness only; it
-does not count as a product-validation run.
+Formatting, Clippy with warnings denied, all-feature workspace tests (37 passing),
+compile checks, shell syntax checks, deployment, rollout, local readiness, additive
+migration, and both cutoff paths passed. This confirms implementation readiness
+only; it does not count as a paid product-validation run.
 
 ## Paired-agent equivalence
 
@@ -74,8 +79,12 @@ the same 24-turn limit, and identical request and acceptance-criteria bytes. The
 Orchestrator arm uses normal controller scheduling and checkpointing. For the
 manual arm, the maintainer prepares an isolated checkout and invokes that same
 binary directly; only preparation, coordination, evidence handling, and recovery
-are manual. Any unavoidable difference in environment variables, resources, or
-tooling makes the pair non-equivalent and must be reported.
+are manual. `scripts/pilot/math-cohort.json` is the sole request and criteria
+source. `run-orchestrator-math-arm.sh` submits it with the durable deadline;
+`run-manual-math-arm.sh` prepares a private PVC subpath and launches the same
+worker image with matching 2-CPU/3-GiB limits, Cargo seed, security context,
+model, and serialized criteria. Any unavoidable environment, resource, or tool
+difference makes the pair non-equivalent and must be reported.
 
 The candidate, transcript, summary, and test output from the first arm remain
 hidden until the second arm reaches a terminal state. The maintainer may operate
@@ -90,8 +99,10 @@ fixture and is not an eligible cohort base. Merged sandbox revision
 `math-validation` CLI with lock fingerprint
 `sha256:96714feaa1986289c5f1284259c53887e6bfd073510ba0399e4580188b0c1eec`,
 repairs that known fixture, and deliberately does not implement or plant failures
-for the five selected feature tasks. Its independent validators fail for all five
-unimplemented features, so this revision is the frozen common start for both arms.
+for the five selected feature tasks. After rebuilding the pinned Ayni environment,
+all five independent validators returned exit 1 with the baseline's retry-delay-only
+usage message. These are intended absent-feature failures, so this revision is the
+frozen common start for both arms.
 
 The selected tasks are synthetic GCD, LCM, primality, integer-square-root, and
 checked-mean CLI features. They are useful for a bounded workflow comparison but
@@ -120,6 +131,19 @@ For every eligible task:
 8. Freshly validate every Orchestrator candidate claimed as verified. Include at
    least one cold reconstruction during the cohort.
 
+Operate one arm at a time with `run-orchestrator-math-arm.sh TASK RUN_ID
+http://127.0.0.1:18080` or `run-manual-math-arm.sh TASK RUN_ID WORKER_IMAGE`.
+Use unique lowercase run IDs, the recorded worker image, and a loopback-only API
+port-forward. Before the manual arm, retain the verified baseline Git bundle as
+ConfigMap `m5-sandbox-baseline`; its checkout preparation remains outside the run
+clock. The launchers emit only phase/timing records and do not reveal candidates.
+
+Complete provider usage and full tool transcripts are not exposed by this build.
+Record provider cost as missing unless independently available, and do not infer
+zero cost. An Orchestrator-first success creates a visible draft PR; the operator
+must not open it before the paired manual arm terminates. Report any accidental
+inspection or solution transfer as contamination.
+
 ## Cohort registry
 
 A row becomes eligible only when the shared baseline revision is merged and its
@@ -137,8 +161,9 @@ any malformed or out-of-range value.
 | 5 | Add `checked-mean <i64>...`; require input, accumulate without `i64` overflow, and truncate toward zero | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
 
 `scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT
-EXPECTED_LOCK_FINGERPRINT` is the independent executable acceptance oracle. It
-rejects a wrong repository, commit, lock, dirty checkout, or unlocked Cargo build.
+EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT` is the independent executable
+acceptance oracle. It rejects a wrong repository, commit, ancestry, lock, dirty
+checkout, or unlocked Cargo build.
 After the expected Ayni environment is built, it clones the frozen commit into a
 host-owned read-only snapshot, keeps Cargo output outside that snapshot, and runs
 candidate code only through the credential-free, network-disabled Ayni

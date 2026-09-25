@@ -446,11 +446,12 @@ product value or authorize M5 conclusions.
 The [product-validation pilot record](product-validation-pilot.md) freezes the
 selected sandbox repository, paired independent baseline, alternating order, and
 a five-minute limit per run and a ceiling of five synthetic arithmetic tasks. No
-run has started; the clean sandbox baseline and paired-run harnesses remain
-prerequisites.
+paid run has started. The merged sandbox baseline, exact request bytes, intended
+baseline failures, paired launchers, durable deadline, and both cutoff paths are
+validated.
 
-Freeze the five task start revision, acceptance criteria, and remaining operating
-details before collecting results. The `openai-gpt5` profile is selected for both
+Use the frozen task start revision, requests, acceptance criteria, and operating
+details when collecting results. The `openai-gpt5` profile is selected for both
 arms. Use the deployed M4 candidate and record its exact identities. Apply the [paired-test protocol](mvp-validation.md#five-task-paired-test),
 including human review, comparison limitations, failure accounting, and fresh
 validation of claimed verified results.
@@ -474,7 +475,7 @@ multi-repository expansion, public publication, or production deployment.
 | M2 | Selected — [Decision 0003](decisions/0003-durable-local-orchestration.md) records local durable storage, retained evidence, Job transport, and lifecycle schema |
 | M3 | First agent, GitHub access, and checkpoint/candidate handoff |
 | M4 completion | Selected — dependency changes are explicitly unsupported; [Decision 0004](decisions/0004-pilot-readiness-and-preparation.md) records the operating limits |
-| M5 | Sandbox, `openai-gpt5`, five synthetic arithmetic tasks, and paired comparison selected. The sandbox baseline and paired-run harnesses remain required. The five-minute bound does not cap provider spend, so neither product value nor cost acceptability can be concluded. |
+| M5 | Sandbox, `openai-gpt5`, five synthetic arithmetic tasks, and paired comparison selected. The baseline and paired-run harness gates passed; the ten paid runs remain. The five-minute bound does not cap provider spend, so neither product value nor cost acceptability can be concluded. |
 
 Docker Desktop Kubernetes and Kustomize are selected. Record the other choices
 and their rationale when made, without implying unsupported capabilities or
