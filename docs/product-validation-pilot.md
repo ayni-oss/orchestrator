@@ -1,9 +1,9 @@
 # Product-validation pilot record
 
 Status: preparation started on 2026-09-25. No pilot run has started and no
-product-value outcome is claimed. The cohort remains blocked until ten eligible
-tasks are frozen and the paired baseline and five-minute cancellation harnesses
-are validated.
+product-value outcome is claimed. The five-task synthetic cohort remains blocked
+until the clean sandbox start revision and paired baseline and five-minute
+cancellation harnesses are validated.
 
 ## Agreed protocol
 
@@ -16,9 +16,9 @@ are validated.
 | Credential policy | Use existing references; never record secret values or credentials in pilot evidence |
 | Run order | Alternate which arm runs first for successive tasks |
 | Time limit | Five minutes per independent run, including retries |
-| Primary runs | Twenty: two arms for each of ten tasks |
+| Primary runs | Ten maximum: two arms for each of five tasks |
 | Monetary limit | None; the maintainer selected a time-only bound, which does not cap paid provider spend |
-| Claims allowed | Descriptive time and outcome evidence; no cost-acceptability conclusion without cost data and a monetary ceiling |
+| Claims allowed | Synthetic workflow evidence only; no product-value or cost-acceptability conclusion |
 
 Repository onboarding and cold or warm preparation happen before the run clock
 and are measured separately. For the Orchestrator arm, start a monotonic timer
@@ -84,18 +84,19 @@ between arms, mark the pair contaminated and exclude it from comparative claims.
 
 ## Repository eligibility review
 
-The selected sandbox currently contains one deliberately incorrect retry-backoff
-fixture at revision `589fb2a2fae67d87e00da1ddc4c9a576a207d2ff`. That fixture was
-used in earlier engineering proofs, its expected repair is documented, and no
-open maintenance issues identify additional work. It is therefore useful for a
-smoke check but is not an independent real task for the decision cohort.
+The enrolled sandbox revision contains the previously exposed retry-backoff
+fixture and is not an eligible cohort base. Sandbox candidate
+`6f49ce0508029b96eecc8d07ab58400914ca10c5` prepares a passing
+`math-validation` CLI with lock fingerprint
+`sha256:96714feaa1986289c5f1284259c53887e6bfd073510ba0399e4580188b0c1eec`,
+repairs that known fixture, and deliberately does not implement or plant failures
+for the five selected feature tasks. Freeze its eventual merged commit as the
+common start revision before running either arm.
 
-The cohort currently has **zero of ten eligible tasks**. Do not execute or count
-pilot runs until ten real, bounded maintenance needs are selected and recorded.
-Do not plant defects solely to manufacture favorable pilot evidence. If the
-sandbox remains the selected repository, it must first acquire genuine
-maintenance work whose solutions have not already been exposed by earlier
-proofs.
+The selected tasks are synthetic GCD, LCM, primality, integer-square-root, and
+checked-mean CLI features. They are useful for a bounded workflow comparison but
+are not genuine maintenance needs. Their results must not be represented as
+product-value evidence, regardless of success rate.
 
 ## Frozen run procedure
 
@@ -121,21 +122,31 @@ For every eligible task:
 
 ## Cohort registry
 
-A row becomes eligible only when the task, revision, criteria, known baseline
-state, and run order are complete before either arm starts.
+A row becomes eligible only when the shared baseline revision is merged and its
+independent validator fails before the feature is implemented. Fixed-arity
+commands must reject missing, extra, malformed, or out-of-range input with a
+nonzero exit. The variadic checked mean must require at least one value and reject
+any malformed or out-of-range value.
 
-| # | Task and acceptance criteria | Start revision | Known baseline state | First arm | Eligibility |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Unselected | — | — | Orchestrator | Blocked |
-| 2 | Unselected | — | — | Manual Ayni | Blocked |
-| 3 | Unselected | — | — | Orchestrator | Blocked |
-| 4 | Unselected | — | — | Manual Ayni | Blocked |
-| 5 | Unselected | — | — | Orchestrator | Blocked |
-| 6 | Unselected | — | — | Manual Ayni | Blocked |
-| 7 | Unselected | — | — | Orchestrator | Blocked |
-| 8 | Unselected | — | — | Manual Ayni | Blocked |
-| 9 | Unselected | — | — | Orchestrator | Blocked |
-| 10 | Unselected | — | — | Manual Ayni | Blocked |
+| # | Task and independently checked acceptance criteria | Start revision | First arm | Eligibility |
+| --- | --- | --- | --- | --- |
+| 1 | Add `gcd <u64> <u64>`; print `6` for `54 24`, `9` for `0 9`, and `0` for `0 0` | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Orchestrator | Blocked |
+| 2 | Add checked `lcm <u64> <u64>`; print `42` for `21 6` and `0` for `0 9`; reject overflow | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Manual Ayni | Blocked |
+| 3 | Add `is-prime <u64>`; print lowercase booleans; classify `0`, `1`, `2`, `97`, and `100` correctly | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Orchestrator | Blocked |
+| 4 | Add floor `integer-sqrt <u64>`; handle `0`, `15`, `16`, and `u64::MAX` | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Manual Ayni | Blocked |
+| 5 | Add `checked-mean <i64>...`; require input, accumulate without `i64` overflow, and truncate toward zero | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Orchestrator | Blocked |
+
+`scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT
+EXPECTED_LOCK_FINGERPRINT` is the independent executable acceptance oracle. It
+rejects a wrong repository, commit, lock, dirty checkout, or unlocked Cargo build.
+After the expected Ayni environment is built, it clones the frozen commit into a
+host-owned read-only snapshot, keeps Cargo output outside that snapshot, and runs
+candidate code only through the credential-free, network-disabled Ayni
+environment. Each candidate command has a 60-second in-container timeout and the
+complete Ayni invocation has a 90-second process-group deadline. For each row,
+retain its failure against the shared baseline and its result against each frozen
+candidate. The coding agent has access only to the sandbox request and checkout,
+not this private validator.
 
 ## Run ledger
 
@@ -148,11 +159,14 @@ new success opportunities.
 
 ## Completion boundary
 
-After all twenty primary runs, report every denominator, missing measurement,
-and protocol deviation. Apply the decision rules in
+After all ten primary runs, calculate every rate separately for the two arms with
+five-task denominators, report matched-pair differences, and report every missing
+measurement and protocol deviation. Never use ten candidate outcomes over a
+five-task denominator or collapse the arms into one result. Apply the decision rules in
 [MVP validation](mvp-validation.md#decision-after-the-pilot). An inconclusive or
 negative result is valid; missing tasks, missing baseline arms, unexplained
 reproduction failures, or absent cost evidence must not be converted into a
-successful product claim. Without a monetary ceiling, this test cannot produce an
-**Advance** decision; its maximum valid outcome is iterate, reconsider, or
-inconclusive.
+successful product claim. Because the tasks are synthetic and there is no
+monetary ceiling, this test cannot produce an **Advance** decision or validate
+product value; its maximum valid outcome is a workflow-level iterate, reconsider,
+or inconclusive result.

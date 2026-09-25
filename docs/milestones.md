@@ -2,7 +2,8 @@
 
 Status: agreed delivery sequence. Each milestone has one delivery PR and an
 observable completion gate. M0 through M4 are delivered; M5 preparation has
-started, but cohort execution is blocked until ten eligible tasks are selected.
+started with a five-task ceiling, but execution is blocked until the sandbox
+baseline and paired-run harnesses are ready.
 
 Read the [MVP scope](mvp.md) for the product boundary and the
 [validation plan](mvp-validation.md) for engineering gates and pilot evaluation.
@@ -39,7 +40,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
 | M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Complete |
 | M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Complete — PR #12 |
-| M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | In preparation — cohort not selected |
+| M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Five synthetic paired tasks produce a bounded workflow result | In preparation — sandbox baseline pending |
 
 ## M0: foundation and first deployment
 
@@ -444,12 +445,13 @@ product value or authorize M5 conclusions.
 
 The [product-validation pilot record](product-validation-pilot.md) freezes the
 selected sandbox repository, paired independent baseline, alternating order, and
-a five-minute limit per run. It also records that the sandbox currently has no
-eligible independent task cohort, so no run has started.
+a five-minute limit per run and a ceiling of five synthetic arithmetic tasks. No
+run has started; the clean sandbox baseline and paired-run harnesses remain
+prerequisites.
 
-Select the ten real tasks, acceptance criteria, and remaining operating details
-before collecting results. The `openai-gpt5` profile is selected for both arms. Use the deployed M4 candidate
-and record its exact identities. Apply the [pilot protocol](mvp-validation.md#ten-task-pilot),
+Freeze the five task start revision, acceptance criteria, and remaining operating
+details before collecting results. The `openai-gpt5` profile is selected for both
+arms. Use the deployed M4 candidate and record its exact identities. Apply the [paired-test protocol](mvp-validation.md#five-task-paired-test),
 including human review, comparison limitations, failure accounting, and fresh
 validation of claimed verified results.
 
@@ -472,7 +474,7 @@ multi-repository expansion, public publication, or production deployment.
 | M2 | Selected — [Decision 0003](decisions/0003-durable-local-orchestration.md) records local durable storage, retained evidence, Job transport, and lifecycle schema |
 | M3 | First agent, GitHub access, and checkpoint/candidate handoff |
 | M4 completion | Selected — dependency changes are explicitly unsupported; [Decision 0004](decisions/0004-pilot-readiness-and-preparation.md) records the operating limits |
-| M5 | Sandbox and paired comparison selected; ten eligible tasks and acceptance definitions remain required. The selected five-minute per-run bound does not cap provider spend, so cost acceptability cannot be concluded. |
+| M5 | Sandbox, `openai-gpt5`, five synthetic arithmetic tasks, and paired comparison selected. The sandbox baseline and paired-run harnesses remain required. The five-minute bound does not cap provider spend, so neither product value nor cost acceptability can be concluded. |
 
 Docker Desktop Kubernetes and Kustomize are selected. Record the other choices
 and their rationale when made, without implying unsupported capabilities or

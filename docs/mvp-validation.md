@@ -2,9 +2,9 @@
 
 Status: validation plan for the [MVP](mvp.md). Pilot preparation is recorded in
 the [product-validation pilot record](product-validation-pilot.md), but no eligible
-cohort run has started and no product outcome is claimed. The ten-task pilot comes
-from the product discussion. The general comparison protocol and decision rules
-are below; choices frozen for the current test and its remaining blockers are in
+cohort run has started and no product outcome is claimed. The five-task ceiling
+is the current maintainer decision. The general comparison protocol and decision
+rules are below; choices frozen for the current test and its remaining blockers are in
 the pilot record.
 
 ## Primary validation goal
@@ -20,8 +20,8 @@ investment. A working Kubernetes controller answers only part of the first.
 
 The [milestone plan](milestones.md) maps implementation to completion gates.
 Deployable changes are exercised on Docker Desktop Kubernetes. Engineering gates
-establish pilot readiness; the ten-task pilot records the product validation
-decision.
+establish pilot readiness; the five-task paired test records a bounded workflow
+decision without claiming product value from synthetic work.
 
 ## Questions and evidence
 
@@ -67,13 +67,15 @@ tests but do not establish managed execution or cluster compatibility. Artifact
 hashes bind records to bytes; controlled collection and validation establish why
 the records are trusted. Neither proves that a feature meets its product intent.
 
-## Ten-task pilot
+## Five-task paired test
 
-### Prepare the pilot
+### Prepare the test
 
-Use ten real, bounded maintenance tasks from a repository the maintainer actively
-uses. Select and record them before execution. Include varied bug fixes, small
-behavior changes, and contained refactors within the declared supported scope.
+Use no more than five bounded tasks and select and record them before execution.
+A product-value pilot requires real maintenance from a repository the maintainer
+actively uses. The current sandbox cohort instead uses five synthetic arithmetic
+features, so it can test workflow behavior but cannot establish product value.
+Include varied bounded changes within the declared supported scope.
 Write acceptance criteria that can be evaluated independently of the agent's
 chosen tests. Record known baseline failures or flaky checks before starting.
 
@@ -100,9 +102,9 @@ capabilities, or resources that could explain the outcome.
 
 Include initial installation/onboarding effort and failed/cancelled attempts.
 Separate cold and warm preparation measurements. Controlled failure scenarios
-from the engineering gates are additional exercises, not substitutes for the ten
-real tasks. Record retries under the original task rather than counting each as
-a new success opportunity.
+from the engineering gates are additional exercises, not substitutes for the five
+selected tasks. Record retries under the original task rather than counting each
+as a new success opportunity.
 
 ### Review and reproduce
 
@@ -133,10 +135,16 @@ failures remain unresolved validation evidence.
 | Reproduction rate | Verified candidates whose fresh validation succeeds, divided by all candidates claimed as verified; show failed and unattempted counts |
 | Recovery and cleanup | Time to actionable diagnosis, safe retry/interruption, and removal of owned resources compared with configured deadlines |
 
+Calculate rates separately for each arm, with at most five selected tasks in each
+denominator and at most five candidates in each numerator. Report matched-pair
+differences per task for time, human effort, outcome, and acceptance. Never divide
+ten arm results by a five-task denominator or deduplicate away arm differences.
+
 If there are no accepted changes, report that fact and total time/cost; the
 per-accepted-change ratios are undefined. Show individual tasks, counts, and
-medians with ranges. Keep unavailable measurements explicit. Ten tasks provide
-directional learning, not statistical proof or universal performance claims.
+medians with ranges. Keep unavailable measurements explicit. Five tasks provide
+only bounded workflow learning, not statistical proof, product-value evidence, or
+universal performance claims.
 
 ## Decision after the pilot
 
@@ -162,7 +170,7 @@ no reduction in effort, if maintaining the platform costs more than the benefit,
 or if the selected runtime cannot preserve the evidence contract. More generated
 PRs alone do not establish value.
 
-The ten-task sample is the agreed pilot size. A five-minute limit per independent
+Five tasks are the agreed maximum cohort size. A five-minute limit per independent
 run is agreed for the current test, but no numeric percentage improvement,
 acceptance-rate target, or monetary cost ceiling is set. The test therefore cannot
 establish cost acceptability or yield an **Advance** decision under the rule above;
@@ -175,7 +183,7 @@ Create a private report for each pilot containing:
 
 1. Date, orchestrator revision, topology, versions, declared scope, and limits.
 2. Engineering gate outcomes and evidence references.
-3. The ten task definitions, baseline/orchestrator runs, intervention logs, costs,
+3. The five task definitions, baseline/orchestrator runs, intervention logs, costs,
    candidate/PR references, review verdicts, and reproduction results.
 4. Aggregate measurements with denominators and missing-data explanations.
 5. The advance/iterate/reconsider decision, rationale, unresolved limitations,
