@@ -37,7 +37,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M0: foundation and first deployment | `chore(workspace): establish Rust workspace and local deployment` | A checkout-built control-plane service runs on Docker Desktop Kubernetes | Complete — evidence predates this repository import |
 | M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | Complete |
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
-| M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | In progress — live proof pending |
+| M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Complete |
 | M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Planned |
 | M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | Planned |
 
@@ -297,9 +297,63 @@ the fresh namespace had no prior task state to preserve. Docker Engine was
 29.8.0, Kubernetes 1.36.1, kubectl 1.35.2, and Kustomize 5.7.1. No Docker
 cache, images, or volumes were pruned. The M3 overlay was not deployed because
 the App/OpenAI Secrets and live test were explicitly deferred. State-survival,
-negative-path, and GitHub reconciliation exercises remain unverified. The
-milestone is incomplete; draft delivery PR #5 must not be merged as completion
-evidence.
+negative-path, and GitHub reconciliation exercises remained unverified at that
+revision. This was a historical blocked attempt and is superseded by the final
+evidence below.
+
+**Final M3 completion evidence (2026-09-25, commit `c92777f`):** The previously
+missing provisioning manifest was copied without alteration to the public
+`ghcr.io/ayni-oss/ayni-provisioning` package at digest
+`sha256:30453fcd751acff069c7b16a1cd2eba01051bd94b64cd9d333c4ce82a9ff0961`;
+anonymous manifest requests passed for linux/amd64 and linux/arm64. The executor
+at `sha256:e21ccf9e66e7490953d2a30ba49ce8894025fd0e59556bc65a3c17c783ae5fe9`
+was also anonymously readable, and Ayni's public consumer workflow passed on
+both architectures.
+
+The final candidate passed formatting, Clippy, all 25 workspace tests, compile
+checks, M3 rendering, server-side manifest validation, and `git diff --check`.
+Its regenerated Ayni 0.13.0 lock has fingerprint
+`sha256:22f46dceb89c6597d02856c31fed1b627c0dc2b8365675f6e283b58071ee0d43`;
+managed `env build`, `env doctor`, and all four Ayni signals passed. Docker
+Engine 29.8.0 and Docker Desktop Kubernetes v1.36.1 (kubectl
+v1.36.1, Kustomize v5.8.1) ran control-plane image index
+`sha256:bb41b57dd4e4cfe96c3391668248242de9ae3587891a685c64a719f7405b5da8`
+and worker image index
+`sha256:09185d5e9fb70e0fb23958672cc3fd368bf3515152cb970428eca2476248fbe0`.
+The active control-plane container reported image ID
+`sha256:afb078f4ebebc017ccffdd618d89dc24418808e1353d326f2e90b3573f921530`,
+and readiness passed.
+
+Live task `01a0d75c-5766-7509-b04d-ae856bdb56f0` started from sandbox revision
+`589fb2a2fae67d87e00da1ddc4c9a576a207d2ff` with lock SHA-256
+`f91be39b21d1af3506e25caf246c0d7178c339669ed511582547acacec8b54d4`.
+The coding Job produced candidate
+`b8badfdad94249e968c53fc72ed78fd967701282`; independent validation retained
+manifest
+`sha256:b18d1a228da3a23cfd96535955e25a9e44ac00aaf03cb6063d484ac992e734f4`,
+reported no policy or test edits, and passed cases `1→2`, `2→4`, `3→8`, and
+`6→60`. The structured publisher created exactly one App-authored draft PR,
+[`ayni-oss/sandbox#1`](https://github.com/ayni-oss/sandbox/pull/1), targeting
+`main`; its sole changed path is `src/main.rs`, and it remains unmerged for
+maintainer review.
+
+The first publication attempt durably recorded a pending action but could not
+complete while the read-only control-plane root lacked writable Git scratch
+space. After adding a bounded `/tmp` `emptyDir` and replacing the Deployment,
+the reconciler recovered that same action and deterministic branch, completed
+the task, and produced the single draft PR without a duplicate. Earlier live
+task `01a0d4d8-1dc8-7694-acb1-b6f38f43316c` retained a quality-failure manifest
+(`sha256:0df39be36a89c9a6a4da58b3989ad15e47d171d18c58c95bd21d09fe2623b9c5`)
+and did not publish. Store and API tests additionally cover cancellation,
+stale-candidate rejection, immutable task snapshots, one-candidate publication,
+and duplicate publication reuse.
+
+**Completion gate: complete.** A real bounded request completed from API
+submission through independently measured evidence to one reviewable draft PR.
+Quality failure, stale-candidate rejection, cancellation semantics, edit
+disclosure, and recovery of an uncertain publication action are covered by the
+retained live evidence and final test suite. The draft remains for the
+maintainer's merge decision.
 
 Select one agent integration and the GitHub access mechanism. Provide an
 attempt-owned development checkout, scoped permissions, repository instructions,
