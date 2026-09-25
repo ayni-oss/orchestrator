@@ -2,4 +2,5 @@
 .ayni
 .ayni.lock
 target
+.worktrees
 **/.DS_Store
