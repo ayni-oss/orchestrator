@@ -3,5 +3,9 @@ kind: Kustomization
 namespace: ayni-orchestrator-dev
 resources:
   - ../../base
+  - checkpoints-pvc.yaml
+  - prepared-environments-pvc.yaml
+  - development-rbac.yaml
 patches:
+  - path: control-plane.yaml
   - path: resources.yaml

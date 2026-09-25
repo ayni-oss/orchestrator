@@ -1,11 +1,11 @@
 # Local development
 
-M2 introduced persistent managed-check orchestration and M3 added the
-API-driven coding, independent validation, and draft-PR path. The M4 overlay is
-the current pilot profile: it adds the browser interface, repository readiness,
-content-addressed environment preparation and reuse, task actions, and evidence
-views. `/readyz` reports whether the M4 publication/preparation subsystem is
-configured; repository-specific access is verified by preparation.
+The current pilot profile combines persistent managed-check orchestration,
+API-driven coding, independent validation, draft-PR publication, a browser
+interface, repository readiness, content-addressed environment preparation and
+reuse, task actions, and evidence views. `/readyz` reports whether the
+publication and preparation subsystem is configured; repository-specific access
+is verified by preparation.
 
 ## Prerequisites
 
@@ -27,14 +27,20 @@ cargo test --workspace --all-features
 cargo check --workspace --all-features
 ```
 
-## M2: build, deploy, and check
+## Build, deploy, and check
 
-From a clean committed checkout, run:
+From a clean committed checkout, configure the local development Secrets as
+described under [Development request to draft PR](#development-request-to-draft-pr),
+then run:
 
 ```sh
 scripts/local/deploy.sh
 scripts/local/check.sh
 ```
+
+The local scripts expose one current profile rather than historical delivery
+modes. `deploy.sh` and `check.sh` reject positional arguments; set
+`AYNI_ORCHESTRATOR_NAMESPACE` to override the namespace.
 
 `deploy.sh` creates control-plane and worker image references from the checked-out
 commit, verifies their Docker revision labels, and imports them into Docker
@@ -49,9 +55,9 @@ evidence. The control-plane state PVC is retained across Deployment replacement.
 The shared managed-check evidence PVC is retained separately and is never removed
 by normal service cleanup.
 
-`check.sh` uses loopback port-forwarding and checks `/readyz`; `check.sh m4`
-also requires pilot readiness, fetches the HTML marker, and checks list APIs. It
-does not execute browser JavaScript or replace the browser walkthrough.
+`check.sh` uses loopback port-forwarding, requires pilot readiness, fetches the
+HTML marker, and checks the repository and task list APIs. It does not execute
+browser JavaScript or replace the browser walkthrough.
 To remove only the overlay's service resources while preserving the namespace,
 run `scripts/local/cleanup.sh`.
 
@@ -59,10 +65,10 @@ For each deployment, record the commit, image identity, Docker Desktop,
 Kubernetes, `kubectl`, and renderer versions in the pull request. Generated
 logs, port-forward output, and secrets must not be committed.
 
-## M1: manual managed check
+## Manual managed check
 
-M1 is intentionally a manually submitted Job, not a control-plane feature. It
-fetches the pinned public Ayni release commit, verifies its committed lock,
+The standalone managed check is intentionally a manually submitted Job, not a
+control-plane feature. It fetches the pinned public Ayni release commit, verifies its committed lock,
 then runs `env build`, `env doctor`, and an unscoped managed `check` through an
 attempt-local Docker-in-Docker engine. It writes command logs, original Ayni
 artifacts, and a hash-bound manifest to the `managed-check-evidence` PVC.
@@ -101,7 +107,7 @@ different failure does not satisfy the gate. The wrapper is mounted only by this
 dedicated test Job and does not alter the worker image or normal managed-check
 manifest. Inspect retained command logs before explicitly deleting its Job.
 
-## M2: durable task API
+## Durable task API
 
 After `scripts/local/deploy.sh`, submit the same immutable managed-check inputs
 through `POST /v1/tasks` with an idempotency key. Inspect `GET /v1/tasks/{task_id}`.
@@ -118,15 +124,15 @@ the configured `ORCHESTRATOR_MAX_ATTEMPTS` bound at submission (three by default
 the local profile accepts one through ten), so a later deployment change does not
 expand its retries.
 
-## M3: API request to draft PR
+## Development request to draft PR
 
-M3 supports only the private `ayni-oss/sandbox` Rust workspace. The committed
-`.ayni.lock` in that repository must match the repository binding. Initialize
-the sandbox once with the M3 Rust workspace contract and deliberately wrong
-`examples/m3-retry-backoff/main.rs` fixture; it must contain the Ayni contract,
+Development tasks support only the private `ayni-oss/sandbox` Rust workspace.
+The committed `.ayni.lock` in that repository must match the repository binding. Initialize
+the sandbox once with the Rust workspace contract and deliberately wrong
+`examples/retry-backoff/main.rs` fixture; it must contain the Ayni contract,
 generated lock, Rust workspace files, and fixture test script. Running
-`scripts/local/check-m3-fixture.sh` in the sandbox before the task must fail at
-attempt 3. Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This
+`scripts/local/check-retry-backoff-fixture.sh` in the sandbox before the task
+must fail at attempt 3. Its expected cases are `1→2`, `2→4`, `3→8`, and `6→60` seconds. This
 fixture is not the control plane's own retry schedule.
 
 Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
@@ -134,7 +140,7 @@ Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
 the same release used by the worker image. Verify that the generated lock uses
 `ghcr.io/ayni-oss/ayni-provisioning`; the deprecated `gdurandvadas/ayni`
 release and registry are not supported. The 0.13.0 lock names the pinned
-`ghcr.io/ayni-oss/ayni-provisioning` image used in the completed M3 deployed
+`ghcr.io/ayni-oss/ayni-provisioning` image used in the completed deployed
 proof. A missing pinned digest is an external-blocked result, never a reason to
 substitute another image.
 
@@ -166,9 +172,9 @@ API. You do not create or manage the internal publisher token. Do not commit
 but are not automatically encrypted at rest; treat Docker Desktop cluster data
 and backups as sensitive.
 
-From a clean committed checkout, `scripts/local/deploy.sh m3` builds and loads
-both images, renders the M3 overlay, and replaces the local control plane. It
-preserves M2 SQLite and evidence PVCs and adds the `development-checkpoints` PVC. Check
+From a clean committed checkout, `scripts/local/deploy.sh` builds and loads both
+images, renders the current overlay, and replaces the local control plane. It
+preserves the SQLite, evidence, checkpoint, and preparation PVCs. Check
 `scripts/local/check.sh`, then use loopback `kubectl --context docker-desktop
 -n ayni-orchestrator-dev port-forward svc/control-plane 8080:8080` for the API.
 No endpoint should be publicly exposed.
@@ -212,14 +218,14 @@ Docker Desktop VM filesystem had 0 available space. The node reported no
 VM and Docker usage and arrange capacity or explicitly approved cleanup. Do not
 prune shared Docker volumes or caches as an implicit part of these scripts.
 
-## M4: browser pilot and prepared environments
+## Browser pilot and prepared environments
 
 Configure credentials, deploy, and validate the current profile with:
 
 ```sh
 scripts/local/configure-development-secrets.sh
-scripts/local/deploy.sh m4
-scripts/local/check.sh m4
+scripts/local/deploy.sh
+scripts/local/check.sh
 ```
 
 Use only a loopback port-forward and open `/`. Enroll the sandbox and prepare an

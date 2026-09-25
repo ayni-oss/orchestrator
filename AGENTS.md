@@ -37,9 +37,10 @@
 - Follow docs/milestones.md: one delivery PR per milestone, starting from updated
   main after the preceding milestone merges. Record completion evidence and update
   the milestone status; do not merge automatically.
-- Deploy working behavior to Docker Desktop Kubernetes from M0 onward, during
-  each deployable milestone. Use Kustomize and the explicit docker-desktop context
-  as defined in docs/decisions/0001-local-kubernetes-deployment.md. Never fall back
+- Deploy working behavior to Docker Desktop Kubernetes from the first deployable
+  change onward, during each deployable milestone. Use Kustomize and the explicit
+  docker-desktop context as defined in
+  docs/decisions/0001-local-kubernetes-deployment.md. Never fall back
   to another current cluster when the local context is absent. Local deployment
   is authorized; destructive cluster resets and retained-data deletion are separate.
 - Keep the first iteration small and end-to-end. Define its observable outcome
@@ -90,6 +91,13 @@
 
 ## Change discipline and reporting
 
+- Tests describe current behavior and supported compatibility, not implementation
+  history. Remove tests whose only purpose is to preserve evidence of deleted code.
+  Keep tests when they protect a current invariant, regression guarantee, migration,
+  persisted-data contract, or API compatibility promise, and name them after that
+  current requirement rather than the removed implementation or delivery phase.
+  Keep historical evidence in Git history and explicit historical records. When a
+  compatibility window ends, remove its compatibility code and tests together.
 - Preserve implementation unless the requested task requires code changes.
 - Treat security boundaries, repository identity, provider behavior,
   control-plane safety, and account capabilities as first-class correctness

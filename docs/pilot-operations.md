@@ -1,6 +1,6 @@
 # Pilot operations
 
-This runbook is the operating contract for the M4 Docker Desktop pilot. It is
+This runbook is the operating contract for the Docker Desktop pilot. It is
 for one trusted maintainer team, one local cluster, and the allowlisted
 `ayni-oss/sandbox` repository. It is not a multi-tenant service contract.
 
@@ -30,12 +30,12 @@ returned by the API or UI.
   Desktop. One managed validation/preparation engine requests 4 CPUs and 9 GiB.
 - A GitHub App installed on the enrolled repository with Contents and Pull
   requests read/write permissions.
-- A committed `.ayni.toml` and `.ayni.lock`; M4 uses Ayni `0.13.0`.
+- A committed `.ayni.toml` and `.ayni.lock`; the worker uses Ayni `0.13.0`.
 - The local credential file described in `.env.example`. Never commit it.
 
 Storage claims are 1 GiB for SQLite state, 2 GiB each for checkpoints and
 validation evidence, and 10 GiB for prepared image archives. The deploy script
-requires at least 12 GiB free before an M4 image build/import, then removes only
+requires at least 12 GiB free before an image build/import, then removes only
 obsolete `local/ayni-orchestrator-*` image tags not referenced by a pod. Rust
 Cargo registry and target data use named BuildKit cache mounts so source changes
 do not create a new multi-gigabyte immutable builder layer each time. This does
@@ -58,12 +58,12 @@ From a clean Docker Desktop Kubernetes namespace:
 cp .env.example .env
 # Fill values locally; do not print the file.
 scripts/local/configure-development-secrets.sh
-scripts/local/deploy.sh m4
-scripts/local/check.sh m4
+scripts/local/deploy.sh
+scripts/local/check.sh
 ```
 
 The check requires `pilot_ready: true`, fetches the HTML marker and repository
-and task list APIs, and does not execute browser JavaScript. The first M4 install
+and task list APIs, and does not execute browser JavaScript. The first install
 creates four retained PVCs. Re-running the install does not replace them.
 
 To reproduce a clean installation without disturbing the normal pilot namespace,
@@ -74,8 +74,8 @@ recording the result:
 export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-clean-check
 export AYNI_ORCHESTRATOR_LOCAL_PORT=18081
 scripts/local/configure-development-secrets.sh
-scripts/local/deploy.sh m4
-scripts/local/check.sh m4
+scripts/local/deploy.sh
+scripts/local/check.sh
 kubectl --context docker-desktop delete namespace "$AYNI_ORCHESTRATOR_NAMESPACE"
 unset AYNI_ORCHESTRATOR_NAMESPACE AYNI_ORCHESTRATOR_LOCAL_PORT
 ```
@@ -155,13 +155,13 @@ then deploy in place:
 ```bash
 kubectl --context docker-desktop -n ayni-orchestrator-dev get pvc
 curl --fail http://127.0.0.1:18080/v1/development-tasks > /tmp/tasks-before.json
-scripts/local/deploy.sh m4
-scripts/local/check.sh m4
+scripts/local/deploy.sh
+scripts/local/check.sh
 curl --fail http://127.0.0.1:18080/v1/development-tasks > /tmp/tasks-after.json
 ```
 
-SQLite migrations are additive. Existing M3 tasks, checkpoints, and evidence
-remain on their existing claims; M4 adds `prepared-environments`. Compare known
+SQLite migrations are additive. Existing tasks, checkpoints, evidence, and
+prepared environments remain on their existing claims. Compare known
 task IDs before and after. Do not roll back a migrated database to older
 binaries.
 
@@ -173,8 +173,8 @@ TTL; retained state, checkpoints, evidence, and preparation archives live on the
 PVCs and have no automatic expiry. Docker reports host images, BuildKit
 cache, and local volumes separately; the Kubernetes node also keeps its own
 containerd image copy. Repeated unscoped builds therefore used to accumulate
-both builder layers and duplicate image tags. M4 bounds the build layers with
-cache mounts and cleans only superseded project tags after a successful rollout.
+both builder layers and duplicate image tags. The deployment workflow bounds
+the build layers with cache mounts and cleans only superseded project tags after a successful rollout.
 Watch usage with:
 
 ```bash
@@ -190,7 +190,7 @@ backup. At minimum copy `/var/lib/ayni-orchestrator` from
 `control-plane-state`; include `development-checkpoints`,
 `managed-check-evidence`, and `prepared-environments` to retain full recovery
 and audit data. Restore claims before starting the deployment. Check file
-ownership remains UID/GID 10001, then run `scripts/local/check.sh m4` and verify
+ownership remains UID/GID 10001, then run `scripts/local/check.sh` and verify
 known task/evidence IDs.
 
 A database-only restore preserves task history but may leave an in-progress task
@@ -221,8 +221,8 @@ part of normal cleanup.
 
 ## Failure triage
 
-- `pilot_ready: false`: deploy M4 and configure all GitHub/model publication
-  variables; inspect control-plane logs.
+- `pilot_ready: false`: deploy the current profile and configure all GitHub/model
+  publication variables; inspect control-plane logs.
 - `setup_required`: repair GitHub App installation access; credentials are not a
   repository change.
 - preparation `failed`: inspect checkout/preparer/engine containers and desktop

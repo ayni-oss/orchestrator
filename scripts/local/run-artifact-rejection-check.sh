@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Exercises M1's final-artifact gate. The test-only wrapper removes the
+# Exercises the managed check's final-artifact gate. The test-only wrapper removes the
 # execution record after a real managed check and before the worker validates
 # and retains artifacts. A failed Job with the expected error is a pass.
 

@@ -197,7 +197,7 @@ impl PreparationReconciler {
         self.secrets()
             .patch(
                 &secret_name(&preparation.id),
-                &PatchParams::apply("ayni-orchestrator-m4").force(),
+                &PatchParams::apply("ayni-orchestrator-preparation").force(),
                 &Patch::Apply(&secret),
             )
             .await

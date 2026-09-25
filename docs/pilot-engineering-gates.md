@@ -1,5 +1,9 @@
 # M4 engineering-gate record
 
+> Historical delivery record. Milestone names, resource identities, and commands
+> below describe the dated revision; use [local development](local-development.md)
+> for current operation.
+
 Status: all applicable engineering gates passed on the selected Docker Desktop pilot topology on 2026-09-25. This establishes implementation readiness for M5, not product value.
 
 ## Candidate and topology

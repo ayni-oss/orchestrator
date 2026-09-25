@@ -1,7 +1,7 @@
 # MVP validation: useful changes with less human intervention
 
-Status: validation plan for the [MVP](mvp.md). No M5 ten-task product-value
-pilot has run and no product outcome is claimed. The ten-task pilot comes from
+Status: validation plan for the [MVP](mvp.md). No ten-task product-value pilot
+has run and no product outcome is claimed. The ten-task pilot comes from
 the product discussion. The comparison
 protocol and decision rules below are proposed evaluation details to settle
 before collecting results.
@@ -18,8 +18,9 @@ enough for the pilot, and whether the observed product value justifies further
 investment. A working Kubernetes controller answers only part of the first.
 
 The [milestone plan](milestones.md) maps implementation to completion gates.
-Deployable milestones are exercised on Docker Desktop Kubernetes from M0 onward;
-M4 establishes pilot readiness and M5 records the product validation decision.
+Deployable changes are exercised on Docker Desktop Kubernetes. Engineering gates
+establish pilot readiness; the ten-task pilot records the product validation
+decision.
 
 ## Questions and evidence
 

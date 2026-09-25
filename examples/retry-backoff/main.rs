@@ -1,4 +1,4 @@
-//! Deliberately incorrect, standalone M3 coding-agent evaluation fixture.
+//! Deliberately incorrect, standalone coding-agent evaluation fixture.
 //!
 //! This is not linked into the orchestrator. The agent's task is to repair the
 //! calculation and add its own regression tests without changing this contract.
@@ -11,7 +11,7 @@ fn retry_delay_seconds(attempt: u32) -> u32 {
 
 fn main() -> ExitCode {
     let Some(attempt) = env::args().nth(1).and_then(|value| value.parse::<u32>().ok()) else {
-        eprintln!("usage: m3-retry-backoff <positive-attempt-number>");
+        eprintln!("usage: retry-backoff <positive-attempt-number>");
         return ExitCode::FAILURE;
     };
     if attempt == 0 {

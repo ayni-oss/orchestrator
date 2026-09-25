@@ -1,8 +1,8 @@
 # MVP delivery milestones
 
 Status: agreed delivery sequence. Each milestone has one delivery PR and an
-observable completion gate. M0 through M3 are delivered; M4's local completion
-gates pass and its delivery PR is pending branch publication.
+observable completion gate. M0 through M4 are delivered; product validation is
+planned.
 
 Read the [MVP scope](mvp.md) for the product boundary and the
 [validation plan](mvp-validation.md) for engineering gates and pilot evaluation.
@@ -38,7 +38,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | Complete |
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
 | M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Complete |
-| M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Complete locally — delivery PR pending |
+| M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Complete — PR #12 |
 | M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | Planned |
 
 ## M0: foundation and first deployment
@@ -425,7 +425,7 @@ browser also submitted warm preparation, provided input to waiting task
 `01a0d884-27b9-7511-a653-af10582edf6d`, created a linked follow-up, and cancelled
 it through the rendered action.
 
-The [M4 engineering-gate record](m4-engineering-gates.md) maps every required
+The [M4 engineering-gate record](pilot-engineering-gates.md) maps every required
 scenario to its expected result and deployed evidence. It includes current-path
 artifact alteration/removal, immutable post-validation candidate binding, inline
 test and policy-edit disclosure, dependency rejection, controller restart
@@ -435,7 +435,7 @@ input. A reproducible namespace override now supports isolated clean-install
 checks. The in-place M3-to-M4 update and final rollout retained prior task data and
 PVC identities.
 
-**Completion gate: complete locally; delivery PR pending branch publication.**
+**Completion gate: complete; delivered in PR #12.**
 The deployed candidate and documented browser workflow satisfy the M4 engineering
 and operating gates. M4 establishes a pilot-ready MVP; it does not establish
 product value or authorize M5 conclusions.
