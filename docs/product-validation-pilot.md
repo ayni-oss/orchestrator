@@ -223,7 +223,8 @@ contract. No candidate changed policy, dependencies, or the toolchain.
 | Workflow result | 4/5 draft PRs with final evidence | 5/5 retained candidates; PR publication not part of this arm | Endpoints are not equivalent |
 | Run time | total 728s; mean 145.6s; median 149s; range 120–166s | total 396s; mean 79.2s; median 76s; range 46–112s | Per-pair Orchestrator minus manual: 111, 62, 54, 73, and 32s; mean 66.4s, median 62s |
 | Timeout/input/setup failure | 0/5 | 0/5 | No primary retry or in-run recovery |
-| Fresh reproduction of accepted candidates | 2/2 | 3/3 | 5/5 accepted candidates reproduced |
+| Fresh validation of product-verified candidates | 2/4 passed; 2/4 failed frozen scope | Not applicable; this arm made no managed verified claim | The two failures were `O-PRIME` and `O-SQRT` |
+| Fresh reproduction of strictly accepted candidates | 2/2 | 3/3 | 5/5 accepted candidates reproduced |
 | Human effort | Missing | Missing | No active-minute stopwatch; per-accepted-change effort is undefined |
 | Provider/compute cost | Missing | Missing | No token or billing telemetry; cost per accepted change is undefined |
 | First useful verification | Stage timestamp unavailable | Review timestamp not captured | Cannot compare this measure |

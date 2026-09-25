@@ -1,11 +1,11 @@
 # MVP validation: useful changes with less human intervention
 
-Status: validation plan for the [MVP](mvp.md). Pilot preparation is recorded in
-the [product-validation pilot record](product-validation-pilot.md), but no eligible
-cohort run has started and no product outcome is claimed. The five-task ceiling
-is the current maintainer decision. The general comparison protocol and decision
-rules are below; choices frozen for the current test and its remaining blockers are in
-the pilot record.
+Status: validation plan for the [MVP](mvp.md). The five-task synthetic paired
+cohort is complete and recorded in the
+[product-validation pilot record](product-validation-pilot.md), with an **Iterate
+within the MVP** decision. Its synthetic scope and missing effort and cost data
+preclude an **Advance** or product-value conclusion. The general comparison
+protocol and decision rules remain below.
 
 ## Primary validation goal
 
