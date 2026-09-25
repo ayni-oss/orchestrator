@@ -1,9 +1,11 @@
 # Product-validation pilot record
 
-Status: ready to run on 2026-09-25. No paid pilot run has started and no
-product-value outcome is claimed. The merged sandbox baseline, five independent
-baseline failures, exact paired inputs, and both five-minute cancellation paths
-are validated. The next action is the first frozen pair, not an additional probe.
+Status: completed on 2026-09-25. All ten frozen primary runs and fresh candidate
+reviews are recorded below. The decision is **Iterate within the MVP**: useful
+changes were produced, but the Orchestrator arm had a lower strict acceptance rate,
+the two arms did not share a comparable terminal endpoint, and human effort and
+provider cost were not measured. No product-value or cost-acceptability outcome
+is claimed, and this synthetic cohort cannot authorize **Advance**.
 
 ## Agreed protocol
 
@@ -154,11 +156,11 @@ any malformed or out-of-range value.
 
 | # | Task and independently checked acceptance criteria | Start revision | First arm | Eligibility |
 | --- | --- | --- | --- | --- |
-| 1 | Add `gcd <u64> <u64>`; print `6` for `54 24`, `9` for `0 9`, and `0` for `0 0` | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
-| 2 | Add checked `lcm <u64> <u64>`; print `42` for `21 6` and `0` for `0 9`; reject overflow | `916f0184bab0999c1a7172dce84898137923505c` | Manual Ayni | Eligible |
-| 3 | Add `is-prime <u64>`; print lowercase booleans; classify `0`, `1`, `2`, `97`, and `100` correctly | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
-| 4 | Add floor `integer-sqrt <u64>`; handle `0`, `15`, `16`, and `u64::MAX` | `916f0184bab0999c1a7172dce84898137923505c` | Manual Ayni | Eligible |
-| 5 | Add `checked-mean <i64>...`; require input, accumulate without `i64` overflow, and truncate toward zero | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
+| 1 | Add `gcd <u64> <u64>`; print `6` for `54 24`, `9` for `0 9`, and `0` for `0 0` | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Complete |
+| 2 | Add checked `lcm <u64> <u64>`; print `42` for `21 6` and `0` for `0 9`; reject overflow | `916f0184bab0999c1a7172dce84898137923505c` | Manual Ayni | Complete |
+| 3 | Add `is-prime <u64>`; print lowercase booleans; classify `0`, `1`, `2`, `97`, and `100` correctly | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Complete |
+| 4 | Add floor `integer-sqrt <u64>`; handle `0`, `15`, `16`, and `u64::MAX` | `916f0184bab0999c1a7172dce84898137923505c` | Manual Ayni | Complete |
+| 5 | Add `checked-mean <i64>...`; require input, accumulate without `i64` overflow, and truncate toward zero | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Complete |
 
 `scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT
 EXPECTED_LOCK_FINGERPRINT EXPECTED_START_COMMIT` is the independent executable
@@ -180,18 +182,102 @@ new success opportunities.
 
 | Task | Arm | Started/ended | Outcome | Human minutes | First useful verification | Provider cost | Candidate/evidence | Review verdict | Reproduction |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| — | — | — | Not started | — | — | — | — | — | — |
+| GCD | Orchestrator | 17:24:34–17:27:11Z | Completed in 157s | Not measured | Stage time unavailable | Missing | `O-GCD` | Accepted | Passed |
+| GCD | Manual Ayni | 17:27:22–17:28:08Z | Candidate in 46s | Not measured | Not timed | Missing | `M-GCD` | Rejected: prohibited tests | Scope rejected |
+| LCM | Manual Ayni | 17:29:09–17:30:07Z | Candidate in 58s | Not measured | Not timed | Missing | `M-LCM` | Accepted | Passed |
+| LCM | Orchestrator | 17:30:23–17:32:23Z | Failed in 120s: quality | Not measured | Stage time unavailable | Missing | `O-LCM` | Rejected: tests and quality | Scope and quality rejected |
+| Primality | Orchestrator | 17:42:43–17:45:29Z | Completed in 166s | Not measured | Stage time unavailable | Missing | `O-PRIME` | Rejected: prohibited tests | Scope rejected |
+| Primality | Manual Ayni | 17:45:39–17:47:31Z | Candidate in 112s | Not measured | Not timed | Missing | `M-PRIME` | Accepted | Passed |
+| Integer sqrt | Manual Ayni | 17:48:13–17:49:29Z | Candidate in 76s | Not measured | Not timed | Missing | `M-SQRT` | Rejected: prohibited tests | Scope rejected |
+| Integer sqrt | Orchestrator | 17:49:38–17:52:07Z | Completed in 149s | Not measured | Stage time unavailable | Missing | `O-SQRT` | Rejected: prohibited tests | Scope rejected |
+| Checked mean | Orchestrator | 17:52:50–17:55:06Z | Completed in 136s | Not measured | Stage time unavailable | Missing | `O-MEAN` | Accepted | Passed |
+| Checked mean | Manual Ayni | 17:55:15–17:56:59Z | Candidate in 104s | Not measured | Not timed | Missing | `M-MEAN` | Accepted | Passed |
+
+### Candidate and evidence registry
+
+| Key | Task/candidate evidence |
+| --- | --- |
+| `O-GCD` | Task `01a0d998-f363-7792-83c1-6a58209ef49f`; candidate `9a3629eef2ed6f28204f2d13b0b433f8d694a7a9`; bundle `sha256:28ee3673085580af0f8fae92b24b691a1cd79a641bcfe43ca93ff1e0c371e78e`; manifest `sha256:905d84ccdef8c003c2429a2aff67c92a733ce3dff4f2495a82249320801889ab`; sandbox draft PR #5 |
+| `M-GCD` | Candidate `f03839e8d9ac22d430b889613fd0f29bf45ed2f1`; bundle `sha256:215bdec5dc8682394429e2bfd1c42f0cb64b7e6c3ca28e3de7d5e81e3943189d`; retained checkpoint `m5/m5-gcd-manual-primary-v1/checkpoint` |
+| `O-LCM` | Task `01a0d99e-44f2-74b5-acff-8013d9ac8137`; candidate `a4a515467a3501d486bc8f1ab3bfec3f067af8fc`; bundle `sha256:43a18262c74160759ab68033a3b29c9c7420d277fda541be2a90c152c84a3f6f`; failed manifest `sha256:b308fed4dca615a810d9dd2d80e98647dcdb27c5f15d9d4b702cf1c0e2152069`; no PR |
+| `M-LCM` | Candidate `18775d79989f4d86648391d97723393f6c57d0ef`; bundle `sha256:5ea684c701041f46ecded49c40406e74e256b3431fb5c989a8a3761026435b26`; retained checkpoint `m5/m5-lcm-manual-primary-v1/checkpoint` |
+| `O-PRIME` | Task `01a0d9a9-91f9-7690-be43-f6a0edf33ef0`; candidate `67add6dbddd1d5600462886d76bbd17c169a220d`; bundle `sha256:911be3137e557ed1ff1c78978a47f19421cf063de400527f930ac00b67c8cbb1`; manifest `sha256:359349e002cb300c6ddb00db62fbf2b96e9479fd8963ee0de1a709e53891bd00`; sandbox draft PR #6 |
+| `M-PRIME` | Candidate `f43b0a414d0804c70d07d2168b3652935b91483d`; bundle `sha256:5019bfac570a0ab91edeb86061eecdcf287aef30f9e1ce16dae5b942f9332811`; retained checkpoint `m5/m5-is-prime-manual-primary-v1/checkpoint` |
+| `O-SQRT` | Task `01a0d9af-e3a8-759f-b4e6-8337f3caff3d`; candidate `f85f906bc065cb547edf6a8d5b5f21027d0536dc`; bundle `sha256:b1df28fc99044a39d16412a0a2dc86bca2f5e1096553bccc09a91ec46945740b`; manifest `sha256:90eafec0e7a5dc9a8e1f0174a556aa9d1ab3014b947055b843d605483e40e4c5`; sandbox draft PR #7 |
+| `M-SQRT` | Candidate `bbb2e8b38f7b73e5b4116693332c995ac4b6d3cf`; bundle `sha256:f8862285e2d2d7c7b98e65c844cfd9f1c407765104e361200139f64226cb60e2`; retained checkpoint `m5/m5-integer-sqrt-manual-primary-v1/checkpoint` |
+| `O-MEAN` | Task `01a0d9b2-d415-75b6-a2de-38f8396dcfd2`; candidate `92625851b2040a89e49c0a86912df20ae43e4e03`; bundle `sha256:21a926cbfe04eec9f6f1b129b4632ebb63c582ec9a46d873940dbb69d463f92b`; manifest `sha256:cdb6c5522e04107a064027c25a8c7c96c27feabf902abceffaffc5c3cda3d69f`; sandbox draft PR #8 |
+| `M-MEAN` | Candidate `d63b5d3500b6b08e1ddc41a5d3fa0402bbc748fc`; bundle `sha256:7c2eb5a6c2d48a5808ae814ff1975a6b443c01a74925272bdf5b2122080196d6`; retained checkpoint `m5/m5-checked-mean-manual-primary-v1/checkpoint` |
+
+All candidates descended from the frozen start revision and were reconstructed in
+fresh host checkouts. The final oracle passed `O-GCD`, `M-LCM`, `M-PRIME`,
+`O-MEAN`, and `M-MEAN`. It rejected the other five because the exact frozen
+request prohibited test edits; `O-LCM` also failed the committed Ayni quality
+contract. No candidate changed policy, dependencies, or the toolchain.
+
+### Aggregate measurements
+
+| Measure | Orchestrator | Manual Ayni | Matched interpretation |
+| --- | --- | --- | --- |
+| Strict acceptance | 2/5 (40%) | 3/5 (60%) | Orchestrator −1 task, or −20 percentage points |
+| Feature behavior plus quality, ignoring prohibited test edits | 4/5 (80%) | 5/5 (100%) | `O-LCM` was the sole quality failure |
+| Workflow result | 4/5 draft PRs with final evidence | 5/5 retained candidates; PR publication not part of this arm | Endpoints are not equivalent |
+| Run time | total 728s; mean 145.6s; median 149s; range 120–166s | total 396s; mean 79.2s; median 76s; range 46–112s | Per-pair Orchestrator minus manual: 111, 62, 54, 73, and 32s; mean 66.4s, median 62s |
+| Timeout/input/setup failure | 0/5 | 0/5 | No primary retry or in-run recovery |
+| Fresh reproduction of accepted candidates | 2/2 | 3/3 | 5/5 accepted candidates reproduced |
+| Human effort | Missing | Missing | No active-minute stopwatch; per-accepted-change effort is undefined |
+| Provider/compute cost | Missing | Missing | No token or billing telemetry; cost per accepted change is undefined |
+| First useful verification | Stage timestamp unavailable | Review timestamp not captured | Cannot compare this measure |
+
+The run-time values are descriptive only. Orchestrator timing includes managed
+validation and draft-PR publication, while manual timing stops when the coding
+agent checkpoints a candidate; the later manual evidence and review work was not
+timed. Therefore the apparent 66.4-second difference is not a performance or
+effort comparison.
+
+### Deviations and limitations
+
+- The private oracle initially checked behavior but not the committed Ayni quality
+  contract. Commit `59b06f5` added that check after the LCM pair exposed the gap.
+  GCD and LCM were revalidated, and the corrected oracle was used for every final
+  verdict.
+- The private oracle initially did not enforce the already-frozen request's ban on
+  policy, test, dependency, and toolchain edits. Commit `eaf7fd9` added exact scope
+  checks after all candidates were frozen, and all ten candidates were then
+  revalidated uniformly. This post-run validator correction is recorded rather
+  than hidden.
+- The product's conservative test-edit disclosure marked `O-GCD` even though an
+  exact comparison of the sandbox's inline test regions found no test edit. The
+  final scope oracle uses the exact region comparison for this fixed repository.
+- Full model/tool transcripts, token use, provider cost, setup time, review time,
+  and active human minutes were unavailable. Manual checkout setup was performed
+  by the repeatable launcher outside its clock.
+- No first-arm candidate, summary, test output, or PR was inspected before its
+  paired second arm terminated. Draft PR visibility remains an operational rather
+  than technical concealment control.
+- These are synthetic arithmetic tasks in one Rust repository. They provide no
+  evidence about demand, pricing, multi-repository operation, or production use.
+
+## Decision
+
+**Iterate within the MVP.** Both arms produced useful, freshly reproducible
+changes, but strict acceptance was 2/5 for Orchestrator and 3/5 for manual Ayni.
+Orchestrator supplied four evidence-bound draft PRs and caught the LCM quality
+failure, but it did not prevent three candidates from violating the frozen test-edit
+constraint. Missing human-effort and cost measurements, plus non-equivalent timing
+endpoints, make the value comparison inconclusive and rule out **Advance**.
+
+Before any separately authorized cohort, enforce task-specific protected paths
+before publication, replace the conservative inline-test heuristic, expose stage
+timestamps and provider usage, time manual setup/review work, and compare both arms
+at the same reviewable endpoint. Do not add retries or extra tasks to this completed
+cohort.
 
 ## Completion boundary
 
-After all ten primary runs, calculate every rate separately for the two arms with
-five-task denominators, report matched-pair differences, and report every missing
-measurement and protocol deviation. Never use ten candidate outcomes over a
-five-task denominator or collapse the arms into one result. Apply the decision rules in
-[MVP validation](mvp-validation.md#decision-after-the-pilot). An inconclusive or
-negative result is valid; missing tasks, missing baseline arms, unexplained
-reproduction failures, or absent cost evidence must not be converted into a
-successful product claim. Because the tasks are synthetic and there is no
-monetary ceiling, this test cannot produce an **Advance** decision or validate
-product value; its maximum valid outcome is a workflow-level iterate, reconsider,
-or inconclusive result.
+All ten primary runs are retained with separate five-task denominators and
+matched-pair differences. No missing task, failed arm, rejected candidate, or
+missing measurement was converted into success. Applying the
+[MVP validation](mvp-validation.md#decision-after-the-pilot) rules, the synthetic
+scope and absent monetary ceiling prevent **Advance** or any product-value claim;
+the recorded outcome is a workflow-level iterate with an inconclusive value
+comparison.

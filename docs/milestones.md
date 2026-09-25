@@ -1,9 +1,9 @@
 # MVP delivery milestones
 
 Status: agreed delivery sequence. Each milestone has one delivery PR and an
-observable completion gate. M0 through M4 are delivered; M5 preparation has
-started with a five-task ceiling, but execution is blocked until the sandbox
-baseline and paired-run harnesses are ready.
+observable completion gate. M0 through M4 are delivered. The bounded M5 cohort is
+complete in the pilot branch with an **Iterate within the MVP** decision pending
+PR #14 review.
 
 Read the [MVP scope](mvp.md) for the product boundary and the
 [validation plan](mvp-validation.md) for engineering gates and pilot evaluation.
@@ -40,7 +40,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
 | M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Complete |
 | M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Complete — PR #12 |
-| M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Five synthetic paired tasks produce a bounded workflow result | In preparation — sandbox baseline pending |
+| M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Five synthetic paired tasks produce a bounded workflow result | Complete in pilot branch — PR #14 pending |
 
 ## M0: foundation and first deployment
 
@@ -444,24 +444,22 @@ product value or authorize M5 conclusions.
 ## M5: product validation
 
 The [product-validation pilot record](product-validation-pilot.md) freezes the
-selected sandbox repository, paired independent baseline, alternating order, and
-a five-minute limit per run and a ceiling of five synthetic arithmetic tasks. No
-paid run has started. The merged sandbox baseline, exact request bytes, intended
-baseline failures, paired launchers, durable deadline, and both cutoff paths are
-validated.
+selected sandbox repository, paired independent baseline, alternating order, a
+five-minute limit per run, and a ceiling of five synthetic arithmetic tasks. All
+ten paid runs completed against the merged baseline with the exact frozen inputs,
+alternating order, durable deadlines, fresh validation, and no primary retry.
 
-Use the frozen task start revision, requests, acceptance criteria, and operating
-details when collecting results. The `openai-gpt5` profile is selected for both
-arms. Use the deployed M4 candidate and record its exact identities. Apply the [paired-test protocol](mvp-validation.md#five-task-paired-test),
-including human review, comparison limitations, failure accounting, and fresh
-validation of claimed verified results.
+The strict acceptance result was 2/5 for Orchestrator and 3/5 for manual Ayni.
+Orchestrator produced four evidence-bound draft PRs and caught one quality failure,
+but three candidates violated the frozen test-edit constraint. Human effort,
+provider cost, and comparable endpoint timing were unavailable, so the decision is
+**Iterate within the MVP**, not **Advance**. See the pilot record for every run,
+evidence identity, validator correction, limitation, and matched measurement.
 
-**Completion gate:** commit a private pilot report with per-task evidence,
-aggregate measurements, limitations, and the investment decision. An inconclusive
-or negative result is a valid completed experiment when reported accurately.
-Missing runs or evidence must remain explicit and cannot establish validation.
-Code fixes discovered during the pilot require recorded validation; do not mix
-outcomes from unrecorded implementation changes.
+**Completion gate: complete in the pilot branch; pending PR #14.** The report keeps
+missing measurements and rejected candidates explicit. Validator gaps discovered
+during the run were fixed in recorded commits and applied uniformly to all frozen
+candidates before the final verdict.
 
 The M5 PR records the decision and next work. It does not automatically authorize
 multi-repository expansion, public publication, or production deployment.
@@ -475,7 +473,7 @@ multi-repository expansion, public publication, or production deployment.
 | M2 | Selected — [Decision 0003](decisions/0003-durable-local-orchestration.md) records local durable storage, retained evidence, Job transport, and lifecycle schema |
 | M3 | First agent, GitHub access, and checkpoint/candidate handoff |
 | M4 completion | Selected — dependency changes are explicitly unsupported; [Decision 0004](decisions/0004-pilot-readiness-and-preparation.md) records the operating limits |
-| M5 | Sandbox, `openai-gpt5`, five synthetic arithmetic tasks, and paired comparison selected. The baseline and paired-run harness gates passed; the ten paid runs remain. The five-minute bound does not cap provider spend, so neither product value nor cost acceptability can be concluded. |
+| M5 | Completed synthetic paired cohort: strict acceptance 2/5 Orchestrator and 3/5 manual Ayni. Decision: **Iterate within the MVP**. Missing effort/cost data and the time-only ceiling prevent product-value, cost-acceptability, or **Advance** conclusions. |
 
 Docker Desktop Kubernetes and Kustomize are selected. Record the other choices
 and their rationale when made, without implying unsupported capabilities or
