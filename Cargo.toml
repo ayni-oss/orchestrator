@@ -19,7 +19,7 @@ rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled
 rig-agent = { version = "=0.42.0", default-features = false }
 rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["json", "query", "rustls"] }
-jsonwebtoken = "=9.3.1"
+jsonwebtoken = "=10.3.0"
 base64 = "=0.22.1"
 tempfile = "=3.27.0"
 serde = { version = "1.0.228", features = ["derive"] }
