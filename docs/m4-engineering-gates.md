@@ -4,12 +4,12 @@ Status: all applicable engineering gates passed on the selected Docker Desktop p
 
 ## Candidate and topology
 
-- Runtime source: `b42e86d4a2b1a823d553ddf0d58496ff84ad8a76`
-- Control plane: `local/ayni-orchestrator-control-plane:git-b42e86d4a2b1`
-  - OCI index: `sha256:0a1e8200ff252301d7094afdbbae5767378c3752f82795b7235cb4757ac37e68`
-  - running image: `sha256:923257dd9d22a32b3d6875601ed8cf499f23122853757101de4fc7c8f847a1dd`
-- Worker: `local/ayni-orchestrator-worker:git-b42e86d4a2b1`
-  - OCI index: `sha256:7fd16feed858777594f5c3f59e55cc18aa63f36207462e463d29023d319ef267`
+- Runtime source: `61f5d2cec9c3f83c456170daea67c185af5a5995`
+- Control plane: `local/ayni-orchestrator-control-plane:git-61f5d2cec9c3`
+  - OCI index: `sha256:6e0adfd64bb4781e09e03b0fbe5a8ae3d0c73037e68eab8af0d5e6375920c82a`
+  - running image: `sha256:369023c4ddedacea902fa7af3591f91fb02bf389ee90d7d485e5c794b5b9bbf7`
+- Worker: `local/ayni-orchestrator-worker:git-61f5d2cec9c3`
+  - OCI index: `sha256:f413d9b6c644f84b658c126702de5f990ff819788c797a6d4645b6827ab1b929`
 - Docker Engine client/server: `29.8.0`
 - Kubernetes client/server: `v1.36.1`; Kustomize: `v5.8.1`
 - Context/node/namespace: `docker-desktop`, `desktop-control-plane`, `ayni-orchestrator-dev`
@@ -48,7 +48,7 @@ The browser surface is unauthenticated inside the cluster and is operationally r
 
 ## Installation and update
 
-A separate clean-install namespace exposed empty task state and bound all four claims, then was deleted. Namespace and local-port overrides now make that check reproducible. Its `pilot_ready: true` established publisher/control-plane configuration, not enrollment.
+At runtime source `61f5d2c`, the separate `ayni-orchestrator-clean-check` namespace exposed empty task state, reported `pilot_ready: true`, and bound all four claims before it was deleted. Namespace and local-port overrides make that check reproducible. `pilot_ready: true` established publisher/control-plane configuration, not enrollment.
 
 The M3-to-M4 update retained tasks `01a0d75c-5766-7509-b04d-ae856bdb56f0` and `01a0d4d8-1dc8-7694-acb1-b6f38f43316c` and PVC UIDs:
 
@@ -57,7 +57,7 @@ The M3-to-M4 update retained tasks `01a0d75c-5766-7509-b04d-ae856bdb56f0` and `0
 - managed evidence: `9b598de1-c274-41bf-9065-3938483072a9`
 - prepared environments: `f4b0ff2f-9601-4a6d-a2ae-deb1e99adf06`
 
-The rollouts from runtime `132998e` through `374ca33` to `b42e86d` again retained those claims and records.
+The rollouts from runtime `132998e` through `b42e86d` to `61f5d2c` again retained those claims and records.
 
 ## Limitations
 

@@ -391,16 +391,16 @@ security boundaries, and operating limits; the [pilot runbook](pilot-operations.
 records installation and operations.
 
 **Final deployment evidence (2026-09-25, runtime commit
-`b42e86d4a2b1a823d553ddf0d58496ff84ad8a76`):** formatting, Clippy, 33 workspace
-tests, compile checks, shell syntax, M4 Kustomize rendering, client dry-run, and
-the live M4 check passed. Docker Engine `29.8.0` and Docker Desktop Kubernetes
-client/server `v1.36.1` with Kustomize `v5.8.1` ran
-`local/ayni-orchestrator-control-plane:git-b42e86d4a2b1` (OCI index
-`sha256:0a1e8200ff252301d7094afdbbae5767378c3752f82795b7235cb4757ac37e68`,
+`61f5d2cec9c3f83c456170daea67c185af5a5995`):** formatting, Clippy, 33 workspace
+tests, compile checks, shell syntax, M4 Kustomize rendering, client dry-run,
+isolated clean installation, and the live M4 check passed. Docker Engine `29.8.0`
+and Docker Desktop Kubernetes client/server `v1.36.1` with Kustomize `v5.8.1`
+ran `local/ayni-orchestrator-control-plane:git-61f5d2cec9c3` (OCI index
+`sha256:6e0adfd64bb4781e09e03b0fbe5a8ae3d0c73037e68eab8af0d5e6375920c82a`,
 running image
-`sha256:923257dd9d22a32b3d6875601ed8cf499f23122853757101de4fc7c8f847a1dd`)
-and loaded `local/ayni-orchestrator-worker:git-b42e86d4a2b1` (OCI index
-`sha256:7fd16feed858777594f5c3f59e55cc18aa63f36207462e463d29023d319ef267`).
+`sha256:369023c4ddedacea902fa7af3591f91fb02bf389ee90d7d485e5c794b5b9bbf7`)
+and loaded `local/ayni-orchestrator-worker:git-61f5d2cec9c3` (OCI index
+`sha256:f413d9b6c644f84b658c126702de5f990ff819788c797a6d4645b6827ab1b929`).
 The rollout retained all four PVCs and prior tasks. `pilot_ready: true` records
 publisher/control-plane configuration; each repository has its own preparation
 readiness state.
