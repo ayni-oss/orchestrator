@@ -89,7 +89,7 @@ the API if one is not already present:
 
 ```bash
 curl --fail -H 'content-type: application/json' \
-  --data '{"id":"coding","provider":"openai","model":"gpt-5-codex","secret_ref":"openai-api"}' \
+  --data '{"id":"openai-gpt5","provider":"openai","model":"gpt-5","secret_ref":"openai-api"}' \
   http://127.0.0.1:18080/v1/agent-profiles
 ```
 

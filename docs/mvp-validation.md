@@ -1,10 +1,11 @@
 # MVP validation: useful changes with less human intervention
 
-Status: validation plan for the [MVP](mvp.md). No ten-task product-value pilot
-has run and no product outcome is claimed. The ten-task pilot comes from
-the product discussion. The comparison
-protocol and decision rules below are proposed evaluation details to settle
-before collecting results.
+Status: validation plan for the [MVP](mvp.md). Pilot preparation is recorded in
+the [product-validation pilot record](product-validation-pilot.md), but no eligible
+cohort run has started and no product outcome is claimed. The ten-task pilot comes
+from the product discussion. The general comparison protocol and decision rules
+are below; choices frozen for the current test and its remaining blockers are in
+the pilot record.
 
 ## Primary validation goal
 
@@ -80,7 +81,9 @@ Record the repository/start revision, agent and model versions/settings, Ayni
 version and execution identity, supported project shape, worker topology,
 resources, credentials policy, retry/time/spend limits, and cleanup/retention
 settings. Secret values do not belong in the pilot record. Freeze the success
-definitions and cost ceiling before running the comparison.
+definitions and operating bounds before running the comparison. A cohort intended
+to establish cost acceptability must also freeze a monetary ceiling; a time-only
+test cannot yield an **Advance** decision.
 
 ### Compare with the existing workflow
 
@@ -159,9 +162,12 @@ no reduction in effort, if maintaining the platform costs more than the benefit,
 or if the selected runtime cannot preserve the evidence contract. More generated
 PRs alone do not establish value.
 
-The ten-task sample is the agreed pilot size. No numeric percentage improvement,
-acceptance-rate target, cost ceiling, or deadline has yet been agreed. Set any
-additional threshold before the pilot and preserve later changes in the record.
+The ten-task sample is the agreed pilot size. A five-minute limit per independent
+run is agreed for the current test, but no numeric percentage improvement,
+acceptance-rate target, or monetary cost ceiling is set. The test therefore cannot
+establish cost acceptability or yield an **Advance** decision under the rule above;
+it can produce an iterate, reconsider, or inconclusive result. Set any additional
+threshold before execution and preserve later changes in the record.
 
 ## Pilot report
 
