@@ -3,8 +3,8 @@
 Private product and technical exploration of an orchestration layer for agentic
 software development, built around Ayni's environment and quality contracts.
 
-The repository remains `ayni-operator` until its GitHub rename is completed.
-Product-facing names use **Ayni Orchestrator**.
+The private GitHub repository is `ayni-oss/orchestrator`. Product-facing names
+use **Ayni Orchestrator**.
 
 **Status: private M4 pilot-ready product complete locally; delivery PR pending.**
 This repository contains the Rust workspace, durable task orchestration, the

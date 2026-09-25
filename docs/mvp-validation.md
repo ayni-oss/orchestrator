@@ -1,7 +1,8 @@
 # MVP validation: useful changes with less human intervention
 
-Status: validation plan for the [MVP](mvp.md). No pilot has run and no outcome is
-claimed. The ten-task pilot comes from the product discussion. The comparison
+Status: validation plan for the [MVP](mvp.md). No M5 ten-task product-value
+pilot has run and no product outcome is claimed. The ten-task pilot comes from
+the product discussion. The comparison
 protocol and decision rules below are proposed evaluation details to settle
 before collecting results.
 
