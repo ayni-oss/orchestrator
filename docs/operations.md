@@ -1,12 +1,12 @@
-# Pilot operations
+# Local operations
 
-This runbook is the operating contract for the Docker Desktop pilot. It is
-for one trusted maintainer team, one local cluster, and the allowlisted
+This runbook is the operating contract for the supported Docker Desktop
+profile: one trusted maintainer team, one local cluster, and the allowlisted
 `ayni-oss/sandbox` repository. It is not a multi-tenant service contract.
 
 ## Access boundary
 
-The control plane has no end-user authentication in the pilot. The Service is
+The control plane has no end-user authentication in this profile. The Service is
 `ClusterIP`; do not expose it with an Ingress, `NodePort`, or a non-loopback
 forward. Open the product only through:
 
@@ -16,7 +16,7 @@ kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
 open http://127.0.0.1:18080/
 ```
 
-Anyone able to reach the Service can operate the pilot. Kubernetes access,
+Anyone able to reach the Service can operate the product. Kubernetes access,
 Docker Desktop host access, the GitHub App installation, and the configured
 model key are therefore privileged. The internal publication endpoint also
 requires its dedicated bearer token. Neither GitHub nor model credentials are
@@ -43,7 +43,7 @@ not prune shared cache or Docker volumes. Docker Desktop's
 single node permits the selected `ReadWriteOnce` sharing pattern. Do not copy
 this topology to a multi-node cluster.
 
-Hard pilot limits are one repository allowlist, 24 coding-agent turns, 4 PR
+Current profile limits are one repository allowlist, 24 coding-agent turns, 4 PR
 summary turns, one-hour preparation/validation Job deadlines, 5 GiB checkout
 workspaces, 20 GiB isolated engine storage, and no automatic deletion of
 retained state. Kubernetes capacity naturally serializes the 4 CPU/9 GiB heavy
@@ -66,7 +66,7 @@ The check requires `pilot_ready: true`, fetches the HTML marker and repository
 and task list APIs, and does not execute browser JavaScript. The first install
 creates four retained PVCs. Re-running the install does not replace them.
 
-To reproduce a clean installation without disturbing the normal pilot namespace,
+To reproduce a clean installation without disturbing the normal development namespace,
 use an isolated namespace and local port, then remove that namespace after
 recording the result:
 
@@ -82,7 +82,7 @@ unset AYNI_ORCHESTRATOR_NAMESPACE AYNI_ORCHESTRATOR_LOCAL_PORT
 
 Namespace deletion is intentionally explicit because it deletes that isolated
 installation's Secrets, Jobs, and retained claims. Never point this command at
-the normal pilot namespace.
+the normal development namespace.
 
 Use the UI to save repository enrollment. Configure an agent profile once with
 the API if one is not already present:
@@ -140,7 +140,7 @@ cannot revive the task. If the control plane restarts, deterministic Job names,
 durable phases, GitHub branch lookup, and immutable evidence allow
 reconciliation to continue without a second external effect.
 
-Dependency evolution is explicitly unsupported in the pilot. Candidate edits
+Dependency evolution is explicitly unsupported by the current profile. Candidate edits
 to `.ayni.lock`, `Cargo.toml`, `Cargo.lock`, or `rust-toolchain.toml` produce
 `dependency_change_unsupported` and no PR. `.ayni.toml` edits produce
 `policy_rejected`. Create a separately reviewed environment update outside the

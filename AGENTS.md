@@ -4,9 +4,10 @@
 
 - This repository is private development and exploration. Keep its visibility
   private until the user explicitly decides to publish it.
-- Keep orchestrator plans, architecture, terminology, integrations, examples, and
-  roadmap in this repository. Do not expose them through public Ayni code,
-  documentation, issues, PRs, commit messages, releases, or cross-repository links.
+- Keep durable orchestrator architecture, operations, terminology, and examples
+  in this repository. Track requirements and delivery in the private Orchestrator
+  GitHub Project and linked issues. Do not expose private material through public
+  Ayni code, documentation, issues, PRs, commit messages, releases, or links.
 - Ayni must remain independently useful as a local environment and quality tool.
   Orchestrator-driven discoveries may motivate Ayni fixes and improvements only when
   they have an independently justified Ayni use case and respect its boundaries.
@@ -16,8 +17,10 @@
 - Keep Kubernetes controllers, provider integrations, project/task lifecycle,
   agent orchestration, and orchestrator access policy here. Do not add a dependency
   from Ayni to this private repository or require private fixtures for Ayni CI.
-- Changes to Ayni belong in a separate branch and PR in its repository, following
-  its own AGENTS.md. Do not silently edit Ayni as part of an orchestrator milestone.
+- Changes to Ayni belong in a separate issue, branch, and PR in its repository,
+  following its own AGENTS.md. A private Orchestrator issue may link the public
+  Ayni issue, but the public issue must not reference private material. Do not
+  silently edit Ayni as part of an Orchestrator change.
 - Verify remote visibility before pushing private material. Do not create public
   packages, images, releases, sites, announcements, or publishing workflows
   without a separate explicit publication decision.
@@ -29,22 +32,19 @@
   controller runtime; pin tested dependencies when implementation begins.
 - Rust does not require reimplementing infrastructure, language tools, or external
   agents. Keep those integrations behind explicit boundaries.
-- Read README.md and the relevant documents in docs/ before implementation.
-  Distinguish user decisions, proposals, experiments, and verified capabilities.
-- Use docs/mvp.md for initial product scope and docs/mvp-validation.md for
-  engineering gates and pilot goals. Broader exploration documents do not expand
-  the MVP implicitly, and an execution spike alone does not complete the MVP.
-- Follow docs/milestones.md: one delivery PR per milestone, starting from updated
-  main after the preceding milestone merges. Record completion evidence and update
-  the milestone status; do not merge automatically.
-- Deploy working behavior to Docker Desktop Kubernetes from the first deployable
-  change onward, during each deployable milestone. Use Kustomize and the explicit
+- Read README.md, the linked issue, and relevant durable documents in docs/
+  before implementation. The issue owns the outcome and acceptance criteria;
+  repository documents describe current behavior and accepted decisions.
+- Start each change from updated main on a focused branch and link its pull
+  request to the issue with a closing keyword. Do not merge automatically.
+- Exercise deployable behavior on Docker Desktop Kubernetes when the change
+  affects runtime behavior. Use Kustomize and the explicit
   docker-desktop context as defined in
   docs/decisions/0001-local-kubernetes-deployment.md. Never fall back
   to another current cluster when the local context is absent. Local deployment
   is authorized; destructive cluster resets and retained-data deletion are separate.
-- Keep the first iteration small and end-to-end. Define its observable outcome
-  and failure/recovery cases before expanding resources or integrations.
+- Keep each issue small and end-to-end. Define its observable outcome and
+  failure/recovery cases before expanding resources or integrations.
 - Consume Ayni's supported CLI and artifact contracts first. Do not duplicate its
   policy evaluation, adapter behavior, or lock interpretation in the orchestrator.
 - A passing host check in a pod is not evidence of Ayni managed compatibility.
@@ -58,7 +58,7 @@
 
 - Use descriptive, unbranded branches; never use codex/ or cortex/ prefixes.
 - Use Conventional Commits for commits and PR titles.
-- Start new milestones from updated main on a fresh branch. Do not reuse a merged
+- Start each issue from updated main on a fresh branch. Do not reuse a merged
   branch or implement directly on main.
 - After repository changes, commit and push unless explicitly instructed otherwise,
   and open a PR with an accurate scope and validation results.
@@ -67,9 +67,9 @@
   tests, and compile checks with that toolchain, plus required CI checks locally.
   Exercise affected Kubernetes behavior on a disposable cluster before claiming
   it is validated. Report blocked checks; do not treat mocks as cluster evidence.
-- Documentation-only changes require review, whitespace checks, and validation of
-  local document links. Do not invent passing Rust or Kubernetes checks while the
-  repository contains no implementation.
+- Documentation-only changes require review, whitespace checks, and validation
+  of local document links. Requirements and delivery status belong in linked
+  issues and the organization Project, not duplicated planning documents.
 
 ## Rust guidance
 
@@ -96,8 +96,9 @@
   Keep tests when they protect a current invariant, regression guarantee, migration,
   persisted-data contract, or API compatibility promise, and name them after that
   current requirement rather than the removed implementation or delivery phase.
-  Keep historical evidence in Git history and explicit historical records. When a
-  compatibility window ends, remove its compatibility code and tests together.
+  Keep completed-work provenance in Git history and linked issues or pull
+  requests. When a compatibility window ends, remove its compatibility code and
+  tests together.
 - Preserve implementation unless the requested task requires code changes.
 - Treat security boundaries, repository identity, provider behavior,
   control-plane safety, and account capabilities as first-class correctness

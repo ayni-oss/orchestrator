@@ -1,92 +1,70 @@
 # Ayni Orchestrator
 
-Private product and technical exploration of an orchestration layer for agentic
-software development, built around Ayni's environment and quality contracts.
+Ayni Orchestrator is a private development-workflow control plane built around
+Ayni's environment and quality contracts. It prepares an approved repository
+revision, runs a bounded coding agent, validates the frozen candidate
+independently, and publishes a reviewable draft pull request.
 
-The private GitHub repository is `ayni-oss/orchestrator`. Product-facing names
-use **Ayni Orchestrator**.
+The private GitHub repository is `ayni-oss/orchestrator`. Ayni remains an
+independently useful local CLI in the public
+[`ayni-oss/ayni`](https://github.com/ayni-oss/ayni) repository.
 
-**Status: private pilot-ready product delivered; product-validation preparation underway with no product outcome claimed.**
-This repository contains the Rust workspace, durable task orchestration, the
-proven coding/validation/draft-PR path, browser workflow, repository readiness,
-reusable prepared environments, retry/input actions, and evidence views. The
-deployed operational gates are recorded in the
-[pilot engineering-gate record](docs/pilot-engineering-gates.md). The name is
-provisional; architecture proposals remain subject to implementation evidence.
-No delivery date or public launch is committed by these documents.
+## Current capabilities
 
-## Intent
+- durable task and attempt state in SQLite on retained local storage;
+- deterministic Kubernetes Job reconciliation, cancellation, and bounded retry;
+- GitHub App repository enrollment and draft-pull-request publication;
+- content-addressed repository preparation and compatible reuse;
+- bounded OpenAI-backed development with retained checkpoints;
+- independent Ayni validation of a frozen candidate;
+- retained, digest-bound result artifacts; and
+- a browser workflow for repository readiness, tasks, recovery actions, and
+  results.
 
-Keep connected repositories ready for development. Turn a request into a
-reviewable change using prepared environments, project context, development
-services, and reproducible quality evidence. Support projects spanning several
-repositories and agents people already use, including Cursor.
+## Current operating boundary
 
-Ayni remains an independently useful local product. This repository explores the
-additional lifecycle and coordination capabilities needed at project and
-organization scale.
+The supported deployment is a single trusted-team Docker Desktop Kubernetes
+cluster. The control-plane Service is unauthenticated and must be reached only
+through loopback port-forwarding. The current profile supports the allowlisted
+private `ayni-oss/sandbox` Rust repository, one control-plane replica, Ayni
+`0.13.0`, and local retained volumes. It does not claim multi-tenant isolation,
+public hosting, multi-node storage, general repository support, or production
+readiness.
 
-## Reading guide
+## Planning and delivery
+
+Requirements and delivery status live in GitHub rather than repository planning
+documents:
+
+- [Ayni Orchestrator project](https://github.com/orgs/ayni-oss/projects/2)
+- [Orchestrator issues](https://github.com/ayni-oss/orchestrator/issues)
+- [Completed Orchestrator milestones](https://github.com/ayni-oss/orchestrator/milestones?state=closed)
+- [Ayni CLI project](https://github.com/orgs/ayni-oss/projects/1)
+
+Issues hold the requirement and acceptance criteria. Pull requests link the
+issue with a closing keyword. Priority labels and Project status/iteration fields
+provide planning views; Git history and merged pull requests retain
+completed-work provenance.
+
+## Documentation
 
 | Document | Purpose |
 | --- | --- |
-| [MVP scope and experience](docs/mvp.md) | Initial audience, request-to-PR journey, scope boundaries, and completion requirements |
-| [MVP validation plan](docs/mvp-validation.md) | Engineering gates, five-task paired test, measurements, and investment decision |
-| [Product-validation pilot](docs/product-validation-pilot.md) | Frozen test protocol, readiness baseline, cohort registry, and run ledger |
-| [Delivery milestones](docs/milestones.md) | Historical delivery plan, deployment gates, and completion evidence |
-| [Pilot operations](docs/pilot-operations.md) | Access, installation, readiness, resources, updates, retention, recovery, and cleanup |
-| [Local deployment decision](docs/decisions/0001-local-kubernetes-deployment.md) | Docker Desktop Kubernetes, Kustomize, and the local deployment workflow |
-| [Product name and control-plane model](docs/decisions/0002-product-name-and-control-plane-model.md) | Ayni Orchestrator, its user-facing configuration model, and the controller/CRD boundary |
-| [Durable local orchestration](docs/decisions/0003-durable-local-orchestration.md) | SQLite/PVC state, Job transport, idempotency, and recovery boundaries |
-| [Pilot readiness and preparation](docs/decisions/0004-pilot-readiness-and-preparation.md) | Reusable preparation, dependency policy, UI boundary, and operating limits |
-| [Product intent](docs/product-intent.md) | Problem, audience, experience, boundaries, and business hypothesis |
-| [Architecture options](docs/architecture.md) | Domain model, responsibilities, topology options, and access diagram |
-| [Environment lifecycle](docs/environment-lifecycle.md) | Onboarding, prepared environments, candidate changes, and development services |
-| [Multi-repository work and evidence](docs/multi-repository.md) | Agent discovery, concurrent work, automatic recording, and integration acceptance |
-| [Agents, integrations, and positioning](docs/integrations-and-positioning.md) | Cursor comparison and integration, Rig, providers, skills, tools, and MCP |
-| [Broader validation backlog](docs/validation.md) | Longer-term experiments and unresolved choices beyond the MVP |
-| [First iteration investigation](docs/first-iteration.md) | Rust feasibility, proposed execution milestone, and managed-worker options |
+| [Architecture](docs/architecture.md) | Implemented components, state, execution flow, and trust boundaries |
+| [Local development](docs/local-development.md) | Workspace checks, image build, deployment, and API development |
+| [Operations](docs/operations.md) | Local access, preparation, updates, retention, recovery, and cleanup |
+| [Docker Desktop deployment decision](docs/decisions/0001-local-kubernetes-deployment.md) | Local Kubernetes and Kustomize deployment model |
+| [Control-plane model](docs/decisions/0002-product-name-and-control-plane-model.md) | Product name and application-API-first model |
+| [Durable orchestration decision](docs/decisions/0003-durable-local-orchestration.md) | SQLite, Jobs, idempotency, and recovery |
+| [Preparation and local UI decision](docs/decisions/0004-repository-preparation-and-local-ui.md) | Prepared environments, browser access, and operating limits |
 
-Development rules, including the private boundary with Ayni, are recorded in
+Repository development rules and the private boundary with Ayni are recorded in
 [AGENTS.md](AGENTS.md).
-
-## Local development and pilot operation
-
-See [local development](docs/local-development.md) for the pinned-toolchain
-checks and deployment mechanics. Use the [pilot runbook](docs/pilot-operations.md)
-for the browser workflow and operational contract.
-
-## How to read proposals
-
-- **Intent** records the direction expressed during product exploration.
-- **MVP scope** records the agreed initial product target; the MVP documents take
-  precedence over broader exploration when deciding what belongs in this pilot.
-- **Existing Ayni capability** describes the separate Ayni project at the source
-  revision recorded below.
-- **Proposal** describes a possible implementation to test.
-- **Open question** identifies a choice that has not been made.
-
-Examples of resource names, tool calls, states, and configuration concepts are
-illustrative. They are not a Kubernetes custom-resource schema or a public API.
 
 ## Publication boundary
 
-This material is private planning. The remote was verified as **PRIVATE** on
-2026-09-15 before the initial documentation push. Keep repository visibility
-private. Public announcements, public documentation, releases, publishing
-workflows, and links from the public Ayni repository require a separate explicit
-publication decision. A Markdown label does not enforce confidentiality;
-repository access controls do.
-
-An eventual open-source project and optional SaaS are intentions, not current
-availability. The repository is licensed under Apache-2.0; packaging and
-commercial boundaries remain undecided.
-
-## Research baseline
-
-The primary source of intent is the product exploration on 2026-09-15. Technical
-claims about Ayni were checked against revision
-`f4bae6ef087a7d98ccbcef1bfc71bdaec585b8ee` of
-[`ayni-oss/ayni`](https://github.com/ayni-oss/ayni).
-External product and library references are linked in the relevant documents;
-recheck their capabilities before implementation or public claims.
+This repository and the Orchestrator Project are private. The Ayni CLI Project
+is public with the public CLI repository. Public Orchestrator announcements,
+documentation, releases, packages, images, or links from Ayni require an
+explicit publication decision. The Apache-2.0 license does not by itself change
+repository visibility or establish product availability.
