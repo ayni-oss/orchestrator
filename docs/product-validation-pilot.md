@@ -85,13 +85,13 @@ between arms, mark the pair contaminated and exclude it from comparative claims.
 ## Repository eligibility review
 
 The enrolled sandbox revision contains the previously exposed retry-backoff
-fixture and is not an eligible cohort base. Sandbox candidate
-`6f49ce0508029b96eecc8d07ab58400914ca10c5` prepares a passing
+fixture and is not an eligible cohort base. Merged sandbox revision
+`916f0184bab0999c1a7172dce84898137923505c` prepares a passing
 `math-validation` CLI with lock fingerprint
 `sha256:96714feaa1986289c5f1284259c53887e6bfd073510ba0399e4580188b0c1eec`,
 repairs that known fixture, and deliberately does not implement or plant failures
-for the five selected feature tasks. Freeze its eventual merged commit as the
-common start revision before running either arm.
+for the five selected feature tasks. Its independent validators fail for all five
+unimplemented features, so this revision is the frozen common start for both arms.
 
 The selected tasks are synthetic GCD, LCM, primality, integer-square-root, and
 checked-mean CLI features. They are useful for a bounded workflow comparison but
@@ -130,11 +130,11 @@ any malformed or out-of-range value.
 
 | # | Task and independently checked acceptance criteria | Start revision | First arm | Eligibility |
 | --- | --- | --- | --- | --- |
-| 1 | Add `gcd <u64> <u64>`; print `6` for `54 24`, `9` for `0 9`, and `0` for `0 0` | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Orchestrator | Blocked |
-| 2 | Add checked `lcm <u64> <u64>`; print `42` for `21 6` and `0` for `0 9`; reject overflow | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Manual Ayni | Blocked |
-| 3 | Add `is-prime <u64>`; print lowercase booleans; classify `0`, `1`, `2`, `97`, and `100` correctly | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Orchestrator | Blocked |
-| 4 | Add floor `integer-sqrt <u64>`; handle `0`, `15`, `16`, and `u64::MAX` | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Manual Ayni | Blocked |
-| 5 | Add `checked-mean <i64>...`; require input, accumulate without `i64` overflow, and truncate toward zero | `6f49ce0508029b96eecc8d07ab58400914ca10c5` pending merge | Orchestrator | Blocked |
+| 1 | Add `gcd <u64> <u64>`; print `6` for `54 24`, `9` for `0 9`, and `0` for `0 0` | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
+| 2 | Add checked `lcm <u64> <u64>`; print `42` for `21 6` and `0` for `0 9`; reject overflow | `916f0184bab0999c1a7172dce84898137923505c` | Manual Ayni | Eligible |
+| 3 | Add `is-prime <u64>`; print lowercase booleans; classify `0`, `1`, `2`, `97`, and `100` correctly | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
+| 4 | Add floor `integer-sqrt <u64>`; handle `0`, `15`, `16`, and `u64::MAX` | `916f0184bab0999c1a7172dce84898137923505c` | Manual Ayni | Eligible |
+| 5 | Add `checked-mean <i64>...`; require input, accumulate without `i64` overflow, and truncate toward zero | `916f0184bab0999c1a7172dce84898137923505c` | Orchestrator | Eligible |
 
 `scripts/pilot/check-math-task.sh TASK CHECKOUT EXPECTED_COMMIT
 EXPECTED_LOCK_FINGERPRINT` is the independent executable acceptance oracle. It
