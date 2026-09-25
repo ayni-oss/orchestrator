@@ -301,7 +301,7 @@ negative-path, and GitHub reconciliation exercises remained unverified at that
 revision. This was a historical blocked attempt and is superseded by the final
 evidence below.
 
-**Final M3 completion evidence (2026-09-25, commit `c92777f`):** The previously
+**Final M3 completion evidence (2026-09-25, commit `617dfd8`):** The previously
 missing provisioning manifest was copied without alteration to the public
 `ghcr.io/ayni-oss/ayni-provisioning` package at digest
 `sha256:30453fcd751acff069c7b16a1cd2eba01051bd94b64cd9d333c4ce82a9ff0961`;
@@ -317,11 +317,11 @@ Its regenerated Ayni 0.13.0 lock has fingerprint
 managed `env build`, `env doctor`, and all four Ayni signals passed. Docker
 Engine 29.8.0 and Docker Desktop Kubernetes v1.36.1 (kubectl
 v1.36.1, Kustomize v5.8.1) ran control-plane image index
-`sha256:bb41b57dd4e4cfe96c3391668248242de9ae3587891a685c64a719f7405b5da8`
+`sha256:d4c0a4d27e7da864677e9aff536ad4f294853c02aa99685bf9cf2c5f24bdbb97`
 and worker image index
-`sha256:09185d5e9fb70e0fb23958672cc3fd368bf3515152cb970428eca2476248fbe0`.
+`sha256:ee693ecc0f3df5ba22264768265d2211f3176129c8965c2201072a55c768cb6f`.
 The active control-plane container reported image ID
-`sha256:afb078f4ebebc017ccffdd618d89dc24418808e1353d326f2e90b3573f921530`,
+`sha256:21b717828a632fcdcf277610c8b1f867a15023f39a3c986fb976bf634cb68228`,
 and readiness passed.
 
 Live task `01a0d75c-5766-7509-b04d-ae856bdb56f0` started from sandbox revision
