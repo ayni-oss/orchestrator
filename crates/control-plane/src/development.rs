@@ -82,6 +82,8 @@ pub struct DevelopmentInput {
     pub start_revision: String,
     pub request: String,
     pub acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    pub deadline_seconds: Option<u64>,
 }
 
 impl DevelopmentInput {
@@ -106,8 +108,55 @@ impl DevelopmentInput {
                 "provide 1-20 bounded acceptance criteria",
             ));
         }
+        if matches!(self.deadline_seconds, Some(0 | 86_401..)) {
+            return Err(StoreError::InvalidInput(
+                "deadline seconds must be between 1 and 86400",
+            ));
+        }
         Ok(())
     }
+}
+
+fn persisted_deadline_seconds(value: Option<u64>) -> Result<Option<i64>, StoreError> {
+    value
+        .map(i64::try_from)
+        .transpose()
+        .map_err(|_| StoreError::InvalidInput("deadline seconds exceed storage bounds"))
+}
+
+fn retry_request(
+    source: &DevelopmentTask,
+    provided_input: Option<&str>,
+) -> Result<String, StoreError> {
+    let allowed = match provided_input {
+        Some(value) => {
+            if value.trim().is_empty() || value.len() > 8_192 {
+                return Err(StoreError::InvalidInput(
+                    "provided input must be 1-8192 characters",
+                ));
+            }
+            source.phase == DevelopmentPhase::WaitingForInput
+        }
+        None => matches!(
+            source.phase,
+            DevelopmentPhase::Failed | DevelopmentPhase::Cancelled
+        ),
+    };
+    if !allowed {
+        return Err(StoreError::InvalidInput(
+            "development task cannot be retried in its current phase",
+        ));
+    }
+    Ok(provided_input.map_or_else(
+        || source.input.request.clone(),
+        |value| {
+            format!(
+                "{}\n\nMaintainer input:\n{}",
+                source.input.request,
+                value.trim()
+            )
+        },
+    ))
 }
 
 /// A single durable development request and its measured candidate.
@@ -119,6 +168,9 @@ pub struct DevelopmentTask {
     pub agent_profile: AgentProfile,
     pub preparation_id: Option<String>,
     pub retry_of: Option<TaskId>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deadline_at: Option<i64>,
     pub phase: DevelopmentPhase,
     pub requested_input: Option<String>,
     pub candidate_commit: Option<String>,
@@ -213,7 +265,8 @@ impl Store {
                 preparation_id TEXT, retry_of TEXT, requested_input TEXT,
                 candidate_commit TEXT, validation_manifest TEXT,
                 policy_or_test_edits INTEGER, draft_pr_url TEXT, failure TEXT,
-                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                deadline_seconds INTEGER, deadline_at INTEGER
             );
             CREATE TABLE IF NOT EXISTS development_actions (
                 action_key TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES development_tasks(id),
@@ -232,6 +285,8 @@ impl Store {
             ("preparation_id", "TEXT"),
             ("retry_of", "TEXT"),
             ("requested_input", "TEXT"),
+            ("deadline_seconds", "INTEGER"),
+            ("deadline_at", "INTEGER"),
         ] {
             let exists: bool = self
                 .connection
@@ -315,17 +370,20 @@ impl Store {
         let profile_snapshot = serde_json::to_string(&profile)
             .map_err(|_| StoreError::InvalidInput("could not serialize profile"))?;
         let now = super::orchestration::unix_seconds()?;
+        let deadline_seconds = persisted_deadline_seconds(input.deadline_seconds)?;
+        let deadline_at = deadline_seconds.map(|seconds| now + seconds);
         let transaction = self
             .connection
             .transaction()
             .map_err(StoreError::Database)?;
         transaction.execute(
             "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request,
-             acceptance_criteria, phase, preparation_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)",
+             acceptance_criteria, phase, preparation_id, created_at, updated_at,
+             deadline_seconds, deadline_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13)",
             params![id.to_string(), input.repository_id, input.profile_id, repository_snapshot,
                 profile_snapshot, input.start_revision, input.request, criteria, phase.as_str(),
-                preparation_id, now],
+                preparation_id, now, deadline_seconds, deadline_at],
         ).map_err(StoreError::Database)?;
         transaction
             .execute(
@@ -398,7 +456,8 @@ impl Store {
         let row = self.connection.query_row(
             "SELECT repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request, acceptance_criteria,
              phase, preparation_id, retry_of, requested_input, candidate_commit, validation_manifest,
-             policy_or_test_edits, draft_pr_url, failure
+             policy_or_test_edits, draft_pr_url, failure, created_at, updated_at,
+             deadline_seconds, deadline_at
              FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?,
@@ -406,7 +465,9 @@ impl Store {
                     row.get::<_, Option<String>>(8)?, row.get::<_, Option<String>>(9)?,
                     row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?, row.get::<_, Option<bool>>(13)?,
-                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<String>>(15)?))
+                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<String>>(15)?,
+                    row.get::<_, i64>(16)?, row.get::<_, i64>(17)?,
+                    row.get::<_, Option<i64>>(18)?, row.get::<_, Option<i64>>(19)?))
             }
         ).optional().map_err(StoreError::Database)?.ok_or(StoreError::TaskNotFound(id))?;
         let repository = serde_json::from_str(&row.2)
@@ -415,6 +476,13 @@ impl Store {
             .map_err(|_| StoreError::InvalidInput("invalid persisted profile"))?;
         let criteria = serde_json::from_str(&row.6)
             .map_err(|_| StoreError::InvalidInput("invalid persisted acceptance criteria"))?;
+        let deadline_seconds = row
+            .18
+            .map(|seconds| {
+                u64::try_from(seconds)
+                    .map_err(|_| StoreError::InvalidInput("invalid persisted task deadline"))
+            })
+            .transpose()?;
         Ok(DevelopmentTask {
             id,
             input: DevelopmentInput {
@@ -423,6 +491,7 @@ impl Store {
                 start_revision: row.4,
                 request: row.5,
                 acceptance_criteria: criteria,
+                deadline_seconds,
             },
             repository,
             agent_profile,
@@ -431,6 +500,9 @@ impl Store {
                 .9
                 .map(|value| TaskId::parse(&value).map_err(StoreError::InvalidLifecycleData))
                 .transpose()?,
+            created_at: row.16,
+            updated_at: row.17,
+            deadline_at: row.19,
             phase: DevelopmentPhase::parse(&row.7)?,
             requested_input: row.10,
             candidate_commit: row.11,
@@ -448,35 +520,7 @@ impl Store {
         provided_input: Option<&str>,
     ) -> Result<DevelopmentTask, StoreError> {
         let source = self.development_task(source_id)?;
-        let allowed = match provided_input {
-            Some(value) => {
-                if value.trim().is_empty() || value.len() > 8_192 {
-                    return Err(StoreError::InvalidInput(
-                        "provided input must be 1-8192 characters",
-                    ));
-                }
-                source.phase == DevelopmentPhase::WaitingForInput
-            }
-            None => matches!(
-                source.phase,
-                DevelopmentPhase::Failed | DevelopmentPhase::Cancelled
-            ),
-        };
-        if !allowed {
-            return Err(StoreError::InvalidInput(
-                "development task cannot be retried in its current phase",
-            ));
-        }
-        let request = provided_input.map_or_else(
-            || source.input.request.clone(),
-            |value| {
-                format!(
-                    "{}\n\nMaintainer input:\n{}",
-                    source.input.request,
-                    value.trim()
-                )
-            },
-        );
+        let request = retry_request(&source, provided_input)?;
         let action_kind = format!("development-retry:{source_id}");
         if let Some((target, kind)) = self
             .connection
@@ -499,6 +543,12 @@ impl Store {
             }
             return Ok(task);
         }
+        let now = super::orchestration::unix_seconds()?;
+        if source.deadline_at.is_some_and(|deadline| deadline <= now) {
+            return Err(StoreError::InvalidInput(
+                "development task deadline has expired",
+            ));
+        }
         let preparation_id = self.ready_preparation(
             &source.input.repository_id,
             &source.input.start_revision,
@@ -511,7 +561,7 @@ impl Store {
             .map_err(|_| StoreError::InvalidInput("could not serialize profile"))?;
         let criteria = serde_json::to_string(&source.input.acceptance_criteria)
             .map_err(|_| StoreError::InvalidInput("could not serialize acceptance criteria"))?;
-        let now = super::orchestration::unix_seconds()?;
+        let deadline_seconds = persisted_deadline_seconds(source.input.deadline_seconds)?;
         let transaction = self
             .connection
             .transaction()
@@ -520,8 +570,8 @@ impl Store {
             .execute(
                 "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
              profile_snapshot, start_revision, request, acceptance_criteria, phase, preparation_id,
-             retry_of, created_at, updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'queued',?9,?10,?11,?11)",
+             retry_of, created_at, updated_at, deadline_seconds, deadline_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'queued',?9,?10,?11,?11,?12,?13)",
                 params![
                     id.to_string(),
                     source.input.repository_id,
@@ -533,7 +583,9 @@ impl Store {
                     criteria,
                     preparation_id,
                     source_id.to_string(),
-                    now
+                    now,
+                    deadline_seconds,
+                    source.deadline_at
                 ],
             )
             .map_err(StoreError::Database)?;

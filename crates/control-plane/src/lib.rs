@@ -605,7 +605,7 @@ mod tests {
             "repository_id":"trial","profile_id":"other",
             "start_revision":"8a555ada2f6e3ee41de2485ed13da508beaebaeb",
             "request":"Correct the retry formula",
-            "acceptance_criteria":["3 -> 8"]});
+            "acceptance_criteria":["3 -> 8"],"deadline_seconds":300});
         let response = api
             .clone()
             .oneshot(json_request("/v1/development-tasks", &payload)?)
@@ -614,6 +614,16 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
         assert_eq!(body["phase"], "unsupported");
+        assert_eq!(body["input"]["deadline_seconds"], 300);
+        assert_eq!(
+            body["deadline_at"].as_i64(),
+            Some(
+                body["created_at"]
+                    .as_i64()
+                    .ok_or("task has no creation time")?
+                    + 300
+            )
+        );
         let task_id = body["id"].as_str().ok_or("task has no id")?;
         let response = api
             .clone()

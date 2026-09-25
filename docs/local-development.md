@@ -187,7 +187,9 @@ Configure one binding via `POST /v1/repository-bindings` with JSON fields
 `POST /v1/development-tasks` with a unique `idempotency_key`, the binding and
 profile IDs, the exact 40-hex `start_revision`, a `request` to correct the
 fixture to `min(60, 2 × 2^(attempt−1))`, and `acceptance_criteria` containing
-the four empirical cases. Repeating a submission key with different content
+the four empirical cases. An optional `deadline_seconds` from 1 through 86400
+persists one absolute task deadline; retries inherit it, and every stage Job is
+bounded by its remaining time. Repeating a submission key with different content
 is rejected. Inspect `GET /v1/development-tasks/{task_id}`. Cancellation is
 `POST /v1/development-tasks/{task_id}/cancel` with a new idempotency key.
 Configured non-OpenAI providers return `unsupported` without a Job.

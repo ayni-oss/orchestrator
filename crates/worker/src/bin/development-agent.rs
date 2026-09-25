@@ -16,6 +16,7 @@ use std::{
 };
 
 const MAX_TOOL_OUTPUT: usize = 32_000;
+const CANDIDATE_COMMIT_TITLE: &str = "chore(agent): apply requested change";
 
 #[derive(Clone)]
 struct Workspace(PathBuf);
@@ -273,7 +274,7 @@ fn checkpoint_candidate(
             "commit",
             "-s",
             "-m",
-            "fix(example): correct retry backoff formula",
+            CANDIDATE_COMMIT_TITLE,
         ],
     )?;
     let commit = git(workspace, &["rev-parse", "HEAD"])?;
@@ -308,6 +309,14 @@ async fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_commit_title_is_task_neutral() {
+        assert_eq!(
+            CANDIDATE_COMMIT_TITLE,
+            "chore(agent): apply requested change"
+        );
+    }
 
     #[test]
     fn workspace_file_tools_reject_traversal_and_symlinks() -> Result<(), Box<dyn std::error::Error>>

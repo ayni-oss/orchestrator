@@ -135,7 +135,10 @@ impl Store {
         )
     }
 
-    fn from_connection(connection: Connection, max_attempts: u32) -> Result<Self, StoreError> {
+    pub(crate) fn from_connection(
+        connection: Connection,
+        max_attempts: u32,
+    ) -> Result<Self, StoreError> {
         if max_attempts == 0 {
             return Err(StoreError::InvalidMaxAttempts(max_attempts));
         }

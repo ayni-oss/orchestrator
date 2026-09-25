@@ -6,7 +6,7 @@ software development, built around Ayni's environment and quality contracts.
 The private GitHub repository is `ayni-oss/orchestrator`. Product-facing names
 use **Ayni Orchestrator**.
 
-**Status: private pilot-ready product delivered; product validation pending.**
+**Status: private pilot-ready product delivered; product-validation preparation underway with no product outcome claimed.**
 This repository contains the Rust workspace, durable task orchestration, the
 proven coding/validation/draft-PR path, browser workflow, repository readiness,
 reusable prepared environments, retry/input actions, and evidence views. The
@@ -31,7 +31,8 @@ organization scale.
 | Document | Purpose |
 | --- | --- |
 | [MVP scope and experience](docs/mvp.md) | Initial audience, request-to-PR journey, scope boundaries, and completion requirements |
-| [MVP validation plan](docs/mvp-validation.md) | Engineering gates, ten-task pilot, measurements, and investment decision |
+| [MVP validation plan](docs/mvp-validation.md) | Engineering gates, five-task paired test, measurements, and investment decision |
+| [Product-validation pilot](docs/product-validation-pilot.md) | Frozen test protocol, readiness baseline, cohort registry, and run ledger |
 | [Delivery milestones](docs/milestones.md) | Historical delivery plan, deployment gates, and completion evidence |
 | [Pilot operations](docs/pilot-operations.md) | Access, installation, readiness, resources, updates, retention, recovery, and cleanup |
 | [Local deployment decision](docs/decisions/0001-local-kubernetes-deployment.md) | Docker Desktop Kubernetes, Kustomize, and the local deployment workflow |

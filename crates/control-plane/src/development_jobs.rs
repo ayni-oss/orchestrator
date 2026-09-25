@@ -3,6 +3,7 @@
 use crate::{
     AppState, PublisherState,
     development::{DevelopmentPhase, DevelopmentTask},
+    orchestration::unix_seconds,
 };
 use ayni_orchestrator_domain::{GitRevision, TaskId};
 use k8s_openapi::api::{batch::v1::Job, core::v1::Secret};
@@ -81,6 +82,24 @@ impl DevelopmentReconciler {
     }
 
     async fn reconcile_task(&self, task: &DevelopmentTask) -> Result<(), String> {
+        let deadline_expired = task
+            .deadline_at
+            .is_some_and(|deadline| unix_seconds().map(|now| now >= deadline).unwrap_or(true));
+        if deadline_expired
+            && matches!(
+                task.phase,
+                DevelopmentPhase::Queued
+                    | DevelopmentPhase::Coding
+                    | DevelopmentPhase::ValidationQueued
+                    | DevelopmentPhase::Validating
+                    | DevelopmentPhase::PrQueued
+                    | DevelopmentPhase::PreparingPr
+            )
+        {
+            self.cleanup_cancelled(task.id).await?;
+            self.fail(task.id, "task deadline exceeded")?;
+            return Ok(());
+        }
         match task.phase {
             DevelopmentPhase::Queued => self.start_stage(task, Stage::Code).await,
             DevelopmentPhase::Coding => self.finish_coding(task).await,
@@ -423,12 +442,18 @@ impl DevelopmentReconciler {
             Stage::Validate => self.validation_spec(task)?,
             Stage::Pr => self.pr_spec(task)?,
         };
+        let (active_deadline_seconds, termination_grace_period_seconds) = job_deadline(
+            task.deadline_at,
+            unix_seconds().map_err(|error| error.to_string())?,
+        )?;
         serde_json::from_value(json!({
             "apiVersion":"batch/v1", "kind":"Job",
             "metadata":{"name":name,"labels":labels},
-            "spec":{"backoffLimit":0,"activeDeadlineSeconds":3600,"ttlSecondsAfterFinished":3600,
+            "spec":{"backoffLimit":0,"activeDeadlineSeconds":active_deadline_seconds,
+                "ttlSecondsAfterFinished":3600,
                 "template":{"metadata":{"labels":labels},"spec":{
                     "restartPolicy":"Never","automountServiceAccountToken":false,
+                    "terminationGracePeriodSeconds":termination_grace_period_seconds,
                     "securityContext":{"seccompProfile":{"type":"RuntimeDefault"},
                         "fsGroup":10001,"fsGroupChangePolicy":"OnRootMismatch"},
                     "initContainers":init_containers,"containers":[container],"volumes":volumes
@@ -588,6 +613,17 @@ impl DevelopmentReconciler {
     }
 }
 
+fn job_deadline(deadline_at: Option<i64>, now: i64) -> Result<(i64, Option<i64>), String> {
+    let Some(deadline) = deadline_at else {
+        return Ok((3_600, None));
+    };
+    let remaining = deadline.checked_sub(now).ok_or("task deadline exceeded")?;
+    if remaining <= 0 {
+        return Err("task deadline exceeded".into());
+    }
+    Ok((remaining.min(3_600), Some(10)))
+}
+
 #[derive(Clone, Copy)]
 enum JobState {
     Missing,
@@ -611,4 +647,24 @@ fn secret_name(id: TaskId) -> String {
 fn worker_security() -> Value {
     json!({"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},
         "readOnlyRootFilesystem":true,"runAsNonRoot":true,"runAsUser":10001})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::job_deadline;
+
+    #[test]
+    fn task_deadline_bounds_each_stage_and_shutdown_grace() {
+        assert_eq!(job_deadline(None, 100), Ok((3_600, None)));
+        assert_eq!(job_deadline(Some(400), 100), Ok((300, Some(10))));
+        assert_eq!(job_deadline(Some(5_000), 100), Ok((3_600, Some(10))));
+        assert_eq!(
+            job_deadline(Some(100), 100),
+            Err("task deadline exceeded".into())
+        );
+        assert_eq!(
+            job_deadline(Some(99), 100),
+            Err("task deadline exceeded".into())
+        );
+    }
 }

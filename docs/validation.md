@@ -114,10 +114,11 @@ attributing every difference to the platform.
 | Successful clean reproduction | Evidence and environment portability |
 | Idle resources and cleanup delay | Operational overhead |
 
-The MVP selects a ten-task pilot; its measurement definitions and decision rules
-are recorded in the [MVP validation plan](mvp-validation.md). Numeric performance
-targets for this broader backlog have not been selected. More PRs or faster
-agent output alone do not demonstrate better accepted changes.
+The MVP currently selects a five-task synthetic paired test; its measurement
+definitions, limitations, and decision rules are recorded in the
+[MVP validation plan](mvp-validation.md). Numeric performance targets for this
+broader backlog have not been selected. More PRs or faster agent output alone do
+not demonstrate better accepted changes.
 
 ## Go/no-go questions
 
