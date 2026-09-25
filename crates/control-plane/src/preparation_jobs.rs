@@ -187,7 +187,7 @@ impl PreparationReconciler {
         let secret: Secret = serde_json::from_value(json!({
             "apiVersion":"v1", "kind":"Secret",
             "metadata":{"name":secret_name(&preparation.id),
-                "labels":{"orchestrator.ayni.dev/preparation-id":preparation.id}},
+                "labels":{"orchestrator.ayni.dev/preparation-id":suffix(&preparation.id)}},
             "type":"Opaque", "stringData":{"token":token}
         }))
         .map_err(|_| "could not build preparation clone Secret")?;
@@ -241,7 +241,8 @@ impl PreparationReconciler {
                     .labels
                     .unwrap_or_default()
                     .get("orchestrator.ayni.dev/preparation-id")
-                    != Some(&preparation.id)
+                    .map(String::as_str)
+                    != Some(suffix(&preparation.id))
                 {
                     return Err("deterministic preparation Job belongs to another input".into());
                 }
@@ -256,7 +257,7 @@ impl PreparationReconciler {
         repository: &crate::development::RepositoryBinding,
     ) -> Result<Job, String> {
         let labels = json!({"app.kubernetes.io/name":"ayni-orchestrator-preparation",
-            "orchestrator.ayni.dev/preparation-id":preparation.id});
+            "orchestrator.ayni.dev/preparation-id":suffix(&preparation.id)});
         let repository_url = format!(
             "https://github.com/{}/{}.git",
             repository.owner, repository.repository
