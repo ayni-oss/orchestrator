@@ -4,6 +4,7 @@ namespace: ayni-orchestrator-dev
 resources:
   - ../docker-desktop
   - checkpoints-pvc.yaml
+  - prepared-environments-pvc.yaml
   - rbac.yaml
 patches:
   - path: control-plane.yaml

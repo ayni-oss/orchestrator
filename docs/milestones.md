@@ -379,6 +379,17 @@ path to provide requested input. Document access, installation, resources,
 updates, retention, recovery, and cleanup. Declare whether dependency evolution
 supports rebuilding or returns an explicit unsupported outcome.
 
+**Selected M4 implementation (validation pending):** the control plane serves a
+loopback-only browser interface and durable list/action APIs. Repository
+preparation retains a digest-bound Ayni image archive and build record; matching
+inputs reuse it and final validation loads it into a fresh isolated engine.
+Retries and requested input create linked tasks. Rust dependency evolution is
+explicitly `dependency_change_unsupported`. Decision
+[0004](decisions/0004-pilot-readiness-and-preparation.md) records identities,
+security boundaries, and operating limits; the [pilot runbook](pilot-operations.md)
+records installation and operations. This paragraph is implementation scope, not
+completion evidence.
+
 **Completion gate:** deploy the final candidate and have a maintainer operate the
 full workflow using its interface and documentation. Exercise cold and warm
 preparation, a failed replacement environment, and missing/revoked access. Every

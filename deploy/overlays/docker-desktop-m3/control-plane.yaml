@@ -19,6 +19,8 @@ spec:
               value: /checkpoints
             - name: DEVELOPMENT_EVIDENCE_ROOT
               value: /evidence
+            - name: DEVELOPMENT_PREPARATION_ROOT
+              value: /preparations
             - name: DEVELOPMENT_PUBLISH_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -34,6 +36,9 @@ spec:
             - name: development-evidence
               mountPath: /evidence
               readOnly: true
+            - name: prepared-environments
+              mountPath: /preparations
+              readOnly: true
       volumes:
         - name: github-app-key
           secret:
@@ -46,4 +51,8 @@ spec:
         - name: development-evidence
           persistentVolumeClaim:
             claimName: managed-check-evidence
+            readOnly: true
+        - name: prepared-environments
+          persistentVolumeClaim:
+            claimName: prepared-environments
             readOnly: true

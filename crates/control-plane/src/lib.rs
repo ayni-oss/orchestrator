@@ -1,22 +1,29 @@
 //! HTTP API and durable orchestration surface for Ayni Orchestrator.
 
+mod api;
 mod development;
 mod development_jobs;
+mod development_lifecycle;
 mod github;
 mod orchestration;
+mod preparation;
+mod preparation_jobs;
 mod publication;
+mod ui;
 
+use api::{ApiError, HealthResponse};
 use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::{get, post},
 };
 use ayni_orchestrator_domain::{AttemptId, AttemptOutcome, IdempotencyKey, TaskId};
 use development::{AgentProfile, DevelopmentInput, DevelopmentTask, RepositoryBinding};
 use orchestration::{Store, StoreError, StoreHandle, TaskInput, TaskView};
-use serde::{Deserialize, Serialize};
+use preparation::{PreparationView, PrepareRepositoryInput, RepositoryView};
+use serde::Deserialize;
 use std::{
     env,
     net::SocketAddr,
@@ -28,6 +35,7 @@ use thiserror::Error;
 
 pub use development_jobs::DevelopmentReconciler;
 pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
+pub use preparation_jobs::PreparationReconciler;
 pub use publication::PublisherState;
 
 /// Configuration validated before the control plane starts accepting traffic.
@@ -226,6 +234,7 @@ impl AppState {
 /// Builds the M2 HTTP router.
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(ui::index))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness))
         .route("/v1/tasks", post(submit_task))
@@ -233,19 +242,85 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/tasks/{task_id}/retry", post(retry_task))
         .route("/v1/tasks/{task_id}/cancel", post(cancel_task))
         .route("/v1/attempts/{attempt_id}/reports", post(report_attempt))
-        .route("/v1/repository-bindings", post(put_repository_binding))
-        .route("/v1/agent-profiles", post(put_agent_profile))
-        .route("/v1/development-tasks", post(submit_development_task))
+        .route(
+            "/v1/repository-bindings",
+            get(repository_bindings).post(put_repository_binding),
+        )
+        .route(
+            "/v1/repository-bindings/{repository_id}",
+            get(repository_binding),
+        )
+        .route(
+            "/v1/repository-bindings/{repository_id}/prepare",
+            post(prepare_repository),
+        )
+        .route("/v1/preparations/{preparation_id}", get(preparation))
+        .route(
+            "/v1/agent-profiles",
+            get(agent_profiles).post(put_agent_profile),
+        )
+        .route(
+            "/v1/development-tasks",
+            get(development_tasks).post(submit_development_task),
+        )
         .route("/v1/development-tasks/{task_id}", get(development_task))
         .route(
             "/v1/development-tasks/{task_id}/cancel",
             post(cancel_development_task),
         )
         .route(
+            "/v1/development-tasks/{task_id}/retry",
+            post(retry_development_task),
+        )
+        .route(
+            "/v1/development-tasks/{task_id}/provide-input",
+            post(provide_development_input),
+        )
+        .route(
+            "/v1/development-tasks/{task_id}/evidence",
+            get(development_evidence),
+        )
+        .route(
             "/v1/development-tasks/{task_id}/publish",
             post(publication::publish),
         )
         .with_state(state)
+}
+
+async fn repository_bindings(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<RepositoryView>>, ApiError> {
+    Ok(Json(with_store(&state, |store| store.repository_views())?))
+}
+
+async fn repository_binding(
+    State(state): State<AppState>,
+    Path(repository_id): Path<String>,
+) -> Result<Json<RepositoryView>, ApiError> {
+    Ok(Json(with_store(&state, |store| {
+        store.repository_view(&repository_id)
+    })?))
+}
+
+async fn prepare_repository(
+    State(state): State<AppState>,
+    Path(repository_id): Path<String>,
+    Json(request): Json<PrepareRepositoryRequest>,
+) -> Result<(StatusCode, Json<PreparationView>), ApiError> {
+    let key = parse_key(request.idempotency_key)?;
+    let preparation = with_store(&state, |store| {
+        store.prepare_repository(&repository_id, &key, &request.input)
+    })?;
+    Ok((StatusCode::ACCEPTED, Json(preparation)))
+}
+
+async fn preparation(
+    State(state): State<AppState>,
+    Path(preparation_id): Path<String>,
+) -> Result<Json<PreparationView>, ApiError> {
+    Ok(Json(with_store(&state, |store| {
+        store.preparation(&preparation_id)
+    })?))
 }
 
 async fn put_repository_binding(
@@ -256,12 +331,24 @@ async fn put_repository_binding(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn agent_profiles(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<AgentProfile>>, ApiError> {
+    Ok(Json(with_store(&state, |store| store.agent_profiles())?))
+}
+
 async fn put_agent_profile(
     State(state): State<AppState>,
     Json(profile): Json<AgentProfile>,
 ) -> Result<StatusCode, ApiError> {
     with_store(&state, |store| store.put_agent_profile(&profile))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn development_tasks(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<DevelopmentTask>>, ApiError> {
+    Ok(Json(with_store(&state, |store| store.development_tasks())?))
 }
 
 async fn submit_development_task(
@@ -297,11 +384,51 @@ async fn cancel_development_task(
     })?))
 }
 
+async fn retry_development_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    Json(request): Json<ActionRequest>,
+) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
+    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
+    let key = parse_key(request.idempotency_key)?;
+    let task = with_store(&state, |store| store.retry_development(id, &key, None))?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn provide_development_input(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    Json(request): Json<ProvideInputRequest>,
+) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
+    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
+    let key = parse_key(request.idempotency_key)?;
+    let task = with_store(&state, |store| {
+        store.retry_development(id, &key, Some(&request.input))
+    })?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn development_evidence(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<publication::EvidenceView>, ApiError> {
+    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
+    let task = with_store(&state, |store| store.development_task(id))?;
+    let publisher = state.publisher().ok_or(ApiError::PublisherUnavailable)?;
+    let evidence = publisher
+        .evidence_view(&task)
+        .map_err(ApiError::EvidenceUnavailable)?;
+    Ok(Json(evidence))
+}
+
 async fn liveness() -> impl IntoResponse {
     (StatusCode::OK, Json(HealthResponse::live()))
 }
-async fn readiness() -> impl IntoResponse {
-    (StatusCode::OK, Json(HealthResponse::ready()))
+async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(HealthResponse::ready(state.publisher.is_some())),
+    )
 }
 
 async fn submit_task(
@@ -384,6 +511,19 @@ struct SubmitDevelopmentRequest {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct PrepareRepositoryRequest {
+    idempotency_key: String,
+    #[serde(flatten)]
+    input: PrepareRepositoryInput,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProvideInputRequest {
+    idempotency_key: String,
+    input: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ActionRequest {
     idempotency_key: String,
 }
@@ -392,75 +532,6 @@ struct ActionRequest {
 struct ReportRequest {
     idempotency_key: String,
     outcome: AttemptOutcome,
-}
-
-#[derive(Serialize)]
-struct HealthResponse {
-    component: &'static str,
-    status: &'static str,
-    managed_execution: bool,
-    durable_orchestration: bool,
-    domain_model_revision: u8,
-}
-impl HealthResponse {
-    const fn live() -> Self {
-        Self {
-            component: "control-plane",
-            status: "live",
-            managed_execution: true,
-            durable_orchestration: true,
-            domain_model_revision: ayni_orchestrator_domain::model_revision(),
-        }
-    }
-    const fn ready() -> Self {
-        Self {
-            component: "control-plane",
-            status: "ready",
-            managed_execution: true,
-            durable_orchestration: true,
-            domain_model_revision: ayni_orchestrator_domain::model_revision(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-enum ApiError {
-    #[error("invalid identifier")]
-    InvalidIdentifier(#[source] ayni_orchestrator_domain::LifecycleError),
-    #[error(transparent)]
-    Store(#[from] StoreError),
-    #[error("durable store lock was poisoned")]
-    StoreLockPoisoned,
-}
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let status = match self {
-            Self::InvalidIdentifier(_)
-            | Self::Store(
-                StoreError::InvalidIdentity(_)
-                | StoreError::InvalidInput(_)
-                | StoreError::RetryNotAllowed(_)
-                | StoreError::MaxAttemptsReached { .. }
-                | StoreError::TaskCancelled(_)
-                | StoreError::ActionKeyReused(_),
-            ) => StatusCode::BAD_REQUEST,
-            Self::Store(StoreError::TaskNotFound(_) | StoreError::AttemptNotFound(_)) => {
-                StatusCode::NOT_FOUND
-            }
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        (
-            status,
-            Json(ErrorResponse {
-                error: self.to_string(),
-            }),
-        )
-            .into_response()
-    }
-}
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
 }
 
 #[cfg(test)]
@@ -508,7 +579,7 @@ mod tests {
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"domain_model_revision":2}"#
+            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","pilot_ready":false,"domain_model_revision":2}"#
         );
         Ok(())
     }

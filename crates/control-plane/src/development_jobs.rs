@@ -89,7 +89,8 @@ impl DevelopmentReconciler {
             DevelopmentPhase::PrQueued => self.start_stage(task, Stage::Pr).await,
             DevelopmentPhase::PreparingPr => self.finish_pr(task).await,
             DevelopmentPhase::Cancelled => self.cleanup_cancelled(task.id).await,
-            DevelopmentPhase::Completed
+            DevelopmentPhase::WaitingForInput
+            | DevelopmentPhase::Completed
             | DevelopmentPhase::Failed
             | DevelopmentPhase::Unsupported => Ok(()),
         }
@@ -97,7 +98,13 @@ impl DevelopmentReconciler {
 
     async fn start_stage(&self, task: &DevelopmentTask, stage: Stage) -> Result<(), String> {
         if matches!(stage, Stage::Code) {
-            let token = self.publisher.clone_token(&task.repository).await?;
+            let token = match self.publisher.clone_token(&task.repository).await {
+                Ok(token) => token,
+                Err(error) => {
+                    self.fail(task.id, &format!("Repository access unavailable: {error}"))?;
+                    return Ok(());
+                }
+            };
             self.ensure_clone_secret(task.id, &token).await?;
         }
         self.ensure_job(task, stage).await?;
@@ -126,7 +133,18 @@ impl DevelopmentReconciler {
                 self.delete_clone_secret(task.id).await?;
             }
             JobState::Failed | JobState::Missing => {
-                self.fail(task.id, "coding Job failed or disappeared")?;
+                let question = self
+                    .publisher
+                    .checkpoint_root()
+                    .join(task.id.to_string())
+                    .join("input-request.txt");
+                if let Ok(question) = fs::read_to_string(question) {
+                    self.with_store(|store| {
+                        store.record_requested_input(task.id, question.trim())
+                    })?;
+                } else {
+                    self.fail(task.id, "coding Job failed or disappeared")?;
+                }
                 self.delete_clone_secret(task.id).await?;
             }
             JobState::Pending => {}
@@ -443,6 +461,10 @@ impl DevelopmentReconciler {
             .candidate_commit
             .as_deref()
             .ok_or("validation has no candidate")?;
+        let preparation_id = task
+            .preparation_id
+            .as_deref()
+            .ok_or("validation has no ready environment preparation")?;
         let engine = json!({"name":"engine","image":"docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce",
             "restartPolicy":"Always","env":[{"name":"DOCKER_TLS_CERTDIR","value":""}],
             "securityContext":{"privileged":true},
@@ -461,13 +483,16 @@ impl DevelopmentReconciler {
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
                 {"name":"DEVELOPMENT_LOCK_SHA256","value":task.repository.lock_sha256},
                 {"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
-                {"name":"DEVELOPMENT_EVIDENCE_DIR","value":"/evidence"}],
+                {"name":"DEVELOPMENT_EVIDENCE_DIR","value":"/evidence"},
+                {"name":"DEVELOPMENT_PREPARATION_DIR","value":format!("/preparations/{preparation_id}")},
+                {"name":"DEVELOPMENT_PREPARATION_ID","value":preparation_id}],
             "securityContext":worker_security(),
             "resources":{"requests":{"cpu":"250m","memory":"256Mi"},
                 "limits":{"cpu":"500m","memory":"512Mi"}},
             "volumeMounts":[{"name":"workspace","mountPath":"/workspace"},
                 {"name":"candidate","mountPath":"/candidate","subPath":task.id.to_string(),"readOnly":true},
                 {"name":"evidence","mountPath":"/evidence","subPath":task.id.to_string()},
+                {"name":"preparations","mountPath":"/preparations","readOnly":true},
                 {"name":"scratch","mountPath":"/tmp"}]
         });
         Ok((
@@ -477,6 +502,7 @@ impl DevelopmentReconciler {
                 json!({"name":"workspace","emptyDir":{"sizeLimit":"5Gi"}}),
                 json!({"name":"candidate","persistentVolumeClaim":{"claimName":"development-checkpoints","readOnly":true}}),
                 json!({"name":"evidence","persistentVolumeClaim":{"claimName":"managed-check-evidence"}}),
+                json!({"name":"preparations","persistentVolumeClaim":{"claimName":"prepared-environments","readOnly":true}}),
                 json!({"name":"scratch","emptyDir":{}}),
                 json!({"name":"engine-storage","emptyDir":{"sizeLimit":"20Gi"}}),
             ],

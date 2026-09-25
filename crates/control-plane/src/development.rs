@@ -117,7 +117,10 @@ pub struct DevelopmentTask {
     pub input: DevelopmentInput,
     pub repository: RepositoryBinding,
     pub agent_profile: AgentProfile,
+    pub preparation_id: Option<String>,
+    pub retry_of: Option<TaskId>,
     pub phase: DevelopmentPhase,
+    pub requested_input: Option<String>,
     pub candidate_commit: Option<String>,
     pub validation_manifest: Option<String>,
     pub policy_or_test_edits: Option<bool>,
@@ -137,6 +140,7 @@ pub struct PublicationAction {
 pub enum DevelopmentPhase {
     Queued,
     Coding,
+    WaitingForInput,
     ValidationQueued,
     Validating,
     PrQueued,
@@ -148,10 +152,11 @@ pub enum DevelopmentPhase {
 }
 
 impl DevelopmentPhase {
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Queued => "queued",
             Self::Coding => "coding",
+            Self::WaitingForInput => "waiting_for_input",
             Self::ValidationQueued => "validation_queued",
             Self::Validating => "validating",
             Self::PrQueued => "pr_queued",
@@ -167,6 +172,7 @@ impl DevelopmentPhase {
         match value {
             "queued" => Ok(Self::Queued),
             "coding" => Ok(Self::Coding),
+            "waiting_for_input" => Ok(Self::WaitingForInput),
             "validation_queued" => Ok(Self::ValidationQueued),
             "validating" => Ok(Self::Validating),
             "pr_queued" => Ok(Self::PrQueued),
@@ -203,6 +209,7 @@ impl Store {
                 repository_snapshot TEXT NOT NULL, profile_snapshot TEXT NOT NULL,
                 start_revision TEXT NOT NULL, request TEXT NOT NULL,
                 acceptance_criteria TEXT NOT NULL, phase TEXT NOT NULL,
+                preparation_id TEXT, retry_of TEXT, requested_input TEXT,
                 candidate_commit TEXT, validation_manifest TEXT,
                 policy_or_test_edits INTEGER, draft_pr_url TEXT, failure TEXT,
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
@@ -219,7 +226,30 @@ impl Store {
                 updated_at INTEGER NOT NULL
             );",
             )
-            .map_err(StoreError::Database)
+            .map_err(StoreError::Database)?;
+        for (name, definition) in [
+            ("preparation_id", "TEXT"),
+            ("retry_of", "TEXT"),
+            ("requested_input", "TEXT"),
+        ] {
+            let exists: bool = self
+                .connection
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('development_tasks') WHERE name=?1)",
+                    [name],
+                    |row| row.get(0),
+                )
+                .map_err(StoreError::Database)?;
+            if !exists {
+                self.connection
+                    .execute(
+                        &format!("ALTER TABLE development_tasks ADD COLUMN {name} {definition}"),
+                        [],
+                    )
+                    .map_err(StoreError::Database)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn put_repository_binding(&self, binding: &RepositoryBinding) -> Result<(), StoreError> {
@@ -266,8 +296,17 @@ impl Store {
         }
         let repository = self.repository_binding(&input.repository_id)?;
         let profile = self.agent_profile(&input.profile_id)?;
-        let id = TaskId::generate();
         let phase = initial_phase(&profile.provider);
+        let preparation_id = if phase == DevelopmentPhase::Queued {
+            Some(self.ready_preparation(
+                &input.repository_id,
+                &input.start_revision,
+                &repository.lock_sha256,
+            )?)
+        } else {
+            None
+        };
+        let id = TaskId::generate();
         let criteria = serde_json::to_string(&input.acceptance_criteria)
             .map_err(|_| StoreError::InvalidInput("could not serialize acceptance criteria"))?;
         let repository_snapshot = serde_json::to_string(&repository)
@@ -281,10 +320,11 @@ impl Store {
             .map_err(StoreError::Database)?;
         transaction.execute(
             "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request,
-             acceptance_criteria, phase, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+             acceptance_criteria, phase, preparation_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)",
             params![id.to_string(), input.repository_id, input.profile_id, repository_snapshot,
-                profile_snapshot, input.start_revision, input.request, criteria, phase.as_str(), now],
+                profile_snapshot, input.start_revision, input.request, criteria, phase.as_str(),
+                preparation_id, now],
         ).map_err(StoreError::Database)?;
         transaction
             .execute(
@@ -322,7 +362,7 @@ impl Store {
         Ok(Some(existing))
     }
 
-    fn repository_binding(&self, id: &str) -> Result<RepositoryBinding, StoreError> {
+    pub(crate) fn repository_binding(&self, id: &str) -> Result<RepositoryBinding, StoreError> {
         self.connection.query_row(
             "SELECT owner, repository, installation_id, base_branch, lock_sha256 FROM repository_bindings WHERE id=?1",
             [id],
@@ -334,7 +374,7 @@ impl Store {
             .ok_or(StoreError::InvalidInput("repository binding does not exist"))
     }
 
-    fn agent_profile(&self, id: &str) -> Result<AgentProfile, StoreError> {
+    pub(crate) fn agent_profile(&self, id: &str) -> Result<AgentProfile, StoreError> {
         self.connection
             .query_row(
                 "SELECT provider, model, secret_ref FROM agent_profiles WHERE id=?1",
@@ -356,14 +396,16 @@ impl Store {
     pub fn development_task(&self, id: TaskId) -> Result<DevelopmentTask, StoreError> {
         let row = self.connection.query_row(
             "SELECT repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request, acceptance_criteria,
-             phase, candidate_commit, validation_manifest, policy_or_test_edits, draft_pr_url, failure
+             phase, preparation_id, retry_of, requested_input, candidate_commit, validation_manifest,
+             policy_or_test_edits, draft_pr_url, failure
              FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?, row.get::<_, String>(6)?, row.get::<_, String>(7)?,
                     row.get::<_, Option<String>>(8)?, row.get::<_, Option<String>>(9)?,
-                    row.get::<_, Option<bool>>(10)?, row.get::<_, Option<String>>(11)?,
-                    row.get::<_, Option<String>>(12)?))
+                    row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?, row.get::<_, Option<bool>>(13)?,
+                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<String>>(15)?))
             }
         ).optional().map_err(StoreError::Database)?.ok_or(StoreError::TaskNotFound(id))?;
         let repository = serde_json::from_str(&row.2)
@@ -383,13 +425,149 @@ impl Store {
             },
             repository,
             agent_profile,
+            preparation_id: row.8,
+            retry_of: row
+                .9
+                .map(|value| TaskId::parse(&value).map_err(StoreError::InvalidLifecycleData))
+                .transpose()?,
             phase: DevelopmentPhase::parse(&row.7)?,
-            candidate_commit: row.8,
-            validation_manifest: row.9,
-            policy_or_test_edits: row.10,
-            draft_pr_url: row.11,
-            failure: row.12,
+            requested_input: row.10,
+            candidate_commit: row.11,
+            validation_manifest: row.12,
+            policy_or_test_edits: row.13,
+            draft_pr_url: row.14,
+            failure: row.15,
         })
+    }
+
+    pub fn retry_development(
+        &mut self,
+        source_id: TaskId,
+        key: &IdempotencyKey,
+        provided_input: Option<&str>,
+    ) -> Result<DevelopmentTask, StoreError> {
+        let source = self.development_task(source_id)?;
+        let allowed = match provided_input {
+            Some(value) => {
+                if value.trim().is_empty() || value.len() > 8_192 {
+                    return Err(StoreError::InvalidInput(
+                        "provided input must be 1-8192 characters",
+                    ));
+                }
+                source.phase == DevelopmentPhase::WaitingForInput
+            }
+            None => matches!(
+                source.phase,
+                DevelopmentPhase::Failed | DevelopmentPhase::Cancelled
+            ),
+        };
+        if !allowed {
+            return Err(StoreError::InvalidInput(
+                "development task cannot be retried in its current phase",
+            ));
+        }
+        let request = provided_input.map_or_else(
+            || source.input.request.clone(),
+            |value| {
+                format!(
+                    "{}\n\nMaintainer input:\n{}",
+                    source.input.request,
+                    value.trim()
+                )
+            },
+        );
+        let action_kind = format!("development-retry:{source_id}");
+        if let Some((target, kind)) = self
+            .connection
+            .query_row(
+                "SELECT task_id, action_kind FROM development_actions WHERE action_key=?1",
+                [key.as_str()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(StoreError::Database)?
+        {
+            if kind != action_kind {
+                return Err(StoreError::ActionKeyReused(key.as_str().to_owned()));
+            }
+            let task = self.development_task(
+                TaskId::parse(&target).map_err(StoreError::InvalidLifecycleData)?,
+            )?;
+            if task.input.request != request {
+                return Err(StoreError::ActionKeyReused(key.as_str().to_owned()));
+            }
+            return Ok(task);
+        }
+        let preparation_id = self.ready_preparation(
+            &source.input.repository_id,
+            &source.input.start_revision,
+            &source.repository.lock_sha256,
+        )?;
+        let id = TaskId::generate();
+        let repository_snapshot = serde_json::to_string(&source.repository)
+            .map_err(|_| StoreError::InvalidInput("could not serialize repository"))?;
+        let profile_snapshot = serde_json::to_string(&source.agent_profile)
+            .map_err(|_| StoreError::InvalidInput("could not serialize profile"))?;
+        let criteria = serde_json::to_string(&source.input.acceptance_criteria)
+            .map_err(|_| StoreError::InvalidInput("could not serialize acceptance criteria"))?;
+        let now = super::orchestration::unix_seconds()?;
+        let transaction = self
+            .connection
+            .transaction()
+            .map_err(StoreError::Database)?;
+        transaction
+            .execute(
+                "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
+             profile_snapshot, start_revision, request, acceptance_criteria, phase, preparation_id,
+             retry_of, created_at, updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'queued',?9,?10,?11,?11)",
+                params![
+                    id.to_string(),
+                    source.input.repository_id,
+                    source.input.profile_id,
+                    repository_snapshot,
+                    profile_snapshot,
+                    source.input.start_revision,
+                    request,
+                    criteria,
+                    preparation_id,
+                    source_id.to_string(),
+                    now
+                ],
+            )
+            .map_err(StoreError::Database)?;
+        transaction
+            .execute(
+                "INSERT INTO development_actions(action_key, task_id, action_kind, created_at)
+             VALUES (?1,?2,?3,?4)",
+                params![key.as_str(), id.to_string(), action_kind, now],
+            )
+            .map_err(StoreError::Database)?;
+        transaction.commit().map_err(StoreError::Database)?;
+        self.development_task(id)
+    }
+
+    pub(crate) fn record_requested_input(
+        &self,
+        id: TaskId,
+        question: &str,
+    ) -> Result<bool, StoreError> {
+        if question.trim().is_empty() {
+            return Err(StoreError::InvalidInput("requested input is empty"));
+        }
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE development_tasks SET phase='waiting_for_input', requested_input=?1,
+             updated_at=?2 WHERE id=?3 AND phase='coding'",
+                params![
+                    question.chars().take(1024).collect::<String>(),
+                    super::orchestration::unix_seconds()?,
+                    id.to_string()
+                ],
+            )
+            .map_err(StoreError::Database)?;
+        Ok(changed == 1)
     }
 
     pub(crate) fn begin_publication(
@@ -502,169 +680,6 @@ impl Store {
             ));
         }
         transaction.commit().map_err(StoreError::Database)
-    }
-
-    pub(crate) fn development_targets(&self) -> Result<Vec<DevelopmentTask>, StoreError> {
-        let mut statement = self.connection.prepare(
-            "SELECT id FROM development_tasks WHERE phase IN ('queued', 'coding', 'validation_queued',
-             'validating', 'pr_queued', 'preparing_pr', 'cancelled')
-             ORDER BY created_at ASC"
-        ).map_err(StoreError::Database)?;
-        let ids = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(StoreError::Database)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::Database)?;
-        ids.into_iter()
-            .map(|id| {
-                self.development_task(TaskId::parse(&id).map_err(StoreError::InvalidLifecycleData)?)
-            })
-            .collect()
-    }
-
-    pub(crate) fn development_phase(
-        &self,
-        id: TaskId,
-        from: DevelopmentPhase,
-        to: DevelopmentPhase,
-    ) -> Result<bool, StoreError> {
-        let updated = self
-            .connection
-            .execute(
-                "UPDATE development_tasks SET phase=?1, updated_at=?2 WHERE id=?3 AND phase=?4",
-                params![
-                    to.as_str(),
-                    super::orchestration::unix_seconds()?,
-                    id.to_string(),
-                    from.as_str()
-                ],
-            )
-            .map_err(StoreError::Database)?;
-        Ok(updated == 1)
-    }
-
-    pub(crate) fn record_candidate(&self, id: TaskId, candidate: &str) -> Result<bool, StoreError> {
-        GitRevision::parse(candidate).map_err(StoreError::InvalidIdentity)?;
-        let updated = self.connection.execute(
-            "UPDATE development_tasks SET phase='validation_queued', candidate_commit=?1, updated_at=?2
-             WHERE id=?3 AND phase='coding'",
-            params![candidate, super::orchestration::unix_seconds()?, id.to_string()],
-        ).map_err(StoreError::Database)?;
-        Ok(updated == 1)
-    }
-
-    pub(crate) fn record_validation(
-        &self,
-        id: TaskId,
-        digest: &str,
-        tests_edited: bool,
-    ) -> Result<bool, StoreError> {
-        let updated = self
-            .connection
-            .execute(
-                "UPDATE development_tasks SET phase='pr_queued', validation_manifest=?1,
-             policy_or_test_edits=?2, updated_at=?3 WHERE id=?4 AND phase='validating'",
-                params![
-                    digest,
-                    tests_edited,
-                    super::orchestration::unix_seconds()?,
-                    id.to_string()
-                ],
-            )
-            .map_err(StoreError::Database)?;
-        Ok(updated == 1)
-    }
-
-    pub(crate) fn fail_development(&self, id: TaskId, reason: &str) -> Result<bool, StoreError> {
-        let updated = self
-            .connection
-            .execute(
-                "UPDATE development_tasks SET phase='failed', failure=?1, updated_at=?2
-             WHERE id=?3 AND phase IN ('queued','coding','validation_queued','validating',
-             'pr_queued','preparing_pr')",
-                params![
-                    reason.chars().take(512).collect::<String>(),
-                    super::orchestration::unix_seconds()?,
-                    id.to_string()
-                ],
-            )
-            .map_err(StoreError::Database)?;
-        Ok(updated == 1)
-    }
-
-    pub(crate) fn fail_validation(
-        &self,
-        id: TaskId,
-        reason: &str,
-        manifest_digest: Option<&str>,
-        policy_or_test_edits: Option<bool>,
-    ) -> Result<bool, StoreError> {
-        let updated = self
-            .connection
-            .execute(
-                "UPDATE development_tasks SET phase='failed', failure=?1,
-             validation_manifest=?2, policy_or_test_edits=?3, updated_at=?4
-             WHERE id=?5 AND phase='validating'",
-                params![
-                    reason,
-                    manifest_digest,
-                    policy_or_test_edits,
-                    super::orchestration::unix_seconds()?,
-                    id.to_string()
-                ],
-            )
-            .map_err(StoreError::Database)?;
-        Ok(updated == 1)
-    }
-
-    pub fn cancel_development(
-        &mut self,
-        id: TaskId,
-        key: &IdempotencyKey,
-    ) -> Result<DevelopmentTask, StoreError> {
-        let task = self.development_task(id)?;
-        let now = super::orchestration::unix_seconds()?;
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(StoreError::Database)?;
-        let existing = transaction
-            .query_row(
-                "SELECT task_id FROM development_actions WHERE action_key=?1",
-                [key.as_str()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(StoreError::Database)?;
-        if let Some(existing) = existing {
-            if existing != id.to_string() {
-                return Err(StoreError::ActionKeyReused(key.as_str().to_owned()));
-            }
-            return Ok(task);
-        }
-        if !matches!(
-            task.phase,
-            DevelopmentPhase::Completed
-                | DevelopmentPhase::Failed
-                | DevelopmentPhase::Cancelled
-                | DevelopmentPhase::Unsupported
-        ) {
-            transaction
-                .execute(
-                    "UPDATE development_tasks SET phase='cancelled', updated_at=?1 WHERE id=?2",
-                    params![now, id.to_string()],
-                )
-                .map_err(StoreError::Database)?;
-        }
-        transaction
-            .execute(
-                "INSERT INTO development_actions(action_key, task_id, action_kind, created_at)
-             VALUES (?1, ?2, 'cancel', ?3)",
-                params![key.as_str(), id.to_string(), now],
-            )
-            .map_err(StoreError::Database)?;
-        transaction.commit().map_err(StoreError::Database)?;
-        self.development_task(id)
     }
 }
 

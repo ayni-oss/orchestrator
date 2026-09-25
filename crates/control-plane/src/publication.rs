@@ -29,6 +29,7 @@ pub struct PublisherState {
     app: GitHubApp,
     checkpoint_root: PathBuf,
     evidence_root: PathBuf,
+    preparation_root: PathBuf,
     internal_token: String,
     serial: Arc<Mutex<()>>,
 }
@@ -55,6 +56,12 @@ struct Manifest {
     check_exit_code: i32,
     policy_edited: bool,
     tests_edited: bool,
+    #[serde(default)]
+    changed_paths: Vec<String>,
+    #[serde(default)]
+    preparation_id: Option<String>,
+    #[serde(default)]
+    preparation_reused: bool,
     artifacts: Vec<Artifact>,
 }
 
@@ -62,6 +69,28 @@ struct Manifest {
 struct Artifact {
     name: String,
     sha256: String,
+}
+
+#[derive(Serialize)]
+pub struct EvidenceView {
+    pub manifest_digest: String,
+    pub outcome: String,
+    pub check_exit_code: i32,
+    pub start_revision: String,
+    pub candidate_commit: String,
+    pub lock_sha256: String,
+    pub preparation_id: Option<String>,
+    pub preparation_reused: bool,
+    pub policy_edited: bool,
+    pub tests_edited: bool,
+    pub changed_paths: Vec<String>,
+    pub artifacts: Vec<EvidenceArtifactView>,
+}
+
+#[derive(Serialize)]
+pub struct EvidenceArtifactView {
+    pub name: String,
+    pub sha256: String,
 }
 
 impl PublisherState {
@@ -73,6 +102,51 @@ impl PublisherState {
         body: &str,
     ) -> Result<(u64, String), String> {
         self.app.publish(task, bundle, title, body).await
+    }
+
+    pub(crate) fn evidence_view(&self, task: &DevelopmentTask) -> Result<EvidenceView, String> {
+        let bytes = fs::read(
+            self.evidence_root
+                .join(task.id.to_string())
+                .join("manifest.json"),
+        )
+        .map_err(|_| "final validation manifest is absent".to_owned())?;
+        let digest = format!("sha256:{:x}", Sha256::digest(&bytes));
+        if task.validation_manifest.as_deref() != Some(&digest) {
+            return Err("retained manifest differs from the durable task record".into());
+        }
+        let manifest: Manifest = serde_json::from_slice(&bytes)
+            .map_err(|_| "final validation manifest is malformed".to_owned())?;
+        if task.candidate_commit.as_deref() != Some(&manifest.candidate_commit)
+            || task.input.start_revision != manifest.start_revision
+            || task.repository.lock_sha256 != manifest.lock_sha256
+        {
+            return Err("final validation manifest does not match the task".into());
+        }
+        if manifest.outcome == "success" {
+            verify_artifacts(&self.evidence_root.join(task.id.to_string()), &manifest)?;
+        }
+        Ok(EvidenceView {
+            manifest_digest: digest,
+            outcome: manifest.outcome,
+            check_exit_code: manifest.check_exit_code,
+            start_revision: manifest.start_revision,
+            candidate_commit: manifest.candidate_commit,
+            lock_sha256: manifest.lock_sha256,
+            preparation_id: manifest.preparation_id,
+            preparation_reused: manifest.preparation_reused,
+            policy_edited: manifest.policy_edited,
+            tests_edited: manifest.tests_edited,
+            changed_paths: manifest.changed_paths,
+            artifacts: manifest
+                .artifacts
+                .into_iter()
+                .map(|artifact| EvidenceArtifactView {
+                    name: artifact.name,
+                    sha256: artifact.sha256,
+                })
+                .collect(),
+        })
     }
 
     pub(crate) fn failed_validation_record(
@@ -95,7 +169,7 @@ impl PublisherState {
             || manifest.lock_sha256 != lock
             || !matches!(
                 manifest.outcome.as_str(),
-                "quality_failure" | "policy_rejected"
+                "quality_failure" | "policy_rejected" | "dependency_change_unsupported"
             )
         {
             return None;
@@ -138,6 +212,11 @@ impl PublisherState {
         &self.evidence_root
     }
 
+    #[must_use]
+    pub fn preparation_root(&self) -> &FilePath {
+        &self.preparation_root
+    }
+
     /// Returns `None` when development publishing has not been configured locally.
     ///
     /// # Errors
@@ -149,6 +228,7 @@ impl PublisherState {
             "GITHUB_APP_PRIVATE_KEY_PATH",
             "DEVELOPMENT_CHECKPOINT_ROOT",
             "DEVELOPMENT_EVIDENCE_ROOT",
+            "DEVELOPMENT_PREPARATION_ROOT",
             "DEVELOPMENT_PUBLISH_TOKEN",
         ];
         let present = vars.iter().filter(|name| env::var(name).is_ok()).count();
@@ -166,7 +246,7 @@ impl PublisherState {
             app_id,
             FilePath::new(&env::var(vars[1]).map_err(|_| "missing app key path")?),
         )?;
-        let internal_token = env::var(vars[4]).map_err(|_| "missing internal token")?;
+        let internal_token = env::var(vars[5]).map_err(|_| "missing internal token")?;
         if internal_token.len() < 32 {
             return Err("M3 internal publish token must be at least 32 characters".into());
         }
@@ -176,6 +256,9 @@ impl PublisherState {
                 env::var(vars[2]).map_err(|_| "missing checkpoint root")?,
             ),
             evidence_root: PathBuf::from(env::var(vars[3]).map_err(|_| "missing evidence root")?),
+            preparation_root: PathBuf::from(
+                env::var(vars[4]).map_err(|_| "missing preparation root")?,
+            ),
             internal_token,
             serial: Arc::new(Mutex::new(())),
         }))

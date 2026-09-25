@@ -6,13 +6,13 @@ software development, built around Ayni's environment and quality contracts.
 The repository remains `ayni-operator` until its GitHub rename is completed.
 Product-facing names use **Ayni Orchestrator**.
 
-**Status: private M2 complete; M3 implementation under validation.** This repository contains
-the Rust workspace, the M1 managed-check worker, persistent M2 task state, and
-an API-driven M3 coding/validation/draft-PR path. M3's live GitHub App and
-OpenAI proof is not complete until the deployed run and failure exercises are
-recorded. There is no browser UI; that begins in M4. The name is provisional; architecture
-proposals remain subject to implementation evidence. No delivery date or public
-launch is committed by these documents.
+**Status: private M3 complete; M4 pilot-ready product under validation.** This
+repository contains the Rust workspace, durable task orchestration, the proven
+M3 coding/validation/draft-PR path, and the M4 browser workflow, repository
+readiness, reusable prepared environments, retry/input actions, and evidence
+views. M4 is complete only after its deployed operational gates are recorded.
+The name is provisional; architecture proposals remain subject to implementation
+evidence. No delivery date or public launch is committed by these documents.
 
 ## Intent
 
@@ -32,9 +32,11 @@ organization scale.
 | [MVP scope and experience](docs/mvp.md) | Initial audience, request-to-PR journey, scope boundaries, and completion requirements |
 | [MVP validation plan](docs/mvp-validation.md) | Engineering gates, ten-task pilot, measurements, and investment decision |
 | [Delivery milestones](docs/milestones.md) | M0-M5, one PR per milestone, deployment gates, and completion evidence |
+| [Pilot operations](docs/pilot-operations.md) | M4 access, installation, readiness, resources, updates, retention, recovery, and cleanup |
 | [Local deployment decision](docs/decisions/0001-local-kubernetes-deployment.md) | Docker Desktop Kubernetes, Kustomize, and the local deployment workflow |
 | [Product name and control-plane model](docs/decisions/0002-product-name-and-control-plane-model.md) | Ayni Orchestrator, its user-facing configuration model, and the controller/CRD boundary |
 | [Durable local orchestration](docs/decisions/0003-durable-local-orchestration.md) | M2 SQLite/PVC state, Job transport, idempotency, and recovery boundaries |
+| [Pilot readiness and preparation](docs/decisions/0004-pilot-readiness-and-preparation.md) | M4 reusable preparation, dependency policy, UI boundary, and operating limits |
 | [Product intent](docs/product-intent.md) | Problem, audience, experience, boundaries, and business hypothesis |
 | [Architecture options](docs/architecture.md) | Domain model, responsibilities, topology options, and access diagram |
 | [Environment lifecycle](docs/environment-lifecycle.md) | Onboarding, prepared environments, candidate changes, and development services |
@@ -46,11 +48,11 @@ organization scale.
 Development rules, including the private boundary with Ayni, are recorded in
 [AGENTS.md](AGENTS.md).
 
-## Local M0 development
+## Local development and pilot operation
 
 See [local development](docs/local-development.md) for the pinned-toolchain
-checks and the Docker Desktop Kubernetes build, deploy, health-check, and
-scoped-cleanup workflow.
+checks and deployment mechanics. Use the [pilot runbook](docs/pilot-operations.md)
+for the M4 browser workflow and operational contract.
 
 ## How to read proposals
 

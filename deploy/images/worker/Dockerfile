@@ -17,6 +17,7 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/
 COPY --from=builder /workspace/target/release/ayni-orchestrator-worker /usr/local/bin/ayni-orchestrator-worker
 COPY --from=builder /workspace/target/release/development-agent /usr/local/bin/development-agent
 COPY --from=builder /workspace/target/release/pr-agent /usr/local/bin/pr-agent
+COPY --from=builder /workspace/target/release/prepare-repository /usr/local/bin/prepare-repository
 COPY --from=builder /workspace/target/release/validate-candidate /usr/local/bin/validate-candidate
 COPY --chown=10001:10001 --from=builder /usr/local/cargo /usr/local/cargo
 COPY --chown=10001:10001 --from=builder /usr/local/rustup /usr/local/rustup

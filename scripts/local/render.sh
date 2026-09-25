@@ -18,6 +18,7 @@ done
 case "$mode" in
   m2) overlay="docker-desktop" ;;
   m3) overlay="docker-desktop-m3" ;;
+  m4) overlay="docker-desktop-m4" ;;
   *) echo "unsupported deployment mode: $mode" >&2; exit 1 ;;
 esac
 

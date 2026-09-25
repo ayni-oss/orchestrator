@@ -1,4 +1,24 @@
 use super::*;
+use crate::preparation::{PreparationStatus, PrepareRepositoryInput};
+
+fn mark_ready(store: &mut Store, repository_id: &str, revision: &str) -> Result<(), StoreError> {
+    let key = IdempotencyKey::try_from(format!("prepare-{repository_id}"))
+        .map_err(StoreError::InvalidLifecycleData)?;
+    let preparation = store.prepare_repository(
+        repository_id,
+        &key,
+        &PrepareRepositoryInput {
+            revision: revision.to_owned(),
+        },
+    )?;
+    assert!(store.set_preparation_status(
+        &preparation.id,
+        PreparationStatus::Queued,
+        PreparationStatus::Preparing,
+    )?);
+    assert!(store.complete_preparation(&preparation.id, 10)?);
+    Ok(())
+}
 
 #[test]
 fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), StoreError> {
@@ -56,6 +76,11 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
     };
+    mark_ready(
+        &mut store,
+        "trial",
+        "8a555ada2f6e3ee41de2485ed13da508beaebaeb",
+    )?;
     let submit = IdempotencyKey::try_from("submit-m3".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
     let task = store.submit_development(&submit, &input)?;
@@ -113,6 +138,11 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
     };
+    mark_ready(
+        &mut store,
+        "trial",
+        "8a555ada2f6e3ee41de2485ed13da508beaebaeb",
+    )?;
     let submit = IdempotencyKey::try_from("submit-publication".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
     let task = store.submit_development(&submit, &input)?;
@@ -150,6 +180,57 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
     assert_eq!(
         action.completed_url.as_deref(),
         Some("https://github.com/ayni-oss/sandbox/pull/42")
+    );
+    Ok(())
+}
+
+#[test]
+fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
+    let mut store = Store::in_memory()?;
+    store.put_repository_binding(&RepositoryBinding {
+        id: "trial".into(),
+        owner: "ayni-oss".into(),
+        repository: "sandbox".into(),
+        installation_id: 11,
+        base_branch: "main".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+    })?;
+    store.put_agent_profile(&AgentProfile {
+        id: "coding".into(),
+        provider: "openai".into(),
+        model: "model-a".into(),
+        secret_ref: "openai-api".into(),
+    })?;
+    let revision = "8a555ada2f6e3ee41de2485ed13da508beaebaeb";
+    mark_ready(&mut store, "trial", revision)?;
+    let submit = IdempotencyKey::try_from("submit-input".to_owned())
+        .map_err(StoreError::InvalidLifecycleData)?;
+    let task = store.submit_development(
+        &submit,
+        &DevelopmentInput {
+            repository_id: "trial".into(),
+            profile_id: "coding".into(),
+            start_revision: revision.into(),
+            request: "Fix the formula".into(),
+            acceptance_criteria: vec!["3 -> 8".into()],
+        },
+    )?;
+    assert!(store.development_phase(
+        task.id,
+        DevelopmentPhase::Queued,
+        DevelopmentPhase::Coding,
+    )?);
+    assert!(store.record_requested_input(task.id, "Which rounding rule applies?")?);
+    let key = IdempotencyKey::try_from("provide-input".to_owned())
+        .map_err(StoreError::InvalidLifecycleData)?;
+    let follow_up = store.retry_development(task.id, &key, Some("Round down"))?;
+    assert_eq!(follow_up.retry_of, Some(task.id));
+    assert!(follow_up.input.request.contains("Round down"));
+    assert_eq!(
+        store
+            .retry_development(task.id, &key, Some("Round down"))?
+            .id,
+        follow_up.id
     );
     Ok(())
 }
