@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use std::{
     env, fs,
     path::{Path as FilePath, PathBuf},
+    process::Command,
     sync::Arc,
 };
 use tokio::sync::Mutex;
@@ -147,6 +148,14 @@ impl PublisherState {
                 })
                 .collect(),
         })
+    }
+
+    pub(crate) fn verify_candidate_checkpoint(
+        &self,
+        id: TaskId,
+        candidate: &str,
+    ) -> Result<(), String> {
+        verify_candidate_checkpoint(&self.checkpoint_root.join(id.to_string()), candidate)
     }
 
     pub(crate) fn failed_validation_record(
@@ -294,6 +303,32 @@ impl PublisherState {
     }
 }
 
+fn verify_candidate_checkpoint(directory: &FilePath, candidate: &str) -> Result<(), String> {
+    let recorded = fs::read_to_string(directory.join("candidate-commit.txt"))
+        .map_err(|_| "candidate checkpoint identity is absent")?;
+    if recorded.trim() != candidate {
+        return Err("candidate checkpoint identity changed after validation".into());
+    }
+    let bundle = directory.join("candidate.bundle");
+    let output = Command::new("git")
+        .args(["bundle", "list-heads"])
+        .arg(&bundle)
+        .output()
+        .map_err(|_| "candidate checkpoint bundle could not be inspected")?;
+    if !output.status.success() {
+        return Err("candidate checkpoint bundle is invalid".into());
+    }
+    let heads = String::from_utf8(output.stdout)
+        .map_err(|_| "candidate checkpoint bundle output is invalid")?;
+    if !heads
+        .lines()
+        .any(|line| line.split_whitespace().next() == Some(candidate))
+    {
+        return Err("candidate checkpoint bundle does not contain the validated candidate".into());
+    }
+    Ok(())
+}
+
 fn verify_artifacts(directory: &FilePath, manifest: &Manifest) -> Result<(), String> {
     for name in ["signals.json", "execution.json", "build.json"] {
         let artifact = manifest
@@ -402,6 +437,9 @@ async fn finish_publication(
             "retained validation manifest changed".into(),
         ));
     }
+    publisher
+        .verify_candidate_checkpoint(id, candidate)
+        .map_err(PublishError::Invalid)?;
     let bundle = publisher
         .checkpoint_root
         .join(id.to_string())
@@ -493,6 +531,63 @@ mod tests {
                 },
             ],
         })
+    }
+
+    fn git(directory: &FilePath, args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(directory)
+            .output()?;
+        if !output.status.success() {
+            return Err(std::io::Error::other(String::from_utf8_lossy(&output.stderr)).into());
+        }
+        Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+    }
+
+    #[test]
+    fn candidate_checkpoint_stays_bound_to_the_validated_commit()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        git(directory.path(), &["init", "--quiet"])?;
+        git(directory.path(), &["config", "user.name", "probe"])?;
+        git(
+            directory.path(),
+            &["config", "user.email", "probe@localhost"],
+        )?;
+        git(directory.path(), &["config", "commit.gpgsign", "false"])?;
+        fs::write(directory.path().join("source.txt"), "first")?;
+        git(directory.path(), &["add", "source.txt"])?;
+        git(directory.path(), &["commit", "--quiet", "-m", "first"])?;
+        let candidate = git(directory.path(), &["rev-parse", "HEAD"])?;
+        git(
+            directory.path(),
+            &["bundle", "create", "candidate.bundle", "HEAD"],
+        )?;
+        fs::write(directory.path().join("candidate-commit.txt"), &candidate)?;
+        verify_candidate_checkpoint(directory.path(), &candidate)?;
+
+        fs::write(
+            directory.path().join("candidate-commit.txt"),
+            "0".repeat(40),
+        )?;
+        assert_eq!(
+            verify_candidate_checkpoint(directory.path(), &candidate),
+            Err("candidate checkpoint identity changed after validation".into())
+        );
+
+        fs::write(directory.path().join("candidate-commit.txt"), &candidate)?;
+        fs::write(directory.path().join("source.txt"), "second")?;
+        git(directory.path(), &["add", "source.txt"])?;
+        git(directory.path(), &["commit", "--quiet", "-m", "second"])?;
+        git(
+            directory.path(),
+            &["bundle", "create", "candidate.bundle", "HEAD"],
+        )?;
+        assert_eq!(
+            verify_candidate_checkpoint(directory.path(), &candidate),
+            Err("candidate checkpoint bundle does not contain the validated candidate".into())
+        );
+        Ok(())
     }
 
     #[test]

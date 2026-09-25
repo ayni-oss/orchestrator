@@ -159,12 +159,25 @@ impl DevelopmentReconciler {
                     .candidate_commit
                     .as_deref()
                     .ok_or("missing candidate")?;
-                let (digest, tests_edited) = self.publisher.verify_manifest(
+                let (digest, tests_edited) = match self.publisher.verify_manifest(
                     task.id,
                     candidate,
                     &task.input.start_revision,
                     &task.repository.lock_sha256,
-                )?;
+                ) {
+                    Ok(verified) => verified,
+                    Err(error) => {
+                        self.fail(task.id, &format!("Final validation rejected: {error}"))?;
+                        return Ok(());
+                    }
+                };
+                if let Err(error) = self
+                    .publisher
+                    .verify_candidate_checkpoint(task.id, candidate)
+                {
+                    self.fail(task.id, &format!("Validated candidate changed: {error}"))?;
+                    return Ok(());
+                }
                 self.with_store(|store| store.record_validation(task.id, &digest, tests_edited))?;
             }
             JobState::Failed | JobState::Missing => self.record_failed_validation(task)?,
@@ -221,16 +234,25 @@ impl DevelopmentReconciler {
             .candidate_commit
             .as_deref()
             .ok_or("missing candidate")?;
-        let (digest, _) = self.publisher.verify_manifest(
+        let Ok((digest, _)) = self.publisher.verify_manifest(
             task.id,
             candidate,
             &task.input.start_revision,
             &task.repository.lock_sha256,
-        )?;
+        ) else {
+            return self.fail(task.id, "publication evidence changed");
+        };
         if task.validation_manifest.as_deref() != Some(&digest)
             || action.candidate_commit != candidate
         {
             return self.fail(task.id, "publication evidence changed");
+        }
+        if self
+            .publisher
+            .verify_candidate_checkpoint(task.id, candidate)
+            .is_err()
+        {
+            return self.fail(task.id, "publication candidate checkpoint changed");
         }
         let bundle = self
             .publisher
