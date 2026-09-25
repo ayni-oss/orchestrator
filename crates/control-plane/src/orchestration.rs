@@ -188,6 +188,7 @@ impl Store {
             max_attempts,
         };
         store.migrate_development()?;
+        store.migrate_preparations()?;
         Ok(store)
     }
 

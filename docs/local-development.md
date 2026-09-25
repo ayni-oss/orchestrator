@@ -1,10 +1,11 @@
 # Local development
 
-M2 deploys a persistent control plane that accepts durable managed-check tasks
-and reconciles attempt-owned Jobs. The optional M3 overlay adds an API-driven
-coding agent, independent managed validation, and draft-PR publication. It has
-no browser UI. Its readiness response does not establish that M3 secrets or
-external services are available.
+M2 introduced persistent managed-check orchestration and M3 added the
+API-driven coding, independent validation, and draft-PR path. The M4 overlay is
+the current pilot profile: it adds the browser interface, repository readiness,
+content-addressed environment preparation and reuse, task actions, and evidence
+views. `/readyz` reports whether the M4 publication/preparation subsystem is
+configured; repository-specific access is verified by preparation.
 
 ## Prerequisites
 
@@ -37,7 +38,10 @@ scripts/local/check.sh
 
 `deploy.sh` creates control-plane and worker image references from the checked-out
 commit, verifies their Docker revision labels, and imports them into Docker
-Desktop's single kind control-plane node before rendering the overlay. It then
+Desktop's single kind control-plane node before rendering the overlay. It
+refuses to build below the profile's free-space floor, uses named BuildKit cache
+mounts rather than retaining a complete Cargo target layer per source revision,
+and removes only obsolete project image tags after a successful rollout. It then
 waits for the Deployment and records the control-plane image reference and image
 ID used by the pod. The image imports and final pod image-identity check prove
 this local delivery path; a host Docker build alone is not treated as deployment
@@ -45,7 +49,9 @@ evidence. The control-plane state PVC is retained across Deployment replacement.
 The shared managed-check evidence PVC is retained separately and is never removed
 by normal service cleanup.
 
-`check.sh` uses loopback port-forwarding and checks both `/livez` and `/readyz`.
+`check.sh` uses loopback port-forwarding and checks `/readyz`; `check.sh m4`
+also requires pilot readiness, fetches the HTML marker, and checks list APIs. It
+does not execute browser JavaScript or replace the browser walkthrough.
 To remove only the overlay's service resources while preserving the namespace,
 run `scripts/local/cleanup.sh`.
 
@@ -127,9 +133,10 @@ Generate or refresh the lock with the pinned Ayni **0.13.0** executable from
 [`ayni-oss/ayni`](https://github.com/ayni-oss/ayni/releases/tag/ayni-v0.13.0),
 the same release used by the worker image. Verify that the generated lock uses
 `ghcr.io/ayni-oss/ayni-provisioning`; the deprecated `gdurandvadas/ayni`
-release and registry are not supported. The 0.13.0 lock currently names a
-provisioning-image digest that GHCR returns as `not found`, so managed `env
-build` and deployed validation cannot pass until that image is available.
+release and registry are not supported. The 0.13.0 lock names the pinned
+`ghcr.io/ayni-oss/ayni-provisioning` image used in the completed M3 deployed
+proof. A missing pinned digest is an external-blocked result, never a reason to
+substitute another image.
 
 Immediately before the live exercise, create a GitHub App and install it only
 on `ayni-oss/sandbox`. Grant Metadata **read**, Contents **write**, and Pull
@@ -204,3 +211,26 @@ Docker Desktop VM filesystem had 0 available space. The node reported no
 `DiskPressure` despite the full filesystem. Before retrying deployment, inspect
 VM and Docker usage and arrange capacity or explicitly approved cleanup. Do not
 prune shared Docker volumes or caches as an implicit part of these scripts.
+
+## M4: browser pilot and prepared environments
+
+Configure credentials, deploy, and validate the current profile with:
+
+```sh
+scripts/local/configure-development-secrets.sh
+scripts/local/deploy.sh m4
+scripts/local/check.sh m4
+```
+
+Use only a loopback port-forward and open `/`. Enroll the sandbox and prepare an
+exact revision before submitting a task; submissions fail closed when no matching
+ready preparation exists. Preparation retains an Ayni-built image archive and
+build record on `prepared-environments`; independent validation verifies and
+loads that exact image rather than rebuilding. Repeating compatible preparation
+records warm reuse and changed inputs require a new cold build.
+
+The browser lists repository readiness and tasks, follows phases, and exposes
+cancel, linked retry, requested-input follow-up, draft PR, and evidence actions.
+Dependency-manifest changes return an explicit unsupported result in this pilot.
+See [pilot operations](pilot-operations.md) for access boundaries, resource and
+retention limits, install/update/recovery procedures, and failure triage.

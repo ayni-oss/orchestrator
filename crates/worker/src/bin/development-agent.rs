@@ -226,7 +226,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let client = openai::Client::new(&key)?;
     let agent = client.agent(&model)
-        .preamble("You are a coding agent in an isolated checkout. Read AGENTS.md and repository guidance. Make only changes needed for the request, run focused checks, and report what you changed. Do not publish a branch or PR. The controller will independently validate your final candidate.")
+        .preamble("You are a coding agent in an isolated checkout. Read AGENTS.md and repository guidance. Make only changes needed for the request, run focused checks, and report what you changed. Do not publish a branch or PR. The controller will independently validate your final candidate. If essential information is missing and no safe bounded change can be made, make no edits and respond exactly with INPUT_REQUIRED: followed by one concrete question.")
         .tool(ReadFile(Workspace(workspace.clone())))
         .tool(WriteFile(Workspace(workspace.clone())))
         .tool(RunCommand(Workspace(workspace.clone())))
@@ -237,6 +237,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .max_turns(24)
         .await?;
+    if let Some(question) = response.trim().strip_prefix("INPUT_REQUIRED:") {
+        let question = question.trim();
+        if question.is_empty() {
+            return Err("agent requested input without a question".into());
+        }
+        fs::create_dir_all(&checkpoint)?;
+        fs::write(checkpoint.join("input-request.txt"), question)?;
+        return Err("maintainer input is required".into());
+    }
     checkpoint_candidate(&workspace, &checkpoint, &response)
 }
 

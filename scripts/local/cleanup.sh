@@ -4,7 +4,14 @@ set -euo pipefail
 readonly repository_root="$(git rev-parse --show-toplevel)"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
+readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 
-# Deletes only resources owned by this overlay; it intentionally leaves the
-# namespace and any retained future evidence untouched.
-kubectl --context "$context" delete -k "$repository_root/deploy/overlays/docker-desktop" --ignore-not-found
+# Remove only stateless service resources. Task state, checkpoints, managed
+# evidence, prepared environments, credentials, Jobs, and the namespace are
+# deliberately retained. Cancel active tasks through the UI/API before cleanup.
+kubectl --context "$context" --namespace "$namespace" delete \
+  deployment/control-plane service/control-plane configmap/control-plane-config \
+  role/control-plane-attempt-jobs rolebinding/control-plane-attempt-jobs \
+  role/control-plane-development-clone-secrets \
+  rolebinding/control-plane-development-clone-secrets \
+  serviceaccount/control-plane --ignore-not-found

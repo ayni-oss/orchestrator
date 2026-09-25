@@ -1,10 +1,11 @@
 //! Independent managed validation of a frozen M3 Git candidate bundle.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
-    env, fs, io,
+    env, fs,
+    io::{self, Read},
     path::{Path, PathBuf},
     process::{Command, ExitCode},
     thread,
@@ -28,6 +29,8 @@ struct Manifest {
     policy_edited: bool,
     tests_edited: bool,
     changed_paths: Vec<String>,
+    preparation_id: Option<String>,
+    preparation_reused: bool,
     artifacts: Vec<Artifact>,
 }
 
@@ -38,6 +41,20 @@ struct ValidationInput {
     expected_lock: String,
     workspace: PathBuf,
     evidence: PathBuf,
+    preparation: Option<PathBuf>,
+    preparation_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PreparationManifest {
+    schema_version: u8,
+    preparation_id: String,
+    revision: String,
+    lock_sha256: String,
+    image_tag: String,
+    image_id: String,
+    image_archive_sha256: String,
+    build_record_sha256: String,
 }
 
 impl ValidationInput {
@@ -49,6 +66,10 @@ impl ValidationInput {
             expected_lock: required("DEVELOPMENT_LOCK_SHA256")?,
             workspace: PathBuf::from(required("DEVELOPMENT_WORKSPACE")?),
             evidence: PathBuf::from(required("DEVELOPMENT_EVIDENCE_DIR")?),
+            preparation: env::var("DEVELOPMENT_PREPARATION_DIR")
+                .ok()
+                .map(PathBuf::from),
+            preparation_id: env::var("DEVELOPMENT_PREPARATION_ID").ok(),
         })
     }
 }
@@ -83,15 +104,34 @@ fn sha256(path: &Path) -> Result<String, io::Error> {
     Ok(format!("{:x}", Sha256::digest(fs::read(path)?)))
 }
 
+fn test_edits_disclosed(changed_paths: &[String], function_context_diff: &str) -> bool {
+    changed_paths
+        .iter()
+        .any(|path| path.contains("test") || path.contains("spec"))
+        || function_context_diff.lines().any(|line| {
+            let line = line.trim_start_matches(['+', '-', ' ']).trim_start();
+            line.starts_with("#[test]")
+                || (line.starts_with("#[") && line.ends_with("::test]"))
+                || line.starts_with("#[cfg(test)]")
+                || line.starts_with("mod tests")
+                || line.starts_with("assert!(")
+                || line.starts_with("assert_eq!(")
+                || line.starts_with("assert_ne!(")
+        })
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let input = ValidationInput::from_environment()?;
     let (lock_digest, changed_paths) = checkout_candidate(&input)?;
-    let policy_edited = changed_paths
-        .iter()
-        .any(|path| path == ".ayni.toml" || path == ".ayni.lock");
-    let tests_edited = changed_paths
-        .iter()
-        .any(|path| path.contains("test") || path.contains("spec"));
+    let policy_edited = changed_paths.iter().any(|path| path == ".ayni.toml");
+    let dependency_edited = changed_paths.iter().any(|path| {
+        matches!(
+            path.as_str(),
+            ".ayni.lock" | "Cargo.toml" | "Cargo.lock" | "rust-toolchain.toml"
+        )
+    });
+    let diff = fs::read_to_string(input.evidence.join("git-diff-patch.stdout"))?;
+    let tests_edited = test_edits_disclosed(&changed_paths, &diff);
     if policy_edited {
         write_manifest(
             &input.evidence,
@@ -105,13 +145,42 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 policy_edited,
                 tests_edited,
                 changed_paths,
+                preparation_id: input.preparation_id.clone(),
+                preparation_reused: false,
                 artifacts: Vec::new(),
             },
         )?;
-        return Err("candidate edited required Ayni policy or lock".into());
+        return Err("candidate edited required Ayni policy".into());
     }
-    let exit = run_managed_check(&input.workspace, &input.evidence)?;
-    retain_result(&input, lock_digest, changed_paths, tests_edited, exit)
+    if dependency_edited {
+        write_manifest(
+            &input.evidence,
+            &Manifest {
+                schema_version: 1,
+                start_revision: input.start_revision.clone(),
+                candidate_commit: input.candidate_commit.clone(),
+                lock_sha256: lock_digest,
+                outcome: "dependency_change_unsupported",
+                check_exit_code: -1,
+                policy_edited: false,
+                tests_edited,
+                changed_paths,
+                preparation_id: input.preparation_id.clone(),
+                preparation_reused: false,
+                artifacts: Vec::new(),
+            },
+        )?;
+        return Err("dependency evolution is unsupported by the pilot profile".into());
+    }
+    let (exit, preparation_reused) = run_managed_check(&input)?;
+    retain_result(
+        &input,
+        lock_digest,
+        changed_paths,
+        tests_edited,
+        exit,
+        preparation_reused,
+    )
 }
 
 fn checkout_candidate(
@@ -179,6 +248,17 @@ fn checkout_candidate(
         ],
         &evidence.join("git-diff"),
     )?;
+    checked(
+        workspace,
+        "git",
+        &[
+            "diff",
+            "--function-context",
+            &input.start_revision,
+            &input.candidate_commit,
+        ],
+        &evidence.join("git-diff-patch"),
+    )?;
     let changed_paths: Vec<String> = fs::read_to_string(evidence.join("git-diff.stdout"))?
         .lines()
         .map(str::to_owned)
@@ -194,7 +274,9 @@ fn ensure_revision(evidence: &Path, expected: &str) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-fn run_managed_check(workspace: &Path, evidence: &Path) -> Result<i32, Box<dyn std::error::Error>> {
+fn run_managed_check(input: &ValidationInput) -> Result<(i32, bool), Box<dyn std::error::Error>> {
+    let workspace = &input.workspace;
+    let evidence = &input.evidence;
     let mut engine_ready = false;
     for _ in 0..60 {
         if command(
@@ -212,17 +294,23 @@ fn run_managed_check(workspace: &Path, evidence: &Path) -> Result<i32, Box<dyn s
     if !engine_ready {
         return Err("isolated Docker engine did not become ready".into());
     }
-    checked(
-        workspace,
-        "ayni",
-        &[
-            "env",
-            "build",
-            "--repo-root",
-            workspace.to_str().ok_or("invalid workspace")?,
-        ],
-        &evidence.join("ayni-build"),
-    )?;
+    let reused = if let Some(preparation) = input.preparation.as_deref() {
+        restore_preparation(input, preparation)?;
+        true
+    } else {
+        checked(
+            workspace,
+            "ayni",
+            &[
+                "env",
+                "build",
+                "--repo-root",
+                workspace.to_str().ok_or("invalid workspace")?,
+            ],
+            &evidence.join("ayni-build"),
+        )?;
+        false
+    };
     checked(
         workspace,
         "ayni",
@@ -235,7 +323,7 @@ fn run_managed_check(workspace: &Path, evidence: &Path) -> Result<i32, Box<dyn s
         &evidence.join("ayni-doctor"),
     )?;
     let config = workspace.join(".ayni.toml");
-    command(
+    let exit = command(
         workspace,
         "ayni",
         &[
@@ -244,8 +332,78 @@ fn run_managed_check(workspace: &Path, evidence: &Path) -> Result<i32, Box<dyn s
             config.to_str().ok_or("invalid config")?,
         ],
         &evidence.join("ayni-check"),
-    )
-    .map_err(Into::into)
+    )?;
+    Ok((exit, reused))
+}
+
+fn restore_preparation(
+    input: &ValidationInput,
+    directory: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = fs::read(directory.join("manifest.json"))?;
+    let manifest: PreparationManifest = serde_json::from_slice(&bytes)?;
+    let expected_id = input
+        .preparation_id
+        .as_deref()
+        .ok_or("preparation ID is absent")?;
+    if manifest.schema_version != 1
+        || manifest.preparation_id != expected_id
+        || manifest.revision != input.start_revision
+        || manifest.lock_sha256 != input.expected_lock
+    {
+        return Err("prepared environment does not match the frozen task inputs".into());
+    }
+    let archive = directory.join("environment-image.tar");
+    let build = directory.join("build.json");
+    if stream_sha256(&archive)? != manifest.image_archive_sha256
+        || sha256(&build)? != manifest.build_record_sha256
+    {
+        return Err("prepared environment artifact digest differs".into());
+    }
+    checked(
+        &input.workspace,
+        "docker",
+        &[
+            "image",
+            "load",
+            "--input",
+            archive.to_str().ok_or("invalid archive path")?,
+        ],
+        &input.evidence.join("preparation-load"),
+    )?;
+    let inspect = Command::new("docker")
+        .args([
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            &manifest.image_tag,
+        ])
+        .current_dir(&input.workspace)
+        .output()?;
+    if !inspect.status.success()
+        || String::from_utf8_lossy(&inspect.stdout).trim() != manifest.image_id
+    {
+        return Err("loaded preparation image identity differs".into());
+    }
+    let state = input.workspace.join(".ayni/environment");
+    fs::create_dir_all(&state)?;
+    fs::copy(build, state.join("build.json"))?;
+    Ok(())
+}
+
+fn stream_sha256(path: &Path) -> Result<String, io::Error> {
+    let mut file = fs::File::open(path)?;
+    let mut digest = Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024].into_boxed_slice();
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
 }
 
 fn retain_result(
@@ -254,6 +412,7 @@ fn retain_result(
     changed_paths: Vec<String>,
     tests_edited: bool,
     exit: i32,
+    preparation_reused: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = input.workspace.join(".ayni");
     let signals = root.join("last/signals.json");
@@ -295,6 +454,8 @@ fn retain_result(
         policy_edited: false,
         tests_edited,
         changed_paths,
+        preparation_id: input.preparation_id.clone(),
+        preparation_reused,
         artifacts,
     };
     write_manifest(&input.evidence, &manifest)?;
@@ -318,5 +479,34 @@ fn main() -> ExitCode {
             eprintln!("candidate validation failed: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_edits_disclosed;
+
+    #[test]
+    fn discloses_dedicated_and_inline_test_edits() {
+        assert!(test_edits_disclosed(
+            &["tests/retry.rs".into()],
+            "diff --git a/tests/retry.rs b/tests/retry.rs"
+        ));
+        assert!(test_edits_disclosed(
+            &["src/main.rs".into()],
+            "@@ fn verifies_backoff() {\n #[test]\n fn verifies_backoff() {\n-    assert_eq!(retry(2), 3);\n+    assert_eq!(retry(2), 4);"
+        ));
+        assert!(test_edits_disclosed(
+            &["src/lib.rs".into()],
+            "@@ mod tests {\n #[tokio::test]\n async fn reports_failure() {"
+        ));
+    }
+
+    #[test]
+    fn does_not_label_implementation_only_edits_as_test_edits() {
+        assert!(!test_edits_disclosed(
+            &["src/main.rs".into()],
+            "@@ fn retry_delay(attempt: u32) -> u32 {\n-    attempt * 2\n+    1 << attempt"
+        ));
     }
 }

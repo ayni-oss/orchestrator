@@ -1,6 +1,6 @@
 use ayni_orchestrator_control_plane::{
-    AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, PublisherState,
-    Reconciler, router,
+    AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, PreparationReconciler,
+    PublisherState, Reconciler, router,
 };
 use kube::Client;
 use std::io;
@@ -35,6 +35,15 @@ async fn main() -> Result<(), io::Error> {
     let development_task = state.publisher().map(|publisher| {
         tokio::spawn(run_development_reconciliation(DevelopmentReconciler::new(
             state.clone(),
+            client.clone(),
+            configuration.kubernetes_namespace().to_owned(),
+            configuration.worker_image().to_owned(),
+            publisher,
+        )))
+    });
+    let preparation_task = state.publisher().map(|publisher| {
+        tokio::spawn(run_preparation_reconciliation(PreparationReconciler::new(
+            state.clone(),
             client,
             configuration.kubernetes_namespace().to_owned(),
             configuration.worker_image().to_owned(),
@@ -51,7 +60,18 @@ async fn main() -> Result<(), io::Error> {
     if let Some(task) = development_task {
         task.abort();
     }
+    if let Some(task) = preparation_task {
+        task.abort();
+    }
     Ok(())
+}
+
+async fn run_preparation_reconciliation(reconciler: PreparationReconciler) {
+    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+    loop {
+        ticker.tick().await;
+        reconciler.reconcile_once().await;
+    }
 }
 
 async fn run_development_reconciliation(reconciler: DevelopmentReconciler) {

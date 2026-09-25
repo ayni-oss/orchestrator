@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly repository_root="$(git rev-parse --show-toplevel)"
-readonly namespace="ayni-orchestrator-dev"
+readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 
 usage() {
   echo "usage: $0 [--env-file PATH]" >&2
@@ -21,7 +21,10 @@ if [[ ! -f "$env_file" ]]; then
   exit 1
 fi
 
-declare -A settings=()
+github_app_id=""
+github_app_installation_id=""
+github_app_private_key_b64=""
+openai_api_key=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ -z "$line" || "$line" == \#* ]] && continue
   if [[ ! "$line" =~ ^([A-Z0-9_]+)=(.*)$ ]]; then
@@ -31,9 +34,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   key="${BASH_REMATCH[1]}"
   value="${BASH_REMATCH[2]}"
   case "$key" in
-    GITHUB_APP_ID|GITHUB_APP_INSTALLATION_ID|GITHUB_APP_PRIVATE_KEY_B64|OPENAI_API_KEY)
-      settings["$key"]="$value"
-      ;;
+    GITHUB_APP_ID) github_app_id="$value" ;;
+    GITHUB_APP_INSTALLATION_ID) github_app_installation_id="$value" ;;
+    GITHUB_APP_PRIVATE_KEY_B64) github_app_private_key_b64="$value" ;;
+    OPENAI_API_KEY) openai_api_key="$value" ;;
     *)
       echo "unsupported environment-file key: $key" >&2
       exit 1
@@ -42,17 +46,22 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$env_file"
 
 for key in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY_B64 OPENAI_API_KEY; do
-  if [[ -z "${settings[$key]:-}" ]]; then
+  case "$key" in
+    GITHUB_APP_ID) value="$github_app_id" ;;
+    GITHUB_APP_PRIVATE_KEY_B64) value="$github_app_private_key_b64" ;;
+    OPENAI_API_KEY) value="$openai_api_key" ;;
+  esac
+  if [[ -z "$value" ]]; then
     echo "missing required environment-file key: $key" >&2
     exit 1
   fi
 done
-if [[ ! "${settings[GITHUB_APP_ID]}" =~ ^[1-9][0-9]*$ ]]; then
+if [[ ! "$github_app_id" =~ ^[1-9][0-9]*$ ]]; then
   echo "GitHub App ID must be a positive decimal number" >&2
   exit 1
 fi
-if [[ -n "${settings[GITHUB_APP_INSTALLATION_ID]:-}" \
-  && ! "${settings[GITHUB_APP_INSTALLATION_ID]}" =~ ^[1-9][0-9]*$ ]]; then
+if [[ -n "$github_app_installation_id" \
+  && ! "$github_app_installation_id" =~ ^[1-9][0-9]*$ ]]; then
   echo "GitHub App installation ID must be a positive decimal number" >&2
   exit 1
 fi
@@ -76,8 +85,8 @@ decode_base64() {
 readonly app_id_file="$temporary_directory/app-id"
 readonly private_key_file="$temporary_directory/private-key.pem"
 readonly openai_key_file="$temporary_directory/api-key"
-printf '%s' "${settings[GITHUB_APP_ID]}" > "$app_id_file"
-if ! printf '%s' "${settings[GITHUB_APP_PRIVATE_KEY_B64]}" | decode_base64 > "$private_key_file"; then
+printf '%s' "$github_app_id" > "$app_id_file"
+if ! printf '%s' "$github_app_private_key_b64" | decode_base64 > "$private_key_file"; then
   echo "GitHub App private key is not valid base64" >&2
   exit 1
 fi
@@ -85,7 +94,7 @@ if ! grep -q -- '-----BEGIN.*PRIVATE KEY-----' "$private_key_file"; then
   echo "GitHub App private key does not contain a PEM private key" >&2
   exit 1
 fi
-printf '%s' "${settings[OPENAI_API_KEY]}" > "$openai_key_file"
+printf '%s' "$openai_api_key" > "$openai_key_file"
 
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context

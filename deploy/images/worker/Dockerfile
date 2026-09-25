@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ARG DOCKER_CLI_IMAGE=docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 
@@ -5,7 +6,16 @@ FROM rust:1.94.0-bookworm AS builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
-RUN cargo build --locked --release --package ayni-orchestrator-worker
+RUN --mount=type=cache,id=ayni-orchestrator-worker-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=ayni-orchestrator-worker-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=ayni-orchestrator-worker-target,target=/workspace/target \
+    cargo build --locked --release --package ayni-orchestrator-worker \
+    && mkdir /tmp/worker-binaries \
+    && install --mode=0755 target/release/ayni-orchestrator-worker /tmp/worker-binaries/ \
+    && install --mode=0755 target/release/development-agent /tmp/worker-binaries/ \
+    && install --mode=0755 target/release/pr-agent /tmp/worker-binaries/ \
+    && install --mode=0755 target/release/prepare-repository /tmp/worker-binaries/ \
+    && install --mode=0755 target/release/validate-candidate /tmp/worker-binaries/
 
 FROM debian:bookworm-slim
 ARG TARGETARCH
@@ -14,13 +24,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
-COPY --from=builder /workspace/target/release/ayni-orchestrator-worker /usr/local/bin/ayni-orchestrator-worker
-COPY --from=builder /workspace/target/release/development-agent /usr/local/bin/development-agent
-COPY --from=builder /workspace/target/release/pr-agent /usr/local/bin/pr-agent
-COPY --from=builder /workspace/target/release/validate-candidate /usr/local/bin/validate-candidate
-COPY --chown=10001:10001 --from=builder /usr/local/cargo /usr/local/cargo
+COPY --from=builder /tmp/worker-binaries/ /usr/local/bin/
+# The coding stage needs the pinned Rust toolchain, but Cargo's registry and
+# build target are mutable scratch state rather than permanent image layers.
+COPY --from=builder /usr/local/cargo/bin /usr/local/cargo/bin
 COPY --chown=10001:10001 --from=builder /usr/local/rustup /usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
+ENV CARGO_HOME=/tmp/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 RUN case "$TARGETARCH" in \
       amd64) archive=ayni-ayni-v0.13.0-x86_64-unknown-linux-gnu.tar.gz; checksum=d0348577b129d9dac115b9a0bec164a73207c0d6a4bfdeb22ce8899060080ff8 ;; \

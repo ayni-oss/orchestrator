@@ -5,7 +5,12 @@ readonly repository_root="$(git rev-parse --show-toplevel)"
 readonly mode="${1:-m2}"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
-readonly namespace="ayni-orchestrator-dev"
+readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
+if [[ "$mode" == "m4" ]]; then
+  "$repository_root/scripts/local/check-capacity.sh" 12
+else
+  "$repository_root/scripts/local/check-capacity.sh" 8
+fi
 control_plane_image_ref="$($repository_root/scripts/local/build-image.sh)"
 readonly control_plane_image_ref
 worker_image_ref="$($repository_root/scripts/local/build-worker-image.sh)"
@@ -21,7 +26,8 @@ metadata:
   name: $namespace
 EOF
 
-"$repository_root/scripts/local/render.sh" "$control_plane_image_ref" "$worker_image_ref" "$mode" \
+"$repository_root/scripts/local/render.sh" \
+  "$control_plane_image_ref" "$worker_image_ref" "$mode" "$namespace" \
   | kubectl --context "$context" apply --server-side --field-manager ayni-orchestrator-local -f -
 kubectl --context "$context" --namespace "$namespace" rollout status deployment/control-plane --timeout=120s
 
@@ -45,3 +51,5 @@ if [[ -z "$pod" ]]; then
 fi
 
 echo "deployed pod=$pod image=$actual_image imageID=$actual_image_id worker_image=$worker_image_ref"
+"$repository_root/scripts/local/prune-project-images.sh" \
+  "$control_plane_image_ref" "$worker_image_ref"
