@@ -319,3 +319,26 @@ fn git(directory: &Path, args: &[&str], token: Option<&str>) -> Result<(), Strin
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Claims, UNIX_EPOCH};
+    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+    use std::time::SystemTime;
+
+    #[test]
+    fn configured_crypto_provider_can_sign_tokens() -> Result<(), Box<dyn std::error::Error>> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &Claims {
+                iat: now,
+                exp: now + 60,
+                iss: "test-app".to_owned(),
+            },
+            &EncodingKey::from_secret(b"non-secret-test-key"),
+        )?;
+        assert_eq!(token.split('.').count(), 3);
+        Ok(())
+    }
+}
