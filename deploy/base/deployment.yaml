@@ -54,7 +54,12 @@ spec:
           volumeMounts:
             - name: durable-state
               mountPath: /data
+            - name: control-plane-scratch
+              mountPath: /tmp
       volumes:
         - name: durable-state
           persistentVolumeClaim:
             claimName: control-plane-state
+        - name: control-plane-scratch
+          emptyDir:
+            sizeLimit: 64Mi
