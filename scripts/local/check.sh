@@ -4,8 +4,8 @@ set -euo pipefail
 readonly repository_root="$(git rev-parse --show-toplevel)"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
-readonly namespace="ayni-orchestrator-dev"
-readonly local_port="18080"
+readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
+readonly local_port="${AYNI_ORCHESTRATOR_LOCAL_PORT:-18080}"
 readonly mode="${1:-m2}"
 
 kubectl --context "$context" --namespace "$namespace" port-forward service/control-plane "$local_port:8080" >/tmp/ayni-orchestrator-port-forward.log 2>&1 &

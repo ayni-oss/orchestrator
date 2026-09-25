@@ -1,8 +1,8 @@
 # MVP delivery milestones
 
 Status: agreed delivery sequence. Each milestone has one delivery PR and an
-observable completion gate. M0 through M2 are complete with recorded local
-deployment evidence.
+observable completion gate. M0 through M3 are delivered; M4's local completion
+gates pass and its delivery PR is pending branch publication.
 
 Read the [MVP scope](mvp.md) for the product boundary and the
 [validation plan](mvp-validation.md) for engineering gates and pilot evaluation.
@@ -38,7 +38,7 @@ Read the [MVP scope](mvp.md) for the product boundary and the
 | M1: managed execution | `feat(worker): execute managed Ayni checks with retained evidence` | A pinned repository revision produces a real managed result | Complete |
 | M2: durable orchestration | `feat(control-plane): reconcile durable execution attempts` | Requests survive controller restart and worker failure without duplicate effects | Complete |
 | M3: request to draft PR | `feat(tasks): deliver agent changes with validated draft PRs` | One real maintenance request produces a reviewable, independently validated change | Complete |
-| M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Planned |
+| M4: pilot-ready product | `feat(mvp): complete repository readiness and task experience` | A maintainer operates the full workflow through its UI and documented setup | Complete locally — delivery PR pending |
 | M5: product validation | `docs(pilot): report MVP outcomes and investment decision` | Ten real tasks support an advance, iterate, or reconsider decision | Planned |
 
 ## M0: foundation and first deployment
@@ -379,25 +379,66 @@ path to provide requested input. Document access, installation, resources,
 updates, retention, recovery, and cleanup. Declare whether dependency evolution
 supports rebuilding or returns an explicit unsupported outcome.
 
-**Selected M4 implementation (validation pending):** the control plane serves a
-loopback-only browser interface and durable list/action APIs. Repository
-preparation retains a digest-bound Ayni image archive and build record; matching
-inputs reuse it and final validation loads it into a fresh isolated engine.
-Retries and requested input create linked tasks. Rust dependency evolution is
-explicitly `dependency_change_unsupported`. Decision
+**Selected M4 implementation (2026-09-25):** the control plane serves an
+unauthenticated in-cluster browser interface and durable list/action APIs,
+operationally restricted to loopback port-forwarding for the trusted pilot.
+Repository preparation retains a digest-bound Ayni image archive and build
+record; matching inputs reuse it and final validation loads it into a fresh
+isolated engine. Retries and requested input create linked tasks. Rust dependency
+evolution is explicitly `dependency_change_unsupported`. Decision
 [0004](decisions/0004-pilot-readiness-and-preparation.md) records identities,
 security boundaries, and operating limits; the [pilot runbook](pilot-operations.md)
-records installation and operations. This paragraph is implementation scope, not
-completion evidence.
+records installation and operations.
 
-**Completion gate:** deploy the final candidate and have a maintainer operate the
-full workflow using its interface and documentation. Exercise cold and warm
-preparation, a failed replacement environment, and missing/revoked access. Every
-applicable [MVP engineering gate](mvp-validation.md#engineering-gates) has passing
-evidence on the selected topology. Verify a clean install and an update from the
-previous milestone without losing retained task data.
+**Final deployment evidence (2026-09-25, runtime commit
+`b42e86d4a2b1a823d553ddf0d58496ff84ad8a76`):** formatting, Clippy, 33 workspace
+tests, compile checks, shell syntax, M4 Kustomize rendering, client dry-run, and
+the live M4 check passed. Docker Engine `29.8.0` and Docker Desktop Kubernetes
+client/server `v1.36.1` with Kustomize `v5.8.1` ran
+`local/ayni-orchestrator-control-plane:git-b42e86d4a2b1` (OCI index
+`sha256:0a1e8200ff252301d7094afdbbae5767378c3752f82795b7235cb4757ac37e68`,
+running image
+`sha256:923257dd9d22a32b3d6875601ed8cf499f23122853757101de4fc7c8f847a1dd`)
+and loaded `local/ayni-orchestrator-worker:git-b42e86d4a2b1` (OCI index
+`sha256:7fd16feed858777594f5c3f59e55cc18aa63f36207462e463d29023d319ef267`).
+The rollout retained all four PVCs and prior tasks. `pilot_ready: true` records
+publisher/control-plane configuration; each repository has its own preparation
+readiness state.
 
-M4 establishes a pilot-ready MVP. It does not establish product value.
+Repository `ayni-oss/sandbox` revision
+`589fb2a2fae67d87e00da1ddc4c9a576a207d2ff` cold-prepared in 106 seconds as
+`prep-c536767dd800a652ba3f8e7a8c23aed7bda3e4c11e1edeb73b94fda063359d02`.
+Repeated API and browser preparation actions reused that identity and raised
+`reuse_count` to 3. A changed-lock replacement,
+`prep-085ef6186f424e17d0efdcf9dd58b5cb110df6addbc769487b104c443709ce77`,
+failed, and a task for those desired inputs returned HTTP 400 rather than using
+the older preparation. Restoring the original lock warm-reused the original
+identity.
+
+The browser submitted task `01a0d8a1-ef61-7124-ba0a-9f50d1578640`, which
+completed from prepared revision to candidate
+`6372f45a8da727db395893a541e65374db6dbb01`, retained manifest
+`sha256:487da11b516e05576ba71f86b1323533b9fbd415a158b08c6ecb3addfc953a71`,
+and exactly one draft [`ayni-oss/sandbox#3`](https://github.com/ayni-oss/sandbox/pull/3).
+Chrome displayed its success evidence through the rendered **View** action. The
+browser also submitted warm preparation, provided input to waiting task
+`01a0d884-27b9-7511-a653-af10582edf6d`, created a linked follow-up, and cancelled
+it through the rendered action.
+
+The [M4 engineering-gate record](m4-engineering-gates.md) maps every required
+scenario to its expected result and deployed evidence. It includes current-path
+artifact alteration/removal, immutable post-validation candidate binding, inline
+test and policy-edit disclosure, dependency rejection, controller restart
+without a duplicate Job, validation-worker loss with a retained candidate,
+cancellation, access loss after readiness, failed replacement, and requested
+input. A reproducible namespace override now supports isolated clean-install
+checks. The in-place M3-to-M4 update and final rollout retained prior task data and
+PVC identities.
+
+**Completion gate: complete locally; delivery PR pending branch publication.**
+The deployed candidate and documented browser workflow satisfy the M4 engineering
+and operating gates. M4 establishes a pilot-ready MVP; it does not establish
+product value or authorize M5 conclusions.
 
 ## M5: product validation
 
@@ -425,7 +466,7 @@ multi-repository expansion, public publication, or production deployment.
 | M1 | First repository shape, pinned Ayni version, and tested managed worker/engine arrangement |
 | M2 | Selected — [Decision 0003](decisions/0003-durable-local-orchestration.md) records local durable storage, retained evidence, Job transport, and lifecycle schema |
 | M3 | First agent, GitHub access, and checkpoint/candidate handoff |
-| M4 completion | Supported dependency-change behavior and all operational limits |
+| M4 completion | Selected — dependency changes are explicitly unsupported; [Decision 0004](decisions/0004-pilot-readiness-and-preparation.md) records the operating limits |
 | M5 | Ten tasks, comparison protocol, acceptance definitions, and acceptable cost ceiling |
 
 Docker Desktop Kubernetes and Kustomize are selected. Record the other choices

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly repository_root="$(git rev-parse --show-toplevel)"
-readonly namespace="ayni-orchestrator-dev"
+readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 
 usage() {
   echo "usage: $0 [--env-file PATH]" >&2

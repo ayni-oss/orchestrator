@@ -50,7 +50,8 @@ The shared managed-check evidence PVC is retained separately and is never remove
 by normal service cleanup.
 
 `check.sh` uses loopback port-forwarding and checks `/readyz`; `check.sh m4`
-also requires pilot readiness, the browser page, and list APIs.
+also requires pilot readiness, fetches the HTML marker, and checks list APIs. It
+does not execute browser JavaScript or replace the browser walkthrough.
 To remove only the overlay's service resources while preserving the namespace,
 run `scripts/local/cleanup.sh`.
 

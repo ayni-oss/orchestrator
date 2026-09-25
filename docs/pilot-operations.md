@@ -62,9 +62,27 @@ scripts/local/deploy.sh m4
 scripts/local/check.sh m4
 ```
 
-The check requires `pilot_ready: true`, the browser page, and the repository and
-task list APIs. The first M4 install creates four retained PVCs. Re-running the
-install does not replace them.
+The check requires `pilot_ready: true`, fetches the HTML marker and repository
+and task list APIs, and does not execute browser JavaScript. The first M4 install
+creates four retained PVCs. Re-running the install does not replace them.
+
+To reproduce a clean installation without disturbing the normal pilot namespace,
+use an isolated namespace and local port, then remove that namespace after
+recording the result:
+
+```bash
+export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-clean-check
+export AYNI_ORCHESTRATOR_LOCAL_PORT=18081
+scripts/local/configure-development-secrets.sh
+scripts/local/deploy.sh m4
+scripts/local/check.sh m4
+kubectl --context docker-desktop delete namespace "$AYNI_ORCHESTRATOR_NAMESPACE"
+unset AYNI_ORCHESTRATOR_NAMESPACE AYNI_ORCHESTRATOR_LOCAL_PORT
+```
+
+Namespace deletion is intentionally explicit because it deletes that isolated
+installation's Secrets, Jobs, and retained claims. Never point this command at
+the normal pilot namespace.
 
 Use the UI to save repository enrollment. Configure an agent profile once with
 the API if one is not already present:
@@ -149,9 +167,10 @@ binaries.
 
 ## Retention, backup, and recovery
 
-Normal cleanup retains all PVCs, credentials, and task Jobs. The pilot has no
-automatic expiry: state, checkpoints, evidence, and preparation archives remain
-until a maintainer explicitly removes them. Docker reports host images, BuildKit
+Normal cleanup retains all PVCs and credentials and does not request deletion of
+task Jobs. Terminal Jobs remain subject to their configured one-hour Kubernetes
+TTL; retained state, checkpoints, evidence, and preparation archives live on the
+PVCs and have no automatic expiry. Docker reports host images, BuildKit
 cache, and local volumes separately; the Kubernetes node also keeps its own
 containerd image copy. Repeated unscoped builds therefore used to accumulate
 both builder layers and duplicate image tags. M4 bounds the build layers with
@@ -188,7 +207,8 @@ scripts/local/cleanup.sh
 ```
 
 This removes only stateless control-plane resources. It deliberately retains
-the namespace, secrets, Jobs, and all PVCs. Destructive removal is a separate,
+the namespace, secrets, active Jobs, and all PVCs; terminal Jobs may later be
+removed by their configured one-hour TTL. Destructive removal is a separate,
 explicit operator action after backup:
 
 ```bash

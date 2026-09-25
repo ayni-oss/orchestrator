@@ -4,7 +4,7 @@ set -euo pipefail
 readonly repository_root="$(git rev-parse --show-toplevel)"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
-readonly namespace="ayni-orchestrator-dev"
+readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 
 # Remove only stateless service resources. Task state, checkpoints, managed
 # evidence, prepared environments, credentials, Jobs, and the namespace are

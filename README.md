@@ -6,13 +6,14 @@ software development, built around Ayni's environment and quality contracts.
 The repository remains `ayni-operator` until its GitHub rename is completed.
 Product-facing names use **Ayni Orchestrator**.
 
-**Status: private M3 complete; M4 pilot-ready product under validation.** This
-repository contains the Rust workspace, durable task orchestration, the proven
-M3 coding/validation/draft-PR path, and the M4 browser workflow, repository
+**Status: private M4 pilot-ready product complete locally; delivery PR pending.**
+This repository contains the Rust workspace, durable task orchestration, the
+proven coding/validation/draft-PR path, and the M4 browser workflow, repository
 readiness, reusable prepared environments, retry/input actions, and evidence
-views. M4 is complete only after its deployed operational gates are recorded.
-The name is provisional; architecture proposals remain subject to implementation
-evidence. No delivery date or public launch is committed by these documents.
+views. The deployed operational gates are recorded in the
+[M4 engineering-gate record](docs/m4-engineering-gates.md). The name is
+provisional; architecture proposals remain subject to implementation evidence.
+No delivery date or public launch is committed by these documents.
 
 ## Intent
 
