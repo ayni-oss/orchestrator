@@ -38,7 +38,10 @@ scripts/local/check.sh
 
 `deploy.sh` creates control-plane and worker image references from the checked-out
 commit, verifies their Docker revision labels, and imports them into Docker
-Desktop's single kind control-plane node before rendering the overlay. It then
+Desktop's single kind control-plane node before rendering the overlay. It
+refuses to build below the profile's free-space floor, uses named BuildKit cache
+mounts rather than retaining a complete Cargo target layer per source revision,
+and removes only obsolete project image tags after a successful rollout. It then
 waits for the Deployment and records the control-plane image reference and image
 ID used by the pod. The image imports and final pod image-identity check prove
 this local delivery path; a host Docker build alone is not treated as deployment

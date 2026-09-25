@@ -6,6 +6,11 @@ readonly mode="${1:-m2}"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
 readonly namespace="ayni-orchestrator-dev"
+if [[ "$mode" == "m4" ]]; then
+  "$repository_root/scripts/local/check-capacity.sh" 12
+else
+  "$repository_root/scripts/local/check-capacity.sh" 8
+fi
 control_plane_image_ref="$($repository_root/scripts/local/build-image.sh)"
 readonly control_plane_image_ref
 worker_image_ref="$($repository_root/scripts/local/build-worker-image.sh)"
@@ -45,3 +50,5 @@ if [[ -z "$pod" ]]; then
 fi
 
 echo "deployed pod=$pod image=$actual_image imageID=$actual_image_id worker_image=$worker_image_ref"
+"$repository_root/scripts/local/prune-project-images.sh" \
+  "$control_plane_image_ref" "$worker_image_ref"

@@ -34,7 +34,12 @@ returned by the API or UI.
 - The local credential file described in `.env.example`. Never commit it.
 
 Storage claims are 1 GiB for SQLite state, 2 GiB each for checkpoints and
-validation evidence, and 10 GiB for prepared image archives. Docker Desktop's
+validation evidence, and 10 GiB for prepared image archives. The deploy script
+requires at least 12 GiB free before an M4 image build/import, then removes only
+obsolete `local/ayni-orchestrator-*` image tags not referenced by a pod. Rust
+Cargo registry and target data use named BuildKit cache mounts so source changes
+do not create a new multi-gigabyte immutable builder layer each time. This does
+not prune shared cache or Docker volumes. Docker Desktop's
 single node permits the selected `ReadWriteOnce` sharing pattern. Do not copy
 this topology to a multi-node cluster.
 
@@ -146,11 +151,18 @@ binaries.
 
 Normal cleanup retains all PVCs, credentials, and task Jobs. The pilot has no
 automatic expiry: state, checkpoints, evidence, and preparation archives remain
-until a maintainer explicitly removes them. Watch usage with:
+until a maintainer explicitly removes them. Docker reports host images, BuildKit
+cache, and local volumes separately; the Kubernetes node also keeps its own
+containerd image copy. Repeated unscoped builds therefore used to accumulate
+both builder layers and duplicate image tags. M4 bounds the build layers with
+cache mounts and cleans only superseded project tags after a successful rollout.
+Watch usage with:
 
 ```bash
 kubectl --context docker-desktop -n ayni-orchestrator-dev get pvc
 kubectl --context docker-desktop -n ayni-orchestrator-dev get jobs
+docker system df
+docker exec desktop-control-plane df -h /var
 ```
 
 Before cluster reset or destructive pruning, scale the control plane to zero and
