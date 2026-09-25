@@ -37,12 +37,15 @@ impl Tool for PublishDraftPr {
     type Error = io::Error;
 
     fn description(&self) -> String {
-        "Ask the control plane to publish exactly one draft PR for the validated candidate".into()
+        "Ask the control plane to publish exactly one draft PR for the validated candidate. The title must use Conventional Commits with a scope, for example: fix(retry): correct backoff formula.".into()
     }
 
     fn parameters(&self) -> serde_json::Value {
-        json!({"type":"object","properties":{"title":{"type":"string"},
-            "body":{"type":"string"}},"required":["title","body"]})
+        json!({"type":"object","properties":{
+            "title":{"type":"string","maxLength":120,
+                "pattern":"^(feat|fix|docs|test|chore|refactor|ci|perf)\\([^)]+\\): .+"},
+            "body":{"type":"string","minLength":1,"maxLength":16384}},
+            "required":["title","body"]})
     }
 
     async fn call(
@@ -50,14 +53,14 @@ impl Tool for PublishDraftPr {
         _: &mut ToolContext,
         args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
-        if args.title.trim().is_empty()
+        if !conventional_title(&args.title)
             || args.title.len() > 120
             || args.body.trim().is_empty()
             || args.body.len() > 16_384
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "invalid PR title or body",
+                "title must be a scoped Conventional Commit and body must be non-empty",
             ));
         }
         let existing = self
@@ -96,6 +99,14 @@ impl Tool for PublishDraftPr {
     }
 }
 
+fn conventional_title(value: &str) -> bool {
+    [
+        "feat", "fix", "docs", "test", "chore", "refactor", "ci", "perf",
+    ]
+    .iter()
+    .any(|kind| value.starts_with(&format!("{kind}(")) && value.contains("): "))
+}
+
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let model = env::var("AGENT_MODEL")?;
     let key = env::var("OPENAI_API_KEY")?;
@@ -115,16 +126,17 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .tool(publisher.clone())
         .tool_choice(ToolChoice::Required)
         .build();
-    let _ = agent.prompt(context).max_turns(4).await?;
-    if publisher
+    let prompt_result = agent.prompt(context).max_turns(4).await;
+    let did_publish = publisher
         .result
         .lock()
         .map_err(|_| io::Error::other("publication state unavailable"))?
-        .is_none()
-    {
-        return Err("PR agent did not invoke publish_draft_pr".into());
+        .is_some();
+    if did_publish {
+        return Ok(());
     }
-    Ok(())
+    prompt_result?;
+    Err("PR agent did not invoke publish_draft_pr".into())
 }
 
 #[tokio::main]
@@ -135,5 +147,17 @@ async fn main() -> ExitCode {
             eprintln!("PR agent failed: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::conventional_title;
+
+    #[test]
+    fn accepts_only_scoped_conventional_titles() {
+        assert!(conventional_title("fix(retry): correct backoff formula"));
+        assert!(!conventional_title("Fix retry backoff formula"));
+        assert!(!conventional_title("fix: correct backoff formula"));
     }
 }
