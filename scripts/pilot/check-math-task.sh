@@ -39,6 +39,51 @@ git -C "$checkout" merge-base --is-ancestor "$expected_start" "$expected_commit"
   echo "checkout must be clean before validation" >&2
   exit 2
 }
+python3 - "$checkout" "$expected_start" "$expected_commit" <<'PY'
+import pathlib
+import subprocess
+import sys
+
+checkout, start, candidate_commit = sys.argv[1:]
+paths = subprocess.check_output(
+    ["git", "-C", checkout, "diff", "--name-only", "-z", start, candidate_commit]
+).decode().rstrip("\0").split("\0")
+protected = {
+    ".ayni.toml",
+    ".ayni.lock",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "scripts/check-math-validation.sh",
+}
+for path in filter(None, paths):
+    parts = pathlib.PurePosixPath(path).parts
+    name = pathlib.PurePosixPath(path).name.lower()
+    if (
+        path in protected
+        or "tests" in parts
+        or "test" in name
+        or "spec" in name
+    ):
+        raise SystemExit(
+            f"candidate changed prohibited policy, dependency, toolchain, or test path: {path}"
+        )
+    if not path.endswith(".rs"):
+        continue
+    try:
+        baseline = subprocess.check_output(
+            ["git", "-C", checkout, "show", f"{start}:{path}"], text=True
+        )
+    except subprocess.CalledProcessError:
+        baseline = ""
+    candidate_path = pathlib.Path(checkout, path)
+    candidate = candidate_path.read_text() if candidate_path.is_file() else ""
+    marker = "#[cfg(test)]"
+    baseline_tests = baseline[baseline.find(marker):] if marker in baseline else ""
+    candidate_tests = candidate[candidate.find(marker):] if marker in candidate else ""
+    if baseline_tests != candidate_tests:
+        raise SystemExit(f"candidate changed prohibited inline tests: {path}")
+PY
 readonly origin="$(git -C "$checkout" remote get-url origin)"
 case "$origin" in
   git@github.com:ayni-oss/sandbox.git|https://github.com/ayni-oss/sandbox|https://github.com/ayni-oss/sandbox.git) ;;
