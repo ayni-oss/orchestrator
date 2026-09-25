@@ -23,3 +23,21 @@ jobs:
           test -f MAINTAINERS.md
           test -f ROADMAP.md
           test -f .github/dco.yml
+      - name: Reject milestone IDs in runtime files
+        run: |
+          historical_docs=(
+            ':!docs/milestones.md'
+            ':!docs/decisions/**'
+            ':!docs/first-iteration.md'
+            ':!docs/pilot-engineering-gates.md'
+          )
+          if git grep -nE '(^|[^[:alnum:]])[mM][0-9]+([^[:alnum:]]|$)' -- \
+            . "${historical_docs[@]}"; then
+            echo 'milestone IDs must not become current product concepts' >&2
+            exit 1
+          fi
+          if find crates deploy examples scripts -type f -print \
+            | grep -E '(^|/)[^/]*[mM][0-9]+[^/]*(/|$)'; then
+            echo 'milestone IDs must not appear in runtime paths' >&2
+            exit 1
+          fi

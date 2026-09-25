@@ -1,4 +1,4 @@
-//! M3's bounded coding agent. It receives a checkout, a model key, and no
+//! Bounded coding agent. It receives a checkout, a model key, and no
 //! Kubernetes or GitHub App credentials.
 
 use rig_agent::{

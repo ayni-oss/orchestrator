@@ -320,10 +320,10 @@ pub enum StoreError {
     /// The Unix timestamp does not fit the store representation.
     #[error("system clock timestamp overflows durable store representation")]
     ClockOverflow,
-    /// A state value was not part of the M2 model.
+    /// A state value is not part of the durable task model.
     #[error("unknown persisted desired state {0:?}")]
     UnknownDesiredState(String),
-    /// An attempt state value was not part of the M2 model.
+    /// An attempt state value is not part of the durable task model.
     #[error("unknown persisted attempt state {0:?}")]
     UnknownAttemptState(String),
     /// The process could not lock its one `SQLite` connection.

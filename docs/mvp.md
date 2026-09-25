@@ -15,8 +15,9 @@ the human effort needed to get an agent's change ready for review. The
 [MVP validation plan](mvp-validation.md) defines how to evaluate that hypothesis.
 
 The [delivery milestones](milestones.md) sequence implementation into one PR per
-milestone. [Docker Desktop Kubernetes with Kustomize](decisions/0001-local-kubernetes-deployment.md)
-is the selected local deployment approach, beginning with a running service in M0.
+milestone. [Docker Desktop Kubernetes with
+Kustomize](decisions/0001-local-kubernetes-deployment.md) is the selected local
+deployment approach, beginning with the first running service.
 
 ## First audience and task shape
 

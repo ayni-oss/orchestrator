@@ -1,4 +1,4 @@
-//! Bounded execution of the M1 managed Ayni check.
+//! Bounded execution of a managed Ayni check.
 
 use ayni_orchestrator_domain::{GitRevision, IdentityError, Sha256Digest};
 use serde::Serialize;
@@ -30,7 +30,7 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    /// Reads fail-closed M1 configuration from the process environment.
+    /// Reads fail-closed managed-check configuration from the process environment.
     ///
     /// # Errors
     ///
@@ -603,9 +603,9 @@ pub enum WorkerError {
         #[source]
         source: env::VarError,
     },
-    #[error("repository {0:?} is not supported by the M1 worker")]
+    #[error("repository {0:?} is not supported by the managed-check worker")]
     UnsupportedRepository(String),
-    #[error("Ayni version {0:?} is not supported by the M1 worker")]
+    #[error("Ayni version {0:?} is not supported by the managed-check worker")]
     UnsupportedAyniVersion(String),
     #[error(transparent)]
     Identity(#[from] IdentityError),

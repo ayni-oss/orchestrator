@@ -1,4 +1,4 @@
-//! GitHub App operations for the one private M3 sandbox repository.
+//! GitHub App operations for the one private sandbox repository.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -120,7 +120,7 @@ impl GitHubApp {
                 "https://api.github.com/app/installations/{}/access_tokens",
                 repository.installation_id
             ))
-            .header("User-Agent", "ayni-orchestrator-m3")
+            .header("User-Agent", "ayni-orchestrator")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .bearer_auth(self.app_jwt()?)
             .json(&json!({"repositories": [repository.repository], "permissions": permissions}))
@@ -147,6 +147,7 @@ impl GitHubApp {
         &self,
         task: &DevelopmentTask,
         candidate_bundle: &Path,
+        branch: &str,
         title: &str,
         body: &str,
     ) -> Result<(u64, String), String> {
@@ -155,22 +156,21 @@ impl GitHubApp {
             .as_deref()
             .ok_or("task has no frozen candidate")?;
         let token = self.installation_token(&task.repository).await?;
-        let branch = format!("m3/task-{}", task.id);
-        if let Some(pr) = self.find_pr(&token, &task.repository, &branch).await? {
+        if let Some(pr) = self.find_pr(&token, &task.repository, branch).await? {
             return pr.verified(candidate);
         }
         push_bundle(
             candidate_bundle,
             candidate,
             &task.input.start_revision,
-            &branch,
+            branch,
             &token,
             &task.repository,
         )?;
-        if let Some(pr) = self.find_pr(&token, &task.repository, &branch).await? {
+        if let Some(pr) = self.find_pr(&token, &task.repository, branch).await? {
             return pr.verified(candidate);
         }
-        self.create_pr(&token, &task.repository, &branch, candidate, title, body)
+        self.create_pr(&token, &task.repository, branch, candidate, title, body)
             .await
     }
 
@@ -186,7 +186,7 @@ impl GitHubApp {
         let response = self
             .client
             .post(pulls_url(repository))
-            .header("User-Agent", "ayni-orchestrator-m3")
+            .header("User-Agent", "ayni-orchestrator")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .bearer_auth(token)
             .json(&json!({"title": title, "body": body, "head": branch,
@@ -221,7 +221,7 @@ impl GitHubApp {
         let response = self
             .client
             .get(pulls_url(repository))
-            .header("User-Agent", "ayni-orchestrator-m3")
+            .header("User-Agent", "ayni-orchestrator")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .bearer_auth(token)
             .query(&[

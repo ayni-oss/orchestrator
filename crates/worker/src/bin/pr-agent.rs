@@ -1,4 +1,4 @@
-//! M3 PR author. Its only external action is a structured request to the
+//! PR author. Its only external action is a structured request to the
 //! control plane, which owns idempotency and GitHub App credentials.
 
 use reqwest::Client;

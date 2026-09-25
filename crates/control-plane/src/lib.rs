@@ -231,7 +231,7 @@ impl AppState {
     }
 }
 
-/// Builds the M2 HTTP router.
+/// Builds the control-plane HTTP router.
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(ui::index))
@@ -547,7 +547,7 @@ mod tests {
         })
     }
     #[test]
-    fn accepts_durable_m2_configuration() -> Result<(), ConfigurationError> {
+    fn accepts_durable_configuration() -> Result<(), ConfigurationError> {
         let configuration = Configuration::from_values(
             "127.0.0.1:8080",
             PathBuf::from("/data/tasks.sqlite"),

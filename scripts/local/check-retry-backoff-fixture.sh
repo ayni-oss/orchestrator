@@ -5,7 +5,7 @@ readonly repository_root="$(git rev-parse --show-toplevel)"
 readonly scratch="$(mktemp -d)"
 trap 'rm -r -- "$scratch"' EXIT
 
-rustc "$repository_root/examples/m3-retry-backoff/main.rs" -o "$scratch/retry-backoff"
+rustc "$repository_root/examples/retry-backoff/main.rs" -o "$scratch/retry-backoff"
 
 for case in '1 2' '2 4' '3 8' '6 60'; do
   read -r attempt expected <<<"$case"

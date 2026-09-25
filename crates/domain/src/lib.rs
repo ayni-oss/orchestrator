@@ -1,6 +1,6 @@
 //! Stable domain types shared by the control plane and worker.
 //!
-//! M2 adds durable task and attempt identities plus the lifecycle states that
+//! Durable task and attempt identities plus the lifecycle states that
 //! the control plane persists outside disposable Kubernetes resources.
 
 use serde::{Deserialize, Serialize};

@@ -44,7 +44,7 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
     };
-    let key = IdempotencyKey::try_from("m3-submit".to_owned())
+    let key = IdempotencyKey::try_from("development-submit".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
     let first = store.submit_development(&key, &input)?;
     assert_eq!(first.phase, DevelopmentPhase::Unsupported);
@@ -81,7 +81,7 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         "trial",
         "8a555ada2f6e3ee41de2485ed13da508beaebaeb",
     )?;
-    let submit = IdempotencyKey::try_from("submit-m3".to_owned())
+    let submit = IdempotencyKey::try_from("submit-development".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
     let task = store.submit_development(&submit, &input)?;
     assert_eq!(task.phase, DevelopmentPhase::Queued);
@@ -103,7 +103,7 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         store.submit_development(&submit, &different),
         Err(StoreError::ActionKeyReused(_))
     ));
-    let cancel = IdempotencyKey::try_from("cancel-m3".to_owned())
+    let cancel = IdempotencyKey::try_from("cancel-development".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
     assert_eq!(
         store.cancel_development(task.id, &cancel)?.phase,
@@ -165,8 +165,17 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         DevelopmentPhase::PreparingPr
     )?);
     let (_, action) = store.begin_publication(task.id, "fix(example): repair formula", "first")?;
+    assert_eq!(action.branch_name, format!("orchestrator/task-{}", task.id));
     assert_eq!(action.body, "first");
+    store
+        .connection
+        .execute(
+            "UPDATE publication_actions SET branch_name='legacy/task-preserved' WHERE task_id=?1",
+            [task.id.to_string()],
+        )
+        .map_err(StoreError::Database)?;
     let (_, action) = store.begin_publication(task.id, "fix(example): repair formula", "second")?;
+    assert_eq!(action.branch_name, "legacy/task-preserved");
     assert_eq!(action.body, "first");
     let changed_candidate = "9c876bca1b61229971900009f4ea9a81f2258909";
     assert!(!store.record_candidate(task.id, changed_candidate)?);
@@ -252,7 +261,7 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
 }
 
 #[test]
-fn rejects_a_repository_outside_the_m3_sandbox() -> Result<(), StoreError> {
+fn rejects_a_repository_outside_the_supported_sandbox() -> Result<(), StoreError> {
     let store = Store::in_memory()?;
     let error = store
         .put_repository_binding(&RepositoryBinding {

@@ -1,4 +1,4 @@
-//! Independent managed validation of a frozen M3 Git candidate bundle.
+//! Independent managed validation of a frozen Git candidate bundle.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

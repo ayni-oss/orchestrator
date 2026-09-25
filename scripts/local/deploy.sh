@@ -2,15 +2,14 @@
 set -euo pipefail
 
 readonly repository_root="$(git rev-parse --show-toplevel)"
-readonly mode="${1:-m2}"
+if [[ $# -ne 0 ]]; then
+  echo "usage: $0" >&2
+  exit 2
+fi
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
 readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
-if [[ "$mode" == "m4" ]]; then
-  "$repository_root/scripts/local/check-capacity.sh" 12
-else
-  "$repository_root/scripts/local/check-capacity.sh" 8
-fi
+"$repository_root/scripts/local/check-capacity.sh" 12
 control_plane_image_ref="$($repository_root/scripts/local/build-image.sh)"
 readonly control_plane_image_ref
 worker_image_ref="$($repository_root/scripts/local/build-worker-image.sh)"
@@ -27,7 +26,7 @@ metadata:
 EOF
 
 "$repository_root/scripts/local/render.sh" \
-  "$control_plane_image_ref" "$worker_image_ref" "$mode" "$namespace" \
+  "$control_plane_image_ref" "$worker_image_ref" \
   | kubectl --context "$context" apply --server-side --field-manager ayni-orchestrator-local -f -
 kubectl --context "$context" --namespace "$namespace" rollout status deployment/control-plane --timeout=120s
 

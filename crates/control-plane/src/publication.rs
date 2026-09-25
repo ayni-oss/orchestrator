@@ -1,4 +1,4 @@
-//! Controlled M3 publication endpoint and validation evidence binding.
+//! Controlled publication endpoint and validation evidence binding.
 
 use axum::{
     Json,
@@ -99,10 +99,11 @@ impl PublisherState {
         &self,
         task: &crate::development::DevelopmentTask,
         bundle: &FilePath,
+        branch: &str,
         title: &str,
         body: &str,
     ) -> Result<(u64, String), String> {
-        self.app.publish(task, bundle, title, body).await
+        self.app.publish(task, bundle, branch, title, body).await
     }
 
     pub(crate) fn evidence_view(&self, task: &DevelopmentTask) -> Result<EvidenceView, String> {
@@ -257,7 +258,7 @@ impl PublisherState {
         )?;
         let internal_token = env::var(vars[5]).map_err(|_| "missing internal token")?;
         if internal_token.len() < 32 {
-            return Err("M3 internal publish token must be at least 32 characters".into());
+            return Err("internal publish token must be at least 32 characters".into());
         }
         Ok(Some(Self {
             app,
@@ -446,7 +447,13 @@ async fn finish_publication(
         .join("candidate.bundle");
     let (number, url) = publisher
         .app
-        .publish(task, &bundle, &action.title, &action.body)
+        .publish(
+            task,
+            &bundle,
+            &action.branch_name,
+            &action.title,
+            &action.body,
+        )
         .await
         .map_err(PublishError::External)?;
     {
@@ -480,7 +487,7 @@ impl IntoResponse for PublishError {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".to_owned()),
             Self::Unavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,
-                "M3 publisher unavailable".to_owned(),
+                "publisher unavailable".to_owned(),
             ),
             Self::Invalid(message) => (StatusCode::CONFLICT, message),
             Self::Store(error) => (StatusCode::CONFLICT, error.to_string()),

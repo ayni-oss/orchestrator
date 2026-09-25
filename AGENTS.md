@@ -37,9 +37,10 @@
 - Follow docs/milestones.md: one delivery PR per milestone, starting from updated
   main after the preceding milestone merges. Record completion evidence and update
   the milestone status; do not merge automatically.
-- Deploy working behavior to Docker Desktop Kubernetes from M0 onward, during
-  each deployable milestone. Use Kustomize and the explicit docker-desktop context
-  as defined in docs/decisions/0001-local-kubernetes-deployment.md. Never fall back
+- Deploy working behavior to Docker Desktop Kubernetes from the first deployable
+  change onward, during each deployable milestone. Use Kustomize and the explicit
+  docker-desktop context as defined in
+  docs/decisions/0001-local-kubernetes-deployment.md. Never fall back
   to another current cluster when the local context is absent. Local deployment
   is authorized; destructive cluster resets and retained-data deletion are separate.
 - Keep the first iteration small and end-to-end. Define its observable outcome

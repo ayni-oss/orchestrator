@@ -1,4 +1,4 @@
-//! Reconcile M3's isolated coding, validation, and PR-author Jobs.
+//! Reconcile isolated coding, validation, and PR-author Jobs.
 
 use crate::{
     AppState, PublisherState,
@@ -69,13 +69,13 @@ impl DevelopmentReconciler {
         let targets = match self.with_store(|store| store.development_targets()) {
             Ok(targets) => targets,
             Err(error) => {
-                warn!(%error, "could not load M3 tasks");
+                warn!(%error, "could not load development tasks");
                 return;
             }
         };
         for task in targets {
             if let Err(error) = self.reconcile_task(&task).await {
-                warn!(task_id = %task.id, %error, "M3 task reconciliation failed");
+                warn!(task_id = %task.id, %error, "development task reconciliation failed");
             }
         }
     }
@@ -261,7 +261,13 @@ impl DevelopmentReconciler {
             .join("candidate.bundle");
         let (number, url) = self
             .publisher
-            .publish_existing(task, &bundle, &action.title, &action.body)
+            .publish_existing(
+                task,
+                &bundle,
+                &action.branch_name,
+                &action.title,
+                &action.body,
+            )
             .await?;
         self.with_store(|store| store.complete_publication(task.id, candidate, number, &url))
     }
@@ -288,7 +294,7 @@ impl DevelopmentReconciler {
 
     fn fail(&self, id: TaskId, reason: &str) -> Result<(), String> {
         self.with_store(|store| store.fail_development(id, reason))?;
-        warn!(task_id = %id, reason, "M3 task failed");
+        warn!(task_id = %id, reason, "development task failed");
         Ok(())
     }
 
@@ -302,7 +308,7 @@ impl DevelopmentReconciler {
         self.secrets()
             .patch(
                 &name,
-                &PatchParams::apply("ayni-orchestrator-m3").force(),
+                &PatchParams::apply("ayni-orchestrator-development").force(),
                 &Patch::Apply(&secret),
             )
             .await
@@ -332,7 +338,7 @@ impl DevelopmentReconciler {
         let job = self.build_job(task, stage)?;
         match self.jobs().create(&PostParams::default(), &job).await {
             Ok(_) => {
-                info!(task_id = %task.id, job_name = name, "M3 Job created");
+                info!(task_id = %task.id, job_name = name, "development Job created");
                 Ok(())
             }
             Err(error) => {
@@ -409,7 +415,7 @@ impl DevelopmentReconciler {
     fn build_job(&self, task: &DevelopmentTask, stage: Stage) -> Result<Job, String> {
         let name = job_name(task.id, stage);
         let task_id = task.id.to_string();
-        let labels = json!({"app.kubernetes.io/name":"ayni-orchestrator-m3",
+        let labels = json!({"app.kubernetes.io/name":"ayni-orchestrator-development-task",
             "orchestrator.ayni.dev/development-task-id": task_id,
             "orchestrator.ayni.dev/development-stage": stage.name()});
         let (init_containers, container, volumes) = match stage {
@@ -428,7 +434,7 @@ impl DevelopmentReconciler {
                     "initContainers":init_containers,"containers":[container],"volumes":volumes
                 }}}
         }))
-        .map_err(|error| format!("invalid M3 Job template: {error}"))
+        .map_err(|error| format!("invalid development Job template: {error}"))
     }
 
     fn code_spec(&self, task: &DevelopmentTask) -> Result<(Vec<Value>, Value, Vec<Value>), String> {

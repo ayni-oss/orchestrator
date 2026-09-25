@@ -1,4 +1,4 @@
-//! Durable M3 request contracts. Execution is activated only after the selected
+//! Durable development request contracts. Execution is activated only after the selected
 //! repository, agent profile, and credential references are configured.
 
 use ayni_orchestrator_domain::{GitRevision, IdempotencyKey, Sha256Digest, TaskId};
@@ -30,7 +30,7 @@ impl RepositoryBinding {
         }
         if format!("{}/{}", self.owner, self.repository) != SUPPORTED_REPOSITORY {
             return Err(StoreError::InvalidInput(
-                "M3 supports only ayni-oss/sandbox",
+                "development tasks support only ayni-oss/sandbox",
             ));
         }
         if self.installation_id <= 0 || !git_branch(&self.base_branch) {
@@ -43,7 +43,7 @@ impl RepositoryBinding {
     }
 }
 
-/// Provider-neutral model selection. M3 execution supports `OpenAI` only.
+/// Provider-neutral model selection. Development execution supports `OpenAI` only.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentProfile {
@@ -73,7 +73,7 @@ impl AgentProfile {
     }
 }
 
-/// The immutable development request accepted by the M3 API.
+/// The immutable development request accepted by the API.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DevelopmentInput {
@@ -110,7 +110,7 @@ impl DevelopmentInput {
     }
 }
 
-/// A single durable M3 request and its measured candidate.
+/// A single durable development request and its measured candidate.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DevelopmentTask {
     pub id: TaskId,
@@ -129,6 +129,7 @@ pub struct DevelopmentTask {
 }
 
 pub struct PublicationAction {
+    pub branch_name: String,
     pub candidate_commit: String,
     pub title: String,
     pub body: String,
@@ -593,7 +594,7 @@ impl Store {
         if task.validation_manifest.is_none() {
             return Err(StoreError::InvalidInput("task has no final validation"));
         }
-        let branch = format!("m3/task-{}", task.id);
+        let branch = format!("orchestrator/task-{}", task.id);
         self.connection
             .execute(
                 "INSERT OR IGNORE INTO publication_actions(task_id, branch_name, candidate_commit,
@@ -620,14 +621,16 @@ impl Store {
     pub(crate) fn publication_action(&self, id: TaskId) -> Result<PublicationAction, StoreError> {
         self.connection
             .query_row(
-            "SELECT candidate_commit, title, body, pr_url FROM publication_actions WHERE task_id=?1",
+                "SELECT branch_name, candidate_commit, title, body, pr_url
+                 FROM publication_actions WHERE task_id=?1",
                 [id.to_string()],
                 |row| {
                     Ok(PublicationAction {
-                candidate_commit: row.get(0)?,
-                title: row.get(1)?,
-                body: row.get(2)?,
-                completed_url: row.get(3)?,
+                        branch_name: row.get(0)?,
+                        candidate_commit: row.get(1)?,
+                        title: row.get(2)?,
+                        body: row.get(3)?,
+                        completed_url: row.get(4)?,
                     })
                 },
             )

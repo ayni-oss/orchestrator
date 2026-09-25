@@ -6,12 +6,12 @@ software development, built around Ayni's environment and quality contracts.
 The private GitHub repository is `ayni-oss/orchestrator`. Product-facing names
 use **Ayni Orchestrator**.
 
-**Status: private M4 pilot-ready product complete locally; delivery PR pending.**
+**Status: private pilot-ready product delivered; product validation pending.**
 This repository contains the Rust workspace, durable task orchestration, the
-proven coding/validation/draft-PR path, and the M4 browser workflow, repository
-readiness, reusable prepared environments, retry/input actions, and evidence
-views. The deployed operational gates are recorded in the
-[M4 engineering-gate record](docs/m4-engineering-gates.md). The name is
+proven coding/validation/draft-PR path, browser workflow, repository readiness,
+reusable prepared environments, retry/input actions, and evidence views. The
+deployed operational gates are recorded in the
+[pilot engineering-gate record](docs/pilot-engineering-gates.md). The name is
 provisional; architecture proposals remain subject to implementation evidence.
 No delivery date or public launch is committed by these documents.
 
@@ -32,12 +32,12 @@ organization scale.
 | --- | --- |
 | [MVP scope and experience](docs/mvp.md) | Initial audience, request-to-PR journey, scope boundaries, and completion requirements |
 | [MVP validation plan](docs/mvp-validation.md) | Engineering gates, ten-task pilot, measurements, and investment decision |
-| [Delivery milestones](docs/milestones.md) | M0-M5, one PR per milestone, deployment gates, and completion evidence |
-| [Pilot operations](docs/pilot-operations.md) | M4 access, installation, readiness, resources, updates, retention, recovery, and cleanup |
+| [Delivery milestones](docs/milestones.md) | Historical delivery plan, deployment gates, and completion evidence |
+| [Pilot operations](docs/pilot-operations.md) | Access, installation, readiness, resources, updates, retention, recovery, and cleanup |
 | [Local deployment decision](docs/decisions/0001-local-kubernetes-deployment.md) | Docker Desktop Kubernetes, Kustomize, and the local deployment workflow |
 | [Product name and control-plane model](docs/decisions/0002-product-name-and-control-plane-model.md) | Ayni Orchestrator, its user-facing configuration model, and the controller/CRD boundary |
-| [Durable local orchestration](docs/decisions/0003-durable-local-orchestration.md) | M2 SQLite/PVC state, Job transport, idempotency, and recovery boundaries |
-| [Pilot readiness and preparation](docs/decisions/0004-pilot-readiness-and-preparation.md) | M4 reusable preparation, dependency policy, UI boundary, and operating limits |
+| [Durable local orchestration](docs/decisions/0003-durable-local-orchestration.md) | SQLite/PVC state, Job transport, idempotency, and recovery boundaries |
+| [Pilot readiness and preparation](docs/decisions/0004-pilot-readiness-and-preparation.md) | Reusable preparation, dependency policy, UI boundary, and operating limits |
 | [Product intent](docs/product-intent.md) | Problem, audience, experience, boundaries, and business hypothesis |
 | [Architecture options](docs/architecture.md) | Domain model, responsibilities, topology options, and access diagram |
 | [Environment lifecycle](docs/environment-lifecycle.md) | Onboarding, prepared environments, candidate changes, and development services |
@@ -53,7 +53,7 @@ Development rules, including the private boundary with Ayni, are recorded in
 
 See [local development](docs/local-development.md) for the pinned-toolchain
 checks and deployment mechanics. Use the [pilot runbook](docs/pilot-operations.md)
-for the M4 browser workflow and operational contract.
+for the browser workflow and operational contract.
 
 ## How to read proposals
 
