@@ -284,6 +284,9 @@ pub enum StoreError {
     /// A submitted task field was invalid.
     #[error("invalid task input: {0}")]
     InvalidInput(&'static str),
+    /// Submitted change constraints were unsafe or exceeded supported bounds.
+    #[error("invalid task change constraints: {0}")]
+    InvalidChangeConstraints(#[source] ayni_orchestrator_domain::ChangeConstraintsError),
     /// A requested task was absent.
     #[error("task {0} was not found")]
     TaskNotFound(TaskId),

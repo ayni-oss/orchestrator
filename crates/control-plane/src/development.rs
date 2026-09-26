@@ -1,7 +1,9 @@
 //! Durable development request contracts. Execution is activated only after the selected
 //! repository, agent profile, and credential references are configured.
 
-use ayni_orchestrator_domain::{GitRevision, IdempotencyKey, Sha256Digest, TaskId};
+use ayni_orchestrator_domain::{
+    ChangeConstraints, GitRevision, IdempotencyKey, Sha256Digest, TaskId,
+};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
@@ -83,6 +85,8 @@ pub struct DevelopmentInput {
     pub request: String,
     pub acceptance_criteria: Vec<String>,
     #[serde(default)]
+    pub change_constraints: ChangeConstraints,
+    #[serde(default)]
     pub deadline_seconds: Option<u64>,
 }
 
@@ -108,6 +112,9 @@ impl DevelopmentInput {
                 "provide 1-20 bounded acceptance criteria",
             ));
         }
+        self.change_constraints
+            .validate()
+            .map_err(StoreError::InvalidChangeConstraints)?;
         if matches!(self.deadline_seconds, Some(0 | 86_401..)) {
             return Err(StoreError::InvalidInput(
                 "deadline seconds must be between 1 and 86400",
@@ -176,6 +183,7 @@ pub struct DevelopmentTask {
     pub candidate_commit: Option<String>,
     pub validation_manifest: Option<String>,
     pub policy_or_test_edits: Option<bool>,
+    pub scope_violations: Vec<String>,
     pub draft_pr_url: Option<String>,
     pub failure: Option<String>,
 }
@@ -261,10 +269,11 @@ impl Store {
                 profile_id TEXT NOT NULL REFERENCES agent_profiles(id),
                 repository_snapshot TEXT NOT NULL, profile_snapshot TEXT NOT NULL,
                 start_revision TEXT NOT NULL, request TEXT NOT NULL,
-                acceptance_criteria TEXT NOT NULL, phase TEXT NOT NULL,
+                acceptance_criteria TEXT NOT NULL, protected_paths TEXT NOT NULL DEFAULT '[]',
+                allow_test_edits INTEGER NOT NULL DEFAULT 0, phase TEXT NOT NULL,
                 preparation_id TEXT, retry_of TEXT, requested_input TEXT,
                 candidate_commit TEXT, validation_manifest TEXT,
-                policy_or_test_edits INTEGER, draft_pr_url TEXT, failure TEXT,
+                policy_or_test_edits INTEGER, scope_violations TEXT, draft_pr_url TEXT, failure TEXT,
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
                 deadline_seconds INTEGER, deadline_at INTEGER
             );
@@ -287,6 +296,9 @@ impl Store {
             ("requested_input", "TEXT"),
             ("deadline_seconds", "INTEGER"),
             ("deadline_at", "INTEGER"),
+            ("protected_paths", "TEXT NOT NULL DEFAULT '[]'"),
+            ("allow_test_edits", "INTEGER NOT NULL DEFAULT 0"),
+            ("scope_violations", "TEXT"),
         ] {
             let exists: bool = self
                 .connection
@@ -365,6 +377,8 @@ impl Store {
         let id = TaskId::generate();
         let criteria = serde_json::to_string(&input.acceptance_criteria)
             .map_err(|_| StoreError::InvalidInput("could not serialize acceptance criteria"))?;
+        let protected_paths = serde_json::to_string(&input.change_constraints.protected_paths)
+            .map_err(|_| StoreError::InvalidInput("could not serialize protected paths"))?;
         let repository_snapshot = serde_json::to_string(&repository)
             .map_err(|_| StoreError::InvalidInput("could not serialize repository"))?;
         let profile_snapshot = serde_json::to_string(&profile)
@@ -378,12 +392,13 @@ impl Store {
             .map_err(StoreError::Database)?;
         transaction.execute(
             "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request,
-             acceptance_criteria, phase, preparation_id, created_at, updated_at,
-             deadline_seconds, deadline_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13)",
+             acceptance_criteria, protected_paths, allow_test_edits, phase, preparation_id,
+             created_at, updated_at, deadline_seconds, deadline_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?14, ?15)",
             params![id.to_string(), input.repository_id, input.profile_id, repository_snapshot,
-                profile_snapshot, input.start_revision, input.request, criteria, phase.as_str(),
-                preparation_id, now, deadline_seconds, deadline_at],
+                profile_snapshot, input.start_revision, input.request, criteria, protected_paths,
+                input.change_constraints.allow_test_edits, phase.as_str(), preparation_id, now,
+                deadline_seconds, deadline_at],
         ).map_err(StoreError::Database)?;
         transaction
             .execute(
@@ -455,19 +470,21 @@ impl Store {
     pub fn development_task(&self, id: TaskId) -> Result<DevelopmentTask, StoreError> {
         let row = self.connection.query_row(
             "SELECT repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request, acceptance_criteria,
-             phase, preparation_id, retry_of, requested_input, candidate_commit, validation_manifest,
-             policy_or_test_edits, draft_pr_url, failure, created_at, updated_at,
-             deadline_seconds, deadline_at
+             protected_paths, allow_test_edits, phase, preparation_id, retry_of, requested_input,
+             candidate_commit, validation_manifest, policy_or_test_edits, scope_violations,
+             draft_pr_url, failure, created_at, updated_at, deadline_seconds, deadline_at
              FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?, row.get::<_, String>(6)?, row.get::<_, String>(7)?,
-                    row.get::<_, Option<String>>(8)?, row.get::<_, Option<String>>(9)?,
+                    row.get::<_, bool>(8)?, row.get::<_, String>(9)?,
                     row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?,
-                    row.get::<_, Option<String>>(12)?, row.get::<_, Option<bool>>(13)?,
-                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<String>>(15)?,
-                    row.get::<_, i64>(16)?, row.get::<_, i64>(17)?,
-                    row.get::<_, Option<i64>>(18)?, row.get::<_, Option<i64>>(19)?))
+                    row.get::<_, Option<String>>(12)?, row.get::<_, Option<String>>(13)?,
+                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<bool>>(15)?,
+                    row.get::<_, Option<String>>(16)?, row.get::<_, Option<String>>(17)?,
+                    row.get::<_, Option<String>>(18)?, row.get::<_, i64>(19)?,
+                    row.get::<_, i64>(20)?, row.get::<_, Option<i64>>(21)?,
+                    row.get::<_, Option<i64>>(22)?))
             }
         ).optional().map_err(StoreError::Database)?.ok_or(StoreError::TaskNotFound(id))?;
         let repository = serde_json::from_str(&row.2)
@@ -476,8 +493,17 @@ impl Store {
             .map_err(|_| StoreError::InvalidInput("invalid persisted profile"))?;
         let criteria = serde_json::from_str(&row.6)
             .map_err(|_| StoreError::InvalidInput("invalid persisted acceptance criteria"))?;
+        let protected_paths = serde_json::from_str(&row.7)
+            .map_err(|_| StoreError::InvalidInput("invalid persisted protected paths"))?;
+        let scope_violations = row
+            .16
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map_err(|_| StoreError::InvalidInput("invalid persisted scope violations"))?
+            .unwrap_or_default();
         let deadline_seconds = row
-            .18
+            .21
             .map(|seconds| {
                 u64::try_from(seconds)
                     .map_err(|_| StoreError::InvalidInput("invalid persisted task deadline"))
@@ -491,25 +517,30 @@ impl Store {
                 start_revision: row.4,
                 request: row.5,
                 acceptance_criteria: criteria,
+                change_constraints: ChangeConstraints {
+                    protected_paths,
+                    allow_test_edits: row.8,
+                },
                 deadline_seconds,
             },
             repository,
             agent_profile,
-            preparation_id: row.8,
+            preparation_id: row.10,
             retry_of: row
-                .9
+                .11
                 .map(|value| TaskId::parse(&value).map_err(StoreError::InvalidLifecycleData))
                 .transpose()?,
-            created_at: row.16,
-            updated_at: row.17,
-            deadline_at: row.19,
-            phase: DevelopmentPhase::parse(&row.7)?,
-            requested_input: row.10,
-            candidate_commit: row.11,
-            validation_manifest: row.12,
-            policy_or_test_edits: row.13,
-            draft_pr_url: row.14,
-            failure: row.15,
+            created_at: row.19,
+            updated_at: row.20,
+            deadline_at: row.22,
+            phase: DevelopmentPhase::parse(&row.9)?,
+            requested_input: row.12,
+            candidate_commit: row.13,
+            validation_manifest: row.14,
+            policy_or_test_edits: row.15,
+            scope_violations,
+            draft_pr_url: row.17,
+            failure: row.18,
         })
     }
 
@@ -561,6 +592,9 @@ impl Store {
             .map_err(|_| StoreError::InvalidInput("could not serialize profile"))?;
         let criteria = serde_json::to_string(&source.input.acceptance_criteria)
             .map_err(|_| StoreError::InvalidInput("could not serialize acceptance criteria"))?;
+        let protected_paths =
+            serde_json::to_string(&source.input.change_constraints.protected_paths)
+                .map_err(|_| StoreError::InvalidInput("could not serialize protected paths"))?;
         let deadline_seconds = persisted_deadline_seconds(source.input.deadline_seconds)?;
         let transaction = self
             .connection
@@ -569,9 +603,10 @@ impl Store {
         transaction
             .execute(
                 "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
-             profile_snapshot, start_revision, request, acceptance_criteria, phase, preparation_id,
-             retry_of, created_at, updated_at, deadline_seconds, deadline_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'queued',?9,?10,?11,?11,?12,?13)",
+             profile_snapshot, start_revision, request, acceptance_criteria, protected_paths,
+             allow_test_edits, phase, preparation_id, retry_of, created_at, updated_at,
+             deadline_seconds, deadline_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',?11,?12,?13,?13,?14,?15)",
                 params![
                     id.to_string(),
                     source.input.repository_id,
@@ -581,6 +616,8 @@ impl Store {
                     source.input.start_revision,
                     request,
                     criteria,
+                    protected_paths,
+                    source.input.change_constraints.allow_test_edits,
                     preparation_id,
                     source_id.to_string(),
                     now,

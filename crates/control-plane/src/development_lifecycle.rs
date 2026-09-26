@@ -2,7 +2,7 @@ use crate::{
     development::{AgentProfile, DevelopmentPhase, DevelopmentTask},
     orchestration::{Store, StoreError},
 };
-use ayni_orchestrator_domain::{GitRevision, IdempotencyKey, TaskId};
+use ayni_orchestrator_domain::{GitRevision, IdempotencyKey, TaskId, scope_violations_are_bounded};
 use rusqlite::{OptionalExtension, params};
 
 impl Store {
@@ -132,17 +132,26 @@ impl Store {
         reason: &str,
         manifest_digest: Option<&str>,
         policy_or_test_edits: Option<bool>,
+        scope_violations: &[String],
     ) -> Result<bool, StoreError> {
+        if !scope_violations_are_bounded(scope_violations) {
+            return Err(StoreError::InvalidInput(
+                "scope violations exceed durable storage limits",
+            ));
+        }
+        let scope_violations = serde_json::to_string(scope_violations)
+            .map_err(|_| StoreError::InvalidInput("could not serialize scope violations"))?;
         let updated = self
             .connection
             .execute(
                 "UPDATE development_tasks SET phase='failed', failure=?1,
-             validation_manifest=?2, policy_or_test_edits=?3, updated_at=?4
-             WHERE id=?5 AND phase='validating'",
+             validation_manifest=?2, policy_or_test_edits=?3, scope_violations=?4, updated_at=?5
+             WHERE id=?6 AND phase='validating'",
                 params![
                     reason,
                     manifest_digest,
                     policy_or_test_edits,
+                    scope_violations,
                     super::orchestration::unix_seconds()?,
                     id.to_string()
                 ],

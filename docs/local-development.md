@@ -142,12 +142,18 @@ and Ayni `0.13.0`. Use the browser for enrollment and preparation, or configure:
 - `POST /v1/agent-profiles` with provider `openai`, model, and Kubernetes Secret
   reference; and
 - `POST /v1/development-tasks` with a unique idempotency key, binding/profile
-  IDs, exact 40-hex start revision, request, acceptance criteria, and optional
-  `deadline_seconds` from 1 through 86400.
+  IDs, exact 40-hex start revision, request, acceptance criteria, immutable
+  `change_constraints`, and optional `deadline_seconds` from 1 through 86400.
+  `change_constraints.protected_paths` accepts at most 100 normalized,
+  repository-relative file or directory paths; descendants of a protected
+  directory are protected. `change_constraints.allow_test_edits` defaults to
+  `false` when omitted. Bounded candidates may change at most 256 paths with at
+  most 65536 aggregate path bytes.
 
 Repository preparation must be `ready` for those exact inputs. A task freezes
 its repository, profile, source, lock, preparation, request, acceptance criteria,
-and deadline. Reusing an idempotency key with different content is rejected.
+change constraints, and deadline. Reusing an idempotency key with different
+content is rejected. Retries copy the same constraints into a linked task.
 
 The coding Job has fixed checkout file and command tools, no Kubernetes token,
 and no GitHub App private key. It stores a local commit and Git bundle on
@@ -159,7 +165,10 @@ pull request.
 
 Candidate changes to `.ayni.toml` are rejected. Changes to `.ayni.lock`, Rust
 dependency manifests, or the pinned toolchain return the explicit
-`dependency_change_unsupported` result. Related future requirements are tracked
+`dependency_change_unsupported` result. A protected-path change or unauthorized
+dedicated/inline Rust test change returns `scope_rejected`, retains the exact
+violations with validation evidence, and cannot create a draft PR. Related
+future requirements are tracked
 in the [Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2).
 
 ## Browser workflow

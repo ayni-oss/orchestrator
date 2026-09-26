@@ -50,13 +50,17 @@ flowchart TD
    builds and doctors the managed environment, and retains an immutable archive
    and build record.
 3. Task submission freezes repository, profile, revision, request, acceptance
-   criteria, lock, preparation identity, and optional deadline.
+   criteria, protected repository paths, test-edit authorization, lock,
+   preparation identity, and optional deadline.
 4. The coding Job receives fixed file and command tools but no Kubernetes token
    or GitHub App private key. It stores a local commit and Git bundle on retained
    checkpoint storage.
-5. Validation mounts the bundle read-only, reconstructs the candidate, loads the
+5. Validation mounts the bundle read-only, reconstructs the candidate, checks
+   every added, modified, deleted, or renamed path against the frozen scope,
+   compares supported Rust test syntax with the starting revision, loads the
    retained environment into a fresh isolated engine, runs Ayni, and writes
-   artifacts outside the editable workspace.
+   artifacts outside the editable workspace. Scope violations are retained as
+   `scope_rejected` evidence and never advance to publication.
 6. Publication proceeds only from the validated candidate identity. The control
    plane mints repository-scoped GitHub App credentials and reconciles a
    deterministic branch and draft PR.

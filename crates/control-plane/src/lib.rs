@@ -579,7 +579,7 @@ mod tests {
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","pilot_ready":false,"domain_model_revision":2}"#
+            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","pilot_ready":false,"domain_model_revision":3}"#
         );
         Ok(())
     }
@@ -605,7 +605,9 @@ mod tests {
             "repository_id":"trial","profile_id":"other",
             "start_revision":"8a555ada2f6e3ee41de2485ed13da508beaebaeb",
             "request":"Correct the retry formula",
-            "acceptance_criteria":["3 -> 8"],"deadline_seconds":300});
+            "acceptance_criteria":["3 -> 8"],
+            "change_constraints":{"protected_paths":["scripts/oracle.sh"],"allow_test_edits":false},
+            "deadline_seconds":300});
         let response = api
             .clone()
             .oneshot(json_request("/v1/development-tasks", &payload)?)
@@ -614,6 +616,14 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
         assert_eq!(body["phase"], "unsupported");
+        assert_eq!(
+            body["input"]["change_constraints"]["protected_paths"][0],
+            "scripts/oracle.sh"
+        );
+        assert_eq!(
+            body["input"]["change_constraints"]["allow_test_edits"],
+            false
+        );
         assert_eq!(body["input"]["deadline_seconds"], 300);
         assert_eq!(
             body["deadline_at"].as_i64(),

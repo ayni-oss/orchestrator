@@ -1,9 +1,9 @@
 use super::*;
 use crate::preparation::{PreparationStatus, PrepareRepositoryInput};
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 
 #[test]
-fn opening_a_legacy_development_database_adds_deadline_columns() -> Result<(), StoreError> {
+fn opening_a_legacy_development_database_adds_current_task_columns() -> Result<(), StoreError> {
     let connection = Connection::open_in_memory().map_err(StoreError::Database)?;
     connection
         .execute_batch(
@@ -19,7 +19,7 @@ fn opening_a_legacy_development_database_adds_deadline_columns() -> Result<(), S
             );",
         )
         .map_err(StoreError::Database)?;
-    let store = Store::from_connection(connection, 2)?;
+    let mut store = Store::from_connection(connection, 2)?;
     let columns = store
         .connection
         .prepare("PRAGMA table_info(development_tasks)")
@@ -30,6 +30,72 @@ fn opening_a_legacy_development_database_adds_deadline_columns() -> Result<(), S
         .map_err(StoreError::Database)?;
     assert!(columns.iter().any(|column| column == "deadline_seconds"));
     assert!(columns.iter().any(|column| column == "deadline_at"));
+    assert!(columns.iter().any(|column| column == "protected_paths"));
+    assert!(columns.iter().any(|column| column == "allow_test_edits"));
+    assert!(columns.iter().any(|column| column == "scope_violations"));
+
+    let repository = RepositoryBinding {
+        id: "trial".into(),
+        owner: "ayni-oss".into(),
+        repository: "sandbox".into(),
+        installation_id: 1,
+        base_branch: "main".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+    };
+    let profile = AgentProfile {
+        id: "other".into(),
+        provider: "anthropic".into(),
+        model: "example".into(),
+        secret_ref: "other-key".into(),
+    };
+    let input = DevelopmentInput {
+        repository_id: repository.id.clone(),
+        profile_id: profile.id.clone(),
+        start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
+        request: "Fix the formula".into(),
+        acceptance_criteria: vec!["3 -> 8".into()],
+        change_constraints: ChangeConstraints::default(),
+        deadline_seconds: None,
+    };
+    let id = TaskId::generate();
+    let key = IdempotencyKey::try_from("legacy-submission".to_owned())
+        .map_err(StoreError::InvalidLifecycleData)?;
+    store
+        .connection
+        .execute(
+            "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
+             profile_snapshot, start_revision, request, acceptance_criteria, phase, created_at,
+             updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'unsupported',1,1)",
+            params![
+                id.to_string(),
+                input.repository_id,
+                input.profile_id,
+                serde_json::to_string(&repository)
+                    .map_err(|_| StoreError::InvalidInput("could not serialize repository"))?,
+                serde_json::to_string(&profile)
+                    .map_err(|_| StoreError::InvalidInput("could not serialize profile"))?,
+                input.start_revision,
+                input.request,
+                serde_json::to_string(&input.acceptance_criteria).map_err(|_| {
+                    StoreError::InvalidInput("could not serialize acceptance criteria")
+                })?,
+            ],
+        )
+        .map_err(StoreError::Database)?;
+    store
+        .connection
+        .execute(
+            "INSERT INTO development_actions(action_key, task_id, action_kind, created_at)
+             VALUES (?1,?2,'submit',1)",
+            params![key.as_str(), id.to_string()],
+        )
+        .map_err(StoreError::Database)?;
+    let replay = store.submit_development(&key, &input)?;
+    assert_eq!(replay.id, id);
+    assert_eq!(
+        replay.input.change_constraints,
+        ChangeConstraints::default()
+    );
     Ok(())
 }
 
@@ -75,6 +141,7 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
         start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
+        change_constraints: ChangeConstraints::default(),
         deadline_seconds: None,
     };
     let key = IdempotencyKey::try_from("development-submit".to_owned())
@@ -96,6 +163,19 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
             ))
         ));
     }
+    let invalid_scope = DevelopmentInput {
+        change_constraints: ChangeConstraints {
+            protected_paths: vec!["../outside".into()],
+            allow_test_edits: false,
+        },
+        ..input
+    };
+    let invalid_scope_key = IdempotencyKey::try_from("invalid-scope".to_owned())
+        .map_err(StoreError::InvalidLifecycleData)?;
+    assert!(matches!(
+        store.submit_development(&invalid_scope_key, &invalid_scope),
+        Err(StoreError::InvalidChangeConstraints(_))
+    ));
     Ok(())
 }
 
@@ -122,6 +202,7 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
         start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
+        change_constraints: ChangeConstraints::default(),
         deadline_seconds: Some(300),
     };
     mark_ready(
@@ -187,6 +268,7 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
         request: "Fix the formula".into(),
         acceptance_criteria: vec!["3 -> 8".into()],
+        change_constraints: ChangeConstraints::default(),
         deadline_seconds: Some(300),
     };
     mark_ready(
@@ -261,6 +343,108 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
 }
 
 #[test]
+fn scope_rejection_is_durable_retryable_and_never_publishable() -> Result<(), StoreError> {
+    let mut store = Store::in_memory()?;
+    store.put_repository_binding(&RepositoryBinding {
+        id: "trial".into(),
+        owner: "ayni-oss".into(),
+        repository: "sandbox".into(),
+        installation_id: 11,
+        base_branch: "main".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+    })?;
+    store.put_agent_profile(&AgentProfile {
+        id: "coding".into(),
+        provider: "openai".into(),
+        model: "model-a".into(),
+        secret_ref: "openai-api".into(),
+    })?;
+    let revision = "8a555ada2f6e3ee41de2485ed13da508beaebaeb";
+    mark_ready(&mut store, "trial", revision)?;
+    let constraints = ChangeConstraints {
+        protected_paths: vec!["scripts/oracle.sh".into()],
+        allow_test_edits: false,
+    };
+    let task = store.submit_development(
+        &IdempotencyKey::try_from("submit-scope-rejection".to_owned())
+            .map_err(StoreError::InvalidLifecycleData)?,
+        &DevelopmentInput {
+            repository_id: "trial".into(),
+            profile_id: "coding".into(),
+            start_revision: revision.into(),
+            request: "Fix the formula without changing the oracle".into(),
+            acceptance_criteria: vec!["3 -> 8".into()],
+            change_constraints: constraints.clone(),
+            deadline_seconds: Some(300),
+        },
+    )?;
+    assert!(store.development_phase(
+        task.id,
+        DevelopmentPhase::Queued,
+        DevelopmentPhase::Coding
+    )?);
+    assert!(store.record_candidate(task.id, "4e67795c0cba21bd82c21bdd6c921417fbe29ff6")?);
+    assert!(store.development_phase(
+        task.id,
+        DevelopmentPhase::ValidationQueued,
+        DevelopmentPhase::Validating,
+    )?);
+    let violations = vec![
+        "protected path \"scripts/oracle.sh\" covers changed path \"scripts/oracle.sh\"".into(),
+    ];
+    let oversized = vec!["violation".into(); ayni_orchestrator_domain::MAX_SCOPE_VIOLATIONS + 1];
+    assert!(matches!(
+        store.fail_validation(
+            task.id,
+            "scope_rejected",
+            Some("sha256:scope-evidence"),
+            Some(false),
+            &oversized,
+        ),
+        Err(StoreError::InvalidInput(
+            "scope violations exceed durable storage limits"
+        ))
+    ));
+    assert_eq!(
+        store.development_task(task.id)?.phase,
+        DevelopmentPhase::Validating
+    );
+    assert!(store.fail_validation(
+        task.id,
+        "scope_rejected",
+        Some("sha256:scope-evidence"),
+        Some(false),
+        &violations,
+    )?);
+    assert!(!store.fail_validation(
+        task.id,
+        "scope_rejected",
+        Some("sha256:scope-evidence"),
+        Some(false),
+        &violations,
+    )?);
+    let rejected = store.development_task(task.id)?;
+    assert_eq!(rejected.phase, DevelopmentPhase::Failed);
+    assert_eq!(rejected.failure.as_deref(), Some("scope_rejected"));
+    assert_eq!(rejected.scope_violations, violations);
+    assert!(
+        store
+            .begin_publication(task.id, "fix(example): repair formula", "body")
+            .is_err()
+    );
+
+    let retry = store.retry_development(
+        task.id,
+        &IdempotencyKey::try_from("retry-scope-rejection".to_owned())
+            .map_err(StoreError::InvalidLifecycleData)?,
+        None,
+    )?;
+    assert_eq!(retry.retry_of, Some(task.id));
+    assert_eq!(retry.input.change_constraints, constraints);
+    Ok(())
+}
+
+#[test]
 fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
     let mut store = Store::in_memory()?;
     store.put_repository_binding(&RepositoryBinding {
@@ -289,6 +473,10 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
             start_revision: revision.into(),
             request: "Fix the formula".into(),
             acceptance_criteria: vec!["3 -> 8".into()],
+            change_constraints: ChangeConstraints {
+                protected_paths: vec!["scripts/oracle.sh".into()],
+                allow_test_edits: false,
+            },
             deadline_seconds: Some(300),
         },
     )?;
@@ -304,6 +492,10 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
     assert_eq!(follow_up.retry_of, Some(task.id));
     assert_eq!(follow_up.deadline_at, task.deadline_at);
     assert_eq!(follow_up.input.deadline_seconds, Some(300));
+    assert_eq!(
+        follow_up.input.change_constraints,
+        task.input.change_constraints
+    );
     assert!(follow_up.input.request.contains("Round down"));
     assert_eq!(
         store

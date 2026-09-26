@@ -35,7 +35,10 @@ task, checkpoint, validation result, or pull request.
 Dependency-manifest evolution is unsupported by the current profile. Changes to
 the Ayni lock or Rust dependency/toolchain manifests return
 `dependency_change_unsupported` and do not publish. Protected Ayni policy changes
-return `policy_rejected`.
+return `policy_rejected`. Each task also freezes normalized protected paths and
+whether test edits are authorized. Final validation compares the complete diff
+and supported Rust test syntax with the starting revision; violations return
+`scope_rejected` and cannot publish.
 
 ## Access and operating limits
 

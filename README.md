@@ -17,6 +17,7 @@ independently useful local CLI in the public
 - content-addressed repository preparation and compatible reuse;
 - bounded OpenAI-backed development with retained checkpoints;
 - independent Ayni validation of a frozen candidate;
+- frozen protected-path and test-edit constraints enforced before publication;
 - retained, digest-bound result artifacts; and
 - a browser workflow for repository readiness, tasks, recovery actions, and
   results.

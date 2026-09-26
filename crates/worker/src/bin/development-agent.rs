@@ -220,6 +220,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let start_revision = env::var("DEVELOPMENT_START_REVISION")?;
     let request = env::var("DEVELOPMENT_REQUEST")?;
     let criteria = env::var("DEVELOPMENT_ACCEPTANCE_CRITERIA")?;
+    let change_constraints = env::var("DEVELOPMENT_CHANGE_CONSTRAINTS")?;
     let model = env::var("AGENT_MODEL")?;
     let key = env::var("OPENAI_API_KEY")?;
     if git(&workspace, &["rev-parse", "HEAD"])? != start_revision {
@@ -234,7 +235,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .build();
     let response = agent
         .prompt(format!(
-            "Request: {request}\nAcceptance criteria: {criteria}"
+            "Request: {request}\nAcceptance criteria: {criteria}\nFrozen change constraints: {change_constraints}. Do not modify protected paths or tests unless these constraints explicitly allow it."
         ))
         .max_turns(24)
         .await?;
