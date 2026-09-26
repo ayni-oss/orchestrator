@@ -1,24 +1,64 @@
 //! Bounded coding agent. It receives a checkout, a model key, and no
 //! Kubernetes or GitHub App credentials.
 
+use ayni_orchestrator_domain::ModelUsageStage;
+use ayni_orchestrator_worker::model_usage::{TrackedModel, UsageTracker};
 use rig_agent::{
-    client::AgentClientExt,
+    client::AgentModelExt,
     completion::Prompt,
     tool::{Tool, ToolContext},
 };
-use rig_core::providers::openai;
+use rig_core::{client::completion::CompletionClient, providers::openai};
 use serde::Deserialize;
 use serde_json::json;
 use std::{
-    env, fs, io,
+    env, fs,
+    io::{self, Write as _},
+    os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
-    process::{Command, ExitCode},
+    process::{Command, ExitCode, Stdio},
     time::Instant,
 };
 use tracing::{Instrument, error, info, info_span};
 
 const MAX_TOOL_OUTPUT: usize = 32_000;
+const TOOL_UID: &str = "10002";
+const WORKSPACE_GID: &str = "10001";
+const SETPRIV: &str = "/usr/bin/setpriv";
 const CANDIDATE_COMMIT_TITLE: &str = "chore(agent): apply requested change";
+
+fn isolated_process(program: &str) -> Command {
+    let mut command = Command::new(SETPRIV);
+    command
+        .args([
+            "--reuid",
+            TOOL_UID,
+            "--regid",
+            WORKSPACE_GID,
+            "--clear-groups",
+            "--bounding-set=-all",
+            "--inh-caps=-all",
+            "--ambient-caps=-all",
+            "--no-new-privs",
+            program,
+        ])
+        .env_clear()
+        .env(
+            "PATH",
+            env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".into()),
+        )
+        .env("HOME", "/workspace")
+        .env(
+            "CARGO_HOME",
+            env::var("CARGO_HOME").unwrap_or_else(|_| "/workspace/.cargo".into()),
+        )
+        .env(
+            "RUSTUP_HOME",
+            env::var("RUSTUP_HOME").unwrap_or_else(|_| "/usr/local/rustup".into()),
+        )
+        .env("GIT_TERMINAL_PROMPT", "0");
+    command
+}
 
 #[derive(Clone)]
 struct Workspace(PathBuf);
@@ -88,7 +128,13 @@ impl Tool for ReadFile {
         _: &mut ToolContext,
         args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
-        let contents = fs::read_to_string(self.0.path(&args.path)?)?;
+        let path = self.0.path(&args.path)?;
+        let output = isolated_process("cat").arg("--").arg(path).output()?;
+        if !output.status.success() {
+            return Err(io::Error::other("workspace file read failed"));
+        }
+        let contents = String::from_utf8(output.stdout)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "file is not UTF-8"))?;
         Ok(truncate(contents))
     }
 }
@@ -125,7 +171,22 @@ impl Tool for WriteFile {
                 "file exceeds 1 MiB",
             ));
         }
-        fs::write(self.0.path(&args.path)?, args.content)?;
+        let path = self.0.path(&args.path)?;
+        let mut child = isolated_process("sh")
+            .args(["-c", "umask 0002; exec tee -- \"$1\"", "write-file"])
+            .arg(path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("workspace writer has no stdin"))?
+            .write_all(args.content.as_bytes())?;
+        if !child.wait()?.success() {
+            return Err(io::Error::other("workspace file write failed"));
+        }
         Ok("file written".into())
     }
 }
@@ -161,9 +222,22 @@ impl Tool for RunCommand {
                 "command is too long",
             ));
         }
-        let output = tokio::process::Command::new("sh")
-            .arg("-lc")
-            .arg(&args.command)
+        let mut command = tokio::process::Command::new(SETPRIV);
+        command
+            .args([
+                "--reuid",
+                TOOL_UID,
+                "--regid",
+                WORKSPACE_GID,
+                "--clear-groups",
+                "--bounding-set=-all",
+                "--inh-caps=-all",
+                "--ambient-caps=-all",
+                "--no-new-privs",
+                "sh",
+                "-lc",
+            ])
+            .arg(format!("umask 0002; {}", args.command))
             .current_dir(&self.0.0)
             .env_clear()
             .env(
@@ -180,13 +254,38 @@ impl Tool for RunCommand {
                 env::var("RUSTUP_HOME").unwrap_or_else(|_| "/usr/local/rustup".into()),
             )
             .env("GIT_TERMINAL_PROMPT", "0")
-            .output()
-            .await?;
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "safe.directory")
+            .env("GIT_CONFIG_VALUE_0", "*");
+        let output = command.output().await?;
         Ok(format!(
             "exit={:?}\nstdout:\n{}\nstderr:\n{}",
             output.status.code(),
             truncate(String::from_utf8_lossy(&output.stdout).into_owned()),
             truncate(String::from_utf8_lossy(&output.stderr).into_owned())
+        ))
+    }
+}
+
+fn verify_tool_isolation(
+    usage_directory: &Path,
+    checkpoint_directory: &Path,
+) -> Result<(), io::Error> {
+    let status = isolated_process("sh")
+        .args([
+            "-c",
+            "test ! -r \"$1\" && test ! -w \"$1\" && test ! -w \"$2\"",
+            "usage-isolation-check",
+        ])
+        .arg(usage_directory)
+        .arg(checkpoint_directory)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "repository command identity can access the usage spool",
         ))
     }
 }
@@ -201,7 +300,9 @@ fn truncate(mut value: String) -> String {
 }
 
 fn git(workspace: &Path, args: &[&str]) -> Result<String, io::Error> {
-    let output = Command::new("git")
+    let output = isolated_process("git")
+        .arg("-c")
+        .arg(format!("safe.directory={}", workspace.display()))
         .args(args)
         .current_dir(workspace)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -223,13 +324,20 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let request = env::var("DEVELOPMENT_REQUEST")?;
     let criteria = env::var("DEVELOPMENT_ACCEPTANCE_CRITERIA")?;
     let change_constraints = env::var("DEVELOPMENT_CHANGE_CONSTRAINTS")?;
+    let provider = env::var("AGENT_PROVIDER")?;
     let model = env::var("AGENT_MODEL")?;
     let key = env::var("OPENAI_API_KEY")?;
+    let usage_directory = PathBuf::from(env::var("DEVELOPMENT_USAGE_DIR")?);
+    let usage = UsageTracker::new(&usage_directory, ModelUsageStage::Coding, &provider, &model)?;
+    fs::create_dir_all(&checkpoint)?;
+    fs::set_permissions(&checkpoint, fs::Permissions::from_mode(0o700))?;
+    verify_tool_isolation(&usage_directory, &checkpoint)?;
     if git(&workspace, &["rev-parse", "HEAD"])? != start_revision {
         return Err("checkout does not match the task starting revision".into());
     }
     let client = openai::Client::new(&key)?;
-    let agent = client.agent(&model)
+    let agent = TrackedModel::new(client.completion_model(&model), usage.clone())
+        .into_agent_builder()
         .preamble("You are a coding agent in an isolated checkout. Read AGENTS.md and repository guidance. Make only changes needed for the request, run focused checks, and report what you changed. Do not publish a branch or PR. The controller will independently validate your final candidate. If essential information is missing and no safe bounded change can be made, make no edits and respond exactly with INPUT_REQUIRED: followed by one concrete question.")
         .tool(ReadFile(Workspace(workspace.clone())))
         .tool(WriteFile(Workspace(workspace.clone())))
@@ -237,7 +345,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .build();
     let provider_span = info_span!(
         "provider.call",
-        provider = "openai",
+        provider = %provider,
         model = %model,
         stage = "coding"
     );
@@ -249,10 +357,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             ))
             .max_turns(24)
             .await;
+        if let Err(error) = &result {
+            let provider_error = error.provider_response_json().ok().flatten();
+            if usage.fail_pending(provider_error.as_ref()).is_err() {
+                error!(reason_code = "usage_spool_failed", "provider usage spool failed");
+            }
+        }
         info!(
             outcome = if result.is_ok() { "succeeded" } else { "failed" },
             latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            "provider call completed"
+            "provider run completed"
         );
         result
     }
@@ -263,8 +377,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         if question.is_empty() {
             return Err("agent requested input without a question".into());
         }
-        fs::create_dir_all(&checkpoint)?;
         fs::write(checkpoint.join("input-request.txt"), question)?;
+        fs::set_permissions(&checkpoint, fs::Permissions::from_mode(0o750))?;
         return Err("maintainer input is required".into());
     }
     checkpoint_candidate(&workspace, &checkpoint, &response)
@@ -298,20 +412,25 @@ fn checkpoint_candidate(
         ],
     )?;
     let commit = git(workspace, &["rev-parse", "HEAD"])?;
-    let bundle = checkpoint.join("candidate.bundle");
+    let temporary_bundle = workspace.join(".git/ayni-candidate.bundle");
     git(
         workspace,
         &[
             "bundle",
             "create",
-            bundle.to_str().ok_or("invalid bundle path")?,
+            temporary_bundle
+                .to_str()
+                .ok_or("invalid temporary bundle path")?,
             "HEAD",
         ],
     )?;
+    fs::copy(&temporary_bundle, checkpoint.join("candidate.bundle"))?;
+    fs::remove_file(temporary_bundle)?;
     fs::write(
         checkpoint.join("candidate-commit.txt"),
         format!("{commit}\n"),
     )?;
+    fs::set_permissions(checkpoint, fs::Permissions::from_mode(0o750))?;
     Ok(())
 }
 
@@ -334,6 +453,13 @@ async fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repository_commands_use_a_distinct_unprivileged_identity() {
+        assert_eq!(SETPRIV, "/usr/bin/setpriv");
+        assert_eq!(TOOL_UID, "10002");
+        assert_ne!(TOOL_UID, WORKSPACE_GID);
+    }
 
     #[test]
     fn candidate_commit_title_is_task_neutral() {

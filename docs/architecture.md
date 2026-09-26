@@ -21,7 +21,7 @@ The local profile uses four persistent volume claims:
 
 | Claim | Contents |
 | --- | --- |
-| `control-plane-state` | SQLite task, attempt, idempotency, preparation, and external-action state |
+| `control-plane-state` | SQLite task, attempt, idempotency, lifecycle, provider-usage, preparation, and external-action state |
 | `development-checkpoints` | Candidate Git bundles and bounded agent checkpoints |
 | `managed-check-evidence` | Original Ayni artifacts and digest-bound validation manifests |
 | `prepared-environments` | Ayni image archives, build records, and preparation manifests |
@@ -30,8 +30,13 @@ Disposable Jobs never become the authoritative record. Development transitions
 also append an idempotent lifecycle event in the same SQLite transaction as the
 mutable task phase. These events retain logical stage outcomes and stable reason
 codes after Job expiry or process restart, allowing elapsed stage durations to be
-reconstructed. Normal cleanup preserves all four claims. The single-writer
-SQLite volume constrains the current profile to one control-plane replica.
+reconstructed. Coding and PR-authoring workers also atomically spool bounded,
+prompt-free per-interaction provider usage into mode-0700 retained checkpoint
+subpaths that repository command processes cannot access. Reconciliation
+imports those reports idempotently into SQLite and derives explicitly versioned
+cost estimates without retaining provider content. Normal cleanup preserves all
+four claims. The single-writer SQLite volume constrains the current profile to
+one control-plane replica.
 
 ## Repository and task flow
 

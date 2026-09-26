@@ -6,8 +6,52 @@ use crate::{
     orchestration::{Store, StoreError},
 };
 use ayni_orchestrator_domain::{GitRevision, IdempotencyKey, TaskId, scope_violations_are_bounded};
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use tracing::info;
+
+pub fn backfill_development_lifecycle(connection: &Connection) -> Result<(), StoreError> {
+    // Older databases did not retain a timeline. Record only the current snapshot and
+    // leave lifecycle_complete false rather than inventing elapsed stage history.
+    connection
+        .execute_batch(
+            "INSERT OR IGNORE INTO development_lifecycle_events
+                (task_id, event_key, event_time, stage, outcome, reason_code)
+             SELECT id, 'legacy_snapshot', updated_at,
+                CASE phase
+                    WHEN 'queued' THEN 'queue'
+                    WHEN 'coding' THEN 'coding'
+                    WHEN 'waiting_for_input' THEN 'coding'
+                    WHEN 'validation_queued' THEN 'validation'
+                    WHEN 'validating' THEN 'validation'
+                    WHEN 'pr_queued' THEN 'pr_preparation'
+                    WHEN 'preparing_pr' THEN 'pr_preparation'
+                    WHEN 'completed' THEN 'pr_preparation'
+                    WHEN 'unsupported' THEN 'queue'
+                    ELSE 'unknown'
+                END,
+                CASE phase
+                    WHEN 'queued' THEN 'queued'
+                    WHEN 'coding' THEN 'started'
+                    WHEN 'waiting_for_input' THEN 'blocked'
+                    WHEN 'validation_queued' THEN 'queued'
+                    WHEN 'validating' THEN 'started'
+                    WHEN 'pr_queued' THEN 'queued'
+                    WHEN 'preparing_pr' THEN 'started'
+                    WHEN 'completed' THEN 'succeeded'
+                    WHEN 'failed' THEN 'failed'
+                    WHEN 'cancelled' THEN 'cancelled'
+                    ELSE 'unsupported'
+                END,
+                CASE phase
+                    WHEN 'unsupported' THEN 'unsupported_provider'
+                    WHEN 'failed' THEN 'legacy_failure'
+                    WHEN 'cancelled' THEN 'operator_cancelled'
+                    ELSE NULL
+                END
+             FROM development_tasks WHERE lifecycle_complete=0;",
+        )
+        .map_err(StoreError::Database)
+}
 
 const fn stage_for_phase(phase: DevelopmentPhase) -> DevelopmentLifecycleStage {
     match phase {
@@ -343,6 +387,9 @@ impl Store {
         let mut statement = self.connection.prepare(
             "SELECT id FROM development_tasks WHERE phase IN ('queued', 'coding', 'validation_queued',
              'validating', 'pr_queued', 'preparing_pr', 'cancelled')
+             OR (phase IN ('completed','failed','waiting_for_input') AND EXISTS (
+                SELECT 1 FROM development_model_usage_collection collection
+                WHERE collection.task_id=development_tasks.id AND collection.complete=0))
              ORDER BY created_at ASC"
         ).map_err(StoreError::Database)?;
         let ids = statement

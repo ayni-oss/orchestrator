@@ -4,10 +4,13 @@
 use ayni_orchestrator_domain::{
     ChangeConstraints, GitRevision, IdempotencyKey, Sha256Digest, TaskId,
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
-use crate::orchestration::{Store, StoreError};
+use crate::{
+    model_usage::TaskModelUsage,
+    orchestration::{Store, StoreError},
+};
 
 const SUPPORTED_REPOSITORY: &str = "ayni-oss/sandbox";
 
@@ -129,6 +132,20 @@ fn persisted_deadline_seconds(value: Option<u64>) -> Result<Option<i64>, StoreEr
         .map(i64::try_from)
         .transpose()
         .map_err(|_| StoreError::InvalidInput("deadline seconds exceed storage bounds"))
+}
+
+fn insert_model_usage_collection(
+    transaction: &rusqlite::Transaction<'_>,
+    id: TaskId,
+    complete: bool,
+) -> Result<(), StoreError> {
+    transaction
+        .execute(
+            "INSERT INTO development_model_usage_collection(task_id, complete) VALUES (?1, ?2)",
+            params![id.to_string(), complete],
+        )
+        .map_err(StoreError::Database)?;
+    Ok(())
 }
 
 fn retry_request(
@@ -277,6 +294,7 @@ pub struct DevelopmentTask {
     pub failure: Option<String>,
     pub lifecycle_complete: bool,
     pub lifecycle: Vec<DevelopmentLifecycleEvent>,
+    pub model_usage: TaskModelUsage,
 }
 
 pub struct PublicationAction {
@@ -342,50 +360,6 @@ impl DevelopmentPhase {
 
 include!("development_validation.rs");
 
-fn backfill_development_lifecycle(connection: &Connection) -> Result<(), StoreError> {
-    // Older databases did not retain a timeline. Record only the current snapshot and
-    // leave lifecycle_complete false rather than inventing elapsed stage history.
-    connection
-        .execute_batch(
-            "INSERT OR IGNORE INTO development_lifecycle_events
-                (task_id, event_key, event_time, stage, outcome, reason_code)
-             SELECT id, 'legacy_snapshot', updated_at,
-                CASE phase
-                    WHEN 'queued' THEN 'queue'
-                    WHEN 'coding' THEN 'coding'
-                    WHEN 'waiting_for_input' THEN 'coding'
-                    WHEN 'validation_queued' THEN 'validation'
-                    WHEN 'validating' THEN 'validation'
-                    WHEN 'pr_queued' THEN 'pr_preparation'
-                    WHEN 'preparing_pr' THEN 'pr_preparation'
-                    WHEN 'completed' THEN 'pr_preparation'
-                    WHEN 'unsupported' THEN 'queue'
-                    ELSE 'unknown'
-                END,
-                CASE phase
-                    WHEN 'queued' THEN 'queued'
-                    WHEN 'coding' THEN 'started'
-                    WHEN 'waiting_for_input' THEN 'blocked'
-                    WHEN 'validation_queued' THEN 'queued'
-                    WHEN 'validating' THEN 'started'
-                    WHEN 'pr_queued' THEN 'queued'
-                    WHEN 'preparing_pr' THEN 'started'
-                    WHEN 'completed' THEN 'succeeded'
-                    WHEN 'failed' THEN 'failed'
-                    WHEN 'cancelled' THEN 'cancelled'
-                    ELSE 'unsupported'
-                END,
-                CASE phase
-                    WHEN 'unsupported' THEN 'unsupported_provider'
-                    WHEN 'failed' THEN 'legacy_failure'
-                    WHEN 'cancelled' THEN 'operator_cancelled'
-                    ELSE NULL
-                END
-             FROM development_tasks WHERE lifecycle_complete=0;",
-        )
-        .map_err(StoreError::Database)
-}
-
 impl Store {
     pub(crate) fn migrate_development(&self) -> Result<(), StoreError> {
         self.connection
@@ -429,6 +403,26 @@ impl Store {
             );
             CREATE INDEX IF NOT EXISTS development_lifecycle_task_idx
                 ON development_lifecycle_events(task_id, event_id);
+            CREATE TABLE IF NOT EXISTS development_model_usage_collection (
+                task_id TEXT PRIMARY KEY REFERENCES development_tasks(id),
+                complete INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS development_model_usage (
+                task_id TEXT NOT NULL REFERENCES development_tasks(id),
+                stage TEXT NOT NULL, call_id TEXT NOT NULL,
+                provider TEXT NOT NULL, model TEXT NOT NULL, resolved_model TEXT,
+                started_at_ms INTEGER NOT NULL, completed_at_ms INTEGER NOT NULL,
+                latency_ms INTEGER NOT NULL, outcome TEXT NOT NULL,
+                input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
+                reasoning_tokens INTEGER, total_tokens INTEGER,
+                estimated_cost_micros INTEGER, pricing_currency TEXT, pricing_version TEXT,
+                priced_input_tokens INTEGER, priced_cached_input_tokens INTEGER,
+                priced_output_tokens INTEGER, input_rate INTEGER, cached_input_rate INTEGER,
+                output_rate INTEGER,
+                PRIMARY KEY(task_id, stage, call_id)
+            );
+            CREATE INDEX IF NOT EXISTS development_model_usage_task_idx
+                ON development_model_usage(task_id, stage, call_id);
             CREATE TABLE IF NOT EXISTS publication_actions (
                 task_id TEXT PRIMARY KEY REFERENCES development_tasks(id),
                 branch_name TEXT NOT NULL UNIQUE, candidate_commit TEXT NOT NULL,
@@ -466,7 +460,7 @@ impl Store {
                     .map_err(StoreError::Database)?;
             }
         }
-        backfill_development_lifecycle(&self.connection)
+        super::development_lifecycle::backfill_development_lifecycle(&self.connection)
     }
 
     pub fn put_repository_binding(&self, binding: &RepositoryBinding) -> Result<(), StoreError> {
@@ -553,6 +547,7 @@ impl Store {
                 input.change_constraints.allow_test_edits, phase.as_str(), preparation_id, now,
                 deadline_seconds, deadline_at],
         ).map_err(StoreError::Database)?;
+        insert_model_usage_collection(&transaction, id, phase == DevelopmentPhase::Unsupported)?;
         super::development_lifecycle::insert_phase_events(
             &transaction,
             id,
@@ -675,6 +670,7 @@ impl Store {
             })
             .transpose()?;
         let lifecycle = self.development_lifecycle(id)?;
+        let model_usage = self.task_model_usage(id)?;
         Ok(DevelopmentTask {
             id,
             input: DevelopmentInput {
@@ -709,6 +705,7 @@ impl Store {
             failure: row.18,
             lifecycle_complete: row.23,
             lifecycle,
+            model_usage,
         })
     }
 
@@ -795,6 +792,7 @@ impl Store {
                 ],
             )
             .map_err(StoreError::Database)?;
+        insert_model_usage_collection(&transaction, id, false)?;
         super::development_lifecycle::insert_phase_events(
             &transaction,
             id,
