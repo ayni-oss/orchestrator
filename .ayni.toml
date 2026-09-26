@@ -12,6 +12,15 @@ enabled = ["rust"]
 [concurrency]
 amount = 1
 
+# Fits the standard two-core GitHub-hosted runner while remaining explicit for
+# local and orchestrated managed checks.
+[environment.resources]
+cpus = 2
+memory_mib = 6144
+memory_swap_mib = 6144
+pids = 2048
+nofile = 8192
+
 [rust]
 roots = ["."]
 
