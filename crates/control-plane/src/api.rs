@@ -72,6 +72,7 @@ impl IntoResponse for ApiError {
             | Self::Store(
                 StoreError::InvalidIdentity(_)
                 | StoreError::InvalidInput(_)
+                | StoreError::InvalidChangeConstraints(_)
                 | StoreError::RetryNotAllowed(_)
                 | StoreError::MaxAttemptsReached { .. }
                 | StoreError::TaskCancelled(_)

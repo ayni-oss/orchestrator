@@ -131,9 +131,10 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev logs \
 
 The browser exposes submission, live phase refresh, cancellation, retry,
 requested-input follow-up, draft PR links, and trusted evidence. A task freezes
-its repository/profile snapshots, start revision, request, criteria, lock, and
-preparation identity. Retry creates a linked new task; it never mutates prior
-evidence. Requested input is appended only to that linked follow-up.
+its repository/profile snapshots, start revision, request, criteria, protected
+paths, test-edit authorization, lock, and preparation identity. Retry creates a
+linked new task with the same constraints; it never mutates prior evidence.
+Requested input is appended only to that linked follow-up.
 
 Cancellation sets durable intent before deleting an active Job. A late worker
 cannot revive the task. If the control plane restarts, deterministic Job names,
@@ -143,9 +144,11 @@ reconciliation to continue without a second external effect.
 Dependency evolution is explicitly unsupported by the current profile. Candidate edits
 to `.ayni.lock`, `Cargo.toml`, `Cargo.lock`, or `rust-toolchain.toml` produce
 `dependency_change_unsupported` and no PR. `.ayni.toml` edits produce
-`policy_rejected`. Create a separately reviewed environment update outside the
-orchestrator, enroll its new lock digest, and prepare its revision before
-submitting feature work.
+`policy_rejected`. A candidate that changes a task-protected path or edits tests
+without frozen authorization produces `scope_rejected`; the task UI lists each
+violation, and no publication Job is scheduled. Create a separately reviewed
+environment update outside the orchestrator, enroll its new lock digest, and
+prepare its revision before submitting feature work.
 
 ## Update without losing data
 

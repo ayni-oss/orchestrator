@@ -183,6 +183,7 @@ impl DevelopmentReconciler {
                     candidate,
                     &task.input.start_revision,
                     &task.repository.lock_sha256,
+                    &task.input.change_constraints,
                 ) {
                     Ok(verified) => verified,
                     Err(error) => {
@@ -233,11 +234,18 @@ impl DevelopmentReconciler {
                 candidate,
                 &task.input.start_revision,
                 &task.repository.lock_sha256,
+                &task.input.change_constraints,
             )
         });
-        if let Some((digest, edited, outcome)) = record {
+        if let Some((digest, edited, outcome, scope_violations)) = record {
             self.with_store(|store| {
-                store.fail_validation(task.id, &outcome, Some(&digest), Some(edited))
+                store.fail_validation(
+                    task.id,
+                    &outcome,
+                    Some(&digest),
+                    Some(edited),
+                    &scope_violations,
+                )
             })?;
         } else {
             self.fail(task.id, "validation Job failed or disappeared")?;
@@ -258,6 +266,7 @@ impl DevelopmentReconciler {
             candidate,
             &task.input.start_revision,
             &task.repository.lock_sha256,
+            &task.input.change_constraints,
         ) else {
             return self.fail(task.id, "publication evidence changed");
         };
@@ -478,6 +487,8 @@ impl DevelopmentReconciler {
         });
         let criteria = serde_json::to_string(&task.input.acceptance_criteria)
             .map_err(|error| error.to_string())?;
+        let change_constraints = serde_json::to_string(&task.input.change_constraints)
+            .map_err(|error| error.to_string())?;
         let container = json!({"name":"coding-agent","image":self.worker_image,
             "imagePullPolicy":"Never","command":["/usr/local/bin/development-agent"],
             "env":[{"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
@@ -485,6 +496,7 @@ impl DevelopmentReconciler {
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
                 {"name":"DEVELOPMENT_REQUEST","value":task.input.request},
                 {"name":"DEVELOPMENT_ACCEPTANCE_CRITERIA","value":criteria},
+                {"name":"DEVELOPMENT_CHANGE_CONSTRAINTS","value":change_constraints},
                 {"name":"AGENT_MODEL","value":task.agent_profile.model},
                 {"name":"CARGO_HOME","value":"/workspace/.cargo"},
                 {"name":"OPENAI_API_KEY","valueFrom":{"secretKeyRef":{"name":task.agent_profile.secret_ref,"key":"api-key"}}}],
@@ -518,6 +530,8 @@ impl DevelopmentReconciler {
             .preparation_id
             .as_deref()
             .ok_or("validation has no ready environment preparation")?;
+        let change_constraints = serde_json::to_string(&task.input.change_constraints)
+            .map_err(|error| error.to_string())?;
         let engine = json!({"name":"engine","image":"docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce",
             "restartPolicy":"Always","env":[{"name":"DOCKER_TLS_CERTDIR","value":""}],
             "securityContext":{"privileged":true},
@@ -538,7 +552,8 @@ impl DevelopmentReconciler {
                 {"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
                 {"name":"DEVELOPMENT_EVIDENCE_DIR","value":"/evidence"},
                 {"name":"DEVELOPMENT_PREPARATION_DIR","value":format!("/preparations/{preparation_id}")},
-                {"name":"DEVELOPMENT_PREPARATION_ID","value":preparation_id}],
+                {"name":"DEVELOPMENT_PREPARATION_ID","value":preparation_id},
+                {"name":"DEVELOPMENT_CHANGE_CONSTRAINTS","value":change_constraints}],
             "securityContext":worker_security(),
             "resources":{"requests":{"cpu":"250m","memory":"256Mi"},
                 "limits":{"cpu":"500m","memory":"512Mi"}},
@@ -568,9 +583,10 @@ impl DevelopmentReconciler {
             .as_deref()
             .ok_or("PR author has no candidate")?;
         let context = format!(
-            "Request: {}\nAcceptance criteria: {:?}\nCandidate commit: {}\nValidation manifest: {}\nPolicy or test edits: {}\nChanged paths: {}\nAgent summary: {}",
+            "Request: {}\nAcceptance criteria: {:?}\nChange constraints: {:?}\nCandidate commit: {}\nValidation manifest: {}\nPolicy or test edits: {}\nChanged paths: {}\nAgent summary: {}",
             task.input.request,
             task.input.acceptance_criteria,
+            task.input.change_constraints,
             candidate,
             task.validation_manifest.as_deref().unwrap_or("none"),
             task.policy_or_test_edits.unwrap_or(false),

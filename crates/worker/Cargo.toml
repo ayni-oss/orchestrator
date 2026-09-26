@@ -9,12 +9,15 @@ publish.workspace = true
 
 [dependencies]
 ayni-orchestrator-domain = { path = "../domain" }
+proc-macro2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 rig-agent.workspace = true
 rig-core.workspace = true
 reqwest.workspace = true
+quote.workspace = true
+syn.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

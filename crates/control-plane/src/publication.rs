@@ -6,12 +6,16 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use ayni_orchestrator_domain::TaskId;
+use ayni_orchestrator_domain::{
+    ChangeConstraints, MAX_CHANGED_PATH_BYTES, MAX_CHANGED_PATHS, TaskId, repository_path_is_valid,
+    scope_violations_are_bounded,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     env, fs,
+    io::Read,
     path::{Path as FilePath, PathBuf},
     process::Command,
     sync::Arc,
@@ -53,10 +57,14 @@ struct Manifest {
     start_revision: String,
     candidate_commit: String,
     lock_sha256: String,
+    #[serde(default)]
+    change_constraints: Option<ChangeConstraints>,
     outcome: String,
     check_exit_code: i32,
     policy_edited: bool,
     tests_edited: bool,
+    #[serde(default)]
+    scope_violations: Vec<String>,
     #[serde(default)]
     changed_paths: Vec<String>,
     #[serde(default)]
@@ -80,10 +88,12 @@ pub struct EvidenceView {
     pub start_revision: String,
     pub candidate_commit: String,
     pub lock_sha256: String,
+    pub change_constraints: Option<ChangeConstraints>,
     pub preparation_id: Option<String>,
     pub preparation_reused: bool,
     pub policy_edited: bool,
     pub tests_edited: bool,
+    pub scope_violations: Vec<String>,
     pub changed_paths: Vec<String>,
     pub artifacts: Vec<EvidenceArtifactView>,
 }
@@ -92,6 +102,45 @@ pub struct EvidenceView {
 pub struct EvidenceArtifactView {
     pub name: String,
     pub sha256: String,
+}
+
+const MAX_VALIDATION_MANIFEST_BYTES: u64 = 1_048_576;
+
+fn read_manifest(path: &FilePath) -> Result<Vec<u8>, String> {
+    let file = fs::File::open(path).map_err(|_| "final validation manifest is absent")?;
+    let mut bytes = Vec::new();
+    file.take(MAX_VALIDATION_MANIFEST_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "final validation manifest could not be read")?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_VALIDATION_MANIFEST_BYTES {
+        return Err("final validation manifest exceeds the retained evidence limit".into());
+    }
+    Ok(bytes)
+}
+
+fn manifest_covers_change_constraints(
+    manifest: &Manifest,
+    constraints: &ChangeConstraints,
+) -> bool {
+    manifest.schema_version == 2
+        && manifest.change_constraints.as_ref() == Some(constraints)
+        && manifest.scope_violations.is_empty()
+        && manifest.changed_paths.len() <= MAX_CHANGED_PATHS
+        && manifest
+            .changed_paths
+            .iter()
+            .map(String::len)
+            .sum::<usize>()
+            <= MAX_CHANGED_PATH_BYTES
+        && manifest
+            .changed_paths
+            .iter()
+            .all(|path| repository_path_is_valid(path))
+        && manifest
+            .changed_paths
+            .iter()
+            .all(|path| constraints.protecting_path(path).is_none())
+        && (constraints.allow_test_edits || !manifest.tests_edited)
 }
 
 impl PublisherState {
@@ -107,21 +156,26 @@ impl PublisherState {
     }
 
     pub(crate) fn evidence_view(&self, task: &DevelopmentTask) -> Result<EvidenceView, String> {
-        let bytes = fs::read(
-            self.evidence_root
+        let bytes = read_manifest(
+            &self
+                .evidence_root
                 .join(task.id.to_string())
                 .join("manifest.json"),
-        )
-        .map_err(|_| "final validation manifest is absent".to_owned())?;
+        )?;
         let digest = format!("sha256:{:x}", Sha256::digest(&bytes));
         if task.validation_manifest.as_deref() != Some(&digest) {
             return Err("retained manifest differs from the durable task record".into());
         }
         let manifest: Manifest = serde_json::from_slice(&bytes)
             .map_err(|_| "final validation manifest is malformed".to_owned())?;
-        if task.candidate_commit.as_deref() != Some(&manifest.candidate_commit)
+        if !matches!(manifest.schema_version, 1 | 2)
+            || task.candidate_commit.as_deref() != Some(&manifest.candidate_commit)
             || task.input.start_revision != manifest.start_revision
             || task.repository.lock_sha256 != manifest.lock_sha256
+            || (manifest.schema_version == 2
+                && manifest.change_constraints.as_ref() != Some(&task.input.change_constraints))
+            || !scope_violations_are_bounded(&manifest.scope_violations)
+            || task.scope_violations != manifest.scope_violations
         {
             return Err("final validation manifest does not match the task".into());
         }
@@ -135,10 +189,12 @@ impl PublisherState {
             start_revision: manifest.start_revision,
             candidate_commit: manifest.candidate_commit,
             lock_sha256: manifest.lock_sha256,
+            change_constraints: manifest.change_constraints,
             preparation_id: manifest.preparation_id,
             preparation_reused: manifest.preparation_reused,
             policy_edited: manifest.policy_edited,
             tests_edited: manifest.tests_edited,
+            scope_violations: manifest.scope_violations,
             changed_paths: manifest.changed_paths,
             artifacts: manifest
                 .artifacts
@@ -165,22 +221,30 @@ impl PublisherState {
         candidate: &str,
         start: &str,
         lock: &str,
-    ) -> Option<(String, bool, String)> {
-        let bytes = fs::read(
-            self.evidence_root
+        change_constraints: &ChangeConstraints,
+    ) -> Option<(String, bool, String, Vec<String>)> {
+        let bytes = read_manifest(
+            &self
+                .evidence_root
                 .join(id.to_string())
                 .join("manifest.json"),
         )
         .ok()?;
         let manifest: Manifest = serde_json::from_slice(&bytes).ok()?;
-        if manifest.schema_version != 1
+        if manifest.schema_version != 2
             || manifest.candidate_commit != candidate
             || manifest.start_revision != start
             || manifest.lock_sha256 != lock
+            || manifest.change_constraints.as_ref() != Some(change_constraints)
+            || !scope_violations_are_bounded(&manifest.scope_violations)
             || !matches!(
                 manifest.outcome.as_str(),
-                "quality_failure" | "policy_rejected" | "dependency_change_unsupported"
+                "quality_failure"
+                    | "policy_rejected"
+                    | "dependency_change_unsupported"
+                    | "scope_rejected"
             )
+            || (manifest.outcome == "scope_rejected" && manifest.scope_violations.is_empty())
         {
             return None;
         }
@@ -188,6 +252,7 @@ impl PublisherState {
             format!("sha256:{:x}", Sha256::digest(bytes)),
             manifest.policy_edited || manifest.tests_edited,
             manifest.outcome,
+            manifest.scope_violations,
         ))
     }
 
@@ -280,19 +345,20 @@ impl PublisherState {
         candidate: &str,
         start: &str,
         lock: &str,
+        change_constraints: &ChangeConstraints,
     ) -> Result<(String, bool), String> {
         let directory = self.evidence_root.join(id.to_string());
         let path = directory.join("manifest.json");
-        let bytes = fs::read(&path).map_err(|_| "final validation manifest is absent")?;
+        let bytes = read_manifest(&path)?;
         let manifest: Manifest =
             serde_json::from_slice(&bytes).map_err(|_| "final validation manifest is malformed")?;
-        if manifest.schema_version != 1
-            || manifest.candidate_commit != candidate
+        if manifest.candidate_commit != candidate
             || manifest.start_revision != start
             || manifest.outcome != "success"
             || manifest.check_exit_code != 0
             || manifest.policy_edited
             || manifest.lock_sha256 != lock
+            || !manifest_covers_change_constraints(&manifest, change_constraints)
         {
             return Err("final validation does not cover the requested candidate".into());
         }
@@ -431,6 +497,7 @@ async fn finish_publication(
             candidate,
             &task.input.start_revision,
             &task.repository.lock_sha256,
+            &task.input.change_constraints,
         )
         .map_err(PublishError::Invalid)?;
     if task.validation_manifest.as_deref() != Some(&digest) {
@@ -512,14 +579,16 @@ mod tests {
         let build = br#"{"image":"fixture"}"#;
         fs::write(directory.join("build.json"), build)?;
         Ok(Manifest {
-            schema_version: 1,
+            schema_version: 2,
             start_revision: "8a555ada2f6e3ee41de2485ed13da508beaebaeb".into(),
             candidate_commit: "4e67795c0cba21bd82c21bdd6c921417fbe29ff6".into(),
             lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+            change_constraints: Some(ChangeConstraints::default()),
             outcome: "success".into(),
             check_exit_code: 0,
             policy_edited: false,
             tests_edited: false,
+            scope_violations: Vec::new(),
             changed_paths: vec!["src/main.rs".into()],
             preparation_id: Some("prep-fixture".into()),
             preparation_reused: true,
@@ -593,6 +662,45 @@ mod tests {
         assert_eq!(
             verify_candidate_checkpoint(directory.path(), &candidate),
             Err("candidate checkpoint bundle does not contain the validated candidate".into())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn successful_manifest_must_bind_and_satisfy_frozen_scope()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut manifest = write_fixture(directory.path())?;
+        let mut constraints = ChangeConstraints::default();
+        assert!(manifest_covers_change_constraints(&manifest, &constraints));
+
+        manifest.schema_version = 1;
+        assert!(!manifest_covers_change_constraints(&manifest, &constraints));
+        manifest.schema_version = 2;
+
+        manifest.tests_edited = true;
+        assert!(!manifest_covers_change_constraints(&manifest, &constraints));
+        constraints.allow_test_edits = true;
+        manifest.change_constraints = Some(constraints.clone());
+        assert!(manifest_covers_change_constraints(&manifest, &constraints));
+
+        constraints.protected_paths = vec!["src".into()];
+        manifest.change_constraints = Some(constraints.clone());
+        assert!(!manifest_covers_change_constraints(&manifest, &constraints));
+        Ok(())
+    }
+
+    #[test]
+    fn retained_manifest_reads_are_bounded() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("manifest.json");
+        fs::write(
+            &path,
+            vec![b'x'; usize::try_from(MAX_VALIDATION_MANIFEST_BYTES)? + 1],
+        )?;
+        assert_eq!(
+            read_manifest(&path),
+            Err("final validation manifest exceeds the retained evidence limit".into())
         );
         Ok(())
     }
