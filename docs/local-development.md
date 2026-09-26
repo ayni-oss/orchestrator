@@ -26,6 +26,16 @@ cargo test --workspace --all-features
 cargo check --workspace --all-features
 ```
 
+CI also installs the checksum-pinned Ayni release recorded by `.ayni.lock`,
+builds and doctors the locked environment, runs the repository-complete check,
+and retains its evidence. Exercise the same managed boundary locally with:
+
+```sh
+ayni env build --repo-root .
+ayni env doctor --repo-root .
+ayni check --config .ayni.toml
+```
+
 Render the deployment separately when changing manifests:
 
 ```sh
