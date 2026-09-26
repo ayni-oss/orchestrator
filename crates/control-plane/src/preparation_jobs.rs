@@ -65,6 +65,10 @@ impl PreparationReconciler {
         }
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(preparation_id = preparation.id, stage = ?preparation.status)
+    )]
     async fn reconcile(&self, preparation: &PreparationView) -> Result<(), String> {
         match preparation.status {
             PreparationStatus::Queued => self.start(preparation).await,
@@ -245,6 +249,10 @@ impl PreparationReconciler {
         Ok(true)
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(preparation_id = preparation.id, job_name = %job_name(&preparation.id))
+    )]
     async fn ensure_job(
         &self,
         preparation: &PreparationView,
@@ -303,7 +311,9 @@ impl PreparationReconciler {
             "volumeMounts":[{"name":"workspace","mountPath":"/workspace"},{"name":"engine-storage","mountPath":"/var/lib/docker"}]});
         let preparer = json!({"name":"preparer","image":self.worker_image,"imagePullPolicy":"Never",
             "command":["/usr/local/bin/prepare-repository"],
-            "env":[{"name":"DOCKER_HOST","value":"tcp://127.0.0.1:2375"},
+            "env":[{"name":"DEVELOPMENT_STAGE","value":"preparation"},
+                {"name":"JOB_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},
+                {"name":"DOCKER_HOST","value":"tcp://127.0.0.1:2375"},
                 {"name":"DOCKER_BUILDKIT","value":"1"},{"name":"DOCKER_CONFIG","value":"/tmp/docker"},
                 {"name":"TMPDIR","value":"/workspace"},{"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
                 {"name":"DEVELOPMENT_PREPARATION_DIR","value":format!("/preparations/{}",preparation.id)},

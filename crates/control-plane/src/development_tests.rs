@@ -90,11 +90,77 @@ fn opening_a_legacy_development_database_adds_current_task_columns() -> Result<(
             params![key.as_str(), id.to_string()],
         )
         .map_err(StoreError::Database)?;
+    store.migrate_development()?;
     let replay = store.submit_development(&key, &input)?;
     assert_eq!(replay.id, id);
+    assert!(!replay.lifecycle_complete);
+    assert_eq!(replay.lifecycle.len(), 1);
+    assert_eq!(replay.lifecycle[0].stage, DevelopmentLifecycleStage::Queue);
     assert_eq!(
         replay.input.change_constraints,
         ChangeConstraints::default()
+    );
+    Ok(())
+}
+
+#[test]
+fn opening_a_populated_legacy_database_marks_history_partial() -> Result<(), StoreError> {
+    let connection = Connection::open_in_memory().map_err(StoreError::Database)?;
+    connection
+        .execute_batch(
+            "CREATE TABLE development_tasks (
+                id TEXT PRIMARY KEY, repository_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                repository_snapshot TEXT NOT NULL, profile_snapshot TEXT NOT NULL,
+                start_revision TEXT NOT NULL, request TEXT NOT NULL,
+                acceptance_criteria TEXT NOT NULL, phase TEXT NOT NULL,
+                preparation_id TEXT, retry_of TEXT, requested_input TEXT,
+                candidate_commit TEXT, validation_manifest TEXT,
+                policy_or_test_edits INTEGER, draft_pr_url TEXT, failure TEXT,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+            );",
+        )
+        .map_err(StoreError::Database)?;
+    let id = TaskId::generate();
+    let repository = RepositoryBinding {
+        id: "trial".into(),
+        owner: "ayni-oss".into(),
+        repository: "sandbox".into(),
+        installation_id: 1,
+        base_branch: "main".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+    };
+    let profile = AgentProfile {
+        id: "coding".into(),
+        provider: "openai".into(),
+        model: "example".into(),
+        secret_ref: "openai-api".into(),
+    };
+    connection.execute(
+        "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
+         profile_snapshot, start_revision, request, acceptance_criteria, phase, created_at,
+         updated_at) VALUES (?1,'trial','coding',?2,?3,?4,'Fix it','[\"passes\"]','validating',1,7)",
+        params![
+            id.to_string(),
+            serde_json::to_string(&repository)
+                .map_err(|_| StoreError::InvalidInput("could not serialize repository"))?,
+            serde_json::to_string(&profile)
+                .map_err(|_| StoreError::InvalidInput("could not serialize profile"))?,
+            "8a555ada2f6e3ee41de2485ed13da508beaebaeb",
+        ],
+    ).map_err(StoreError::Database)?;
+
+    let store = Store::from_connection(connection, 2)?;
+    let task = store.development_task(id)?;
+    assert!(!task.lifecycle_complete);
+    assert_eq!(task.lifecycle.len(), 1);
+    assert_eq!(task.lifecycle[0].event_time, 7);
+    assert_eq!(
+        task.lifecycle[0].stage,
+        DevelopmentLifecycleStage::Validation
+    );
+    assert_eq!(
+        task.lifecycle[0].outcome,
+        DevelopmentLifecycleOutcome::Started
     );
     Ok(())
 }
@@ -148,6 +214,7 @@ fn submission_is_durable_and_unsupported_provider_is_explicit() -> Result<(), St
         .map_err(StoreError::InvalidLifecycleData)?;
     let first = store.submit_development(&key, &input)?;
     assert_eq!(first.phase, DevelopmentPhase::Unsupported);
+    assert!(first.lifecycle_complete);
     assert_eq!(first, store.submit_development(&key, &input)?);
     for invalid_deadline in [0, 86_401] {
         let invalid = DevelopmentInput {
@@ -236,12 +303,62 @@ fn snapshots_profile_and_blocks_stale_candidate_after_cancellation() -> Result<(
     ));
     let cancel = IdempotencyKey::try_from("cancel-development".to_owned())
         .map_err(StoreError::InvalidLifecycleData)?;
+    assert!(matches!(
+        store.cancel_development(task.id, &submit),
+        Err(StoreError::ActionKeyReused(_))
+    ));
     assert_eq!(
         store.cancel_development(task.id, &cancel)?.phase,
         DevelopmentPhase::Cancelled
     );
+    assert_eq!(
+        store.cancel_development(task.id, &cancel)?.lifecycle.len(),
+        2
+    );
+    assert!(matches!(
+        store.submit_development(&cancel, &task.input),
+        Err(StoreError::ActionKeyReused(_))
+    ));
+    let cancelled = store.development_task(task.id)?;
+    assert_eq!(
+        cancelled.lifecycle[0].stage,
+        DevelopmentLifecycleStage::Queue
+    );
+    assert_eq!(
+        cancelled.lifecycle[1].stage,
+        DevelopmentLifecycleStage::Queue
+    );
+    assert_eq!(
+        cancelled.lifecycle[1].reason_code.as_deref(),
+        Some("operator_cancelled")
+    );
     assert!(!store.record_candidate(task.id, "8a555ada2f6e3ee41de2485ed13da508beaebaeb")?);
     Ok(())
+}
+
+fn assert_complete_lifecycle(task: &DevelopmentTask) {
+    assert_eq!(
+        task.lifecycle
+            .iter()
+            .map(|event| event.stage)
+            .collect::<Vec<_>>(),
+        vec![
+            DevelopmentLifecycleStage::Queue,
+            DevelopmentLifecycleStage::Coding,
+            DevelopmentLifecycleStage::Coding,
+            DevelopmentLifecycleStage::Validation,
+            DevelopmentLifecycleStage::Validation,
+            DevelopmentLifecycleStage::Validation,
+            DevelopmentLifecycleStage::PrPreparation,
+            DevelopmentLifecycleStage::PrPreparation,
+            DevelopmentLifecycleStage::PrPreparation,
+        ]
+    );
+    assert!(
+        task.lifecycle
+            .windows(2)
+            .all(|events| events[0].event_time <= events[1].event_time)
+    );
 }
 
 #[test]
@@ -339,7 +456,19 @@ fn publication_action_is_bound_to_one_candidate_and_reusable_after_completion()
         action.completed_url.as_deref(),
         Some("https://github.com/ayni-oss/sandbox/pull/42")
     );
+    assert_complete_lifecycle(&done);
     Ok(())
+}
+
+fn assert_failed_with_reason(task: &DevelopmentTask, reason_code: &str) {
+    assert_eq!(task.phase, DevelopmentPhase::Failed);
+    assert_eq!(task.failure.as_deref(), Some(reason_code));
+    assert_eq!(
+        task.lifecycle
+            .last()
+            .and_then(|event| event.reason_code.as_deref()),
+        Some(reason_code)
+    );
 }
 
 #[test]
@@ -397,6 +526,7 @@ fn scope_rejection_is_durable_retryable_and_never_publishable() -> Result<(), St
         store.fail_validation(
             task.id,
             "scope_rejected",
+            "scope_rejected",
             Some("sha256:scope-evidence"),
             Some(false),
             &oversized,
@@ -412,6 +542,7 @@ fn scope_rejection_is_durable_retryable_and_never_publishable() -> Result<(), St
     assert!(store.fail_validation(
         task.id,
         "scope_rejected",
+        "scope_rejected",
         Some("sha256:scope-evidence"),
         Some(false),
         &violations,
@@ -419,13 +550,13 @@ fn scope_rejection_is_durable_retryable_and_never_publishable() -> Result<(), St
     assert!(!store.fail_validation(
         task.id,
         "scope_rejected",
+        "scope_rejected",
         Some("sha256:scope-evidence"),
         Some(false),
         &violations,
     )?);
     let rejected = store.development_task(task.id)?;
-    assert_eq!(rejected.phase, DevelopmentPhase::Failed);
-    assert_eq!(rejected.failure.as_deref(), Some("scope_rejected"));
+    assert_failed_with_reason(&rejected, "scope_rejected");
     assert_eq!(rejected.scope_violations, violations);
     assert!(
         store
@@ -518,6 +649,64 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
             "development task deadline has expired"
         ))
     ));
+    Ok(())
+}
+
+#[test]
+fn lifecycle_survives_restart_and_duplicate_reconciliation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let database = directory.path().join("orchestrator.sqlite");
+    let revision = "8a555ada2f6e3ee41de2485ed13da508beaebaeb";
+    let task_id = {
+        let mut store = Store::open(&database, 3)?;
+        store.put_repository_binding(&RepositoryBinding {
+            id: "trial".into(),
+            owner: "ayni-oss".into(),
+            repository: "sandbox".into(),
+            installation_id: 11,
+            base_branch: "main".into(),
+            lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+        })?;
+        store.put_agent_profile(&AgentProfile {
+            id: "coding".into(),
+            provider: "openai".into(),
+            model: "model-a".into(),
+            secret_ref: "openai-api".into(),
+        })?;
+        mark_ready(&mut store, "trial", revision)?;
+        let task = store.submit_development(
+            &IdempotencyKey::try_from("restart-timeline".to_owned())?,
+            &DevelopmentInput {
+                repository_id: "trial".into(),
+                profile_id: "coding".into(),
+                start_revision: revision.into(),
+                request: "Fix the formula".into(),
+                acceptance_criteria: vec!["3 -> 8".into()],
+                change_constraints: ChangeConstraints::default(),
+                deadline_seconds: None,
+            },
+        )?;
+        assert!(store.development_phase(
+            task.id,
+            DevelopmentPhase::Queued,
+            DevelopmentPhase::Coding,
+        )?);
+        task.id
+    };
+
+    let mut reopened = Store::open(&database, 3)?;
+    let task = reopened.development_task(task_id)?;
+    assert!(task.lifecycle_complete);
+    assert_eq!(task.lifecycle.len(), 2);
+    assert_eq!(task.lifecycle[0].stage, DevelopmentLifecycleStage::Queue);
+    assert_eq!(task.lifecycle[1].stage, DevelopmentLifecycleStage::Coding);
+    assert!(!reopened.development_phase(
+        task_id,
+        DevelopmentPhase::Queued,
+        DevelopmentPhase::Coding,
+    )?);
+    assert_eq!(reopened.development_task(task_id)?.lifecycle.len(), 2);
     Ok(())
 }
 

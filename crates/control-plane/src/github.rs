@@ -101,6 +101,14 @@ impl GitHubApp {
         self.token_with_permissions(repository, false).await
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            provider = "github",
+            repository_id = repository.id,
+            operation = if publish { "publication_token" } else { "clone_token" }
+        )
+    )]
     async fn token_with_permissions(
         &self,
         repository: &RepositoryBinding,
@@ -143,6 +151,10 @@ impl GitHubApp {
     /// Find the deterministic PR first; push the frozen commit and create it
     /// only when no matching PR exists. Retrying an uncertain response starts
     /// with the same lookup.
+    #[tracing::instrument(
+        skip_all,
+        fields(provider = "github", task_id = %task.id, repository_id = task.repository.id)
+    )]
     pub async fn publish(
         &self,
         task: &DevelopmentTask,

@@ -13,7 +13,9 @@ use std::{
     env, fs, io,
     path::{Component, Path, PathBuf},
     process::{Command, ExitCode},
+    time::Instant,
 };
+use tracing::{Instrument, error, info, info_span};
 
 const MAX_TOOL_OUTPUT: usize = 32_000;
 const CANDIDATE_COMMIT_TITLE: &str = "chore(agent): apply requested change";
@@ -233,12 +235,29 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .tool(WriteFile(Workspace(workspace.clone())))
         .tool(RunCommand(Workspace(workspace.clone())))
         .build();
-    let response = agent
-        .prompt(format!(
-            "Request: {request}\nAcceptance criteria: {criteria}\nFrozen change constraints: {change_constraints}. Do not modify protected paths or tests unless these constraints explicitly allow it."
-        ))
-        .max_turns(24)
-        .await?;
+    let provider_span = info_span!(
+        "provider.call",
+        provider = "openai",
+        model = %model,
+        stage = "coding"
+    );
+    let response = async {
+        let started = Instant::now();
+        let result = agent
+            .prompt(format!(
+                "Request: {request}\nAcceptance criteria: {criteria}\nFrozen change constraints: {change_constraints}. Do not modify protected paths or tests unless these constraints explicitly allow it."
+            ))
+            .max_turns(24)
+            .await;
+        info!(
+            outcome = if result.is_ok() { "succeeded" } else { "failed" },
+            latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "provider call completed"
+        );
+        result
+    }
+    .instrument(provider_span)
+    .await?;
     if let Some(question) = response.trim().strip_prefix("INPUT_REQUIRED:") {
         let question = question.trim();
         if question.is_empty() {
@@ -298,12 +317,17 @@ fn checkpoint_candidate(
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run().await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("development agent failed: {error}");
-            ExitCode::FAILURE
-        }
+    ayni_orchestrator_observability::init("development-agent");
+    let process_span = ayni_orchestrator_observability::process_span("development-agent");
+    if run().instrument(process_span).await.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        // Provider and tool errors can contain prompts or repository output.
+        error!(
+            reason_code = "development_agent_failed",
+            "development agent failed"
+        );
+        ExitCode::FAILURE
     }
 }
 

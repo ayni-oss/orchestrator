@@ -60,6 +60,10 @@ impl<T: JobTransport> Reconciler<T> {
         }
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(task_id = %target.task_id, attempt_id = %target.attempt.id, stage = ?target.attempt.state)
+    )]
     async fn reconcile_target(&self, target: ReconciliationTarget) -> Result<(), StoreError> {
         if target.attempt.state == AttemptState::Queued
             && target.desired_state == TaskDesiredState::Active
@@ -145,6 +149,12 @@ impl JobTransport for KubernetesJobTransport {
     ) -> Pin<Box<dyn Future<Output = Result<(), TransportError>> + Send + '_>> {
         let target = target.clone();
         let job_name = job_name.to_owned();
+        let span = tracing::info_span!(
+            "kubernetes.ensure_job",
+            task_id = %target.task_id,
+            attempt_id = %target.attempt.id,
+            job_name = %job_name
+        );
         Box::pin(async move {
             let job = managed_check_job(&target, &job_name, &self.worker_image)?;
             match self.jobs().create(&PostParams::default(), &job).await {
@@ -155,7 +165,8 @@ impl JobTransport for KubernetesJobTransport {
                     Err(get_error) => Err(TransportError::Kubernetes(get_error.to_string())),
                 },
             }
-        })
+        }
+        .instrument(span))
     }
 
     fn observe_job(
@@ -163,6 +174,7 @@ impl JobTransport for KubernetesJobTransport {
         job_name: &str,
     ) -> Pin<Box<dyn Future<Output = Result<JobObservation, TransportError>> + Send + '_>> {
         let job_name = job_name.to_owned();
+        let span = tracing::info_span!("kubernetes.observe_job", job_name = %job_name);
         Box::pin(async move {
             let Some(job) = self
                 .jobs()
@@ -199,7 +211,8 @@ impl JobTransport for KubernetesJobTransport {
             } else {
                 Ok(JobObservation::Pending)
             }
-        })
+        }
+        .instrument(span))
     }
 
     fn delete_job(
@@ -207,6 +220,7 @@ impl JobTransport for KubernetesJobTransport {
         job_name: &str,
     ) -> Pin<Box<dyn Future<Output = Result<(), TransportError>> + Send + '_>> {
         let job_name = job_name.to_owned();
+        let span = tracing::info_span!("kubernetes.delete_job", job_name = %job_name);
         Box::pin(async move {
             if self
                 .jobs()
@@ -221,7 +235,8 @@ impl JobTransport for KubernetesJobTransport {
                     .map_err(|error| TransportError::Kubernetes(error.to_string()))?;
             }
             Ok(())
-        })
+        }
+        .instrument(span))
     }
 }
 
@@ -240,7 +255,8 @@ fn managed_check_job(
                 "securityContext": { "seccompProfile": { "type": "RuntimeDefault" } },
                 "initContainers": [{ "name": "engine", "image": "docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce", "restartPolicy": "Always", "env": [{ "name": "DOCKER_TLS_CERTDIR", "value": "" }], "securityContext": { "privileged": true }, "resources": { "requests": { "cpu": "4", "memory": "9Gi" }, "limits": { "cpu": "4", "memory": "9Gi" } }, "volumeMounts": [{ "name": "workspace", "mountPath": "/workspace" }, { "name": "engine-storage", "mountPath": "/var/lib/docker" }] }],
                 "containers": [{ "name": "worker", "image": worker_image, "imagePullPolicy": "Never", "env": [
-                    { "name": "DOCKER_HOST", "value": "tcp://127.0.0.1:2375" }, { "name": "DOCKER_BUILDKIT", "value": "1" }, { "name": "DOCKER_CONFIG", "value": "/tmp/docker" }, { "name": "TMPDIR", "value": "/workspace" }, { "name": "ORCHESTRATOR_ATTEMPT_ID", "value": target.attempt.id.to_string() },
+                    { "name": "DOCKER_HOST", "value": "tcp://127.0.0.1:2375" }, { "name": "DOCKER_BUILDKIT", "value": "1" }, { "name": "DOCKER_CONFIG", "value": "/tmp/docker" }, { "name": "TMPDIR", "value": "/workspace" },
+                    { "name": "DEVELOPMENT_TASK_ID", "value": target.task_id.to_string() }, { "name": "ORCHESTRATOR_ATTEMPT_ID", "value": target.attempt.id.to_string() }, { "name": "DEVELOPMENT_STAGE", "value": "managed_check" }, { "name": "JOB_NAME", "valueFrom": { "fieldRef": { "fieldPath": "metadata.name" } } },
                     { "name": "ORCHESTRATOR_REPOSITORY_URL", "value": target.input.repository_url }, { "name": "ORCHESTRATOR_REVISION", "value": target.input.revision },
                     { "name": "ORCHESTRATOR_LOCK_SHA256", "value": target.input.lock_sha256 }, { "name": "ORCHESTRATOR_AYNI_VERSION", "value": target.input.ayni_version },
                     { "name": "ORCHESTRATOR_WORKSPACE", "value": "/workspace/repository" }, { "name": "ORCHESTRATOR_EVIDENCE_ROOT", "value": "/evidence" }

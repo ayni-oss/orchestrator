@@ -4,7 +4,7 @@
 use ayni_orchestrator_domain::{
     ChangeConstraints, GitRevision, IdempotencyKey, Sha256Digest, TaskId,
 };
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::orchestration::{Store, StoreError};
@@ -166,6 +166,95 @@ fn retry_request(
     ))
 }
 
+/// A measurable stage in the development pipeline.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DevelopmentLifecycleStage {
+    Queue,
+    Coding,
+    Validation,
+    PrPreparation,
+    Unknown,
+}
+
+impl DevelopmentLifecycleStage {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Queue => "queue",
+            Self::Coding => "coding",
+            Self::Validation => "validation",
+            Self::PrPreparation => "pr_preparation",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub(crate) fn parse(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "queue" => Ok(Self::Queue),
+            "coding" => Ok(Self::Coding),
+            "validation" => Ok(Self::Validation),
+            "pr_preparation" => Ok(Self::PrPreparation),
+            "unknown" => Ok(Self::Unknown),
+            _ => Err(StoreError::InvalidInput(
+                "invalid persisted development lifecycle stage",
+            )),
+        }
+    }
+}
+
+/// The bounded result recorded at a lifecycle boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DevelopmentLifecycleOutcome {
+    Queued,
+    Started,
+    Succeeded,
+    Blocked,
+    Failed,
+    Cancelled,
+    Unsupported,
+}
+
+impl DevelopmentLifecycleOutcome {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Started => "started",
+            Self::Succeeded => "succeeded",
+            Self::Blocked => "blocked",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::Unsupported => "unsupported",
+        }
+    }
+
+    pub(crate) fn parse(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "started" => Ok(Self::Started),
+            "succeeded" => Ok(Self::Succeeded),
+            "blocked" => Ok(Self::Blocked),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            "unsupported" => Ok(Self::Unsupported),
+            _ => Err(StoreError::InvalidInput(
+                "invalid persisted development lifecycle outcome",
+            )),
+        }
+    }
+}
+
+/// One append-only, idempotent development lifecycle event.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DevelopmentLifecycleEvent {
+    pub sequence: i64,
+    pub event_time: i64,
+    pub stage: DevelopmentLifecycleStage,
+    pub outcome: DevelopmentLifecycleOutcome,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+}
+
 /// A single durable development request and its measured candidate.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct DevelopmentTask {
@@ -186,6 +275,8 @@ pub struct DevelopmentTask {
     pub scope_violations: Vec<String>,
     pub draft_pr_url: Option<String>,
     pub failure: Option<String>,
+    pub lifecycle_complete: bool,
+    pub lifecycle: Vec<DevelopmentLifecycleEvent>,
 }
 
 pub struct PublicationAction {
@@ -229,7 +320,7 @@ impl DevelopmentPhase {
         }
     }
 
-    fn parse(value: &str) -> Result<Self, StoreError> {
+    pub(crate) fn parse(value: &str) -> Result<Self, StoreError> {
         match value {
             "queued" => Ok(Self::Queued),
             "coding" => Ok(Self::Coding),
@@ -250,6 +341,50 @@ impl DevelopmentPhase {
 }
 
 include!("development_validation.rs");
+
+fn backfill_development_lifecycle(connection: &Connection) -> Result<(), StoreError> {
+    // Older databases did not retain a timeline. Record only the current snapshot and
+    // leave lifecycle_complete false rather than inventing elapsed stage history.
+    connection
+        .execute_batch(
+            "INSERT OR IGNORE INTO development_lifecycle_events
+                (task_id, event_key, event_time, stage, outcome, reason_code)
+             SELECT id, 'legacy_snapshot', updated_at,
+                CASE phase
+                    WHEN 'queued' THEN 'queue'
+                    WHEN 'coding' THEN 'coding'
+                    WHEN 'waiting_for_input' THEN 'coding'
+                    WHEN 'validation_queued' THEN 'validation'
+                    WHEN 'validating' THEN 'validation'
+                    WHEN 'pr_queued' THEN 'pr_preparation'
+                    WHEN 'preparing_pr' THEN 'pr_preparation'
+                    WHEN 'completed' THEN 'pr_preparation'
+                    WHEN 'unsupported' THEN 'queue'
+                    ELSE 'unknown'
+                END,
+                CASE phase
+                    WHEN 'queued' THEN 'queued'
+                    WHEN 'coding' THEN 'started'
+                    WHEN 'waiting_for_input' THEN 'blocked'
+                    WHEN 'validation_queued' THEN 'queued'
+                    WHEN 'validating' THEN 'started'
+                    WHEN 'pr_queued' THEN 'queued'
+                    WHEN 'preparing_pr' THEN 'started'
+                    WHEN 'completed' THEN 'succeeded'
+                    WHEN 'failed' THEN 'failed'
+                    WHEN 'cancelled' THEN 'cancelled'
+                    ELSE 'unsupported'
+                END,
+                CASE phase
+                    WHEN 'unsupported' THEN 'unsupported_provider'
+                    WHEN 'failed' THEN 'legacy_failure'
+                    WHEN 'cancelled' THEN 'operator_cancelled'
+                    ELSE NULL
+                END
+             FROM development_tasks WHERE lifecycle_complete=0;",
+        )
+        .map_err(StoreError::Database)
+}
 
 impl Store {
     pub(crate) fn migrate_development(&self) -> Result<(), StoreError> {
@@ -275,12 +410,25 @@ impl Store {
                 candidate_commit TEXT, validation_manifest TEXT,
                 policy_or_test_edits INTEGER, scope_violations TEXT, draft_pr_url TEXT, failure TEXT,
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-                deadline_seconds INTEGER, deadline_at INTEGER
+                deadline_seconds INTEGER, deadline_at INTEGER,
+                lifecycle_complete INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS development_actions (
                 action_key TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES development_tasks(id),
                 action_kind TEXT NOT NULL, created_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS development_lifecycle_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL REFERENCES development_tasks(id),
+                event_key TEXT NOT NULL,
+                event_time INTEGER NOT NULL,
+                stage TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                reason_code TEXT,
+                UNIQUE(task_id, event_key)
+            );
+            CREATE INDEX IF NOT EXISTS development_lifecycle_task_idx
+                ON development_lifecycle_events(task_id, event_id);
             CREATE TABLE IF NOT EXISTS publication_actions (
                 task_id TEXT PRIMARY KEY REFERENCES development_tasks(id),
                 branch_name TEXT NOT NULL UNIQUE, candidate_commit TEXT NOT NULL,
@@ -299,6 +447,7 @@ impl Store {
             ("protected_paths", "TEXT NOT NULL DEFAULT '[]'"),
             ("allow_test_edits", "INTEGER NOT NULL DEFAULT 0"),
             ("scope_violations", "TEXT"),
+            ("lifecycle_complete", "INTEGER NOT NULL DEFAULT 0"),
         ] {
             let exists: bool = self
                 .connection
@@ -317,7 +466,7 @@ impl Store {
                     .map_err(StoreError::Database)?;
             }
         }
-        Ok(())
+        backfill_development_lifecycle(&self.connection)
     }
 
     pub fn put_repository_binding(&self, binding: &RepositoryBinding) -> Result<(), StoreError> {
@@ -353,6 +502,10 @@ impl Store {
         Ok(())
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(repository_id = %input.repository_id, profile_id = %input.profile_id)
+    )]
     pub fn submit_development(
         &mut self,
         key: &IdempotencyKey,
@@ -393,13 +546,20 @@ impl Store {
         transaction.execute(
             "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request,
              acceptance_criteria, protected_paths, allow_test_edits, phase, preparation_id,
-             created_at, updated_at, deadline_seconds, deadline_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?14, ?15)",
+             created_at, updated_at, deadline_seconds, deadline_at, lifecycle_complete)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?14, ?15, 1)",
             params![id.to_string(), input.repository_id, input.profile_id, repository_snapshot,
                 profile_snapshot, input.start_revision, input.request, criteria, protected_paths,
                 input.change_constraints.allow_test_edits, phase.as_str(), preparation_id, now,
                 deadline_seconds, deadline_at],
         ).map_err(StoreError::Database)?;
+        super::development_lifecycle::insert_phase_events(
+            &transaction,
+            id,
+            phase,
+            now,
+            (phase == DevelopmentPhase::Unsupported).then_some("unsupported_provider"),
+        )?;
         transaction
             .execute(
                 "INSERT INTO development_actions(action_key, task_id, action_kind, created_at)
@@ -408,6 +568,11 @@ impl Store {
             )
             .map_err(StoreError::Database)?;
         transaction.commit().map_err(StoreError::Database)?;
+        super::development_lifecycle::log_phase_events(
+            id,
+            phase,
+            (phase == DevelopmentPhase::Unsupported).then_some("unsupported_provider"),
+        );
         self.development_task(id)
     }
 
@@ -416,12 +581,12 @@ impl Store {
         key: &IdempotencyKey,
         input: &DevelopmentInput,
     ) -> Result<Option<DevelopmentTask>, StoreError> {
-        let Some(id) = self
+        let Some((id, action_kind)) = self
             .connection
             .query_row(
-                "SELECT task_id FROM development_actions WHERE action_key=?1",
+                "SELECT task_id, action_kind FROM development_actions WHERE action_key=?1",
                 [key.as_str()],
-                |row| row.get::<_, String>(0),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )
             .optional()
             .map_err(StoreError::Database)?
@@ -430,7 +595,7 @@ impl Store {
         };
         let existing =
             self.development_task(TaskId::parse(&id).map_err(StoreError::InvalidLifecycleData)?)?;
-        if existing.input != *input {
+        if action_kind != "submit" || existing.input != *input {
             return Err(StoreError::ActionKeyReused(key.as_str().to_owned()));
         }
         Ok(Some(existing))
@@ -472,8 +637,8 @@ impl Store {
             "SELECT repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request, acceptance_criteria,
              protected_paths, allow_test_edits, phase, preparation_id, retry_of, requested_input,
              candidate_commit, validation_manifest, policy_or_test_edits, scope_violations,
-             draft_pr_url, failure, created_at, updated_at, deadline_seconds, deadline_at
-             FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
+             draft_pr_url, failure, created_at, updated_at, deadline_seconds, deadline_at,
+             lifecycle_complete FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?, row.get::<_, String>(6)?, row.get::<_, String>(7)?,
@@ -484,7 +649,7 @@ impl Store {
                     row.get::<_, Option<String>>(16)?, row.get::<_, Option<String>>(17)?,
                     row.get::<_, Option<String>>(18)?, row.get::<_, i64>(19)?,
                     row.get::<_, i64>(20)?, row.get::<_, Option<i64>>(21)?,
-                    row.get::<_, Option<i64>>(22)?))
+                    row.get::<_, Option<i64>>(22)?, row.get::<_, bool>(23)?))
             }
         ).optional().map_err(StoreError::Database)?.ok_or(StoreError::TaskNotFound(id))?;
         let repository = serde_json::from_str(&row.2)
@@ -509,6 +674,7 @@ impl Store {
                     .map_err(|_| StoreError::InvalidInput("invalid persisted task deadline"))
             })
             .transpose()?;
+        let lifecycle = self.development_lifecycle(id)?;
         Ok(DevelopmentTask {
             id,
             input: DevelopmentInput {
@@ -541,9 +707,12 @@ impl Store {
             scope_violations,
             draft_pr_url: row.17,
             failure: row.18,
+            lifecycle_complete: row.23,
+            lifecycle,
         })
     }
 
+    #[tracing::instrument(skip_all, fields(retry_source = %source_id))]
     pub fn retry_development(
         &mut self,
         source_id: TaskId,
@@ -605,8 +774,8 @@ impl Store {
                 "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
              profile_snapshot, start_revision, request, acceptance_criteria, protected_paths,
              allow_test_edits, phase, preparation_id, retry_of, created_at, updated_at,
-             deadline_seconds, deadline_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',?11,?12,?13,?13,?14,?15)",
+             deadline_seconds, deadline_at, lifecycle_complete)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',?11,?12,?13,?13,?14,?15,1)",
                 params![
                     id.to_string(),
                     source.input.repository_id,
@@ -626,6 +795,13 @@ impl Store {
                 ],
             )
             .map_err(StoreError::Database)?;
+        super::development_lifecycle::insert_phase_events(
+            &transaction,
+            id,
+            DevelopmentPhase::Queued,
+            now,
+            None,
+        )?;
         transaction
             .execute(
                 "INSERT INTO development_actions(action_key, task_id, action_kind, created_at)
@@ -634,32 +810,61 @@ impl Store {
             )
             .map_err(StoreError::Database)?;
         transaction.commit().map_err(StoreError::Database)?;
+        super::development_lifecycle::log_phase_events(id, DevelopmentPhase::Queued, None);
+        tracing::info!(
+            task_id = %id,
+            retry_source = %source_id,
+            "development retry linked"
+        );
         self.development_task(id)
     }
 
+    #[tracing::instrument(skip_all, fields(task_id = %id, transition = "input_requested"))]
     pub(crate) fn record_requested_input(
-        &self,
+        &mut self,
         id: TaskId,
         question: &str,
     ) -> Result<bool, StoreError> {
         if question.trim().is_empty() {
             return Err(StoreError::InvalidInput("requested input is empty"));
         }
-        let changed = self
+        let now = super::orchestration::unix_seconds()?;
+        let transaction = self
             .connection
+            .transaction()
+            .map_err(StoreError::Database)?;
+        let changed = transaction
             .execute(
                 "UPDATE development_tasks SET phase='waiting_for_input', requested_input=?1,
              updated_at=?2 WHERE id=?3 AND phase='coding'",
                 params![
                     question.chars().take(1024).collect::<String>(),
-                    super::orchestration::unix_seconds()?,
+                    now,
                     id.to_string()
                 ],
             )
             .map_err(StoreError::Database)?;
+        if changed == 1 {
+            super::development_lifecycle::insert_phase_events(
+                &transaction,
+                id,
+                DevelopmentPhase::WaitingForInput,
+                now,
+                Some("maintainer_input_required"),
+            )?;
+        }
+        transaction.commit().map_err(StoreError::Database)?;
+        if changed == 1 {
+            super::development_lifecycle::log_phase_events(
+                id,
+                DevelopmentPhase::WaitingForInput,
+                Some("maintainer_input_required"),
+            );
+        }
         Ok(changed == 1)
     }
 
+    #[tracing::instrument(skip_all, fields(task_id = %id, transition = "publication_started"))]
     pub(crate) fn begin_publication(
         &self,
         id: TaskId,
@@ -726,6 +931,7 @@ impl Store {
             .map_err(StoreError::Database)
     }
 
+    #[tracing::instrument(skip_all, fields(task_id = %id, transition = "publication_completed"))]
     pub(crate) fn complete_publication(
         &mut self,
         id: TaskId,
@@ -733,6 +939,7 @@ impl Store {
         number: u64,
         url: &str,
     ) -> Result<(), StoreError> {
+        let now = super::orchestration::unix_seconds()?;
         let transaction = self
             .connection
             .transaction()
@@ -745,7 +952,7 @@ impl Store {
                     i64::try_from(number)
                         .map_err(|_| StoreError::InvalidInput("PR number too large"))?,
                     url,
-                    super::orchestration::unix_seconds()?,
+                    now,
                     id.to_string(),
                     candidate
                 ],
@@ -758,12 +965,7 @@ impl Store {
             .execute(
                 "UPDATE development_tasks SET phase='completed', draft_pr_url=?1,
              updated_at=?2 WHERE id=?3 AND phase='preparing_pr' AND candidate_commit=?4",
-                params![
-                    url,
-                    super::orchestration::unix_seconds()?,
-                    id.to_string(),
-                    candidate
-                ],
+                params![url, now, id.to_string(), candidate],
             )
             .map_err(StoreError::Database)?;
         if updated != 1 {
@@ -771,7 +973,16 @@ impl Store {
                 "task changed before PR completion",
             ));
         }
-        transaction.commit().map_err(StoreError::Database)
+        super::development_lifecycle::insert_phase_events(
+            &transaction,
+            id,
+            DevelopmentPhase::Completed,
+            now,
+            None,
+        )?;
+        transaction.commit().map_err(StoreError::Database)?;
+        super::development_lifecycle::log_phase_events(id, DevelopmentPhase::Completed, None);
+        Ok(())
     }
 }
 

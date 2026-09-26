@@ -9,6 +9,7 @@ status, is the source of truth for task lifecycle and external actions.
 | Crate | Responsibility |
 | --- | --- |
 | `domain` | Validated task, attempt, result, and state-transition types |
+| `observability` | Shared JSON logging, safe filtering, correlation fields, and redaction helpers |
 | `control-plane` | HTTP API and UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
 | `worker` | Source preparation, managed Ayni execution, coding-agent tools, frozen-candidate validation, and structured PR authoring |
 
@@ -25,9 +26,12 @@ The local profile uses four persistent volume claims:
 | `managed-check-evidence` | Original Ayni artifacts and digest-bound validation manifests |
 | `prepared-environments` | Ayni image archives, build records, and preparation manifests |
 
-Disposable Jobs never become the authoritative record. Normal cleanup preserves
-all four claims. The single-writer SQLite volume constrains the current profile
-to one control-plane replica.
+Disposable Jobs never become the authoritative record. Development transitions
+also append an idempotent lifecycle event in the same SQLite transaction as the
+mutable task phase. These events retain logical stage outcomes and stable reason
+codes after Job expiry or process restart, allowing elapsed stage durations to be
+reconstructed. Normal cleanup preserves all four claims. The single-writer
+SQLite volume constrains the current profile to one control-plane replica.
 
 ## Repository and task flow
 
