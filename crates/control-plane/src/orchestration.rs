@@ -21,7 +21,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::{Instrument, info, warn};
 
 /// The durable `SQLite` handle shared by the API and reconciler.
 pub type StoreHandle = Arc<Mutex<Store>>;

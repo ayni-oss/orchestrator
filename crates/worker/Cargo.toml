@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 ayni-orchestrator-domain = { path = "../domain" }
+ayni-orchestrator-observability = { path = "../observability" }
 proc-macro2.workspace = true
 serde.workspace = true
 serde_json.workspace = true

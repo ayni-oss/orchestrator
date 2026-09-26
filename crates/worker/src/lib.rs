@@ -36,10 +36,7 @@ impl Configuration {
     ///
     /// Returns [`WorkerError`] for missing, malformed, or unsupported inputs.
     pub fn from_environment() -> Result<Self, WorkerError> {
-        let repository_url = required("ORCHESTRATOR_REPOSITORY_URL")?;
-        if repository_url != SUPPORTED_REPOSITORY_URL {
-            return Err(WorkerError::UnsupportedRepository(repository_url));
-        }
+        let repository_url = supported_repository_url(required("ORCHESTRATOR_REPOSITORY_URL")?)?;
         let version = required("ORCHESTRATOR_AYNI_VERSION")?;
         if version != SUPPORTED_AYNI_VERSION {
             return Err(WorkerError::UnsupportedAyniVersion(version));
@@ -52,6 +49,14 @@ impl Configuration {
             workspace: absolute_path("ORCHESTRATOR_WORKSPACE")?,
             evidence_root: absolute_path("ORCHESTRATOR_EVIDENCE_ROOT")?,
         })
+    }
+}
+
+fn supported_repository_url(value: String) -> Result<String, WorkerError> {
+    if value == SUPPORTED_REPOSITORY_URL {
+        Ok(value)
+    } else {
+        Err(WorkerError::UnsupportedRepository)
     }
 }
 
@@ -603,8 +608,8 @@ pub enum WorkerError {
         #[source]
         source: env::VarError,
     },
-    #[error("repository {0:?} is not supported by the managed-check worker")]
-    UnsupportedRepository(String),
+    #[error("repository is not supported by the managed-check worker")]
+    UnsupportedRepository,
     #[error("Ayni version {0:?} is not supported by the managed-check worker")]
     UnsupportedAyniVersion(String),
     #[error(transparent)]
@@ -664,7 +669,9 @@ pub enum WorkerError {
 
 #[cfg(test)]
 mod tests {
-    use super::{attempt_id, target_architecture, validate_execution_digest};
+    use super::{
+        attempt_id, supported_repository_url, target_architecture, validate_execution_digest,
+    };
     #[test]
     fn accepts_the_execution_binding_for_retained_signals() -> Result<(), super::WorkerError> {
         validate_execution_digest(br#"{"artifact_digest":"sha256:abc123"}"#, "abc123")
@@ -689,5 +696,16 @@ mod tests {
         assert!(matches!(target_architecture("x86_64"), Ok("amd64")));
         assert!(matches!(target_architecture("aarch64"), Ok("arm64")));
         assert!(target_architecture("riscv64").is_err());
+    }
+    #[test]
+    fn unsupported_repository_errors_do_not_echo_credentials() {
+        let credential = "repository-password";
+        let supplied = format!("https://user:{credential}@example.invalid/private.git");
+        let Err(error) = supported_repository_url(supplied.clone()) else {
+            panic!("credential-bearing repository URL was accepted");
+        };
+        let rendered = error.to_string();
+        assert!(!rendered.contains(credential));
+        assert!(!rendered.contains(&supplied));
     }
 }

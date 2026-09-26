@@ -81,6 +81,17 @@ impl DevelopmentReconciler {
         }
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            task_id = %task.id,
+            repository_id = %task.repository.id,
+            stage = task.phase.as_str(),
+            provider = %task.agent_profile.provider,
+            model = %task.agent_profile.model,
+            preparation_id = task.preparation_id.as_deref().unwrap_or("none")
+        )
+    )]
     async fn reconcile_task(&self, task: &DevelopmentTask) -> Result<(), String> {
         let deadline_expired = task
             .deadline_at
@@ -97,7 +108,7 @@ impl DevelopmentReconciler {
             )
         {
             self.cleanup_cancelled(task.id).await?;
-            self.fail(task.id, "task deadline exceeded")?;
+            self.fail(task.id, "task_deadline_exceeded", "task deadline exceeded")?;
             return Ok(());
         }
         match task.phase {
@@ -120,7 +131,11 @@ impl DevelopmentReconciler {
             let token = match self.publisher.clone_token(&task.repository).await {
                 Ok(token) => token,
                 Err(error) => {
-                    self.fail(task.id, &format!("Repository access unavailable: {error}"))?;
+                    self.fail(
+                        task.id,
+                        "repository_access_unavailable",
+                        &format!("Repository access unavailable: {error}"),
+                    )?;
                     return Ok(());
                 }
             };
@@ -142,11 +157,33 @@ impl DevelopmentReconciler {
         match self.observe(task.id, Stage::Code).await? {
             JobState::Succeeded => {
                 let directory = self.publisher.checkpoint_root().join(task.id.to_string());
-                let candidate = fs::read_to_string(directory.join("candidate-commit.txt"))
-                    .map_err(|_| "coding Job completed without a candidate commit")?;
-                GitRevision::parse(candidate.trim()).map_err(|_| "candidate commit is invalid")?;
+                let Ok(candidate) = fs::read_to_string(directory.join("candidate-commit.txt"))
+                else {
+                    self.fail(
+                        task.id,
+                        "candidate_artifact_missing",
+                        "coding Job completed without a candidate commit",
+                    )?;
+                    self.delete_clone_secret(task.id).await?;
+                    return Ok(());
+                };
+                if GitRevision::parse(candidate.trim()).is_err() {
+                    self.fail(
+                        task.id,
+                        "candidate_identity_invalid",
+                        "coding Job produced an invalid candidate commit",
+                    )?;
+                    self.delete_clone_secret(task.id).await?;
+                    return Ok(());
+                }
                 if !directory.join("candidate.bundle").is_file() {
-                    return self.fail(task.id, "coding Job completed without a Git bundle");
+                    self.fail(
+                        task.id,
+                        "candidate_artifact_missing",
+                        "coding Job completed without a Git bundle",
+                    )?;
+                    self.delete_clone_secret(task.id).await?;
+                    return Ok(());
                 }
                 self.with_store(|store| store.record_candidate(task.id, candidate.trim()))?;
                 self.delete_clone_secret(task.id).await?;
@@ -162,7 +199,11 @@ impl DevelopmentReconciler {
                         store.record_requested_input(task.id, question.trim())
                     })?;
                 } else {
-                    self.fail(task.id, "coding Job failed or disappeared")?;
+                    self.fail(
+                        task.id,
+                        "coding_job_failed",
+                        "coding Job failed or disappeared",
+                    )?;
                 }
                 self.delete_clone_secret(task.id).await?;
             }
@@ -187,7 +228,11 @@ impl DevelopmentReconciler {
                 ) {
                     Ok(verified) => verified,
                     Err(error) => {
-                        self.fail(task.id, &format!("Final validation rejected: {error}"))?;
+                        self.fail(
+                            task.id,
+                            "validation_evidence_rejected",
+                            &format!("Final validation rejected: {error}"),
+                        )?;
                         return Ok(());
                     }
                 };
@@ -195,7 +240,11 @@ impl DevelopmentReconciler {
                     .publisher
                     .verify_candidate_checkpoint(task.id, candidate)
                 {
-                    self.fail(task.id, &format!("Validated candidate changed: {error}"))?;
+                    self.fail(
+                        task.id,
+                        "candidate_checkpoint_changed",
+                        &format!("Validated candidate changed: {error}"),
+                    )?;
                     return Ok(());
                 }
                 self.with_store(|store| store.record_validation(task.id, &digest, tests_edited))?;
@@ -212,7 +261,11 @@ impl DevelopmentReconciler {
             JobState::Succeeded => {
                 let refreshed = self.with_store(|store| store.development_task(task.id))?;
                 if refreshed.phase != DevelopmentPhase::Completed {
-                    self.fail(task.id, "PR author completed without a durable draft PR")?;
+                    self.fail(
+                        task.id,
+                        "pr_result_missing",
+                        "PR author completed without a durable draft PR",
+                    )?;
                 }
             }
             JobState::Pending => {}
@@ -242,20 +295,29 @@ impl DevelopmentReconciler {
                 store.fail_validation(
                     task.id,
                     &outcome,
+                    &outcome,
                     Some(&digest),
                     Some(edited),
                     &scope_violations,
                 )
             })?;
         } else {
-            self.fail(task.id, "validation Job failed or disappeared")?;
+            self.fail(
+                task.id,
+                "validation_job_failed",
+                "validation Job failed or disappeared",
+            )?;
         }
         Ok(())
     }
 
     async fn recover_publication(&self, task: &DevelopmentTask) -> Result<(), String> {
         let Ok(action) = self.with_store(|store| store.publication_action(task.id)) else {
-            return self.fail(task.id, "PR author Job failed before publication");
+            return self.fail(
+                task.id,
+                "publication_not_started",
+                "PR author Job failed before publication",
+            );
         };
         let candidate = task
             .candidate_commit
@@ -268,19 +330,31 @@ impl DevelopmentReconciler {
             &task.repository.lock_sha256,
             &task.input.change_constraints,
         ) else {
-            return self.fail(task.id, "publication evidence changed");
+            return self.fail(
+                task.id,
+                "publication_evidence_changed",
+                "publication evidence changed",
+            );
         };
         if task.validation_manifest.as_deref() != Some(&digest)
             || action.candidate_commit != candidate
         {
-            return self.fail(task.id, "publication evidence changed");
+            return self.fail(
+                task.id,
+                "publication_evidence_changed",
+                "publication evidence changed",
+            );
         }
         if self
             .publisher
             .verify_candidate_checkpoint(task.id, candidate)
             .is_err()
         {
-            return self.fail(task.id, "publication candidate checkpoint changed");
+            return self.fail(
+                task.id,
+                "publication_checkpoint_changed",
+                "publication candidate checkpoint changed",
+            );
         }
         let bundle = self
             .publisher
@@ -320,9 +394,9 @@ impl DevelopmentReconciler {
         Ok(())
     }
 
-    fn fail(&self, id: TaskId, reason: &str) -> Result<(), String> {
-        self.with_store(|store| store.fail_development(id, reason))?;
-        warn!(task_id = %id, reason, "development task failed");
+    fn fail(&self, id: TaskId, reason_code: &str, diagnostic: &str) -> Result<(), String> {
+        self.with_store(|store| store.fail_development(id, reason_code, diagnostic))?;
+        warn!(task_id = %id, reason_code, "development task failed");
         Ok(())
     }
 
@@ -361,6 +435,10 @@ impl DevelopmentReconciler {
         Ok(())
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(task_id = %task.id, stage = stage.name(), job_name = %job_name(task.id, stage))
+    )]
     async fn ensure_job(&self, task: &DevelopmentTask, stage: Stage) -> Result<(), String> {
         let name = job_name(task.id, stage);
         let job = self.build_job(task, stage)?;
@@ -391,6 +469,10 @@ impl DevelopmentReconciler {
         }
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(task_id = %id, stage = stage.name(), job_name = %job_name(id, stage))
+    )]
     async fn observe(&self, id: TaskId, stage: Stage) -> Result<JobState, String> {
         let Some(job) = self
             .jobs()
@@ -420,6 +502,10 @@ impl DevelopmentReconciler {
         }
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(task_id = %id, stage = stage.name(), job_name = %job_name(id, stage))
+    )]
     async fn delete_job(&self, id: TaskId, stage: Stage) -> Result<(), String> {
         let name = job_name(id, stage);
         if let Some(job) = self
@@ -491,7 +577,11 @@ impl DevelopmentReconciler {
             .map_err(|error| error.to_string())?;
         let container = json!({"name":"coding-agent","image":self.worker_image,
             "imagePullPolicy":"Never","command":["/usr/local/bin/development-agent"],
-            "env":[{"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
+            "env":[{"name":"DEVELOPMENT_TASK_ID","value":task.id.to_string()},
+                {"name":"DEVELOPMENT_STAGE","value":"coding"},
+                {"name":"JOB_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},
+                {"name":"AGENT_PROVIDER","value":task.agent_profile.provider},
+                {"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
                 {"name":"DEVELOPMENT_CHECKPOINT","value":"/checkpoint"},
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
                 {"name":"DEVELOPMENT_REQUEST","value":task.input.request},
@@ -541,7 +631,10 @@ impl DevelopmentReconciler {
                 {"name":"engine-storage","mountPath":"/var/lib/docker"}]});
         let container = json!({"name":"validator","image":self.worker_image,
             "imagePullPolicy":"Never","command":["/usr/local/bin/validate-candidate"],
-            "env":[{"name":"DOCKER_HOST","value":"tcp://127.0.0.1:2375"},
+            "env":[{"name":"DEVELOPMENT_TASK_ID","value":task.id.to_string()},
+                {"name":"DEVELOPMENT_STAGE","value":"validation"},
+                {"name":"JOB_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},
+                {"name":"DOCKER_HOST","value":"tcp://127.0.0.1:2375"},
                 {"name":"DOCKER_BUILDKIT","value":"1"},
                 {"name":"DOCKER_CONFIG","value":"/tmp/docker"},
                 {"name":"TMPDIR","value":"/workspace"},
@@ -611,7 +704,11 @@ impl DevelopmentReconciler {
         );
         let container = json!({"name":"pr-agent","image":self.worker_image,
             "imagePullPolicy":"Never","command":["/usr/local/bin/pr-agent"],
-            "env":[{"name":"AGENT_MODEL","value":task.agent_profile.model},
+            "env":[{"name":"DEVELOPMENT_TASK_ID","value":task.id.to_string()},
+                {"name":"DEVELOPMENT_STAGE","value":"pr_preparation"},
+                {"name":"JOB_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},
+                {"name":"AGENT_PROVIDER","value":task.agent_profile.provider},
+                {"name":"AGENT_MODEL","value":task.agent_profile.model},
                 {"name":"DEVELOPMENT_PR_CONTEXT","value":context},
                 {"name":"DEVELOPMENT_PUBLISH_ENDPOINT","value":endpoint},
                 {"name":"DEVELOPMENT_PUBLISH_TOKEN","valueFrom":{"secretKeyRef":{"name":"development-publisher-auth","key":"token"}}},

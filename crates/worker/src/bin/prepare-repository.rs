@@ -6,10 +6,11 @@ use std::{
     env, fs,
     io::{self, Read},
     path::{Path, PathBuf},
-    process::{Command, ExitCode},
+    process::{Command, ExitCode, Stdio},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tracing::{error, info};
 
 #[derive(Deserialize)]
 struct BuildRecord {
@@ -76,7 +77,14 @@ fn command(directory: &Path, program: &str, args: &[&str]) -> Result<(), io::Err
         .args(args)
         .current_dir(directory)
         .env("GIT_TERMINAL_PROMPT", "0")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()?;
+    info!(
+        program,
+        exit_code = status.code(),
+        "preparation command completed"
+    );
     if status.success() {
         Ok(())
     } else {
@@ -224,10 +232,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    ayni_orchestrator_observability::init("prepare-repository");
+    let process_span = ayni_orchestrator_observability::process_span("prepare-repository");
+    let _process = process_span.enter();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("repository preparation failed: {error}");
+            error!(
+                reason_code = "repository_preparation_failed",
+                error = %ayni_orchestrator_observability::redact(&error.to_string()),
+                "repository preparation failed"
+            );
             ExitCode::FAILURE
         }
     }

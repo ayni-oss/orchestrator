@@ -14,9 +14,10 @@ mod ui;
 use api::{ApiError, HealthResponse};
 use axum::{
     Json, Router,
-    extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    extract::{MatchedPath, Path, Request, State},
+    http::{HeaderValue, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use ayni_orchestrator_domain::{AttemptId, AttemptOutcome, IdempotencyKey, TaskId};
@@ -30,8 +31,11 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 use thiserror::Error;
+use tracing::{Instrument, info, info_span};
+use uuid::Uuid;
 
 pub use development_jobs::DevelopmentReconciler;
 pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
@@ -284,7 +288,43 @@ pub fn router(state: AppState) -> Router {
             "/v1/development-tasks/{task_id}/publish",
             post(publication::publish),
         )
+        .layer(middleware::from_fn(observe_http))
         .with_state(state)
+}
+
+async fn observe_http(request: Request, next: Next) -> Response {
+    let request_id = request
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        })
+        .map_or_else(|| Uuid::now_v7().to_string(), str::to_owned);
+    let method = request.method().to_string();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unmatched", MatchedPath::as_str)
+        .to_owned();
+    let span = info_span!("http.request", %request_id, %method, %route);
+    async move {
+        let started = Instant::now();
+        let mut response = next.run(request).await;
+        let status = response.status().as_u16();
+        let latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        info!(status, latency_ms, "HTTP request completed");
+        if let Ok(value) = HeaderValue::from_str(&request_id) {
+            response.headers_mut().insert("x-request-id", value);
+        }
+        response
+    }
+    .instrument(span)
+    .await
 }
 
 async fn repository_bindings(
@@ -567,6 +607,7 @@ mod tests {
     async fn readiness_is_explicit_about_durable_orchestration() -> Result<(), axum::Error> {
         let request = Request::builder()
             .uri("/readyz")
+            .header("x-request-id", "readiness-test")
             .body(Body::empty())
             .map_err(axum::Error::new)?;
         let response = match router(state().map_err(axum::Error::new)?)
@@ -576,6 +617,7 @@ mod tests {
             Ok(response) => response,
             Err(never) => match never {},
         };
+        assert_eq!(response.headers()["x-request-id"], "readiness-test");
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
@@ -616,6 +658,9 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
         assert_eq!(body["phase"], "unsupported");
+        assert_eq!(body["lifecycle"][0]["stage"], "queue");
+        assert_eq!(body["lifecycle"][0]["outcome"], "unsupported");
+        assert_eq!(body["lifecycle"][0]["reason_code"], "unsupported_provider");
         assert_eq!(
             body["input"]["change_constraints"]["protected_paths"][0],
             "scripts/oracle.sh"

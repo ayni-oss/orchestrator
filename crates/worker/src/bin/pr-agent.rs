@@ -14,7 +14,9 @@ use std::{
     env, fs, io,
     process::ExitCode,
     sync::{Arc, Mutex},
+    time::Instant,
 };
+use tracing::{Instrument, error, info, info_span};
 
 #[derive(Deserialize, Serialize)]
 struct PublishArgs {
@@ -126,7 +128,28 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .tool(publisher.clone())
         .tool_choice(ToolChoice::Required)
         .build();
-    let prompt_result = agent.prompt(context).max_turns(4).await;
+    let provider_span = info_span!(
+        "provider.call",
+        provider = "openai",
+        model = %model,
+        stage = "pr_preparation"
+    );
+    let prompt_result = async {
+        let started = Instant::now();
+        let result = agent.prompt(context).max_turns(4).await;
+        info!(
+            outcome = if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            },
+            latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "provider call completed"
+        );
+        result
+    }
+    .instrument(provider_span)
+    .await;
     let did_publish = publisher
         .result
         .lock()
@@ -141,12 +164,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run().await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("PR agent failed: {error}");
-            ExitCode::FAILURE
-        }
+    ayni_orchestrator_observability::init("pr-agent");
+    let process_span = ayni_orchestrator_observability::process_span("pr-agent");
+    if run().instrument(process_span).await.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        // Provider errors can contain the generated PR context.
+        error!(reason_code = "pr_agent_failed", "PR agent failed");
+        ExitCode::FAILURE
     }
 }
 

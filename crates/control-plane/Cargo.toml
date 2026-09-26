@@ -11,6 +11,7 @@ publish.workspace = true
 axum.workspace = true
 base64.workspace = true
 ayni-orchestrator-domain = { path = "../domain" }
+ayni-orchestrator-observability = { path = "../observability" }
 http-body-util.workspace = true
 k8s-openapi.workspace = true
 kube.workspace = true

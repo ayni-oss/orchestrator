@@ -222,6 +222,63 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev delete pvc \
 That command permanently removes task state and retained evidence. It is not
 part of normal cleanup.
 
+## Lifecycle and structured-log troubleshooting
+
+Every development-task phase change is written transactionally to the append-only
+`lifecycle` array returned by both development-task API endpoints. Events contain
+an event time, logical stage (`queue`, `coding`, `validation`, or
+`pr_preparation`), outcome, and a stable `reason_code` for blocked or terminal
+outcomes. Stage completion and the next queued stage share a timestamp, so
+operators can calculate queue, coding, validation, PR-preparation, and total
+elapsed time without the Kubernetes Job. `lifecycle_complete: false` means the
+task predates lifecycle instrumentation; its single migration snapshot is not a
+complete duration record. Retry and requested-input actions create a new task
+with its own timeline and retain `retry_of` on the new task.
+
+The control plane and every worker binary emit newline-delimited JSON to stdout.
+The shared envelope contains `timestamp`, `level`, `target`, `message`, and span
+context. Depending on the operation, bounded correlation fields include
+`request_id`, `task_id`, `attempt_id`, `preparation_id`, `stage`, `job_name`,
+`provider`, `model`, `repository_id`, `status`, `latency_ms`, and `reason_code`.
+HTTP responses return `x-request-id`; a caller-supplied request ID is accepted
+only when it is a 1-64 character ASCII token. Set `RUST_LOG` to one of `error`,
+`warn`, `info`, `debug`, or `trace` to change filtering for orchestrator-owned
+targets. Third-party targets remain disabled even at `trace` so dependency
+instrumentation cannot expose credential-bearing provider requests.
+
+Logs deliberately exclude authorization headers, credentials, secret values,
+prompts, acceptance criteria, repository contents, command output, and
+environment dumps. High-cardinality task and repository identifiers and detailed
+safe diagnostics belong in logs or durable task records, never metric labels.
+Worker child-command streams are captured, retained as evidence where supported,
+or suppressed rather than mixed into the JSON stream. The shared redactor is a
+last line of defense; do not add sensitive values as tracing fields.
+
+Useful local filters are:
+
+```bash
+# Control-plane failures for one task.
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs \
+  deployment/control-plane | jq -c \
+  'select(.task_id == "TASK_ID" or .span.task_id == "TASK_ID")'
+
+# Follow one deterministic Job and filter warnings/errors.
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs -f \
+  job/JOB_NAME | jq -c 'select(.level == "WARN" or .level == "ERROR")'
+
+# Correlate an HTTP response with its request log.
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs \
+  deployment/control-plane | jq -c \
+  'select(.request_id == "REQUEST_ID" or .span.request_id == "REQUEST_ID")'
+```
+
+Kubernetes retains terminal Jobs for one hour in this profile, so pod logs may
+expire with them and Docker Desktop log retention is not an audit store. The
+SQLite lifecycle remains until the `control-plane-state` claim is explicitly
+deleted. There is no centralized log backend, tracing exporter, automatic log
+backup, or guaranteed log retention; collect relevant JSON logs before Job,
+namespace, or Docker Desktop cleanup.
+
 ## Failure triage
 
 - `pilot_ready: false`: deploy the current profile and configure all GitHub/model

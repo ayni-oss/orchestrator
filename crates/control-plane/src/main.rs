@@ -3,21 +3,28 @@ use ayni_orchestrator_control_plane::{
     PublisherState, Reconciler, router,
 };
 use kube::Client;
-use std::io;
+use std::{io, process::ExitCode};
 use tokio::{net::TcpListener, signal};
-use tracing::{error, info};
-use tracing_subscriber::EnvFilter;
+use tracing::{Instrument, error, info};
 
 #[tokio::main]
-async fn main() -> Result<(), io::Error> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .with_target(false)
-        .compact()
-        .init();
+async fn main() -> ExitCode {
+    ayni_orchestrator_observability::init("control-plane");
+    let process_span = ayni_orchestrator_observability::process_span("control-plane");
+    match run().instrument(process_span).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            error!(
+                reason_code = "control_plane_failed",
+                error = %ayni_orchestrator_observability::redact(&error.to_string()),
+                "control plane stopped"
+            );
+            ExitCode::FAILURE
+        }
+    }
+}
 
+async fn run() -> Result<(), io::Error> {
     let configuration = Configuration::from_environment().map_err(io::Error::other)?;
     let state = AppState::open(configuration.database_path(), configuration.max_attempts())
         .map_err(io::Error::other)?

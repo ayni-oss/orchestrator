@@ -10,17 +10,22 @@ context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
 readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 readonly local_port="${AYNI_ORCHESTRATOR_LOCAL_PORT:-18080}"
+readonly response_headers="$(mktemp /tmp/ayni-orchestrator-response-headers.XXXXXX)"
 
 kubectl --context "$context" --namespace "$namespace" port-forward service/control-plane "$local_port:8080" >/tmp/ayni-orchestrator-port-forward.log 2>&1 &
 readonly port_forward_pid="$!"
 cleanup() {
   kill "$port_forward_pid" 2>/dev/null || true
   wait "$port_forward_pid" 2>/dev/null || true
+  rm -f "$response_headers"
 }
 trap cleanup EXIT
 
 for _ in {1..20}; do
-  if response="$(curl --fail --silent --show-error "http://127.0.0.1:$local_port/readyz" 2>/dev/null)"; then
+  if response="$(curl --fail --silent --show-error --dump-header "$response_headers" \
+    -H 'x-request-id: local-readiness-check' \
+    "http://127.0.0.1:$local_port/readyz" 2>/dev/null)"; then
+    grep -qi '^x-request-id: local-readiness-check' "$response_headers"
     grep -q '"pilot_ready":true' <<<"$response"
     curl --fail --silent --show-error "http://127.0.0.1:$local_port/" | grep -q 'Ayni Orchestrator'
     curl --fail --silent --show-error "http://127.0.0.1:$local_port/v1/repository-bindings" >/dev/null

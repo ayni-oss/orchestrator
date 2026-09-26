@@ -16,6 +16,7 @@ use std::{
     time::Duration,
 };
 use syn::{parse::Parser, spanned::Spanned};
+use tracing::error;
 
 #[derive(Serialize)]
 struct Artifact {
@@ -787,10 +788,17 @@ fn write_manifest(evidence: &Path, manifest: &Manifest) -> Result<(), Box<dyn st
 }
 
 fn main() -> ExitCode {
+    ayni_orchestrator_observability::init("validate-candidate");
+    let process_span = ayni_orchestrator_observability::process_span("validate-candidate");
+    let _process = process_span.enter();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("candidate validation failed: {error}");
+            error!(
+                reason_code = "candidate_validation_failed",
+                error = %ayni_orchestrator_observability::redact(&error.to_string()),
+                "candidate validation failed"
+            );
             ExitCode::FAILURE
         }
     }
