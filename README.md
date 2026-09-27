@@ -16,6 +16,7 @@ independently useful local CLI in the public
 - GitHub App repository enrollment and draft-pull-request publication;
 - content-addressed repository preparation and compatible reuse;
 - bounded OpenAI-backed development with retained checkpoints;
+- durable per-interaction provider usage and versioned cost estimates;
 - independent Ayni validation of a frozen candidate;
 - frozen protected-path and test-edit constraints enforced before publication;
 - retained, digest-bound result artifacts; and

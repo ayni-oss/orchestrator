@@ -5,6 +5,7 @@ mod development;
 mod development_jobs;
 mod development_lifecycle;
 mod github;
+mod model_usage;
 mod orchestration;
 mod preparation;
 mod preparation_jobs;
@@ -15,7 +16,7 @@ use api::{ApiError, HealthResponse};
 use axum::{
     Json, Router,
     extract::{MatchedPath, Path, Request, State},
-    http::{HeaderValue, StatusCode},
+    http::{HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -241,6 +242,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(ui::index))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness))
+        .route("/metrics", get(metrics))
         .route("/v1/tasks", post(submit_task))
         .route("/v1/tasks/{task_id}", get(task))
         .route("/v1/tasks/{task_id}/retry", post(retry_task))
@@ -464,6 +466,10 @@ async fn development_evidence(
 async fn liveness() -> impl IntoResponse {
     (StatusCode::OK, Json(HealthResponse::live()))
 }
+async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let body = with_store(&state, |store| store.model_usage_metrics())?;
+    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body))
+}
 async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -621,7 +627,7 @@ mod tests {
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","pilot_ready":false,"domain_model_revision":3}"#
+            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","pilot_ready":false,"domain_model_revision":4}"#
         );
         Ok(())
     }
@@ -670,6 +676,10 @@ mod tests {
             false
         );
         assert_eq!(body["input"]["deadline_seconds"], 300);
+        assert_eq!(body["model_usage"]["collection_status"], "complete");
+        assert_eq!(body["model_usage"]["total"]["interaction_count"], 0);
+        assert!(body["model_usage"]["total"]["input_tokens"].is_null());
+        assert_eq!(body["model_usage"]["by_stage"][0]["stage"], "coding");
         assert_eq!(
             body["deadline_at"].as_i64(),
             Some(

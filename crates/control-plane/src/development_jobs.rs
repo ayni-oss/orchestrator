@@ -3,13 +3,14 @@
 use crate::{
     AppState, PublisherState,
     development::{DevelopmentPhase, DevelopmentTask},
+    model_usage::ingest_usage_reports,
     orchestration::unix_seconds,
 };
-use ayni_orchestrator_domain::{GitRevision, TaskId};
+use ayni_orchestrator_domain::{GitRevision, ModelInteractionOutcome, TaskId};
 use k8s_openapi::api::{batch::v1::Job, core::v1::Secret};
 use kube::{
     Api, Client,
-    api::{DeleteParams, Patch, PatchParams, PostParams},
+    api::{DeleteParams, Patch, PatchParams, PostParams, PropagationPolicy},
 };
 use serde_json::{Value, json};
 use std::{fs, sync::Arc};
@@ -93,6 +94,7 @@ impl DevelopmentReconciler {
         )
     )]
     async fn reconcile_task(&self, task: &DevelopmentTask) -> Result<(), String> {
+        self.ingest_usage(task.id, None)?;
         let deadline_expired = task
             .deadline_at
             .is_some_and(|deadline| unix_seconds().map(|now| now >= deadline).unwrap_or(true));
@@ -108,7 +110,10 @@ impl DevelopmentReconciler {
             )
         {
             self.cleanup_cancelled(task.id).await?;
-            self.fail(task.id, "task_deadline_exceeded", "task deadline exceeded")?;
+            if self.stage_jobs_absent(task.id).await? {
+                self.ingest_usage(task.id, Some(ModelInteractionOutcome::Failed))?;
+                self.fail(task.id, "task_deadline_exceeded", "task deadline exceeded")?;
+            }
             return Ok(());
         }
         match task.phase {
@@ -118,11 +123,20 @@ impl DevelopmentReconciler {
             DevelopmentPhase::Validating => self.finish_validation(task).await,
             DevelopmentPhase::PrQueued => self.start_stage(task, Stage::Pr).await,
             DevelopmentPhase::PreparingPr => self.finish_pr(task).await,
-            DevelopmentPhase::Cancelled => self.cleanup_cancelled(task.id).await,
-            DevelopmentPhase::WaitingForInput
-            | DevelopmentPhase::Completed
-            | DevelopmentPhase::Failed
-            | DevelopmentPhase::Unsupported => Ok(()),
+            DevelopmentPhase::Cancelled => {
+                self.cleanup_cancelled(task.id).await?;
+                if self.stage_jobs_absent(task.id).await? {
+                    self.ingest_usage(task.id, Some(ModelInteractionOutcome::Cancelled))?;
+                    self.with_store(|store| store.complete_model_usage_collection(task.id))?;
+                }
+                Ok(())
+            }
+            DevelopmentPhase::Completed => self.finish_completed_usage(task).await,
+            DevelopmentPhase::WaitingForInput | DevelopmentPhase::Failed => {
+                self.ingest_usage(task.id, Some(ModelInteractionOutcome::Failed))?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))
+            }
+            DevelopmentPhase::Unsupported => Ok(()),
         }
     }
 
@@ -189,6 +203,7 @@ impl DevelopmentReconciler {
                 self.delete_clone_secret(task.id).await?;
             }
             JobState::Failed | JobState::Missing => {
+                self.ingest_usage(task.id, Some(ModelInteractionOutcome::Failed))?;
                 let question = self
                     .publisher
                     .checkpoint_root()
@@ -198,6 +213,7 @@ impl DevelopmentReconciler {
                     self.with_store(|store| {
                         store.record_requested_input(task.id, question.trim())
                     })?;
+                    self.with_store(|store| store.complete_model_usage_collection(task.id))?;
                 } else {
                     self.fail(
                         task.id,
@@ -249,7 +265,10 @@ impl DevelopmentReconciler {
                 }
                 self.with_store(|store| store.record_validation(task.id, &digest, tests_edited))?;
             }
-            JobState::Failed | JobState::Missing => self.record_failed_validation(task)?,
+            JobState::Failed | JobState::Missing => {
+                self.record_failed_validation(task)?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))?;
+            }
             JobState::Pending => {}
         }
         Ok(())
@@ -257,9 +276,15 @@ impl DevelopmentReconciler {
 
     async fn finish_pr(&self, task: &DevelopmentTask) -> Result<(), String> {
         match self.observe(task.id, Stage::Pr).await? {
-            JobState::Failed | JobState::Missing => self.recover_publication(task).await?,
+            JobState::Failed | JobState::Missing => {
+                self.ingest_usage(task.id, Some(ModelInteractionOutcome::Failed))?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))?;
+                self.recover_publication(task).await?;
+            }
             JobState::Succeeded => {
+                self.ingest_usage(task.id, None)?;
                 let refreshed = self.with_store(|store| store.development_task(task.id))?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))?;
                 if refreshed.phase != DevelopmentPhase::Completed {
                     self.fail(
                         task.id,
@@ -273,11 +298,40 @@ impl DevelopmentReconciler {
         Ok(())
     }
 
+    async fn finish_completed_usage(&self, task: &DevelopmentTask) -> Result<(), String> {
+        match self.observe(task.id, Stage::Pr).await? {
+            JobState::Pending => Ok(()),
+            JobState::Succeeded => {
+                self.ingest_usage(task.id, None)?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))
+            }
+            JobState::Failed | JobState::Missing => {
+                self.ingest_usage(task.id, Some(ModelInteractionOutcome::Failed))?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))
+            }
+        }
+    }
+
     async fn cleanup_cancelled(&self, id: TaskId) -> Result<(), String> {
         for stage in [Stage::Code, Stage::Validate, Stage::Pr] {
             self.delete_job(id, stage).await?;
         }
         self.delete_clone_secret(id).await
+    }
+
+    async fn stage_jobs_absent(&self, id: TaskId) -> Result<bool, String> {
+        for stage in [Stage::Code, Stage::Validate, Stage::Pr] {
+            if self
+                .jobs()
+                .get_opt(&job_name(id, stage))
+                .await
+                .map_err(|error| error.to_string())?
+                .is_some()
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn record_failed_validation(&self, task: &DevelopmentTask) -> Result<(), String> {
@@ -372,6 +426,15 @@ impl DevelopmentReconciler {
             )
             .await?;
         self.with_store(|store| store.complete_publication(task.id, candidate, number, &url))
+    }
+
+    fn ingest_usage(
+        &self,
+        id: TaskId,
+        terminal_outcome: Option<ModelInteractionOutcome>,
+    ) -> Result<(), String> {
+        let root = self.publisher.checkpoint_root().to_path_buf();
+        self.with_store(|store| ingest_usage_reports(store, &root, id, terminal_outcome))
     }
 
     fn with_store<T>(
@@ -519,7 +582,13 @@ impl DevelopmentReconciler {
                 return Err("refusing to delete unowned Job".into());
             }
             self.jobs()
-                .delete(&name, &DeleteParams::default())
+                .delete(
+                    &name,
+                    &DeleteParams {
+                        propagation_policy: Some(PropagationPolicy::Foreground),
+                        ..DeleteParams::default()
+                    },
+                )
                 .await
                 .map_err(|error| format!("Job deletion failed: {error}"))?;
         }
@@ -557,6 +626,16 @@ impl DevelopmentReconciler {
         .map_err(|error| format!("invalid development Job template: {error}"))
     }
 
+    fn usage_init(&self, task: &DevelopmentTask) -> Value {
+        json!({"name":"prepare-checkpoints","image":self.worker_image,"imagePullPolicy":"Never",
+            "command":["/bin/sh","-ec"],
+            "args":["install -d -m 0750 /checkpoint-root/$DEVELOPMENT_TASK_ID; install -d -m 0700 /checkpoint-root/model-usage/$DEVELOPMENT_TASK_ID"],
+            "env":[{"name":"DEVELOPMENT_TASK_ID","value":task.id.to_string()}],
+            "securityContext":worker_security(),
+            "volumeMounts":[{"name":"checkpoint","mountPath":"/checkpoint-root"}]
+        })
+    }
+
     fn code_spec(&self, task: &DevelopmentTask) -> Result<(Vec<Value>, Value, Vec<Value>), String> {
         let repository = format!(
             "https://github.com/{}/{}.git",
@@ -564,7 +643,7 @@ impl DevelopmentReconciler {
         );
         let init = json!({"name":"checkout","image":self.worker_image,"imagePullPolicy":"Never",
             "command":["/bin/sh","-ec"],
-            "args":["AUTH=$(printf 'x-access-token:%s' \"$GITHUB_CLONE_TOKEN\" | base64 | tr -d '\\n'); git -c http.https://github.com/.extraheader=\"Authorization: Basic $AUTH\" clone \"$DEVELOPMENT_REPOSITORY_URL\" /workspace/repository; git -C /workspace/repository checkout --detach \"$DEVELOPMENT_START_REVISION\"; test \"$(git -C /workspace/repository rev-parse HEAD)\" = \"$DEVELOPMENT_START_REVISION\"; mkdir -p /workspace/.cargo; cp -R /usr/local/cargo/. /workspace/.cargo/"],
+            "args":["AUTH=$(printf 'x-access-token:%s' \"$GITHUB_CLONE_TOKEN\" | base64 | tr -d '\\n'); git -c http.https://github.com/.extraheader=\"Authorization: Basic $AUTH\" clone \"$DEVELOPMENT_REPOSITORY_URL\" /workspace/repository; git -C /workspace/repository checkout --detach \"$DEVELOPMENT_START_REVISION\"; test \"$(git -C /workspace/repository rev-parse HEAD)\" = \"$DEVELOPMENT_START_REVISION\"; mkdir -p /workspace/.cargo; cp -R /usr/local/cargo/. /workspace/.cargo/; chmod -R g+rwX /workspace"],
             "env":[{"name":"GITHUB_CLONE_TOKEN","valueFrom":{"secretKeyRef":{"name":secret_name(task.id),"key":"token"}}},
                 {"name":"DEVELOPMENT_REPOSITORY_URL","value":repository},
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision}],
@@ -583,6 +662,7 @@ impl DevelopmentReconciler {
                 {"name":"AGENT_PROVIDER","value":task.agent_profile.provider},
                 {"name":"DEVELOPMENT_WORKSPACE","value":"/workspace/repository"},
                 {"name":"DEVELOPMENT_CHECKPOINT","value":"/checkpoint"},
+                {"name":"DEVELOPMENT_USAGE_DIR","value":"/usage"},
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
                 {"name":"DEVELOPMENT_REQUEST","value":task.input.request},
                 {"name":"DEVELOPMENT_ACCEPTANCE_CRITERIA","value":criteria},
@@ -590,15 +670,16 @@ impl DevelopmentReconciler {
                 {"name":"AGENT_MODEL","value":task.agent_profile.model},
                 {"name":"CARGO_HOME","value":"/workspace/.cargo"},
                 {"name":"OPENAI_API_KEY","valueFrom":{"secretKeyRef":{"name":task.agent_profile.secret_ref,"key":"api-key"}}}],
-            "securityContext":worker_security(),
+            "securityContext":coding_agent_security(),
             "resources":{"requests":{"cpu":"500m","memory":"1Gi"},
                 "limits":{"cpu":"2","memory":"3Gi"}},
             "volumeMounts":[{"name":"workspace","mountPath":"/workspace"},
                 {"name":"checkpoint","mountPath":"/checkpoint","subPath":task.id.to_string()},
+                {"name":"checkpoint","mountPath":"/usage","subPath":usage_subpath(task.id)},
                 {"name":"scratch","mountPath":"/tmp"}]
         });
         Ok((
-            vec![init],
+            vec![self.usage_init(task), init],
             container,
             vec![
                 json!({"name":"workspace","emptyDir":{"sizeLimit":"5Gi"}}),
@@ -709,6 +790,7 @@ impl DevelopmentReconciler {
                 {"name":"JOB_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},
                 {"name":"AGENT_PROVIDER","value":task.agent_profile.provider},
                 {"name":"AGENT_MODEL","value":task.agent_profile.model},
+                {"name":"DEVELOPMENT_USAGE_DIR","value":"/usage"},
                 {"name":"DEVELOPMENT_PR_CONTEXT","value":context},
                 {"name":"DEVELOPMENT_PUBLISH_ENDPOINT","value":endpoint},
                 {"name":"DEVELOPMENT_PUBLISH_TOKEN","valueFrom":{"secretKeyRef":{"name":"development-publisher-auth","key":"token"}}},
@@ -716,12 +798,16 @@ impl DevelopmentReconciler {
             "securityContext":worker_security(),
             "resources":{"requests":{"cpu":"250m","memory":"256Mi"},
                 "limits":{"cpu":"1","memory":"1Gi"}},
-            "volumeMounts":[{"name":"scratch","mountPath":"/tmp"}]
+            "volumeMounts":[{"name":"checkpoint","mountPath":"/usage","subPath":usage_subpath(task.id)},
+                {"name":"scratch","mountPath":"/tmp"}]
         });
         Ok((
-            vec![],
+            vec![self.usage_init(task)],
             container,
-            vec![json!({"name":"scratch","emptyDir":{}})],
+            vec![
+                json!({"name":"checkpoint","persistentVolumeClaim":{"claimName":"development-checkpoints"}}),
+                json!({"name":"scratch","emptyDir":{}}),
+            ],
         ))
     }
 }
@@ -757,14 +843,40 @@ fn secret_name(id: TaskId) -> String {
     format!("development-clone-{}", id.to_string().replace('-', ""))
 }
 
+fn usage_subpath(id: TaskId) -> String {
+    format!("model-usage/{id}")
+}
+
 fn worker_security() -> Value {
     json!({"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},
         "readOnlyRootFilesystem":true,"runAsNonRoot":true,"runAsUser":10001})
 }
 
+fn coding_agent_security() -> Value {
+    json!({"allowPrivilegeEscalation":false,
+        "capabilities":{"drop":["ALL"],
+            "add":["DAC_OVERRIDE","FOWNER","SETGID","SETPCAP","SETUID"]},
+        "readOnlyRootFilesystem":true,"runAsGroup":10001,"runAsNonRoot":false,"runAsUser":0})
+}
+
 #[cfg(test)]
 mod tests {
-    use super::job_deadline;
+    use super::{coding_agent_security, job_deadline, usage_subpath};
+    use ayni_orchestrator_domain::TaskId;
+
+    #[test]
+    fn coding_tools_are_separated_from_the_usage_spool() {
+        let id = TaskId::generate();
+        assert_eq!(usage_subpath(id), format!("model-usage/{id}"));
+        let security = coding_agent_security();
+        assert_eq!(security["runAsUser"], 0);
+        assert_eq!(security["runAsGroup"], 10_001);
+        assert_eq!(security["capabilities"]["add"][0], "DAC_OVERRIDE");
+        assert_eq!(security["capabilities"]["add"][1], "FOWNER");
+        assert_eq!(security["capabilities"]["add"][2], "SETGID");
+        assert_eq!(security["capabilities"]["add"][3], "SETPCAP");
+        assert_eq!(security["capabilities"]["add"][4], "SETUID");
+    }
 
     #[test]
     fn task_deadline_bounds_each_stage_and_shutdown_grace() {

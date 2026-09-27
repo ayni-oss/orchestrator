@@ -150,6 +150,66 @@ violation, and no publication Job is scheduled. Create a separately reviewed
 environment update outside the orchestrator, enroll its new lock digest, and
 prepare its revision before submitting feature work.
 
+## Pilot model-usage measurement
+
+Both model-consuming stages (`coding` and `pr_preparation`) write one bounded,
+prompt-free report for every provider interaction. Reports are first atomically
+spooled in a task-scoped, mode-0700 subpath of the retained development-checkpoint
+claim that repository commands cannot access, and are reconciled into SQLite with
+the unique identity `(task_id, stage, call_id)`. Coding file, shell, and Git tools
+run under a distinct UID with an allowlisted environment and no capabilities. The
+trusted agent transport retains only the narrow filesystem and identity-switching
+capabilities needed to protect the spool, and fails closed if the tool identity can
+read or write the usage mount. Re-reading a report,
+retrying reconciliation, or restarting the control plane does not create a second
+interaction. A worker stopped during a request leaves an in-progress spool record;
+once the Job is terminal it becomes a failed or cancelled interaction with unknown
+usage instead of an asserted zero.
+
+The development-task list and detail APIs return `model_usage.interactions`,
+`model_usage.by_stage`, and `model_usage.total`. `collection_status` is
+`collecting` while a model stage can still add calls, `complete` only after its
+last model Job is terminal, and `unavailable` for tasks created before this
+instrumentation. The task UI renders the same values. Use these definitions for
+pilot measurements:
+
+- **Input, output, cached-input, reasoning, and total tokens** are raw counters
+  supplied by the provider for each HTTP model interaction. Cached-input and
+  reasoning tokens are subsets of the provider's input and output counts; do not
+  add them again to total tokens. No count is inferred from prompt text.
+- **Stage token total** is the sum of a field only when every interaction in that
+  stage reported that field. **Task token total** applies the same rule across
+  both stages. A missing field is `null`/`unknown`, never zero. A stage with no
+  interactions is also unknown rather than zero.
+- **Usage unavailable** counts interactions for which the provider returned none
+  of the supported counters. Partial provider usage retains the reported fields
+  and leaves the others unknown, including on failed work when the provider
+  supplied counters.
+- **Estimated cost** is not an invoice or provider billing truth. It is calculated
+  only for a known pricing entry and stores the currency, exact priced token
+  inputs, per-million-token rates, and pricing-table identity with the interaction.
+  The requested task-profile model and nullable provider-resolved model identity
+  are retained separately. The current table identity is
+  `openai-public-2025-08-07`, in USD micro-units, and applies only when the
+  provider reports the exact `gpt-5-2025-08-07` identity; floating aliases and
+  missing resolved identities remain unpriced. Its fixed rates are USD 1.25 per
+  million input tokens, USD 0.125 per million cached-input tokens, and USD 10.00
+  per million output tokens. Cached input is priced at the cached rate when
+  reported; when the optional
+  cached breakdown is absent, all reported input is conservatively priced at the
+  standard input rate. OpenAI reasoning tokens are already included in output and
+  are not charged a second time. A stage or task estimated cost is unknown when
+  any included interaction cannot be priced.
+- **Latency** is wall time from issuing one model request through its response or
+  terminal error. Outcomes are `succeeded`, `failed`, or `cancelled` for each
+  interaction and do not imply the enclosing task outcome.
+
+`GET /metrics` exports only aggregate interaction counters and latency histograms
+with `stage`, `provider`, and `outcome` labels. It intentionally omits task IDs,
+request text, repositories, model-generated content, and arbitrary errors. Usage
+records and metrics never retain prompts, completions, reasoning text, tool
+transcripts, credentials, authorization headers, or provider response bodies.
+
 ## Update without losing data
 
 Never run cleanup to perform an update. Record PVC identities and task state,

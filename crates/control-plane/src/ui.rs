@@ -14,5 +14,12 @@ mod tests {
         assert!(html.contains("partial history from before lifecycle instrumentation"));
         assert!(html.contains("reason_code"));
         assert!(html.contains("Date.now()"));
+        assert!(html.contains("Provider usage"));
+        assert!(html.contains("usage unavailable"));
+        assert!(html.contains("Costs are estimates, not provider billing"));
+        assert!(html.contains("cached_input_tokens"));
+        assert!(html.contains("pricing_version"));
+        assert!(html.contains("resolved_model"));
+        assert!(html.contains("input_rate_micros_per_million"));
     }
 }
