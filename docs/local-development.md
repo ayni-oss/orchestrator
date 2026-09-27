@@ -92,8 +92,9 @@ successful rollout; it does not prune shared Docker caches or volumes.
 
 The check script opens a loopback port-forward, verifies `/livez`, `/readyz`, the
 browser marker, and list APIs. The current readiness JSON field is named
-`pilot_ready`; it means publication configuration is available, not that an
-individual repository has been prepared.
+`pilot_ready`; it means publication is configured and provider model discovery
+has succeeded at least once in this process, not that an individual repository
+has been prepared or the provider is currently reachable.
 
 Remove stateless resources while preserving retained state with:
 
@@ -149,10 +150,10 @@ and Ayni `0.13.0`. Use the browser for enrollment and preparation, or configure:
 
 - `POST /v1/repository-bindings` with repository identity, GitHub App
   installation, base branch, and lowercase SHA-256 of `.ayni.lock`;
-- `POST /v1/agent-profiles` with provider `openai`, model, and Kubernetes Secret
-  reference; and
-- `POST /v1/development-tasks` with a unique idempotency key, binding/profile
-  IDs, exact 40-hex start revision, request, acceptance criteria, immutable
+- `GET /v1/provider-models` to inspect the live OpenAI catalog available to the
+  configured `openai-api` Secret; and
+- `POST /v1/development-tasks` with a unique idempotency key, binding ID,
+  selected `model`, exact 40-hex start revision, request, acceptance criteria, immutable
   `change_constraints`, and optional `deadline_seconds` from 1 through 86400.
   `change_constraints.protected_paths` accepts at most 100 normalized,
   repository-relative file or directory paths; descendants of a protected
@@ -161,7 +162,7 @@ and Ayni `0.13.0`. Use the browser for enrollment and preparation, or configure:
   most 65536 aggregate path bytes.
 
 Repository preparation must be `ready` for those exact inputs. A task freezes
-its repository, profile, source, lock, preparation, request, acceptance criteria,
+its repository, provider/model selection, source, lock, preparation, request, acceptance criteria,
 change constraints, and deadline. Reusing an idempotency key with different
 content is rejected. Retries copy the same constraints into a linked task.
 
@@ -191,7 +192,20 @@ kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
 open http://127.0.0.1:18080/
 ```
 
-The browser exposes repository readiness, preparation, task submission, phase
-refresh, cancellation, linked retry, requested-input follow-up, draft PR links,
-and validated results. It is not authenticated; anyone who can reach the Service
-can operate it.
+The browser exposes repository readiness, preparation, provider-discovered model
+selection, task submission, phase refresh, cancellation, linked retry,
+requested-input follow-up, draft PR links, and validated results. It is not
+authenticated; anyone who can reach the Service can operate it.
+
+The Docker Desktop overlay also provisions disposable Prometheus and Grafana
+instances for the control-plane `/metrics` endpoint. Open the provisioned model
+interaction dashboard through loopback only:
+
+```sh
+kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
+  port-forward service/grafana 13000:3000
+open http://127.0.0.1:13000/d/ayni-orchestrator-model-usage
+```
+
+Prometheus retains only 24 hours in ephemeral storage. Grafana anonymous access
+is Viewer-only and is acceptable solely within this trusted local boundary.

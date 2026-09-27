@@ -5,6 +5,7 @@ mod development;
 mod development_jobs;
 mod development_lifecycle;
 mod github;
+mod model_catalog;
 mod model_usage;
 mod orchestration;
 mod preparation;
@@ -21,8 +22,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use ayni_orchestrator_domain::{AttemptId, AttemptOutcome, IdempotencyKey, TaskId};
-use development::{AgentProfile, DevelopmentInput, DevelopmentTask, RepositoryBinding};
+use ayni_orchestrator_domain::{
+    AttemptId, AttemptOutcome, ChangeConstraints, IdempotencyKey, TaskId,
+};
+use development::{DevelopmentInput, DevelopmentTask, RepositoryBinding};
 use orchestration::{Store, StoreError, StoreHandle, TaskInput, TaskView};
 use preparation::{PreparationView, PrepareRepositoryInput, RepositoryView};
 use serde::Deserialize;
@@ -39,6 +42,7 @@ use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
 pub use development_jobs::DevelopmentReconciler;
+pub use model_catalog::{AvailableModel, ModelCatalog, ModelCatalogError};
 pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
 pub use preparation_jobs::PreparationReconciler;
 pub use publication::PublisherState;
@@ -200,6 +204,7 @@ pub enum ConfigurationError {
 pub struct AppState {
     store: StoreHandle,
     publisher: Option<Arc<PublisherState>>,
+    model_catalog: Option<ModelCatalog>,
 }
 
 impl AppState {
@@ -215,12 +220,19 @@ impl AppState {
         Ok(Self {
             store: Arc::new(Mutex::new(Store::open(database_path, max_attempts)?)),
             publisher: None,
+            model_catalog: None,
         })
     }
 
     #[must_use]
     pub fn with_publisher(mut self, publisher: Option<PublisherState>) -> Self {
         self.publisher = publisher.map(Arc::new);
+        self
+    }
+
+    #[must_use]
+    pub fn with_model_catalog(mut self, model_catalog: ModelCatalog) -> Self {
+        self.model_catalog = Some(model_catalog);
         self
     }
 
@@ -261,10 +273,7 @@ pub fn router(state: AppState) -> Router {
             post(prepare_repository),
         )
         .route("/v1/preparations/{preparation_id}", get(preparation))
-        .route(
-            "/v1/agent-profiles",
-            get(agent_profiles).post(put_agent_profile),
-        )
+        .route("/v1/provider-models", get(provider_models))
         .route(
             "/v1/development-tasks",
             get(development_tasks).post(submit_development_task),
@@ -373,18 +382,14 @@ async fn put_repository_binding(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn agent_profiles(
+async fn provider_models(
     State(state): State<AppState>,
-) -> Result<Json<Vec<AgentProfile>>, ApiError> {
-    Ok(Json(with_store(&state, |store| store.agent_profiles())?))
-}
-
-async fn put_agent_profile(
-    State(state): State<AppState>,
-    Json(profile): Json<AgentProfile>,
-) -> Result<StatusCode, ApiError> {
-    with_store(&state, |store| store.put_agent_profile(&profile))?;
-    Ok(StatusCode::NO_CONTENT)
+) -> Result<Json<model_catalog::AvailableModels>, ApiError> {
+    let catalog = state
+        .model_catalog
+        .as_ref()
+        .ok_or(ApiError::ModelCatalogUnavailable)?;
+    Ok(Json(catalog.available().await?))
 }
 
 async fn development_tasks(
@@ -397,10 +402,24 @@ async fn submit_development_task(
     State(state): State<AppState>,
     Json(request): Json<SubmitDevelopmentRequest>,
 ) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let key = parse_key(request.idempotency_key)?;
-    let task = with_store(&state, |store| {
-        store.submit_development(&key, &request.input)
-    })?;
+    let key = parse_key(request.idempotency_key.clone())?;
+    let model = request.model.clone();
+    let profile_id = Store::discovered_model_profile_id(&model);
+    let input = request.into_input(profile_id);
+    if let Some(task) = with_store(&state, |store| {
+        store.existing_development_submission(&key, &input)
+    })? {
+        return Ok((StatusCode::ACCEPTED, Json(task)));
+    }
+    let catalog = state
+        .model_catalog
+        .as_ref()
+        .ok_or(ApiError::ModelCatalogUnavailable)?;
+    if !catalog.contains(&model).await? {
+        return Err(ApiError::ModelUnavailable);
+    }
+    with_store(&state, |store| store.put_discovered_model(&model))?;
+    let task = with_store(&state, |store| store.submit_development(&key, &input))?;
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
@@ -473,7 +492,14 @@ async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse, Api
 async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
     (
         StatusCode::OK,
-        Json(HealthResponse::ready(state.publisher.is_some())),
+        Json(HealthResponse::ready(
+            state.publisher.is_some(),
+            state.model_catalog.is_some(),
+            state
+                .model_catalog
+                .as_ref()
+                .is_some_and(ModelCatalog::is_verified),
+        )),
     )
 }
 
@@ -552,8 +578,29 @@ struct SubmitTaskRequest {
 #[serde(deny_unknown_fields)]
 struct SubmitDevelopmentRequest {
     idempotency_key: String,
-    #[serde(flatten)]
-    input: DevelopmentInput,
+    repository_id: String,
+    model: String,
+    start_revision: String,
+    request: String,
+    acceptance_criteria: Vec<String>,
+    #[serde(default)]
+    change_constraints: ChangeConstraints,
+    #[serde(default)]
+    deadline_seconds: Option<u64>,
+}
+
+impl SubmitDevelopmentRequest {
+    fn into_input(self, profile_id: String) -> DevelopmentInput {
+        DevelopmentInput {
+            repository_id: self.repository_id,
+            profile_id,
+            start_revision: self.start_revision,
+            request: self.request,
+            acceptance_criteria: self.acceptance_criteria,
+            change_constraints: self.change_constraints,
+            deadline_seconds: self.deadline_seconds,
+        }
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -590,6 +637,14 @@ mod tests {
         Ok(AppState {
             store: Arc::new(Mutex::new(Store::in_memory()?)),
             publisher: None,
+            model_catalog: Some(ModelCatalog::fixed(vec![AvailableModel {
+                id: "gpt-5".into(),
+                name: Some("GPT-5".into()),
+                owned_by: Some("openai".into()),
+                created_at: None,
+                context_length: None,
+                max_output_tokens: None,
+            }])),
         })
     }
     #[test]
@@ -627,82 +682,96 @@ mod tests {
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","pilot_ready":false,"domain_model_revision":4}"#
+            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","model_catalog":"available","pilot_ready":false,"domain_model_revision":4}"#
         );
         Ok(())
     }
 
     #[tokio::test]
-    async fn development_api_snapshots_configuration_and_reports_unsupported_provider()
+    async fn missing_model_catalog_degrades_only_catalog_dependent_routes()
     -> Result<(), Box<dyn std::error::Error>> {
-        let api = router(state()?);
-        let binding = serde_json::json!({"id":"trial","owner":"ayni-oss",
-            "repository":"sandbox","installation_id":1,
-            "base_branch":"main",
-            "lock_sha256":"d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7"});
-        let profile = serde_json::json!({"id":"other","provider":"anthropic",
-            "model":"example","secret_ref":"other-key"});
-        for (path, payload) in [
-            ("/v1/repository-bindings", binding),
-            ("/v1/agent-profiles", profile),
-        ] {
-            let response = api.clone().oneshot(json_request(path, &payload)?).await?;
-            assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        }
-        let payload = serde_json::json!({"idempotency_key":"api-trial",
-            "repository_id":"trial","profile_id":"other",
-            "start_revision":"8a555ada2f6e3ee41de2485ed13da508beaebaeb",
-            "request":"Correct the retry formula",
-            "acceptance_criteria":["3 -> 8"],
-            "change_constraints":{"protected_paths":["scripts/oracle.sh"],"allow_test_edits":false},
-            "deadline_seconds":300});
-        let response = api
-            .clone()
-            .oneshot(json_request("/v1/development-tasks", &payload)?)
-            .await?;
-        assert_eq!(response.status(), StatusCode::ACCEPTED);
-        let body: serde_json::Value =
-            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
-        assert_eq!(body["phase"], "unsupported");
-        assert_eq!(body["lifecycle"][0]["stage"], "queue");
-        assert_eq!(body["lifecycle"][0]["outcome"], "unsupported");
-        assert_eq!(body["lifecycle"][0]["reason_code"], "unsupported_provider");
-        assert_eq!(
-            body["input"]["change_constraints"]["protected_paths"][0],
-            "scripts/oracle.sh"
-        );
-        assert_eq!(
-            body["input"]["change_constraints"]["allow_test_edits"],
-            false
-        );
-        assert_eq!(body["input"]["deadline_seconds"], 300);
-        assert_eq!(body["model_usage"]["collection_status"], "complete");
-        assert_eq!(body["model_usage"]["total"]["interaction_count"], 0);
-        assert!(body["model_usage"]["total"]["input_tokens"].is_null());
-        assert_eq!(body["model_usage"]["by_stage"][0]["stage"], "coding");
-        assert_eq!(
-            body["deadline_at"].as_i64(),
-            Some(
-                body["created_at"]
-                    .as_i64()
-                    .ok_or("task has no creation time")?
-                    + 300
-            )
-        );
-        let task_id = body["id"].as_str().ok_or("task has no id")?;
+        let mut unavailable = state()?;
+        unavailable.model_catalog = None;
+        let api = router(unavailable);
         let response = api
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/v1/development-tasks/{task_id}"))
+                    .uri("/v1/provider-models")
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let response = api
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(body["model_catalog"], "unconfigured");
+        assert_eq!(body["pilot_ready"], false);
+
+        let configured = state()?.with_model_catalog(ModelCatalog::openai("test-key")?);
+        let response = router(configured)
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
+            .await?;
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(body["model_catalog"], "unavailable");
+        assert_eq!(body["pilot_ready"], false);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn provider_models_returns_the_sanitized_catalog()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let response = router(state()?)
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/provider-models")
                     .body(Body::empty())?,
             )
             .await?;
         assert_eq!(response.status(), StatusCode::OK);
-        let duplicate = api
+        let body: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
+        assert_eq!(body["provider"], "openai");
+        assert_eq!(body["models"][0]["id"], "gpt-5");
+        assert_eq!(body["models"][0]["name"], "GPT-5");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn development_api_rejects_a_model_absent_from_the_provider_catalog()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let payload = serde_json::json!({
+            "idempotency_key":"unavailable-model",
+            "repository_id":"trial",
+            "model":"luna",
+            "start_revision":"8a555ada2f6e3ee41de2485ed13da508beaebaeb",
+            "request":"Correct the retry formula",
+            "acceptance_criteria":["3 -> 8"]
+        });
+        let response = router(state()?)
             .oneshot(json_request("/v1/development-tasks", &payload)?)
             .await?;
-        assert_eq!(duplicate.status(), StatusCode::ACCEPTED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response.into_body().collect().await?.to_bytes();
+        assert!(String::from_utf8(body.to_vec())?.contains("not available"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn legacy_agent_profile_configuration_is_not_public()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let response = router(state()?)
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/agent-profiles")
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
         Ok(())
     }
 

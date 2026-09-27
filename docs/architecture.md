@@ -38,6 +38,11 @@ cost estimates without retaining provider content. Normal cleanup preserves all
 four claims. The single-writer SQLite volume constrains the current profile to
 one control-plane replica.
 
+The Docker Desktop overlay additionally runs disposable Prometheus and Grafana
+Deployments. Prometheus scrapes the bounded aggregate `/metrics` surface, and
+Grafana receives only that datasource. Both use `emptyDir` storage and are
+operational views rather than durable evidence; SQLite remains authoritative.
+
 ## Repository and task flow
 
 ```mermaid
@@ -58,9 +63,11 @@ flowchart TD
 2. Preparation checks out one exact revision, validates its Ayni contract,
    builds and doctors the managed environment, and retains an immutable archive
    and build record.
-3. Task submission freezes repository, profile, revision, request, acceptance
-   criteria, protected repository paths, test-edit authorization, lock,
-   preparation identity, and optional deadline.
+3. The control plane fetches and briefly caches the OpenAI key's live model
+   catalog through Rig. Task submission freezes the selected model with its
+   provider and credential reference, plus the repository, revision, request,
+   acceptance criteria, protected repository paths, test-edit authorization,
+   lock, preparation identity, and optional deadline.
 4. The coding Job receives fixed file and command tools but no Kubernetes token
    or GitHub App private key. It stores a local commit and Git bundle on retained
    checkpoint storage.
@@ -93,7 +100,9 @@ request before repeating creation.
 - Coding, final validation, and publication use separate Jobs and credentials.
 - Agent Jobs do not receive Kubernetes service-account tokens.
 - GitHub App and model credentials are held in Kubernetes Secrets and injected
-  only where required.
+  only where required. The control plane receives the OpenAI key through a
+  read-only projected file for catalog discovery; the key is never returned by
+  the API or UI.
 - Final artifacts are collected outside agent-writable storage and bound to the
   exact candidate and environment identities.
 - Managed Ayni execution uses an isolated privileged Docker-in-Docker engine;
@@ -105,8 +114,8 @@ request before repeating creation.
 ## Supported boundary
 
 The current implementation supports one allowlisted private Rust repository,
-Ayni `0.13.0`, a GitHub App integration, an OpenAI agent profile, Docker Desktop
-Kubernetes, and single-node retained storage. Dependency-manifest changes return
+Ayni `0.13.0`, a GitHub App integration, an OpenAI provider catalog and task-frozen
+model selection, Docker Desktop Kubernetes, and single-node retained storage. Dependency-manifest changes return
 an explicit unsupported result. Requirements beyond this boundary are tracked in
 the [Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2), not in
 this architecture document.

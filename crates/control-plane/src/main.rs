@@ -1,11 +1,11 @@
 use ayni_orchestrator_control_plane::{
-    AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, PreparationReconciler,
-    PublisherState, Reconciler, router,
+    AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, ModelCatalog,
+    PreparationReconciler, PublisherState, Reconciler, router,
 };
 use kube::Client;
-use std::{io, process::ExitCode};
+use std::{env, fs, io, process::ExitCode};
 use tokio::{net::TcpListener, signal};
-use tracing::{Instrument, error, info};
+use tracing::{Instrument, error, info, warn};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -24,11 +24,35 @@ async fn main() -> ExitCode {
     }
 }
 
+fn model_catalog_from_environment() -> Result<ModelCatalog, io::Error> {
+    let openai_api_key_path = env::var("OPENAI_API_KEY_PATH")
+        .map_err(|_| io::Error::other("OPENAI_API_KEY_PATH is not configured"))?;
+    let openai_api_key = fs::read_to_string(openai_api_key_path)
+        .map_err(|_| io::Error::other("could not read the OpenAI API key"))?;
+    ModelCatalog::openai(&openai_api_key).map_err(io::Error::other)
+}
+
 async fn run() -> Result<(), io::Error> {
     let configuration = Configuration::from_environment().map_err(io::Error::other)?;
-    let state = AppState::open(configuration.database_path(), configuration.max_attempts())
+    let model_catalog = match model_catalog_from_environment() {
+        Ok(catalog) => Some(catalog),
+        Err(error) => {
+            warn!(reason_code = "model_catalog_unavailable", %error, "model discovery disabled");
+            None
+        }
+    };
+    let mut state = AppState::open(configuration.database_path(), configuration.max_attempts())
         .map_err(io::Error::other)?
         .with_publisher(PublisherState::from_environment().map_err(io::Error::other)?);
+    if let Some(catalog) = model_catalog {
+        let warmup = catalog.clone();
+        tokio::spawn(async move {
+            if let Err(error) = warmup.available().await {
+                warn!(reason_code = "model_catalog_refresh_failed", %error, "model discovery failed");
+            }
+        });
+        state = state.with_model_catalog(catalog);
+    }
     let client = Client::try_default().await.map_err(io::Error::other)?;
     let reconciler = Reconciler::new(
         state.store(),

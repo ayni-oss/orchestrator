@@ -711,6 +711,20 @@ fn lifecycle_survives_restart_and_duplicate_reconciliation()
 }
 
 #[test]
+fn discovered_models_create_internal_profiles_without_user_configuration() -> Result<(), StoreError>
+{
+    let store = Store::in_memory()?;
+    let first = store.put_discovered_model("gpt-5")?;
+    let second = store.put_discovered_model("gpt-5")?;
+    assert_eq!(first, second);
+    let profile = store.agent_profile(&first)?;
+    assert_eq!(profile.provider, "openai");
+    assert_eq!(profile.model, "gpt-5");
+    assert_eq!(profile.secret_ref, "openai-api");
+    Ok(())
+}
+
+#[test]
 fn rejects_a_repository_outside_the_supported_sandbox() -> Result<(), StoreError> {
     let store = Store::in_memory()?;
     let error = store

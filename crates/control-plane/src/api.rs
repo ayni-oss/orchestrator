@@ -15,6 +15,7 @@ pub struct HealthResponse {
     durable_orchestration: bool,
     task_ui: &'static str,
     repository_preparation: &'static str,
+    model_catalog: &'static str,
     pilot_ready: bool,
     domain_model_revision: u8,
 }
@@ -28,12 +29,17 @@ impl HealthResponse {
             durable_orchestration: true,
             task_ui: "available",
             repository_preparation: "unconfigured",
+            model_catalog: "unconfigured",
             pilot_ready: false,
             domain_model_revision: ayni_orchestrator_domain::model_revision(),
         }
     }
 
-    pub const fn ready(publisher_available: bool) -> Self {
+    pub const fn ready(
+        publisher_available: bool,
+        model_catalog_configured: bool,
+        model_catalog_available: bool,
+    ) -> Self {
         Self {
             component: "control-plane",
             status: "ready",
@@ -45,7 +51,14 @@ impl HealthResponse {
             } else {
                 "unconfigured"
             },
-            pilot_ready: publisher_available,
+            model_catalog: if model_catalog_available {
+                "available"
+            } else if model_catalog_configured {
+                "unavailable"
+            } else {
+                "unconfigured"
+            },
+            pilot_ready: publisher_available && model_catalog_available,
             domain_model_revision: ayni_orchestrator_domain::model_revision(),
         }
     }
@@ -61,6 +74,12 @@ pub enum ApiError {
     StoreLockPoisoned,
     #[error("pilot evidence service is unavailable")]
     PublisherUnavailable,
+    #[error("provider model catalog is unavailable")]
+    ModelCatalogUnavailable,
+    #[error(transparent)]
+    ModelCatalog(#[from] crate::ModelCatalogError),
+    #[error("the selected model is not available from the provider")]
+    ModelUnavailable,
     #[error("evidence unavailable: {0}")]
     EvidenceUnavailable(String),
 }
@@ -69,6 +88,7 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = match self {
             Self::InvalidIdentifier(_)
+            | Self::ModelUnavailable
             | Self::Store(
                 StoreError::InvalidIdentity(_)
                 | StoreError::InvalidInput(_)
@@ -82,7 +102,10 @@ impl IntoResponse for ApiError {
                 StatusCode::NOT_FOUND
             }
             Self::EvidenceUnavailable(_) => StatusCode::NOT_FOUND,
-            Self::PublisherUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::PublisherUnavailable | Self::ModelCatalogUnavailable => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
+            Self::ModelCatalog(_) => StatusCode::BAD_GATEWAY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (

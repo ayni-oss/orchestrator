@@ -10,7 +10,10 @@ readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 # evidence, prepared environments, credentials, Jobs, and the namespace are
 # deliberately retained. Cancel active tasks through the UI/API before cleanup.
 kubectl --context "$context" --namespace "$namespace" delete \
-  deployment/control-plane service/control-plane configmap/control-plane-config \
+  deployment/control-plane deployment/prometheus deployment/grafana \
+  service/control-plane service/prometheus service/grafana \
+  configmap/control-plane-config configmap/prometheus-config \
+  configmap/grafana-provisioning configmap/grafana-dashboard \
   role/control-plane-attempt-jobs rolebinding/control-plane-attempt-jobs \
   role/control-plane-development-clone-secrets \
   rolebinding/control-plane-development-clone-secrets \

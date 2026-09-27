@@ -28,7 +28,13 @@ EOF
 "$repository_root/scripts/local/render.sh" \
   "$control_plane_image_ref" "$worker_image_ref" \
   | kubectl --context "$context" apply --server-side --field-manager ayni-orchestrator-local -f -
+# Monitoring ConfigMaps are stable names; restart the disposable pods so mounted
+# configuration and subPath provisioning files always match this checkout.
+kubectl --context "$context" --namespace "$namespace" rollout restart \
+  deployment/prometheus deployment/grafana
 kubectl --context "$context" --namespace "$namespace" rollout status deployment/control-plane --timeout=120s
+kubectl --context "$context" --namespace "$namespace" rollout status deployment/prometheus --timeout=120s
+kubectl --context "$context" --namespace "$namespace" rollout status deployment/grafana --timeout=120s
 
 pod=""
 actual_image=""
