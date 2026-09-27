@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ayni.orchestrator.v1;
+
+// PageRequest selects one bounded page from a list RPC.
+message PageRequest {
+  // page_size is 1 through 100. Zero requests the server default of 50.
+  uint32 page_size = 1;
+  // page_token is an opaque token returned by the preceding page, at most 512 bytes.
+  string page_token = 2;
+}
+
+// PageResponse describes the next page, when one exists.
+message PageResponse {
+  // next_page_token is empty when the current page is the final page.
+  string next_page_token = 1;
+}
+
+// ChangeConstraints freezes the repository paths and test-edit authority for a task.
+message ChangeConstraints {
+  // protected_paths contains at most 100 normalized repository-relative paths
+  // with at most 16,384 aggregate UTF-8 bytes.
+  repeated string protected_paths = 1;
+  bool allow_test_edits = 2;
+}

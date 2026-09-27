@@ -59,6 +59,8 @@ completed-work provenance.
 | [Control-plane model](docs/decisions/0002-product-name-and-control-plane-model.md) | Product name and application-API-first model |
 | [Durable orchestration decision](docs/decisions/0003-durable-local-orchestration.md) | SQLite, Jobs, idempotency, and recovery |
 | [Preparation and local UI decision](docs/decisions/0004-repository-preparation-and-local-ui.md) | Prepared environments, browser access, and operating limits |
+| [Native gRPC product API decision](docs/decisions/0005-native-grpc-product-api.md) | Single product protocol, browser BFF boundary, compatibility, and operational HTTP exceptions |
+| [Protocol contract](proto/README.md) | Versioned services, bounds, compatibility, errors, and binding generation |
 
 Repository development rules and the private boundary with Ayni are recorded in
 [AGENTS.md](AGENTS.md).

@@ -8,6 +8,8 @@ browser interface.
 ## Prerequisites
 
 - Rust 1.94.0, pinned by `rust-toolchain.toml`
+- Node 24.14.0 and pnpm 10.31.0, pinned by the root package and CI configuration
+- Buf 1.71.0 for protobuf formatting, linting, generation, and compatibility checks
 - Docker Desktop with Kubernetes enabled
 - a reachable `docker-desktop` Kubernetes context
 - `kubectl`, Docker, Git, and `curl`
@@ -45,6 +47,31 @@ scripts/local/render-observability.sh >/tmp/ayni-orchestrator-observability.yaml
 ```
 
 Do not commit rendered output, logs, local credentials, or runtime artifacts.
+
+## Validate the protobuf contract
+
+The canonical product contract is under `proto/`. Install the locked local
+TypeScript generator, validate the schema, reproduce the checked-in server
+bindings, and compile both generated language surfaces with:
+
+```sh
+pnpm install --frozen-lockfile
+scripts/ci/check-proto.sh
+cargo test -p ayni-orchestrator-api
+```
+
+`buf format -w proto` formats source definitions. Do not hand-edit files under
+`clients/typescript/src/generated`; run `buf generate` and review the resulting
+diff. For an established contract, pass a base module to the check script to
+run the additive-only compatibility check:
+
+```sh
+scripts/ci/check-proto.sh /path/to/base/checkout/proto
+```
+
+The target product contract is native gRPC only. Existing `/v1` JSON routes are
+a temporary migration surface; `/livez`, `/readyz`, and `/metrics` remain HTTP
+operational endpoints rather than alternate product APIs.
 
 ## Configure local credentials
 

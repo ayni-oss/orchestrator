@@ -35,6 +35,7 @@ fn_cyclomatic = { warn = 10, fail = 31 }
 fn_cognitive = { warn = 20, fail = 29 }
 
 [rust.deps.forbidden]
+"crates/api" = ["crates/domain", "crates/observability", "crates/control-plane", "crates/worker"]
 "crates/domain" = ["crates/control-plane", "crates/worker"]
 "crates/control-plane" = ["crates/worker"]
 "crates/worker" = ["crates/control-plane"]

@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package ayni.orchestrator.v1;
+
+import "ayni/orchestrator/v1/common.proto";
+import "google/protobuf/duration.proto";
+
+// RepositoryService manages enrolled repositories and immutable environment preparations.
+service RepositoryService {
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+  rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
+  rpc SaveRepository(SaveRepositoryRequest) returns (SaveRepositoryResponse);
+  rpc ListPreparations(ListPreparationsRequest) returns (ListPreparationsResponse);
+  rpc GetPreparation(GetPreparationRequest) returns (GetPreparationResponse);
+  rpc PrepareRepository(PrepareRepositoryRequest) returns (PrepareRepositoryResponse);
+}
+
+// PreparationStatus is the durable state of one content-addressed preparation.
+enum PreparationStatus {
+  PREPARATION_STATUS_UNSPECIFIED = 0;
+  PREPARATION_STATUS_QUEUED = 1;
+  PREPARATION_STATUS_PREPARING = 2;
+  PREPARATION_STATUS_READY = 3;
+  PREPARATION_STATUS_SETUP_REQUIRED = 4;
+  PREPARATION_STATUS_FAILED = 5;
+}
+
+// RepositoryEnrollment is the caller-controlled repository configuration.
+message RepositoryEnrollment {
+  string id = 1;
+  string owner = 2;
+  string repository = 3;
+  uint64 installation_id = 4;
+  string base_branch = 5;
+  // lock_sha256 is exactly 64 lowercase hexadecimal characters.
+  string lock_sha256 = 6;
+}
+
+// RepositoryBinding is one enrolled source repository and its current readiness.
+message RepositoryBinding {
+  RepositoryEnrollment enrollment = 1;
+  optional Preparation latest_preparation = 2;
+}
+
+// Preparation is one asynchronous, content-addressed environment preparation.
+message Preparation {
+  string id = 1;
+  string repository_id = 2;
+  // revision is an exact 40-character lowercase Git object ID.
+  string revision = 3;
+  string lock_sha256 = 4;
+  PreparationStatus status = 5;
+  // diagnostic is a credential-free operator message of at most 512 UTF-8 bytes.
+  optional string diagnostic = 6;
+  optional google.protobuf.Duration duration = 7;
+  uint32 reuse_count = 8;
+}
+
+message ListRepositoriesRequest {
+  PageRequest page = 1;
+}
+
+message ListRepositoriesResponse {
+  repeated RepositoryBinding repositories = 1;
+  PageResponse page = 2;
+}
+
+message GetRepositoryRequest {
+  string repository_id = 1;
+}
+
+message GetRepositoryResponse {
+  RepositoryBinding repository = 1;
+}
+
+message SaveRepositoryRequest {
+  // idempotency_key is 1 through 128 ASCII [A-Za-z0-9._:-] characters.
+  string idempotency_key = 1;
+  RepositoryEnrollment repository = 2;
+}
+
+message SaveRepositoryResponse {
+  RepositoryBinding repository = 1;
+}
+
+message ListPreparationsRequest {
+  string repository_id = 1;
+  PageRequest page = 2;
+}
+
+message ListPreparationsResponse {
+  repeated Preparation preparations = 1;
+  PageResponse page = 2;
+}
+
+message GetPreparationRequest {
+  string preparation_id = 1;
+}
+
+message GetPreparationResponse {
+  Preparation preparation = 1;
+}
+
+message PrepareRepositoryRequest {
+  string idempotency_key = 1;
+  string repository_id = 2;
+  string revision = 3;
+}
+
+message PrepareRepositoryResponse {
+  // preparation normally starts in QUEUED; callers observe it until terminal.
+  Preparation preparation = 1;
+  // reused is true when this request selected an already-ready identity.
+  bool reused = 2;
+}

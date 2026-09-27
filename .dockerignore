@@ -2,5 +2,7 @@
 .ayni
 .ayni.lock
 target
+node_modules
+.pnpm-store
 .worktrees
 **/.DS_Store
