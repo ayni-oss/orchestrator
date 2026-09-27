@@ -6,9 +6,6 @@ resources:
   - checkpoints-pvc.yaml
   - prepared-environments-pvc.yaml
   - development-rbac.yaml
-  - monitoring-config.yaml
-  - prometheus.yaml
-  - grafana.yaml
 patches:
   - path: control-plane.yaml
   - path: resources.yaml

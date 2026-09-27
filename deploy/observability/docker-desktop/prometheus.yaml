@@ -4,7 +4,7 @@ metadata:
   name: prometheus
   labels:
     app.kubernetes.io/name: ayni-orchestrator-prometheus
-    app.kubernetes.io/part-of: ayni-orchestrator
+    app.kubernetes.io/part-of: ayni-orchestrator-observability
 spec:
   replicas: 1
   selector:
@@ -14,9 +14,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: ayni-orchestrator-prometheus
-        app.kubernetes.io/part-of: ayni-orchestrator
+        app.kubernetes.io/part-of: ayni-orchestrator-observability
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: prometheus
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -32,7 +33,8 @@ spec:
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
-            - --storage.tsdb.retention.time=24h
+            - --storage.tsdb.retention.time=48h
+            - --storage.tsdb.retention.size=900MB
           ports:
             - name: http
               containerPort: 9090
@@ -51,11 +53,11 @@ spec:
             periodSeconds: 5
           resources:
             requests:
-              cpu: 25m
-              memory: 64Mi
+              cpu: 50m
+              memory: 96Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 300m
+              memory: 384Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -73,7 +75,7 @@ spec:
             name: prometheus-config
         - name: data
           emptyDir:
-            sizeLimit: 512Mi
+            sizeLimit: 1Gi
 ---
 apiVersion: v1
 kind: Service
@@ -81,7 +83,7 @@ metadata:
   name: prometheus
   labels:
     app.kubernetes.io/name: ayni-orchestrator-prometheus
-    app.kubernetes.io/part-of: ayni-orchestrator
+    app.kubernetes.io/part-of: ayni-orchestrator-observability
 spec:
   type: ClusterIP
   selector:

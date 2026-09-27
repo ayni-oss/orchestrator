@@ -1,0 +1,1383 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active tasks by phase",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "orchestrator_development_tasks{phase!~\"completed|failed|cancelled|unsupported\"}",
+          "legendFormat": "{{phase}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "Current durable task phases; terminal phases are shown separately.",
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 2,
+      "title": "Terminal task outcomes",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "orchestrator_development_task_outcomes_total",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 3,
+      "title": "Stage outcomes",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "orchestrator_development_stage_outcomes_total",
+          "legendFormat": "{{stage}} \u00b7 {{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 4,
+      "title": "Stage duration p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le,stage,outcome) (orchestrator_development_stage_duration_seconds_bucket))",
+          "legendFormat": "{{stage}} \u00b7 {{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Total task duration p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le,outcome) (orchestrator_development_task_duration_seconds_bucket))",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Token usage by stage and model",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage,model) (orchestrator_model_tokens_total{type=\"total\"})",
+          "legendFormat": "{{stage}} \u00b7 {{model}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "Provider-reported total tokens. Exact interaction records remain in the product API/UI.",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Provider latency p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le,stage,provider,outcome) (rate(orchestrator_model_interaction_latency_milliseconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{stage}} \u00b7 {{provider}} \u00b7 {{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Provider error rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage,provider,model) (rate(orchestrator_provider_errors_total[$__rate_interval]))",
+          "legendFormat": "{{stage}} \u00b7 {{provider}} \u00b7 {{model}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Reconciliation error rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (reconciler) (rate(orchestrator_reconciliation_errors_total[$__rate_interval]))",
+          "legendFormat": "{{reconciler}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "CPU usage by stage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "cores",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (label_orchestrator_ayni_dev_development_stage) (rate(container_cpu_usage_seconds_total{namespace=\"ayni-orchestrator-dev\",container!=\"\",container!=\"POD\",image!=\"\"}[$__rate_interval]) * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "Aggregates every regular and restartable init container in each selected task stage.",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "CPU usage by container",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "cores",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (label_orchestrator_ayni_dev_development_stage,container) (rate(container_cpu_usage_seconds_total{namespace=\"ayni-orchestrator-dev\",container!=\"\",container!=\"POD\",image!=\"\"}[$__rate_interval]) * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}} \u00b7 {{container}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Memory working set by stage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (label_orchestrator_ayni_dev_development_stage) (container_memory_working_set_bytes{namespace=\"ayni-orchestrator-dev\",container!=\"\",container!=\"POD\",image!=\"\"} * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "Includes validation engine sidecars/restartable init containers.",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Memory working set by container",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (label_orchestrator_ayni_dev_development_stage,container) (container_memory_working_set_bytes{namespace=\"ayni-orchestrator-dev\",container!=\"\",container!=\"POD\",image!=\"\"} * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}} \u00b7 {{container}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "CPU usage versus limits",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "100 * sum by (label_orchestrator_ayni_dev_development_stage) (rate(container_cpu_usage_seconds_total{namespace=\"ayni-orchestrator-dev\",container!=\"\",container!=\"POD\",image!=\"\"}[$__rate_interval]) * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"}) / clamp_min(sum by (label_orchestrator_ayni_dev_development_stage) ((kube_pod_container_resource_limits{namespace=\"ayni-orchestrator-dev\",resource=\"cpu\",unit=\"core\"} or kube_pod_init_container_resource_limits{namespace=\"ayni-orchestrator-dev\",resource=\"cpu\",unit=\"core\"}) * on(namespace,pod) group_left() (kube_pod_status_phase{namespace=\"ayni-orchestrator-dev\",phase=\"Running\"} == 1) * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"}), 0.001)",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Memory usage versus limits",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "100 * sum by (label_orchestrator_ayni_dev_development_stage) (container_memory_working_set_bytes{namespace=\"ayni-orchestrator-dev\",container!=\"\",container!=\"POD\",image!=\"\"} * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"}) / clamp_min(sum by (label_orchestrator_ayni_dev_development_stage) ((kube_pod_container_resource_limits{namespace=\"ayni-orchestrator-dev\",resource=\"memory\",unit=\"byte\"} or kube_pod_init_container_resource_limits{namespace=\"ayni-orchestrator-dev\",resource=\"memory\",unit=\"byte\"}) * on(namespace,pod) group_left() (kube_pod_status_phase{namespace=\"ayni-orchestrator-dev\",phase=\"Running\"} == 1) * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"}), 1)",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Container restarts",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (label_orchestrator_ayni_dev_development_stage,container) ((increase(kube_pod_container_status_restarts_total{namespace=\"ayni-orchestrator-dev\"}[$__rate_interval]) or increase(kube_pod_init_container_status_restarts_total{namespace=\"ayni-orchestrator-dev\"}[$__rate_interval])) * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_stage,label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{label_orchestrator_ayni_dev_development_stage}} \u00b7 {{container}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Abnormal termination",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 46,
+        "w": 16,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod,container,reason) (kube_pod_container_status_last_terminated_reason{namespace=\"ayni-orchestrator-dev\",reason=~\"OOMKilled|Error|ContainerCannotRun\"} * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{pod}} \u00b7 {{container}} \u00b7 {{reason}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (job_name,reason) (kube_job_status_failed{namespace=\"ayni-orchestrator-dev\",reason=\"DeadlineExceeded\"} * on(namespace,job_name) group_left(label_orchestrator_ayni_dev_development_task_id) kube_job_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{job_name}} \u00b7 {{reason}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod,container,reason) (kube_pod_init_container_status_last_terminated_reason{namespace=\"ayni-orchestrator-dev\",reason=~\"OOMKilled|Error|ContainerCannotRun\"} * on(namespace,pod) group_left(label_orchestrator_ayni_dev_development_task_id) kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id=~\"$task\"})",
+          "legendFormat": "{{pod}} \u00b7 {{container}} \u00b7 {{reason}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "description": "Last container termination reasons plus Jobs that exceeded their active deadline.",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Retained storage pressure",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "kubelet_volume_stats_used_bytes{namespace=\"ayni-orchestrator-dev\"} or (label_replace(container_fs_usage_bytes{job=\"ayni-orchestrator-node-storage\",id=\"/\"}, \"persistentvolumeclaim\", \"docker-desktop-root\", \"device\", \".*\") unless on() (count(kubelet_volume_stats_used_bytes{namespace=\"ayni-orchestrator-dev\"}) > 0))",
+          "legendFormat": "{{persistentvolumeclaim}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "kube_persistentvolumeclaim_resource_requests_storage_bytes{namespace=\"ayni-orchestrator-dev\"}",
+          "legendFormat": "{{persistentvolumeclaim}} \u00b7 provisioned",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Uses per-PVC kubelet volume stats when Docker Desktop exports them; otherwise shows Docker Desktop root-disk usage, which includes retained local PVC data. Provisioned PVC sizes are shown separately."
+    },
+    {
+      "id": 19,
+      "title": "Retained storage growth",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 54,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "delta(kubelet_volume_stats_used_bytes{namespace=\"ayni-orchestrator-dev\"}[$__range]) or (label_replace(delta(container_fs_usage_bytes{job=\"ayni-orchestrator-node-storage\",id=\"/\"}[$__range]), \"persistentvolumeclaim\", \"docker-desktop-root\", \"device\", \".*\") unless on() (count(kubelet_volume_stats_used_bytes{namespace=\"ayni-orchestrator-dev\"}) > 0))",
+          "legendFormat": "{{persistentvolumeclaim}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "description": "Change over the selected range. Uses per-PVC kubelet stats when available and falls back to Docker Desktop root-disk growth; monitoring history is disposable and retained for at most 48 hours.",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": [
+    "ayni-orchestrator",
+    "kubernetes",
+    "local"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "task",
+        "label": "Development task",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id!=\"\"}, label_orchestrator_ayni_dev_development_task_id)",
+          "refId": "task-variable"
+        },
+        "definition": "label_values(kube_pod_labels{namespace=\"ayni-orchestrator-dev\",label_app_kubernetes_io_name=\"ayni-orchestrator-development-task\",label_orchestrator_ayni_dev_development_task_id!=\"\"}, label_orchestrator_ayni_dev_development_task_id)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Ayni Orchestrator \u00b7 Tasks and resources",
+  "uid": "ayni-orchestrator-tasks-resources",
+  "version": 1
+}

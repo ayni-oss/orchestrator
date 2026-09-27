@@ -36,10 +36,12 @@ ayni env doctor --repo-root .
 ayni check --config .ayni.toml
 ```
 
-Render the deployment separately when changing manifests:
+Render the core and optional observability deployments separately when changing
+manifests:
 
 ```sh
 scripts/local/render.sh >/tmp/ayni-orchestrator.yaml
+scripts/local/render-observability.sh >/tmp/ayni-orchestrator-observability.yaml
 ```
 
 Do not commit rendered output, logs, local credentials, or runtime artifacts.
@@ -197,15 +199,30 @@ selection, task submission, phase refresh, cancellation, linked retry,
 requested-input follow-up, draft PR links, and validated results. It is not
 authenticated; anyone who can reach the Service can operate it.
 
-The Docker Desktop overlay also provisions disposable Prometheus and Grafana
-instances for the control-plane `/metrics` endpoint. Open the provisioned model
-interaction dashboard through loopback only:
+Observability is optional and is not installed by `deploy.sh`. After the core
+check passes, install and validate the disposable local stack explicitly:
+
+```sh
+scripts/local/deploy-observability.sh
+scripts/local/check-observability.sh
+```
+
+This adds pinned Prometheus, kube-state-metrics, and Grafana images. Prometheus
+scrapes the application endpoint, namespaced Kubernetes object state, and the
+Docker Desktop kubelet/cAdvisor through a service account limited to node
+discovery and the metric-only `nodes/metrics` subresource. It is not granted
+`nodes/proxy` or access to Secrets, pod specifications, or logs. Open the
+provisioned dashboard through loopback only:
 
 ```sh
 kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
   port-forward service/grafana 13000:3000
-open http://127.0.0.1:13000/d/ayni-orchestrator-model-usage
+open http://127.0.0.1:13000/d/ayni-orchestrator-tasks-resources
 ```
 
-Prometheus retains only 24 hours in ephemeral storage. Grafana anonymous access
-is Viewer-only and is acceptable solely within this trusted local boundary.
+Prometheus retains at most 48 hours or 900 MB in ephemeral storage. Grafana
+anonymous access is Viewer-only and acceptable solely within this trusted local
+boundary. Remove only the optional stack with
+`scripts/local/teardown-observability.sh`; this does not touch product state.
+See [local operations](operations.md) for metric semantics, capacity, and
+troubleshooting.

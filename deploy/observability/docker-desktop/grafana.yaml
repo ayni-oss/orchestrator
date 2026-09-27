@@ -4,7 +4,7 @@ metadata:
   name: grafana
   labels:
     app.kubernetes.io/name: ayni-orchestrator-grafana
-    app.kubernetes.io/part-of: ayni-orchestrator
+    app.kubernetes.io/part-of: ayni-orchestrator-observability
 spec:
   replicas: 1
   selector:
@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: ayni-orchestrator-grafana
-        app.kubernetes.io/part-of: ayni-orchestrator
+        app.kubernetes.io/part-of: ayni-orchestrator-observability
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -106,7 +106,7 @@ metadata:
   name: grafana
   labels:
     app.kubernetes.io/name: ayni-orchestrator-grafana
-    app.kubernetes.io/part-of: ayni-orchestrator
+    app.kubernetes.io/part-of: ayni-orchestrator-observability
 spec:
   type: ClusterIP
   selector:

@@ -480,29 +480,6 @@ impl Store {
         })
         .collect()
     }
-
-    pub(crate) fn model_usage_metrics(&self) -> Result<String, StoreError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT stage, provider, outcome, latency_ms FROM development_model_usage
-             ORDER BY stage, provider, outcome",
-            )
-            .map_err(StoreError::Database)?;
-        let values = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                ))
-            })
-            .map_err(StoreError::Database)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::Database)?;
-        Ok(render_metrics(&values))
-    }
 }
 
 fn report_matches(existing: &ModelUsageInteraction, report: &ModelUsageReport) -> bool {
@@ -629,58 +606,9 @@ fn unix_millis() -> Result<i64, StoreError> {
     i64::try_from(elapsed.as_millis()).map_err(|_| StoreError::ClockOverflow)
 }
 
-fn render_metrics(values: &[(String, String, String, i64)]) -> String {
-    use std::{collections::BTreeMap, fmt::Write as _};
-    const BUCKETS: [i64; 7] = [100, 500, 1_000, 5_000, 10_000, 30_000, 60_000];
-    let mut groups: BTreeMap<(&str, &str, &str), Vec<i64>> = BTreeMap::new();
-    for (stage, provider, outcome, latency) in values {
-        groups
-            .entry((stage.as_str(), provider.as_str(), outcome.as_str()))
-            .or_default()
-            .push(*latency);
-    }
-    let mut output = String::from(
-        "# HELP orchestrator_model_interactions_total Provider model interactions.\n# TYPE orchestrator_model_interactions_total counter\n# HELP orchestrator_model_interaction_latency_milliseconds Provider model interaction latency.\n# TYPE orchestrator_model_interaction_latency_milliseconds histogram\n",
-    );
-    for ((stage, provider, outcome), latencies) in groups {
-        let labels = format!("stage=\"{stage}\",provider=\"{provider}\",outcome=\"{outcome}\"");
-        let _write_result = writeln!(
-            output,
-            "orchestrator_model_interactions_total{{{labels}}} {}",
-            latencies.len()
-        );
-        for bucket in BUCKETS {
-            let count = latencies
-                .iter()
-                .filter(|latency| **latency <= bucket)
-                .count();
-            let _write_result = writeln!(
-                output,
-                "orchestrator_model_interaction_latency_milliseconds_bucket{{{labels},le=\"{bucket}\"}} {count}"
-            );
-        }
-        let _write_result = writeln!(
-            output,
-            "orchestrator_model_interaction_latency_milliseconds_bucket{{{labels},le=\"+Inf\"}} {}",
-            latencies.len()
-        );
-        let _write_result = writeln!(
-            output,
-            "orchestrator_model_interaction_latency_milliseconds_count{{{labels}}} {}",
-            latencies.len()
-        );
-        let _write_result = writeln!(
-            output,
-            "orchestrator_model_interaction_latency_milliseconds_sum{{{labels}}} {}",
-            latencies.iter().sum::<i64>()
-        );
-    }
-    output
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{PRICED_MODEL, estimate, ingest_usage_reports, render_metrics, summarize};
+    use super::{PRICED_MODEL, estimate, ingest_usage_reports, summarize};
     use crate::{
         development::{AgentProfile, RepositoryBinding},
         model_usage::ModelUsageInteraction,
@@ -860,14 +788,6 @@ mod tests {
         assert_eq!(summary.estimated_cost_micros, None);
         assert_eq!(summary.estimated_cost_currency, None);
         assert_eq!(summary.pricing_version, None);
-    }
-
-    #[test]
-    fn metrics_have_only_bounded_labels() {
-        let metrics = render_metrics(&[("coding".into(), "openai".into(), "failed".into(), 42)]);
-        assert!(metrics.contains("stage=\"coding\",provider=\"openai\",outcome=\"failed\""));
-        assert!(!metrics.contains("task_id"));
-        assert!(!metrics.contains("repository"));
     }
 
     #[test]

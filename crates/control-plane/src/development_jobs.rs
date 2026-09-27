@@ -2,6 +2,7 @@
 
 use crate::{
     AppState, PublisherState,
+    application_metrics::{ReconcilerKind, record_reconciliation_error},
     development::{DevelopmentPhase, DevelopmentTask},
     model_usage::ingest_usage_reports,
     orchestration::unix_seconds,
@@ -73,12 +74,14 @@ impl DevelopmentReconciler {
         let targets = match self.with_store(|store| store.development_targets()) {
             Ok(targets) => targets,
             Err(error) => {
+                record_reconciliation_error(ReconcilerKind::Development);
                 warn!(%error, "could not load development tasks");
                 return;
             }
         };
         for task in targets {
             if let Err(error) = self.reconcile_task(&task).await {
+                record_reconciliation_error(ReconcilerKind::Development);
                 warn!(task_id = %task.id, %error, "development task reconciliation failed");
             }
         }
@@ -601,6 +604,7 @@ impl DevelopmentReconciler {
         let name = job_name(task.id, stage);
         let task_id = task.id.to_string();
         let labels = json!({"app.kubernetes.io/name":"ayni-orchestrator-development-task",
+            "app.kubernetes.io/part-of":"ayni-orchestrator",
             "orchestrator.ayni.dev/development-task-id": task_id,
             "orchestrator.ayni.dev/development-stage": stage.name()});
         let (init_containers, container, volumes) = match stage {
