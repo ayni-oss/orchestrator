@@ -16,7 +16,7 @@ independently useful local CLI in the public
 - GitHub App repository enrollment and draft-pull-request publication;
 - content-addressed repository preparation and compatible reuse;
 - bounded OpenAI-backed development with a live provider model catalog and retained checkpoints;
-- durable per-interaction provider usage, versioned cost estimates, and a local Prometheus/Grafana view;
+- durable per-interaction provider usage, versioned cost estimates, and an optional local Prometheus/Grafana task and Kubernetes resource dashboard;
 - independent Ayni validation of a frozen candidate;
 - frozen protected-path and test-edit constraints enforced before publication;
 - retained, digest-bound result artifacts; and

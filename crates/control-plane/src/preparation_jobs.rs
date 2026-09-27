@@ -2,6 +2,7 @@
 
 use crate::{
     AppState, PublisherState,
+    application_metrics::{ReconcilerKind, record_reconciliation_error},
     preparation::{PreparationStatus, PreparationView},
 };
 use k8s_openapi::api::{batch::v1::Job, core::v1::Secret};
@@ -54,12 +55,14 @@ impl PreparationReconciler {
         let targets = match self.with_store(|store| store.preparation_targets()) {
             Ok(targets) => targets,
             Err(error) => {
+                record_reconciliation_error(ReconcilerKind::Preparation);
                 warn!(%error, "could not load repository preparations");
                 return;
             }
         };
         for target in targets {
             if let Err(error) = self.reconcile(&target).await {
+                record_reconciliation_error(ReconcilerKind::Preparation);
                 warn!(preparation_id = target.id, %error, "repository preparation failed");
             }
         }
@@ -291,7 +294,9 @@ impl PreparationReconciler {
         repository: &crate::development::RepositoryBinding,
     ) -> Result<Job, String> {
         let labels = json!({"app.kubernetes.io/name":"ayni-orchestrator-preparation",
-            "orchestrator.ayni.dev/preparation-id":suffix(&preparation.id)});
+            "app.kubernetes.io/part-of":"ayni-orchestrator",
+            "orchestrator.ayni.dev/preparation-id":suffix(&preparation.id),
+            "orchestrator.ayni.dev/development-stage":"preparation"});
         let repository_url = format!(
             "https://github.com/{}/{}.git",
             repository.owner, repository.repository

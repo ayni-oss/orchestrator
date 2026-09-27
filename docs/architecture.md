@@ -38,10 +38,17 @@ cost estimates without retaining provider content. Normal cleanup preserves all
 four claims. The single-writer SQLite volume constrains the current profile to
 one control-plane replica.
 
-The Docker Desktop overlay additionally runs disposable Prometheus and Grafana
-Deployments. Prometheus scrapes the bounded aggregate `/metrics` surface, and
-Grafana receives only that datasource. Both use `emptyDir` storage and are
+An optional Docker Desktop observability deployment runs disposable Prometheus,
+kube-state-metrics, and Grafana Deployments. Prometheus scrapes the bounded
+aggregate `/metrics` surface, namespaced Kubernetes object state, and only the
+orchestrator namespace's kubelet/cAdvisor resource series. Its node permission
+is limited to discovery and the metric-only `nodes/metrics` subresource; it
+cannot use the general node proxy. Grafana receives only
+that datasource. Prometheus and Grafana use bounded `emptyDir` storage and are
 operational views rather than durable evidence; SQLite remains authoritative.
+The application metrics omit task IDs and task content. Kubernetes workload
+series may carry the existing task and stage labels for short-lived resource
+attribution, and expire with the monitoring retention window.
 
 ## Repository and task flow
 

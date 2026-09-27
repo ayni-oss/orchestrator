@@ -62,11 +62,12 @@ scripts/local/deploy.sh
 scripts/local/check.sh
 ```
 
-The check requires `pilot_ready: true`, fetches the HTML marker and repository
-and task list APIs, verifies the metrics scrape/query path and Grafana health,
-and does not execute browser JavaScript. The first install creates four retained
-PVCs. Monitoring uses only disposable `emptyDir` storage. Re-running the install
-does not replace retained claims.
+The core check requires `pilot_ready: true`, fetches the HTML marker and
+repository and task list APIs, verifies the application metrics endpoint, and
+does not execute browser JavaScript. The first install creates four retained
+PVCs. Re-running the install does not replace retained claims. The optional
+observability stack is installed and checked separately as described below and
+uses only disposable `emptyDir` storage.
 
 To reproduce a clean installation without disturbing the normal development namespace,
 use an isolated namespace and local port, then remove that namespace after
@@ -208,37 +209,106 @@ pilot measurements:
   terminal error. Outcomes are `succeeded`, `failed`, or `cancelled` for each
   interaction and do not imply the enclosing task outcome.
 
-`GET /metrics` exports only aggregate interaction counters and latency histograms
-with `stage`, `provider`, and `outcome` labels. It intentionally omits task IDs,
-request text, repositories, model-generated content, and arbitrary errors. Usage
-records and metrics never retain prompts, completions, reasoning text, tool
-transcripts, credentials, authorization headers, or provider response bodies.
+`GET /metrics` exports aggregate task phases/outcomes/durations, stage
+outcomes/durations, model interactions/latency/tokens, provider failures, and
+reconciliation failures. Durable metrics are reconstructed from SQLite;
+reconciliation counters are process-local and correctly reset when the control
+plane restarts. Labels are limited to phase, stage, outcome, provider, selected
+model, token kind, and reconciler. The endpoint intentionally omits task IDs,
+request text, repositories, model-generated content, reason strings, and
+arbitrary errors. Usage records and metrics never retain prompts, completions,
+reasoning text, tool transcripts, credentials, authorization headers, or
+provider response bodies.
 
-## Local metrics dashboard
+## Optional local task and resource dashboard
 
-The Docker Desktop overlay includes one small Prometheus and Grafana deployment.
-Prometheus scrapes `control-plane:8080/metrics` every 15 seconds and retains at
-most 24 hours in an `emptyDir`. Grafana is pre-provisioned with that datasource
-and the **Ayni Orchestrator · Model interactions** dashboard. Both deployments
-are disposable: a restart or cleanup may discard their monitoring history, and
-neither is a replacement for the durable SQLite usage records.
+The core deployment does not require monitoring. Install the version-controlled
+observability deployment only when an operator needs the dashboard:
+
+```bash
+scripts/local/deploy-observability.sh
+scripts/local/check-observability.sh
+```
+
+The stack uses pinned, off-the-shelf Prometheus, kube-state-metrics, and Grafana
+images. Prometheus scrapes every 15 seconds and keeps no more than 48 hours or
+900 MB in a 1 GiB `emptyDir`. That window preserves resource samples after a
+terminal Job's one-hour TTL removes its Pod. A Prometheus restart or teardown
+may still discard all history. SQLite task lifecycle and exact provider-usage
+records remain authoritative and do not depend on monitoring.
+
+The provisioned **Ayni Orchestrator · Tasks and resources** dashboard includes:
+
+- active task phases, terminal outcomes, stage outcomes, and stage/total p95
+  duration from durable application telemetry;
+- aggregate provider token usage by stage and selected model, provider latency
+  and errors, and reconciliation errors;
+- CPU and memory by stage and by container, including the validation `engine`
+  restartable init container, plus usage versus declared limits;
+- restarts, OOM/error/deadline termination signals; and
+- retained-storage pressure and growth over the selected time range, with
+  per-PVC volume stats when Docker Desktop exports them and a node-disk fallback.
+
+Application metrics use bounded stage, phase, outcome, provider, model, token
+kind, and reconciler labels. They never contain task IDs, repository IDs,
+request text, credentials, prompts, completions, reason strings, or task
+content. Exact per-task history remains in the API/UI. kube-state-metrics
+allowlists only the existing orchestrator ownership, task-ID, and stage labels
+needed to join short-lived Kubernetes resource series. The dashboard's task
+variable contains only that opaque task identifier; it does not contain task
+content. Kubernetes series disappear under the Prometheus retention bounds.
 
 Open Grafana only through a loopback port-forward:
 
 ```bash
 kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
   port-forward service/grafana 13000:3000
-open http://127.0.0.1:13000/d/ayni-orchestrator-model-usage
+open http://127.0.0.1:13000/d/ayni-orchestrator-tasks-resources
 ```
 
 Anonymous access is enabled with Viewer permissions because this is the trusted
-local profile. The Service remains `ClusterIP`; never expose it through an
-Ingress, `NodePort`, or non-loopback forward. For direct query inspection, use a
-separate loopback forward to `service/prometheus` on `19090:9090`.
-`scripts/local/check.sh` verifies the application metrics endpoint, Prometheus
-query API, and Grafana health endpoint. A production or shared-cluster setup
-would require authentication, TLS, network isolation, durable monitoring
-storage, and a separate review.
+local profile. Grafana and Prometheus Services remain `ClusterIP`; never expose
+them through an Ingress, `NodePort`, or non-loopback forward. For direct query
+inspection, use a separate loopback forward to `service/prometheus` on
+`19090:9090`. No dashboard variable or metric label contains a credential.
+
+The stack requests 100 millicores and 240 MiB in total. Its aggregate limits are
+650 millicores and 768 MiB, plus bounded ephemeral storage (1 GiB Prometheus,
+256 MiB Grafana data, and 64 MiB Grafana scratch). These limits leave the
+4 CPU/9 GiB validation engine and its worker within the documented 6 CPU/14 GiB
+Docker Desktop profile. Monitoring failure cannot block task orchestration.
+
+Remove only the optional resources, RBAC, and disposable history with:
+
+```bash
+scripts/local/teardown-observability.sh
+```
+
+This preserves the namespace, product Deployments, Jobs, Secrets, and all four
+retained PVCs. `scripts/local/cleanup.sh` also tears down observability before
+removing the stateless control plane.
+
+Troubleshooting:
+
+```bash
+kubectl --context docker-desktop -n ayni-orchestrator-dev get pods \
+  -l app.kubernetes.io/part-of=ayni-orchestrator-observability
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/prometheus
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/kube-state-metrics
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/grafana
+```
+
+If an `up` target is missing, rerun `check-observability.sh` and inspect the
+matching Deployment logs. A `403` from a kubelet/cAdvisor target indicates that
+the metric-only `nodes/metrics` ClusterRole or binding is absent; redeploy the
+optional stack rather than granting `nodes/proxy` or broader access. Empty task resource panels
+mean no matching Pod was sampled during the selected 48-hour window, or the
+selected task predates the current ownership/stage labels. When Docker Desktop
+does not export per-PVC kubelet volume stats, the storage panels deliberately
+fall back to Docker Desktop root-disk usage/growth and show PVC provisioned
+capacity separately; product PVC state is unaffected. Shared-cluster or
+production use requires separate review for
+authentication, TLS, network isolation, durable monitoring storage, and RBAC.
 
 ## Update without losing data
 
@@ -299,9 +369,9 @@ Then:
 scripts/local/cleanup.sh
 ```
 
-This removes only stateless control-plane resources. It deliberately retains
-the namespace, secrets, active Jobs, and all PVCs; terminal Jobs may later be
-removed by their configured one-hour TTL. Destructive removal is a separate,
+This removes the optional observability stack and stateless control-plane
+resources. It deliberately retains the namespace, secrets, active Jobs, and all
+PVCs; terminal Jobs may later be removed by their configured one-hour TTL. Destructive removal is a separate,
 explicit operator action after backup:
 
 ```bash

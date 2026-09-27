@@ -1,4 +1,6 @@
 /// The Kubernetes observation for an attempt-owned Job.
+use crate::application_metrics::{ReconcilerKind, record_reconciliation_error};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JobObservation {
     Pending,
@@ -49,12 +51,14 @@ impl<T: JobTransport> Reconciler<T> {
         let targets = match with_store(&self.store, |store| store.reconciliation_targets()) {
             Ok(targets) => targets,
             Err(error) => {
+                record_reconciliation_error(ReconcilerKind::Attempt);
                 warn!(%error, "could not load reconciliation targets");
                 return;
             }
         };
         for target in targets {
             if let Err(error) = self.reconcile_target(target).await {
+                record_reconciliation_error(ReconcilerKind::Attempt);
                 warn!(%error, "attempt reconciliation failed");
             }
         }
@@ -247,10 +251,10 @@ fn managed_check_job(
 ) -> Result<Job, TransportError> {
     serde_json::from_value(json!({
         "apiVersion": "batch/v1", "kind": "Job",
-        "metadata": { "name": name, "labels": { "app.kubernetes.io/name": "ayni-orchestrator-managed-check", "app.kubernetes.io/part-of": "ayni-orchestrator", "orchestrator.ayni.dev/attempt-id": target.attempt.id.to_string() } },
+        "metadata": { "name": name, "labels": { "app.kubernetes.io/name": "ayni-orchestrator-managed-check", "app.kubernetes.io/part-of": "ayni-orchestrator", "orchestrator.ayni.dev/task-id": target.task_id.to_string(), "orchestrator.ayni.dev/attempt-id": target.attempt.id.to_string(), "orchestrator.ayni.dev/development-stage": "managed_check" } },
         "spec": {
             "backoffLimit": 0, "activeDeadlineSeconds": 900, "ttlSecondsAfterFinished": 3600,
-            "template": { "metadata": { "labels": { "app.kubernetes.io/name": "ayni-orchestrator-managed-check", "orchestrator.ayni.dev/attempt-id": target.attempt.id.to_string() } }, "spec": {
+            "template": { "metadata": { "labels": { "app.kubernetes.io/name": "ayni-orchestrator-managed-check", "app.kubernetes.io/part-of": "ayni-orchestrator", "orchestrator.ayni.dev/task-id": target.task_id.to_string(), "orchestrator.ayni.dev/attempt-id": target.attempt.id.to_string(), "orchestrator.ayni.dev/development-stage": "managed_check" } }, "spec": {
                 "restartPolicy": "Never", "automountServiceAccountToken": false,
                 "securityContext": { "seccompProfile": { "type": "RuntimeDefault" } },
                 "initContainers": [{ "name": "engine", "image": "docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce", "restartPolicy": "Always", "env": [{ "name": "DOCKER_TLS_CERTDIR", "value": "" }], "securityContext": { "privileged": true }, "resources": { "requests": { "cpu": "4", "memory": "9Gi" }, "limits": { "cpu": "4", "memory": "9Gi" } }, "volumeMounts": [{ "name": "workspace", "mountPath": "/workspace" }, { "name": "engine-storage", "mountPath": "/var/lib/docker" }] }],

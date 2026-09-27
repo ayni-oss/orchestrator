@@ -1,6 +1,7 @@
 //! HTTP API and durable orchestration surface for Ayni Orchestrator.
 
 mod api;
+mod application_metrics;
 mod development;
 mod development_jobs;
 mod development_lifecycle;
@@ -486,7 +487,7 @@ async fn liveness() -> impl IntoResponse {
     (StatusCode::OK, Json(HealthResponse::live()))
 }
 async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
-    let body = with_store(&state, |store| store.model_usage_metrics())?;
+    let body = with_store(&state, |store| store.application_metrics())?;
     Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body))
 }
 async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
