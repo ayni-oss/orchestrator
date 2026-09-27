@@ -26,7 +26,12 @@ spec:
                 secretKeyRef:
                   name: development-publisher-auth
                   key: token
+            - name: OPENAI_API_KEY_PATH
+              value: /run/secrets/openai/api-key
           volumeMounts:
+            - name: openai-api-key
+              mountPath: /run/secrets/openai
+              readOnly: true
             - name: github-app-key
               mountPath: /run/secrets/github
               readOnly: true
@@ -40,6 +45,11 @@ spec:
               mountPath: /preparations
               readOnly: true
       volumes:
+        - name: openai-api-key
+          secret:
+            secretName: openai-api
+            defaultMode: 288
+            optional: true
         - name: github-app-key
           secret:
             secretName: github-app-credentials

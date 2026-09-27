@@ -571,7 +571,7 @@ impl Store {
         self.development_task(id)
     }
 
-    fn existing_development_submission(
+    pub(crate) fn existing_development_submission(
         &self,
         key: &IdempotencyKey,
         input: &DevelopmentInput,

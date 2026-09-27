@@ -21,5 +21,10 @@ mod tests {
         assert!(html.contains("pricing_version"));
         assert!(html.contains("resolved_model"));
         assert!(html.contains("input_rate_micros_per_million"));
+        assert!(html.contains("OpenAI model"));
+        assert!(html.contains("/v1/provider-models"));
+        assert!(html.contains("Select a model"));
+        assert!(html.contains("t.agent_profile.model"));
+        assert!(!html.contains("select name=\"profile_id\""));
     }
 }

@@ -15,8 +15,8 @@ independently useful local CLI in the public
 - deterministic Kubernetes Job reconciliation, cancellation, and bounded retry;
 - GitHub App repository enrollment and draft-pull-request publication;
 - content-addressed repository preparation and compatible reuse;
-- bounded OpenAI-backed development with retained checkpoints;
-- durable per-interaction provider usage and versioned cost estimates;
+- bounded OpenAI-backed development with a live provider model catalog and retained checkpoints;
+- durable per-interaction provider usage, versioned cost estimates, and a local Prometheus/Grafana view;
 - independent Ayni validation of a frozen candidate;
 - frozen protected-path and test-edit constraints enforced before publication;
 - retained, digest-bound result artifacts; and

@@ -16,6 +16,8 @@ use serde_json::{Value, json};
 use std::{fs, sync::Arc};
 use tracing::{info, warn};
 
+const CODE_CHECKOUT_SCRIPT: &str = "AUTH=$(printf 'x-access-token:%s' \"$GITHUB_CLONE_TOKEN\" | base64 | tr -d '\\n'); git -c http.https://github.com/.extraheader=\"Authorization: Basic $AUTH\" clone \"$DEVELOPMENT_REPOSITORY_URL\" /workspace/repository; git -C /workspace/repository checkout --detach \"$DEVELOPMENT_START_REVISION\"; test \"$(git -C /workspace/repository rev-parse HEAD)\" = \"$DEVELOPMENT_START_REVISION\"; mkdir -p /workspace/.cargo; cp -R /usr/local/cargo/. /workspace/.cargo/; chmod -R g+rwX /workspace/repository /workspace/.cargo";
+
 #[derive(Clone)]
 pub struct DevelopmentReconciler {
     state: AppState,
@@ -94,7 +96,6 @@ impl DevelopmentReconciler {
         )
     )]
     async fn reconcile_task(&self, task: &DevelopmentTask) -> Result<(), String> {
-        self.ingest_usage(task.id, None)?;
         let deadline_expired = task
             .deadline_at
             .is_some_and(|deadline| unix_seconds().map(|now| now >= deadline).unwrap_or(true));
@@ -116,6 +117,15 @@ impl DevelopmentReconciler {
             }
             return Ok(());
         }
+        if task.phase == DevelopmentPhase::Cancelled {
+            self.cleanup_cancelled(task.id).await?;
+            if self.stage_jobs_absent(task.id).await? {
+                self.ingest_usage(task.id, Some(ModelInteractionOutcome::Cancelled))?;
+                self.with_store(|store| store.complete_model_usage_collection(task.id))?;
+            }
+            return Ok(());
+        }
+        self.ingest_usage(task.id, None)?;
         match task.phase {
             DevelopmentPhase::Queued => self.start_stage(task, Stage::Code).await,
             DevelopmentPhase::Coding => self.finish_coding(task).await,
@@ -123,20 +133,12 @@ impl DevelopmentReconciler {
             DevelopmentPhase::Validating => self.finish_validation(task).await,
             DevelopmentPhase::PrQueued => self.start_stage(task, Stage::Pr).await,
             DevelopmentPhase::PreparingPr => self.finish_pr(task).await,
-            DevelopmentPhase::Cancelled => {
-                self.cleanup_cancelled(task.id).await?;
-                if self.stage_jobs_absent(task.id).await? {
-                    self.ingest_usage(task.id, Some(ModelInteractionOutcome::Cancelled))?;
-                    self.with_store(|store| store.complete_model_usage_collection(task.id))?;
-                }
-                Ok(())
-            }
+            DevelopmentPhase::Cancelled | DevelopmentPhase::Unsupported => Ok(()),
             DevelopmentPhase::Completed => self.finish_completed_usage(task).await,
             DevelopmentPhase::WaitingForInput | DevelopmentPhase::Failed => {
                 self.ingest_usage(task.id, Some(ModelInteractionOutcome::Failed))?;
                 self.with_store(|store| store.complete_model_usage_collection(task.id))
             }
-            DevelopmentPhase::Unsupported => Ok(()),
         }
     }
 
@@ -643,7 +645,7 @@ impl DevelopmentReconciler {
         );
         let init = json!({"name":"checkout","image":self.worker_image,"imagePullPolicy":"Never",
             "command":["/bin/sh","-ec"],
-            "args":["AUTH=$(printf 'x-access-token:%s' \"$GITHUB_CLONE_TOKEN\" | base64 | tr -d '\\n'); git -c http.https://github.com/.extraheader=\"Authorization: Basic $AUTH\" clone \"$DEVELOPMENT_REPOSITORY_URL\" /workspace/repository; git -C /workspace/repository checkout --detach \"$DEVELOPMENT_START_REVISION\"; test \"$(git -C /workspace/repository rev-parse HEAD)\" = \"$DEVELOPMENT_START_REVISION\"; mkdir -p /workspace/.cargo; cp -R /usr/local/cargo/. /workspace/.cargo/; chmod -R g+rwX /workspace"],
+            "args":[CODE_CHECKOUT_SCRIPT],
             "env":[{"name":"GITHUB_CLONE_TOKEN","valueFrom":{"secretKeyRef":{"name":secret_name(task.id),"key":"token"}}},
                 {"name":"DEVELOPMENT_REPOSITORY_URL","value":repository},
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision}],
@@ -861,7 +863,7 @@ fn coding_agent_security() -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{coding_agent_security, job_deadline, usage_subpath};
+    use super::{CODE_CHECKOUT_SCRIPT, coding_agent_security, job_deadline, usage_subpath};
     use ayni_orchestrator_domain::TaskId;
 
     #[test]
@@ -876,6 +878,15 @@ mod tests {
         assert_eq!(security["capabilities"]["add"][2], "SETGID");
         assert_eq!(security["capabilities"]["add"][3], "SETPCAP");
         assert_eq!(security["capabilities"]["add"][4], "SETUID");
+    }
+
+    #[test]
+    fn checkout_changes_only_init_container_owned_paths() {
+        assert!(
+            CODE_CHECKOUT_SCRIPT
+                .ends_with("chmod -R g+rwX /workspace/repository /workspace/.cargo")
+        );
+        assert!(!CODE_CHECKOUT_SCRIPT.ends_with("chmod -R g+rwX /workspace"));
     }
 
     #[test]

@@ -30,7 +30,7 @@ if task not in cohort: raise SystemExit(f"unsupported task: {task}")
 value=cohort[task]
 if probe == "1":
     value={"request":"Deadline harness probe. Make no publication; the one-second task deadline must expire before coding starts.","acceptance_criteria":["the durable task deadline stops all owned execution"]}
-payload={"idempotency_key":f"pilot-{task}-orchestrator-{run_id}","repository_id":"sandbox-main","profile_id":"openai-gpt5","start_revision":revision,"request":value["request"],"acceptance_criteria":value["acceptance_criteria"],"deadline_seconds":1 if probe == "1" else 300}
+payload={"idempotency_key":f"pilot-{task}-orchestrator-{run_id}","repository_id":"sandbox-main","model":"gpt-5","start_revision":revision,"request":value["request"],"acceptance_criteria":value["acceptance_criteria"],"deadline_seconds":1 if probe == "1" else 300}
 with open(path,"w",encoding="utf-8") as handle: json.dump(payload,handle,separators=(",",":"))
 PY
 

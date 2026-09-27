@@ -63,8 +63,10 @@ scripts/local/check.sh
 ```
 
 The check requires `pilot_ready: true`, fetches the HTML marker and repository
-and task list APIs, and does not execute browser JavaScript. The first install
-creates four retained PVCs. Re-running the install does not replace them.
+and task list APIs, verifies the metrics scrape/query path and Grafana health,
+and does not execute browser JavaScript. The first install creates four retained
+PVCs. Monitoring uses only disposable `emptyDir` storage. Re-running the install
+does not replace retained claims.
 
 To reproduce a clean installation without disturbing the normal development namespace,
 use an isolated namespace and local port, then remove that namespace after
@@ -84,16 +86,18 @@ Namespace deletion is intentionally explicit because it deletes that isolated
 installation's Secrets, Jobs, and retained claims. Never point this command at
 the normal development namespace.
 
-Use the UI to save repository enrollment. Configure an agent profile once with
-the API if one is not already present:
-
-```bash
-curl --fail -H 'content-type: application/json' \
-  --data '{"id":"openai-gpt5","provider":"openai","model":"gpt-5","secret_ref":"openai-api"}' \
-  http://127.0.0.1:18080/v1/agent-profiles
-```
-
-The `secret_ref` is a Kubernetes Secret name, not secret material.
+Use the UI to save repository enrollment. No model-specific agent profile is
+configured. The control plane reads the existing `openai-api` Secret from its
+read-only projected volume, asks OpenAI for the authenticated key's model list
+through Rig, filters it to the currently supported Responses/tool-capable model
+families, and caches successful discovery for five minutes. The UI submits
+the selected provider model ID, while the task freezes an internal provider,
+model, and Secret-reference snapshot for execution and retry. `GET
+/v1/provider-models` exposes only sanitized provider model metadata, never the
+credential. The current compatibility policy admits GPT-5, GPT-4.1, GPT-4o,
+o1, o3, and o4 families while excluding audio, realtime, transcription, TTS,
+image, search, and instruct variants. Existing retained tasks and legacy profile
+rows remain readable but are not shown as model choices.
 
 ## Repository readiness and preparation
 
@@ -131,8 +135,8 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev logs \
 
 The browser exposes submission, live phase refresh, cancellation, retry,
 requested-input follow-up, draft PR links, and trusted evidence. A task freezes
-its repository/profile snapshots, start revision, request, criteria, protected
-paths, test-edit authorization, lock, and preparation identity. Retry creates a
+its repository and selected-provider-model snapshots, start revision, request,
+criteria, protected paths, test-edit authorization, lock, and preparation identity. Retry creates a
 linked new task with the same constraints; it never mutates prior evidence.
 Requested input is appended only to that linked follow-up.
 
@@ -209,6 +213,32 @@ with `stage`, `provider`, and `outcome` labels. It intentionally omits task IDs,
 request text, repositories, model-generated content, and arbitrary errors. Usage
 records and metrics never retain prompts, completions, reasoning text, tool
 transcripts, credentials, authorization headers, or provider response bodies.
+
+## Local metrics dashboard
+
+The Docker Desktop overlay includes one small Prometheus and Grafana deployment.
+Prometheus scrapes `control-plane:8080/metrics` every 15 seconds and retains at
+most 24 hours in an `emptyDir`. Grafana is pre-provisioned with that datasource
+and the **Ayni Orchestrator · Model interactions** dashboard. Both deployments
+are disposable: a restart or cleanup may discard their monitoring history, and
+neither is a replacement for the durable SQLite usage records.
+
+Open Grafana only through a loopback port-forward:
+
+```bash
+kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
+  port-forward service/grafana 13000:3000
+open http://127.0.0.1:13000/d/ayni-orchestrator-model-usage
+```
+
+Anonymous access is enabled with Viewer permissions because this is the trusted
+local profile. The Service remains `ClusterIP`; never expose it through an
+Ingress, `NodePort`, or non-loopback forward. For direct query inspection, use a
+separate loopback forward to `service/prometheus` on `19090:9090`.
+`scripts/local/check.sh` verifies the application metrics endpoint, Prometheus
+query API, and Grafana health endpoint. A production or shared-cluster setup
+would require authentication, TLS, network isolation, durable monitoring
+storage, and a separate review.
 
 ## Update without losing data
 
@@ -341,8 +371,10 @@ namespace, or Docker Desktop cleanup.
 
 ## Failure triage
 
-- `pilot_ready: false`: deploy the current profile and configure all GitHub/model
-  publication variables; inspect control-plane logs.
+- `pilot_ready: false`: deploy the current profile and configure the GitHub
+  publication variables and `openai-api` model-catalog Secret; the readiness value
+  `model_catalog: "unavailable"` means discovery has not yet succeeded, so inspect key validity,
+  provider reachability, and control-plane logs.
 - `setup_required`: repair GitHub App installation access; credentials are not a
   repository change.
 - preparation `failed`: inspect checkout/preparer/engine containers and desktop

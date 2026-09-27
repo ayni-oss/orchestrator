@@ -175,6 +175,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "reqwest",
+ "rig-core",
  "rusqlite",
  "serde",
  "serde_json",

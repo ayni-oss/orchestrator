@@ -1,7 +1,7 @@
 use crate::{
     development::{
-        AgentProfile, DevelopmentLifecycleEvent, DevelopmentLifecycleOutcome,
-        DevelopmentLifecycleStage, DevelopmentPhase, DevelopmentTask,
+        DevelopmentLifecycleEvent, DevelopmentLifecycleOutcome, DevelopmentLifecycleStage,
+        DevelopmentPhase, DevelopmentTask,
     },
     orchestration::{Store, StoreError},
 };
@@ -315,19 +315,6 @@ fn log_terminal_event(
 }
 
 impl Store {
-    pub fn agent_profiles(&self) -> Result<Vec<AgentProfile>, StoreError> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT id FROM agent_profiles ORDER BY id")
-            .map_err(StoreError::Database)?;
-        let ids = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(StoreError::Database)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(StoreError::Database)?;
-        ids.into_iter().map(|id| self.agent_profile(&id)).collect()
-    }
-
     pub fn development_tasks(&self) -> Result<Vec<DevelopmentTask>, StoreError> {
         let mut statement = self
             .connection

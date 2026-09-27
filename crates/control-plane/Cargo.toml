@@ -17,6 +17,7 @@ k8s-openapi.workspace = true
 kube.workspace = true
 jsonwebtoken.workspace = true
 reqwest.workspace = true
+rig-core.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 rusqlite.workspace = true
