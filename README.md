@@ -11,6 +11,7 @@ independently useful local CLI in the public
 
 ## Current capabilities
 
+- a versioned native gRPC product API with health, development reflection, and resumable task updates;
 - durable task and attempt state in SQLite on retained local storage;
 - deterministic Kubernetes Job reconciliation, cancellation, and bounded retry;
 - GitHub App repository enrollment and draft-pull-request publication;

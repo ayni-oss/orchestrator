@@ -48,11 +48,12 @@ and do not benefit from becoming product RPCs.
   gRPC-backed BFF.
 - The server must map application errors to canonical gRPC status codes plus
   stable, safe error details.
-- Defining this contract does not authorize a listener. A gRPC server must not
-  be attached unauthenticated to the current namespace-reachable Service.
-  Serving product RPCs requires authentication, authorization, transport
-  protection, and/or verified network isolation appropriate to the deployment
-  profile.
+- Defining this contract does not authorize a namespace-reachable listener. In
+  the trusted local profile the native server is required to bind to pod
+  loopback. Its declared Service target supports a host-loopback `kubectl
+  port-forward`, while normal Service traffic to the pod IP cannot reach the
+  listener. Any broader serving boundary requires authentication, authorization,
+  transport protection, and verified network isolation.
 - A future server-side browser BFF may expose narrowly scoped same-origin page
   actions or browser adapters. They are private UI implementation details, not
   a supported Orchestrator API.

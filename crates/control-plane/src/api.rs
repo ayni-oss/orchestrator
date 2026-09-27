@@ -66,55 +66,61 @@ impl HealthResponse {
 
 #[derive(Debug, Error)]
 pub enum ApiError {
+    #[error("application operation failed")]
+    Application(crate::application::ApplicationError),
     #[error("invalid identifier")]
     InvalidIdentifier(#[source] ayni_orchestrator_domain::LifecycleError),
     #[error(transparent)]
     Store(#[from] StoreError),
     #[error("durable store lock was poisoned")]
     StoreLockPoisoned,
-    #[error("pilot evidence service is unavailable")]
-    PublisherUnavailable,
-    #[error("provider model catalog is unavailable")]
-    ModelCatalogUnavailable,
-    #[error(transparent)]
-    ModelCatalog(#[from] crate::ModelCatalogError),
-    #[error("the selected model is not available from the provider")]
-    ModelUnavailable,
-    #[error("evidence unavailable: {0}")]
-    EvidenceUnavailable(String),
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = match self {
-            Self::InvalidIdentifier(_)
-            | Self::ModelUnavailable
-            | Self::Store(
-                StoreError::InvalidIdentity(_)
-                | StoreError::InvalidInput(_)
-                | StoreError::InvalidChangeConstraints(_)
-                | StoreError::RetryNotAllowed(_)
-                | StoreError::MaxAttemptsReached { .. }
-                | StoreError::TaskCancelled(_)
-                | StoreError::ActionKeyReused(_),
-            ) => StatusCode::BAD_REQUEST,
-            Self::Store(StoreError::TaskNotFound(_) | StoreError::AttemptNotFound(_)) => {
-                StatusCode::NOT_FOUND
+        let (status, message) = match self {
+            Self::Application(error) => {
+                use crate::application::ErrorReason;
+                let status = match error.reason {
+                    ErrorReason::ResourceNotFound | ErrorReason::EvidenceUnavailable => {
+                        StatusCode::NOT_FOUND
+                    }
+                    ErrorReason::IdempotencyKeyReused | ErrorReason::Conflict => {
+                        StatusCode::CONFLICT
+                    }
+                    ErrorReason::ProviderUnavailable
+                    | ErrorReason::RepositoryAccess
+                    | ErrorReason::DependencyUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+                    ErrorReason::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+                    ErrorReason::Cancelled | ErrorReason::DeadlineExceeded => {
+                        StatusCode::REQUEST_TIMEOUT
+                    }
+                    _ => StatusCode::BAD_REQUEST,
+                };
+                (status, error.message)
             }
-            Self::EvidenceUnavailable(_) => StatusCode::NOT_FOUND,
-            Self::PublisherUnavailable | Self::ModelCatalogUnavailable => {
-                StatusCode::SERVICE_UNAVAILABLE
+            error => {
+                let status = match error {
+                    Self::InvalidIdentifier(_)
+                    | Self::Store(
+                        StoreError::InvalidIdentity(_)
+                        | StoreError::InvalidInput(_)
+                        | StoreError::InvalidChangeConstraints(_)
+                        | StoreError::RetryNotAllowed(_)
+                        | StoreError::MaxAttemptsReached { .. }
+                        | StoreError::TaskCancelled(_)
+                        | StoreError::ActionKeyReused(_),
+                    ) => StatusCode::BAD_REQUEST,
+                    Self::Store(StoreError::TaskNotFound(_) | StoreError::AttemptNotFound(_)) => {
+                        StatusCode::NOT_FOUND
+                    }
+                    Self::Application(_) => unreachable!("application errors were handled above"),
+                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                };
+                (status, error.to_string())
             }
-            Self::ModelCatalog(_) => StatusCode::BAD_GATEWAY,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        (
-            status,
-            Json(ErrorResponse {
-                error: self.to_string(),
-            }),
-        )
-            .into_response()
+        (status, Json(ErrorResponse { error: message })).into_response()
     }
 }
 

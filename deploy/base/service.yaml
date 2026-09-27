@@ -14,3 +14,11 @@ spec:
       port: 8080
       targetPort: http
       protocol: TCP
+    # The process is required to bind this target to pod loopback. Normal
+    # Service traffic addresses the pod IP and cannot reach it; kubectl
+    # port-forward enters the pod network namespace and can reach loopback.
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: kubernetes.io/h2c

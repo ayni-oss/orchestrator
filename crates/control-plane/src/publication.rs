@@ -104,7 +104,15 @@ pub struct EvidenceArtifactView {
     pub sha256: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EvidenceViewError {
+    Unavailable,
+    Corrupt,
+}
+
 const MAX_VALIDATION_MANIFEST_BYTES: u64 = 1_048_576;
+const MAX_EVIDENCE_ARTIFACTS: usize = 16;
+const MAX_EVIDENCE_ARTIFACT_NAME_BYTES: usize = 128;
 
 fn read_manifest(path: &FilePath) -> Result<Vec<u8>, String> {
     let file = fs::File::open(path).map_err(|_| "final validation manifest is absent")?;
@@ -116,6 +124,56 @@ fn read_manifest(path: &FilePath) -> Result<Vec<u8>, String> {
         return Err("final validation manifest exceeds the retained evidence limit".into());
     }
     Ok(bytes)
+}
+
+fn read_evidence_manifest(path: &FilePath) -> Result<Vec<u8>, EvidenceViewError> {
+    let file = fs::File::open(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            EvidenceViewError::Unavailable
+        } else {
+            EvidenceViewError::Corrupt
+        }
+    })?;
+    let mut bytes = Vec::new();
+    file.take(MAX_VALIDATION_MANIFEST_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| EvidenceViewError::Corrupt)?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_VALIDATION_MANIFEST_BYTES {
+        return Err(EvidenceViewError::Corrupt);
+    }
+    Ok(bytes)
+}
+
+fn evidence_manifest_is_bounded(manifest: &Manifest) -> bool {
+    matches!(
+        manifest.outcome.as_str(),
+        "success"
+            | "quality_failure"
+            | "policy_rejected"
+            | "dependency_change_unsupported"
+            | "scope_rejected"
+    ) && manifest.changed_paths.len() <= MAX_CHANGED_PATHS
+        && manifest
+            .changed_paths
+            .iter()
+            .map(String::len)
+            .sum::<usize>()
+            <= MAX_CHANGED_PATH_BYTES
+        && manifest
+            .changed_paths
+            .iter()
+            .all(|path| repository_path_is_valid(path))
+        && manifest.artifacts.len() <= MAX_EVIDENCE_ARTIFACTS
+        && manifest.artifacts.iter().all(|artifact| {
+            !artifact.name.is_empty()
+                && artifact.name.len() <= MAX_EVIDENCE_ARTIFACT_NAME_BYTES
+                && repository_path_is_valid(&artifact.name)
+                && artifact.sha256.len() == 64
+                && artifact
+                    .sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
 }
 
 fn manifest_covers_change_constraints(
@@ -155,8 +213,11 @@ impl PublisherState {
         self.app.publish(task, bundle, branch, title, body).await
     }
 
-    pub(crate) fn evidence_view(&self, task: &DevelopmentTask) -> Result<EvidenceView, String> {
-        let bytes = read_manifest(
+    pub(crate) fn evidence_view(
+        &self,
+        task: &DevelopmentTask,
+    ) -> Result<EvidenceView, EvidenceViewError> {
+        let bytes = read_evidence_manifest(
             &self
                 .evidence_root
                 .join(task.id.to_string())
@@ -164,10 +225,10 @@ impl PublisherState {
         )?;
         let digest = format!("sha256:{:x}", Sha256::digest(&bytes));
         if task.validation_manifest.as_deref() != Some(&digest) {
-            return Err("retained manifest differs from the durable task record".into());
+            return Err(EvidenceViewError::Corrupt);
         }
-        let manifest: Manifest = serde_json::from_slice(&bytes)
-            .map_err(|_| "final validation manifest is malformed".to_owned())?;
+        let manifest: Manifest =
+            serde_json::from_slice(&bytes).map_err(|_| EvidenceViewError::Corrupt)?;
         if !matches!(manifest.schema_version, 1 | 2)
             || task.candidate_commit.as_deref() != Some(&manifest.candidate_commit)
             || task.input.start_revision != manifest.start_revision
@@ -176,11 +237,13 @@ impl PublisherState {
                 && manifest.change_constraints.as_ref() != Some(&task.input.change_constraints))
             || !scope_violations_are_bounded(&manifest.scope_violations)
             || task.scope_violations != manifest.scope_violations
+            || !evidence_manifest_is_bounded(&manifest)
         {
-            return Err("final validation manifest does not match the task".into());
+            return Err(EvidenceViewError::Corrupt);
         }
         if manifest.outcome == "success" {
-            verify_artifacts(&self.evidence_root.join(task.id.to_string()), &manifest)?;
+            verify_artifacts(&self.evidence_root.join(task.id.to_string()), &manifest)
+                .map_err(|_| EvidenceViewError::Corrupt)?;
         }
         Ok(EvidenceView {
             manifest_digest: digest,
@@ -687,6 +750,23 @@ mod tests {
         constraints.protected_paths = vec!["src".into()];
         manifest.change_constraints = Some(constraints.clone());
         assert!(!manifest_covers_change_constraints(&manifest, &constraints));
+        Ok(())
+    }
+
+    #[test]
+    fn evidence_projection_rejects_unknown_outcomes_and_unbounded_artifacts()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut manifest = write_fixture(directory.path())?;
+        assert!(evidence_manifest_is_bounded(&manifest));
+        manifest.outcome = "unexpected".to_owned();
+        assert!(!evidence_manifest_is_bounded(&manifest));
+        manifest.outcome = "quality_failure".to_owned();
+        manifest.artifacts[0].name = "../signals.json".to_owned();
+        assert!(!evidence_manifest_is_bounded(&manifest));
+        manifest.artifacts[0].name = "signals.json".to_owned();
+        manifest.artifacts[0].sha256 = "not-a-digest".to_owned();
+        assert!(!evidence_manifest_is_bounded(&manifest));
         Ok(())
     }
 

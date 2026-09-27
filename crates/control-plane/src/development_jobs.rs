@@ -670,7 +670,7 @@ impl DevelopmentReconciler {
                 {"name":"DEVELOPMENT_CHECKPOINT","value":"/checkpoint"},
                 {"name":"DEVELOPMENT_USAGE_DIR","value":"/usage"},
                 {"name":"DEVELOPMENT_START_REVISION","value":task.input.start_revision},
-                {"name":"DEVELOPMENT_REQUEST","value":task.input.request},
+                {"name":"DEVELOPMENT_REQUEST","value":task.execution_request()},
                 {"name":"DEVELOPMENT_ACCEPTANCE_CRITERIA","value":criteria},
                 {"name":"DEVELOPMENT_CHANGE_CONSTRAINTS","value":change_constraints},
                 {"name":"AGENT_MODEL","value":task.agent_profile.model},
@@ -764,7 +764,7 @@ impl DevelopmentReconciler {
             .ok_or("PR author has no candidate")?;
         let context = format!(
             "Request: {}\nAcceptance criteria: {:?}\nChange constraints: {:?}\nCandidate commit: {}\nValidation manifest: {}\nPolicy or test edits: {}\nChanged paths: {}\nAgent summary: {}",
-            task.input.request,
+            task.execution_request(),
             task.input.acceptance_criteria,
             task.input.change_constraints,
             candidate,

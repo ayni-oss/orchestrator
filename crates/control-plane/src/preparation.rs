@@ -22,7 +22,7 @@ impl PrepareRepositoryInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PreparationStatus {
     Queued,
@@ -50,14 +50,14 @@ impl PreparationStatus {
             "ready" => Ok(Self::Ready),
             "setup_required" => Ok(Self::SetupRequired),
             "failed" => Ok(Self::Failed),
-            _ => Err(StoreError::InvalidInput(
+            _ => Err(StoreError::CorruptState(
                 "invalid persisted preparation status",
             )),
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PreparationView {
     pub id: String,
     pub repository_id: String,
@@ -70,7 +70,7 @@ pub struct PreparationView {
     pub reused: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RepositoryView {
     #[serde(flatten)]
     pub binding: RepositoryBinding,
@@ -90,12 +90,30 @@ impl Store {
                 );
                 CREATE TABLE IF NOT EXISTS preparation_actions (
                     action_key TEXT PRIMARY KEY, preparation_id TEXT NOT NULL REFERENCES repository_preparations(id),
-                    repository_id TEXT NOT NULL, revision TEXT NOT NULL, created_at INTEGER NOT NULL
+                    repository_id TEXT NOT NULL, revision TEXT NOT NULL, reused INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS repository_preparations_status_idx
                     ON repository_preparations(status, updated_at);",
             )
-            .map_err(StoreError::Database)
+            .map_err(StoreError::Database)?;
+        let has_reused: bool = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('preparation_actions') WHERE name='reused')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(StoreError::Database)?;
+        if !has_reused {
+            self.connection
+                .execute(
+                    "ALTER TABLE preparation_actions ADD COLUMN reused INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(StoreError::Database)?;
+        }
+        Ok(())
     }
 
     pub fn repository_views(&self) -> Result<Vec<RepositoryView>, StoreError> {
@@ -113,14 +131,32 @@ impl Store {
             .collect()
     }
 
+    pub fn preparations(&self, repository_id: &str) -> Result<Vec<PreparationView>, StoreError> {
+        self.repository_binding(repository_id)?;
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT id FROM repository_preparations WHERE repository_id=?1
+                 ORDER BY created_at DESC, id DESC",
+            )
+            .map_err(StoreError::Database)?;
+        let ids = statement
+            .query_map([repository_id], |row| row.get::<_, String>(0))
+            .map_err(StoreError::Database)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+        ids.into_iter().map(|id| self.preparation(&id)).collect()
+    }
+
     pub fn repository_view(&self, id: &str) -> Result<RepositoryView, StoreError> {
         let binding = self.repository_binding(id)?;
         let preparation_id = self
             .connection
             .query_row(
-                "SELECT id FROM repository_preparations WHERE repository_id=?1
+                "SELECT id FROM repository_preparations
+                 WHERE repository_id=?1 AND lock_sha256=?2
                  ORDER BY updated_at DESC LIMIT 1",
-                [id],
+                params![id, &binding.lock_sha256],
                 |row| row.get::<_, String>(0),
             )
             .optional()
@@ -145,7 +181,9 @@ impl Store {
             if existing.0 != repository_id || existing.1 != input.revision {
                 return Err(StoreError::ActionKeyReused(key.as_str().to_owned()));
             }
-            return self.preparation(&existing.2);
+            let mut preparation = self.preparation(&existing.2)?;
+            preparation.reused = existing.3;
+            return Ok(preparation);
         }
         let repository = self.repository_binding(repository_id)?;
         let id = preparation_identity(&repository, &input.revision);
@@ -176,25 +214,33 @@ impl Store {
                 params![now, id],
             )
             .map_err(StoreError::Database)?;
+        let reused = transaction
+            .query_row(
+                "SELECT status='ready' FROM repository_preparations WHERE id=?1",
+                [&id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(StoreError::Database)?;
+        if reused {
+            transaction
+                .execute(
+                    "UPDATE repository_preparations
+                     SET reuse_count=reuse_count+1, updated_at=?1 WHERE id=?2",
+                    params![now, id],
+                )
+                .map_err(StoreError::Database)?;
+        }
         transaction
             .execute(
-                "INSERT INTO preparation_actions(action_key, preparation_id, repository_id, revision, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![key.as_str(), id, repository_id, input.revision, now],
+                "INSERT INTO preparation_actions
+                 (action_key, preparation_id, repository_id, revision, reused, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![key.as_str(), id, repository_id, input.revision, reused, now],
             )
             .map_err(StoreError::Database)?;
         transaction.commit().map_err(StoreError::Database)?;
         let mut preparation = self.preparation(&id)?;
-        if preparation.status == PreparationStatus::Ready {
-            self.connection
-                .execute(
-                    "UPDATE repository_preparations SET reuse_count=reuse_count+1, updated_at=?1 WHERE id=?2",
-                    params![now, id],
-                )
-                .map_err(StoreError::Database)?;
-            preparation = self.preparation(&id)?;
-            preparation.reused = true;
-        }
+        preparation.reused = reused;
         Ok(preparation)
     }
 
@@ -232,18 +278,19 @@ impl Store {
                 })
             })
             .transpose()?
-            .ok_or(StoreError::InvalidInput("preparation does not exist"))
+            .ok_or_else(|| StoreError::PreparationNotFound(id.to_owned()))
     }
 
-    fn preparation_action(
+    pub(crate) fn preparation_action(
         &self,
         key: &IdempotencyKey,
-    ) -> Result<Option<(String, String, String)>, StoreError> {
+    ) -> Result<Option<(String, String, String, bool)>, StoreError> {
         self.connection
             .query_row(
-                "SELECT repository_id, revision, preparation_id FROM preparation_actions WHERE action_key=?1",
+                "SELECT repository_id, revision, preparation_id, reused
+                 FROM preparation_actions WHERE action_key=?1",
                 [key.as_str()],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
             .map_err(StoreError::Database)
@@ -321,7 +368,7 @@ impl Store {
              WHERE id=?4 AND status IN ('queued','preparing')",
                 params![
                     status.as_str(),
-                    diagnostic.chars().take(512).collect::<String>(),
+                    crate::truncate_utf8(diagnostic, 512),
                     unix_seconds()?,
                     id
                 ],
@@ -345,9 +392,7 @@ impl Store {
             )
             .optional()
             .map_err(StoreError::Database)?
-            .ok_or(StoreError::InvalidInput(
-                "repository revision is not ready; prepare it before submitting a task",
-            ))
+            .ok_or(StoreError::RepositoryNotReady)
     }
 }
 

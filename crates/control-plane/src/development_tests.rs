@@ -3,11 +3,20 @@ use crate::preparation::{PreparationStatus, PrepareRepositoryInput};
 use rusqlite::{Connection, params};
 
 #[test]
+#[allow(clippy::too_many_lines)] // One legacy fixture verifies the complete ordered migration.
 fn opening_a_legacy_development_database_adds_current_task_columns() -> Result<(), StoreError> {
     let connection = Connection::open_in_memory().map_err(StoreError::Database)?;
     connection
         .execute_batch(
-            "CREATE TABLE development_tasks (
+            "CREATE TABLE application_list_snapshots (
+                token TEXT PRIMARY KEY,
+                method TEXT NOT NULL,
+                filter TEXT NOT NULL,
+                item_ids TEXT NOT NULL,
+                item_offset INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE development_tasks (
                 id TEXT PRIMARY KEY, repository_id TEXT NOT NULL, profile_id TEXT NOT NULL,
                 repository_snapshot TEXT NOT NULL, profile_snapshot TEXT NOT NULL,
                 start_revision TEXT NOT NULL, request TEXT NOT NULL,
@@ -33,6 +42,21 @@ fn opening_a_legacy_development_database_adds_current_task_columns() -> Result<(
     assert!(columns.iter().any(|column| column == "protected_paths"));
     assert!(columns.iter().any(|column| column == "allow_test_edits"));
     assert!(columns.iter().any(|column| column == "scope_violations"));
+    assert!(columns.iter().any(|column| column == "provided_input"));
+    assert!(columns.iter().any(|column| column == "resource_version"));
+    let snapshot_columns = store
+        .connection
+        .prepare("PRAGMA table_info(application_list_snapshots)")
+        .map_err(StoreError::Database)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(StoreError::Database)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::Database)?;
+    assert!(
+        snapshot_columns
+            .iter()
+            .any(|column| column == "item_values")
+    );
 
     let repository = RepositoryBinding {
         id: "trial".into(),
@@ -576,6 +600,7 @@ fn scope_rejection_is_durable_retryable_and_never_publishable() -> Result<(), St
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // One lifecycle test keeps migration and replay assertions correlated.
 fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
     let mut store = Store::in_memory()?;
     store.put_repository_binding(&RepositoryBinding {
@@ -627,13 +652,40 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
         follow_up.input.change_constraints,
         task.input.change_constraints
     );
-    assert!(follow_up.input.request.contains("Round down"));
+    assert_eq!(follow_up.input.request, task.input.request);
+    assert_eq!(follow_up.provided_input.as_deref(), Some("Round down"));
+    assert!(follow_up.execution_request().contains("Round down"));
     assert_eq!(
         store
             .retry_development(task.id, &key, Some("Round down"))?
             .id,
         follow_up.id
     );
+
+    // Simulate the pre-provided_input storage shape and verify that reopening
+    // migration restores the frozen request before durable action replay.
+    store
+        .connection
+        .execute(
+            "UPDATE development_tasks
+             SET request=?1, provided_input=NULL WHERE id=?2",
+            params![
+                format!("{}\n\nMaintainer input:\nRound down", task.input.request),
+                follow_up.id.to_string()
+            ],
+        )
+        .map_err(StoreError::Database)?;
+    store.migrate_development()?;
+    let migrated = store.development_task(follow_up.id)?;
+    assert_eq!(migrated.input.request, task.input.request);
+    assert_eq!(migrated.provided_input.as_deref(), Some("Round down"));
+    assert_eq!(
+        store
+            .retry_development(task.id, &key, Some("Round down"))?
+            .id,
+        follow_up.id
+    );
+
     store
         .connection
         .execute(
@@ -645,10 +697,19 @@ fn requested_input_creates_a_linked_follow_up_task() -> Result<(), StoreError> {
         .map_err(StoreError::InvalidLifecycleData)?;
     assert!(matches!(
         store.retry_development(task.id, &expired_key, Some("Round up")),
-        Err(StoreError::InvalidInput(
-            "development task deadline has expired"
-        ))
+        Err(StoreError::TaskDeadlineExpired)
     ));
+    store.cancel_development(
+        task.id,
+        &IdempotencyKey::try_from("cancel-input-source".to_owned())
+            .map_err(StoreError::InvalidLifecycleData)?,
+    )?;
+    assert_eq!(
+        store
+            .retry_development(task.id, &key, Some("Round down"))?
+            .id,
+        follow_up.id
+    );
     Ok(())
 }
 

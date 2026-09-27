@@ -27,7 +27,7 @@ pub struct RepositoryBinding {
 }
 
 impl RepositoryBinding {
-    fn validate(&self) -> Result<(), StoreError> {
+    pub(crate) fn validate(&self) -> Result<(), StoreError> {
         if self.id.is_empty() || self.id.len() > 64 || !slug(&self.id) {
             return Err(StoreError::InvalidInput(
                 "repository id must be a 1-64 character slug",
@@ -94,7 +94,7 @@ pub struct DevelopmentInput {
 }
 
 impl DevelopmentInput {
-    fn validate(&self) -> Result<(), StoreError> {
+    pub(crate) fn validate(&self) -> Result<(), StoreError> {
         if !slug(&self.repository_id) || !slug(&self.profile_id) {
             return Err(StoreError::InvalidInput("invalid repository or profile id"));
         }
@@ -167,20 +167,9 @@ fn retry_request(
         ),
     };
     if !allowed {
-        return Err(StoreError::InvalidInput(
-            "development task cannot be retried in its current phase",
-        ));
+        return Err(StoreError::TaskPhaseNotEligible);
     }
-    Ok(provided_input.map_or_else(
-        || source.input.request.clone(),
-        |value| {
-            format!(
-                "{}\n\nMaintainer input:\n{}",
-                source.input.request,
-                value.trim()
-            )
-        },
-    ))
+    Ok(source.input.request.clone())
 }
 
 /// A measurable stage in the development pipeline.
@@ -212,7 +201,7 @@ impl DevelopmentLifecycleStage {
             "validation" => Ok(Self::Validation),
             "pr_preparation" => Ok(Self::PrPreparation),
             "unknown" => Ok(Self::Unknown),
-            _ => Err(StoreError::InvalidInput(
+            _ => Err(StoreError::CorruptState(
                 "invalid persisted development lifecycle stage",
             )),
         }
@@ -254,7 +243,7 @@ impl DevelopmentLifecycleOutcome {
             "failed" => Ok(Self::Failed),
             "cancelled" => Ok(Self::Cancelled),
             "unsupported" => Ok(Self::Unsupported),
-            _ => Err(StoreError::InvalidInput(
+            _ => Err(StoreError::CorruptState(
                 "invalid persisted development lifecycle outcome",
             )),
         }
@@ -281,6 +270,8 @@ pub struct DevelopmentTask {
     pub agent_profile: AgentProfile,
     pub preparation_id: Option<String>,
     pub retry_of: Option<TaskId>,
+    #[serde(skip_serializing)]
+    pub provided_input: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub deadline_at: Option<i64>,
@@ -295,6 +286,18 @@ pub struct DevelopmentTask {
     pub lifecycle_complete: bool,
     pub lifecycle: Vec<DevelopmentLifecycleEvent>,
     pub model_usage: TaskModelUsage,
+    /// Monotonically increasing cursor for every durable resource change.
+    #[serde(skip_serializing)]
+    pub resource_version: u64,
+}
+
+impl DevelopmentTask {
+    pub(crate) fn execution_request(&self) -> String {
+        self.provided_input.as_ref().map_or_else(
+            || self.input.request.clone(),
+            |input| format!("{}\n\nMaintainer input:\n{input}", self.input.request),
+        )
+    }
 }
 
 pub struct PublicationAction {
@@ -305,7 +308,7 @@ pub struct PublicationAction {
     pub completed_url: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DevelopmentPhase {
     Queued,
@@ -351,7 +354,7 @@ impl DevelopmentPhase {
             "failed" => Ok(Self::Failed),
             "cancelled" => Ok(Self::Cancelled),
             "unsupported" => Ok(Self::Unsupported),
-            _ => Err(StoreError::InvalidInput(
+            _ => Err(StoreError::CorruptState(
                 "invalid persisted development phase",
             )),
         }
@@ -359,143 +362,11 @@ impl DevelopmentPhase {
 }
 
 include!("development_validation.rs");
+include!("development_application.rs");
+
+include!("development_migration.rs");
 
 impl Store {
-    pub(crate) fn migrate_development(&self) -> Result<(), StoreError> {
-        self.connection
-            .execute_batch(
-                "CREATE TABLE IF NOT EXISTS repository_bindings (
-                id TEXT PRIMARY KEY, owner TEXT NOT NULL, repository TEXT NOT NULL,
-                installation_id INTEGER NOT NULL, base_branch TEXT NOT NULL,
-                lock_sha256 TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS agent_profiles (
-                id TEXT PRIMARY KEY, provider TEXT NOT NULL, model TEXT NOT NULL,
-                secret_ref TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS development_tasks (
-                id TEXT PRIMARY KEY, repository_id TEXT NOT NULL REFERENCES repository_bindings(id),
-                profile_id TEXT NOT NULL REFERENCES agent_profiles(id),
-                repository_snapshot TEXT NOT NULL, profile_snapshot TEXT NOT NULL,
-                start_revision TEXT NOT NULL, request TEXT NOT NULL,
-                acceptance_criteria TEXT NOT NULL, protected_paths TEXT NOT NULL DEFAULT '[]',
-                allow_test_edits INTEGER NOT NULL DEFAULT 0, phase TEXT NOT NULL,
-                preparation_id TEXT, retry_of TEXT, requested_input TEXT,
-                candidate_commit TEXT, validation_manifest TEXT,
-                policy_or_test_edits INTEGER, scope_violations TEXT, draft_pr_url TEXT, failure TEXT,
-                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-                deadline_seconds INTEGER, deadline_at INTEGER,
-                lifecycle_complete INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS development_actions (
-                action_key TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES development_tasks(id),
-                action_kind TEXT NOT NULL, created_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS development_lifecycle_events (
-                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id TEXT NOT NULL REFERENCES development_tasks(id),
-                event_key TEXT NOT NULL,
-                event_time INTEGER NOT NULL,
-                stage TEXT NOT NULL,
-                outcome TEXT NOT NULL,
-                reason_code TEXT,
-                UNIQUE(task_id, event_key)
-            );
-            CREATE INDEX IF NOT EXISTS development_lifecycle_task_idx
-                ON development_lifecycle_events(task_id, event_id);
-            CREATE TABLE IF NOT EXISTS development_model_usage_collection (
-                task_id TEXT PRIMARY KEY REFERENCES development_tasks(id),
-                complete INTEGER NOT NULL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS development_model_usage (
-                task_id TEXT NOT NULL REFERENCES development_tasks(id),
-                stage TEXT NOT NULL, call_id TEXT NOT NULL,
-                provider TEXT NOT NULL, model TEXT NOT NULL, resolved_model TEXT,
-                started_at_ms INTEGER NOT NULL, completed_at_ms INTEGER NOT NULL,
-                latency_ms INTEGER NOT NULL, outcome TEXT NOT NULL,
-                input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
-                reasoning_tokens INTEGER, total_tokens INTEGER,
-                estimated_cost_micros INTEGER, pricing_currency TEXT, pricing_version TEXT,
-                priced_input_tokens INTEGER, priced_cached_input_tokens INTEGER,
-                priced_output_tokens INTEGER, input_rate INTEGER, cached_input_rate INTEGER,
-                output_rate INTEGER,
-                PRIMARY KEY(task_id, stage, call_id)
-            );
-            CREATE INDEX IF NOT EXISTS development_model_usage_task_idx
-                ON development_model_usage(task_id, stage, call_id);
-            CREATE TABLE IF NOT EXISTS publication_actions (
-                task_id TEXT PRIMARY KEY REFERENCES development_tasks(id),
-                branch_name TEXT NOT NULL UNIQUE, candidate_commit TEXT NOT NULL,
-                status TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
-                pr_number INTEGER, pr_url TEXT,
-                updated_at INTEGER NOT NULL
-            );",
-            )
-            .map_err(StoreError::Database)?;
-        for (name, definition) in [
-            ("preparation_id", "TEXT"),
-            ("retry_of", "TEXT"),
-            ("requested_input", "TEXT"),
-            ("deadline_seconds", "INTEGER"),
-            ("deadline_at", "INTEGER"),
-            ("protected_paths", "TEXT NOT NULL DEFAULT '[]'"),
-            ("allow_test_edits", "INTEGER NOT NULL DEFAULT 0"),
-            ("scope_violations", "TEXT"),
-            ("lifecycle_complete", "INTEGER NOT NULL DEFAULT 0"),
-        ] {
-            let exists: bool = self
-                .connection
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('development_tasks') WHERE name=?1)",
-                    [name],
-                    |row| row.get(0),
-                )
-                .map_err(StoreError::Database)?;
-            if !exists {
-                self.connection
-                    .execute(
-                        &format!("ALTER TABLE development_tasks ADD COLUMN {name} {definition}"),
-                        [],
-                    )
-                    .map_err(StoreError::Database)?;
-            }
-        }
-        super::development_lifecycle::backfill_development_lifecycle(&self.connection)
-    }
-
-    pub fn put_repository_binding(&self, binding: &RepositoryBinding) -> Result<(), StoreError> {
-        binding.validate()?;
-        self.connection.execute(
-            "INSERT INTO repository_bindings(id, owner, repository, installation_id, base_branch, lock_sha256)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(id) DO UPDATE SET owner=excluded.owner, repository=excluded.repository,
-             installation_id=excluded.installation_id, base_branch=excluded.base_branch,
-             lock_sha256=excluded.lock_sha256",
-            params![binding.id, binding.owner, binding.repository,
-                binding.installation_id, binding.base_branch, binding.lock_sha256],
-        ).map_err(StoreError::Database)?;
-        Ok(())
-    }
-
-    pub fn put_agent_profile(&self, profile: &AgentProfile) -> Result<(), StoreError> {
-        profile.validate()?;
-        self.connection
-            .execute(
-                "INSERT INTO agent_profiles(id, provider, model, secret_ref)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, model=excluded.model,
-             secret_ref=excluded.secret_ref",
-                params![
-                    profile.id,
-                    profile.provider,
-                    profile.model,
-                    profile.secret_ref
-                ],
-            )
-            .map_err(StoreError::Database)?;
-        Ok(())
-    }
-
     #[tracing::instrument(
         skip_all,
         fields(repository_id = %input.repository_id, profile_id = %input.profile_id)
@@ -605,7 +476,7 @@ impl Store {
                 installation_id: row.get(2)?, base_branch: row.get(3)?, lock_sha256: row.get(4)?,
             }),
         ).optional().map_err(StoreError::Database)?
-            .ok_or(StoreError::InvalidInput("repository binding does not exist"))
+            .ok_or_else(|| StoreError::RepositoryNotFound(id.to_owned()))
     }
 
     pub(crate) fn agent_profile(&self, id: &str) -> Result<AgentProfile, StoreError> {
@@ -630,43 +501,44 @@ impl Store {
     pub fn development_task(&self, id: TaskId) -> Result<DevelopmentTask, StoreError> {
         let row = self.connection.query_row(
             "SELECT repository_id, profile_id, repository_snapshot, profile_snapshot, start_revision, request, acceptance_criteria,
-             protected_paths, allow_test_edits, phase, preparation_id, retry_of, requested_input,
+             protected_paths, allow_test_edits, phase, preparation_id, retry_of, provided_input, requested_input,
              candidate_commit, validation_manifest, policy_or_test_edits, scope_violations,
              draft_pr_url, failure, created_at, updated_at, deadline_seconds, deadline_at,
-             lifecycle_complete FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
+             lifecycle_complete, resource_version FROM development_tasks WHERE id=?1", [id.to_string()], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?, row.get::<_, String>(6)?, row.get::<_, String>(7)?,
                     row.get::<_, bool>(8)?, row.get::<_, String>(9)?,
                     row.get::<_, Option<String>>(10)?, row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?, row.get::<_, Option<String>>(13)?,
-                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<bool>>(15)?,
-                    row.get::<_, Option<String>>(16)?, row.get::<_, Option<String>>(17)?,
-                    row.get::<_, Option<String>>(18)?, row.get::<_, i64>(19)?,
-                    row.get::<_, i64>(20)?, row.get::<_, Option<i64>>(21)?,
-                    row.get::<_, Option<i64>>(22)?, row.get::<_, bool>(23)?))
+                    row.get::<_, Option<String>>(14)?, row.get::<_, Option<String>>(15)?,
+                    row.get::<_, Option<bool>>(16)?, row.get::<_, Option<String>>(17)?,
+                    row.get::<_, Option<String>>(18)?, row.get::<_, Option<String>>(19)?,
+                    row.get::<_, i64>(20)?, row.get::<_, i64>(21)?,
+                    row.get::<_, Option<i64>>(22)?, row.get::<_, Option<i64>>(23)?,
+                    row.get::<_, bool>(24)?, row.get::<_, i64>(25)?))
             }
         ).optional().map_err(StoreError::Database)?.ok_or(StoreError::TaskNotFound(id))?;
         let repository = serde_json::from_str(&row.2)
-            .map_err(|_| StoreError::InvalidInput("invalid persisted repository"))?;
+            .map_err(|_| StoreError::CorruptState("invalid persisted repository"))?;
         let agent_profile = serde_json::from_str(&row.3)
-            .map_err(|_| StoreError::InvalidInput("invalid persisted profile"))?;
+            .map_err(|_| StoreError::CorruptState("invalid persisted profile"))?;
         let criteria = serde_json::from_str(&row.6)
-            .map_err(|_| StoreError::InvalidInput("invalid persisted acceptance criteria"))?;
+            .map_err(|_| StoreError::CorruptState("invalid persisted acceptance criteria"))?;
         let protected_paths = serde_json::from_str(&row.7)
-            .map_err(|_| StoreError::InvalidInput("invalid persisted protected paths"))?;
+            .map_err(|_| StoreError::CorruptState("invalid persisted protected paths"))?;
         let scope_violations = row
-            .16
+            .17
             .as_deref()
             .map(serde_json::from_str)
             .transpose()
-            .map_err(|_| StoreError::InvalidInput("invalid persisted scope violations"))?
+            .map_err(|_| StoreError::CorruptState("invalid persisted scope violations"))?
             .unwrap_or_default();
         let deadline_seconds = row
-            .21
+            .22
             .map(|seconds| {
                 u64::try_from(seconds)
-                    .map_err(|_| StoreError::InvalidInput("invalid persisted task deadline"))
+                    .map_err(|_| StoreError::CorruptState("invalid persisted task deadline"))
             })
             .transpose()?;
         let lifecycle = self.development_lifecycle(id)?;
@@ -692,24 +564,28 @@ impl Store {
                 .11
                 .map(|value| TaskId::parse(&value).map_err(StoreError::InvalidLifecycleData))
                 .transpose()?,
-            created_at: row.19,
-            updated_at: row.20,
-            deadline_at: row.22,
+            provided_input: row.12,
+            created_at: row.20,
+            updated_at: row.21,
+            deadline_at: row.23,
             phase: DevelopmentPhase::parse(&row.9)?,
-            requested_input: row.12,
-            candidate_commit: row.13,
-            validation_manifest: row.14,
-            policy_or_test_edits: row.15,
+            requested_input: row.13,
+            candidate_commit: row.14,
+            validation_manifest: row.15,
+            policy_or_test_edits: row.16,
             scope_violations,
-            draft_pr_url: row.17,
-            failure: row.18,
-            lifecycle_complete: row.23,
+            draft_pr_url: row.18,
+            failure: row.19,
+            lifecycle_complete: row.24,
             lifecycle,
             model_usage,
+            resource_version: u64::try_from(row.25)
+                .map_err(|_| StoreError::CorruptState("invalid persisted resource version"))?,
         })
     }
 
     #[tracing::instrument(skip_all, fields(retry_source = %source_id))]
+    #[allow(clippy::too_many_lines)] // Validation, replay compatibility, and atomic creation stay together.
     pub fn retry_development(
         &mut self,
         source_id: TaskId,
@@ -717,7 +593,6 @@ impl Store {
         provided_input: Option<&str>,
     ) -> Result<DevelopmentTask, StoreError> {
         let source = self.development_task(source_id)?;
-        let request = retry_request(&source, provided_input)?;
         let action_kind = format!("development-retry:{source_id}");
         if let Some((target, kind)) = self
             .connection
@@ -735,16 +610,30 @@ impl Store {
             let task = self.development_task(
                 TaskId::parse(&target).map_err(StoreError::InvalidLifecycleData)?,
             )?;
-            if task.input.request != request {
+            let provided_input = provided_input.map(str::trim);
+            if provided_input.is_some_and(str::is_empty)
+                || provided_input.is_some_and(|value| value.len() > 8_192)
+            {
+                return Err(StoreError::InvalidInput(
+                    "provided input must be 1-8192 characters",
+                ));
+            }
+            let current_shape = task.input.request == source.input.request
+                && task.provided_input.as_deref() == provided_input;
+            let legacy_shape = provided_input.is_some_and(|value| {
+                task.provided_input.is_none()
+                    && task.input.request
+                        == format!("{}\n\nMaintainer input:\n{value}", source.input.request)
+            });
+            if !current_shape && !legacy_shape {
                 return Err(StoreError::ActionKeyReused(key.as_str().to_owned()));
             }
             return Ok(task);
         }
+        let request = retry_request(&source, provided_input)?;
         let now = super::orchestration::unix_seconds()?;
         if source.deadline_at.is_some_and(|deadline| deadline <= now) {
-            return Err(StoreError::InvalidInput(
-                "development task deadline has expired",
-            ));
+            return Err(StoreError::TaskDeadlineExpired);
         }
         let preparation_id = self.ready_preparation(
             &source.input.repository_id,
@@ -770,9 +659,9 @@ impl Store {
             .execute(
                 "INSERT INTO development_tasks(id, repository_id, profile_id, repository_snapshot,
              profile_snapshot, start_revision, request, acceptance_criteria, protected_paths,
-             allow_test_edits, phase, preparation_id, retry_of, created_at, updated_at,
+             allow_test_edits, phase, preparation_id, retry_of, provided_input, created_at, updated_at,
              deadline_seconds, deadline_at, lifecycle_complete)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',?11,?12,?13,?13,?14,?15,1)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'queued',?11,?12,?13,?14,?14,?15,?16,1)",
                 params![
                     id.to_string(),
                     source.input.repository_id,
@@ -786,6 +675,7 @@ impl Store {
                     source.input.change_constraints.allow_test_edits,
                     preparation_id,
                     source_id.to_string(),
+                    provided_input.map(str::trim),
                     now,
                     deadline_seconds,
                     source.deadline_at
@@ -834,12 +724,8 @@ impl Store {
         let changed = transaction
             .execute(
                 "UPDATE development_tasks SET phase='waiting_for_input', requested_input=?1,
-             updated_at=?2 WHERE id=?3 AND phase='coding'",
-                params![
-                    question.chars().take(1024).collect::<String>(),
-                    now,
-                    id.to_string()
-                ],
+             updated_at=?2, resource_version=resource_version+1 WHERE id=?3 AND phase='coding'",
+                params![crate::truncate_utf8(question, 1024), now, id.to_string()],
             )
             .map_err(StoreError::Database)?;
         if changed == 1 {
@@ -962,7 +848,8 @@ impl Store {
         let updated = transaction
             .execute(
                 "UPDATE development_tasks SET phase='completed', draft_pr_url=?1,
-             updated_at=?2 WHERE id=?3 AND phase='preparing_pr' AND candidate_commit=?4",
+             updated_at=?2, resource_version=resource_version+1
+             WHERE id=?3 AND phase='preparing_pr' AND candidate_commit=?4",
                 params![url, now, id.to_string(), candidate],
             )
             .map_err(StoreError::Database)?;

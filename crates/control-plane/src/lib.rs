@@ -1,11 +1,13 @@
 //! HTTP API and durable orchestration surface for Ayni Orchestrator.
 
 mod api;
+pub(crate) mod application;
 mod application_metrics;
 mod development;
 mod development_jobs;
 mod development_lifecycle;
 mod github;
+mod grpc;
 mod model_catalog;
 mod model_usage;
 mod orchestration;
@@ -15,6 +17,9 @@ mod publication;
 mod ui;
 
 use api::{ApiError, HealthResponse};
+use application::{
+    Application, CreateDevelopmentTaskCommand, PageRequest as ApplicationPageRequest,
+};
 use axum::{
     Json, Router,
     extract::{MatchedPath, Path, Request, State},
@@ -26,7 +31,7 @@ use axum::{
 use ayni_orchestrator_domain::{
     AttemptId, AttemptOutcome, ChangeConstraints, IdempotencyKey, TaskId,
 };
-use development::{DevelopmentInput, DevelopmentTask, RepositoryBinding};
+use development::{DevelopmentTask, RepositoryBinding};
 use orchestration::{Store, StoreError, StoreHandle, TaskInput, TaskView};
 use preparation::{PreparationView, PrepareRepositoryInput, RepositoryView};
 use serde::Deserialize;
@@ -43,6 +48,7 @@ use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
 pub use development_jobs::DevelopmentReconciler;
+pub use grpc::serve as serve_grpc;
 pub use model_catalog::{AvailableModel, ModelCatalog, ModelCatalogError};
 pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
 pub use preparation_jobs::PreparationReconciler;
@@ -52,6 +58,7 @@ pub use publication::PublisherState;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Configuration {
     bind_address: SocketAddr,
+    grpc_bind_address: SocketAddr,
     database_path: PathBuf,
     kubernetes_namespace: String,
     worker_image: String,
@@ -61,6 +68,8 @@ pub struct Configuration {
 impl Configuration {
     /// The default address used when no address is configured.
     pub const DEFAULT_BIND_ADDRESS: &'static str = "0.0.0.0:8080";
+    /// Default native gRPC listener used by the trusted local profile.
+    pub const DEFAULT_GRPC_BIND_ADDRESS: &'static str = "127.0.0.1:50051";
     /// Persistent task database path inside the control-plane pod.
     pub const DEFAULT_DATABASE_PATH: &'static str = "/data/orchestrator.sqlite";
     /// Default namespace for attempt-owned Jobs.
@@ -78,6 +87,8 @@ impl Configuration {
     pub fn from_environment() -> Result<Self, ConfigurationError> {
         let bind_address = env::var("ORCHESTRATOR_BIND_ADDRESS")
             .unwrap_or_else(|_| Self::DEFAULT_BIND_ADDRESS.to_owned());
+        let grpc_bind_address = env::var("ORCHESTRATOR_GRPC_BIND_ADDRESS")
+            .unwrap_or_else(|_| Self::DEFAULT_GRPC_BIND_ADDRESS.to_owned());
         let database_path = env::var("ORCHESTRATOR_DATABASE_PATH")
             .unwrap_or_else(|_| Self::DEFAULT_DATABASE_PATH.to_owned());
         let kubernetes_namespace = env::var("ORCHESTRATOR_KUBERNETES_NAMESPACE")
@@ -92,6 +103,7 @@ impl Configuration {
             .unwrap_or(Self::DEFAULT_MAX_ATTEMPTS);
         Self::from_values(
             &bind_address,
+            &grpc_bind_address,
             PathBuf::from(database_path),
             kubernetes_namespace,
             worker_image,
@@ -106,6 +118,7 @@ impl Configuration {
     /// Returns [`ConfigurationError`] for invalid socket or namespace values.
     pub fn from_values(
         bind_address: &str,
+        grpc_bind_address: &str,
         database_path: PathBuf,
         kubernetes_namespace: String,
         worker_image: String,
@@ -117,6 +130,20 @@ impl Configuration {
                 source,
             }
         })?;
+        let grpc_bind_address = SocketAddr::from_str(grpc_bind_address).map_err(|source| {
+            ConfigurationError::InvalidGrpcBindAddress {
+                value: grpc_bind_address.to_owned(),
+                source,
+            }
+        })?;
+        if grpc_bind_address == bind_address {
+            return Err(ConfigurationError::DuplicateBindAddress(bind_address));
+        }
+        if !grpc_bind_address.ip().is_loopback() {
+            return Err(ConfigurationError::NonLoopbackGrpcBindAddress(
+                grpc_bind_address,
+            ));
+        }
         if database_path.as_os_str().is_empty() || !database_path.is_absolute() {
             return Err(ConfigurationError::InvalidDatabasePath(database_path));
         }
@@ -139,6 +166,7 @@ impl Configuration {
         }
         Ok(Self {
             bind_address,
+            grpc_bind_address,
             database_path,
             kubernetes_namespace,
             worker_image,
@@ -150,6 +178,11 @@ impl Configuration {
     #[must_use]
     pub const fn bind_address(&self) -> SocketAddr {
         self.bind_address
+    }
+    /// Returns the native gRPC listener address.
+    #[must_use]
+    pub const fn grpc_bind_address(&self) -> SocketAddr {
+        self.grpc_bind_address
     }
     /// Returns the durable state path.
     #[must_use]
@@ -183,6 +216,19 @@ pub enum ConfigurationError {
         #[source]
         source: std::net::AddrParseError,
     },
+    /// `ORCHESTRATOR_GRPC_BIND_ADDRESS` was not a valid address.
+    #[error("ORCHESTRATOR_GRPC_BIND_ADDRESS must be a socket address, got {value:?}")]
+    InvalidGrpcBindAddress {
+        value: String,
+        #[source]
+        source: std::net::AddrParseError,
+    },
+    /// HTTP and gRPC cannot listen on the same socket.
+    #[error("HTTP and gRPC bind addresses must differ, both were {0}")]
+    DuplicateBindAddress(SocketAddr),
+    /// The unauthenticated product API must remain reachable only through pod loopback.
+    #[error("ORCHESTRATOR_GRPC_BIND_ADDRESS must use a loopback address, got {0}")]
+    NonLoopbackGrpcBindAddress(SocketAddr),
     /// `ORCHESTRATOR_DATABASE_PATH` was not absolute.
     #[error("ORCHESTRATOR_DATABASE_PATH must be absolute, got {0}")]
     InvalidDatabasePath(PathBuf),
@@ -342,16 +388,34 @@ async fn observe_http(request: Request, next: Next) -> Response {
 async fn repository_bindings(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<RepositoryView>>, ApiError> {
-    Ok(Json(with_store(&state, |store| store.repository_views())?))
+    let application = Application::new(state);
+    let mut page = application
+        .list_repositories(&migration_page())
+        .map_err(ApiError::Application)?;
+    let mut repositories = Vec::new();
+    loop {
+        repositories.append(&mut page.items);
+        if page.next_page_token.is_empty() {
+            break;
+        }
+        page = application
+            .list_repositories(&ApplicationPageRequest {
+                page_size: 100,
+                page_token: page.next_page_token,
+            })
+            .map_err(ApiError::Application)?;
+    }
+    Ok(Json(repositories))
 }
 
 async fn repository_binding(
     State(state): State<AppState>,
     Path(repository_id): Path<String>,
 ) -> Result<Json<RepositoryView>, ApiError> {
-    Ok(Json(with_store(&state, |store| {
-        store.repository_view(&repository_id)
-    })?))
+    Application::new(state)
+        .get_repository(&repository_id)
+        .map(Json)
+        .map_err(ApiError::Application)
 }
 
 async fn prepare_repository(
@@ -359,10 +423,13 @@ async fn prepare_repository(
     Path(repository_id): Path<String>,
     Json(request): Json<PrepareRepositoryRequest>,
 ) -> Result<(StatusCode, Json<PreparationView>), ApiError> {
-    let key = parse_key(request.idempotency_key)?;
-    let preparation = with_store(&state, |store| {
-        store.prepare_repository(&repository_id, &key, &request.input)
-    })?;
+    let preparation = Application::new(state)
+        .prepare_repository(
+            request.idempotency_key,
+            &repository_id,
+            request.input.revision,
+        )
+        .map_err(ApiError::Application)?;
     Ok((StatusCode::ACCEPTED, Json(preparation)))
 }
 
@@ -370,57 +437,78 @@ async fn preparation(
     State(state): State<AppState>,
     Path(preparation_id): Path<String>,
 ) -> Result<Json<PreparationView>, ApiError> {
-    Ok(Json(with_store(&state, |store| {
-        store.preparation(&preparation_id)
-    })?))
+    Application::new(state)
+        .get_preparation(&preparation_id)
+        .map(Json)
+        .map_err(ApiError::Application)
 }
 
 async fn put_repository_binding(
     State(state): State<AppState>,
     Json(binding): Json<RepositoryBinding>,
 ) -> Result<StatusCode, ApiError> {
-    with_store(&state, |store| store.put_repository_binding(&binding))?;
+    Application::new(state)
+        .replace_repository(&binding)
+        .map_err(ApiError::Application)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 async fn provider_models(
     State(state): State<AppState>,
 ) -> Result<Json<model_catalog::AvailableModels>, ApiError> {
-    let catalog = state
-        .model_catalog
-        .as_ref()
-        .ok_or(ApiError::ModelCatalogUnavailable)?;
-    Ok(Json(catalog.available().await?))
+    let application = Application::new(state);
+    let (available, mut page) = application
+        .list_provider_models(&migration_page())
+        .await
+        .map_err(ApiError::Application)?;
+    let mut models = Vec::new();
+    loop {
+        models.append(&mut page.items);
+        if page.next_page_token.is_empty() {
+            break;
+        }
+        let (_, next) = application
+            .list_provider_models(&ApplicationPageRequest {
+                page_size: 100,
+                page_token: page.next_page_token,
+            })
+            .await
+            .map_err(ApiError::Application)?;
+        page = next;
+    }
+    Ok(Json(model_catalog::AvailableModels {
+        provider: available.provider,
+        models,
+        observed_at: available.observed_at,
+    }))
 }
 
 async fn development_tasks(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<DevelopmentTask>>, ApiError> {
-    Ok(Json(with_store(&state, |store| store.development_tasks())?))
+    Application::new(state)
+        .migration_development_tasks()
+        .map(Json)
+        .map_err(ApiError::Application)
 }
 
 async fn submit_development_task(
     State(state): State<AppState>,
     Json(request): Json<SubmitDevelopmentRequest>,
 ) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let key = parse_key(request.idempotency_key.clone())?;
-    let model = request.model.clone();
-    let profile_id = Store::discovered_model_profile_id(&model);
-    let input = request.into_input(profile_id);
-    if let Some(task) = with_store(&state, |store| {
-        store.existing_development_submission(&key, &input)
-    })? {
-        return Ok((StatusCode::ACCEPTED, Json(task)));
-    }
-    let catalog = state
-        .model_catalog
-        .as_ref()
-        .ok_or(ApiError::ModelCatalogUnavailable)?;
-    if !catalog.contains(&model).await? {
-        return Err(ApiError::ModelUnavailable);
-    }
-    with_store(&state, |store| store.put_discovered_model(&model))?;
-    let task = with_store(&state, |store| store.submit_development(&key, &input))?;
+    let task = Application::new(state)
+        .create_development_task(CreateDevelopmentTaskCommand {
+            idempotency_key: request.idempotency_key,
+            repository_id: request.repository_id,
+            model: request.model,
+            start_revision: request.start_revision,
+            request: request.request,
+            acceptance_criteria: request.acceptance_criteria,
+            change_constraints: request.change_constraints,
+            deadline_seconds: request.deadline_seconds,
+        })
+        .await
+        .map_err(ApiError::Application)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
@@ -428,10 +516,10 @@ async fn development_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<DevelopmentTask>, ApiError> {
-    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    Ok(Json(with_store(&state, |store| {
-        store.development_task(id)
-    })?))
+    Application::new(state)
+        .get_development_task(&task_id)
+        .map(Json)
+        .map_err(ApiError::Application)
 }
 
 async fn cancel_development_task(
@@ -439,11 +527,10 @@ async fn cancel_development_task(
     Path(task_id): Path<String>,
     Json(request): Json<ActionRequest>,
 ) -> Result<Json<DevelopmentTask>, ApiError> {
-    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    let key = parse_key(request.idempotency_key)?;
-    Ok(Json(with_store(&state, |store| {
-        store.cancel_development(id, &key)
-    })?))
+    Application::new(state)
+        .cancel_development_task(request.idempotency_key, &task_id)
+        .map(Json)
+        .map_err(ApiError::Application)
 }
 
 async fn retry_development_task(
@@ -451,9 +538,9 @@ async fn retry_development_task(
     Path(task_id): Path<String>,
     Json(request): Json<ActionRequest>,
 ) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    let key = parse_key(request.idempotency_key)?;
-    let task = with_store(&state, |store| store.retry_development(id, &key, None))?;
+    let task = Application::new(state)
+        .retry_development_task(request.idempotency_key, &task_id)
+        .map_err(ApiError::Application)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
@@ -462,11 +549,9 @@ async fn provide_development_input(
     Path(task_id): Path<String>,
     Json(request): Json<ProvideInputRequest>,
 ) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    let key = parse_key(request.idempotency_key)?;
-    let task = with_store(&state, |store| {
-        store.retry_development(id, &key, Some(&request.input))
-    })?;
+    let task = Application::new(state)
+        .provide_development_task_input(request.idempotency_key, &task_id, &request.input)
+        .map_err(ApiError::Application)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
@@ -474,13 +559,10 @@ async fn development_evidence(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<publication::EvidenceView>, ApiError> {
-    let id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    let task = with_store(&state, |store| store.development_task(id))?;
-    let publisher = state.publisher().ok_or(ApiError::PublisherUnavailable)?;
-    let evidence = publisher
-        .evidence_view(&task)
-        .map_err(ApiError::EvidenceUnavailable)?;
-    Ok(Json(evidence))
+    Application::new(state)
+        .get_development_task_evidence(&task_id)
+        .map(Json)
+        .map_err(ApiError::Application)
 }
 
 async fn liveness() -> impl IntoResponse {
@@ -554,6 +636,21 @@ async fn report_attempt(
     Ok(StatusCode::NO_CONTENT)
 }
 
+const fn migration_page() -> ApplicationPageRequest {
+    ApplicationPageRequest {
+        page_size: 100,
+        page_token: String::new(),
+    }
+}
+
+pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> String {
+    let mut end = value.len().min(max_bytes);
+    while !value.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    value[..end].to_owned()
+}
+
 fn with_store<T>(
     state: &AppState,
     operation: impl FnOnce(&mut Store) -> Result<T, StoreError>,
@@ -590,19 +687,6 @@ struct SubmitDevelopmentRequest {
     deadline_seconds: Option<u64>,
 }
 
-impl SubmitDevelopmentRequest {
-    fn into_input(self, profile_id: String) -> DevelopmentInput {
-        DevelopmentInput {
-            repository_id: self.repository_id,
-            profile_id,
-            start_revision: self.start_revision,
-            request: self.request,
-            acceptance_criteria: self.acceptance_criteria,
-            change_constraints: self.change_constraints,
-            deadline_seconds: self.deadline_seconds,
-        }
-    }
-}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PrepareRepositoryRequest {
@@ -652,6 +736,7 @@ mod tests {
     fn accepts_durable_configuration() -> Result<(), ConfigurationError> {
         let configuration = Configuration::from_values(
             "127.0.0.1:8080",
+            "127.0.0.1:50051",
             PathBuf::from("/data/tasks.sqlite"),
             "ayni-orchestrator-dev".to_owned(),
             "local/ayni-orchestrator-worker:test".to_owned(),
@@ -659,12 +744,34 @@ mod tests {
         )?;
         assert_eq!(configuration.bind_address().to_string(), "127.0.0.1:8080");
         assert_eq!(
+            configuration.grpc_bind_address().to_string(),
+            "127.0.0.1:50051"
+        );
+        assert_eq!(
             configuration.kubernetes_namespace(),
             "ayni-orchestrator-dev"
         );
         assert_eq!(configuration.max_attempts(), 3);
         Ok(())
     }
+    #[test]
+    fn rejects_non_loopback_grpc_configuration() {
+        let Err(error) = Configuration::from_values(
+            "0.0.0.0:8080",
+            "0.0.0.0:50051",
+            PathBuf::from("/data/tasks.sqlite"),
+            "ayni-orchestrator-dev".to_owned(),
+            "local/ayni-orchestrator-worker:test".to_owned(),
+            3,
+        ) else {
+            panic!("an unauthenticated non-loopback gRPC listener was accepted");
+        };
+        assert!(matches!(
+            error,
+            ConfigurationError::NonLoopbackGrpcBindAddress(_)
+        ));
+    }
+
     #[tokio::test]
     async fn readiness_is_explicit_about_durable_orchestration() -> Result<(), axum::Error> {
         let request = Request::builder()

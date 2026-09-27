@@ -16,7 +16,19 @@ kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
 open http://127.0.0.1:18080/
 ```
 
-Anyone able to reach the Service can operate the product. Kubernetes access,
+Native gRPC uses a separate pod-loopback listener. The Service declares the
+target for `kubectl port-forward`, but normal Service traffic addresses the pod
+IP and cannot reach the listener:
+
+```bash
+kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
+  port-forward --address 127.0.0.1 service/control-plane 15051:50051
+grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
+```
+
+Never change `ORCHESTRATOR_GRPC_BIND_ADDRESS` to a non-loopback address in this
+unauthenticated profile. Anyone able to reach either product transport can
+operate the product. Kubernetes access,
 Docker Desktop host access, the GitHub App installation, and the configured
 model key are therefore privileged. The internal publication endpoint also
 requires its dedicated bearer token. Neither GitHub nor model credentials are
@@ -91,7 +103,8 @@ Use the UI to save repository enrollment. No model-specific agent profile is
 configured. The control plane reads the existing `openai-api` Secret from its
 read-only projected volume, asks OpenAI for the authenticated key's model list
 through Rig, filters it to the currently supported Responses/tool-capable model
-families, and caches successful discovery for five minutes. The UI submits
+families, and caches successful discovery for fifteen minutes so paginated
+catalog snapshots remain resumable for the documented token lifetime. The UI submits
 the selected provider model ID, while the task freezes an internal provider,
 model, and Secret-reference snapshot for execution and retry. `GET
 /v1/provider-models` exposes only sanitized provider model metadata, never the

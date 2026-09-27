@@ -304,9 +304,27 @@ pub enum StoreError {
     /// A submitted task field was invalid.
     #[error("invalid task input: {0}")]
     InvalidInput(&'static str),
+    /// Durable state failed an invariant or could not be decoded.
+    #[error("corrupt durable state: {0}")]
+    CorruptState(&'static str),
     /// Submitted change constraints were unsafe or exceeded supported bounds.
     #[error("invalid task change constraints: {0}")]
     InvalidChangeConstraints(#[source] ayni_orchestrator_domain::ChangeConstraintsError),
+    /// A requested repository enrollment was absent.
+    #[error("repository {0} was not found")]
+    RepositoryNotFound(String),
+    /// A requested preparation was absent.
+    #[error("preparation {0} was not found")]
+    PreparationNotFound(String),
+    /// An exact repository revision has no ready preparation.
+    #[error("repository revision is not ready")]
+    RepositoryNotReady,
+    /// The development task phase does not permit the requested action.
+    #[error("development task phase is not eligible for this action")]
+    TaskPhaseNotEligible,
+    /// The frozen development-task deadline has expired.
+    #[error("development task deadline has expired")]
+    TaskDeadlineExpired,
     /// A requested task was absent.
     #[error("task {0} was not found")]
     TaskNotFound(TaskId),
