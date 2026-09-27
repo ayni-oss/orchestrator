@@ -1,1 +1,2 @@
 # The vendored rust-skills source is retained byte-for-byte at its pinned upstream revision.
+clients/typescript/src/generated/** linguist-generated=true

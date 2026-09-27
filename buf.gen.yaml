@@ -1,0 +1,23 @@
+version: v2
+clean: true
+inputs:
+  - directory: proto
+plugins:
+  - local:
+      - pnpm
+      - --dir
+      - clients/typescript
+      - exec
+      - protoc-gen-ts_proto
+    out: clients/typescript/src/generated
+    strategy: all
+    opt:
+      - env=node
+      - esModuleInterop=true
+      - exportCommonSymbols=false
+      - forceLong=string
+      - oneof=unions
+      - outputIndex=true
+      - outputServices=grpc-js
+      - useExactTypes=false
+      - useOptionals=messages

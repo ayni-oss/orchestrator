@@ -1,0 +1,14 @@
+{
+  "name": "@ayni-orchestrator/workspace",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.31.0",
+  "engines": {
+    "node": "24.14.0"
+  },
+  "scripts": {
+    "proto:check": "scripts/ci/check-proto.sh",
+    "proto:generate": "buf generate",
+    "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check"
+  }
+}

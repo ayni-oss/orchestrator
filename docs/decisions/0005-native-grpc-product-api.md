@@ -1,0 +1,60 @@
+# Decision 0005: native gRPC product API
+
+- Status: accepted
+- Date: 2026-09-27
+
+## Decision
+
+Ayni Orchestrator's target architecture has one product API: the versioned
+native gRPC contract under `proto/ayni/orchestrator/v1`. After migration, the
+first-party server-rendered browser application must use that contract through
+a server-side BFF, and approved custom clients use the same gRPC services.
+Browser code does not call gRPC directly.
+
+The target control plane retains a narrow HTTP operational surface for
+liveness, readiness, and Prometheus metrics. Those endpoints are not product
+APIs. The product does not provide a parallel REST or JSON contract, HTTP
+transcoding, gRPC-Web, or a generic browser API gateway. Existing `/v1` JSON
+routes are a temporary implementation-private migration surface, not a second
+supported contract.
+
+The v1 contract models repository preparation and development work as durable
+asynchronous resources. Mutations are idempotent. List methods are paginated,
+inputs are bounded, error reasons augment canonical gRPC status codes, and task
+updates use a resumable bounded server stream keyed by a durable task resource
+version.
+
+Protocol Buffers are canonical across languages. Rust bindings are generated at
+build time, server-side TypeScript bindings are reproducibly generated and
+checked in, and Buf enforces lint and file-level breaking-change policy. The v1
+package is additive-only; incompatible changes require a new package.
+
+## Rationale
+
+One protocol prevents independent transports from drifting in validation,
+state, error, and lifecycle semantics. Native gRPC provides generated clients,
+streaming, deadlines, cancellation, and a cross-language contract for CLIs,
+automation, IDE integration, and alternative trusted clients. A server-side BFF
+keeps native gRPC and credentials out of browser code while adapting resources
+to page-oriented interactions.
+
+Operational probes and Prometheus scraping have established HTTP integrations
+and do not benefit from becoming product RPCs.
+
+## Consequences
+
+- Existing `/v1` JSON product routes are migration-only and receive no new
+  capabilities. They are removed when the first-party browser switches to the
+  gRPC-backed BFF.
+- The server must map application errors to canonical gRPC status codes plus
+  stable, safe error details.
+- Defining this contract does not authorize a listener. A gRPC server must not
+  be attached unauthenticated to the current namespace-reachable Service.
+  Serving product RPCs requires authentication, authorization, transport
+  protection, and/or verified network isolation appropriate to the deployment
+  profile.
+- A future server-side browser BFF may expose narrowly scoped same-origin page
+  actions or browser adapters. They are private UI implementation details, not
+  a supported Orchestrator API.
+- Client authors must tolerate additive fields and unknown enum values and use
+  bounded deadlines and stream reconnection.

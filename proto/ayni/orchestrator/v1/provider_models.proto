@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package ayni.orchestrator.v1;
+
+import "ayni/orchestrator/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// ProviderService exposes the sanitized model catalog available for task submission.
+service ProviderService {
+  rpc ListProviderModels(ListProviderModelsRequest) returns (ListProviderModelsResponse);
+}
+
+// ProviderModel is credential-free model metadata returned by the configured provider.
+message ProviderModel {
+  // id is 1 through 128 safe ASCII bytes.
+  string id = 1;
+  // name is at most 256 UTF-8 bytes when present.
+  optional string name = 2;
+  // owned_by is at most 128 UTF-8 bytes when present.
+  optional string owned_by = 3;
+  optional google.protobuf.Timestamp created_at = 4;
+  optional uint32 context_length = 5;
+  optional uint32 max_output_tokens = 6;
+}
+
+message ListProviderModelsRequest {
+  PageRequest page = 1;
+}
+
+message ListProviderModelsResponse {
+  string provider = 1;
+  repeated ProviderModel models = 2;
+  PageResponse page = 3;
+  // observed_at identifies when this catalog snapshot was obtained from the provider.
+  google.protobuf.Timestamp observed_at = 4;
+}
