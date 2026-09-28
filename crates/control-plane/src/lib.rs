@@ -1,4 +1,4 @@
-//! HTTP API and durable orchestration surface for Ayni Orchestrator.
+//! Native gRPC, operational HTTP, and durable orchestration for Ayni Orchestrator.
 
 mod api;
 pub(crate) mod application;
@@ -14,27 +14,17 @@ mod orchestration;
 mod preparation;
 mod preparation_jobs;
 mod publication;
-mod ui;
 
 use api::{ApiError, HealthResponse};
-use application::{
-    Application, CreateDevelopmentTaskCommand, PageRequest as ApplicationPageRequest,
-};
 use axum::{
     Json, Router,
-    extract::{MatchedPath, Path, Request, State},
+    extract::{MatchedPath, Request, State},
     http::{HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use ayni_orchestrator_domain::{
-    AttemptId, AttemptOutcome, ChangeConstraints, IdempotencyKey, TaskId,
-};
-use development::{DevelopmentTask, RepositoryBinding};
-use orchestration::{Store, StoreError, StoreHandle, TaskInput, TaskView};
-use preparation::{PreparationView, PrepareRepositoryInput, RepositoryView};
-use serde::Deserialize;
+use orchestration::{Store, StoreError, StoreHandle};
 use std::{
     env,
     net::SocketAddr,
@@ -298,52 +288,11 @@ impl AppState {
 /// Builds the control-plane HTTP router.
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(ui::index))
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness))
         .route("/metrics", get(metrics))
-        .route("/v1/tasks", post(submit_task))
-        .route("/v1/tasks/{task_id}", get(task))
-        .route("/v1/tasks/{task_id}/retry", post(retry_task))
-        .route("/v1/tasks/{task_id}/cancel", post(cancel_task))
-        .route("/v1/attempts/{attempt_id}/reports", post(report_attempt))
         .route(
-            "/v1/repository-bindings",
-            get(repository_bindings).post(put_repository_binding),
-        )
-        .route(
-            "/v1/repository-bindings/{repository_id}",
-            get(repository_binding),
-        )
-        .route(
-            "/v1/repository-bindings/{repository_id}/prepare",
-            post(prepare_repository),
-        )
-        .route("/v1/preparations/{preparation_id}", get(preparation))
-        .route("/v1/provider-models", get(provider_models))
-        .route(
-            "/v1/development-tasks",
-            get(development_tasks).post(submit_development_task),
-        )
-        .route("/v1/development-tasks/{task_id}", get(development_task))
-        .route(
-            "/v1/development-tasks/{task_id}/cancel",
-            post(cancel_development_task),
-        )
-        .route(
-            "/v1/development-tasks/{task_id}/retry",
-            post(retry_development_task),
-        )
-        .route(
-            "/v1/development-tasks/{task_id}/provide-input",
-            post(provide_development_input),
-        )
-        .route(
-            "/v1/development-tasks/{task_id}/evidence",
-            get(development_evidence),
-        )
-        .route(
-            "/v1/development-tasks/{task_id}/publish",
+            "/internal/publications/{task_id}",
             post(publication::publish),
         )
         .layer(middleware::from_fn(observe_http))
@@ -385,186 +334,6 @@ async fn observe_http(request: Request, next: Next) -> Response {
     .await
 }
 
-async fn repository_bindings(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<RepositoryView>>, ApiError> {
-    let application = Application::new(state);
-    let mut page = application
-        .list_repositories(&migration_page())
-        .map_err(ApiError::Application)?;
-    let mut repositories = Vec::new();
-    loop {
-        repositories.append(&mut page.items);
-        if page.next_page_token.is_empty() {
-            break;
-        }
-        page = application
-            .list_repositories(&ApplicationPageRequest {
-                page_size: 100,
-                page_token: page.next_page_token,
-            })
-            .map_err(ApiError::Application)?;
-    }
-    Ok(Json(repositories))
-}
-
-async fn repository_binding(
-    State(state): State<AppState>,
-    Path(repository_id): Path<String>,
-) -> Result<Json<RepositoryView>, ApiError> {
-    Application::new(state)
-        .get_repository(&repository_id)
-        .map(Json)
-        .map_err(ApiError::Application)
-}
-
-async fn prepare_repository(
-    State(state): State<AppState>,
-    Path(repository_id): Path<String>,
-    Json(request): Json<PrepareRepositoryRequest>,
-) -> Result<(StatusCode, Json<PreparationView>), ApiError> {
-    let preparation = Application::new(state)
-        .prepare_repository(
-            request.idempotency_key,
-            &repository_id,
-            request.input.revision,
-        )
-        .map_err(ApiError::Application)?;
-    Ok((StatusCode::ACCEPTED, Json(preparation)))
-}
-
-async fn preparation(
-    State(state): State<AppState>,
-    Path(preparation_id): Path<String>,
-) -> Result<Json<PreparationView>, ApiError> {
-    Application::new(state)
-        .get_preparation(&preparation_id)
-        .map(Json)
-        .map_err(ApiError::Application)
-}
-
-async fn put_repository_binding(
-    State(state): State<AppState>,
-    Json(binding): Json<RepositoryBinding>,
-) -> Result<StatusCode, ApiError> {
-    Application::new(state)
-        .replace_repository(&binding)
-        .map_err(ApiError::Application)?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-async fn provider_models(
-    State(state): State<AppState>,
-) -> Result<Json<model_catalog::AvailableModels>, ApiError> {
-    let application = Application::new(state);
-    let (available, mut page) = application
-        .list_provider_models(&migration_page())
-        .await
-        .map_err(ApiError::Application)?;
-    let mut models = Vec::new();
-    loop {
-        models.append(&mut page.items);
-        if page.next_page_token.is_empty() {
-            break;
-        }
-        let (_, next) = application
-            .list_provider_models(&ApplicationPageRequest {
-                page_size: 100,
-                page_token: page.next_page_token,
-            })
-            .await
-            .map_err(ApiError::Application)?;
-        page = next;
-    }
-    Ok(Json(model_catalog::AvailableModels {
-        provider: available.provider,
-        models,
-        observed_at: available.observed_at,
-    }))
-}
-
-async fn development_tasks(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<DevelopmentTask>>, ApiError> {
-    Application::new(state)
-        .migration_development_tasks()
-        .map(Json)
-        .map_err(ApiError::Application)
-}
-
-async fn submit_development_task(
-    State(state): State<AppState>,
-    Json(request): Json<SubmitDevelopmentRequest>,
-) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let task = Application::new(state)
-        .create_development_task(CreateDevelopmentTaskCommand {
-            idempotency_key: request.idempotency_key,
-            repository_id: request.repository_id,
-            model: request.model,
-            start_revision: request.start_revision,
-            request: request.request,
-            acceptance_criteria: request.acceptance_criteria,
-            change_constraints: request.change_constraints,
-            deadline_seconds: request.deadline_seconds,
-        })
-        .await
-        .map_err(ApiError::Application)?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
-}
-
-async fn development_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-) -> Result<Json<DevelopmentTask>, ApiError> {
-    Application::new(state)
-        .get_development_task(&task_id)
-        .map(Json)
-        .map_err(ApiError::Application)
-}
-
-async fn cancel_development_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-    Json(request): Json<ActionRequest>,
-) -> Result<Json<DevelopmentTask>, ApiError> {
-    Application::new(state)
-        .cancel_development_task(request.idempotency_key, &task_id)
-        .map(Json)
-        .map_err(ApiError::Application)
-}
-
-async fn retry_development_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-    Json(request): Json<ActionRequest>,
-) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let task = Application::new(state)
-        .retry_development_task(request.idempotency_key, &task_id)
-        .map_err(ApiError::Application)?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
-}
-
-async fn provide_development_input(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-    Json(request): Json<ProvideInputRequest>,
-) -> Result<(StatusCode, Json<DevelopmentTask>), ApiError> {
-    let task = Application::new(state)
-        .provide_development_task_input(request.idempotency_key, &task_id, &request.input)
-        .map_err(ApiError::Application)?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
-}
-
-async fn development_evidence(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-) -> Result<Json<publication::EvidenceView>, ApiError> {
-    Application::new(state)
-        .get_development_task_evidence(&task_id)
-        .map(Json)
-        .map_err(ApiError::Application)
-}
-
 async fn liveness() -> impl IntoResponse {
     (StatusCode::OK, Json(HealthResponse::live()))
 }
@@ -586,63 +355,6 @@ async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-async fn submit_task(
-    State(state): State<AppState>,
-    Json(request): Json<SubmitTaskRequest>,
-) -> Result<(StatusCode, Json<TaskView>), ApiError> {
-    let action_key = parse_key(request.idempotency_key)?;
-    let task = with_store(&state, |store| store.submit(&action_key, &request.input))?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
-}
-async fn task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-) -> Result<Json<TaskView>, ApiError> {
-    let task_id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    Ok(Json(with_store(&state, |store| store.task(task_id))?))
-}
-async fn retry_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-    Json(request): Json<ActionRequest>,
-) -> Result<Json<TaskView>, ApiError> {
-    let task_id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    let action_key = parse_key(request.idempotency_key)?;
-    Ok(Json(with_store(&state, |store| {
-        store.retry(task_id, &action_key)
-    })?))
-}
-async fn cancel_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-    Json(request): Json<ActionRequest>,
-) -> Result<Json<TaskView>, ApiError> {
-    let task_id = TaskId::parse(&task_id).map_err(ApiError::InvalidIdentifier)?;
-    let action_key = parse_key(request.idempotency_key)?;
-    Ok(Json(with_store(&state, |store| {
-        store.cancel(task_id, &action_key)
-    })?))
-}
-async fn report_attempt(
-    State(state): State<AppState>,
-    Path(attempt_id): Path<String>,
-    Json(request): Json<ReportRequest>,
-) -> Result<StatusCode, ApiError> {
-    let attempt_id = AttemptId::parse(&attempt_id).map_err(ApiError::InvalidIdentifier)?;
-    let report_key = parse_key(request.idempotency_key)?;
-    with_store(&state, |store| {
-        store.report(attempt_id, &report_key, request.outcome)
-    })?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-const fn migration_page() -> ApplicationPageRequest {
-    ApplicationPageRequest {
-        page_size: 100,
-        page_token: String::new(),
-    }
-}
-
 pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> String {
     let mut end = value.len().min(max_bytes);
     while !value.is_char_boundary(end) {
@@ -661,56 +373,6 @@ fn with_store<T>(
         .map_err(|_| ApiError::StoreLockPoisoned)?;
     operation(&mut store).map_err(ApiError::Store)
 }
-fn parse_key(value: String) -> Result<IdempotencyKey, ApiError> {
-    IdempotencyKey::try_from(value).map_err(ApiError::InvalidIdentifier)
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SubmitTaskRequest {
-    idempotency_key: String,
-    #[serde(flatten)]
-    input: TaskInput,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SubmitDevelopmentRequest {
-    idempotency_key: String,
-    repository_id: String,
-    model: String,
-    start_revision: String,
-    request: String,
-    acceptance_criteria: Vec<String>,
-    #[serde(default)]
-    change_constraints: ChangeConstraints,
-    #[serde(default)]
-    deadline_seconds: Option<u64>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PrepareRepositoryRequest {
-    idempotency_key: String,
-    #[serde(flatten)]
-    input: PrepareRepositoryInput,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ProvideInputRequest {
-    idempotency_key: String,
-    input: String,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ActionRequest {
-    idempotency_key: String,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ReportRequest {
-    idempotency_key: String,
-    outcome: AttemptOutcome,
-}
 
 #[cfg(test)]
 mod tests {
@@ -718,6 +380,7 @@ mod tests {
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
     fn state() -> Result<AppState, StoreError> {
         Ok(AppState {
             store: Arc::new(Mutex::new(Store::in_memory()?)),
@@ -732,6 +395,7 @@ mod tests {
             }])),
         })
     }
+
     #[test]
     fn accepts_durable_configuration() -> Result<(), ConfigurationError> {
         let configuration = Configuration::from_values(
@@ -754,6 +418,7 @@ mod tests {
         assert_eq!(configuration.max_attempts(), 3);
         Ok(())
     }
+
     #[test]
     fn rejects_non_loopback_grpc_configuration() {
         let Err(error) = Configuration::from_values(
@@ -790,27 +455,17 @@ mod tests {
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"available","repository_preparation":"unconfigured","model_catalog":"available","pilot_ready":false,"domain_model_revision":4}"#
+            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"separate","repository_preparation":"unconfigured","model_catalog":"available","pilot_ready":false,"domain_model_revision":4}"#
         );
         Ok(())
     }
 
     #[tokio::test]
-    async fn missing_model_catalog_degrades_only_catalog_dependent_routes()
+    async fn missing_model_catalog_changes_readiness_without_removing_operations()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut unavailable = state()?;
         unavailable.model_catalog = None;
-        let api = router(unavailable);
-        let response = api
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/v1/provider-models")
-                    .body(Body::empty())?,
-            )
-            .await?;
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let response = api
+        let response = router(unavailable)
             .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
             .await?;
         assert_eq!(response.status(), StatusCode::OK);
@@ -818,79 +473,38 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
         assert_eq!(body["model_catalog"], "unconfigured");
         assert_eq!(body["pilot_ready"], false);
-
-        let configured = state()?.with_model_catalog(ModelCatalog::openai("test-key")?);
-        let response = router(configured)
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
-            .await?;
-        let body: serde_json::Value =
-            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
-        assert_eq!(body["model_catalog"], "unavailable");
-        assert_eq!(body["pilot_ready"], false);
         Ok(())
     }
 
     #[tokio::test]
-    async fn provider_models_returns_the_sanitized_catalog()
+    async fn operational_http_does_not_serve_browser_or_product_routes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let api = router(state()?);
+        for path in ["/", "/v1/provider-models", "/v1/development-tasks"] {
+            let response = api
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn internal_publication_callback_remains_routed_and_fail_closed()
     -> Result<(), Box<dyn std::error::Error>> {
         let response = router(state()?)
             .oneshot(
                 Request::builder()
-                    .uri("/v1/provider-models")
-                    .body(Body::empty())?,
+                    .method("POST")
+                    .uri("/internal/publications/00000000-0000-4000-8000-000000000001")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"title":"fix: bounded change","body":"summary"}"#,
+                    ))?,
             )
             .await?;
-        assert_eq!(response.status(), StatusCode::OK);
-        let body: serde_json::Value =
-            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
-        assert_eq!(body["provider"], "openai");
-        assert_eq!(body["models"][0]["id"], "gpt-5");
-        assert_eq!(body["models"][0]["name"], "GPT-5");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         Ok(())
-    }
-
-    #[tokio::test]
-    async fn development_api_rejects_a_model_absent_from_the_provider_catalog()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let payload = serde_json::json!({
-            "idempotency_key":"unavailable-model",
-            "repository_id":"trial",
-            "model":"luna",
-            "start_revision":"8a555ada2f6e3ee41de2485ed13da508beaebaeb",
-            "request":"Correct the retry formula",
-            "acceptance_criteria":["3 -> 8"]
-        });
-        let response = router(state()?)
-            .oneshot(json_request("/v1/development-tasks", &payload)?)
-            .await?;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = response.into_body().collect().await?.to_bytes();
-        assert!(String::from_utf8(body.to_vec())?.contains("not available"));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn legacy_agent_profile_configuration_is_not_public()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let response = router(state()?)
-            .oneshot(
-                Request::builder()
-                    .uri("/v1/agent-profiles")
-                    .body(Body::empty())?,
-            )
-            .await?;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        Ok(())
-    }
-
-    fn json_request(
-        path: &str,
-        value: &serde_json::Value,
-    ) -> Result<Request<Body>, axum::http::Error> {
-        Request::builder()
-            .method("POST")
-            .uri(path)
-            .header("content-type", "application/json")
-            .body(Body::from(value.to_string()))
     }
 }

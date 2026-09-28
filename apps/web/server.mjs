@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import process from "node:process";
-import { handler } from "./build/handler.js";
+
+// This direct local server overwrites the protocol header below and retains the
+// actual Host header, allowing adapter-node to reconstruct the request origin
+// for its same-origin action protection without trusting an external proxy.
+process.env.PROTOCOL_HEADER ??= "x-forwarded-proto";
+process.env.HOST_HEADER ??= "host";
+const { handler } = await import("./build/handler.js");
 
 const host = process.env.HOST ?? "127.0.0.1";
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);

@@ -303,18 +303,6 @@ impl Application {
         self.with_store(|store| store.save_repository(&key, repository))
     }
 
-    /// Preserves the migration HTTP endpoint's replace semantics. Native gRPC
-    /// callers use `save_repository`, whose explicit key provides durable replay.
-    pub(crate) fn replace_repository(
-        &self,
-        repository: &RepositoryBinding,
-    ) -> Result<RepositoryView, ApplicationError> {
-        self.with_store(|store| {
-            store.put_repository_binding(repository)?;
-            store.repository_view(&repository.id)
-        })
-    }
-
     pub(crate) fn list_preparations(
         &self,
         repository_id: &str,
@@ -483,12 +471,6 @@ impl Application {
         self.page_items(tasks, page, "development_tasks", &filter, |task| {
             task.id.to_string()
         })
-    }
-
-    pub(crate) fn migration_development_tasks(
-        &self,
-    ) -> Result<Vec<DevelopmentTask>, ApplicationError> {
-        self.with_store(|store| store.development_tasks_all())
     }
 
     pub(crate) fn get_development_task(

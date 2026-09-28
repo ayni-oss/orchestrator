@@ -6,10 +6,10 @@
 ## Decision
 
 The current profile supports one trusted Docker Desktop cluster and an
-allowlisted private repository. The control plane serves a small browser client
-from its existing Service, reachable only through loopback port-forwarding.
-SQLite remains the durable lifecycle source of truth; the UI calls idempotent
-JSON actions.
+allowlisted private repository. The browser remains reachable only through loopback port-forwarding. The
+initial embedded client and JSON actions were replaced by the SvelteKit
+server-side BFF described in Decision 0005. SQLite remains the durable lifecycle
+source of truth.
 
 Repository readiness is an explicit preparation lifecycle. A preparation
 identity binds repository enrollment, exact revision, lock digest, supported

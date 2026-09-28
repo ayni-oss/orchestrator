@@ -193,8 +193,13 @@ jobs:
       - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate server-only browser boundary
-        run: pnpm frontend:check
+      - name: Install browser test runtime
+        run: pnpm --filter @ayni-orchestrator/web exec playwright install --with-deps chromium
+
+      - name: Validate operator application and server-only browser boundary
+        run: |
+          pnpm frontend:check
+          pnpm test:e2e
 
   ayni:
     name: Ayni

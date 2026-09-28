@@ -14,9 +14,9 @@ Browser code does not call gRPC directly.
 The target control plane retains a narrow HTTP operational surface for
 liveness, readiness, and Prometheus metrics. Those endpoints are not product
 APIs. The product does not provide a parallel REST or JSON contract, HTTP
-transcoding, gRPC-Web, or a generic browser API gateway. Existing `/v1` JSON
-routes are a temporary implementation-private migration surface, not a second
-supported contract.
+transcoding, gRPC-Web, or a generic browser API gateway. The former `/v1` JSON routes were an implementation-private migration surface
+and were removed at browser cutover; they were never a second supported
+contract.
 
 The v1 contract models repository preparation and development work as durable
 asynchronous resources. Mutations are idempotent. List methods are paginated,
@@ -43,9 +43,9 @@ and do not benefit from becoming product RPCs.
 
 ## Consequences
 
-- Existing `/v1` JSON product routes are migration-only and receive no new
-  capabilities. They are removed when the first-party browser switches to the
-  gRPC-backed BFF.
+- The first-party browser cutover removed the embedded UI and `/v1` JSON product
+  routes. HTTP remains only for compatible operational endpoints and a narrow,
+  bearer-protected internal publication callback.
 - The server must map application errors to canonical gRPC status codes plus
   stable, safe error details.
 - Defining this contract does not authorize a namespace-reachable listener. In

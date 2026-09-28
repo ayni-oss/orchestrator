@@ -69,7 +69,7 @@ fn page_tokens_retain_membership_across_writes_and_restart()
     application.save_repository("save-b".to_owned(), &repository("b"))?;
     let mut changed_c = repository("c");
     changed_c.base_branch = "release".to_owned();
-    application.replace_repository(&changed_c)?;
+    application.save_repository("save-changed-c".to_owned(), &changed_c)?;
     drop(application);
 
     let reopened = Application::new(AppState::open(&database, 3)?);
@@ -169,23 +169,6 @@ fn legacy_same_method_key_changed_target_is_a_conflict() -> Result<(), Box<dyn s
     };
     assert_eq!(error.reason, ErrorReason::IdempotencyKeyReused);
     assert_ne!(first_id, second_id);
-    Ok(())
-}
-
-#[test]
-fn migration_repository_replace_can_restore_an_earlier_binding()
--> Result<(), Box<dyn std::error::Error>> {
-    let application = Application::new(AppState::open(":memory:", 3)?);
-    let original = repository("trial");
-    application.replace_repository(&original)?;
-    let mut changed = original.clone();
-    changed.base_branch = "release".to_owned();
-    application.replace_repository(&changed)?;
-    application.replace_repository(&original)?;
-    assert_eq!(
-        application.get_repository("trial")?.binding.base_branch,
-        "main"
-    );
     Ok(())
 }
 

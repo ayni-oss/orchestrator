@@ -1,31 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bff = vi.hoisted(() => ({
   listRepositories: vi.fn(async () => ({ repositories: [], page: { nextPageToken: "" } })),
-  listProviderModels: vi.fn(async () => ({
-    provider: "openai",
-    models: [],
-    observedAt: "2026-01-01T00:00:00.000Z",
-    page: { nextPageToken: "" },
-  })),
+  listProviderModels: vi.fn(async () => ({ provider: "openai", models: [], observedAt: "2026-01-01T00:00:00.000Z", page: { nextPageToken: "" } })),
   listDevelopmentTasks: vi.fn(async () => ({ tasks: [], page: { nextPageToken: "" } })),
-  getDevelopmentTask: vi.fn(),
 }));
-
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
+import { load } from "../routes/+page.server.js";
 
-import { actions, load } from "../routes/+page.server.js";
-
-describe("server-only page boundary", () => {
+describe("overview server boundary", () => {
   const requestSignal = new AbortController().signal;
+  beforeEach(() => vi.clearAllMocks());
 
-  it("loads only through the BFF and disables response caching", async () => {
+  it("loads operator data only through the server BFF and disables caching", async () => {
     const setHeaders = vi.fn();
-    const result = await load({
-      locals: { requestId: "page-request", requestSignal },
-      request: new Request("http://127.0.0.1/"),
-      setHeaders,
-    } as never);
+    const result = await load({ locals: { requestId: "page-request", requestSignal }, request: new Request("http://127.0.0.1/"), setHeaders } as never);
     expect(result).toMatchObject({ backend: "connected", provider: "openai", requestId: "page-request" });
     expect(setHeaders).toHaveBeenCalledWith({ "cache-control": "no-store" });
     expect(bff.listRepositories).toHaveBeenCalledOnce();
@@ -33,20 +22,12 @@ describe("server-only page boundary", () => {
     expect(bff.listDevelopmentTasks).toHaveBeenCalledOnce();
   });
 
-  it("validates a form action before invoking gRPC", async () => {
-    const action = actions.inspectTask;
-    if (action === undefined) throw new Error("inspectTask action is absent");
-    const result = await action({
-      locals: { requestId: "action-request", requestSignal },
-      request: new Request("http://127.0.0.1/?/inspectTask", {
-        method: "POST",
-        body: new URLSearchParams({ taskId: "------------------------------------" }),
-      }),
-    } as never);
-    expect(result).toMatchObject({
-      status: 400,
-      data: { lookupError: { reason: "invalid_identifier", requestId: "action-request" } },
-    });
-    expect(bff.getDevelopmentTask).not.toHaveBeenCalled();
+  it("renders a disconnected state without leaking an unexpected backend error", async () => {
+    bff.listRepositories.mockRejectedValueOnce(new Error("private backend detail"));
+    bff.listProviderModels.mockRejectedValueOnce(new Error("private backend detail"));
+    bff.listDevelopmentTasks.mockRejectedValueOnce(new Error("private backend detail"));
+    const result = await load({ locals: { requestId: "failed-request", requestSignal }, setHeaders: vi.fn() } as never);
+    expect(result).toMatchObject({ backend: "disconnected", error: { reason: "internal", requestId: "failed-request" } });
+    expect(JSON.stringify(result)).not.toContain("private backend detail");
   });
 });

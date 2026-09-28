@@ -28,12 +28,17 @@ cargo test --workspace --all-features
 cargo check --workspace --all-features
 pnpm install --frozen-lockfile
 pnpm frontend:check
+pnpm --filter @ayni-orchestrator/web exec playwright install chromium
+pnpm test:e2e
 ```
 
 `frontend:check` type-checks the generated Node bindings, server-only BFF, and
 SvelteKit application; runs mapping, safe-error, correlation, and native gRPC
 integration tests; builds the adapter-node runtime; and verifies native gRPC
-code did not enter the browser bundle.
+code did not enter the browser bundle. `test:e2e` exercises the operator workflow,
+keyboard/focus behavior, narrow view, reduced motion, theme switching, and
+explicit destructive-action confirmation against a deterministic native-gRPC
+fixture.
 
 CI also installs the checksum-pinned Ayni release recorded by `.ayni.lock`,
 builds and doctors the locked environment, runs the repository-complete check,
@@ -77,9 +82,9 @@ run the additive-only compatibility check:
 scripts/ci/check-proto.sh /path/to/base/checkout/proto
 ```
 
-The target product contract is native gRPC only. Existing `/v1` JSON routes are
-a temporary migration surface; `/livez`, `/readyz`, and `/metrics` remain HTTP
-operational endpoints rather than alternate product APIs.
+The product contract is native gRPC only. The retired `/v1` JSON product routes
+and embedded control-plane UI are not served. `/livez`, `/readyz`, and `/metrics`
+remain HTTP operational endpoints rather than alternate product APIs.
 
 The local gRPC listener is native cleartext HTTP/2 on pod loopback. The Service
 declares its target so `kubectl port-forward` can select it, but normal Service
@@ -192,56 +197,24 @@ scripts/local/run-artifact-rejection-check.sh
 The dedicated test Job removes `execution.json` after Ayni runs. The unchanged
 worker must withhold success and report the missing artifact.
 
-## Durable managed-task API
-
-Submit immutable managed-check inputs to `POST /v1/tasks` with an idempotency
-key, then inspect `GET /v1/tasks/{task_id}`. The reconciler uses a deterministic
-Job name and observes the same Job after restart. Cancellation records durable
-intent before deleting the owned Job. A late report cannot revive a cancelled
-attempt.
-
-Retry is explicit and idempotent. Only failed or interrupted attempts can be
-retried. Each task retains the maximum-attempt bound that applied at submission.
-The SQLite storage model supports one control-plane replica only.
-
-## Development-task API
+## Product workflow
 
 The current profile accepts only the private `ayni-oss/sandbox` Rust repository
-and Ayni `0.13.0`. Use the browser for enrollment and preparation, or configure:
+and Ayni `0.13.0`. Use the SvelteKit operator interface for enrollment, exact-revision
+preparation, task submission, lifecycle actions, usage, and evidence. Approved
+automation may use the native gRPC services documented under `proto/`; there is
+no REST or JSON product API.
 
-- `POST /v1/repository-bindings` with repository identity, GitHub App
-  installation, base branch, and lowercase SHA-256 of `.ayni.lock`;
-- `GET /v1/provider-models` to inspect the live OpenAI catalog available to the
-  configured `openai-api` Secret; and
-- `POST /v1/development-tasks` with a unique idempotency key, binding ID,
-  selected `model`, exact 40-hex start revision, request, acceptance criteria, immutable
-  `change_constraints`, and optional `deadline_seconds` from 1 through 86400.
-  `change_constraints.protected_paths` accepts at most 100 normalized,
-  repository-relative file or directory paths; descendants of a protected
-  directory are protected. `change_constraints.allow_test_edits` defaults to
-  `false` when omitted. Bounded candidates may change at most 256 paths with at
-  most 65536 aggregate path bytes.
-
-Repository preparation must be `ready` for those exact inputs. A task freezes
-its repository, provider/model selection, source, lock, preparation, request, acceptance criteria,
-change constraints, and deadline. Reusing an idempotency key with different
-content is rejected. Retries copy the same constraints into a linked task.
+Repository preparation must be `ready` for the exact revision and lock. A task
+freezes its repository, provider/model selection, source, lock, preparation,
+request, acceptance criteria, change constraints, and deadline. Retries and
+requested-input follow-ups create linked tasks rather than mutating prior state.
 
 The coding Job has fixed checkout file and command tools, no Kubernetes token,
-and no GitHub App private key. It stores a local commit and Git bundle on
-`development-checkpoints`. Validation mounts the bundle read-only, reconstructs
-the candidate, loads the retained Ayni environment in a fresh isolated engine,
-and writes artifacts to `managed-check-evidence`. Publication uses only the
-validated candidate identity and reconciles one deterministic branch and draft
-pull request.
-
-Candidate changes to `.ayni.toml` are rejected. Changes to `.ayni.lock`, Rust
-dependency manifests, or the pinned toolchain return the explicit
-`dependency_change_unsupported` result. A protected-path change or unauthorized
-dedicated/inline Rust test change returns `scope_rejected`, retains the exact
-violations with validation evidence, and cannot create a draft PR. Related
-future requirements are tracked
-in the [Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2).
+and no GitHub App private key. Independent validation writes retained evidence,
+and publication uses only the validated candidate identity to reconcile one
+deterministic branch and draft pull request. Backend application operations own
+authorization and lifecycle meaning; clients must not infer transitions.
 
 ## Browser server boundary
 
@@ -253,19 +226,17 @@ kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
 open http://127.0.0.1:18080/
 ```
 
-The deployed page is intentionally minimal until the browser-interface work is
-complete. Its server load and form action call only the server-side BFF, which
-uses generated native gRPC clients over pod loopback and returns explicit
-browser-safe DTOs. A bounded same-origin task update relay is available at
+The deployed Svelte 5 operator application provides repository readiness, task
+operation, lifecycle, usage, diagnostics, and structured evidence. Its server
+loads and form actions call only the server-side BFF, which uses generated native
+gRPC clients over pod loopback and returns explicit browser-safe DTOs. A bounded same-origin task update relay is available at
 `/tasks/TASK_ID/updates`; it is a private browser implementation detail, not a
 supported JSON API.
 
-During the compatibility window, the embedded migration UI remains reachable
-separately with a loopback forward to `service/control-plane 18081:8080`. It
-continues to provide repository readiness, preparation, task actions, and
-validated results until the browser cutover removes it together with the
-migration `/v1` product routes. Neither browser surface is authenticated;
-anyone who can reach a forward can operate it.
+The control-plane HTTP listener serves only operational probes, Prometheus
+metrics, and a bearer-protected internal publication callback. It does not serve
+a browser or product JSON routes. The browser remains unauthenticated; anyone
+who can reach its loopback forward can operate it.
 
 Observability is optional and is not installed by `deploy.sh`. After the core
 check passes, install and validate the disposable local stack explicitly:

@@ -13,7 +13,6 @@ readonly web_port="${AYNI_ORCHESTRATOR_WEB_LOCAL_PORT:-18080}"
 readonly operations_port="${AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT:-18081}"
 readonly grpc_port="${AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT:-15051}"
 readonly response_headers="$(mktemp /tmp/ayni-orchestrator-response-headers.XXXXXX)"
-readonly action_response="$(mktemp /tmp/ayni-orchestrator-action-response.XXXXXX)"
 readonly web_forward_log="$(mktemp /tmp/ayni-orchestrator-web-forward.XXXXXX)"
 readonly operations_forward_log="$(mktemp /tmp/ayni-orchestrator-operations-forward.XXXXXX)"
 readonly grpc_forward_log="$(mktemp /tmp/ayni-orchestrator-grpc-forward.XXXXXX)"
@@ -35,7 +34,7 @@ readonly grpc_forward_pid="$!"
 cleanup() {
   kill "$web_forward_pid" "$operations_forward_pid" "$grpc_forward_pid" 2>/dev/null || true
   wait "$web_forward_pid" "$operations_forward_pid" "$grpc_forward_pid" 2>/dev/null || true
-  rm -f "$response_headers" "$action_response" "$web_forward_log" "$operations_forward_log" "$grpc_forward_log"
+  rm -f "$response_headers" "$web_forward_log" "$operations_forward_log" "$grpc_forward_log"
 }
 trap cleanup EXIT
 
@@ -63,14 +62,15 @@ check_once() {
   grep -Eq '<script[^>]+nonce=' <<<"$web_html" || return 1
   grep -q 'data-bff-status="connected"' <<<"$web_html" || return 1
   grep -q 'data-grpc-provider="openai"' <<<"$web_html" || return 1
-  grep -q 'server-only browser boundary' <<<"$web_html" || return 1
-  action_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error \
-    --output "$action_response" --write-out '%{http_code}' \
-    -H 'accept: text/html' -H "origin: http://127.0.0.1:$web_port" \
-    -H 'x-request-id: local-action-check' -H 'content-type: application/x-www-form-urlencoded' \
-    --data 'taskId=invalid' "http://127.0.0.1:$web_port/?/inspectTask")" || return 1
-  [[ "$action_status" == "400" ]] || return 1
-  grep -q 'a valid task identifier is required' "$action_response" || return 1
+  grep -q 'Development control plane' <<<"$web_html" || return 1
+  unsupported_root_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error \
+    --output /dev/null --write-out '%{http_code}' \
+    "http://127.0.0.1:$operations_port/")" || return 1
+  unsupported_product_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error \
+    --output /dev/null --write-out '%{http_code}' \
+    "http://127.0.0.1:$operations_port/v1/development-tasks")" || return 1
+  [[ "$unsupported_root_status" == "404" ]] || return 1
+  [[ "$unsupported_product_status" == "404" ]] || return 1
 
   grpc_services="$(grpcurl -plaintext -max-time 5 "127.0.0.1:$grpc_port" list)" || return 1
   grep -q '^ayni.orchestrator.v1.RepositoryService$' <<<"$grpc_services" || return 1
