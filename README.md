@@ -12,6 +12,7 @@ independently useful local CLI in the public
 ## Current capabilities
 
 - a versioned native gRPC product API with health, development reflection, and resumable task updates;
+- a deployable server-rendered SvelteKit boundary whose server-only BFF uses generated native gRPC clients;
 - durable task and attempt state in SQLite on retained local storage;
 - deterministic Kubernetes Job reconciliation, cancellation, and bounded retry;
 - GitHub App repository enrollment and draft-pull-request publication;
@@ -27,8 +28,11 @@ independently useful local CLI in the public
 ## Current operating boundary
 
 The supported deployment is a single trusted-team Docker Desktop Kubernetes
-cluster. The control-plane Service is unauthenticated and must be reached only
-through loopback port-forwarding. The current profile supports the allowlisted
+cluster. The internal web and control-plane Services are unauthenticated and
+must be reached from the host only through loopback port-forwarding. The
+SvelteKit server shares the control-plane Pod so its BFF can reach the
+pod-loopback native gRPC listener without making that listener namespace
+reachable. The current profile supports the allowlisted
 private `ayni-oss/sandbox` Rust repository, one control-plane replica, Ayni
 `0.13.0`, and local retained volumes. It does not claim multi-tenant isolation,
 public hosting, multi-node storage, general repository support, or production

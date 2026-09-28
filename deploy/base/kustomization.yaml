@@ -6,4 +6,5 @@ resources:
   - managed-check-evidence-pvc.yaml
   - rbac.yaml
   - service.yaml
+  - web-service.yaml
   - deployment.yaml

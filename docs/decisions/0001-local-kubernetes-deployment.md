@@ -24,12 +24,13 @@ local profile.
 
 For every deployable change:
 
-1. Build control-plane and worker images from a clean committed checkout.
+1. Build control-plane, web, and worker images from a clean committed checkout.
 2. Tag and label them with the source revision.
 3. Load them into Docker Desktop's Kubernetes node explicitly.
 4. Render and inspect the Kustomize overlay.
 5. Apply through the explicit local context and wait for readiness.
-6. Verify the image identity actually used by the running pod.
+6. Verify the control-plane and web image identities actually used by the
+   running Pod; the worker identity is frozen into generated Jobs.
 7. Run the affected behavior checks and preserve only concise results in the
    linked pull request.
 

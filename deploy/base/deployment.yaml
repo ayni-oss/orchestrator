@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/part-of: ayni-orchestrator
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: ayni-orchestrator-control-plane
@@ -17,6 +19,7 @@ spec:
         app.kubernetes.io/part-of: ayni-orchestrator
     spec:
       serviceAccountName: control-plane
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 10001
         fsGroupChangePolicy: OnRootMismatch
@@ -36,6 +39,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: control-plane-config
+          env:
+            - name: ORCHESTRATOR_WORKER_IMAGE
+              value: local/ayni-orchestrator-worker:replace-me
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /livez
@@ -59,6 +71,50 @@ spec:
               mountPath: /data
             - name: control-plane-scratch
               mountPath: /tmp
+            - name: control-plane-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+        - name: web
+          image: local/ayni-orchestrator-web:replace-me
+          imagePullPolicy: Never
+          ports:
+            - name: web
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: ORCHESTRATOR_GRPC_ADDRESS
+              value: 127.0.0.1:50051
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "3000"
+            - name: BODY_SIZE_LIMIT
+              value: "1048576"
+            - name: PROTOCOL_HEADER
+              value: x-forwarded-proto
+            - name: HOME
+              value: /tmp
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: web
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: web
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: web-scratch
+              mountPath: /tmp
       volumes:
         - name: durable-state
           persistentVolumeClaim:
@@ -66,3 +122,24 @@ spec:
         - name: control-plane-scratch
           emptyDir:
             sizeLimit: 64Mi
+        - name: web-scratch
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: control-plane-api-access
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        apiVersion: v1
+                        fieldPath: metadata.namespace

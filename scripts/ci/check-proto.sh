@@ -29,4 +29,4 @@ trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 cp -R clients/typescript/src/generated "$temporary/generated"
 buf generate
 diff -ru "$temporary/generated" clients/typescript/src/generated
-pnpm typecheck
+pnpm --filter @ayni-orchestrator/grpc-bindings check
