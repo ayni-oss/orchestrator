@@ -6,9 +6,14 @@ use crate::{
         Application, ApplicationError, CreateDevelopmentTaskCommand, DevelopmentTaskListItem,
         ErrorReason as ApplicationErrorReason, PageRequest as ApplicationPageRequest,
     },
+    application_metrics::record_grpc_completion,
     development::{
         DevelopmentLifecycleOutcome, DevelopmentLifecycleStage, DevelopmentPhase, DevelopmentTask,
         RepositoryBinding,
+    },
+    grpc_access::{
+        ClientIdentity, CustomClientAccess, CustomClientGuard,
+        MAX_CONCURRENT_STREAMS_PER_CONNECTION, MAX_HTTP2_HEADER_LIST_BYTES,
     },
     model_usage::{
         EstimatedModelCost, ModelUsageCollectionStatus, ModelUsageInteraction, ModelUsageSummary,
@@ -23,10 +28,15 @@ use ayni_orchestrator_domain::{
 };
 use prost::Message;
 use prost_types::{Any, Duration, Timestamp};
+use sha2::{Digest as _, Sha256};
 use std::{io, net::SocketAddr, pin::Pin, str::FromStr, time::Instant};
 use tokio::sync::watch;
-use tokio_stream::Stream;
-use tonic::{Code, Request, Response, Status, metadata::MetadataValue, transport::Server};
+use tokio_stream::{Stream, StreamExt as _};
+use tonic::{
+    Code, Request, Response, Status,
+    metadata::MetadataValue,
+    transport::{Identity, Server, ServerTlsConfig},
+};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -34,12 +44,14 @@ const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
 const ERROR_DETAIL_TYPE_URL: &str = "type.googleapis.com/ayni.orchestrator.v1.ErrorDetail";
+type BoxGrpcStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>;
 
 /// Product gRPC services backed only by transport-neutral application operations.
 #[derive(Clone)]
 pub struct GrpcApi {
     application: Application,
     shutdown: watch::Receiver<bool>,
+    custom_clients: Option<CustomClientGuard>,
 }
 
 impl GrpcApi {
@@ -49,7 +61,33 @@ impl GrpcApi {
         Self {
             application: Application::new(state),
             shutdown,
+            custom_clients: None,
         }
+    }
+
+    const fn new_custom(
+        state: AppState,
+        shutdown: watch::Receiver<bool>,
+        custom_clients: CustomClientGuard,
+    ) -> Self {
+        Self {
+            application: Application::new(state),
+            shutdown,
+            custom_clients: Some(custom_clients),
+        }
+    }
+
+    fn context<T>(
+        &self,
+        request: &Request<T>,
+        rpc: &'static str,
+    ) -> Result<RequestContext, Status> {
+        let client = self
+            .custom_clients
+            .as_ref()
+            .map(|guard| guard.authorize(request, rpc))
+            .transpose()?;
+        Ok(RequestContext::from_request(request, rpc, client.as_ref()))
     }
 }
 
@@ -105,22 +143,89 @@ pub async fn serve(
         .map_err(io::Error::other)
 }
 
+/// Serves the product API on a TLS-only, authenticated custom-client listener.
+///
+/// Reflection is deliberately omitted: approved clients receive the canonical
+/// descriptor bundle through the private contract distribution channel.
+///
+/// # Errors
+///
+/// Returns an I/O error when TLS setup, listener startup, or serving fails.
+pub async fn serve_custom(
+    address: SocketAddr,
+    state: AppState,
+    mut shutdown: watch::Receiver<bool>,
+    access: CustomClientAccess,
+) -> Result<(), io::Error> {
+    let api = GrpcApi::new_custom(state, shutdown.clone(), access.guard());
+    let repository = v1::repository_service_server::RepositoryServiceServer::new(api.clone())
+        .max_decoding_message_size(MAX_REQUEST_BYTES)
+        .max_encoding_message_size(MAX_RESPONSE_BYTES);
+    let provider = v1::provider_service_server::ProviderServiceServer::new(api.clone())
+        .max_decoding_message_size(MAX_REQUEST_BYTES)
+        .max_encoding_message_size(MAX_RESPONSE_BYTES);
+    let development = v1::development_task_service_server::DevelopmentTaskServiceServer::new(api)
+        .max_decoding_message_size(MAX_REQUEST_BYTES)
+        .max_encoding_message_size(MAX_RESPONSE_BYTES);
+    let tls = ServerTlsConfig::new()
+        .identity(Identity::from_pem(
+            access.certificate_pem(),
+            access.private_key_pem(),
+        ))
+        .timeout(std::time::Duration::from_secs(10));
+    let mut server = Server::builder()
+        .tls_config(tls)
+        .map_err(io::Error::other)?
+        .http2_max_header_list_size(Some(MAX_HTTP2_HEADER_LIST_BYTES))
+        .max_concurrent_streams(MAX_CONCURRENT_STREAMS_PER_CONNECTION)
+        .concurrency_limit_per_connection(
+            usize::try_from(MAX_CONCURRENT_STREAMS_PER_CONNECTION).unwrap_or(32),
+        )
+        .load_shed(true);
+
+    info!(address = %address, tls = true, authentication = "bearer", reflection = false,
+        "custom-client gRPC control plane started");
+    server
+        .add_service(repository)
+        .add_service(provider)
+        .add_service(development)
+        .serve_with_shutdown(address, async move {
+            if !*shutdown.borrow() {
+                let _ = shutdown.changed().await;
+            }
+        })
+        .await
+        .map_err(io::Error::other)
+}
+
 struct RequestContext {
     request_id: String,
+    client_id: Option<String>,
     rpc: &'static str,
     started: Instant,
 }
 
 impl RequestContext {
-    fn from_request<T>(request: &Request<T>, rpc: &'static str) -> Self {
-        let request_id = request
-            .metadata()
-            .get("x-request-id")
-            .and_then(|value| value.to_str().ok())
-            .filter(|value| valid_request_id(value))
-            .map_or_else(|| Uuid::now_v7().to_string(), str::to_owned);
+    fn from_request<T>(
+        request: &Request<T>,
+        rpc: &'static str,
+        client: Option<&ClientIdentity>,
+    ) -> Self {
+        let request_id = client.and_then(ClientIdentity::request_id).map_or_else(
+            || {
+                request
+                    .metadata()
+                    .get("x-request-id")
+                    .and_then(|value| value.to_str().ok())
+                    .filter(|value| valid_request_id(value))
+                    .map_or_else(|| Uuid::now_v7().to_string(), str::to_owned)
+            },
+            str::to_owned,
+        );
+        let client_id = client.map(|identity| identity.id().to_owned());
         Self {
             request_id,
+            client_id,
             rpc,
             started: Instant::now(),
         }
@@ -128,12 +233,14 @@ impl RequestContext {
 
     #[allow(clippy::unnecessary_wraps)] // Generated service methods return Result; this centralizes metadata.
     fn ok<T>(&self, value: T) -> Result<Response<T>, Status> {
+        record_grpc_completion(self.rpc, Code::Ok);
         let mut response = Response::new(value);
         if let Ok(value) = MetadataValue::from_str(&self.request_id) {
             response.metadata_mut().insert("x-request-id", value);
         }
         info!(
             request_id = %self.request_id,
+            client_id = self.client_id.as_deref().unwrap_or("trusted-local"),
             rpc = self.rpc,
             status = "ok",
             latency_ms = elapsed_millis(self.started),
@@ -142,16 +249,67 @@ impl RequestContext {
         Ok(response)
     }
 
+    fn stream<T, S>(self, stream: S) -> Response<BoxGrpcStream<T>>
+    where
+        T: Send + 'static,
+        S: Stream<Item = Result<T, Status>> + Send + 'static,
+    {
+        let mut response = Response::new({
+            let mut completion = StreamCompletion::new(&self);
+            let audited = async_stream::stream! {
+                tokio::pin!(stream);
+                while let Some(item) = stream.next().await {
+                    if let Err(status) = &item {
+                        completion.finish(status.code());
+                        yield item;
+                        return;
+                    }
+                    yield item;
+                }
+                completion.finish(Code::Ok);
+            };
+            Box::pin(audited) as BoxGrpcStream<T>
+        });
+        if let Ok(value) = MetadataValue::from_str(&self.request_id) {
+            response.metadata_mut().insert("x-request-id", value);
+        }
+        response
+    }
+
     fn error(&self, error: ApplicationError) -> Status {
         let status = application_status(error, Some(&self.request_id));
+        record_grpc_completion(self.rpc, status.code());
         warn!(
             request_id = %self.request_id,
+            client_id = self.client_id.as_deref().unwrap_or("trusted-local"),
             rpc = self.rpc,
             status = ?status.code(),
             latency_ms = elapsed_millis(self.started),
             "gRPC request failed"
         );
         status
+    }
+
+    fn idempotency_key(&self, key: String) -> Result<String, Status> {
+        let Some(client_id) = &self.client_id else {
+            return Ok(key);
+        };
+        if key.is_empty()
+            || key.len() > 128
+            || !key.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-')
+            })
+        {
+            return Err(self.invalid("idempotency_key must be 1-128 safe ASCII bytes"));
+        }
+        let digest = Sha256::digest(
+            format!(
+                "ayni.custom-client.idempotency.v1\0{client_id}\0{}\0{key}",
+                self.rpc
+            )
+            .as_bytes(),
+        );
+        Ok(format!("client-{digest:x}"))
     }
 
     fn invalid(&self, message: &'static str) -> Status {
@@ -161,6 +319,59 @@ impl RequestContext {
             resource_type: None,
             resource_id: None,
         })
+    }
+}
+
+struct StreamCompletion {
+    request_id: String,
+    client_id: Option<String>,
+    rpc: &'static str,
+    started: Instant,
+    finished: bool,
+}
+
+impl StreamCompletion {
+    fn new(context: &RequestContext) -> Self {
+        Self {
+            request_id: context.request_id.clone(),
+            client_id: context.client_id.clone(),
+            rpc: context.rpc,
+            started: context.started,
+            finished: false,
+        }
+    }
+
+    fn finish(&mut self, code: Code) {
+        if self.finished {
+            return;
+        }
+        self.finished = true;
+        record_grpc_completion(self.rpc, code);
+        if code == Code::Ok {
+            info!(
+                request_id = %self.request_id,
+                client_id = self.client_id.as_deref().unwrap_or("trusted-local"),
+                rpc = self.rpc,
+                status = "ok",
+                latency_ms = elapsed_millis(self.started),
+                "gRPC stream completed"
+            );
+        } else {
+            warn!(
+                request_id = %self.request_id,
+                client_id = self.client_id.as_deref().unwrap_or("trusted-local"),
+                rpc = self.rpc,
+                status = ?code,
+                latency_ms = elapsed_millis(self.started),
+                "gRPC stream ended"
+            );
+        }
+    }
+}
+
+impl Drop for StreamCompletion {
+    fn drop(&mut self) {
+        self.finish(Code::Cancelled);
     }
 }
 
@@ -229,7 +440,7 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         &self,
         request: Request<v1::ListRepositoriesRequest>,
     ) -> Result<Response<v1::ListRepositoriesResponse>, Status> {
-        let context = RequestContext::from_request(&request, "ListRepositories");
+        let context = self.context(&request, "ListRepositories")?;
         let request = request.into_inner();
         let page = self
             .application
@@ -245,7 +456,7 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         &self,
         request: Request<v1::GetRepositoryRequest>,
     ) -> Result<Response<v1::GetRepositoryResponse>, Status> {
-        let context = RequestContext::from_request(&request, "GetRepository");
+        let context = self.context(&request, "GetRepository")?;
         let request = request.into_inner();
         let repository = self
             .application
@@ -260,7 +471,7 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         &self,
         request: Request<v1::SaveRepositoryRequest>,
     ) -> Result<Response<v1::SaveRepositoryResponse>, Status> {
-        let context = RequestContext::from_request(&request, "SaveRepository");
+        let context = self.context(&request, "SaveRepository")?;
         let request = request.into_inner();
         let repository = request
             .repository
@@ -277,7 +488,7 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         };
         let repository = self
             .application
-            .save_repository(request.idempotency_key, &binding)
+            .save_repository(context.idempotency_key(request.idempotency_key)?, &binding)
             .map_err(|error| context.error(error))?;
         context.ok(v1::SaveRepositoryResponse {
             repository: Some(repository_binding(repository)),
@@ -288,7 +499,7 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         &self,
         request: Request<v1::ListPreparationsRequest>,
     ) -> Result<Response<v1::ListPreparationsResponse>, Status> {
-        let context = RequestContext::from_request(&request, "ListPreparations");
+        let context = self.context(&request, "ListPreparations")?;
         let request = request.into_inner();
         let page = self
             .application
@@ -304,7 +515,7 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         &self,
         request: Request<v1::GetPreparationRequest>,
     ) -> Result<Response<v1::GetPreparationResponse>, Status> {
-        let context = RequestContext::from_request(&request, "GetPreparation");
+        let context = self.context(&request, "GetPreparation")?;
         let request = request.into_inner();
         let preparation = self
             .application
@@ -319,12 +530,12 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         &self,
         request: Request<v1::PrepareRepositoryRequest>,
     ) -> Result<Response<v1::PrepareRepositoryResponse>, Status> {
-        let context = RequestContext::from_request(&request, "PrepareRepository");
+        let context = self.context(&request, "PrepareRepository")?;
         let request = request.into_inner();
         let preparation = self
             .application
             .prepare_repository(
-                request.idempotency_key,
+                context.idempotency_key(request.idempotency_key)?,
                 &request.repository_id,
                 request.revision,
             )
@@ -343,7 +554,7 @@ impl v1::provider_service_server::ProviderService for GrpcApi {
         &self,
         request: Request<v1::ListProviderModelsRequest>,
     ) -> Result<Response<v1::ListProviderModelsResponse>, Status> {
-        let context = RequestContext::from_request(&request, "ListProviderModels");
+        let context = self.context(&request, "ListProviderModels")?;
         let request = request.into_inner();
         let (available, page) = self
             .application
@@ -369,7 +580,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::ListDevelopmentTasksRequest>,
     ) -> Result<Response<v1::ListDevelopmentTasksResponse>, Status> {
-        let context = RequestContext::from_request(&request, "ListDevelopmentTasks");
+        let context = self.context(&request, "ListDevelopmentTasks")?;
         let request = request.into_inner();
         let phase = request
             .phase
@@ -389,7 +600,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::GetDevelopmentTaskRequest>,
     ) -> Result<Response<v1::GetDevelopmentTaskResponse>, Status> {
-        let context = RequestContext::from_request(&request, "GetDevelopmentTask");
+        let context = self.context(&request, "GetDevelopmentTask")?;
         let request = request.into_inner();
         let task = self
             .application
@@ -404,7 +615,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::CreateDevelopmentTaskRequest>,
     ) -> Result<Response<v1::CreateDevelopmentTaskResponse>, Status> {
-        let context = RequestContext::from_request(&request, "CreateDevelopmentTask");
+        let context = self.context(&request, "CreateDevelopmentTask")?;
         let request = request.into_inner();
         let input = request
             .input
@@ -425,7 +636,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         let task = self
             .application
             .create_development_task(CreateDevelopmentTaskCommand {
-                idempotency_key: request.idempotency_key,
+                idempotency_key: context.idempotency_key(request.idempotency_key)?,
                 repository_id: input.repository_id,
                 model: input.model,
                 start_revision: input.start_revision,
@@ -445,11 +656,14 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::CancelDevelopmentTaskRequest>,
     ) -> Result<Response<v1::CancelDevelopmentTaskResponse>, Status> {
-        let context = RequestContext::from_request(&request, "CancelDevelopmentTask");
+        let context = self.context(&request, "CancelDevelopmentTask")?;
         let request = request.into_inner();
         let task = self
             .application
-            .cancel_development_task(request.idempotency_key, &request.task_id)
+            .cancel_development_task(
+                context.idempotency_key(request.idempotency_key)?,
+                &request.task_id,
+            )
             .map_err(|error| context.error(error))?;
         context.ok(v1::CancelDevelopmentTaskResponse {
             task: Some(development_task(task)),
@@ -460,11 +674,14 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::RetryDevelopmentTaskRequest>,
     ) -> Result<Response<v1::RetryDevelopmentTaskResponse>, Status> {
-        let context = RequestContext::from_request(&request, "RetryDevelopmentTask");
+        let context = self.context(&request, "RetryDevelopmentTask")?;
         let request = request.into_inner();
         let task = self
             .application
-            .retry_development_task(request.idempotency_key, &request.task_id)
+            .retry_development_task(
+                context.idempotency_key(request.idempotency_key)?,
+                &request.task_id,
+            )
             .map_err(|error| context.error(error))?;
         context.ok(v1::RetryDevelopmentTaskResponse {
             task: Some(development_task(task)),
@@ -475,12 +692,12 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::ProvideDevelopmentTaskInputRequest>,
     ) -> Result<Response<v1::ProvideDevelopmentTaskInputResponse>, Status> {
-        let context = RequestContext::from_request(&request, "ProvideDevelopmentTaskInput");
+        let context = self.context(&request, "ProvideDevelopmentTaskInput")?;
         let request = request.into_inner();
         let task = self
             .application
             .provide_development_task_input(
-                request.idempotency_key,
+                context.idempotency_key(request.idempotency_key)?,
                 &request.task_id,
                 &request.input,
             )
@@ -494,7 +711,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         &self,
         request: Request<v1::GetDevelopmentTaskEvidenceRequest>,
     ) -> Result<Response<v1::GetDevelopmentTaskEvidenceResponse>, Status> {
-        let context = RequestContext::from_request(&request, "GetDevelopmentTaskEvidence");
+        let context = self.context(&request, "GetDevelopmentTaskEvidence")?;
         let request = request.into_inner();
         let evidence = self
             .application
@@ -505,14 +722,13 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         })
     }
 
-    type WatchDevelopmentTaskStream =
-        Pin<Box<dyn Stream<Item = Result<v1::WatchDevelopmentTaskResponse, Status>> + Send>>;
+    type WatchDevelopmentTaskStream = BoxGrpcStream<v1::WatchDevelopmentTaskResponse>;
 
     async fn watch_development_task(
         &self,
         request: Request<v1::WatchDevelopmentTaskRequest>,
     ) -> Result<Response<Self::WatchDevelopmentTaskStream>, Status> {
-        let context = RequestContext::from_request(&request, "WatchDevelopmentTask");
+        let context = self.context(&request, "WatchDevelopmentTask")?;
         let deadline = request_deadline(&request);
         let request = request.into_inner();
         let initial = self
@@ -581,7 +797,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
                 }
             }
         };
-        context.ok(Box::pin(stream) as Self::WatchDevelopmentTaskStream)
+        Ok(context.stream(stream))
     }
 }
 

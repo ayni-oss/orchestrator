@@ -90,6 +90,9 @@ importers:
         specifier: 1.14.5
         version: 1.14.5
     devDependencies:
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
       ts-proto:
         specifier: 2.12.4
         version: 2.12.4

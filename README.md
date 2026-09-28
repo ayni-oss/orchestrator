@@ -11,7 +11,7 @@ independently useful local CLI in the public
 
 ## Current capabilities
 
-- a versioned native gRPC product API with health, development reflection, and resumable task updates;
+- a versioned native gRPC product API with health, development reflection, resumable task updates, and an opt-in TLS/authenticated private custom-client listener;
 - a deployable server-rendered SvelteKit boundary whose server-only BFF uses generated native gRPC clients;
 - durable task and attempt state in SQLite on retained local storage;
 - deterministic Kubernetes Job reconciliation, cancellation, and bounded retry;
@@ -32,11 +32,16 @@ cluster. The internal web and control-plane Services are unauthenticated and
 must be reached from the host only through loopback port-forwarding. The
 SvelteKit server shares the control-plane Pod so its BFF can reach the
 pod-loopback native gRPC listener without making that listener namespace
-reachable. The current profile supports the allowlisted
-private `ayni-oss/sandbox` Rust repository, one control-plane replica, Ayni
-`0.13.0`, and local retained volumes. It does not claim multi-tenant isolation,
-public hosting, multi-node storage, general repository support, or production
-readiness.
+reachable. An opt-in Docker Desktop overlay adds a distinct TLS-only native gRPC listener
+for explicitly configured custom-client identities. It is capability-authorized,
+rate- and size-limited, privately distributed, and remains ClusterIP-only; the
+loopback BFF listener and its defaults do not change. See
+[Custom-client gRPC access](docs/custom-client-access.md).
+
+The current profiles support the allowlisted private `ayni-oss/sandbox` Rust
+repository, one control-plane replica, Ayni `0.13.0`, and local retained
+volumes. They do not claim multi-tenant isolation, public hosting, multi-node
+storage, general repository support, or production readiness.
 
 ## Planning and delivery
 
@@ -66,6 +71,7 @@ completed-work provenance.
 | [Preparation and local UI decision](docs/decisions/0004-repository-preparation-and-local-ui.md) | Prepared environments, browser access, and operating limits |
 | [Native gRPC product API decision](docs/decisions/0005-native-grpc-product-api.md) | Single product protocol, browser BFF boundary, compatibility, and operational HTTP exceptions |
 | [Protocol contract](proto/README.md) | Versioned services, bounds, compatibility, errors, and binding generation |
+| [Custom-client gRPC access](docs/custom-client-access.md) | Private endpoint discovery, TLS, identity, capabilities, limits, upgrades, and examples |
 
 Repository development rules and the private boundary with Ayni are recorded in
 [AGENTS.md](AGENTS.md).

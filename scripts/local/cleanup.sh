@@ -15,4 +15,5 @@ kubectl --context "$context" --namespace "$namespace" delete \
   role/control-plane-attempt-jobs rolebinding/control-plane-attempt-jobs \
   role/control-plane-development-clone-secrets \
   rolebinding/control-plane-development-clone-secrets \
+  networkpolicy/custom-client-grpc \
   serviceaccount/control-plane --ignore-not-found

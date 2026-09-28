@@ -15,9 +15,11 @@ gRPC-Web, or browser-generated clients.
 The supported local server exposes this contract through a pod-loopback Tonic
 listener reached with a Service port-forward bound to host loopback. Normal
 Service traffic addresses the pod IP and cannot reach the loopback listener.
-Any non-loopback endpoint requires authentication, authorization, transport
-protection, and verified network isolation appropriate to that deployment
-profile.
+The opt-in custom-client profile uses a distinct non-loopback listener with
+TLS, bounded bearer metadata, operation capabilities, deadlines, rate and
+concurrency controls, and network policy. The existing unauthenticated listener
+remains pod-loopback-only. See
+[Custom-client gRPC access](../docs/custom-client-access.md).
 
 ## Services
 
@@ -82,8 +84,10 @@ A future incompatible contract uses a new protobuf package such as
 ## Errors
 
 Clients may send `x-request-id` metadata containing 1–64 ASCII alphanumeric,
-dash, underscore, or period characters. The server returns the accepted value
-or a generated value in response metadata.
+dash, underscore, or period characters. Once a request is decoded and reaches a
+product handler, the server returns the accepted value or a generated value in
+response metadata. TLS, HTTP/2, header-list, and message-decoding failures can
+occur before application admission and do not carry this correlation guarantee.
 
 RPCs use canonical gRPC status codes. When a stable explanation is available,
 the standard rich status details list contains an
@@ -95,7 +99,8 @@ text. Unknown reasons are handled as `ERROR_REASON_UNSPECIFIED` behavior.
 
 | Condition | Canonical status |
 | --- | --- |
-| Malformed field or exceeded bound | `INVALID_ARGUMENT` |
+| Malformed decoded field or exceeded field bound | `INVALID_ARGUMENT` |
+| Encoded request or response exceeds its transport message limit | `OUT_OF_RANGE` |
 | Missing repository, preparation, task, or evidence | `NOT_FOUND` |
 | Idempotency key reused with different content | `ALREADY_EXISTS` |
 | Repository not ready or task phase ineligible | `FAILED_PRECONDITION` |
@@ -107,8 +112,10 @@ text. Unknown reasons are handled as `ERROR_REASON_UNSPECIFIED` behavior.
 
 ## Bounds
 
-Servers reject inputs outside these contract limits with `INVALID_ARGUMENT` and
-an `ERROR_REASON_INVALID_INPUT` detail.
+Servers reject decoded fields outside these contract limits with
+`INVALID_ARGUMENT` and an `ERROR_REASON_INVALID_INPUT` detail. Tonic rejects an
+encoded message above its transport limit before field validation with
+`OUT_OF_RANGE`.
 
 | Input | Limit |
 | --- | --- |
@@ -135,6 +142,11 @@ an `ERROR_REASON_INVALID_INPUT` detail.
 | Lifecycle events | 32 per task |
 | Provider interactions | 64 per task |
 | Error metadata | 16 entries; keys 1–64 ASCII bytes, values at most 256 UTF-8 bytes |
+| Custom-client request metadata | 8 KiB and 32 entries, including one 32–512 byte bearer credential |
+| Custom-client request rate | 120 admitted RPC starts per client per 60-second server window |
+| Custom-client HTTP/2 concurrency | 32 streams per connection |
+| Custom-client unary deadline | required; at most 30 seconds |
+| Custom-client watch deadline | required; at most 5 minutes |
 
 Protected and changed paths are normalized repository-relative UTF-8 paths:
 they have no leading or trailing slash, backslash, control character, empty
@@ -168,3 +180,11 @@ cargo test -p ayni-orchestrator-api
 Do not edit generated TypeScript. CI regenerates it and rejects a diff. The
 first revision that introduces the protocol has no base contract; every later
 revision is checked against the base branch.
+
+For approved custom clients, `scripts/api/build-contract-bundle.sh` packages the
+canonical sources and a standard descriptor set with the private source revision
+and checksums. The script performs no upload. An operator must explicitly
+approve distribution through restricted private artifact storage; public
+packages, releases, endpoints, and repository visibility remain separate
+publication decisions. Reflection is a development convenience, not the
+supported distribution channel.
