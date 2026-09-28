@@ -1,4 +1,4 @@
-{{- if .Values.core.enabled }}
+{{- if .Values.enabled }}
 {{- $claims := list
   (dict "name" "control-plane-state" "size" .Values.persistence.controlPlaneState.size)
   (dict "name" "development-checkpoints" "size" .Values.persistence.developmentCheckpoints.size)
@@ -15,7 +15,7 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
   labels:
-    {{- include "local.commonLabels" $ | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce

@@ -35,8 +35,9 @@ grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
 
 Never change `ORCHESTRATOR_GRPC_BIND_ADDRESS` to a non-loopback address in this
 unauthenticated profile. Approved custom clients use the separate opt-in
-`customClients.enabled` chart value and TLS port 50052; do not repurpose the
-loopback listener. Identity provisioning, port-forward discovery, certificate
+`customClients.enabled` application-chart value (nested under
+`ayni-orchestrator` in the local umbrella) and TLS port 50052; do not repurpose
+the loopback listener. Identity provisioning, port-forward discovery, certificate
 rotation, revocation, capability review, limits, and audit response are covered
 in [Custom-client gRPC access](custom-client-access.md).
 
@@ -258,11 +259,11 @@ provider response bodies.
 
 ## Local task and resource dashboard
 
-The `local` chart installs the version-controlled observability stack by
-default. `scripts/local/check.sh` validates it together with the application;
-rerun only `scripts/local/check-observability.sh` when troubleshooting the
-monitoring path. The stack uses pinned, off-the-shelf Prometheus,
-kube-state-metrics, and Grafana images. Prometheus scrapes every 15 seconds and keeps no more than 48 hours or
+The `local` umbrella installs version-locked upstream Prometheus,
+kube-state-metrics, and Grafana chart dependencies by default.
+`scripts/local/check.sh` validates them together with the reusable application
+chart; rerun only `scripts/local/check-observability.sh` when troubleshooting
+the monitoring path. Prometheus scrapes every 15 seconds and keeps no more than 48 hours or
 900 MB in a 1 GiB `emptyDir`. That window preserves resource samples after a
 terminal Job's one-hour TTL removes its Pod. A Prometheus restart or teardown
 may still discard all history. SQLite task lifecycle and exact provider-usage
@@ -303,9 +304,10 @@ them through an Ingress, `NodePort`, or non-loopback forward. For direct query
 inspection, use a separate loopback forward to `service/prometheus` on
 `19090:9090`. No dashboard variable or metric label contains a credential.
 
-The stack requests 100 millicores and 240 MiB in total. Its aggregate limits are
-650 millicores and 768 MiB, plus bounded ephemeral storage (1 GiB Prometheus,
-256 MiB Grafana data, and 64 MiB Grafana scratch). These limits leave the
+The stack requests 110 millicores and 256 MiB in total, including the
+Prometheus configuration reloader. Its aggregate limits are 700 millicores and
+800 MiB, plus bounded ephemeral storage (1 GiB Prometheus, 64 MiB
+memory-backed Grafana data, and 64 MiB Grafana scratch). These limits leave the
 4 CPU/9 GiB validation engine and its worker within the documented 6 CPU/14 GiB
 Docker Desktop profile. Monitoring failure cannot block task orchestration.
 
@@ -317,8 +319,9 @@ Troubleshooting:
 
 ```bash
 kubectl --context docker-desktop -n ayni-orchestrator-dev get pods \
-  -l app.kubernetes.io/part-of=ayni-orchestrator-observability
-kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/prometheus
+  -l orchestrator.ayni.dev/stack=observability
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs \
+  deployment/prometheus --container prometheus-server
 kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/kube-state-metrics
 kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/grafana
 ```
@@ -340,10 +343,26 @@ authentication, TLS, network isolation, durable monitoring storage, and RBAC.
 Never run cleanup to perform an update. Record PVC identities and task state,
 then deploy in place. The first deployment after Decision 0001's manifest flow
 uses Helm's explicit `--take-ownership` and guarded server-side field-conflict
-migration for the same-named resources, including the four claims; it does not
-delete or recreate them. Keep the fixed
-`ayni-orchestrator` release name and verify claim UIDs and known task IDs before
-and after that one-way migration.
+migration for the same-named application resources, including the four claims;
+it does not delete or recreate retained state. A release created by the first
+Decision 0006 chart revision also receives a one-time guarded replacement of
+its three disposable monitoring Deployments because the upstream dependency
+charts use different immutable selectors. Keep the fixed `ayni-orchestrator`
+release name and verify claim UIDs and known task IDs before and after either
+one-way migration.
+
+Most legacy objects carry the expected Ayni ownership label. Four objects from
+the superseded Kustomize flow do not. Inspect those objects and all colliding
+names first, then authorize that migration for one invocation only:
+
+```bash
+AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES=true \
+  scripts/local/deploy.sh
+```
+
+Never set this flag for routine upgrades or an unfamiliar namespace. The script
+still validates the known legacy signatures, refuses foreign ownership
+annotations or management labels, and stops on any inspection error.
 
 Before deployment, record the retained PVC identities and known task IDs through
 the browser or native gRPC. Deploy in place, run the smoke checks, and confirm the

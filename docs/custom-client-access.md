@@ -18,8 +18,10 @@ h2c listener only on pod loopback for the colocated BFF and host-loopback
 `kubectl port-forward`. It rejects a non-loopback value for
 `ORCHESTRATOR_GRPC_BIND_ADDRESS`.
 
-Setting `customClients.enabled=true` in the `deploy/charts/local` chart adds a
-separate TLS-only listener on port `50052`. It keeps the local listener on
+Setting `customClients.enabled=true` in the reusable
+`deploy/charts/ayni-orchestrator` chart adds a separate TLS-only listener on
+port `50052`. The equivalent local-umbrella override is
+`ayni-orchestrator.customClients.enabled=true`. It keeps the local listener on
 `127.0.0.1:50051`, uses a `ClusterIP` Service, and does not add an Ingress,
 NodePort, load balancer, public DNS record, or public package. The included
 NetworkPolicy admits port 50052 only from same-namespace pods labelled

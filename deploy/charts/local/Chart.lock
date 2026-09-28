@@ -1,0 +1,15 @@
+dependencies:
+- name: ayni-orchestrator
+  repository: file://../ayni-orchestrator
+  version: 0.1.0
+- name: prometheus
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 27.38.0
+- name: kube-state-metrics
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 6.1.5
+- name: grafana
+  repository: https://grafana.github.io/helm-charts
+  version: 10.0.0
+digest: sha256:5eb56679a820a3076ec8a8d25dd4f65dcc218a67b7fe231f34dc54017ede6389
+generated: "2026-09-28T15:36:12.057678+02:00"

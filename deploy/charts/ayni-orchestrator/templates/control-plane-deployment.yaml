@@ -1,10 +1,10 @@
-{{- if .Values.core.enabled }}
+{{- if .Values.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: control-plane
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-control-plane
 spec:
   replicas: 1

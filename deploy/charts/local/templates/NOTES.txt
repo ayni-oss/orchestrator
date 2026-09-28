@@ -1,6 +1,7 @@
 Ayni Orchestrator local development release {{ .Release.Name }} is installed in
 namespace {{ .Release.Namespace }}.
-{{- if .Values.core.enabled }}
+{{- $application := index .Values "ayni-orchestrator" }}
+{{- if $application.enabled }}
 
 Forward the local web application with:
   kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/web 18080:8080

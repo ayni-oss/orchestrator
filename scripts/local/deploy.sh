@@ -10,6 +10,13 @@ if ! command -v helm >/dev/null 2>&1; then
   echo "Helm is required to deploy the local chart" >&2
   exit 1
 fi
+helm_version="$(helm version --template '{{ .Version }}' 2>/dev/null)"
+readonly helm_version
+if [[ "${helm_version%%+*}" != v4.1.1 ]]; then
+  echo "Helm 4.1.1 is required for guarded server-side ownership migration; found ${helm_version:-unknown}" >&2
+  exit 1
+fi
+"$repository_root/scripts/local/build-chart-dependencies.sh"
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
 namespace="$("$repository_root/scripts/local/resolve-namespace.sh")"
@@ -17,6 +24,14 @@ readonly namespace
 readonly deployment_profile="${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}"
 readonly release_name="ayni-orchestrator"
 readonly chart="$repository_root/deploy/charts/local"
+readonly adopt_unlabeled_legacy="${AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES:-false}"
+case "$adopt_unlabeled_legacy" in
+  true | false) ;;
+  *)
+    echo "AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES must be true or false" >&2
+    exit 1
+    ;;
+esac
 case "$deployment_profile" in
   local) readonly custom_clients=false ;;
   custom-clients) readonly custom_clients=true ;;
@@ -41,27 +56,101 @@ helm_release_exists() {
 
 ownership_args=()
 delete_legacy_network_policy=false
-if ! helm_release_exists "$release_name"; then
+release_installed=false
+if helm_release_exists "$release_name"; then
+  release_installed=true
+fi
+if [[ "$release_installed" == false ]]; then
   legacy_resources=false
   inspect_resource() {
     local resource="$1"
     local scope="$2"
+    local expected_part="$3"
     local kubectl_scope=(--context "$context")
     if [[ "$scope" == namespaced ]]; then
       kubectl_scope+=(--namespace "$namespace")
     fi
-    if ! kubectl "${kubectl_scope[@]}" get "$resource" >/dev/null 2>&1; then
+    local resource_name
+    if ! resource_name="$(kubectl "${kubectl_scope[@]}" get "$resource" \
+      --ignore-not-found -o name)"; then
+      echo "unable to inspect $resource before ownership migration" >&2
+      exit 1
+    fi
+    if [[ -z "$resource_name" ]]; then
       return
     fi
 
-    local managed_by owner owner_namespace
+    local managed_by owner owner_namespace part_of legacy_signature signature_value
     managed_by="$(kubectl "${kubectl_scope[@]}" get "$resource" \
       -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
     owner="$(kubectl "${kubectl_scope[@]}" get "$resource" \
       -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
     owner_namespace="$(kubectl "${kubectl_scope[@]}" get "$resource" \
       -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}')"
-    if [[ "$managed_by" == Helm \
+    part_of="$(kubectl "${kubectl_scope[@]}" get "$resource" \
+      -o jsonpath='{.metadata.labels.app\.kubernetes\.io/part-of}')"
+
+    # Four superseded Kustomize objects predate common labels. Accept only
+    # their exact, bounded identity; all other takeover candidates must carry
+    # the expected Ayni ownership label.
+    legacy_signature=false
+    signature_value=""
+    case "$resource" in
+      configmap/control-plane-config)
+        if ! signature_value="$(kubectl "${kubectl_scope[@]}" get "$resource" \
+          -o jsonpath='{.data.ORCHESTRATOR_DATABASE_PATH}')"; then
+          echo "unable to verify the legacy signature for $resource" >&2
+          exit 1
+        fi
+        if [[ "$signature_value" == /data/orchestrator.sqlite ]]; then
+          legacy_signature=true
+        fi
+        ;;
+      role/control-plane-development-clone-secrets)
+        if ! signature_value="$(kubectl "${kubectl_scope[@]}" get "$resource" \
+          -o jsonpath='{.rules[0].resources[0]}:{.rules[0].verbs[0]}:{.rules[0].verbs[1]}:{.rules[0].verbs[2]}:{.rules[0].verbs[3]}')"; then
+          echo "unable to verify the legacy signature for $resource" >&2
+          exit 1
+        fi
+        if [[ "$signature_value" == secrets:create:get:patch:delete ]]; then
+          legacy_signature=true
+        fi
+        ;;
+      rolebinding/control-plane-development-clone-secrets)
+        if ! signature_value="$(kubectl "${kubectl_scope[@]}" get "$resource" \
+          -o jsonpath='{.roleRef.kind}:{.roleRef.name}:{.subjects[0].kind}:{.subjects[0].name}')"; then
+          echo "unable to verify the legacy signature for $resource" >&2
+          exit 1
+        fi
+        if [[ "$signature_value" == Role:control-plane-development-clone-secrets:ServiceAccount:control-plane ]]; then
+          legacy_signature=true
+        fi
+        ;;
+      networkpolicy/custom-client-grpc)
+        if ! signature_value="$(kubectl "${kubectl_scope[@]}" get "$resource" \
+          -o jsonpath='{.spec.podSelector.matchLabels.app\.kubernetes\.io/name}:{.spec.policyTypes[0]}:{.spec.ingress[1].ports[0].port}')"; then
+          echo "unable to verify the legacy signature for $resource" >&2
+          exit 1
+        fi
+        if [[ "$signature_value" == ayni-orchestrator-control-plane:Ingress:50052 ]]; then
+          legacy_signature=true
+        fi
+        ;;
+    esac
+    if [[ "$part_of" != "$expected_part" ]]; then
+      if [[ "$legacy_signature" != true || "$adopt_unlabeled_legacy" != true ]]; then
+        echo "refusing to take unknown $resource without app.kubernetes.io/part-of=$expected_part" >&2
+        if [[ "$legacy_signature" == true ]]; then
+          echo "inspect the legacy object, then set AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES=true for this one-way migration" >&2
+        fi
+        exit 1
+      fi
+    fi
+    if [[ -n "$managed_by" && "$managed_by" != Helm ]]; then
+      echo "refusing to take $resource managed by $managed_by" >&2
+      exit 1
+    fi
+    if [[ ( -n "$owner" || -n "$owner_namespace" || "$managed_by" == Helm ) \
       && ( "$owner" != "$release_name" || "$owner_namespace" != "$namespace" ) ]]; then
       if [[ "$resource" == persistentvolumeclaim/managed-check-evidence \
         && "$owner" == ayni-orchestrator-managed-check \
@@ -83,37 +172,42 @@ if ! helm_release_exists "$release_name"; then
 
   for resource in \
     serviceaccount/control-plane \
-    serviceaccount/prometheus \
-    serviceaccount/kube-state-metrics \
     configmap/control-plane-config \
-    configmap/prometheus-config \
-    configmap/grafana-provisioning \
-    configmap/grafana-dashboard \
     persistentvolumeclaim/control-plane-state \
     persistentvolumeclaim/development-checkpoints \
     persistentvolumeclaim/managed-check-evidence \
     persistentvolumeclaim/prepared-environments \
     role/control-plane-attempt-jobs \
     role/control-plane-development-clone-secrets \
-    role/kube-state-metrics \
     rolebinding/control-plane-attempt-jobs \
     rolebinding/control-plane-development-clone-secrets \
-    rolebinding/kube-state-metrics \
     deployment/control-plane \
+    service/control-plane \
+    service/web \
+    networkpolicy/custom-client-grpc; do
+    inspect_resource "$resource" namespaced ayni-orchestrator
+  done
+  for resource in \
+    serviceaccount/prometheus \
+    serviceaccount/kube-state-metrics \
+    configmap/prometheus-config \
+    configmap/ayni-orchestrator-prometheus-config \
+    configmap/grafana-provisioning \
+    configmap/grafana \
+    configmap/grafana-dashboard \
+    role/kube-state-metrics \
+    rolebinding/kube-state-metrics \
     deployment/prometheus \
     deployment/kube-state-metrics \
     deployment/grafana \
-    service/control-plane \
-    service/web \
     service/prometheus \
     service/kube-state-metrics \
-    service/grafana \
-    networkpolicy/custom-client-grpc; do
-    inspect_resource "$resource" namespaced
+    service/grafana; do
+    inspect_resource "$resource" namespaced ayni-orchestrator-observability
   done
   readonly prometheus_role="$(printf '%s-prometheus' "$namespace" | cut -c1-63 | sed 's/-*$//')"
-  inspect_resource "clusterrole/$prometheus_role" cluster
-  inspect_resource "clusterrolebinding/$prometheus_role" cluster
+  inspect_resource "clusterrole/$prometheus_role" cluster ayni-orchestrator-observability
+  inspect_resource "clusterrolebinding/$prometheus_role" cluster ayni-orchestrator-observability
 
   if [[ "$legacy_resources" == true ]]; then
     echo "adopting legacy local resources into Helm release $release_name"
@@ -125,6 +219,80 @@ if ! helm_release_exists "$release_name"; then
   fi
 fi
 readonly ownership_args
+
+# Decision 0006 initially shipped hand-written monitoring Deployments. The
+# dependency charts use different immutable selectors, so replace only verified
+# disposable objects during the one-way dependency-chart migration.
+legacy_observability_deployments=()
+for deployment in prometheus kube-state-metrics grafana; do
+  resource="deployment/$deployment"
+  if ! resource_name="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    --ignore-not-found -o name)"; then
+    echo "unable to inspect $resource before monitoring migration" >&2
+    exit 1
+  fi
+  if [[ -z "$resource_name" ]]; then
+    continue
+  fi
+  if ! selector_identity="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o go-template='{{len .spec.selector.matchLabels}}:{{if .spec.selector.matchExpressions}}{{len .spec.selector.matchExpressions}}{{else}}0{{end}}:{{index .spec.selector.matchLabels "app.kubernetes.io/name"}}')"; then
+    echo "unable to inspect the exact selector for $resource" >&2
+    exit 1
+  fi
+  case "$deployment:$selector_identity" in
+    prometheus:1:0:ayni-orchestrator-prometheus | \
+      kube-state-metrics:1:0:ayni-orchestrator-kube-state-metrics | \
+      grafana:1:0:ayni-orchestrator-grafana) ;;
+    *) continue ;;
+  esac
+  part_of="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o jsonpath='{.metadata.labels.app\.kubernetes\.io/part-of}')"
+  managed_by="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
+  owner="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
+  if [[ "$part_of" != ayni-orchestrator-observability ]]; then
+    echo "refusing to replace unknown $resource" >&2
+    exit 1
+  fi
+  if [[ "$release_installed" == true \
+    && ( "$managed_by" != Helm || "$owner" != "$release_name" ) ]]; then
+    echo "refusing to replace $resource owned by ${owner:-unknown}" >&2
+    exit 1
+  fi
+  legacy_observability_deployments+=("$resource")
+done
+readonly legacy_observability_deployments
+
+obsolete_observability_configmaps=()
+for configmap in prometheus-config grafana-provisioning; do
+  resource="configmap/$configmap"
+  if ! resource_name="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    --ignore-not-found -o name)"; then
+    echo "unable to inspect $resource before monitoring migration" >&2
+    exit 1
+  fi
+  if [[ -z "$resource_name" ]]; then
+    continue
+  fi
+  part_of="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o jsonpath='{.metadata.labels.app\.kubernetes\.io/part-of}')"
+  managed_by="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
+  owner="$(kubectl --context "$context" --namespace "$namespace" get "$resource" \
+    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
+  if [[ "$part_of" != ayni-orchestrator-observability ]]; then
+    echo "refusing to replace unknown $resource" >&2
+    exit 1
+  fi
+  if [[ "$release_installed" == true \
+    && ( "$managed_by" != Helm || "$owner" != "$release_name" ) ]]; then
+    echo "refusing to replace $resource owned by ${owner:-unknown}" >&2
+    exit 1
+  fi
+  obsolete_observability_configmaps+=("$resource")
+done
+readonly obsolete_observability_configmaps
 
 "$repository_root/scripts/local/check-capacity.sh" 12
 control_plane_image_ref="$($repository_root/scripts/local/build-image.sh)"
@@ -138,6 +306,15 @@ readonly web_image_ref
 "$repository_root/scripts/local/load-image.sh" "$web_image_ref"
 
 echo "renderer=$(helm version --short 2>/dev/null)"
+if (( ${#legacy_observability_deployments[@]} > 0 )); then
+  echo "replacing verified legacy monitoring Deployments with dependency-chart resources"
+  kubectl --context "$context" --namespace "$namespace" delete \
+    "${legacy_observability_deployments[@]}" --ignore-not-found >/dev/null
+fi
+if (( ${#obsolete_observability_configmaps[@]} > 0 )); then
+  kubectl --context "$context" --namespace "$namespace" delete \
+    "${obsolete_observability_configmaps[@]}" --ignore-not-found >/dev/null
+fi
 # The guarded ownership argument provides the one-way legacy migration only
 # when an existing release is absent. Retained claims remain across normal
 # release uninstall/reinstall cycles.
@@ -147,10 +324,10 @@ helm upgrade --install "$release_name" "$chart" \
   --create-namespace \
   --force-conflicts \
   "${ownership_args[@]}" \
-  --set-string "images.controlPlane=$control_plane_image_ref" \
-  --set-string "images.worker=$worker_image_ref" \
-  --set-string "images.web=$web_image_ref" \
-  --set "customClients.enabled=$custom_clients" \
+  --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
+  --set-string "ayni-orchestrator.images.worker=$worker_image_ref" \
+  --set-string "ayni-orchestrator.images.web=$web_image_ref" \
+  --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
   --wait \
   --timeout 5m
 

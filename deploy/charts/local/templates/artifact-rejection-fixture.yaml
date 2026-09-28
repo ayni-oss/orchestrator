@@ -82,8 +82,8 @@ spec:
               mountPath: /var/lib/docker
       containers:
         - name: worker
-          image: {{ .Values.images.worker | quote }}
-          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          image: {{ .Values.fixtures.workerImage | quote }}
+          imagePullPolicy: {{ .Values.fixtures.imagePullPolicy }}
           env:
             - name: DOCKER_HOST
               value: tcp://127.0.0.1:2375

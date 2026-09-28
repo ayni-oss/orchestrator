@@ -27,8 +27,11 @@ independently useful local CLI in the public
 
 ## Current operating boundary
 
-The supported deployment is a single trusted-team Docker Desktop Kubernetes
-cluster. The internal web and control-plane Services are unauthenticated and
+The reusable `deploy/charts/ayni-orchestrator` Helm chart contains the product
+workloads; the supported `deploy/charts/local` Docker Desktop umbrella adds
+version-locked Prometheus, kube-state-metrics, and Grafana dependencies. The
+supported deployment is a single trusted-team Docker Desktop Kubernetes cluster. The
+internal web and control-plane Services are unauthenticated and
 must be reached from the host only through loopback port-forwarding. The
 SvelteKit server shares the control-plane Pod so its BFF can reach the
 pod-loopback native gRPC listener without making that listener namespace

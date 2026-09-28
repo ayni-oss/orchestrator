@@ -44,6 +44,12 @@ second supported product protocol or a generic JSON mirror.
 
 Dependencies point toward `domain`; workers do not own durable lifecycle state.
 
+The reusable `deploy/charts/ayni-orchestrator` chart owns this application
+boundary and retained product storage. The Docker Desktop
+`deploy/charts/local` umbrella composes that chart with version-locked upstream
+monitoring dependencies and local-only validation fixtures; monitoring is not a
+requirement of the reusable application chart.
+
 ## Durable state and retained data
 
 The local profile uses four persistent volume claims:

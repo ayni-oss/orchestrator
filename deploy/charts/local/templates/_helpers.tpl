@@ -22,7 +22,8 @@ app.kubernetes.io/part-of: ayni-orchestrator-observability
 {{- if and .Values.fixtures.managedCheck.enabled .Values.fixtures.artifactRejection.enabled -}}
 {{- fail "fixtures.managedCheck.enabled and fixtures.artifactRejection.enabled cannot both be true" -}}
 {{- end -}}
-{{- if and .Values.core.enabled .Values.fixtures.managedCheck.enabled .Values.fixtures.managedCheck.createEvidenceClaim -}}
-{{- fail "fixtures.managedCheck.createEvidenceClaim requires core.enabled=false" -}}
+{{- $application := index .Values "ayni-orchestrator" -}}
+{{- if and $application.enabled .Values.fixtures.managedCheck.enabled .Values.fixtures.managedCheck.createEvidenceClaim -}}
+{{- fail "fixtures.managedCheck.createEvidenceClaim requires ayni-orchestrator.enabled=false" -}}
 {{- end -}}
 {{- end }}

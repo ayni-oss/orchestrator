@@ -51,8 +51,8 @@ ayni env doctor --repo-root .
 ayni check --config .ayni.toml
 ```
 
-Lint the chart and render the complete local stack when changing deployment
-templates or values:
+Lint both charts, verify the dependency lock, and render the complete local
+stack when changing deployment templates or values:
 
 ```sh
 scripts/ci/check-helm.sh
@@ -60,11 +60,13 @@ scripts/local/render.sh local/control-plane:test local/worker:test local/web:tes
   >/tmp/ayni-orchestrator.yaml
 ```
 
-The `deploy/charts/local` chart is the only manifest source. Its default render
-includes the control plane, web application, all retained claims, Prometheus,
-kube-state-metrics, Grafana, and the provisioned dashboard. Rendered output is
-for inspection; use `deploy.sh` for installation so Helm owns the release and
-selects the namespace explicitly.
+`deploy/charts/ayni-orchestrator` is the reusable application chart.
+`deploy/charts/local` composes it with version-locked upstream Prometheus,
+kube-state-metrics, and Grafana dependencies plus the local dashboard and test
+fixtures. `scripts/local/build-chart-dependencies.sh` materializes ignored
+archives from `Chart.lock`; the render and deploy scripts invoke it
+automatically. Rendered output is for inspection; use `deploy.sh` for local
+installation so Helm owns the release and selects the namespace explicitly.
 
 Do not commit rendered output, logs, local credentials, or runtime artifacts.
 
@@ -151,12 +153,15 @@ scripts/local/check.sh
 
 The deploy script:
 
-1. verifies Docker Desktop capacity and the explicit Kubernetes context;
+1. builds the version-locked chart dependencies and verifies Docker Desktop
+   capacity and the explicit Kubernetes context;
 2. builds control-plane, worker, and SvelteKit web images labeled with the
    checkout revision and tags each with a content-identity suffix;
 3. loads all three into Docker Desktop's Kubernetes node;
-4. upgrades the `ayni-orchestrator` release from the `local` Helm chart,
-   adopting a prior manifest-based installation on the first upgrade;
+4. upgrades the `ayni-orchestrator` release from the `local` umbrella, whose
+   application dependency is `deploy/charts/ayni-orchestrator`; a prior
+   unlabeled manifest-based installation requires the explicit one-time
+   adoption flag documented in [operations](operations.md);
 5. waits for the application and monitoring Deployments; and
 6. verifies the running control-plane and web image identities and the worker
    image frozen into the control-plane Pod configuration.
@@ -266,9 +271,10 @@ metrics, and a bearer-protected internal publication callback. It does not serve
 a browser or product JSON routes. The browser remains unauthenticated; anyone
 who can reach its loopback forward can operate it.
 
-The default `local` chart values install pinned Prometheus, kube-state-metrics,
-and Grafana images with the application. `scripts/local/check.sh` validates the
-scrape targets and dashboard; `scripts/local/check-observability.sh` remains
+The default `local` umbrella installs the version-locked Prometheus,
+kube-state-metrics, and Grafana chart dependencies with the application.
+`scripts/local/check.sh` validates the scrape targets and dashboard;
+`scripts/local/check-observability.sh` remains
 available when only the monitoring checks need to be repeated. Prometheus
 scrapes the application endpoint, namespaced Kubernetes object state, and the
 Docker Desktop kubelet/cAdvisor through a service account limited to node

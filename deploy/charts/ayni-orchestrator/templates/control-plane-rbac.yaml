@@ -1,10 +1,10 @@
-{{- if .Values.core.enabled }}
+{{- if .Values.enabled }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: control-plane
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-control-plane
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -12,7 +12,7 @@ kind: Role
 metadata:
   name: control-plane-attempt-jobs
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
@@ -23,7 +23,7 @@ kind: RoleBinding
 metadata:
   name: control-plane-attempt-jobs
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
     name: control-plane
@@ -38,7 +38,7 @@ kind: Role
 metadata:
   name: control-plane-development-clone-secrets
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -49,7 +49,7 @@ kind: RoleBinding
 metadata:
   name: control-plane-development-clone-secrets
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
     name: control-plane

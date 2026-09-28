@@ -2,103 +2,35 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["core", "images", "controlPlane", "web", "persistence", "customClients", "observability", "fixtures"],
+  "required": ["ayni-orchestrator", "observability", "prometheus", "kube-state-metrics", "grafana", "fixtures"],
   "properties": {
-    "core": {
+    "ayni-orchestrator": { "type": "object" },
+    "observability": {
       "type": "object",
       "additionalProperties": false,
       "required": ["enabled"],
       "properties": { "enabled": { "type": "boolean" } }
     },
-    "images": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["controlPlane", "worker", "web", "pullPolicy"],
-      "properties": {
-        "controlPlane": { "$ref": "#/definitions/image" },
-        "worker": { "$ref": "#/definitions/image" },
-        "web": { "$ref": "#/definitions/image" },
-        "pullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] }
-      }
-    },
-    "controlPlane": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["maxAttempts", "resources"],
-      "properties": {
-        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
-        "resources": { "$ref": "#/definitions/resources" }
-      }
-    },
-    "web": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["resources"],
-      "properties": { "resources": { "$ref": "#/definitions/resources" } }
-    },
-    "persistence": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["controlPlaneState", "developmentCheckpoints", "managedCheckEvidence", "preparedEnvironments"],
-      "properties": {
-        "controlPlaneState": { "$ref": "#/definitions/claim" },
-        "developmentCheckpoints": { "$ref": "#/definitions/claim" },
-        "managedCheckEvidence": { "$ref": "#/definitions/claim" },
-        "preparedEnvironments": { "$ref": "#/definitions/claim" }
-      }
-    },
-    "customClients": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "secretName"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "secretName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 253 }
-      }
-    },
-    "observability": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "prometheus", "kubeStateMetrics", "grafana"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "prometheus": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["image", "retentionTime", "retentionSize", "resources"],
-          "properties": {
-            "image": { "$ref": "#/definitions/image" },
-            "retentionTime": { "type": "string", "pattern": "^[1-9][0-9]*[smhdwy]$" },
-            "retentionSize": { "type": "string", "pattern": "^[1-9][0-9]*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$" },
-            "resources": { "$ref": "#/definitions/resources" }
-          }
-        },
-        "kubeStateMetrics": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["image", "resources"],
-          "properties": {
-            "image": { "$ref": "#/definitions/image" },
-            "resources": { "$ref": "#/definitions/resources" }
-          }
-        },
-        "grafana": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["image", "resources"],
-          "properties": {
-            "image": { "$ref": "#/definitions/image" },
-            "resources": { "$ref": "#/definitions/resources" }
-          }
-        }
-      }
-    },
+    "prometheus": { "type": "object" },
+    "kube-state-metrics": { "type": "object" },
+    "grafana": { "type": "object" },
     "fixtures": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["managedCheck", "artifactRejection", "repositoryUrl", "revision", "lockSha256", "ayniVersion"],
+      "required": ["workerImage", "imagePullPolicy", "managedCheck", "artifactRejection", "repositoryUrl", "revision", "lockSha256", "ayniVersion"],
       "properties": {
-        "managedCheck": { "$ref": "#/definitions/managedCheckToggle" },
+        "workerImage": { "$ref": "#/definitions/image" },
+        "imagePullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] },
+        "managedCheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "createEvidenceClaim", "evidenceSize"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "createEvidenceClaim": { "type": "boolean" },
+            "evidenceSize": { "$ref": "#/definitions/quantity" }
+          }
+        },
         "artifactRejection": { "$ref": "#/definitions/toggle" },
         "repositoryUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
         "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -123,7 +55,7 @@
     {
       "not": {
         "properties": {
-          "core": { "properties": { "enabled": { "const": true } } },
+          "ayni-orchestrator": { "properties": { "enabled": { "const": true } } },
           "fixtures": {
             "properties": {
               "managedCheck": {
@@ -141,44 +73,11 @@
   "definitions": {
     "image": { "type": "string", "pattern": "^[^\\s,]+$", "minLength": 1 },
     "quantity": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)?(?:m|n|u|Ki|Mi|Gi|Ti|Pi|Ei)?$" },
-    "claim": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["size"],
-      "properties": { "size": { "$ref": "#/definitions/quantity" } }
-    },
     "toggle": {
       "type": "object",
       "additionalProperties": false,
       "required": ["enabled"],
       "properties": { "enabled": { "type": "boolean" } }
-    },
-    "managedCheckToggle": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "createEvidenceClaim"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "createEvidenceClaim": { "type": "boolean" }
-      }
-    },
-    "resources": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["requests", "limits"],
-      "properties": {
-        "requests": { "$ref": "#/definitions/cpuMemory" },
-        "limits": { "$ref": "#/definitions/cpuMemory" }
-      }
-    },
-    "cpuMemory": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cpu", "memory"],
-      "properties": {
-        "cpu": { "$ref": "#/definitions/quantity" },
-        "memory": { "$ref": "#/definitions/quantity" }
-      }
     }
   }
 }

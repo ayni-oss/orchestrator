@@ -1,0 +1,6 @@
+{{- if .Values.enabled }}
+Ayni Orchestrator {{ .Release.Name }} is installed in namespace {{ .Release.Namespace }}.
+
+Forward the operator web application with:
+  kubectl --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/web 18080:8080
+{{- end }}

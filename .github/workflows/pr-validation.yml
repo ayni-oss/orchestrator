@@ -112,7 +112,7 @@ jobs:
           test -f docs/operations.md
 
   deployment:
-    name: local Helm chart
+    name: Helm charts
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -142,7 +142,7 @@ jobs:
           install --mode=0755 "$install_root/linux-amd64/helm" "$bin_root/helm"
           echo "$bin_root" >> "$GITHUB_PATH"
 
-      - name: Validate local deployment chart
+      - name: Validate deployment charts
         run: scripts/ci/check-helm.sh
 
   protobuf:

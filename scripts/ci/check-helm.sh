@@ -2,71 +2,112 @@
 set -euo pipefail
 
 readonly repository_root="$(git rev-parse --show-toplevel)"
-readonly chart="$repository_root/deploy/charts/local"
+readonly application_chart="$repository_root/deploy/charts/ayni-orchestrator"
+readonly local_chart="$repository_root/deploy/charts/local"
 readonly scratch="$(mktemp -d)"
-trap 'rm -rf "$scratch"' EXIT
-mkdir -p "$scratch/helm-plugins"
+trap 'rm -rf "$scratch" "$local_chart/charts"' EXIT
+mkdir -p "$scratch/helm-plugins" "$scratch/helm-cache"
 export HELM_PLUGINS="$scratch/helm-plugins"
+export HELM_REPOSITORY_CONFIG="$scratch/helm-repositories.yaml"
+export HELM_REPOSITORY_CACHE="$scratch/helm-cache"
 
 if ! command -v helm >/dev/null 2>&1; then
-  echo "Helm is required to validate the local chart" >&2
+  echo "Helm is required to validate the deployment charts" >&2
   exit 1
 fi
 if find "$repository_root" \
     \( -path "$repository_root/.git" -o -path "$repository_root/.worktrees" \) -prune -o \
     -name kustomization.yaml -print -quit | grep -q .; then
-  echo "Kustomize manifests are no longer supported; use deploy/charts/local" >&2
+  echo "Kustomize manifests are no longer supported; use deploy/charts" >&2
   exit 1
 fi
 
-helm lint --strict "$chart"
-helm template ayni-orchestrator "$chart" \
+rm -rf "$local_chart/charts"
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
+helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
+helm dependency build "$local_chart"
+helm lint --strict "$application_chart"
+helm lint --strict "$local_chart"
+
+helm template reusable "$application_chart" \
+  --namespace reusable-install \
+  --set-string images.controlPlane=registry.example/control-plane:test \
+  --set-string images.worker=registry.example/worker:test \
+  --set-string images.web=registry.example/web:test \
+  >"$scratch/application.yaml"
+helm template ayni-orchestrator "$local_chart" \
   --namespace ayni-orchestrator-dev \
-  --set-string images.controlPlane=local/ayni-orchestrator-control-plane:test \
-  --set-string images.worker=local/ayni-orchestrator-worker:test \
-  --set-string images.web=local/ayni-orchestrator-web:test \
+  --set-string ayni-orchestrator.images.controlPlane=local/ayni-orchestrator-control-plane:test \
+  --set-string ayni-orchestrator.images.worker=local/ayni-orchestrator-worker:test \
+  --set-string ayni-orchestrator.images.web=local/ayni-orchestrator-web:test \
   >"$scratch/local.yaml"
-helm template ayni-orchestrator "$chart" \
+helm template ayni-orchestrator "$local_chart" \
   --namespace isolated-local \
-  --set customClients.enabled=true \
+  --set ayni-orchestrator.customClients.enabled=true \
   >"$scratch/custom-clients.yaml"
-helm template ayni-orchestrator "$chart" \
+helm template ayni-orchestrator "$local_chart" \
   --namespace ayni-orchestrator-dev \
   --set observability.enabled=false \
   >"$scratch/no-observability.yaml"
-helm template ayni-orchestrator-managed-check "$chart" \
+helm template ayni-orchestrator-managed-check "$local_chart" \
   --namespace ayni-orchestrator-dev \
-  --set core.enabled=false \
+  --set ayni-orchestrator.enabled=false \
   --set observability.enabled=false \
   --set fixtures.managedCheck.enabled=true \
   --set fixtures.managedCheck.createEvidenceClaim=true \
   >"$scratch/managed-check.yaml"
-helm template ayni-orchestrator-artifact-rejection "$chart" \
+helm template ayni-orchestrator-artifact-rejection "$local_chart" \
   --namespace ayni-orchestrator-dev \
-  --set core.enabled=false \
+  --set ayni-orchestrator.enabled=false \
   --set observability.enabled=false \
   --set fixtures.artifactRejection.enabled=true \
   >"$scratch/artifact-rejection.yaml"
-if helm template invalid-fixtures "$chart" \
+if helm template invalid-fixtures "$local_chart" \
     --set fixtures.managedCheck.enabled=true \
     --set fixtures.artifactRejection.enabled=true \
     >"$scratch/invalid-fixtures.yaml" 2>/dev/null; then
-  echo "chart accepted mutually exclusive managed-check fixtures" >&2
+  echo "local chart accepted mutually exclusive managed-check fixtures" >&2
   exit 1
 fi
-if helm template duplicate-claim "$chart" \
+if helm template duplicate-claim "$local_chart" \
     --set fixtures.managedCheck.enabled=true \
     --set fixtures.managedCheck.createEvidenceClaim=true \
     >"$scratch/duplicate-claim.yaml" 2>/dev/null; then
-  echo "chart accepted duplicate managed-check evidence claims" >&2
+  echo "local chart accepted duplicate managed-check evidence claims" >&2
   exit 1
 fi
 
+# The reusable chart must render independently and remain namespace-neutral.
+grep -q '^  ORCHESTRATOR_KUBERNETES_NAMESPACE: "reusable-install"$' "$scratch/application.yaml"
+grep -q 'registry.example/control-plane:test' "$scratch/application.yaml"
+grep -q '^  name: control-plane$' "$scratch/application.yaml"
+grep -q '^  name: web$' "$scratch/application.yaml"
+if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics)$' "$scratch/application.yaml"; then
+  echo "reusable application chart rendered local monitoring resources" >&2
+  exit 1
+fi
+
+# The local chart must compose the reusable chart and version-locked upstream charts.
+grep -q '# Source: local/charts/ayni-orchestrator/' "$scratch/local.yaml"
+grep -q '# Source: local/charts/prometheus/' "$scratch/local.yaml"
+grep -q '# Source: local/charts/kube-state-metrics/' "$scratch/local.yaml"
+grep -q '# Source: local/charts/grafana/' "$scratch/local.yaml"
 grep -q '^  ORCHESTRATOR_KUBERNETES_NAMESPACE: "ayni-orchestrator-dev"$' "$scratch/local.yaml"
-grep -q '^kind: Deployment$' "$scratch/local.yaml"
 grep -q '^  name: prometheus$' "$scratch/local.yaml"
 grep -q '^  name: grafana$' "$scratch/local.yaml"
 grep -q '^  name: grafana-dashboard$' "$scratch/local.yaml"
+grep -q -- '--namespaces=ayni-orchestrator-dev' "$scratch/local.yaml"
+grep -q 'prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996' "$scratch/local.yaml"
+grep -q 'prometheus-config-reloader@sha256:ebb560bcb6bd3ab728a7ab61d77d22a001cc0c7a67f0531e7f92e20ce004de38' "$scratch/local.yaml"
+grep -q 'grafana/grafana:12.1.1@sha256:a1701c2180249361737a99a01bc770db39381640e4d631825d38ff4535efa47d' "$scratch/local.yaml"
+grep -q 'orchestrator.ayni.dev/stack: observability' "$scratch/local.yaml"
+grep -q 'sizeLimit: 1Gi' "$scratch/local.yaml"
+grep -q 'sizeLimit: 64Mi' "$scratch/local.yaml"
+if grep -q '@sha256:sha256:' "$scratch/local.yaml"; then
+  echo "local chart rendered a malformed image digest" >&2
+  exit 1
+fi
+
 grep -q '^  name: custom-client-grpc$' "$scratch/custom-clients.yaml"
 grep -q 'namespace=\\"isolated-local\\"' "$scratch/custom-clients.yaml"
 if grep -Eq '__AYNI_NAMESPACE__|namespace=\\"ayni-orchestrator-dev\\"' "$scratch/custom-clients.yaml"; then
@@ -77,6 +118,8 @@ grep -q '^  name: managed-check$' "$scratch/managed-check.yaml"
 grep -q '^  name: managed-check-evidence$' "$scratch/managed-check.yaml"
 grep -q '^  name: managed-check-artifact-rejection$' "$scratch/artifact-rejection.yaml"
 grep -q '^  name: ayni-orchestrator-dev-prometheus$' "$scratch/local.yaml"
+[[ "$(grep -c '^kind: ClusterRole$' "$scratch/local.yaml")" -eq 1 ]]
+[[ "$(grep -c '^kind: ClusterRoleBinding$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 4 ]]
 for claim in control-plane-state development-checkpoints managed-check-evidence prepared-environments; do
   grep -q "^  name: $claim$" "$scratch/local.yaml"
@@ -90,6 +133,9 @@ if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics)$' "$scratch/no-obs
   exit 1
 fi
 if grep -q '^  name: control-plane$' "$scratch/managed-check.yaml"; then
-  echo "managed-check fixture unexpectedly rendered the core release" >&2
+  echo "managed-check fixture unexpectedly rendered the application dependency" >&2
   exit 1
 fi
+
+helm package "$application_chart" --destination "$scratch" >/dev/null
+helm package "$local_chart" --destination "$scratch" >/dev/null

@@ -11,6 +11,7 @@ node_modules/
 **/build/
 **/test-results/
 **/playwright-report/
+/deploy/charts/local/charts/
 .agents/
 .codex/
 /.worktrees/

@@ -26,6 +26,7 @@ if ! command -v helm >/dev/null 2>&1; then
   echo "Helm is required to install the local managed-check fixture" >&2
   exit 1
 fi
+"$repository_root/scripts/local/build-chart-dependencies.sh"
 if helm_release_exists; then
   echo "$release_name already exists; inspect it, then explicitly uninstall that fixture release before another attempt" >&2
   exit 1
@@ -64,11 +65,11 @@ helm install "$release_name" "$chart" \
   --namespace "$namespace" \
   --create-namespace \
   "${ownership_args[@]}" \
-  --set core.enabled=false \
+  --set ayni-orchestrator.enabled=false \
   --set observability.enabled=false \
   --set fixtures.managedCheck.enabled=true \
   --set "fixtures.managedCheck.createEvidenceClaim=$create_evidence_claim" \
-  --set-string "images.worker=$image_ref" >/dev/null
+  --set-string "fixtures.workerImage=$image_ref" >/dev/null
 
 deadline=$((SECONDS + 900))
 while (( SECONDS < deadline )); do

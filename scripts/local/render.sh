@@ -24,6 +24,8 @@ for image_ref in "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref"
     exit 1
   fi
 done
+"$repository_root/scripts/local/build-chart-dependencies.sh"
+
 case "$deployment_profile" in
   local) readonly custom_clients=false ;;
   custom-clients) readonly custom_clients=true ;;
@@ -35,7 +37,7 @@ esac
 
 helm template ayni-orchestrator "$chart" \
   --namespace "$namespace" \
-  --set-string "images.controlPlane=$control_plane_image_ref" \
-  --set-string "images.worker=$worker_image_ref" \
-  --set-string "images.web=$web_image_ref" \
-  --set "customClients.enabled=$custom_clients"
+  --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
+  --set-string "ayni-orchestrator.images.worker=$worker_image_ref" \
+  --set-string "ayni-orchestrator.images.web=$web_image_ref" \
+  --set "ayni-orchestrator.customClients.enabled=$custom_clients"

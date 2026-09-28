@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prometheus-config
+  name: {{ .Release.Name }}-prometheus-config
   labels:
     {{- include "local.observabilityLabels" . | nindent 4 }}
-    app.kubernetes.io/name: ayni-orchestrator-prometheus
+    app.kubernetes.io/name: prometheus
 data:
   prometheus.yml: |
     global:
@@ -85,41 +85,10 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-provisioning
-  labels:
-    {{- include "local.observabilityLabels" . | nindent 4 }}
-    app.kubernetes.io/name: ayni-orchestrator-grafana
-data:
-  datasource.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        uid: prometheus
-        type: prometheus
-        access: proxy
-        url: http://prometheus:9090
-        isDefault: true
-        editable: false
-  dashboard-provider.yaml: |
-    apiVersion: 1
-    providers:
-      - name: Ayni Orchestrator
-        orgId: 1
-        folder: Ayni Orchestrator
-        type: file
-        disableDeletion: true
-        editable: false
-        updateIntervalSeconds: 30
-        options:
-          path: /etc/grafana/dashboards
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
   name: grafana-dashboard
   labels:
     {{- include "local.observabilityLabels" . | nindent 4 }}
-    app.kubernetes.io/name: ayni-orchestrator-grafana
+    app.kubernetes.io/name: grafana
 data:
   orchestrator-overview.json: |
 {{ .Files.Get "dashboards/orchestrator-overview.json" | replace "__AYNI_NAMESPACE__" .Release.Namespace | nindent 4 }}
