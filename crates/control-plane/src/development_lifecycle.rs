@@ -334,6 +334,25 @@ impl Store {
             .collect()
     }
 
+    pub(crate) fn development_tasks_all(&self) -> Result<Vec<DevelopmentTask>, StoreError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id FROM development_tasks ORDER BY created_at DESC, id DESC")
+            .map_err(StoreError::Database)?;
+        let ids = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(StoreError::Database)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::Database)?;
+        ids.into_iter()
+            .map(|value| {
+                self.development_task(
+                    TaskId::parse(&value).map_err(StoreError::InvalidLifecycleData)?,
+                )
+            })
+            .collect()
+    }
+
     pub(crate) fn development_lifecycle(
         &self,
         id: TaskId,
@@ -405,7 +424,8 @@ impl Store {
             .map_err(StoreError::Database)?;
         let updated = transaction
             .execute(
-                "UPDATE development_tasks SET phase=?1, updated_at=?2 WHERE id=?3 AND phase=?4",
+                "UPDATE development_tasks SET phase=?1, updated_at=?2,
+                 resource_version=resource_version+1 WHERE id=?3 AND phase=?4",
                 params![to.as_str(), now, id.to_string(), from.as_str()],
             )
             .map_err(StoreError::Database)?;
@@ -432,8 +452,8 @@ impl Store {
             .transaction()
             .map_err(StoreError::Database)?;
         let updated = transaction.execute(
-            "UPDATE development_tasks SET phase='validation_queued', candidate_commit=?1, updated_at=?2
-             WHERE id=?3 AND phase='coding'",
+            "UPDATE development_tasks SET phase='validation_queued', candidate_commit=?1, updated_at=?2,
+             resource_version=resource_version+1 WHERE id=?3 AND phase='coding'",
             params![candidate, now, id.to_string()],
         ).map_err(StoreError::Database)?;
         if updated == 1 {
@@ -467,7 +487,8 @@ impl Store {
         let updated = transaction
             .execute(
                 "UPDATE development_tasks SET phase='pr_queued', validation_manifest=?1,
-             policy_or_test_edits=?2, updated_at=?3 WHERE id=?4 AND phase='validating'",
+             policy_or_test_edits=?2, updated_at=?3, resource_version=resource_version+1
+             WHERE id=?4 AND phase='validating'",
                 params![digest, tests_edited, now, id.to_string()],
             )
             .map_err(StoreError::Database)?;
@@ -503,14 +524,11 @@ impl Store {
         let active_phase = DevelopmentPhase::parse(&current)?;
         let updated = transaction
             .execute(
-                "UPDATE development_tasks SET phase='failed', failure=?1, updated_at=?2
+                "UPDATE development_tasks SET phase='failed', failure=?1, updated_at=?2,
+             resource_version=resource_version+1
              WHERE id=?3 AND phase IN ('queued','coding','validation_queued','validating',
              'pr_queued','preparing_pr')",
-                params![
-                    diagnostic.chars().take(512).collect::<String>(),
-                    now,
-                    id.to_string()
-                ],
+                params![crate::truncate_utf8(diagnostic, 512), now, id.to_string()],
             )
             .map_err(StoreError::Database)?;
         if updated == 1 {
@@ -555,8 +573,8 @@ impl Store {
         let updated = transaction
             .execute(
                 "UPDATE development_tasks SET phase='failed', failure=?1,
-             validation_manifest=?2, policy_or_test_edits=?3, scope_violations=?4, updated_at=?5
-             WHERE id=?6 AND phase='validating'",
+             validation_manifest=?2, policy_or_test_edits=?3, scope_violations=?4, updated_at=?5,
+             resource_version=resource_version+1 WHERE id=?6 AND phase='validating'",
                 params![
                     diagnostic,
                     manifest_digest,
@@ -626,7 +644,8 @@ impl Store {
         } else {
             transaction
                 .execute(
-                    "UPDATE development_tasks SET phase='cancelled', updated_at=?1 WHERE id=?2",
+                    "UPDATE development_tasks SET phase='cancelled', updated_at=?1,
+                     resource_version=resource_version+1 WHERE id=?2",
                     params![now, id.to_string()],
                 )
                 .map_err(StoreError::Database)?;

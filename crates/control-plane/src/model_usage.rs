@@ -6,7 +6,7 @@ use ayni_orchestrator_domain::{
     ModelInteractionOutcome, ModelUsageReport, ModelUsageStage, ProviderTokenUsage, TaskId,
 };
 use rusqlite::{OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::{self, Read},
@@ -57,7 +57,7 @@ pub struct ModelUsageInteraction {
 }
 
 /// Aggregate usage whose token fields remain unknown if any included interaction omitted them.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ModelUsageSummary {
     pub interaction_count: usize,
     pub unavailable_interaction_count: usize,
@@ -222,7 +222,7 @@ fn parse_stage(value: &str) -> Result<ModelUsageStage, StoreError> {
     match value {
         "coding" => Ok(ModelUsageStage::Coding),
         "pr_preparation" => Ok(ModelUsageStage::PrPreparation),
-        _ => Err(StoreError::InvalidInput(
+        _ => Err(StoreError::CorruptState(
             "invalid persisted model usage stage",
         )),
     }
@@ -233,7 +233,7 @@ fn parse_outcome(value: &str) -> Result<ModelInteractionOutcome, StoreError> {
         "succeeded" => Ok(ModelInteractionOutcome::Succeeded),
         "failed" => Ok(ModelInteractionOutcome::Failed),
         "cancelled" => Ok(ModelInteractionOutcome::Cancelled),
-        _ => Err(StoreError::InvalidInput(
+        _ => Err(StoreError::CorruptState(
             "invalid persisted model interaction outcome",
         )),
     }
@@ -243,7 +243,7 @@ fn stored_u64(value: Option<i64>) -> Result<Option<u64>, StoreError> {
     value
         .map(u64::try_from)
         .transpose()
-        .map_err(|_| StoreError::InvalidInput("negative persisted model usage value"))
+        .map_err(|_| StoreError::CorruptState("negative persisted model usage value"))
 }
 
 fn sqlite_u64(value: Option<u64>) -> Result<Option<i64>, StoreError> {
@@ -271,7 +271,7 @@ impl Store {
             .map_err(StoreError::Database)?
             .ok_or(StoreError::TaskNotFound(id))?;
         let profile: AgentProfile = serde_json::from_str(&profile_json)
-            .map_err(|_| StoreError::InvalidInput("invalid persisted profile"))?;
+            .map_err(|_| StoreError::CorruptState("invalid persisted profile"))?;
         if report.provider != profile.provider || report.model != profile.model {
             return Err(StoreError::InvalidInput(
                 "model usage attribution differs from the task profile",
@@ -296,7 +296,11 @@ impl Store {
             report.resolved_model.as_deref(),
             report.tokens,
         );
-        self.connection
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(StoreError::Database)?;
+        transaction
             .execute(
                 "INSERT INTO development_model_usage(
                     task_id, stage, call_id, provider, model, resolved_model, started_at_ms,
@@ -334,6 +338,13 @@ impl Store {
                 ],
             )
             .map_err(StoreError::Database)?;
+        transaction
+            .execute(
+                "UPDATE development_tasks SET resource_version=resource_version+1 WHERE id=?1",
+                [id.to_string()],
+            )
+            .map_err(StoreError::Database)?;
+        transaction.commit().map_err(StoreError::Database)?;
         Ok(true)
     }
 
@@ -371,12 +382,26 @@ impl Store {
     }
 
     pub(crate) fn complete_model_usage_collection(&self, id: TaskId) -> Result<(), StoreError> {
-        self.connection
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(StoreError::Database)?;
+        let changed = transaction
             .execute(
-                "UPDATE development_model_usage_collection SET complete=1 WHERE task_id=?1",
+                "UPDATE development_model_usage_collection SET complete=1
+                 WHERE task_id=?1 AND complete=0",
                 [id.to_string()],
             )
             .map_err(StoreError::Database)?;
+        if changed == 1 {
+            transaction
+                .execute(
+                    "UPDATE development_tasks SET resource_version=resource_version+1 WHERE id=?1",
+                    [id.to_string()],
+                )
+                .map_err(StoreError::Database)?;
+        }
+        transaction.commit().map_err(StoreError::Database)?;
         Ok(())
     }
 
@@ -431,28 +456,28 @@ impl Store {
                 Some(amount) => Some(EstimatedModelCost {
                     label: "estimated",
                     amount_micros: u64::try_from(amount).map_err(|_| {
-                        StoreError::InvalidInput("invalid persisted estimated cost")
+                        StoreError::CorruptState("invalid persisted estimated cost")
                     })?,
                     currency: row
                         .15
-                        .ok_or(StoreError::InvalidInput("estimated cost has no currency"))?,
-                    pricing_version: row.16.ok_or(StoreError::InvalidInput(
+                        .ok_or(StoreError::CorruptState("estimated cost has no currency"))?,
+                    pricing_version: row.16.ok_or(StoreError::CorruptState(
                         "estimated cost has no pricing version",
                     ))?,
                     priced_input_tokens: stored_u64(row.17)?
-                        .ok_or(StoreError::InvalidInput("estimated cost has no input"))?,
+                        .ok_or(StoreError::CorruptState("estimated cost has no input"))?,
                     priced_cached_input_tokens: stored_u64(row.18)?.ok_or(
-                        StoreError::InvalidInput("estimated cost has no cached input"),
+                        StoreError::CorruptState("estimated cost has no cached input"),
                     )?,
                     priced_output_tokens: stored_u64(row.19)?
-                        .ok_or(StoreError::InvalidInput("estimated cost has no output"))?,
+                        .ok_or(StoreError::CorruptState("estimated cost has no output"))?,
                     input_rate_micros_per_million: stored_u64(row.20)?
-                        .ok_or(StoreError::InvalidInput("estimated cost has no input rate"))?,
+                        .ok_or(StoreError::CorruptState("estimated cost has no input rate"))?,
                     cached_input_rate_micros_per_million: stored_u64(row.21)?.ok_or(
-                        StoreError::InvalidInput("estimated cost has no cached rate"),
+                        StoreError::CorruptState("estimated cost has no cached rate"),
                     )?,
                     output_rate_micros_per_million: stored_u64(row.22)?.ok_or(
-                        StoreError::InvalidInput("estimated cost has no output rate"),
+                        StoreError::CorruptState("estimated cost has no output rate"),
                     )?,
                 }),
                 None => None,
@@ -466,7 +491,7 @@ impl Store {
                 started_at_ms: row.5,
                 completed_at_ms: row.6,
                 latency_ms: u64::try_from(row.7)
-                    .map_err(|_| StoreError::InvalidInput("invalid persisted model latency"))?,
+                    .map_err(|_| StoreError::CorruptState("invalid persisted model latency"))?,
                 outcome: parse_outcome(&row.8)?,
                 tokens: ProviderTokenUsage {
                     input_tokens: stored_u64(row.9)?,

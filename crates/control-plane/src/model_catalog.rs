@@ -3,7 +3,7 @@ use crate::{
     orchestration::{Store, StoreError},
 };
 use rig_core::{client::ModelListingClient, providers::openai};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -11,12 +11,13 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
 
-const CACHE_TTL: Duration = Duration::from_secs(300);
+// Keep one provider snapshot available for at least the minimum page-token lifetime.
+const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const FAILURE_BACKOFF: Duration = Duration::from_secs(30);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_MODELS: usize = 2_048;
@@ -27,7 +28,7 @@ const PROVIDER: &str = "openai";
 const SECRET_REF: &str = "openai-api";
 
 /// Provider-reported model metadata safe to return to the browser.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AvailableModel {
     pub id: String,
     pub name: Option<String>,
@@ -41,6 +42,8 @@ pub struct AvailableModel {
 pub struct AvailableModels {
     pub provider: &'static str,
     pub models: Vec<AvailableModel>,
+    #[serde(skip_serializing)]
+    pub observed_at: u64,
 }
 
 #[derive(Debug, Error)]
@@ -73,6 +76,7 @@ enum CatalogSource {
 struct CachedModels {
     refresh_after: Instant,
     models: Option<Vec<AvailableModel>>,
+    observed_at: Option<u64>,
 }
 
 impl ModelCatalog {
@@ -118,22 +122,28 @@ impl ModelCatalog {
     /// the catalog bounds.
     #[allow(clippy::significant_drop_tightening)] // The mutex deliberately provides one refresh flight.
     pub async fn available(&self) -> Result<AvailableModels, ModelCatalogError> {
-        let models = match &self.inner.source {
+        let (models, observed_at) = match &self.inner.source {
             #[cfg(test)]
-            CatalogSource::Fixed(models) => models.clone(),
+            CatalogSource::Fixed(models) => (models.clone(), observed_now()?),
             CatalogSource::OpenAi(client) => {
                 let mut cache = self.inner.cache.lock().await;
                 let now = Instant::now();
                 if let Some(cached) = cache.as_ref().filter(|cached| now < cached.refresh_after) {
-                    cached.models.clone().ok_or(ModelCatalogError::Discovery)?
+                    cached
+                        .models
+                        .clone()
+                        .zip(cached.observed_at)
+                        .ok_or(ModelCatalogError::Discovery)?
                 } else {
-                    let stale = cache.as_ref().and_then(|cached| cached.models.clone());
+                    let stale = cache
+                        .as_ref()
+                        .and_then(|cached| cached.models.clone().zip(cached.observed_at));
                     let discovered = async {
                         let listed = tokio::time::timeout(DISCOVERY_TIMEOUT, client.list_models())
                             .await
                             .map_err(|_| ModelCatalogError::Discovery)?
                             .map_err(|_| ModelCatalogError::Discovery)?;
-                        normalize(
+                        let models = normalize(
                             listed
                                 .into_iter()
                                 .map(|model| AvailableModel {
@@ -145,22 +155,25 @@ impl ModelCatalog {
                                     max_output_tokens: model.max_output_tokens,
                                 })
                                 .collect(),
-                        )
+                        )?;
+                        Ok::<_, ModelCatalogError>((models, observed_now()?))
                     }
                     .await;
                     match discovered {
-                        Ok(models) => {
+                        Ok((models, observed_at)) => {
                             self.inner.verified.store(true, Ordering::Release);
                             *cache = Some(CachedModels {
                                 refresh_after: Instant::now() + CACHE_TTL,
                                 models: Some(models.clone()),
+                                observed_at: Some(observed_at),
                             });
-                            models
+                            (models, observed_at)
                         }
                         Err(error) => {
                             *cache = Some(CachedModels {
                                 refresh_after: Instant::now() + FAILURE_BACKOFF,
-                                models: stale.clone(),
+                                models: stale.as_ref().map(|(models, _)| models.clone()),
+                                observed_at: stale.as_ref().map(|(_, observed_at)| *observed_at),
                             });
                             stale.ok_or(error)?
                         }
@@ -171,6 +184,7 @@ impl ModelCatalog {
         Ok(AvailableModels {
             provider: PROVIDER,
             models,
+            observed_at,
         })
     }
 
@@ -213,6 +227,13 @@ impl Store {
     }
 }
 
+fn observed_now() -> Result<u64, ModelCatalogError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| ModelCatalogError::InvalidCatalog)
+}
+
 fn agent_compatible(id: &str) -> bool {
     let supported_family = ["gpt-5", "gpt-4.1", "gpt-4o", "o1", "o3", "o4"]
         .iter()
@@ -243,6 +264,12 @@ fn normalize(models: Vec<AvailableModel>) -> Result<Vec<AvailableModel>, ModelCa
                 .id
                 .bytes()
                 .all(|byte| byte.is_ascii_graphic() && byte != b'"' && byte != b'\\')
+        {
+            return Err(ModelCatalogError::InvalidCatalog);
+        }
+        if model
+            .created_at
+            .is_some_and(|seconds| i64::try_from(seconds).is_err())
         {
             return Err(ModelCatalogError::InvalidCatalog);
         }

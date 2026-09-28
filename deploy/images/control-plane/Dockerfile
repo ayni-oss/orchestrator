@@ -4,6 +4,7 @@ FROM rust:1.94.0-bookworm AS builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
+COPY proto ./proto
 RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-control-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-control-target,target=/workspace/target \
@@ -18,5 +19,5 @@ RUN apt-get update \
 RUN useradd --system --uid 10001 --create-home orchestrator
 USER 10001
 COPY --from=builder /tmp/ayni-orchestrator-control-plane /usr/local/bin/ayni-orchestrator-control-plane
-EXPOSE 8080
+EXPOSE 8080 50051
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]

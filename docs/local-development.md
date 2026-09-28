@@ -12,7 +12,7 @@ browser interface.
 - Buf 1.71.0 for protobuf formatting, linting, generation, and compatibility checks
 - Docker Desktop with Kubernetes enabled
 - a reachable `docker-desktop` Kubernetes context
-- `kubectl`, Docker, Git, and `curl`
+- `kubectl`, Docker, Git, `curl`, and `grpcurl`
 
 Local scripts always name `docker-desktop`; they never fall back to the current
 context or reset the cluster. The default namespace is
@@ -73,6 +73,26 @@ The target product contract is native gRPC only. Existing `/v1` JSON routes are
 a temporary migration surface; `/livez`, `/readyz`, and `/metrics` remain HTTP
 operational endpoints rather than alternate product APIs.
 
+The local gRPC listener is native cleartext HTTP/2 on pod loopback. The Service
+declares its target so `kubectl port-forward` can select it, but normal Service
+traffic addresses the pod IP and cannot reach the loopback listener. Open a
+host-loopback forward and exercise health, development reflection, and one
+bounded read with:
+
+```sh
+kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
+  port-forward --address 127.0.0.1 service/control-plane 15051:50051
+grpcurl -plaintext -max-time 5 -d \
+  '{"service":"ayni.orchestrator.v1.RepositoryService"}' \
+  127.0.0.1:15051 grpc.health.v1.Health/Check
+grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
+grpcurl -plaintext -max-time 10 -d '{}' 127.0.0.1:15051 \
+  ayni.orchestrator.v1.RepositoryService/ListRepositories
+```
+
+Never forward to a non-loopback address. Authentication, TLS, and non-local
+hosting remain outside this trusted development profile.
+
 ## Configure local credentials
 
 Copy the documented template to the gitignored `.env` file and set the GitHub
@@ -119,8 +139,8 @@ It preserves SQLite, checkpoint, validation-result, and prepared-environment
 volumes across updates. It may remove only obsolete project image tags after a
 successful rollout; it does not prune shared Docker caches or volumes.
 
-The check script opens a loopback port-forward, verifies `/livez`, `/readyz`, the
-browser marker, and list APIs. The current readiness JSON field is named
+The check script opens loopback HTTP and gRPC port-forwards, verifies `/livez`,
+`/readyz`, the browser marker, migration list APIs, gRPC health, and reflection. The current readiness JSON field is named
 `pilot_ready`; it means publication is configured and provider model discovery
 has succeeded at least once in this process, not that an individual repository
 has been prepared or the provider is currently reachable.

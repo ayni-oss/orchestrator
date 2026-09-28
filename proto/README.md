@@ -12,11 +12,12 @@ HTTP remains available only for operational integration: liveness, readiness,
 and Prometheus metrics. This contract does not define REST, JSON transcoding,
 gRPC-Web, or browser-generated clients.
 
-This schema does not implement or authorize a network endpoint. A future gRPC
-server must not expose unauthenticated product RPCs on the current
-namespace-reachable Service; serving requires authentication, authorization,
-transport protection, and/or verified network isolation as appropriate to the
-deployment profile.
+The supported local server exposes this contract through a pod-loopback Tonic
+listener reached with a Service port-forward bound to host loopback. Normal
+Service traffic addresses the pod IP and cannot reach the loopback listener.
+Any non-loopback endpoint requires authentication, authorization, transport
+protection, and verified network isolation appropriate to that deployment
+profile.
 
 ## Services
 

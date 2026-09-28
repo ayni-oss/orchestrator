@@ -1,10 +1,10 @@
 use ayni_orchestrator_control_plane::{
     AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, ModelCatalog,
-    PreparationReconciler, PublisherState, Reconciler, router,
+    PreparationReconciler, PublisherState, Reconciler, router, serve_grpc,
 };
 use kube::Client;
 use std::{env, fs, io, process::ExitCode};
-use tokio::{net::TcpListener, signal};
+use tokio::{net::TcpListener, signal, sync::watch};
 use tracing::{Instrument, error, info, warn};
 
 #[tokio::main]
@@ -82,11 +82,19 @@ async fn run() -> Result<(), io::Error> {
         )))
     });
     let listener = TcpListener::bind(configuration.bind_address()).await?;
-    info!(address = %configuration.bind_address(), "control plane started");
-
-    axum::serve(listener, router(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    info!(address = %configuration.bind_address(), "HTTP control plane started");
+    let (shutdown_sender, shutdown_receiver) = watch::channel(false);
+    let signal_task = tokio::spawn(async move {
+        shutdown_signal().await;
+        let _ = shutdown_sender.send(true);
+    });
+    let http_shutdown = shutdown_receiver.clone();
+    let http = axum::serve(listener, router(state.clone())).with_graceful_shutdown(async move {
+        wait_for_shutdown(http_shutdown).await;
+    });
+    let grpc = serve_grpc(configuration.grpc_bind_address(), state, shutdown_receiver);
+    tokio::try_join!(async { http.await.map_err(io::Error::other) }, grpc)?;
+    signal_task.abort();
     reconciliation_task.abort();
     if let Some(task) = development_task {
         task.abort();
@@ -118,6 +126,12 @@ async fn run_reconciliation(reconciler: Reconciler<KubernetesJobTransport>) {
     loop {
         ticker.tick().await;
         reconciler.reconcile_once().await;
+    }
+}
+
+async fn wait_for_shutdown(mut shutdown: watch::Receiver<bool>) {
+    if !*shutdown.borrow() {
+        let _ = shutdown.changed().await;
     }
 }
 

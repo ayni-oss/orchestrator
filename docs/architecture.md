@@ -11,16 +11,19 @@ status, is the source of truth for task lifecycle and external actions.
 | `api` | Generated Rust types, service contracts, and descriptor set for `ayni.orchestrator.v1` |
 | `domain` | Validated task, attempt, result, and state-transition types |
 | `observability` | Shared JSON logging, safe filtering, correlation fields, and redaction helpers |
-| `control-plane` | HTTP API and UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
+| `control-plane` | Transport-neutral application operations, native gRPC and migration HTTP adapters, UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
 | `worker` | Source preparation, managed Ayni execution, coding-agent tools, frozen-candidate validation, and structured PR authoring |
 
 The canonical protobuf contract is independent of persistence, Kubernetes, and
 browser types. Product semantics remain in the domain and control-plane
 application operations; generated transport types do not become domain types.
-The current HTTP product routes are a temporary migration surface. A future
-gRPC server must not be attached unauthenticated to the namespace-reachable
-Service; its serving boundary requires authentication, authorization, transport
-protection, and/or verified network isolation.
+The native Tonic server and temporary HTTP product routes call those same
+operations. The gRPC listener is required to bind to pod loopback in the
+supported local profile. Although the Service declares the gRPC target for
+`kubectl port-forward`, normal Service traffic addresses the pod IP and cannot
+reach the loopback listener. A non-loopback listener requires separate
+authentication, authorization, transport-protection, and network-isolation
+design.
 
 Dependencies point toward `domain`; workers do not own durable lifecycle state.
 
@@ -124,8 +127,9 @@ request before repeating creation.
 - Managed Ayni execution uses an isolated privileged Docker-in-Docker engine;
   the worker itself remains non-root and does not receive the host Docker socket.
 - The browser/API Service has no end-user authentication in the current profile
-  and is restricted operationally to loopback port-forwarding on a trusted
-  local cluster.
+  and is restricted operationally to a trusted local cluster. Native gRPC binds
+  to pod loopback; its Service target is usable through a host-loopback
+  `kubectl port-forward` but is not reachable through the Service cluster IP.
 
 ## Supported boundary
 

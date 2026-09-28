@@ -39,6 +39,8 @@ fn preparation_is_content_addressed_and_reused_only_after_success() -> Result<()
     assert!(warm.reused);
     assert_eq!(warm.reuse_count, 1);
     assert_eq!(warm.duration_seconds, Some(47));
+    let replay = store.prepare_repository("sandbox", &warm_key, &input)?;
+    assert_eq!(replay, warm);
     Ok(())
 }
 
