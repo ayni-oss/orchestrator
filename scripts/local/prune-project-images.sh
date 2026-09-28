@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly control_plane_image_ref="${1:?usage: scripts/local/prune-project-images.sh CONTROL_PLANE_IMAGE_REF WORKER_IMAGE_REF}"
-readonly worker_image_ref="${2:?usage: scripts/local/prune-project-images.sh CONTROL_PLANE_IMAGE_REF WORKER_IMAGE_REF}"
+readonly control_plane_image_ref="${1:?usage: scripts/local/prune-project-images.sh CONTROL_PLANE_IMAGE_REF WORKER_IMAGE_REF WEB_IMAGE_REF}"
+readonly worker_image_ref="${2:?usage: scripts/local/prune-project-images.sh CONTROL_PLANE_IMAGE_REF WORKER_IMAGE_REF WEB_IMAGE_REF}"
+readonly web_image_ref="${3:?usage: scripts/local/prune-project-images.sh CONTROL_PLANE_IMAGE_REF WORKER_IMAGE_REF WEB_IMAGE_REF}"
 readonly node_name="desktop-control-plane"
 node_id="$(docker inspect "$node_name" --format '{{.Id}}')"
 readonly node_id
@@ -11,7 +12,7 @@ readonly temporary_directory
 trap 'rm -rf "$temporary_directory"' EXIT
 readonly keep="$temporary_directory/keep"
 
-printf '%s\n%s\n' "$control_plane_image_ref" "$worker_image_ref" > "$keep"
+printf '%s\n%s\n%s\n' "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref" > "$keep"
 kubectl --context docker-desktop get pods --all-namespaces \
   -o jsonpath='{range .items[*]}{range .spec.initContainers[*]}{.image}{"\n"}{end}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' \
   | grep '^local/ayni-orchestrator-' >> "$keep" || true

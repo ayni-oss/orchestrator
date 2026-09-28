@@ -26,7 +26,14 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo check --workspace --all-features
+pnpm install --frozen-lockfile
+pnpm frontend:check
 ```
+
+`frontend:check` type-checks the generated Node bindings, server-only BFF, and
+SvelteKit application; runs mapping, safe-error, correlation, and native gRPC
+integration tests; builds the adapter-node runtime; and verifies native gRPC
+code did not enter the browser bundle.
 
 CI also installs the checksum-pinned Ayni release recorded by `.ayni.lock`,
 builds and doctors the locked environment, runs the repository-complete check,
@@ -42,7 +49,8 @@ Render the core and optional observability deployments separately when changing
 manifests:
 
 ```sh
-scripts/local/render.sh >/tmp/ayni-orchestrator.yaml
+scripts/local/render.sh local/control-plane:test local/worker:test local/web:test \
+  >/tmp/ayni-orchestrator.yaml
 scripts/local/render-observability.sh >/tmp/ayni-orchestrator-observability.yaml
 ```
 
@@ -129,18 +137,22 @@ scripts/local/check.sh
 The deploy script:
 
 1. verifies Docker Desktop capacity and the explicit Kubernetes context;
-2. builds control-plane and worker images labeled with the checkout revision;
-3. loads them into Docker Desktop's Kubernetes node;
+2. builds control-plane, worker, and SvelteKit web images labeled with the
+   checkout revision and tags each with a content-identity suffix;
+3. loads all three into Docker Desktop's Kubernetes node;
 4. renders and applies the Kustomize overlay;
 5. waits for rollout; and
-6. verifies the running control-plane image identity.
+6. verifies the running control-plane and web image identities and the worker
+   image frozen into the control-plane Pod configuration.
 
 It preserves SQLite, checkpoint, validation-result, and prepared-environment
 volumes across updates. It may remove only obsolete project image tags after a
 successful rollout; it does not prune shared Docker caches or volumes.
 
-The check script opens loopback HTTP and gRPC port-forwards, verifies `/livez`,
-`/readyz`, the browser marker, migration list APIs, gRPC health, and reflection. The current readiness JSON field is named
+The check script opens separate loopback web, operational HTTP, and gRPC
+port-forwards. It verifies `/livez`, `/readyz`, metrics, the server-rendered BFF
+page through real native gRPC reads, gRPC health, and reflection. The current
+readiness JSON field is named
 `pilot_ready`; it means publication is configured and provider model discovery
 has succeeded at least once in this process, not that an individual repository
 has been prepared or the provider is currently reachable.
@@ -231,20 +243,29 @@ violations with validation evidence, and cannot create a draft PR. Related
 future requirements are tracked
 in the [Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2).
 
-## Browser workflow
+## Browser server boundary
 
-Open the Service only through loopback port-forwarding:
+Open the SvelteKit server only through loopback port-forwarding:
 
 ```sh
 kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward service/control-plane 18080:8080
+  port-forward --address 127.0.0.1 service/web 18080:8080
 open http://127.0.0.1:18080/
 ```
 
-The browser exposes repository readiness, preparation, provider-discovered model
-selection, task submission, phase refresh, cancellation, linked retry,
-requested-input follow-up, draft PR links, and validated results. It is not
-authenticated; anyone who can reach the Service can operate it.
+The deployed page is intentionally minimal until the browser-interface work is
+complete. Its server load and form action call only the server-side BFF, which
+uses generated native gRPC clients over pod loopback and returns explicit
+browser-safe DTOs. A bounded same-origin task update relay is available at
+`/tasks/TASK_ID/updates`; it is a private browser implementation detail, not a
+supported JSON API.
+
+During the compatibility window, the embedded migration UI remains reachable
+separately with a loopback forward to `service/control-plane 18081:8080`. It
+continues to provide repository readiness, preparation, task actions, and
+validated results until the browser cutover removes it together with the
+migration `/v1` product routes. Neither browser surface is authenticated;
+anyone who can reach a forward can operate it.
 
 Observability is optional and is not installed by `deploy.sh`. After the core
 check passes, install and validate the disposable local stack explicitly:

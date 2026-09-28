@@ -7,6 +7,8 @@
 **/.DS_Store
 node_modules/
 .pnpm-store/
+**/.svelte-kit/
+**/build/
 .agents/
 .codex/
 /.worktrees/

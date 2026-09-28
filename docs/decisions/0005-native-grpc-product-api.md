@@ -54,8 +54,9 @@ and do not benefit from becoming product RPCs.
   port-forward`, while normal Service traffic to the pod IP cannot reach the
   listener. Any broader serving boundary requires authentication, authorization,
   transport protection, and verified network isolation.
-- A future server-side browser BFF may expose narrowly scoped same-origin page
-  actions or browser adapters. They are private UI implementation details, not
-  a supported Orchestrator API.
+- The SvelteKit server-side BFF may expose only narrowly scoped same-origin
+  server loads, form actions, and bounded browser-native update relays. These
+  are private UI implementation details, not a supported Orchestrator API. The
+  BFF runs beside the control plane so gRPC remains bound to pod loopback.
 - Client authors must tolerate additive fields and unknown enum values and use
   bounded deadlines and stream reconnection.

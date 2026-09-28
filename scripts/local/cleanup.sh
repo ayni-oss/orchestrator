@@ -11,7 +11,7 @@ readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
 # deliberately retained. Cancel active tasks through the UI/API before cleanup.
 "$repository_root/scripts/local/teardown-observability.sh"
 kubectl --context "$context" --namespace "$namespace" delete \
-  deployment/control-plane service/control-plane configmap/control-plane-config \
+  deployment/control-plane service/control-plane service/web configmap/control-plane-config \
   role/control-plane-attempt-jobs rolebinding/control-plane-attempt-jobs \
   role/control-plane-development-clone-secrets \
   rolebinding/control-plane-development-clone-secrets \

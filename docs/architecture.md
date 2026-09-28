@@ -6,13 +6,16 @@ status, is the source of truth for task lifecycle and external actions.
 
 ## Workspace
 
-| Crate | Responsibility |
+| Component | Responsibility |
 | --- | --- |
 | `api` | Generated Rust types, service contracts, and descriptor set for `ayni.orchestrator.v1` |
 | `domain` | Validated task, attempt, result, and state-transition types |
 | `observability` | Shared JSON logging, safe filtering, correlation fields, and redaction helpers |
-| `control-plane` | Transport-neutral application operations, native gRPC and migration HTTP adapters, UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
+| `control-plane` | Transport-neutral application operations, native gRPC and migration HTTP adapters, embedded migration UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
 | `worker` | Source preparation, managed Ayni execution, coding-agent tools, frozen-candidate validation, and structured PR authoring |
+| `clients/typescript` | Checked-in Node-compatible native gRPC bindings generated from the canonical protobuf contract |
+| `packages/bff` | Server-only gRPC client policy, browser-safe DTO mapping, deadlines, cancellation, correlation, and safe error translation |
+| `apps/web` | SvelteKit Node server, server loads and actions, and bounded same-origin task-update relay |
 
 The canonical protobuf contract is independent of persistence, Kubernetes, and
 browser types. Product semantics remain in the domain and control-plane
@@ -24,6 +27,13 @@ supported local profile. Although the Service declares the gRPC target for
 reach the loopback listener. A non-loopback listener requires separate
 authentication, authorization, transport-protection, and network-isolation
 design.
+
+The SvelteKit runtime is a sidecar in the control-plane Pod. It reaches gRPC at
+`127.0.0.1:50051` through the shared Pod network namespace and is exposed by a
+separate internal `web` Service. It has no Kubernetes service-account token or
+credential volume. Generated protobuf values stop at the server-only BFF;
+browser data consists only of explicit allowlisted DTOs. The BFF is not a
+second supported product protocol or a generic JSON mirror.
 
 Dependencies point toward `domain`; workers do not own durable lifecycle state.
 
@@ -48,7 +58,8 @@ subpaths that repository command processes cannot access. Reconciliation
 imports those reports idempotently into SQLite and derives explicitly versioned
 cost estimates without retaining provider content. Normal cleanup preserves all
 four claims. The single-writer SQLite volume constrains the current profile to
-one control-plane replica.
+one control-plane replica. The Deployment uses a `Recreate` update strategy so
+an update cannot overlap two control-plane processes on that volume.
 
 An optional Docker Desktop observability deployment runs disposable Prometheus,
 kube-state-metrics, and Grafana Deployments. Prometheus scrapes the bounded
@@ -126,10 +137,12 @@ request before repeating creation.
   exact candidate and environment identities.
 - Managed Ayni execution uses an isolated privileged Docker-in-Docker engine;
   the worker itself remains non-root and does not receive the host Docker socket.
-- The browser/API Service has no end-user authentication in the current profile
-  and is restricted operationally to a trusted local cluster. Native gRPC binds
-  to pod loopback; its Service target is usable through a host-loopback
-  `kubectl port-forward` but is not reachable through the Service cluster IP.
+- The browser and control-plane Services have no end-user authentication in the
+  current profile and are restricted operationally to a trusted local cluster.
+  The SvelteKit sidecar receives no Kubernetes service-account token. Native
+  gRPC binds to pod loopback; its Service target is usable through a
+  host-loopback `kubectl port-forward` but is not reachable through the Service
+  cluster IP.
 
 ## Supported boundary
 

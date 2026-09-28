@@ -6,15 +6,22 @@ profile: one trusted maintainer team, one local cluster, and the allowlisted
 
 ## Access boundary
 
-The control plane has no end-user authentication in this profile. The Service is
-`ClusterIP`; do not expose it with an Ingress, `NodePort`, or a non-loopback
-forward. Open the product only through:
+The browser server and control plane have no end-user authentication in this
+profile. Both Services are `ClusterIP`; do not expose them with an Ingress,
+`NodePort`, or a non-loopback forward. Open the SvelteKit server boundary only
+through:
 
 ```bash
 kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward service/control-plane 18080:8080
+  port-forward --address 127.0.0.1 service/web 18080:8080
 open http://127.0.0.1:18080/
 ```
+
+The Node server runs as a sidecar in the control-plane Pod and calls
+`127.0.0.1:50051`. It receives no Kubernetes service-account token or credential
+volume. The embedded migration UI and operational endpoints remain temporarily
+available through a separate loopback forward to
+`service/control-plane 18081:8080`; the SvelteKit port does not proxy them.
 
 Native gRPC uses a separate pod-loopback listener. The Service declares the
 target for `kubectl port-forward`, but normal Service traffic addresses the pod
@@ -27,8 +34,10 @@ grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
 ```
 
 Never change `ORCHESTRATOR_GRPC_BIND_ADDRESS` to a non-loopback address in this
-unauthenticated profile. Anyone able to reach either product transport can
-operate the product. Kubernetes access,
+unauthenticated profile. The same-origin SvelteKit loads, actions, and bounded
+server-sent task updates are private browser adapters, not a second supported
+product protocol. Anyone able to reach either browser surface or native gRPC
+can operate the product. Kubernetes access,
 Docker Desktop host access, the GitHub App installation, and the configured
 model key are therefore privileged. The internal publication endpoint also
 requires its dedicated bearer token. Neither GitHub nor model credentials are
@@ -36,8 +45,8 @@ returned by the API or UI.
 
 ## Prerequisites and capacity
 
-- Docker Desktop Kubernetes, with current context exactly `docker-desktop`.
-- `kubectl`, Docker, Git, Rust, and `curl`.
+- Docker Desktop Kubernetes, with a `docker-desktop` context available; local scripts select it explicitly and never fall back to the current context.
+- `kubectl`, Docker, Git, Rust, Node, pnpm, `curl`, and `grpcurl`.
 - At least 6 CPUs, 14 GiB memory, and 30 GiB free disk assigned to Docker
   Desktop. One managed validation/preparation engine requests 4 CPUs and 9 GiB.
 - A GitHub App installed on the enrolled repository with Contents and Pull
@@ -74,9 +83,11 @@ scripts/local/deploy.sh
 scripts/local/check.sh
 ```
 
-The core check requires `pilot_ready: true`, fetches the HTML marker and
-repository and task list APIs, verifies the application metrics endpoint, and
-does not execute browser JavaScript. The first install creates four retained
+The core check requires `pilot_ready: true`, verifies the operational and
+metrics endpoints, fetches the server-rendered SvelteKit marker backed by real
+gRPC repository, model, and task reads, and checks native gRPC health and
+reflection. It does not execute browser JavaScript. The first install creates
+four retained
 PVCs. Re-running the install does not replace retained claims. The optional
 observability stack is installed and checked separately as described below and
 uses only disposable `emptyDir` storage.
@@ -87,12 +98,15 @@ recording the result:
 
 ```bash
 export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-clean-check
-export AYNI_ORCHESTRATOR_LOCAL_PORT=18081
+export AYNI_ORCHESTRATOR_WEB_LOCAL_PORT=18082
+export AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT=18083
+export AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT=15052
 scripts/local/configure-development-secrets.sh
 scripts/local/deploy.sh
 scripts/local/check.sh
 kubectl --context docker-desktop delete namespace "$AYNI_ORCHESTRATOR_NAMESPACE"
-unset AYNI_ORCHESTRATOR_NAMESPACE AYNI_ORCHESTRATOR_LOCAL_PORT
+unset AYNI_ORCHESTRATOR_NAMESPACE AYNI_ORCHESTRATOR_WEB_LOCAL_PORT \
+  AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT
 ```
 
 Namespace deletion is intentionally explicit because it deletes that isolated
@@ -328,12 +342,22 @@ authentication, TLS, network isolation, durable monitoring storage, and RBAC.
 Never run cleanup to perform an update. Record PVC identities and task state,
 then deploy in place:
 
+In a separate terminal, forward the temporary migration API to the documented
+control-plane port. Capture the pre-update state, deploy, restart the forward
+after the rollout replaces its Pod, and then capture the post-update state:
+
 ```bash
+# Forward terminal; restart this command after scripts/local/deploy.sh completes.
+kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
+  port-forward --address 127.0.0.1 service/control-plane 18081:8080
+
+# Update terminal.
 kubectl --context docker-desktop -n ayni-orchestrator-dev get pvc
-curl --fail http://127.0.0.1:18080/v1/development-tasks > /tmp/tasks-before.json
+curl --fail http://127.0.0.1:18081/v1/development-tasks > /tmp/tasks-before.json
 scripts/local/deploy.sh
 scripts/local/check.sh
-curl --fail http://127.0.0.1:18080/v1/development-tasks > /tmp/tasks-after.json
+# Restart the forward above before this request.
+curl --fail http://127.0.0.1:18081/v1/development-tasks > /tmp/tasks-after.json
 ```
 
 SQLite migrations are additive. Existing tasks, checkpoints, evidence, and
@@ -362,8 +386,8 @@ docker exec desktop-control-plane df -h /var
 
 Before cluster reset or destructive pruning, scale the control plane to zero and
 back up all four claims using a trusted temporary pod or a Docker Desktop volume
-backup. At minimum copy `/var/lib/ayni-orchestrator` from
-`control-plane-state`; include `development-checkpoints`,
+backup. At minimum copy `/data/orchestrator.sqlite` from the
+`control-plane-state` claim mounted at `/data`; include `development-checkpoints`,
 `managed-check-evidence`, and `prepared-environments` to retain full recovery
 and audit data. Restore claims before starting the deployment. Check file
 ownership remains UID/GID 10001, then run `scripts/local/check.sh` and verify

@@ -1,8 +1,11 @@
-.git
 .ayni
 .ayni.lock
+.env
+.env.*
 target
 node_modules
 .pnpm-store
 .worktrees
+**/.svelte-kit
+**/build
 **/.DS_Store
