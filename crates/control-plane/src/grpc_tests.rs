@@ -485,46 +485,309 @@ fn authenticated_request<T>(message: T, token: Option<&str>) -> Result<Request<T
     Ok(request)
 }
 
+const PROTECTED_READ_TOKEN: &str = "read-client-token-12345678901234567890";
+const PROTECTED_WRITE_A_TOKEN: &str = "write-a-client-token-123456789012345";
+const PROTECTED_WRITE_B_TOKEN: &str = "write-b-client-token-123456789012345";
+const PROTECTED_FORBIDDEN_TOKEN: &str = "forbidden-client-token-12345678901234";
+const PROTECTED_EXPIRED_TOKEN: &str = "expired-client-token-1234567890123456";
+const PROTECTED_TASK_TOKEN: &str = "task-client-token-12345678901234567890";
+
+fn protected_clients() -> Result<Vec<u8>, serde_json::Error> {
+    let digest = |token: &str| format!("{:x}", Sha256::digest(token.as_bytes()));
+    serde_json::to_vec(&serde_json::json!({
+        "version": 1,
+        "clients": [
+            {"id":"reader", "token_sha256":digest(PROTECTED_READ_TOKEN),
+             "expires_at_unix":u64::MAX, "capabilities":["provider_models.read"]},
+            {"id":"writer-a", "token_sha256":digest(PROTECTED_WRITE_A_TOKEN),
+             "expires_at_unix":u64::MAX, "capabilities":["repositories.write"]},
+            {"id":"writer-b", "token_sha256":digest(PROTECTED_WRITE_B_TOKEN),
+             "expires_at_unix":u64::MAX, "capabilities":["repositories.write"]},
+            {"id":"forbidden", "token_sha256":digest(PROTECTED_FORBIDDEN_TOKEN),
+             "expires_at_unix":u64::MAX, "capabilities":["tasks.read"]},
+            {"id":"expired", "token_sha256":digest(PROTECTED_EXPIRED_TOKEN),
+             "expires_at_unix":1, "capabilities":["provider_models.read"]},
+            {"id":"task-client", "token_sha256":digest(PROTECTED_TASK_TOKEN),
+             "expires_at_unix":u64::MAX,
+             "capabilities":["tasks.read","tasks.create","tasks.cancel","publications.create"]}
+        ]
+    }))
+}
+
+async fn assert_protected_provider_access(
+    channel: tonic::transport::Channel,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
+
+    let mut health = HealthClient::new(channel.clone());
+    let Err(health_status) = health
+        .check(HealthCheckRequest {
+            service: "ayni.orchestrator.v1.RepositoryService".to_owned(),
+        })
+        .await
+    else {
+        return Err("protected listener exposed an unauthenticated health service".into());
+    };
+    assert_eq!(health_status.code(), Code::Unimplemented);
+
+    let mut provider = v1::provider_service_client::ProviderServiceClient::new(channel);
+    let response = provider
+        .list_provider_models(authenticated_request(
+            v1::ListProviderModelsRequest { page: None },
+            Some(PROTECTED_READ_TOKEN),
+        )?)
+        .await?;
+    assert!(
+        response
+            .metadata()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(valid_request_id)
+    );
+    assert_eq!(response.into_inner().models.len(), 1);
+
+    let Err(missing) = provider
+        .list_provider_models(authenticated_request(
+            v1::ListProviderModelsRequest { page: None },
+            None,
+        )?)
+        .await
+    else {
+        return Err("missing credential was accepted".into());
+    };
+    assert_eq!(missing.code(), Code::Unauthenticated);
+    assert!(
+        missing
+            .metadata()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(valid_request_id)
+    );
+
+    let mut duplicate_credential = authenticated_request(
+        v1::ListProviderModelsRequest { page: None },
+        Some(PROTECTED_READ_TOKEN),
+    )?;
+    duplicate_credential.metadata_mut().append(
+        "authorization",
+        format!("Bearer {PROTECTED_READ_TOKEN}").parse()?,
+    );
+    let Err(duplicate_status) = provider.list_provider_models(duplicate_credential).await else {
+        return Err("duplicate credentials were accepted".into());
+    };
+    assert_eq!(duplicate_status.code(), Code::Unauthenticated);
+
+    let mut oversized_metadata = authenticated_request(
+        v1::ListProviderModelsRequest { page: None },
+        Some(PROTECTED_READ_TOKEN),
+    )?;
+    oversized_metadata
+        .metadata_mut()
+        .insert("x-padding", "x".repeat(MAX_METADATA_BYTES).parse()?);
+    let Err(metadata_status) = provider.list_provider_models(oversized_metadata).await else {
+        return Err("oversized metadata was accepted".into());
+    };
+    assert_eq!(metadata_status.code(), Code::ResourceExhausted);
+
+    let Err(forbidden) = provider
+        .list_provider_models(authenticated_request(
+            v1::ListProviderModelsRequest { page: None },
+            Some(PROTECTED_FORBIDDEN_TOKEN),
+        )?)
+        .await
+    else {
+        return Err("under-scoped credential was accepted".into());
+    };
+    assert_eq!(forbidden.code(), Code::PermissionDenied);
+    let Err(expired) = provider
+        .list_provider_models(authenticated_request(
+            v1::ListProviderModelsRequest { page: None },
+            Some(PROTECTED_EXPIRED_TOKEN),
+        )?)
+        .await
+    else {
+        return Err("expired credential was accepted".into());
+    };
+    assert_eq!(expired.code(), Code::Unauthenticated);
+    Ok(())
+}
+
+async fn assert_protected_task_lifecycle(
+    channel: tonic::transport::Channel,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut tasks = v1::development_task_service_client::DevelopmentTaskServiceClient::new(channel);
+    let created = tasks
+        .create_development_task(authenticated_request(
+            v1::CreateDevelopmentTaskRequest {
+                idempotency_key: "protected-create".to_owned(),
+                input: Some(v1::DevelopmentTaskInput {
+                    repository_id: "protected-trial".to_owned(),
+                    model: "gpt-5".to_owned(),
+                    start_revision: "b".repeat(40),
+                    request: "Exercise the protected task lifecycle".to_owned(),
+                    acceptance_criteria: vec!["The protected lifecycle completes".to_owned()],
+                    change_constraints: Some(v1::ChangeConstraints {
+                        protected_paths: Vec::new(),
+                        allow_test_edits: true,
+                    }),
+                    deadline: Some(Duration {
+                        seconds: 3_600,
+                        nanos: 0,
+                    }),
+                }),
+            },
+            Some(PROTECTED_TASK_TOKEN),
+        )?)
+        .await?
+        .into_inner()
+        .task
+        .ok_or("protected create response omitted task")?;
+
+    let mut too_long = authenticated_request(
+        v1::WatchDevelopmentTaskRequest {
+            task_id: created.id.clone(),
+            after_resource_version: Some(created.resource_version),
+        },
+        Some(PROTECTED_TASK_TOKEN),
+    )?;
+    too_long.set_timeout(std::time::Duration::from_secs(301));
+    let Err(too_long_status) = tasks.watch_development_task(too_long).await else {
+        return Err("overlong protected watch deadline was accepted".into());
+    };
+    assert_eq!(too_long_status.code(), Code::InvalidArgument);
+
+    let mut expiring = authenticated_request(
+        v1::WatchDevelopmentTaskRequest {
+            task_id: created.id.clone(),
+            after_resource_version: Some(created.resource_version),
+        },
+        Some(PROTECTED_TASK_TOKEN),
+    )?;
+    expiring.set_timeout(std::time::Duration::from_millis(20));
+    let mut expiring_stream = tasks.watch_development_task(expiring).await?.into_inner();
+    let deadline_result =
+        tokio::time::timeout(std::time::Duration::from_secs(1), expiring_stream.message()).await?;
+    let Err(deadline_status) = deadline_result else {
+        return Err("protected watch did not enforce its deadline".into());
+    };
+    assert_eq!(deadline_status.code(), Code::DeadlineExceeded);
+
+    let mut resumed_stream = tasks
+        .watch_development_task(authenticated_request(
+            v1::WatchDevelopmentTaskRequest {
+                task_id: created.id.clone(),
+                after_resource_version: Some(created.resource_version),
+            },
+            Some(PROTECTED_TASK_TOKEN),
+        )?)
+        .await?
+        .into_inner();
+    let cancelled = tasks
+        .cancel_development_task(authenticated_request(
+            v1::CancelDevelopmentTaskRequest {
+                idempotency_key: "protected-cancel".to_owned(),
+                task_id: created.id.clone(),
+            },
+            Some(PROTECTED_TASK_TOKEN),
+        )?)
+        .await?
+        .into_inner()
+        .task
+        .ok_or("protected cancel response omitted task")?;
+    assert_eq!(cancelled.phase, v1::DevelopmentTaskPhase::Cancelled as i32);
+    let resumed = tokio::time::timeout(std::time::Duration::from_secs(1), resumed_stream.message())
+        .await??
+        .ok_or("protected resumed watch ended before cancellation")?;
+    assert_eq!(resumed.resource_version, cancelled.resource_version);
+    assert_eq!(
+        resumed.task.map(|task| task.phase),
+        Some(v1::DevelopmentTaskPhase::Cancelled as i32)
+    );
+    Ok(())
+}
+
+async fn assert_protected_repository_boundaries(
+    channel: tonic::transport::Channel,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut repositories = v1::repository_service_client::RepositoryServiceClient::new(channel)
+        .max_encoding_message_size(3 * 1024 * 1024);
+    let mut first = repository_enrollment("principal-scope");
+    first.base_branch = "main".to_owned();
+    repositories
+        .save_repository(authenticated_request(
+            v1::SaveRepositoryRequest {
+                idempotency_key: "shared-caller-key".to_owned(),
+                repository: Some(first),
+            },
+            Some(PROTECTED_WRITE_A_TOKEN),
+        )?)
+        .await?;
+    let mut second = repository_enrollment("principal-scope");
+    second.base_branch = "release".to_owned();
+    let response = repositories
+        .save_repository(authenticated_request(
+            v1::SaveRepositoryRequest {
+                idempotency_key: "shared-caller-key".to_owned(),
+                repository: Some(second),
+            },
+            Some(PROTECTED_WRITE_B_TOKEN),
+        )?)
+        .await?
+        .into_inner();
+    assert_eq!(
+        response
+            .repository
+            .and_then(|repository| repository.enrollment)
+            .map(|repository| repository.base_branch),
+        Some("release".to_owned())
+    );
+
+    let Err(invalid_key) = repositories
+        .save_repository(authenticated_request(
+            v1::SaveRepositoryRequest {
+                idempotency_key: String::new(),
+                repository: Some(repository_enrollment("invalid-key")),
+            },
+            Some(PROTECTED_WRITE_A_TOKEN),
+        )?)
+        .await
+    else {
+        return Err("invalid idempotency key was accepted".into());
+    };
+    assert_eq!(invalid_key.code(), Code::InvalidArgument);
+
+    let Err(oversized) = repositories
+        .save_repository(authenticated_request(
+            v1::SaveRepositoryRequest {
+                idempotency_key: "oversized-request".to_owned(),
+                repository: Some(v1::RepositoryEnrollment {
+                    owner: "x".repeat(MAX_REQUEST_BYTES + 1),
+                    ..repository_enrollment("oversized")
+                }),
+            },
+            Some(PROTECTED_WRITE_A_TOKEN),
+        )?)
+        .await
+    else {
+        return Err("oversized request was accepted".into());
+    };
+    assert_eq!(oversized.code(), Code::OutOfRange);
+    Ok(())
+}
+
 #[tokio::test]
-#[allow(clippy::too_many_lines)]
 async fn protected_tls_path_enforces_identity_capabilities_expiry_and_size()
 -> Result<(), Box<dyn std::error::Error>> {
     use rcgen::{CertifiedKey, generate_simple_self_signed};
     use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
-    use tonic_health::pb::{HealthCheckRequest, health_client::HealthClient};
 
-    const READ_TOKEN: &str = "read-client-token-12345678901234567890";
-    const WRITE_A_TOKEN: &str = "write-a-client-token-123456789012345";
-    const WRITE_B_TOKEN: &str = "write-b-client-token-123456789012345";
-    const FORBIDDEN_TOKEN: &str = "forbidden-client-token-12345678901234";
-    const EXPIRED_TOKEN: &str = "expired-client-token-1234567890123456";
-    const TASK_TOKEN: &str = "task-client-token-12345678901234567890";
-
-    let digest = |token: &str| format!("{:x}", Sha256::digest(token.as_bytes()));
-    let clients = serde_json::to_vec(&serde_json::json!({
-        "version": 1,
-        "clients": [
-            {"id":"reader", "token_sha256":digest(READ_TOKEN), "expires_at_unix":u64::MAX,
-             "capabilities":["provider_models.read"]},
-            {"id":"writer-a", "token_sha256":digest(WRITE_A_TOKEN), "expires_at_unix":u64::MAX,
-             "capabilities":["repositories.write"]},
-            {"id":"writer-b", "token_sha256":digest(WRITE_B_TOKEN), "expires_at_unix":u64::MAX,
-             "capabilities":["repositories.write"]},
-            {"id":"forbidden", "token_sha256":digest(FORBIDDEN_TOKEN), "expires_at_unix":u64::MAX,
-             "capabilities":["tasks.read"]},
-            {"id":"expired", "token_sha256":digest(EXPIRED_TOKEN), "expires_at_unix":1,
-             "capabilities":["provider_models.read"]},
-            {"id":"task-client", "token_sha256":digest(TASK_TOKEN), "expires_at_unix":u64::MAX,
-             "capabilities":["tasks.read","tasks.create","tasks.cancel","publications.create"]}
-        ]
-    }))?;
     let CertifiedKey { cert, signing_key } =
         generate_simple_self_signed(vec!["localhost".to_owned()])?;
     let certificate_pem = cert.pem();
     let access = CustomClientAccess::from_parts_for_test(
         certificate_pem.as_bytes().to_vec(),
         signing_key.serialize_pem().into_bytes(),
-        &clients,
+        &protected_clients()?,
     )?;
     let directory = tempfile::tempdir()?;
     let state = AppState::open(directory.path().join("orchestrator.sqlite"), 3)?
@@ -589,249 +852,9 @@ async fn protected_tls_path_enforces_identity_capabilities_expiry_and_size()
     })
     .await??;
 
-    let mut health = HealthClient::new(channel.clone());
-    let Err(health_status) = health
-        .check(HealthCheckRequest {
-            service: "ayni.orchestrator.v1.RepositoryService".to_owned(),
-        })
-        .await
-    else {
-        return Err("protected listener exposed an unauthenticated health service".into());
-    };
-    assert_eq!(health_status.code(), Code::Unimplemented);
-
-    let mut provider = v1::provider_service_client::ProviderServiceClient::new(channel.clone());
-    let response = provider
-        .list_provider_models(authenticated_request(
-            v1::ListProviderModelsRequest { page: None },
-            Some(READ_TOKEN),
-        )?)
-        .await?;
-    assert!(
-        response
-            .metadata()
-            .get("x-request-id")
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(valid_request_id)
-    );
-    assert_eq!(response.into_inner().models.len(), 1);
-
-    let Err(missing) = provider
-        .list_provider_models(authenticated_request(
-            v1::ListProviderModelsRequest { page: None },
-            None,
-        )?)
-        .await
-    else {
-        return Err("missing credential was accepted".into());
-    };
-    assert_eq!(missing.code(), Code::Unauthenticated);
-    assert!(
-        missing
-            .metadata()
-            .get("x-request-id")
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(valid_request_id)
-    );
-
-    let mut duplicate_credential = authenticated_request(
-        v1::ListProviderModelsRequest { page: None },
-        Some(READ_TOKEN),
-    )?;
-    duplicate_credential
-        .metadata_mut()
-        .append("authorization", format!("Bearer {READ_TOKEN}").parse()?);
-    let Err(duplicate_status) = provider.list_provider_models(duplicate_credential).await else {
-        return Err("duplicate credentials were accepted".into());
-    };
-    assert_eq!(duplicate_status.code(), Code::Unauthenticated);
-
-    let mut oversized_metadata = authenticated_request(
-        v1::ListProviderModelsRequest { page: None },
-        Some(READ_TOKEN),
-    )?;
-    oversized_metadata
-        .metadata_mut()
-        .insert("x-padding", "x".repeat(MAX_METADATA_BYTES).parse()?);
-    let Err(metadata_status) = provider.list_provider_models(oversized_metadata).await else {
-        return Err("oversized metadata was accepted".into());
-    };
-    assert_eq!(metadata_status.code(), Code::ResourceExhausted);
-
-    let Err(forbidden) = provider
-        .list_provider_models(authenticated_request(
-            v1::ListProviderModelsRequest { page: None },
-            Some(FORBIDDEN_TOKEN),
-        )?)
-        .await
-    else {
-        return Err("under-scoped credential was accepted".into());
-    };
-    assert_eq!(forbidden.code(), Code::PermissionDenied);
-    let Err(expired) = provider
-        .list_provider_models(authenticated_request(
-            v1::ListProviderModelsRequest { page: None },
-            Some(EXPIRED_TOKEN),
-        )?)
-        .await
-    else {
-        return Err("expired credential was accepted".into());
-    };
-    assert_eq!(expired.code(), Code::Unauthenticated);
-
-    let mut tasks =
-        v1::development_task_service_client::DevelopmentTaskServiceClient::new(channel.clone());
-    let created = tasks
-        .create_development_task(authenticated_request(
-            v1::CreateDevelopmentTaskRequest {
-                idempotency_key: "protected-create".to_owned(),
-                input: Some(v1::DevelopmentTaskInput {
-                    repository_id: "protected-trial".to_owned(),
-                    model: "gpt-5".to_owned(),
-                    start_revision: "b".repeat(40),
-                    request: "Exercise the protected task lifecycle".to_owned(),
-                    acceptance_criteria: vec!["The protected lifecycle completes".to_owned()],
-                    change_constraints: Some(v1::ChangeConstraints {
-                        protected_paths: Vec::new(),
-                        allow_test_edits: true,
-                    }),
-                    deadline: Some(Duration {
-                        seconds: 3_600,
-                        nanos: 0,
-                    }),
-                }),
-            },
-            Some(TASK_TOKEN),
-        )?)
-        .await?
-        .into_inner()
-        .task
-        .ok_or("protected create response omitted task")?;
-
-    let mut too_long = authenticated_request(
-        v1::WatchDevelopmentTaskRequest {
-            task_id: created.id.clone(),
-            after_resource_version: Some(created.resource_version),
-        },
-        Some(TASK_TOKEN),
-    )?;
-    too_long.set_timeout(std::time::Duration::from_secs(301));
-    let Err(too_long_status) = tasks.watch_development_task(too_long).await else {
-        return Err("overlong protected watch deadline was accepted".into());
-    };
-    assert_eq!(too_long_status.code(), Code::InvalidArgument);
-
-    let mut expiring = authenticated_request(
-        v1::WatchDevelopmentTaskRequest {
-            task_id: created.id.clone(),
-            after_resource_version: Some(created.resource_version),
-        },
-        Some(TASK_TOKEN),
-    )?;
-    expiring.set_timeout(std::time::Duration::from_millis(20));
-    let mut expiring_stream = tasks.watch_development_task(expiring).await?.into_inner();
-    let deadline_result =
-        tokio::time::timeout(std::time::Duration::from_secs(1), expiring_stream.message()).await?;
-    let Err(deadline_status) = deadline_result else {
-        return Err("protected watch did not enforce its deadline".into());
-    };
-    assert_eq!(deadline_status.code(), Code::DeadlineExceeded);
-
-    let mut resumed_stream = tasks
-        .watch_development_task(authenticated_request(
-            v1::WatchDevelopmentTaskRequest {
-                task_id: created.id.clone(),
-                after_resource_version: Some(created.resource_version),
-            },
-            Some(TASK_TOKEN),
-        )?)
-        .await?
-        .into_inner();
-    let cancelled = tasks
-        .cancel_development_task(authenticated_request(
-            v1::CancelDevelopmentTaskRequest {
-                idempotency_key: "protected-cancel".to_owned(),
-                task_id: created.id.clone(),
-            },
-            Some(TASK_TOKEN),
-        )?)
-        .await?
-        .into_inner()
-        .task
-        .ok_or("protected cancel response omitted task")?;
-    assert_eq!(cancelled.phase, v1::DevelopmentTaskPhase::Cancelled as i32);
-    let resumed = tokio::time::timeout(std::time::Duration::from_secs(1), resumed_stream.message())
-        .await??
-        .ok_or("protected resumed watch ended before cancellation")?;
-    assert_eq!(resumed.resource_version, cancelled.resource_version);
-    assert_eq!(
-        resumed.task.map(|task| task.phase),
-        Some(v1::DevelopmentTaskPhase::Cancelled as i32)
-    );
-
-    let mut repositories = v1::repository_service_client::RepositoryServiceClient::new(channel)
-        .max_encoding_message_size(3 * 1024 * 1024);
-    let mut first = repository_enrollment("principal-scope");
-    first.base_branch = "main".to_owned();
-    repositories
-        .save_repository(authenticated_request(
-            v1::SaveRepositoryRequest {
-                idempotency_key: "shared-caller-key".to_owned(),
-                repository: Some(first),
-            },
-            Some(WRITE_A_TOKEN),
-        )?)
-        .await?;
-    let mut second = repository_enrollment("principal-scope");
-    second.base_branch = "release".to_owned();
-    let response = repositories
-        .save_repository(authenticated_request(
-            v1::SaveRepositoryRequest {
-                idempotency_key: "shared-caller-key".to_owned(),
-                repository: Some(second),
-            },
-            Some(WRITE_B_TOKEN),
-        )?)
-        .await?
-        .into_inner();
-    assert_eq!(
-        response
-            .repository
-            .and_then(|repository| repository.enrollment)
-            .map(|repository| repository.base_branch),
-        Some("release".to_owned())
-    );
-
-    let Err(invalid_key) = repositories
-        .save_repository(authenticated_request(
-            v1::SaveRepositoryRequest {
-                idempotency_key: String::new(),
-                repository: Some(repository_enrollment("invalid-key")),
-            },
-            Some(WRITE_A_TOKEN),
-        )?)
-        .await
-    else {
-        return Err("invalid idempotency key was accepted".into());
-    };
-    assert_eq!(invalid_key.code(), Code::InvalidArgument);
-
-    let Err(oversized) = repositories
-        .save_repository(authenticated_request(
-            v1::SaveRepositoryRequest {
-                idempotency_key: "oversized-request".to_owned(),
-                repository: Some(v1::RepositoryEnrollment {
-                    owner: "x".repeat(MAX_REQUEST_BYTES + 1),
-                    ..repository_enrollment("oversized")
-                }),
-            },
-            Some(WRITE_A_TOKEN),
-        )?)
-        .await
-    else {
-        return Err("oversized request was accepted".into());
-    };
-    assert_eq!(oversized.code(), Code::OutOfRange);
+    assert_protected_provider_access(channel.clone()).await?;
+    assert_protected_task_lifecycle(channel.clone()).await?;
+    assert_protected_repository_boundaries(channel).await?;
 
     shutdown_sender.send(true)?;
     server.await??;
