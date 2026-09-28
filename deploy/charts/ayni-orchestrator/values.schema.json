@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["enabled", "images", "controlPlane", "web", "persistence", "customClients"],
+  "properties": {
+    "global": { "type": "object" },
+    "enabled": { "type": "boolean" },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlPlane", "worker", "web", "pullPolicy"],
+      "properties": {
+        "controlPlane": { "$ref": "#/definitions/image" },
+        "worker": { "$ref": "#/definitions/image" },
+        "web": { "$ref": "#/definitions/image" },
+        "pullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] }
+      }
+    },
+    "controlPlane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxAttempts", "resources"],
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resources"],
+      "properties": { "resources": { "$ref": "#/definitions/resources" } }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlPlaneState", "developmentCheckpoints", "managedCheckEvidence", "preparedEnvironments"],
+      "properties": {
+        "controlPlaneState": { "$ref": "#/definitions/claim" },
+        "developmentCheckpoints": { "$ref": "#/definitions/claim" },
+        "managedCheckEvidence": { "$ref": "#/definitions/claim" },
+        "preparedEnvironments": { "$ref": "#/definitions/claim" }
+      }
+    },
+    "customClients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "secretName"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "secretName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 253 }
+      }
+    }
+  },
+  "definitions": {
+    "image": { "type": "string", "pattern": "^[^\\s,]+$", "minLength": 1 },
+    "quantity": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)?(?:m|n|u|Ki|Mi|Gi|Ti|Pi|Ei)?$" },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size"],
+      "properties": { "size": { "$ref": "#/definitions/quantity" } }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": { "$ref": "#/definitions/cpuMemory" },
+        "limits": { "$ref": "#/definitions/cpuMemory" }
+      }
+    },
+    "cpuMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": { "$ref": "#/definitions/quantity" },
+        "memory": { "$ref": "#/definitions/quantity" }
+      }
+    }
+  }
+}

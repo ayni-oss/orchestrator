@@ -1,0 +1,48 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-plane
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-control-plane
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ayni-orchestrator-control-plane
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    # Pod-loopback binding keeps this unreachable through normal Service traffic;
+    # the target exists only for loopback kubectl port-forwarding.
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      protocol: TCP
+      appProtocol: kubernetes.io/h2c
+    {{- if .Values.customClients.enabled }}
+    - name: custom-grpc
+      port: 50052
+      targetPort: custom-grpc
+      protocol: TCP
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-web
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ayni-orchestrator-control-plane
+  ports:
+    - name: http
+      port: 8080
+      targetPort: web
+      protocol: TCP
+{{- end }}

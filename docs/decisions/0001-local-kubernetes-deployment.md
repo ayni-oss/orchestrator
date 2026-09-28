@@ -1,7 +1,8 @@
 # Decision 0001: Docker Desktop Kubernetes and Kustomize
 
-- Status: accepted
+- Status: superseded by [Decision 0006](0006-local-helm-chart.md)
 - Date: 2026-09-17
+- Superseded: 2026-09-28
 
 ## Decision
 

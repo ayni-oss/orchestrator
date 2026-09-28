@@ -35,8 +35,9 @@ grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
 
 Never change `ORCHESTRATOR_GRPC_BIND_ADDRESS` to a non-loopback address in this
 unauthenticated profile. Approved custom clients use the separate opt-in
-`docker-desktop-custom-clients` overlay and TLS port 50052; do not repurpose the
-loopback listener. Identity provisioning, port-forward discovery, certificate
+`customClients.enabled` application-chart value (nested under
+`ayni-orchestrator` in the local umbrella) and TLS port 50052; do not repurpose
+the loopback listener. Identity provisioning, port-forward discovery, certificate
 rotation, revocation, capability review, limits, and audit response are covered
 in [Custom-client gRPC access](custom-client-access.md).
 
@@ -51,8 +52,10 @@ returned by the API or UI.
 
 ## Prerequisites and capacity
 
-- Docker Desktop Kubernetes, with a `docker-desktop` context available; local scripts select it explicitly and never fall back to the current context.
-- `kubectl`, Docker, Git, Rust, Node, pnpm, `curl`, and `grpcurl`.
+- Docker Desktop Kubernetes 1.32 or newer, with a `docker-desktop` context
+  available; local scripts select it explicitly and never fall back to the
+  current context.
+- Helm 4.1.1, `kubectl`, Docker, Git, Rust, Node, pnpm, `curl`, and `grpcurl`.
 - At least 6 CPUs, 14 GiB memory, and 30 GiB free disk assigned to Docker
   Desktop. One managed validation/preparation engine requests 4 CPUs and 9 GiB.
 - A GitHub App installed on the enrolled repository with Contents and Pull
@@ -67,8 +70,10 @@ obsolete `local/ayni-orchestrator-*` image tags not referenced by a pod. Rust
 Cargo registry and target data use named BuildKit cache mounts so source changes
 do not create a new multi-gigabyte immutable builder layer each time. This does
 not prune shared cache or Docker volumes. Docker Desktop's
-single node permits the selected `ReadWriteOnce` sharing pattern. Do not copy
-this topology to a multi-node cluster.
+single node permits the selected `ReadWriteOnce` sharing pattern. Claim sizes in
+the chart are install-time minimums: do not reduce them, and expand them only
+when the active storage class supports expansion. Do not copy this topology to
+a multi-node cluster.
 
 Current profile limits are one repository allowlist, 24 coding-agent turns, 4 PR
 summary turns, one-hour preparation/validation Job deadlines, 5 GiB checkout
@@ -93,10 +98,9 @@ The core check requires `pilot_ready: true`, verifies the operational and
 metrics endpoints, fetches the server-rendered SvelteKit marker backed by real
 gRPC repository, model, and task reads, and checks native gRPC health and
 reflection. It does not execute browser JavaScript. The first install creates
-four retained
-PVCs. Re-running the install does not replace retained claims. The optional
-observability stack is installed and checked separately as described below and
-uses only disposable `emptyDir` storage.
+four retained PVCs. Re-running the install does not replace retained claims.
+The same release includes the observability stack described below and uses only
+disposable `emptyDir` storage for its monitoring data.
 
 To reproduce a clean installation without disturbing the normal development namespace,
 use an isolated namespace and local port, then remove that namespace after
@@ -253,18 +257,13 @@ arbitrary errors. Usage records and metrics never retain prompts, completions,
 reasoning text, tool transcripts, credentials, authorization headers, or
 provider response bodies.
 
-## Optional local task and resource dashboard
+## Local task and resource dashboard
 
-The core deployment does not require monitoring. Install the version-controlled
-observability deployment only when an operator needs the dashboard:
-
-```bash
-scripts/local/deploy-observability.sh
-scripts/local/check-observability.sh
-```
-
-The stack uses pinned, off-the-shelf Prometheus, kube-state-metrics, and Grafana
-images. Prometheus scrapes every 15 seconds and keeps no more than 48 hours or
+The `local` umbrella installs version-locked upstream Prometheus,
+kube-state-metrics, and Grafana chart dependencies by default.
+`scripts/local/check.sh` validates them together with the reusable application
+chart; rerun only `scripts/local/check-observability.sh` when troubleshooting
+the monitoring path. Prometheus scrapes every 15 seconds and keeps no more than 48 hours or
 900 MB in a 1 GiB `emptyDir`. That window preserves resource samples after a
 terminal Job's one-hour TTL removes its Pod. A Prometheus restart or teardown
 may still discard all history. SQLite task lifecycle and exact provider-usage
@@ -295,7 +294,7 @@ Open Grafana only through a loopback port-forward:
 
 ```bash
 kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward service/grafana 13000:3000
+  port-forward --address 127.0.0.1 service/grafana 13000:3000
 open http://127.0.0.1:13000/d/ayni-orchestrator-tasks-resources
 ```
 
@@ -305,28 +304,24 @@ them through an Ingress, `NodePort`, or non-loopback forward. For direct query
 inspection, use a separate loopback forward to `service/prometheus` on
 `19090:9090`. No dashboard variable or metric label contains a credential.
 
-The stack requests 100 millicores and 240 MiB in total. Its aggregate limits are
-650 millicores and 768 MiB, plus bounded ephemeral storage (1 GiB Prometheus,
-256 MiB Grafana data, and 64 MiB Grafana scratch). These limits leave the
+The stack requests 110 millicores and 256 MiB in total, including the
+Prometheus configuration reloader. Its aggregate limits are 700 millicores and
+800 MiB, plus bounded ephemeral storage (1 GiB Prometheus, 64 MiB
+memory-backed Grafana data, and 64 MiB Grafana scratch). These limits leave the
 4 CPU/9 GiB validation engine and its worker within the documented 6 CPU/14 GiB
 Docker Desktop profile. Monitoring failure cannot block task orchestration.
 
-Remove only the optional resources, RBAC, and disposable history with:
-
-```bash
-scripts/local/teardown-observability.sh
-```
-
-This preserves the namespace, product Deployments, Jobs, Secrets, and all four
-retained PVCs. `scripts/local/cleanup.sh` also tears down observability before
-removing the stateless control plane.
+The observability resources are part of the local release. Normal
+`scripts/local/cleanup.sh` uninstalls them with the stateless application while
+preserving the namespace, Jobs, Secrets, and all four retained PVCs.
 
 Troubleshooting:
 
 ```bash
 kubectl --context docker-desktop -n ayni-orchestrator-dev get pods \
-  -l app.kubernetes.io/part-of=ayni-orchestrator-observability
-kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/prometheus
+  -l orchestrator.ayni.dev/stack=observability
+kubectl --context docker-desktop -n ayni-orchestrator-dev logs \
+  deployment/prometheus --container prometheus-server
 kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/kube-state-metrics
 kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/grafana
 ```
@@ -334,7 +329,7 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/grafan
 If an `up` target is missing, rerun `check-observability.sh` and inspect the
 matching Deployment logs. A `403` from a kubelet/cAdvisor target indicates that
 the metric-only `nodes/metrics` ClusterRole or binding is absent; redeploy the
-optional stack rather than granting `nodes/proxy` or broader access. Empty task resource panels
+local release rather than granting `nodes/proxy` or broader access. Empty task resource panels
 mean no matching Pod was sampled during the selected 48-hour window, or the
 selected task predates the current ownership/stage labels. When Docker Desktop
 does not export per-PVC kubelet volume stats, the storage panels deliberately
@@ -346,7 +341,28 @@ authentication, TLS, network isolation, durable monitoring storage, and RBAC.
 ## Update without losing data
 
 Never run cleanup to perform an update. Record PVC identities and task state,
-then deploy in place:
+then deploy in place. The first deployment after Decision 0001's manifest flow
+uses Helm's explicit `--take-ownership` and guarded server-side field-conflict
+migration for the same-named application resources, including the four claims;
+it does not delete or recreate retained state. A release created by the first
+Decision 0006 chart revision also receives a one-time guarded replacement of
+its three disposable monitoring Deployments because the upstream dependency
+charts use different immutable selectors. Keep the fixed `ayni-orchestrator`
+release name and verify claim UIDs and known task IDs before and after either
+one-way migration.
+
+Most legacy objects carry the expected Ayni ownership label. Four objects from
+the superseded Kustomize flow do not. Inspect those objects and all colliding
+names first, then authorize that migration for one invocation only:
+
+```bash
+AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES=true \
+  scripts/local/deploy.sh
+```
+
+Never set this flag for routine upgrades or an unfamiliar namespace. The script
+still validates the known legacy signatures, refuses foreign ownership
+annotations or management labels, and stops on any inspection error.
 
 Before deployment, record the retained PVC identities and known task IDs through
 the browser or native gRPC. Deploy in place, run the smoke checks, and confirm the
@@ -409,10 +425,11 @@ Then:
 scripts/local/cleanup.sh
 ```
 
-This removes the optional observability stack and stateless control-plane
-resources. It deliberately retains the namespace, secrets, active Jobs, and all
-PVCs; terminal Jobs may later be removed by their configured one-hour TTL. Destructive removal is a separate,
-explicit operator action after backup:
+This uninstalls the `ayni-orchestrator` Helm release, including the disposable
+observability stack and stateless control-plane resources. It deliberately
+retains the namespace, secrets, active Jobs, and all PVCs; terminal Jobs may
+later be removed by their configured one-hour TTL. Destructive removal is a
+separate, explicit operator action after backup:
 
 ```bash
 kubectl --context docker-desktop -n ayni-orchestrator-dev delete pvc \

@@ -1,0 +1,13 @@
+Ayni Orchestrator local development release {{ .Release.Name }} is installed in
+namespace {{ .Release.Namespace }}.
+{{- $application := index .Values "ayni-orchestrator" }}
+{{- if $application.enabled }}
+
+Forward the local web application with:
+  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/web 18080:8080
+{{- end }}
+{{- if .Values.observability.enabled }}
+
+Forward the local Grafana dashboard with:
+  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/grafana 13000:3000
+{{- end }}

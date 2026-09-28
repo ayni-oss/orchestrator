@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ayni-orchestrator
+description: Ayni Orchestrator control plane and operator web application
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.32.0-0"

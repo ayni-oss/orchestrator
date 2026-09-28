@@ -8,7 +8,8 @@ if [[ $# -ne 0 ]]; then
 fi
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
-readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
+namespace="$("$repository_root/scripts/local/resolve-namespace.sh")"
+readonly namespace
 readonly prometheus_port="${AYNI_ORCHESTRATOR_PROMETHEUS_PORT:-19090}"
 readonly grafana_port="${AYNI_ORCHESTRATOR_GRAFANA_PORT:-13000}"
 readonly prometheus_log="$(mktemp /tmp/ayni-orchestrator-prometheus-port-forward.XXXXXX)"

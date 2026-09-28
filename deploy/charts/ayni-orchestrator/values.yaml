@@ -1,0 +1,40 @@
+enabled: true
+
+images:
+  controlPlane: local/ayni-orchestrator-control-plane:replace-me
+  worker: local/ayni-orchestrator-worker:replace-me
+  web: local/ayni-orchestrator-web:replace-me
+  pullPolicy: IfNotPresent
+
+controlPlane:
+  maxAttempts: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+web:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+persistence:
+  controlPlaneState:
+    size: 1Gi
+  developmentCheckpoints:
+    size: 2Gi
+  managedCheckEvidence:
+    size: 2Gi
+  preparedEnvironments:
+    size: 10Gi
+
+customClients:
+  enabled: false
+  secretName: custom-client-grpc-access

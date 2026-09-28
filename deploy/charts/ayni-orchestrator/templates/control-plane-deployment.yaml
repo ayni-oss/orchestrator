@@ -1,0 +1,225 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-control-plane
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ayni-orchestrator-control-plane
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/control-plane-config.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: ayni-orchestrator-control-plane
+        app.kubernetes.io/part-of: ayni-orchestrator
+    spec:
+      serviceAccountName: control-plane
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control-plane
+          image: {{ .Values.images.controlPlane | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+            {{- if .Values.customClients.enabled }}
+            - name: custom-grpc
+              containerPort: 50052
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: control-plane-config
+          env:
+            - name: ORCHESTRATOR_WORKER_IMAGE
+              value: {{ .Values.images.worker | quote }}
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app-credentials
+                  key: app-id
+            - name: GITHUB_APP_PRIVATE_KEY_PATH
+              value: /run/secrets/github/private-key.pem
+            - name: DEVELOPMENT_CHECKPOINT_ROOT
+              value: /checkpoints
+            - name: DEVELOPMENT_EVIDENCE_ROOT
+              value: /evidence
+            - name: DEVELOPMENT_PREPARATION_ROOT
+              value: /preparations
+            - name: DEVELOPMENT_PUBLISH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: development-publisher-auth
+                  key: token
+            - name: OPENAI_API_KEY_PATH
+              value: /run/secrets/openai/api-key
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: durable-state
+              mountPath: /data
+            - name: control-plane-scratch
+              mountPath: /tmp
+            - name: control-plane-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            - name: openai-api-key
+              mountPath: /run/secrets/openai
+              readOnly: true
+            - name: github-app-key
+              mountPath: /run/secrets/github
+              readOnly: true
+            - name: development-checkpoints
+              mountPath: /checkpoints
+              readOnly: true
+            - name: development-evidence
+              mountPath: /evidence
+              readOnly: true
+            - name: prepared-environments
+              mountPath: /preparations
+              readOnly: true
+            {{- if .Values.customClients.enabled }}
+            - name: custom-grpc-access
+              mountPath: /run/secrets/custom-grpc
+              readOnly: true
+            {{- end }}
+        - name: web
+          image: {{ .Values.images.web | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          ports:
+            - name: web
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: ORCHESTRATOR_GRPC_ADDRESS
+              value: 127.0.0.1:50051
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "3000"
+            - name: BODY_SIZE_LIMIT
+              value: "1048576"
+            - name: PROTOCOL_HEADER
+              value: x-forwarded-proto
+            - name: HOME
+              value: /tmp
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: web
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: web
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: web-scratch
+              mountPath: /tmp
+      volumes:
+        - name: durable-state
+          persistentVolumeClaim:
+            claimName: control-plane-state
+        - name: control-plane-scratch
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: web-scratch
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: control-plane-api-access
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        apiVersion: v1
+                        fieldPath: metadata.namespace
+        - name: openai-api-key
+          secret:
+            secretName: openai-api
+            defaultMode: 288
+            optional: true
+        - name: github-app-key
+          secret:
+            secretName: github-app-credentials
+            defaultMode: 288
+        - name: development-checkpoints
+          persistentVolumeClaim:
+            claimName: development-checkpoints
+            readOnly: true
+        - name: development-evidence
+          persistentVolumeClaim:
+            claimName: managed-check-evidence
+            readOnly: true
+        - name: prepared-environments
+          persistentVolumeClaim:
+            claimName: prepared-environments
+            readOnly: true
+        {{- if .Values.customClients.enabled }}
+        - name: custom-grpc-access
+          secret:
+            secretName: {{ .Values.customClients.secretName }}
+            defaultMode: 288
+        {{- end }}
+{{- end }}

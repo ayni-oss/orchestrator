@@ -38,9 +38,9 @@
 - Start each change from updated main on a focused branch and link its pull
   request to the issue with a closing keyword. Do not merge automatically.
 - Exercise deployable behavior on Docker Desktop Kubernetes when the change
-  affects runtime behavior. Use Kustomize and the explicit
-  docker-desktop context as defined in
-  docs/decisions/0001-local-kubernetes-deployment.md. Never fall back
+  affects runtime behavior. Use the `deploy/charts/local` Helm chart and the
+  explicit `docker-desktop` context as defined in
+  docs/decisions/0006-local-helm-chart.md. Never fall back
   to another current cluster when the local context is absent. Local deployment
   is authorized; destructive cluster resets and retained-data deletion are separate.
 - Keep each issue small and end-to-end. Define its observable outcome and

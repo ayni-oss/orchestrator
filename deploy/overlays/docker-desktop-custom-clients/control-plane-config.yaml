@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: control-plane-config
-data:
-  ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS: 0.0.0.0:50052
-  ORCHESTRATOR_CUSTOM_GRPC_TLS_CERTIFICATE_PATH: /run/secrets/custom-grpc/tls.crt
-  ORCHESTRATOR_CUSTOM_GRPC_TLS_PRIVATE_KEY_PATH: /run/secrets/custom-grpc/tls.key
-  ORCHESTRATOR_CUSTOM_GRPC_CLIENTS_PATH: /run/secrets/custom-grpc/clients.json
