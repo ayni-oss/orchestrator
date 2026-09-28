@@ -11,6 +11,7 @@
     "proto:generate": "buf generate",
     "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check && pnpm --filter @ayni-orchestrator/bff check && pnpm --filter @ayni-orchestrator/web check",
     "test:frontend": "pnpm --filter @ayni-orchestrator/bff test && pnpm --filter @ayni-orchestrator/web test",
+    "test:e2e": "pnpm --filter @ayni-orchestrator/web test:e2e",
     "build:web": "pnpm --filter @ayni-orchestrator/web build",
     "check:browser-bundle": "pnpm --filter @ayni-orchestrator/web check:browser-bundle",
     "frontend:check": "pnpm typecheck && pnpm test:frontend && pnpm build:web && pnpm check:browser-bundle"

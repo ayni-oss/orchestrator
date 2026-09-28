@@ -19,9 +19,9 @@ open http://127.0.0.1:18080/
 
 The Node server runs as a sidecar in the control-plane Pod and calls
 `127.0.0.1:50051`. It receives no Kubernetes service-account token or credential
-volume. The embedded migration UI and operational endpoints remain temporarily
-available through a separate loopback forward to
-`service/control-plane 18081:8080`; the SvelteKit port does not proxy them.
+volume. The control-plane HTTP listener is operational only: `/livez`, `/readyz`,
+and `/metrics`, plus the bearer-protected internal publication callback. It does
+not serve the retired embedded UI or product JSON routes.
 
 Native gRPC uses a separate pod-loopback listener. The Service declares the
 target for `kubectl port-forward`, but normal Service traffic addresses the pod
@@ -36,7 +36,7 @@ grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
 Never change `ORCHESTRATOR_GRPC_BIND_ADDRESS` to a non-loopback address in this
 unauthenticated profile. The same-origin SvelteKit loads, actions, and bounded
 server-sent task updates are private browser adapters, not a second supported
-product protocol. Anyone able to reach either browser surface or native gRPC
+product protocol. Anyone able to reach the browser surface or native gRPC
 can operate the product. Kubernetes access,
 Docker Desktop host access, the GitHub App installation, and the configured
 model key are therefore privileged. The internal publication endpoint also
@@ -120,8 +120,8 @@ through Rig, filters it to the currently supported Responses/tool-capable model
 families, and caches successful discovery for fifteen minutes so paginated
 catalog snapshots remain resumable for the documented token lifetime. The UI submits
 the selected provider model ID, while the task freezes an internal provider,
-model, and Secret-reference snapshot for execution and retry. `GET
-/v1/provider-models` exposes only sanitized provider model metadata, never the
+model, and Secret-reference snapshot for execution and retry. The server BFF
+returns only sanitized provider model metadata from native gRPC, never the
 credential. The current compatibility policy admits GPT-5, GPT-4.1, GPT-4o,
 o1, o3, and o4 families while excluding audio, realtime, transcription, TTS,
 image, search, and instruct variants. Existing retained tasks and legacy profile
@@ -342,22 +342,19 @@ authentication, TLS, network isolation, durable monitoring storage, and RBAC.
 Never run cleanup to perform an update. Record PVC identities and task state,
 then deploy in place:
 
-In a separate terminal, forward the temporary migration API to the documented
-control-plane port. Capture the pre-update state, deploy, restart the forward
-after the rollout replaces its Pod, and then capture the post-update state:
+Before deployment, record the retained PVC identities and known task IDs through
+the browser or native gRPC. Deploy in place, run the smoke checks, and confirm the
+same task IDs remain visible:
 
 ```bash
-# Forward terminal; restart this command after scripts/local/deploy.sh completes.
-kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward --address 127.0.0.1 service/control-plane 18081:8080
-
-# Update terminal.
 kubectl --context docker-desktop -n ayni-orchestrator-dev get pvc
-curl --fail http://127.0.0.1:18081/v1/development-tasks > /tmp/tasks-before.json
+kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
+  port-forward --address 127.0.0.1 service/control-plane 15051:50051
+# In another terminal, before and after deployment:
+grpcurl -plaintext -max-time 10 -d '{}' 127.0.0.1:15051 \
+  ayni.orchestrator.v1.DevelopmentTaskService/ListDevelopmentTasks
 scripts/local/deploy.sh
 scripts/local/check.sh
-# Restart the forward above before this request.
-curl --fail http://127.0.0.1:18081/v1/development-tasks > /tmp/tasks-after.json
 ```
 
 SQLite migrations are additive. Existing tasks, checkpoints, evidence, and

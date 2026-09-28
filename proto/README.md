@@ -1,15 +1,15 @@
 # Ayni Orchestrator protocol
 
-`ayni.orchestrator.v1` is the canonical target product API contract. Native
+`ayni.orchestrator.v1` is the canonical product API contract. Native
 gRPC is the supported product transport for repository, provider-model,
 development-task, and evidence operations. The deployed SvelteKit server-side
 BFF and approved custom clients use the same contract; generated clients and
 gRPC transport values must not enter browser bundles.
 
-Existing `/v1` JSON routes are a temporary, implementation-private migration
-surface and receive no new product capabilities. In the target architecture,
-HTTP remains available only for operational integration: liveness, readiness,
-and Prometheus metrics. This contract does not define REST, JSON transcoding,
+The retired `/v1` JSON routes and embedded browser client were an
+implementation-private migration surface. HTTP now remains only for liveness,
+readiness, Prometheus metrics, and a narrow bearer-protected internal
+publication callback. This contract does not define REST, JSON transcoding,
 gRPC-Web, or browser-generated clients.
 
 The supported local server exposes this contract through a pod-loopback Tonic

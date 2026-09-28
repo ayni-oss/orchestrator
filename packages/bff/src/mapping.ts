@@ -97,6 +97,18 @@ function optional<T extends object>(key: string, value: unknown): T | object {
   return value === undefined ? {} : { [key]: value };
 }
 
+function optionalHttpsUrl<T extends object>(key: string, value: string | undefined): T | object {
+  if (value === undefined) return {};
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") throw new BffMappingError();
+  } catch (error) {
+    if (error instanceof BffMappingError) throw error;
+    throw new BffMappingError();
+  }
+  return { [key]: value };
+}
+
 export function mapChangeConstraints(value: ChangeConstraints): ChangeConstraintsDto {
   return {
     protectedPaths: value.protectedPaths.map(String),
@@ -455,7 +467,7 @@ export function mapDevelopmentTask(value: ProtoDevelopmentTask): DevelopmentTask
     ...optional("candidateCommit", value.candidateCommit),
     ...optional("validationManifestDigest", value.validationManifestDigest),
     ...optional("policyOrTestEdits", value.policyOrTestEdits),
-    ...optional("draftPrUrl", value.draftPrUrl),
+    ...optionalHttpsUrl("draftPrUrl", value.draftPrUrl),
     ...optional("failure", mapFailure(value.failure)),
     ...optional("providedInput", value.providedInput),
   } as DevelopmentTaskDto;
@@ -477,7 +489,7 @@ export function mapDevelopmentTaskSummary(value: ProtoDevelopmentTaskSummary): D
     resourceVersion: value.resourceVersion,
     ...optional("retryOfTaskId", value.retryOfTaskId),
     ...optional("candidateCommit", value.candidateCommit),
-    ...optional("draftPrUrl", value.draftPrUrl),
+    ...optionalHttpsUrl("draftPrUrl", value.draftPrUrl),
     ...optional("failure", mapFailure(value.failure)),
   } as DevelopmentTaskSummaryDto;
 }

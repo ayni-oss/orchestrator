@@ -786,7 +786,7 @@ impl DevelopmentReconciler {
             .unwrap_or_default()
         );
         let endpoint = format!(
-            "http://control-plane.{}.svc.cluster.local:8080/v1/development-tasks/{}/publish",
+            "http://control-plane.{}.svc.cluster.local:8080/internal/publications/{}",
             self.namespace, task.id
         );
         let container = json!({"name":"pr-agent","image":self.worker_image,

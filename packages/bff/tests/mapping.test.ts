@@ -72,6 +72,7 @@ describe("browser DTO mappings", () => {
     const missingConstraints = task();
     if (missingConstraints.input !== undefined) missingConstraints.input.changeConstraints = undefined;
     expect(() => mapDevelopmentTask(missingConstraints)).toThrow(BffMappingError);
+    expect(() => mapDevelopmentTask({ ...task(), draftPrUrl: "javascript:alert(1)" })).toThrow(BffMappingError);
   });
 
   it("builds explicit transport input from browser input", () => {

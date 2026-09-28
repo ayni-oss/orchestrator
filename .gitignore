@@ -9,6 +9,8 @@ node_modules/
 .pnpm-store/
 **/.svelte-kit/
 **/build/
+**/test-results/
+**/playwright-report/
 .agents/
 .codex/
 /.worktrees/

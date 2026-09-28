@@ -25,8 +25,9 @@ const bff = vi.hoisted(() => ({
       });
       return;
     }
-    onUpdate({ id: "00000000-0000-4000-8000-000000000001", resourceVersion: "8", phase: "queued" });
-    onUpdate({ id: "00000000-0000-4000-8000-000000000001", resourceVersion: "9", phase: "coding" });
+    for (let version = 8; version <= 41; version += 1) {
+      onUpdate({ id: "00000000-0000-4000-8000-000000000001", resourceVersion: String(version), phase: version === 8 ? "queued" : "coding" });
+    }
   }),
 }));
 
@@ -45,7 +46,7 @@ describe("same-origin task update relay", () => {
     bff.watchDevelopmentTask.mockClear();
   });
 
-  it("forwards the resume cursor and closes when an unconsumed event fills the buffer", async () => {
+  it("forwards the resume cursor and closes with a retryable error when the bounded buffer fills", async () => {
     const response = await GET({
       locals: locals(),
       params: { taskId },
@@ -57,7 +58,10 @@ describe("same-origin task update relay", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.text();
     expect(body).toContain("id: 8\nevent: task\n");
-    expect(body).not.toContain("id: 9\nevent: task\n");
+    expect(body).toContain("id: 39\nevent: task\n");
+    expect(body).not.toContain("id: 40\nevent: task\n");
+    expect(body).toContain('"reason":"backpressure"');
+    expect(body).toContain('"retryable":true');
     expect(bff.watchDevelopmentTask).toHaveBeenCalledWith(
       taskId,
       "7",

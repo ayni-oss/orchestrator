@@ -8,7 +8,7 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
     "strict": true
   }
 }

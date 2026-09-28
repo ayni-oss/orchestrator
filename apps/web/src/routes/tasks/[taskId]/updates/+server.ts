@@ -2,6 +2,7 @@ import { BffError, type BrowserErrorDto, type DevelopmentTaskDto } from "@ayni-o
 import type { RequestHandler } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { isCanonicalIdentifier, isResourceVersion } from "$lib/server/validation.js";
+
 const encoder = new TextEncoder();
 
 function errorDto(error: unknown, requestId: string): BrowserErrorDto {
@@ -23,17 +24,20 @@ export const GET: RequestHandler = ({ locals, params, request }) => {
   if (cursor !== undefined && !isResourceVersion(cursor)) {
     return new Response("the task update cursor is invalid", { status: 400 });
   }
+
   const cancellation = new AbortController();
   const abort = (): void => cancellation.abort();
-  locals.requestSignal.addEventListener("abort", abort, { once: true });
+  if (locals.requestSignal.aborted) cancellation.abort();
+  else locals.requestSignal.addEventListener("abort", abort, { once: true });
+  let closed = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
 
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      const heartbeat = setInterval(() => {
-        if ((controller.desiredSize ?? 1) > 0) controller.enqueue(encoder.encode(": keepalive\n\n"));
-      }, 15_000);
       const finish = (): void => {
-        clearInterval(heartbeat);
+        if (closed) return;
+        closed = true;
+        if (heartbeat !== undefined) clearInterval(heartbeat);
         locals.requestSignal.removeEventListener("abort", abort);
         try {
           controller.close();
@@ -41,35 +45,52 @@ export const GET: RequestHandler = ({ locals, params, request }) => {
           // The browser already closed the stream.
         }
       };
-      void getBff().watchDevelopmentTask(
-        params.taskId,
-        cursor,
-        { requestId: locals.requestId, signal: cancellation.signal },
-        (task: DevelopmentTaskDto) => {
-          if ((controller.desiredSize ?? 1) <= 0) {
-            throw new BffError({
-              status: 503,
-              reason: "backpressure",
-              message: "the task update consumer is too slow",
-              requestId: locals.requestId,
-              retryable: true,
-            });
-          }
-          controller.enqueue(encoder.encode(
-            `id: ${task.resourceVersion}\nevent: task\ndata: ${JSON.stringify(task)}\n\n`,
-          ));
-        },
-      ).catch((error: unknown) => {
-        if (!cancellation.signal.aborted && (controller.desiredSize ?? 1) > 0) {
-          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify(errorDto(error, locals.requestId))}\n\n`));
+      const enqueue = (payload: string): boolean => {
+        if (closed) return false;
+        if ((controller.desiredSize ?? 1) <= 0) {
+          const overflow = new BffError({
+            status: 503,
+            reason: "backpressure",
+            message: "the task update consumer is too slow",
+            requestId: locals.requestId,
+            retryable: true,
+          });
+          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify(overflow.toDto())}\n\n`));
+          cancellation.abort();
+          finish();
+          return false;
         }
-      }).finally(finish);
+        controller.enqueue(encoder.encode(payload));
+        return true;
+      };
+      heartbeat = setInterval(() => {
+        enqueue("event: heartbeat\ndata: {}\n\n");
+      }, 15_000);
+
+      void (async () => {
+        try {
+          await getBff().watchDevelopmentTask(
+            params.taskId,
+            cursor,
+            { requestId: locals.requestId, signal: cancellation.signal },
+            (task: DevelopmentTaskDto) => {
+              enqueue(`id: ${task.resourceVersion}\nevent: task\ndata: ${JSON.stringify(task)}\n\n`);
+            },
+          );
+        } catch (error) {
+          if (!cancellation.signal.aborted) enqueue(`event: error\ndata: ${JSON.stringify(errorDto(error, locals.requestId))}\n\n`);
+        } finally {
+          finish();
+        }
+      })();
     },
     cancel() {
+      closed = true;
+      if (heartbeat !== undefined) clearInterval(heartbeat);
       cancellation.abort();
-      request.signal.removeEventListener("abort", abort);
+      locals.requestSignal.removeEventListener("abort", abort);
     },
-  });
+  }, { highWaterMark: 32, size: () => 1 });
 
   return new Response(body, {
     headers: {

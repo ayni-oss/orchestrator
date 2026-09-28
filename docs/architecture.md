@@ -11,7 +11,7 @@ status, is the source of truth for task lifecycle and external actions.
 | `api` | Generated Rust types, service contracts, and descriptor set for `ayni.orchestrator.v1` |
 | `domain` | Validated task, attempt, result, and state-transition types |
 | `observability` | Shared JSON logging, safe filtering, correlation fields, and redaction helpers |
-| `control-plane` | Transport-neutral application operations, native gRPC and migration HTTP adapters, embedded migration UI, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
+| `control-plane` | Transport-neutral application operations, native gRPC, operational HTTP endpoints, SQLite persistence, reconciliation, Kubernetes Job creation, GitHub App integration, and publication |
 | `worker` | Source preparation, managed Ayni execution, coding-agent tools, frozen-candidate validation, and structured PR authoring |
 | `clients/typescript` | Checked-in Node-compatible native gRPC bindings generated from the canonical protobuf contract |
 | `packages/bff` | Server-only gRPC client policy, browser-safe DTO mapping, deadlines, cancellation, correlation, and safe error translation |
@@ -20,8 +20,8 @@ status, is the source of truth for task lifecycle and external actions.
 The canonical protobuf contract is independent of persistence, Kubernetes, and
 browser types. Product semantics remain in the domain and control-plane
 application operations; generated transport types do not become domain types.
-The native Tonic server and temporary HTTP product routes call those same
-operations. The gRPC listener is required to bind to pod loopback in the
+The native Tonic server calls those operations; HTTP is limited to health,
+metrics, and a bearer-protected internal publication callback. The gRPC listener is required to bind to pod loopback in the
 supported local profile. Although the Service declares the gRPC target for
 `kubectl port-forward`, normal Service traffic addresses the pod IP and cannot
 reach the loopback listener. A non-loopback listener requires separate

@@ -1,12 +1,14 @@
-# SvelteKit browser server
+# SvelteKit operator application
 
-This private adapter-node application hosts the same-origin browser boundary. A
-server load and form action demonstrate the BFF integration, and
-`/tasks/{task_id}/updates` relays bounded resumable gRPC updates as server-sent
-events. The complete operator interface is tracked separately.
+This private adapter-node application provides the supported browser workflow
+for repository readiness, development tasks, lifecycle actions, usage, and
+retained evidence. Server loads and form actions call the server-only BFF;
+`/tasks/{task_id}/updates` relays bounded resumable native-gRPC updates as
+server-sent events.
 
-The application must run beside the control plane and use
+The application runs beside the control plane with
 `ORCHESTRATOR_GRPC_ADDRESS=127.0.0.1:50051`. It receives no Kubernetes
 service-account token or credential mounts. Native gRPC bindings and the BFF may
-only be imported by server modules. `pnpm frontend:check` builds and scans the
-client bundle to enforce that boundary.
+only be imported by server modules. `pnpm frontend:check` type-checks, tests,
+builds, and scans the browser bundle to enforce that boundary. Playwright tests
+exercise the operator workflow against a deterministic native-gRPC fixture.
