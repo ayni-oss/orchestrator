@@ -18,7 +18,7 @@ independently useful local CLI in the public
 - GitHub App repository enrollment and draft-pull-request publication;
 - content-addressed repository preparation and compatible reuse;
 - bounded OpenAI-backed development with a live provider model catalog and retained checkpoints;
-- durable per-interaction provider usage, versioned cost estimates, and an optional local Prometheus/Grafana task and Kubernetes resource dashboard;
+- durable per-interaction provider usage, versioned cost estimates, and a local Prometheus/Grafana task and Kubernetes resource dashboard;
 - independent Ayni validation of a frozen candidate;
 - frozen protected-path and test-edit constraints enforced before publication;
 - retained, digest-bound result artifacts; and
@@ -32,7 +32,7 @@ cluster. The internal web and control-plane Services are unauthenticated and
 must be reached from the host only through loopback port-forwarding. The
 SvelteKit server shares the control-plane Pod so its BFF can reach the
 pod-loopback native gRPC listener without making that listener namespace
-reachable. An opt-in Docker Desktop overlay adds a distinct TLS-only native gRPC listener
+reachable. An opt-in local Helm value adds a distinct TLS-only native gRPC listener
 for explicitly configured custom-client identities. It is capability-authorized,
 rate- and size-limited, privately distributed, and remains ClusterIP-only; the
 loopback BFF listener and its defaults do not change. See
@@ -65,7 +65,7 @@ completed-work provenance.
 | [Architecture](docs/architecture.md) | Implemented components, state, execution flow, and trust boundaries |
 | [Local development](docs/local-development.md) | Workspace checks, image build, deployment, and API development |
 | [Operations](docs/operations.md) | Local access, preparation, updates, retention, recovery, and cleanup |
-| [Docker Desktop deployment decision](docs/decisions/0001-local-kubernetes-deployment.md) | Local Kubernetes and Kustomize deployment model |
+| [Local Helm deployment decision](docs/decisions/0006-local-helm-chart.md) | Docker Desktop Kubernetes and Helm deployment model |
 | [Control-plane model](docs/decisions/0002-product-name-and-control-plane-model.md) | Product name and application-API-first model |
 | [Durable orchestration decision](docs/decisions/0003-durable-local-orchestration.md) | SQLite, Jobs, idempotency, and recovery |
 | [Preparation and local UI decision](docs/decisions/0004-repository-preparation-and-local-ui.md) | Prepared environments, browser access, and operating limits |

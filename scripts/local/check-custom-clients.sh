@@ -8,7 +8,8 @@ if [[ $# -ne 0 ]]; then
 fi
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
-readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
+namespace="$("$repository_root/scripts/local/resolve-namespace.sh")"
+readonly namespace
 readonly grpc_port="${AYNI_ORCHESTRATOR_CUSTOM_GRPC_LOCAL_PORT:-15052}"
 readonly ca_file="${ORCHESTRATOR_CUSTOM_GRPC_CA_FILE:?ORCHESTRATOR_CUSTOM_GRPC_CA_FILE is required}"
 readonly token_file="${ORCHESTRATOR_CUSTOM_GRPC_TOKEN_FILE:?ORCHESTRATOR_CUSTOM_GRPC_TOKEN_FILE is required}"

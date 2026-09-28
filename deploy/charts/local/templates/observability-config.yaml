@@ -1,0 +1,126 @@
+{{- if .Values.observability.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels:
+    {{- include "local.observabilityLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        deployment: {{ .Release.Namespace }}
+    scrape_configs:
+      - job_name: ayni-orchestrator-control-plane
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["control-plane:8080"]
+      - job_name: ayni-orchestrator-kube-state-metrics
+        static_configs:
+          - targets: ["kube-state-metrics:8080"]
+      - job_name: ayni-orchestrator-cadvisor
+        scheme: https
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          insecure_skip_verify: true
+        metrics_path: /metrics/cadvisor
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: container_cpu_usage_seconds_total|container_memory_working_set_bytes
+            action: keep
+          - source_labels: [namespace]
+            regex: {{ .Release.Namespace }}
+            action: keep
+      - job_name: ayni-orchestrator-node-storage
+        scheme: https
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          insecure_skip_verify: true
+        metrics_path: /metrics/cadvisor
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: container_fs_(usage|limit)_bytes
+            action: keep
+          - source_labels: [id]
+            regex: /
+            action: keep
+          - source_labels: [device]
+            regex: /dev/(vd[a-z][0-9]+|sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+)
+            action: keep
+      - job_name: ayni-orchestrator-kubelet-volumes
+        scheme: https
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          insecure_skip_verify: true
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: kubelet_volume_stats_(used|capacity|available)_bytes
+            action: keep
+          - source_labels: [namespace]
+            regex: {{ .Release.Namespace }}
+            action: keep
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  labels:
+    {{- include "local.observabilityLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-grafana
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+  dashboard-provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: Ayni Orchestrator
+        orgId: 1
+        folder: Ayni Orchestrator
+        type: file
+        disableDeletion: true
+        editable: false
+        updateIntervalSeconds: 30
+        options:
+          path: /etc/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard
+  labels:
+    {{- include "local.observabilityLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-grafana
+data:
+  orchestrator-overview.json: |
+{{ .Files.Get "dashboards/orchestrator-overview.json" | replace "__AYNI_NAMESPACE__" .Release.Namespace | nindent 4 }}
+{{- end }}

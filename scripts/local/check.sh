@@ -8,7 +8,8 @@ if [[ $# -ne 0 ]]; then
 fi
 context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
 readonly context
-readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}"
+namespace="$("$repository_root/scripts/local/resolve-namespace.sh")"
+readonly namespace
 readonly web_port="${AYNI_ORCHESTRATOR_WEB_LOCAL_PORT:-18080}"
 readonly operations_port="${AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT:-18081}"
 readonly grpc_port="${AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT:-15051}"
@@ -88,6 +89,7 @@ check_once() {
 for _ in {1..30}; do
   if check_once; then
     printf '%s\n' "$readiness"
+    "$repository_root/scripts/local/check-observability.sh"
     exit 0
   fi
   sleep 1

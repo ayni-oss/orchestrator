@@ -7,6 +7,7 @@
     "node": "24.14.0"
   },
   "scripts": {
+    "chart:check": "scripts/ci/check-helm.sh",
     "proto:check": "scripts/ci/check-proto.sh",
     "proto:generate": "buf generate",
     "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check && pnpm --filter @ayni-orchestrator/bff check && pnpm --filter @ayni-orchestrator/web check",

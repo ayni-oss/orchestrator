@@ -26,8 +26,8 @@ listener is required to bind to pod loopback. Although the Service declares its
 target for `kubectl port-forward`, normal Service traffic addresses the pod IP
 and cannot reach that listener.
 
-The opt-in custom-client overlay adds a second Tonic listener rather than
-changing the local boundary. It binds a separate pod port, requires TLS/HTTP2,
+The opt-in `customClients.enabled` chart value adds a second Tonic listener
+rather than changing the local boundary. It binds a separate pod port, requires TLS/HTTP2,
 authenticates bounded bearer metadata against expiring configured token
 digests, authorizes an explicit capability map before application dispatch, and
 applies metadata, deadline, rate, connection-stream, and message limits. It
@@ -68,7 +68,7 @@ four claims. The single-writer SQLite volume constrains the current profile to
 one control-plane replica. The Deployment uses a `Recreate` update strategy so
 an update cannot overlap two control-plane processes on that volume.
 
-An optional Docker Desktop observability deployment runs disposable Prometheus,
+The local Helm release includes disposable Prometheus,
 kube-state-metrics, and Grafana Deployments. Prometheus scrapes the bounded
 aggregate `/metrics` surface, namespaced Kubernetes object state, and only the
 orchestrator namespace's kubelet/cAdvisor resource series. Its node permission

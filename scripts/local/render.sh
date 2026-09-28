@@ -9,35 +9,33 @@ fi
 readonly control_plane_image_ref="$1"
 readonly worker_image_ref="$2"
 readonly web_image_ref="$3"
-readonly default_namespace="ayni-orchestrator-dev"
-readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-$default_namespace}"
-readonly control_plane_placeholder="local/ayni-orchestrator-control-plane:replace-me"
-readonly worker_placeholder="local/ayni-orchestrator-worker:replace-me"
-readonly web_placeholder="local/ayni-orchestrator-web:replace-me"
+namespace="$("$repository_root/scripts/local/resolve-namespace.sh")"
+readonly namespace
 readonly deployment_profile="${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}"
+readonly chart="$repository_root/deploy/charts/local"
+
+if ! command -v helm >/dev/null 2>&1; then
+  echo "Helm is required to render the local chart" >&2
+  exit 1
+fi
+for image_ref in "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref"; do
+  if [[ -z "$image_ref" || "$image_ref" =~ [[:space:]] || "$image_ref" == *','* ]]; then
+    echo "image reference is empty or contains an unsupported character" >&2
+    exit 1
+  fi
+done
 case "$deployment_profile" in
-  local) readonly overlay="deploy/overlays/docker-desktop" ;;
-  custom-clients) readonly overlay="deploy/overlays/docker-desktop-custom-clients" ;;
+  local) readonly custom_clients=false ;;
+  custom-clients) readonly custom_clients=true ;;
   *)
     echo "AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE must be local or custom-clients" >&2
     exit 1
     ;;
 esac
 
-if [[ ! "$namespace" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ || ${#namespace} -gt 63 ]]; then
-  echo "namespace must be a valid DNS label" >&2
-  exit 1
-fi
-
-for image_ref in "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref"; do
-  if [[ -z "$image_ref" || "$image_ref" =~ [[:space:]] || "$image_ref" == *'&'* || "$image_ref" == *'|'* ]]; then
-    echo "image reference is empty or contains an unsupported character" >&2
-    exit 1
-  fi
-done
-
-kubectl kustomize "$repository_root/$overlay" \
-  | sed -e "s|$control_plane_placeholder|$control_plane_image_ref|g" \
-        -e "s|$worker_placeholder|$worker_image_ref|g" \
-        -e "s|$web_placeholder|$web_image_ref|g" \
-        -e "s|$default_namespace|$namespace|g"
+helm template ayni-orchestrator "$chart" \
+  --namespace "$namespace" \
+  --set-string "images.controlPlane=$control_plane_image_ref" \
+  --set-string "images.worker=$worker_image_ref" \
+  --set-string "images.web=$web_image_ref" \
+  --set "customClients.enabled=$custom_clients"

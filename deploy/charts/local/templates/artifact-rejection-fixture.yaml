@@ -1,0 +1,143 @@
+{{- include "local.validateFixtureSelection" . }}
+{{- if .Values.fixtures.artifactRejection.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: managed-check-artifact-rejection-inputs
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+data:
+  ORCHESTRATOR_REPOSITORY_URL: {{ .Values.fixtures.repositoryUrl | quote }}
+  ORCHESTRATOR_REVISION: {{ .Values.fixtures.revision | quote }}
+  ORCHESTRATOR_LOCK_SHA256: {{ .Values.fixtures.lockSha256 | quote }}
+  ORCHESTRATOR_AYNI_VERSION: {{ .Values.fixtures.ayniVersion | quote }}
+  ORCHESTRATOR_WORKSPACE: /workspace/repository
+  ORCHESTRATOR_EVIDENCE_ROOT: /evidence
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: managed-check-artifact-rejection-wrapper
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/component: evidence-integrity-test
+data:
+  ayni: |
+    #!/bin/sh
+    set -eu
+
+    if [ "$#" -gt 0 ] && [ "$1" = "check" ]; then
+      set +e
+      /usr/local/bin/ayni "$@"
+      status="$?"
+      rm -f /workspace/repository/.ayni/last/execution.json
+      exit "$status"
+    fi
+
+    exec /usr/local/bin/ayni "$@"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: managed-check-artifact-rejection
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-managed-check
+    app.kubernetes.io/component: evidence-integrity-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ayni-orchestrator-managed-check
+        app.kubernetes.io/part-of: ayni-orchestrator
+        app.kubernetes.io/component: evidence-integrity-test
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: engine
+          image: docker:27.5.1-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
+          restartPolicy: Always
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 4
+              memory: 9Gi
+            limits:
+              cpu: 4
+              memory: 9Gi
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: engine-storage
+              mountPath: /var/lib/docker
+      containers:
+        - name: worker
+          image: {{ .Values.images.worker | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          env:
+            - name: DOCKER_HOST
+              value: tcp://127.0.0.1:2375
+            - name: DOCKER_BUILDKIT
+              value: "1"
+            - name: DOCKER_CONFIG
+              value: /tmp/docker
+            - name: TMPDIR
+              value: /workspace
+            - name: PATH
+              value: /test-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            - name: ORCHESTRATOR_ATTEMPT_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          envFrom:
+            - configMapRef:
+                name: managed-check-artifact-rejection-inputs
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: evidence
+              mountPath: /evidence
+            - name: scratch
+              mountPath: /tmp
+            - name: test-artifact-wrapper
+              mountPath: /test-bin
+              readOnly: true
+      volumes:
+        - name: workspace
+          emptyDir: {}
+        - name: evidence
+          persistentVolumeClaim:
+            claimName: managed-check-evidence
+        - name: scratch
+          emptyDir: {}
+        - name: engine-storage
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: test-artifact-wrapper
+          configMap:
+            name: managed-check-artifact-rejection-wrapper
+            defaultMode: 0555
+{{- end }}

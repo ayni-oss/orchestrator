@@ -1,0 +1,26 @@
+{{- if .Values.core.enabled }}
+{{- $claims := list
+  (dict "name" "control-plane-state" "size" .Values.persistence.controlPlaneState.size)
+  (dict "name" "development-checkpoints" "size" .Values.persistence.developmentCheckpoints.size)
+  (dict "name" "managed-check-evidence" "size" .Values.persistence.managedCheckEvidence.size)
+  (dict "name" "prepared-environments" "size" .Values.persistence.preparedEnvironments.size) -}}
+{{- range $index, $claim := $claims }}
+{{- if $index }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $claim.name }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "local.commonLabels" $ | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ $claim.size }}
+{{- end }}
+{{- end }}

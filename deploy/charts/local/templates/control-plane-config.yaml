@@ -1,0 +1,21 @@
+{{- if .Values.core.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-plane-config
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+data:
+  ORCHESTRATOR_BIND_ADDRESS: 0.0.0.0:8080
+  ORCHESTRATOR_GRPC_BIND_ADDRESS: 127.0.0.1:50051
+  ORCHESTRATOR_DATABASE_PATH: /data/orchestrator.sqlite
+  ORCHESTRATOR_KUBERNETES_NAMESPACE: {{ .Release.Namespace | quote }}
+  ORCHESTRATOR_WORKER_IMAGE: {{ .Values.images.worker | quote }}
+  ORCHESTRATOR_MAX_ATTEMPTS: {{ .Values.controlPlane.maxAttempts | quote }}
+  {{- if .Values.customClients.enabled }}
+  ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS: 0.0.0.0:50052
+  ORCHESTRATOR_CUSTOM_GRPC_TLS_CERTIFICATE_PATH: /run/secrets/custom-grpc/tls.crt
+  ORCHESTRATOR_CUSTOM_GRPC_TLS_PRIVATE_KEY_PATH: /run/secrets/custom-grpc/tls.key
+  ORCHESTRATOR_CUSTOM_GRPC_CLIENTS_PATH: /run/secrets/custom-grpc/clients.json
+  {{- end }}
+{{- end }}

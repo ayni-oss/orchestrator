@@ -10,8 +10,9 @@ browser interface.
 - Rust 1.94.0, pinned by `rust-toolchain.toml`
 - Node 24.14.0 and pnpm 10.31.0, pinned by the root package and CI configuration
 - Buf 1.71.0 for protobuf formatting, linting, generation, and compatibility checks
-- Docker Desktop with Kubernetes enabled
+- Docker Desktop with Kubernetes 1.32 or newer enabled
 - a reachable `docker-desktop` Kubernetes context
+- Helm 4.1.1
 - `kubectl`, Docker, Git, `curl`, and `grpcurl`
 
 Local scripts always name `docker-desktop`; they never fall back to the current
@@ -50,14 +51,20 @@ ayni env doctor --repo-root .
 ayni check --config .ayni.toml
 ```
 
-Render the core and optional observability deployments separately when changing
-manifests:
+Lint the chart and render the complete local stack when changing deployment
+templates or values:
 
 ```sh
+scripts/ci/check-helm.sh
 scripts/local/render.sh local/control-plane:test local/worker:test local/web:test \
   >/tmp/ayni-orchestrator.yaml
-scripts/local/render-observability.sh >/tmp/ayni-orchestrator-observability.yaml
 ```
+
+The `deploy/charts/local` chart is the only manifest source. Its default render
+includes the control plane, web application, all retained claims, Prometheus,
+kube-state-metrics, Grafana, and the provisioned dashboard. Rendered output is
+for inspection; use `deploy.sh` for installation so Helm owns the release and
+selects the namespace explicitly.
 
 Do not commit rendered output, logs, local credentials, or runtime artifacts.
 
@@ -104,7 +111,7 @@ grpcurl -plaintext -max-time 10 -d '{}' 127.0.0.1:15051 \
 ```
 
 Never forward the local listener to a non-loopback address. To develop or test
-approved custom-client access, use the distinct opt-in TLS overlay and the
+approved custom-client access, use the distinct opt-in chart profile and the
 private descriptor workflow in [Custom-client gRPC access](custom-client-access.md).
 That profile remains private and ClusterIP-only; it is not authorization for
 public hosting.
@@ -148,8 +155,9 @@ The deploy script:
 2. builds control-plane, worker, and SvelteKit web images labeled with the
    checkout revision and tags each with a content-identity suffix;
 3. loads all three into Docker Desktop's Kubernetes node;
-4. renders and applies the Kustomize overlay;
-5. waits for rollout; and
+4. upgrades the `ayni-orchestrator` release from the `local` Helm chart,
+   adopting a prior manifest-based installation on the first upgrade;
+5. waits for the application and monitoring Deployments; and
 6. verifies the running control-plane and web image identities and the worker
    image frozen into the control-plane Pod configuration.
 
@@ -157,9 +165,10 @@ It preserves SQLite, checkpoint, validation-result, and prepared-environment
 volumes across updates. It may remove only obsolete project image tags after a
 successful rollout; it does not prune shared Docker caches or volumes.
 
-The check script opens separate loopback web, operational HTTP, and gRPC
-port-forwards. It verifies `/livez`, `/readyz`, metrics, the server-rendered BFF
-page through real native gRPC reads, gRPC health, and reflection. The current
+The check script opens separate loopback web, operational HTTP, gRPC,
+Prometheus, and Grafana port-forwards. It verifies `/livez`, `/readyz`, metrics,
+the server-rendered BFF page through real native gRPC reads, gRPC health,
+reflection, monitoring scrape targets, and the provisioned dashboard. The current
 readiness JSON field is named
 `pilot_ready`; it means publication is configured and provider model discovery
 has succeeded at least once in this process, not that an individual repository
@@ -185,11 +194,21 @@ scripts/local/run-managed-check.sh
 It fetches the pinned source revision, verifies the committed Ayni lock, runs
 `env build`, `env doctor`, and an unscoped managed check through an isolated
 Docker-in-Docker engine, then stores original artifacts and a digest-bound
-manifest on `managed-check-evidence`.
+manifest on `managed-check-evidence`. The fixture reuses that claim when the
+main release exists and creates a retained claim when run standalone.
 
-The command refuses to replace an existing Job. Inspect logs and retained data
-before deleting it. Quality failure, source/lock mismatch, and missing artifacts
-remain distinct terminal results.
+The command refuses to replace an existing fixture release or Job. Inspect logs
+and retained data, then remove the fixture before another attempt:
+
+```sh
+helm uninstall ayni-orchestrator-managed-check \
+  --kube-context docker-desktop --namespace ayni-orchestrator-dev
+```
+
+Uninstall that fixture release before installing the main release. Its retained
+evidence claim remains in place and the guarded main deployment adopts it.
+Quality failure, source/lock mismatch, and missing artifacts remain distinct
+terminal results.
 
 Exercise missing-artifact rejection with:
 
@@ -198,7 +217,13 @@ scripts/local/run-artifact-rejection-check.sh
 ```
 
 The dedicated test Job removes `execution.json` after Ayni runs. The unchanged
-worker must withhold success and report the missing artifact.
+worker must withhold success and report the missing artifact. Inspect it, then
+remove its fixture:
+
+```sh
+helm uninstall ayni-orchestrator-artifact-rejection \
+  --kube-context docker-desktop --namespace ayni-orchestrator-dev
+```
 
 ## Product workflow
 
@@ -241,15 +266,10 @@ metrics, and a bearer-protected internal publication callback. It does not serve
 a browser or product JSON routes. The browser remains unauthenticated; anyone
 who can reach its loopback forward can operate it.
 
-Observability is optional and is not installed by `deploy.sh`. After the core
-check passes, install and validate the disposable local stack explicitly:
-
-```sh
-scripts/local/deploy-observability.sh
-scripts/local/check-observability.sh
-```
-
-This adds pinned Prometheus, kube-state-metrics, and Grafana images. Prometheus
+The default `local` chart values install pinned Prometheus, kube-state-metrics,
+and Grafana images with the application. `scripts/local/check.sh` validates the
+scrape targets and dashboard; `scripts/local/check-observability.sh` remains
+available when only the monitoring checks need to be repeated. Prometheus
 scrapes the application endpoint, namespaced Kubernetes object state, and the
 Docker Desktop kubelet/cAdvisor through a service account limited to node
 discovery and the metric-only `nodes/metrics` subresource. It is not granted
@@ -258,13 +278,12 @@ provisioned dashboard through loopback only:
 
 ```sh
 kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward service/grafana 13000:3000
+  port-forward --address 127.0.0.1 service/grafana 13000:3000
 open http://127.0.0.1:13000/d/ayni-orchestrator-tasks-resources
 ```
 
 Prometheus retains at most 48 hours or 900 MB in ephemeral storage. Grafana
 anonymous access is Viewer-only and acceptable solely within this trusted local
-boundary. Remove only the optional stack with
-`scripts/local/teardown-observability.sh`; this does not touch product state.
-See [local operations](operations.md) for metric semantics, capacity, and
-troubleshooting.
+boundary. Normal release cleanup removes the disposable monitoring history
+while preserving product claims. See [local operations](operations.md) for
+metric semantics, capacity, and troubleshooting.

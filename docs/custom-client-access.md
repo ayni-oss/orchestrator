@@ -18,8 +18,8 @@ h2c listener only on pod loopback for the colocated BFF and host-loopback
 `kubectl port-forward`. It rejects a non-loopback value for
 `ORCHESTRATOR_GRPC_BIND_ADDRESS`.
 
-The `deploy/overlays/docker-desktop-custom-clients` overlay adds a separate
-TLS-only listener on port `50052`. It keeps the local listener on
+Setting `customClients.enabled=true` in the `deploy/charts/local` chart adds a
+separate TLS-only listener on port `50052`. It keeps the local listener on
 `127.0.0.1:50051`, uses a `ClusterIP` Service, and does not add an Ingress,
 NodePort, load balancer, public DNS record, or public package. The included
 NetworkPolicy admits port 50052 only from same-namespace pods labelled
@@ -81,7 +81,7 @@ restarting the pod. Expiry is enforced on every new RPC. Never place a raw token
 in a manifest, command history, task request, acceptance criterion, idempotency
 key, URL, log, or metric.
 
-The overlay sets these all-or-nothing variables:
+The chart sets these all-or-nothing variables:
 
 - `ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS`
 - `ORCHESTRATOR_CUSTOM_GRPC_TLS_CERTIFICATE_PATH`
@@ -91,7 +91,7 @@ The overlay sets these all-or-nothing variables:
 Startup fails if the address is loopback, uses port zero, collides with another
 listener, paths are not absolute, TLS material cannot be read, or the identity
 file is invalid.
-Render the overlay before applying it:
+Render the opt-in profile before applying it:
 
 ```sh
 AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE=custom-clients \
@@ -100,7 +100,7 @@ AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE=custom-clients \
 
 Create the namespace and Secret with your normal private secret-delivery
 procedure; do not commit generated credentials or keys. Then deploy this profile
-instead of the standard Docker Desktop overlay:
+instead of the standard chart values:
 
 ```sh
 AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE=custom-clients scripts/local/deploy.sh
