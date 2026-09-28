@@ -2,8 +2,12 @@ use crate::orchestration::{Store, StoreError};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Write as _,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
 };
+use tonic::Code;
 
 const DURATION_BUCKETS_SECONDS: [i64; 10] = [1, 5, 15, 30, 60, 300, 900, 1_800, 3_600, 7_200];
 const LATENCY_BUCKETS_MILLISECONDS: [i64; 7] = [100, 500, 1_000, 5_000, 10_000, 30_000, 60_000];
@@ -25,6 +29,46 @@ const TERMINAL_OUTCOMES: [&str; 4] = ["completed", "failed", "cancelled", "unsup
 static ATTEMPT_RECONCILIATION_ERRORS: AtomicU64 = AtomicU64::new(0);
 static DEVELOPMENT_RECONCILIATION_ERRORS: AtomicU64 = AtomicU64::new(0);
 static PREPARATION_RECONCILIATION_ERRORS: AtomicU64 = AtomicU64::new(0);
+type GrpcAdmissionCounts = BTreeMap<(&'static str, &'static str, &'static str), u64>;
+type GrpcCompletionCounts = BTreeMap<(&'static str, &'static str), u64>;
+static GRPC_ADMISSIONS: OnceLock<Mutex<GrpcAdmissionCounts>> = OnceLock::new();
+static GRPC_COMPLETIONS: OnceLock<Mutex<GrpcCompletionCounts>> = OnceLock::new();
+
+pub fn record_grpc_admission(rpc: &'static str, decision: &'static str, code: Code) {
+    let values = GRPC_ADMISSIONS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    if let Ok(mut values) = values.lock() {
+        *values.entry((rpc, decision, grpc_code(code))).or_default() += 1;
+    }
+}
+
+pub fn record_grpc_completion(rpc: &'static str, code: Code) {
+    let values = GRPC_COMPLETIONS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    if let Ok(mut values) = values.lock() {
+        *values.entry((rpc, grpc_code(code))).or_default() += 1;
+    }
+}
+
+const fn grpc_code(code: Code) -> &'static str {
+    match code {
+        Code::Ok => "ok",
+        Code::Cancelled => "cancelled",
+        Code::Unknown => "unknown",
+        Code::InvalidArgument => "invalid_argument",
+        Code::DeadlineExceeded => "deadline_exceeded",
+        Code::NotFound => "not_found",
+        Code::AlreadyExists => "already_exists",
+        Code::PermissionDenied => "permission_denied",
+        Code::ResourceExhausted => "resource_exhausted",
+        Code::FailedPrecondition => "failed_precondition",
+        Code::Aborted => "aborted",
+        Code::OutOfRange => "out_of_range",
+        Code::Unimplemented => "unimplemented",
+        Code::Internal => "internal",
+        Code::Unavailable => "unavailable",
+        Code::DataLoss => "data_loss",
+        Code::Unauthenticated => "unauthenticated",
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum ReconcilerKind {
@@ -173,6 +217,7 @@ fn render_metrics(
     render_lifecycle_metrics(&mut output, lifecycle);
     render_usage_metrics(&mut output, usage);
     render_reconciliation_metrics(&mut output);
+    render_grpc_metrics(&mut output);
     output
 }
 
@@ -415,6 +460,37 @@ fn render_reconciliation_metrics(output: &mut String) {
             "orchestrator_reconciliation_errors_total{{reconciler=\"{reconciler}\"}} {}",
             counter.load(Ordering::Relaxed)
         );
+    }
+}
+
+fn render_grpc_metrics(output: &mut String) {
+    let _ = output.write_str(
+        "# HELP orchestrator_grpc_admissions_total Custom-client admission decisions.\n\
+# TYPE orchestrator_grpc_admissions_total counter\n",
+    );
+    if let Some(values) = GRPC_ADMISSIONS.get()
+        && let Ok(values) = values.lock()
+    {
+        for ((rpc, decision, code), count) in values.iter() {
+            let _ = writeln!(
+                output,
+                "orchestrator_grpc_admissions_total{{rpc=\"{rpc}\",decision=\"{decision}\",code=\"{code}\"}} {count}"
+            );
+        }
+    }
+    let _ = output.write_str(
+        "# HELP orchestrator_grpc_requests_total Completed product gRPC requests.\n\
+# TYPE orchestrator_grpc_requests_total counter\n",
+    );
+    if let Some(values) = GRPC_COMPLETIONS.get()
+        && let Ok(values) = values.lock()
+    {
+        for ((rpc, code), count) in values.iter() {
+            let _ = writeln!(
+                output,
+                "orchestrator_grpc_requests_total{{rpc=\"{rpc}\",code=\"{code}\"}} {count}"
+            );
+        }
     }
 }
 

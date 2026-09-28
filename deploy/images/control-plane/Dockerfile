@@ -19,5 +19,5 @@ RUN apt-get update \
 RUN useradd --system --uid 10001 --create-home orchestrator
 USER 10001
 COPY --from=builder /tmp/ayni-orchestrator-control-plane /usr/local/bin/ayni-orchestrator-control-plane
-EXPOSE 8080 50051
+EXPOSE 8080 50051 50052
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]

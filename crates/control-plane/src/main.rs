@@ -1,6 +1,6 @@
 use ayni_orchestrator_control_plane::{
     AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, ModelCatalog,
-    PreparationReconciler, PublisherState, Reconciler, router, serve_grpc,
+    PreparationReconciler, PublisherState, Reconciler, router, serve_custom_grpc, serve_grpc,
 };
 use kube::Client;
 use std::{env, fs, io, process::ExitCode};
@@ -34,6 +34,15 @@ fn model_catalog_from_environment() -> Result<ModelCatalog, io::Error> {
 
 async fn run() -> Result<(), io::Error> {
     let configuration = Configuration::from_environment().map_err(io::Error::other)?;
+    let custom_grpc = configuration
+        .custom_grpc()
+        .map(|custom| {
+            custom
+                .load_access()
+                .map(|access| (custom.bind_address(), access))
+        })
+        .transpose()
+        .map_err(io::Error::other)?;
     let model_catalog = match model_catalog_from_environment() {
         Ok(catalog) => Some(catalog),
         Err(error) => {
@@ -92,8 +101,21 @@ async fn run() -> Result<(), io::Error> {
     let http = axum::serve(listener, router(state.clone())).with_graceful_shutdown(async move {
         wait_for_shutdown(http_shutdown).await;
     });
-    let grpc = serve_grpc(configuration.grpc_bind_address(), state, shutdown_receiver);
-    tokio::try_join!(async { http.await.map_err(io::Error::other) }, grpc)?;
+    let grpc = serve_grpc(
+        configuration.grpc_bind_address(),
+        state.clone(),
+        shutdown_receiver.clone(),
+    );
+    let custom_shutdown = shutdown_receiver.clone();
+    let custom = async move {
+        if let Some((address, access)) = custom_grpc {
+            serve_custom_grpc(address, state, custom_shutdown, access).await
+        } else {
+            wait_for_shutdown(custom_shutdown).await;
+            Ok(())
+        }
+    };
+    tokio::try_join!(async { http.await.map_err(io::Error::other) }, grpc, custom)?;
     signal_task.abort();
     reconciliation_task.abort();
     if let Some(task) = development_task {

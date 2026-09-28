@@ -52,8 +52,10 @@ and do not benefit from becoming product RPCs.
   the trusted local profile the native server is required to bind to pod
   loopback. Its declared Service target supports a host-loopback `kubectl
   port-forward`, while normal Service traffic to the pod IP cannot reach the
-  listener. Any broader serving boundary requires authentication, authorization,
-  transport protection, and verified network isolation.
+  listener. The optional custom-client profile therefore uses a distinct
+  TLS-only listener with bounded bearer authentication, operation capabilities,
+  overload controls, safe telemetry, and network policy; it does not relax the
+  loopback listener.
 - The SvelteKit server-side BFF may expose only narrowly scoped same-origin
   server loads, form actions, and bounded browser-native update relays. These
   are private UI implementation details, not a supported Orchestrator API. The

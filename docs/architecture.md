@@ -21,12 +21,19 @@ The canonical protobuf contract is independent of persistence, Kubernetes, and
 browser types. Product semantics remain in the domain and control-plane
 application operations; generated transport types do not become domain types.
 The native Tonic server calls those operations; HTTP is limited to health,
-metrics, and a bearer-protected internal publication callback. The gRPC listener is required to bind to pod loopback in the
-supported local profile. Although the Service declares the gRPC target for
-`kubectl port-forward`, normal Service traffic addresses the pod IP and cannot
-reach the loopback listener. A non-loopback listener requires separate
-authentication, authorization, transport-protection, and network-isolation
-design.
+metrics, and a bearer-protected internal publication callback. The default gRPC
+listener is required to bind to pod loopback. Although the Service declares its
+target for `kubectl port-forward`, normal Service traffic addresses the pod IP
+and cannot reach that listener.
+
+The opt-in custom-client overlay adds a second Tonic listener rather than
+changing the local boundary. It binds a separate pod port, requires TLS/HTTP2,
+authenticates bounded bearer metadata against expiring configured token
+digests, authorizes an explicit capability map before application dispatch, and
+applies metadata, deadline, rate, connection-stream, and message limits. It
+omits reflection, scopes mutation idempotency to the authenticated identity,
+and is exposed only by ClusterIP plus an allowlist NetworkPolicy. Both listeners
+call the same application operations and versioned protobuf services.
 
 The SvelteKit runtime is a sidecar in the control-plane Pod. It reaches gRPC at
 `127.0.0.1:50051` through the shared Pod network namespace and is exposed by a
@@ -69,9 +76,11 @@ is limited to discovery and the metric-only `nodes/metrics` subresource; it
 cannot use the general node proxy. Grafana receives only
 that datasource. Prometheus and Grafana use bounded `emptyDir` storage and are
 operational views rather than durable evidence; SQLite remains authoritative.
-The application metrics omit task IDs and task content. Kubernetes workload
-series may carry the existing task and stage labels for short-lived resource
-attribution, and expire with the monitoring retention window.
+The application metrics omit client, request, task, and repository IDs and task
+content. gRPC admission and completion counters use only bounded RPC, decision,
+and canonical-code labels. Kubernetes workload series may carry the existing
+task and stage labels for short-lived resource attribution, and expire with the
+monitoring retention window.
 
 ## Repository and task flow
 

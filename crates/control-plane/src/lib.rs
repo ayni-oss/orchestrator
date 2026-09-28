@@ -8,6 +8,7 @@ mod development_jobs;
 mod development_lifecycle;
 mod github;
 mod grpc;
+mod grpc_access;
 mod model_catalog;
 mod model_usage;
 mod orchestration;
@@ -38,7 +39,8 @@ use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
 pub use development_jobs::DevelopmentReconciler;
-pub use grpc::serve as serve_grpc;
+pub use grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc};
+pub use grpc_access::{AccessConfigurationError, CustomClientAccess};
 pub use model_catalog::{AvailableModel, ModelCatalog, ModelCatalogError};
 pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
 pub use preparation_jobs::PreparationReconciler;
@@ -49,10 +51,41 @@ pub use publication::PublisherState;
 pub struct Configuration {
     bind_address: SocketAddr,
     grpc_bind_address: SocketAddr,
+    custom_grpc: Option<CustomGrpcConfiguration>,
     database_path: PathBuf,
     kubernetes_namespace: String,
     worker_image: String,
     max_attempts: u32,
+}
+
+/// Optional TLS and identity configuration for the non-loopback custom-client listener.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CustomGrpcConfiguration {
+    bind_address: SocketAddr,
+    certificate_path: PathBuf,
+    private_key_path: PathBuf,
+    clients_path: PathBuf,
+}
+
+impl CustomGrpcConfiguration {
+    /// Returns the protected listener address.
+    #[must_use]
+    pub const fn bind_address(&self) -> SocketAddr {
+        self.bind_address
+    }
+
+    /// Loads TLS material and credential digests without exposing their contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a configured file cannot be read or validated.
+    pub fn load_access(&self) -> Result<CustomClientAccess, AccessConfigurationError> {
+        CustomClientAccess::load(
+            &self.certificate_path,
+            &self.private_key_path,
+            &self.clients_path,
+        )
+    }
 }
 
 impl Configuration {
@@ -91,14 +124,19 @@ impl Configuration {
             .transpose()
             .map_err(ConfigurationError::InvalidMaxAttempts)?
             .unwrap_or(Self::DEFAULT_MAX_ATTEMPTS);
-        Self::from_values(
+        let mut configuration = Self::from_values(
             &bind_address,
             &grpc_bind_address,
             PathBuf::from(database_path),
             kubernetes_namespace,
             worker_image,
             max_attempts,
-        )
+        )?;
+        configuration.custom_grpc = custom_grpc_from_environment(
+            configuration.bind_address,
+            configuration.grpc_bind_address,
+        )?;
+        Ok(configuration)
     }
 
     /// Validates explicit configuration values.
@@ -157,6 +195,7 @@ impl Configuration {
         Ok(Self {
             bind_address,
             grpc_bind_address,
+            custom_grpc: None,
             database_path,
             kubernetes_namespace,
             worker_image,
@@ -173,6 +212,11 @@ impl Configuration {
     #[must_use]
     pub const fn grpc_bind_address(&self) -> SocketAddr {
         self.grpc_bind_address
+    }
+    /// Returns the optional non-loopback custom-client listener configuration.
+    #[must_use]
+    pub const fn custom_grpc(&self) -> Option<&CustomGrpcConfiguration> {
+        self.custom_grpc.as_ref()
     }
     /// Returns the durable state path.
     #[must_use]
@@ -194,6 +238,72 @@ impl Configuration {
     pub const fn max_attempts(&self) -> u32 {
         self.max_attempts
     }
+}
+
+fn custom_grpc_from_environment(
+    http_address: SocketAddr,
+    local_grpc_address: SocketAddr,
+) -> Result<Option<CustomGrpcConfiguration>, ConfigurationError> {
+    const KEYS: [&str; 4] = [
+        "ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS",
+        "ORCHESTRATOR_CUSTOM_GRPC_TLS_CERTIFICATE_PATH",
+        "ORCHESTRATOR_CUSTOM_GRPC_TLS_PRIVATE_KEY_PATH",
+        "ORCHESTRATOR_CUSTOM_GRPC_CLIENTS_PATH",
+    ];
+    custom_grpc_from_values(
+        KEYS.map(|key| env::var(key).ok()),
+        http_address,
+        local_grpc_address,
+    )
+}
+
+fn custom_grpc_from_values(
+    values: [Option<String>; 4],
+    http_address: SocketAddr,
+    local_grpc_address: SocketAddr,
+) -> Result<Option<CustomGrpcConfiguration>, ConfigurationError> {
+    if values.iter().all(Option::is_none) {
+        return Ok(None);
+    }
+    let [
+        Some(address),
+        Some(certificate),
+        Some(private_key),
+        Some(clients),
+    ] = values
+    else {
+        return Err(ConfigurationError::IncompleteCustomGrpcConfiguration);
+    };
+    let bind_address = SocketAddr::from_str(&address).map_err(|source| {
+        ConfigurationError::InvalidCustomGrpcBindAddress {
+            value: address,
+            source,
+        }
+    })?;
+    if bind_address.ip().is_loopback()
+        || bind_address.port() == 0
+        || bind_address.port() == http_address.port()
+        || bind_address.port() == local_grpc_address.port()
+    {
+        return Err(ConfigurationError::UnsafeCustomGrpcBindAddress(
+            bind_address,
+        ));
+    }
+    let certificate_path = PathBuf::from(certificate);
+    let private_key_path = PathBuf::from(private_key);
+    let clients_path = PathBuf::from(clients);
+    if [&certificate_path, &private_key_path, &clients_path]
+        .iter()
+        .any(|path| !path.is_absolute() || path.as_os_str().is_empty())
+    {
+        return Err(ConfigurationError::InvalidCustomGrpcPath);
+    }
+    Ok(Some(CustomGrpcConfiguration {
+        bind_address,
+        certificate_path,
+        private_key_path,
+        clients_path,
+    }))
 }
 
 /// A configuration value could not be validated.
@@ -219,6 +329,24 @@ pub enum ConfigurationError {
     /// The unauthenticated product API must remain reachable only through pod loopback.
     #[error("ORCHESTRATOR_GRPC_BIND_ADDRESS must use a loopback address, got {0}")]
     NonLoopbackGrpcBindAddress(SocketAddr),
+    /// Only some protected listener settings were supplied.
+    #[error("all ORCHESTRATOR_CUSTOM_GRPC_* settings are required together")]
+    IncompleteCustomGrpcConfiguration,
+    /// The protected listener address was malformed.
+    #[error("ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS must be a socket address, got {value:?}")]
+    InvalidCustomGrpcBindAddress {
+        value: String,
+        #[source]
+        source: std::net::AddrParseError,
+    },
+    /// The protected listener did not have a separate non-loopback address.
+    #[error(
+        "ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS must be a distinct non-loopback address with a nonzero port, got {0}"
+    )]
+    UnsafeCustomGrpcBindAddress(SocketAddr),
+    /// Protected listener file paths must be absolute.
+    #[error("custom-client TLS and identity configuration paths must be absolute")]
+    InvalidCustomGrpcPath,
     /// `ORCHESTRATOR_DATABASE_PATH` was not absolute.
     #[error("ORCHESTRATOR_DATABASE_PATH must be absolute, got {0}")]
     InvalidDatabasePath(PathBuf),
@@ -435,6 +563,49 @@ mod tests {
             error,
             ConfigurationError::NonLoopbackGrpcBindAddress(_)
         ));
+    }
+
+    #[test]
+    fn protected_grpc_configuration_is_all_or_nothing_and_non_loopback() {
+        let http = SocketAddr::from(([0, 0, 0, 0], 8080));
+        let local = SocketAddr::from(([127, 0, 0, 1], 50051));
+        let incomplete = custom_grpc_from_values(
+            [Some("0.0.0.0:50052".to_owned()), None, None, None],
+            http,
+            local,
+        );
+        assert!(matches!(
+            incomplete,
+            Err(ConfigurationError::IncompleteCustomGrpcConfiguration)
+        ));
+        let ephemeral = custom_grpc_from_values(
+            [
+                Some("0.0.0.0:0".to_owned()),
+                Some("/tls.crt".to_owned()),
+                Some("/tls.key".to_owned()),
+                Some("/clients.json".to_owned()),
+            ],
+            http,
+            local,
+        );
+        assert!(matches!(
+            ephemeral,
+            Err(ConfigurationError::UnsafeCustomGrpcBindAddress(_))
+        ));
+        let configured = custom_grpc_from_values(
+            [
+                Some("0.0.0.0:50052".to_owned()),
+                Some("/tls.crt".to_owned()),
+                Some("/tls.key".to_owned()),
+                Some("/clients.json".to_owned()),
+            ],
+            http,
+            local,
+        );
+        assert_eq!(
+            configured.ok().flatten().map(|value| value.bind_address()),
+            Some(SocketAddr::from(([0, 0, 0, 0], 50052)))
+        );
     }
 
     #[tokio::test]

@@ -34,7 +34,13 @@ grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
 ```
 
 Never change `ORCHESTRATOR_GRPC_BIND_ADDRESS` to a non-loopback address in this
-unauthenticated profile. The same-origin SvelteKit loads, actions, and bounded
+unauthenticated profile. Approved custom clients use the separate opt-in
+`docker-desktop-custom-clients` overlay and TLS port 50052; do not repurpose the
+loopback listener. Identity provisioning, port-forward discovery, certificate
+rotation, revocation, capability review, limits, and audit response are covered
+in [Custom-client gRPC access](custom-client-access.md).
+
+The same-origin SvelteKit loads, actions, and bounded
 server-sent task updates are private browser adapters, not a second supported
 product protocol. Anyone able to reach the browser surface or native gRPC
 can operate the product. Kubernetes access,

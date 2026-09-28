@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane
+spec:
+  template:
+    spec:
+      containers:
+        - name: control-plane
+          ports:
+            - name: custom-grpc
+              containerPort: 50052
+              protocol: TCP
+          volumeMounts:
+            - name: custom-grpc-access
+              mountPath: /run/secrets/custom-grpc
+              readOnly: true
+      volumes:
+        - name: custom-grpc-access
+          secret:
+            secretName: custom-client-grpc-access
+            defaultMode: 288

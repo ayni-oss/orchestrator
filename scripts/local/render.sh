@@ -14,6 +14,15 @@ readonly namespace="${AYNI_ORCHESTRATOR_NAMESPACE:-$default_namespace}"
 readonly control_plane_placeholder="local/ayni-orchestrator-control-plane:replace-me"
 readonly worker_placeholder="local/ayni-orchestrator-worker:replace-me"
 readonly web_placeholder="local/ayni-orchestrator-web:replace-me"
+readonly deployment_profile="${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}"
+case "$deployment_profile" in
+  local) readonly overlay="deploy/overlays/docker-desktop" ;;
+  custom-clients) readonly overlay="deploy/overlays/docker-desktop-custom-clients" ;;
+  *)
+    echo "AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE must be local or custom-clients" >&2
+    exit 1
+    ;;
+esac
 
 if [[ ! "$namespace" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ || ${#namespace} -gt 63 ]]; then
   echo "namespace must be a valid DNS label" >&2
@@ -27,7 +36,7 @@ for image_ref in "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref"
   fi
 done
 
-kubectl kustomize "$repository_root/deploy/overlays/docker-desktop" \
+kubectl kustomize "$repository_root/$overlay" \
   | sed -e "s|$control_plane_placeholder|$control_plane_image_ref|g" \
         -e "s|$worker_placeholder|$worker_image_ref|g" \
         -e "s|$web_placeholder|$web_image_ref|g" \

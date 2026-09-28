@@ -103,8 +103,11 @@ grpcurl -plaintext -max-time 10 -d '{}' 127.0.0.1:15051 \
   ayni.orchestrator.v1.RepositoryService/ListRepositories
 ```
 
-Never forward to a non-loopback address. Authentication, TLS, and non-local
-hosting remain outside this trusted development profile.
+Never forward the local listener to a non-loopback address. To develop or test
+approved custom-client access, use the distinct opt-in TLS overlay and the
+private descriptor workflow in [Custom-client gRPC access](custom-client-access.md).
+That profile remains private and ClusterIP-only; it is not authorization for
+public hosting.
 
 ## Configure local credentials
 
