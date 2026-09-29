@@ -63,7 +63,11 @@
         {:else}
           <Button disabled>Enter an organization name to continue</Button>
         {/if}
-        <p class="text-xs text-muted-foreground">This uses GitHub’s App Manifest flow with Ayni’s required permissions. For a personal account, use the same manifest from <a href="https://github.com/settings/apps/new" target="_blank" rel="noreferrer">GitHub App settings <ExternalLink class="inline size-3" aria-hidden="true" /></a>.</p>
+        <p class="text-xs text-muted-foreground">This uses GitHub’s App Manifest flow with Ayni’s required permissions. For a personal account, use the same pre-populated flow:</p>
+        <form action="https://github.com/settings/apps/new" method="POST" target="_blank">
+          <input type="hidden" name="manifest" value={appManifest} />
+          <Button type="submit" variant="outline">Create App for personal account <ExternalLink aria-hidden="true" /></Button>
+        </form>
       </Card.Content>
     </Card.Root>
 
