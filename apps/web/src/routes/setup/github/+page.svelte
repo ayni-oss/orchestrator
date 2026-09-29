@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { ExternalLink, KeyRound, ShieldCheck, Upload } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
@@ -7,13 +8,22 @@
 
   let owner = $state("");
   const ownerIsValid = $derived(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/u.test(owner));
-  const organizationAppUrl = $derived(ownerIsValid ? `https://github.com/organizations/${encodeURIComponent(owner)}/settings/apps/new` : undefined);
-  const appManifest = JSON.stringify({
+  let flowState = $state("");
+  let callbackOrigin = $state("");
+  const organizationAppUrl = $derived(ownerIsValid && flowState ? `https://github.com/organizations/${encodeURIComponent(owner)}/settings/apps/new?state=${encodeURIComponent(flowState)}` : undefined);
+  const personalAppUrl = $derived(flowState ? `https://github.com/settings/apps/new?state=${encodeURIComponent(flowState)}` : undefined);
+  const appManifest = $derived(JSON.stringify({
     name: "Ayni Orchestrator",
     description: "Customer-owned GitHub App for a trusted local Ayni Orchestrator deployment.",
     url: "https://github.com/ayni-oss/orchestrator",
+    redirect_url: callbackOrigin ? `${callbackOrigin}/setup/github/complete` : undefined,
     public: false,
     default_permissions: { contents: "write", pull_requests: "write", metadata: "read" },
+  }));
+  onMount(async () => {
+    callbackOrigin = window.location.origin;
+    const response = await fetch("/setup/github/start", { method: "POST" });
+    if (response.ok) flowState = (await response.json() as { state: string }).state;
   });
 </script>
 
@@ -64,10 +74,14 @@
           <Button disabled>Enter an organization name to continue</Button>
         {/if}
         <p class="text-xs text-muted-foreground">This uses GitHub’s App Manifest flow with Ayni’s required permissions. For a personal account, use the same pre-populated flow:</p>
-        <form action="https://github.com/settings/apps/new" method="POST" target="_blank">
-          <input type="hidden" name="manifest" value={appManifest} />
-          <Button type="submit" variant="outline">Create App for personal account <ExternalLink aria-hidden="true" /></Button>
-        </form>
+        {#if personalAppUrl}
+          <form action={personalAppUrl} method="POST" target="_blank">
+            <input type="hidden" name="manifest" value={appManifest} />
+            <Button type="submit" variant="outline">Create App for personal account <ExternalLink aria-hidden="true" /></Button>
+          </form>
+        {:else}
+          <Button disabled variant="outline">Preparing GitHub setup…</Button>
+        {/if}
       </Card.Content>
     </Card.Root>
 
