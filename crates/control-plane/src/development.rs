@@ -12,8 +12,6 @@ use crate::{
     orchestration::{Store, StoreError},
 };
 
-const SUPPORTED_REPOSITORY: &str = "ayni-oss/sandbox";
-
 /// One explicitly granted GitHub repository.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -33,9 +31,9 @@ impl RepositoryBinding {
                 "repository id must be a 1-64 character slug",
             ));
         }
-        if format!("{}/{}", self.owner, self.repository) != SUPPORTED_REPOSITORY {
+        if !github_name(&self.owner) || !github_name(&self.repository) {
             return Err(StoreError::InvalidInput(
-                "development tasks support only ayni-oss/sandbox",
+                "repository owner and name must be valid GitHub names",
             ));
         }
         if self.installation_id <= 0 || !git_branch(&self.base_branch) {

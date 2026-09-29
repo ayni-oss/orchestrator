@@ -12,7 +12,7 @@ const config = {
         "default-src": ["self"],
         "base-uri": ["self"],
         "connect-src": ["self"],
-        "form-action": ["self"],
+        "form-action": ["self", "https://github.com"],
         "frame-ancestors": ["none"],
         "img-src": ["self"],
         "object-src": ["none"],

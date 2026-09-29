@@ -5,8 +5,8 @@
 
 ## Decision
 
-The current profile supports one trusted Docker Desktop cluster and an
-allowlisted private repository. The browser remains reachable only through loopback port-forwarding. The
+The current profile supports one trusted Docker Desktop cluster and GitHub.com
+repositories explicitly selected for its configured GitHub App. The browser remains reachable only through loopback port-forwarding. The
 initial embedded client and JSON actions were replaced by the SvelteKit
 server-side BFF described in Decision 0005. SQLite remains the durable lifecycle
 source of truth.
@@ -58,5 +58,5 @@ local trusted-team constraints rather than production properties.
 - Updating uses additive SQLite migrations; destructive volume removal requires
   an explicit operator command after backup.
 - Multi-user authentication, multi-node storage, horizontal replicas, network
-  policy, general repository onboarding, dependency rebuilding, automated
+  policy, GitLab or other VCS onboarding, dependency rebuilding, automated
   retention, and production secret management are not supported by this profile.

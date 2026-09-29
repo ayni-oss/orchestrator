@@ -13,6 +13,12 @@ fn slug(value: &str) -> bool {
         })
 }
 
+fn github_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
 fn git_branch(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128

@@ -15,8 +15,8 @@ use std::{
 use thiserror::Error;
 use tracing::info;
 
-/// The first supported repository shape.
-pub const SUPPORTED_REPOSITORY_URL: &str = "https://github.com/ayni-oss/ayni.git";
+/// GitHub repository URLs accepted by the GitHub App checkout flow.
+const GITHUB_REPOSITORY_URL_PREFIX: &str = "https://github.com/";
 /// The pinned Ayni binary release.
 pub const SUPPORTED_AYNI_VERSION: &str = "0.13.0";
 
@@ -38,7 +38,7 @@ impl Configuration {
     ///
     /// Returns [`WorkerError`] for missing, malformed, or unsupported inputs.
     pub fn from_environment() -> Result<Self, WorkerError> {
-        let repository_url = supported_repository_url(required("ORCHESTRATOR_REPOSITORY_URL")?)?;
+        let repository_url = github_repository_url(required("ORCHESTRATOR_REPOSITORY_URL")?)?;
         let version = required("ORCHESTRATOR_AYNI_VERSION")?;
         if version != SUPPORTED_AYNI_VERSION {
             return Err(WorkerError::UnsupportedAyniVersion(version));
@@ -54,12 +54,32 @@ impl Configuration {
     }
 }
 
-fn supported_repository_url(value: String) -> Result<String, WorkerError> {
-    if value == SUPPORTED_REPOSITORY_URL {
-        Ok(value)
-    } else {
-        Err(WorkerError::UnsupportedRepository)
+fn github_repository_url(value: String) -> Result<String, WorkerError> {
+    let Some(path) = value.strip_prefix(GITHUB_REPOSITORY_URL_PREFIX) else {
+        return Err(WorkerError::UnsupportedRepository);
+    };
+    let Some(path) = path.strip_suffix(".git") else {
+        return Err(WorkerError::UnsupportedRepository);
+    };
+    let mut components = path.split('/');
+    let Some(owner) = components.next() else {
+        return Err(WorkerError::UnsupportedRepository);
+    };
+    let Some(repository) = components.next() else {
+        return Err(WorkerError::UnsupportedRepository);
+    };
+    if components.next().is_some() || !github_name(owner) || !github_name(repository) {
+        return Err(WorkerError::UnsupportedRepository);
     }
+    Ok(value)
+}
+
+fn github_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 /// Executes the managed check and retains only artifact-bound evidence.
@@ -672,7 +692,7 @@ pub enum WorkerError {
 #[cfg(test)]
 mod tests {
     use super::{
-        attempt_id, supported_repository_url, target_architecture, validate_execution_digest,
+        attempt_id, github_repository_url, target_architecture, validate_execution_digest,
     };
     #[test]
     fn accepts_the_execution_binding_for_retained_signals() -> Result<(), super::WorkerError> {
@@ -700,10 +720,11 @@ mod tests {
         assert!(target_architecture("riscv64").is_err());
     }
     #[test]
-    fn unsupported_repository_errors_do_not_echo_credentials() {
+    fn accepts_github_repository_urls_and_rejects_credential_bearing_urls() {
+        assert!(github_repository_url("https://github.com/ayni-oss/sandbox.git".into()).is_ok());
         let credential = "repository-password";
-        let supplied = format!("https://user:{credential}@example.invalid/private.git");
-        let Err(error) = supported_repository_url(supplied.clone()) else {
+        let supplied = format!("https://user:{credential}@github.com/private/repository.git");
+        let Err(error) = github_repository_url(supplied.clone()) else {
             panic!("credential-bearing repository URL was accepted");
         };
         let rendered = error.to_string();

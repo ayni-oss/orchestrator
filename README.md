@@ -15,7 +15,7 @@ independently useful local CLI in the public
 - a deployable server-rendered SvelteKit boundary whose server-only BFF uses generated native gRPC clients;
 - durable task and attempt state in SQLite on retained local storage;
 - deterministic Kubernetes Job reconciliation, cancellation, and bounded retry;
-- GitHub App repository enrollment and draft-pull-request publication;
+- customer-owned GitHub App onboarding, repository enrollment, and draft-pull-request publication;
 - content-addressed repository preparation and compatible reuse;
 - bounded OpenAI-backed development with a live provider model catalog and retained checkpoints;
 - durable per-interaction provider usage, versioned cost estimates, and a local Prometheus/Grafana task and Kubernetes resource dashboard;
@@ -41,10 +41,10 @@ rate- and size-limited, privately distributed, and remains ClusterIP-only; the
 loopback BFF listener and its defaults do not change. See
 [Custom-client gRPC access](docs/custom-client-access.md).
 
-The current profiles support the allowlisted private `ayni-oss/sandbox` Rust
-repository, one control-plane replica, Ayni `0.13.0`, and local retained
-volumes. They do not claim multi-tenant isolation, public hosting, multi-node
-storage, general repository support, or production readiness.
+The current profile supports GitHub.com repositories selected for the configured
+GitHub App, one control-plane replica, Ayni `0.13.0`, and local retained
+volumes. It does not claim multi-tenant isolation, public hosting, multi-node
+storage, GitLab or other VCS support, or production readiness.
 
 ## Planning and delivery
 
