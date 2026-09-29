@@ -35,6 +35,7 @@ evidence and OCI digests are retained identities.
 | Document | Purpose |
 | --- | --- |
 | [Clean-v1 runtime-profile decision](docs/decisions/0007-clean-v1-runtime-profiles.md) | Normative names, ownership, identity, lifecycle, trust, recovery, and issue map |
+| [Ayni OCI workflow research](docs/research/ayni-oci-workflow.md) | Executed OCI build/metadata evidence and direct-digest runner boundary |
 | [Architecture](docs/architecture.md) | Target shared/profile component and resource model |
 | [Protocol contract](proto/README.md) | Target clean-v1 gRPC resources and compatibility reset |
 | [Local development](docs/local-development.md) | Target Docker Desktop workflow and validation boundary |

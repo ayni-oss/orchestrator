@@ -65,7 +65,8 @@ dependency hash: its covered contract includes schema and recipe versions,
 contract digest, Ayni and Mise versions, provisioning-base reference/digest and
 variant, platforms, target runtimes/components, signal tools, dependency locks
 and source digests, capabilities, and resource limits. #53 must prove the
-exact fingerprint and image-label contract against the supported Ayni release.
+exact fingerprint and image-label contract against the supported Ayni release. The
+current executable research record is [Ayni OCI workflow research](../research/ayni-oci-workflow.md).
 
 ## Lifecycle and reconciliation
 
