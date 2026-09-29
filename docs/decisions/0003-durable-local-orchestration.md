@@ -1,6 +1,6 @@
 # Decision 0003: durable local orchestration
 
-- Status: accepted
+- Status: superseded by [Decision 0007](0007-clean-v1-runtime-profiles.md)
 - Date: 2026-09-17
 
 ## Decision

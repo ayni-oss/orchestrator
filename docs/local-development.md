@@ -1,27 +1,65 @@
 # Local development
 
-The supported local profile runs the control plane and workers on Docker Desktop
-Kubernetes. It includes durable task orchestration, repository preparation,
-bounded coding, independent candidate validation, draft-PR publication, and the
-browser interface. Local-only configuration and tooling are contained in
-[`dev/`](../dev/README.md), with `dev/ctl` as the supported command interface.
+> **Clean-v1 transition.** The checked-in pilot deployment/check commands do
+> not validate the replacement product. This guide describes the target local
+> topology and the validation required as #53–#68 land. Do not interpret pilot
+> preparation, local image archives, or `pilot_ready` as current v1 behavior.
 
-## Prerequisites
+The supported target topology is Docker Desktop Kubernetes with explicit
+`docker-desktop` context, one trusted maintainer team, and loopback-only access.
+`dev/ctl` remains the local command boundary. It must never fall back to another
+cluster, reset retained data, or print local credentials.
 
-- Rust 1.94.0, pinned by `rust-toolchain.toml`
-- Node 24.14.0 and pnpm 10.31.0, pinned by the root package and CI configuration
-- Buf 1.71.0 for protobuf formatting, linting, generation, and compatibility checks
-- Docker Desktop with Kubernetes 1.32 or newer enabled
-- a reachable `docker-desktop` Kubernetes context
-- Helm 4.1.1
-- `kubectl`, Docker, Git, `curl`, and `grpcurl`
+## Clean-v1 local contract
 
-Local scripts always name `docker-desktop`; they never fall back to the current
-context or reset the cluster. The default namespace is
-`ayni-orchestrator-dev`. Set `AYNI_ORCHESTRATOR_NAMESPACE` only when an isolated
-namespace is intentional.
+A clean installation starts with the replacement database baseline; it does not
+migrate the pilot SQLite schema, preparation directories, checkpoints, or
+validation manifests. Preserve any pilot data outside the deployment if needed,
+then use the guarded purge path before installing v1. Do not add a legacy-read
+or migration flag.
 
-## Validate the workspace
+The target deployment requires configuration for the GitHub App, enrolled GHCR
+coordinates, supported platform(s), Ayni release/checksum, workflow-template
+version, reconciliation interval/jitter, deadlines/concurrency, artifact bounds,
+and readiness policy. Credentials are supplied only through ignored local
+configuration and scoped Kubernetes Secrets; never commit, print, or copy them
+into task evidence.
+
+A GitHub App installation needs only the permissions documented and enforced by
+#57: repository/default-branch read, setup-PR creation, Actions/check observation
+or dispatch where needed, Packages read, and bounded comment/PR operations.
+The default-branch environment workflow has package-write only for its trusted
+build job; PR code never receives package-write, controller, or model
+credentials.
+
+## Target developer workflow
+
+1. Enroll a GitHub repository as a **repository connection** and create an
+   **Ayni Managed** profile. It must contain committed `.ayni.toml` and
+   `.ayni.lock`; the Ayni executable is provisioned, not vendored.
+2. Review the idempotent pipelines setup PR. The profile is
+   `setup_pr_open` until it merges; no default-branch mutation occurs directly.
+3. Observe trusted default-branch automation validate the lock and publish or
+   verify `ghcr.io/<owner>/<repository>/ayni-environment:lock-<full-64-hex-lock-fingerprint>`.
+   The controller independently resolves and verifies its digest, labels, owner,
+   and platform before `ready`.
+4. Submit coding only against a ready profile. The coding Job uses the frozen
+   `image@sha256:...` digest, writable checkout, bounded scratch, and scoped
+   credentials. It does not build an environment or mount a Docker socket,
+   controller database, service-account token, or another task's state.
+5. Treat `ayni check --host` in the coding container as feedback. Publish a
+   candidate as a draft PR, then let managed PR automation run exact-head
+   `ayni check` and retain digest-verified assessment evidence.
+
+A source-only default-branch revision reuses/validates its lock artifact. A
+lock revision enters `updating`; new tasks wait for its verified artifact while
+old in-flight tasks retain their frozen digest. `Custom Runtime` is visible as a
+profile variant but is not operational until #66.
+
+## Validation commands
+
+The usual workspace checks remain required for documentation and implementation
+changes:
 
 ```sh
 cargo fmt --all -- --check
@@ -30,270 +68,23 @@ cargo test --workspace --all-features
 cargo check --workspace --all-features
 pnpm install --frozen-lockfile
 pnpm frontend:check
-pnpm --filter @ayni-orchestrator/web exec playwright install chromium
-pnpm test:e2e
-```
-
-`frontend:check` type-checks the generated Node bindings, server-only BFF, and
-SvelteKit application; runs mapping, safe-error, correlation, and native gRPC
-integration tests; builds the adapter-node runtime; and verifies native gRPC
-code did not enter the browser bundle. `test:e2e` exercises the operator workflow,
-keyboard/focus behavior, narrow view, reduced motion, theme switching, and
-explicit destructive-action confirmation against a deterministic native-gRPC
-fixture.
-
-CI also installs the checksum-pinned Ayni release recorded by `.ayni.lock`,
-builds and doctors the locked environment, runs the repository-complete check,
-and retains its evidence. Exercise the same managed boundary locally with:
-
-```sh
-ayni env build --repo-root .
-ayni env doctor --repo-root .
-ayni check --config .ayni.toml
-```
-
-Lint both charts, verify the dependency lock, and render the complete local
-stack when changing deployment templates or values:
-
-```sh
-scripts/ci/check-helm.sh
-dev/ctl render local/control-plane:test local/worker:test local/web:test \
-  >/tmp/ayni-orchestrator.yaml
-```
-
-`deploy/charts/ayni-orchestrator` is the reusable application chart.
-`dev/charts/ayni-orchestrator-local` composes it with version-locked upstream Prometheus,
-kube-state-metrics, and Grafana dependencies plus the local dashboard. Opt-in
-worker fixtures live separately in `dev/tests/charts/worker-fixtures`.
-`dev/ctl dependencies` materializes ignored
-archives from `Chart.lock`; the render and deploy scripts invoke it
-automatically. Rendered output is for inspection; use `dev/ctl deploy` for local
-installation so Helm owns the release and selects the namespace explicitly.
-
-Do not commit rendered output, logs, local credentials, or runtime artifacts.
-
-## Validate the protobuf contract
-
-The canonical product contract is under `proto/`. Install the locked local
-TypeScript generator, validate the schema, reproduce the checked-in server
-bindings, and compile both generated language surfaces with:
-
-```sh
-pnpm install --frozen-lockfile
 scripts/ci/check-proto.sh
-cargo test -p ayni-orchestrator-api
+scripts/ci/check-helm.sh
 ```
 
-`buf format -w proto` formats source definitions. Do not hand-edit files under
-`clients/typescript/src/generated`; run `buf generate` and review the resulting
-diff. For an established contract, pass a base module to the check script to
-run the additive-only compatibility check:
+When a delivery issue changes deployment behavior, render through the explicit
+context and exercise its disposable Docker Desktop scenario. #68 owns the
+recorded end-to-end gate: exactly one setup PR; verified GHCR artifact; coding
+from its digest on a clean node/cache; draft PR; exact-head assessment and one
+summary comment; source-only no-op verification; lock update; and recovery
+coverage. A host check, mocked registry, or locally cached image alone is not
+that evidence.
 
-```sh
-scripts/ci/check-proto.sh /path/to/base/checkout/proto
-```
+## Access boundary
 
-The product contract is native gRPC only. The retired `/v1` JSON product routes
-and embedded control-plane UI are not served. `/livez`, `/readyz`, and `/metrics`
-remain HTTP operational endpoints rather than alternate product APIs.
-
-The local gRPC listener is native cleartext HTTP/2 on pod loopback. The Service
-declares its target so `kubectl port-forward` can select it, but normal Service
-traffic addresses the pod IP and cannot reach the loopback listener. Open a
-host-loopback forward and exercise health, development reflection, and one
-bounded read with:
-
-```sh
-kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward --address 127.0.0.1 service/control-plane 15051:50051
-grpcurl -plaintext -max-time 5 -d \
-  '{"service":"ayni.orchestrator.v1.RepositoryService"}' \
-  127.0.0.1:15051 grpc.health.v1.Health/Check
-grpcurl -plaintext -max-time 5 127.0.0.1:15051 list
-grpcurl -plaintext -max-time 10 -d '{}' 127.0.0.1:15051 \
-  ayni.orchestrator.v1.RepositoryService/ListRepositories
-```
-
-Never forward the local listener to a non-loopback address. To develop or test
-approved custom-client access, use the distinct opt-in chart profile and the
-private descriptor workflow in [Custom-client gRPC access](custom-client-access.md).
-That profile remains private and ClusterIP-only; it is not authorization for
-public hosting.
-
-## Configure local credentials
-
-Create the gitignored `dev/.env` from the documented template and set the
-GitHub App ID, installation ID, OpenAI key, and base64-encoded GitHub App private key.
-Base64 is transport encoding, not encryption.
-
-```sh
-dev/ctl init
-# Fill dev/.env, then sync it explicitly.
-dev/ctl secrets
-```
-
-The bootstrap script parses only documented keys and does not source the file.
-It writes Kubernetes Secrets for the local namespace. Never print those Secrets
-as YAML or commit `dev/.env`.
-
-The GitHub App should be installed only on the development repository with:
-
-- Metadata: read
-- Contents: read and write
-- Pull requests: read and write
-
-Webhooks, organization permissions, Actions access, and user authorization are
-not required by this profile.
-
-## Build, deploy, and check
-
-Use a clean committed checkout:
-
-```sh
-dev/ctl deploy
-dev/ctl check
-```
-
-The deploy script:
-
-1. builds the version-locked chart dependencies and verifies Docker Desktop
-   capacity and the explicit Kubernetes context;
-2. builds control-plane, worker, and SvelteKit web images labeled with the
-   checkout revision and tags each with a content-identity suffix;
-3. loads all three into Docker Desktop's Kubernetes node;
-4. upgrades the `ayni-orchestrator` release from the local umbrella, whose
-   application dependency is `deploy/charts/ayni-orchestrator`; incompatible
-   pre-Helm state must be removed with the guarded purge command rather than
-   adopted by routine deployment;
-5. waits for the application and monitoring Deployments; and
-6. verifies the running control-plane and web image identities and the worker
-   image frozen into the control-plane Pod configuration.
-
-It preserves SQLite, checkpoint, validation-result, and prepared-environment
-volumes across updates. It may remove only obsolete project image tags after a
-successful rollout; it does not prune shared Docker caches or volumes.
-
-The check script opens separate loopback web, operational HTTP, gRPC,
-Prometheus, and Grafana port-forwards. It verifies `/livez`, `/readyz`, metrics,
-the server-rendered BFF page through real native gRPC reads, gRPC health,
-reflection, monitoring scrape targets, and the provisioned dashboard. The current
-readiness JSON field is named
-`pilot_ready`; it means publication is configured and provider model discovery
-has succeeded at least once in this process, not that an individual repository
-has been prepared or the provider is currently reachable.
-
-Remove stateless resources while preserving retained state with:
-
-```sh
-dev/ctl cleanup
-```
-
-See [local operations](operations.md) before deleting a namespace, persistent
-volume, or Docker data.
-
-## Manual managed-check path
-
-A standalone Job exercises the worker without the control-plane task API:
-
-```sh
-dev/ctl test managed-check
-```
-
-It requires the normal local release, fetches the pinned source revision,
-verifies the committed Ayni lock, runs `env build`, `env doctor`, and an
-unscoped managed check through an isolated Docker-in-Docker engine, then stores
-original artifacts and a digest-bound manifest on `managed-check-evidence`.
-
-The command refuses to replace an existing fixture release or Job. Inspect logs
-and retained data, then remove the fixture before another attempt:
-
-```sh
-helm uninstall ayni-orchestrator-managed-check \
-  --kube-context docker-desktop --namespace ayni-orchestrator-dev
-```
-
-Quality failure, source/lock mismatch, and missing artifacts remain distinct
-terminal results.
-
-Exercise missing-artifact rejection with:
-
-```sh
-dev/ctl test artifact-rejection
-```
-
-The dedicated test Job removes `execution.json` after Ayni runs. The unchanged
-worker must withhold success and report the missing artifact. Inspect it, then
-remove its fixture:
-
-```sh
-helm uninstall ayni-orchestrator-artifact-rejection \
-  --kube-context docker-desktop --namespace ayni-orchestrator-dev
-```
-
-## Product workflow
-
-The current profile accepts GitHub.com repositories selected for the configured
-GitHub App and Ayni `0.13.0`. Start at **Connect GitHub** in the SvelteKit
-operator interface to either create a customer-owned App under the intended
-GitHub organization or configure an existing App. Store the generated private
-key outside the browser, configure it through `dev/.env` and `dev/ctl secrets`,
-then install the App on the desired repository and enroll it. GitHub controls
-repository installation scope: add repositories in GitHub App installation
-settings before enrolling them here. Approved automation may use the native
-gRPC services documented under `proto/`; there is no REST or JSON product API.
-
-Repository preparation must be `ready` for the exact revision and lock. A task
-freezes its repository, provider/model selection, source, lock, preparation,
-request, acceptance criteria, change constraints, and deadline. Retries and
-requested-input follow-ups create linked tasks rather than mutating prior state.
-
-The coding Job has fixed checkout file and command tools, no Kubernetes token,
-and no GitHub App private key. Independent validation writes retained evidence,
-and publication uses only the validated candidate identity to reconcile one
-deterministic branch and draft pull request. Backend application operations own
-authorization and lifecycle meaning; clients must not infer transitions.
-
-## Browser server boundary
-
-Open the SvelteKit server only through loopback port-forwarding:
-
-```sh
-kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward --address 127.0.0.1 service/web 18080:8080
-open http://127.0.0.1:18080/
-```
-
-The deployed Svelte 5 operator application provides repository readiness, task
-operation, lifecycle, usage, diagnostics, and structured evidence. Its server
-loads and form actions call only the server-side BFF, which uses generated native
-gRPC clients over pod loopback and returns explicit browser-safe DTOs. A bounded same-origin task update relay is available at
-`/tasks/TASK_ID/updates`; it is a private browser implementation detail, not a
-supported JSON API.
-
-The control-plane HTTP listener serves only operational probes, Prometheus
-metrics, and a bearer-protected internal publication callback. It does not serve
-a browser or product JSON routes. The browser remains unauthenticated; anyone
-who can reach its loopback forward can operate it.
-
-The default `local` umbrella installs the version-locked Prometheus,
-kube-state-metrics, and Grafana chart dependencies with the application.
-`dev/ctl check` validates the scrape targets and dashboard;
-`dev/ctl test observability` remains
-available when only the monitoring checks need to be repeated. Prometheus
-scrapes the application endpoint, namespaced Kubernetes object state, and the
-Docker Desktop kubelet/cAdvisor through a service account limited to node
-discovery and the metric-only `nodes/metrics` subresource. It is not granted
-`nodes/proxy` or access to Secrets, pod specifications, or logs. Open the
-provisioned dashboard through loopback only:
-
-```sh
-kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
-  port-forward --address 127.0.0.1 service/grafana 13000:3000
-open http://127.0.0.1:13000/d/ayni-orchestrator-tasks-resources
-```
-
-Prometheus retains at most 48 hours or 900 MB in ephemeral storage. Grafana
-anonymous access is Viewer-only and acceptable solely within this trusted local
-boundary. Normal release cleanup removes the disposable monitoring history
-while preserving product claims. See [local operations](operations.md) for
-metric semantics, capacity, and troubleshooting.
+Product gRPC stays native and pod-loopback by default. Open web, gRPC, metrics,
+and Grafana only through `kubectl --context docker-desktop --address 127.0.0.1
+port-forward`; no Ingress, NodePort, public image publication, or public hosting
+is authorized. The SvelteKit BFF is server-only and not a second API. See
+[protocol](../proto/README.md), [architecture](architecture.md), and
+[operations](operations.md) for the target resource and recovery contract.
