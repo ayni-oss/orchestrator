@@ -1,8 +1,8 @@
 # Local operations
 
 This runbook is the operating contract for the supported Docker Desktop
-profile: one trusted maintainer team, one local cluster, and the allowlisted
-`ayni-oss/sandbox` repository. It is not a multi-tenant service contract.
+profile: one trusted maintainer team, one local cluster, and GitHub.com
+repositories selected for the configured GitHub App. It is not a multi-tenant service contract.
 
 ## Access boundary
 
@@ -75,7 +75,7 @@ the chart are install-time minimums: do not reduce them, and expand them only
 when the active storage class supports expansion. Do not copy this topology to
 a multi-node cluster.
 
-Current profile limits are one repository allowlist, 24 coding-agent turns, 4 PR
+Current profile limits are GitHub.com repositories selected for one configured GitHub App, 24 coding-agent turns, 4 PR
 summary turns, one-hour preparation/validation Job deadlines, 5 GiB checkout
 workspaces, 20 GiB isolated engine storage, and no automatic deletion of
 retained state. Kubernetes capacity naturally serializes the 4 CPU/9 GiB heavy

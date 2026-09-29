@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Boxes, FolderGit2, ListTodo } from "@lucide/svelte";
+  import { Boxes, FolderGit2, ListTodo, PlugZap } from "@lucide/svelte";
   import { page } from "$app/state";
   import { onMount } from "svelte";
   import type { LayoutProps } from "./$types";
@@ -9,6 +9,7 @@
   let { children }: LayoutProps = $props();
   const links = [
     { href: "/", label: "Overview", icon: Boxes },
+    { href: "/setup/github", label: "Connect GitHub", icon: PlugZap },
     { href: "/repositories", label: "Repositories", icon: FolderGit2 },
     { href: "/tasks", label: "Tasks", icon: ListTodo },
   ];

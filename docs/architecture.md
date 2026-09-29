@@ -162,7 +162,7 @@ request before repeating creation.
 
 ## Supported boundary
 
-The current implementation supports one allowlisted private Rust repository,
+The current implementation supports GitHub.com repositories selected for one configured GitHub App,
 Ayni `0.13.0`, a GitHub App integration, an OpenAI provider catalog and task-frozen
 model selection, Docker Desktop Kubernetes, and single-node retained storage. Dependency-manifest changes return
 an explicit unsupported result. Requirements beyond this boundary are tracked in

@@ -232,11 +232,15 @@ helm uninstall ayni-orchestrator-artifact-rejection \
 
 ## Product workflow
 
-The current profile accepts only the private `ayni-oss/sandbox` Rust repository
-and Ayni `0.13.0`. Use the SvelteKit operator interface for enrollment, exact-revision
-preparation, task submission, lifecycle actions, usage, and evidence. Approved
-automation may use the native gRPC services documented under `proto/`; there is
-no REST or JSON product API.
+The current profile accepts GitHub.com repositories selected for the configured
+GitHub App and Ayni `0.13.0`. Start at **Connect GitHub** in the SvelteKit
+operator interface to either create a customer-owned App under the intended
+GitHub organization or configure an existing App. Store the generated private
+key outside the browser, configure it through `dev/.env` and `dev/ctl secrets`,
+then install the App on the desired repository and enroll it. GitHub controls
+repository installation scope: add repositories in GitHub App installation
+settings before enrolling them here. Approved automation may use the native
+gRPC services documented under `proto/`; there is no REST or JSON product API.
 
 Repository preparation must be `ready` for the exact revision and lock. A task
 freezes its repository, provider/model selection, source, lock, preparation,

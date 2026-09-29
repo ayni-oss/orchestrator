@@ -1,6 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import { ArrowRight, FolderGit2, Plus } from "@lucide/svelte";
+  import { ArrowRight, FolderGit2, Plus, PlugZap } from "@lucide/svelte";
   import type { PageProps } from "./$types";
   import EmptyState from "$lib/components/empty-state.svelte";
   import Feedback from "$lib/components/feedback.svelte";
@@ -21,8 +21,8 @@
 <svelte:head><title>Repositories · Ayni Orchestrator</title></svelte:head>
 
 <div class="space-y-8" data-bff-status={data.backend}>
-  <PageHeader eyebrow="Readiness" title="Repositories" description="Enroll an approved repository, prepare one immutable revision, and verify its retained environment before development starts.">
-    {#snippet actions()}<Button href="#enroll"><Plus aria-hidden="true" /> Enroll repository</Button>{/snippet}
+  <PageHeader eyebrow="Readiness" title="Repositories" description="Enroll a repository selected for your GitHub App, prepare one immutable revision, and verify its retained environment before development starts.">
+    {#snippet actions()}<Button href="/setup/github" variant="outline"><PlugZap aria-hidden="true" /> Connect GitHub</Button><Button href="#enroll"><Plus aria-hidden="true" /> Enroll repository</Button>{/snippet}
   </PageHeader>
 
   {#if data.error}<Feedback kind="error" title="Repositories unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
@@ -59,12 +59,13 @@
   <Card.Root id="enroll">
     <Card.Header><div class="flex items-center gap-3"><span class="grid size-9 place-items-center rounded-md bg-accent"><FolderGit2 class="size-4" aria-hidden="true" /></span><div><Card.Title>Enroll repository</Card.Title><Card.Description>The backend validates product support and authorization; this form does not infer access.</Card.Description></div></div></Card.Header>
     <Card.Content>
+      <p class="mb-5 text-sm text-muted-foreground">The GitHub App must already be installed on this repository. To add a repository later, update the App installation in GitHub, then refresh this form. <a href="/setup/github">Need to create or configure an App?</a></p>
       <form method="POST" action="?/enroll" class="grid gap-5 sm:grid-cols-2" use:enhance={() => { enrolling = true; return async ({ update }) => { enrolling = false; await update(); }; }}>
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
         <div class="space-y-2"><Label for="repository-id">Operator identifier</Label><Input id="repository-id" name="id" required maxlength={64} pattern="[a-z0-9][a-z0-9._-]*" placeholder="sandbox" aria-describedby="repository-id-help" /><p id="repository-id-help" class="text-xs text-muted-foreground">A stable lowercase slug used in task submissions.</p></div>
         <div class="space-y-2"><Label for="installation-id">GitHub App installation ID</Label><Input id="installation-id" name="installationId" required inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" /></div>
-        <div class="space-y-2"><Label for="owner">Owner</Label><Input id="owner" name="owner" required maxlength={100} value="ayni-oss" autocomplete="off" /></div>
-        <div class="space-y-2"><Label for="repository">Repository</Label><Input id="repository" name="repository" required maxlength={100} value="sandbox" autocomplete="off" /></div>
+        <div class="space-y-2"><Label for="owner">Owner</Label><Input id="owner" name="owner" required maxlength={100} placeholder="acme-inc" autocomplete="off" /></div>
+        <div class="space-y-2"><Label for="repository">Repository</Label><Input id="repository" name="repository" required maxlength={100} placeholder="service-api" autocomplete="off" /></div>
         <div class="space-y-2"><Label for="base-branch">Base branch</Label><Input id="base-branch" name="baseBranch" required maxlength={255} value="main" autocomplete="off" /></div>
         <div class="space-y-2"><Label for="lock-sha">Ayni lock SHA-256</Label><Input id="lock-sha" name="lockSha256" required minlength={64} maxlength={64} pattern={"[0-9a-f]{64}"} autocomplete="off" spellcheck="false" class="font-mono" /></div>
         <div class="sm:col-span-2"><SubmitButton pending={enrolling} pendingLabel="Enrolling…">Enroll repository</SubmitButton></div>

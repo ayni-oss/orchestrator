@@ -786,19 +786,35 @@ fn discovered_models_create_internal_profiles_without_user_configuration() -> Re
 }
 
 #[test]
-fn rejects_a_repository_outside_the_supported_sandbox() -> Result<(), StoreError> {
+fn accepts_a_github_repository_selected_by_the_installed_app() -> Result<(), StoreError> {
+    let store = Store::in_memory()?;
+    store.put_repository_binding(&RepositoryBinding {
+        id: "orchestrator".into(),
+        owner: "ayni-oss".into(),
+        repository: "orchestrator".into(),
+        installation_id: 1,
+        base_branch: "main".into(),
+        lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
+    })?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_invalid_github_repository_name() -> Result<(), StoreError> {
     let store = Store::in_memory()?;
     let error = store
         .put_repository_binding(&RepositoryBinding {
-            id: "wrong-target".into(),
-            owner: "ayni-oss".into(),
-            repository: "orchestrator".into(),
+            id: "invalid-name".into(),
+            owner: "ayni oss".into(),
+            repository: "sandbox".into(),
             installation_id: 1,
             base_branch: "main".into(),
             lock_sha256: "d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7".into(),
         })
         .err()
-        .ok_or(StoreError::InvalidInput("non-sandbox target was accepted"))?;
-    assert!(error.to_string().contains("ayni-oss/sandbox"));
+        .ok_or(StoreError::InvalidInput(
+            "invalid GitHub owner was accepted",
+        ))?;
+    assert!(error.to_string().contains("GitHub names"));
     Ok(())
 }
