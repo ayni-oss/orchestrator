@@ -4,6 +4,10 @@
 - Date: 2026-09-28
 - Supersedes: [Decision 0001](0001-local-kubernetes-deployment.md)
 
+## Historical scope
+
+The Helm composition, explicit Docker Desktop context, and loopback deployment boundary remain accepted. Its pilot storage and Docker-in-Docker worker descriptions are historical; [Decision 0007](0007-clean-v1-runtime-profiles.md) defines the clean-v1 resource and runner model.
+
 ## Decision
 
 Maintain a reusable application chart under `deploy/charts` and contain the

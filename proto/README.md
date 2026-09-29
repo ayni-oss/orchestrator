@@ -1,190 +1,85 @@
 # Ayni Orchestrator protocol
 
-`ayni.orchestrator.v1` is the canonical product API contract. Native
-gRPC is the supported product transport for repository, provider-model,
-development-task, and evidence operations. The deployed SvelteKit server-side
-BFF and approved custom clients use the same contract; generated clients and
-gRPC transport values must not enter browser bundles.
+> **Clean-v1 target.** `ayni.orchestrator.v1` is replaced as a pre-public
+> baseline by the model in [Decision 0007](../docs/decisions/0007-clean-v1-runtime-profiles.md).
+> The existing pilot schema, generated bindings, and Buf baseline are removed;
+> this does not introduce a v2 package or compatibility aliases.
 
-The retired `/v1` JSON routes and embedded browser client were an
-implementation-private migration surface. HTTP now remains only for liveness,
-readiness, Prometheus metrics, and a narrow bearer-protected internal
-publication callback. This contract does not define REST, JSON transcoding,
-gRPC-Web, or browser-generated clients.
+Native gRPC remains the only supported product transport. The server-side
+SvelteKit BFF and approved custom clients use the same contract; generated
+transport values never enter browser bundles. HTTP remains limited to liveness,
+readiness, metrics, and documented internal callbacks; it is not REST, JSON
+transcoding, gRPC-Web, or a browser API.
 
-The supported local server exposes this contract through a pod-loopback Tonic
-listener reached with a Service port-forward bound to host loopback. Normal
-Service traffic addresses the pod IP and cannot reach the loopback listener.
-The opt-in custom-client profile uses a distinct non-loopback listener with
-TLS, bounded bearer metadata, operation capabilities, deadlines, rate and
-concurrency controls, and network policy. The existing unauthenticated listener
-remains pod-loopback-only. See
-[Custom-client gRPC access](../docs/custom-client-access.md).
+## Resource model
 
-## Services
+The replacement contract models these independently reconcilable resources:
 
-| Service | Responsibility |
+| Resource | Required immutable bindings |
 | --- | --- |
-| `RepositoryService` | Repository enrollment plus asynchronous, content-addressed preparation |
-| `ProviderService` | Sanitized provider model discovery |
-| `DevelopmentTaskService` | Task submission, lookup, actions, lifecycle updates, usage, and evidence |
+| Repository connection/snapshot | Provider repository identity and observed revision |
+| Runtime profile/revision | Closed profile kind (`AYNI_MANAGED` or `CUSTOM_RUNTIME`), repository connection, configuration revision |
+| Runtime artifact | Profile revision, OCI repository/discovery tag where applicable, resolved digest, platform, status, bounded verified metadata |
+| Repository automation/installation | Provider installation and versioned owned automation identity/action |
+| Development task/attempt | Frozen repository/profile revision, OCI digest, model/agent, request, constraints, deadline |
+| Candidate | Attempt and immutable candidate commit/bundle identity |
+| Change request | Candidate and provider PR/MR identity, base and exact head SHA |
+| Assessment | Change request, exact head SHA, producer/version, workflow run/attempt, conclusion, evidence references |
+| Evidence reference | Assessment and content digest with bounded metadata |
 
-Mutations carry caller-generated idempotency keys. Keys are scoped to the
-authenticated caller and RPC method and are retained at least as long as the
-resulting resource. Repeating the same canonical request returns the original
-result; reusing a key with different content returns `ALREADY_EXISTS` with
-`ERROR_REASON_IDEMPOTENCY_KEY_REUSED`.
+Repository connections and shared task/change-request resources do not require
+Ayni locks, signals, preparation IDs, or GitHub-only fields. Ayni Managed carries
+lock/environment/assessment data in its profile-specific fields; Custom Runtime
+carries none. An unsupported profile is explicit rather than inferred from
+missing Ayni data.
 
-`SaveRepository` creates or replaces the enrollment with the same repository
-ID. The replacement applies only to future preparation and task submissions;
-existing preparations, frozen task snapshots, evidence, and publication results
-remain unchanged. Preparation and development submission return durable
-resources, normally in a queued state; they never promise synchronous
-completion.
+Mutations carry caller-generated idempotency keys and create a durable action
+before external effects. Repeating an equivalent request returns the original
+resource; reuse with different canonical content returns `ALREADY_EXISTS` and a
+machine-readable reason. Lists are stable, paginated, and bounded. Resources
+provide monotonic versions for resumable watch/poll; a task completion, change
+request state, assessment conclusion, and profile readiness remain separate
+updates.
 
-List ordering is stable: repository and model IDs sort ascending, while
-preparations and tasks sort by creation time and ID descending. Page tokens bind
-the original filter and a consistent list snapshot. Tokens are opaque, expire
-no earlier than 15 minutes after issue, and cannot be reused with another list
-method or filter.
+## Identity and admission
 
-Task lists return bounded summaries. Full lifecycle events, frozen scope,
-evidence references, and individual provider interactions are returned only by
-task-specific RPCs.
+The protocol validates distinct types for commit SHA, full Ayni lock fingerprint,
+OCI discovery tag, OCI digest, candidate commit, PR/MR head SHA, workflow
+run/attempt, and evidence digest. A task admission accepts only a verified
+platform-specific runtime artifact and stores `image@sha256:...`; mutable tags
+are discovery only. Ayni Managed uses
+`lock-<full-64-hex-lock-fingerprint>` as its GHCR discovery tag, but the tag is
+not a task or evidence identity.
 
-`WatchDevelopmentTask` is the v1 task-update contract. Every durable change to
-the represented task, including lifecycle, evidence, publication, and provider
-usage changes, increments `resource_version`. Without a cursor the stream first
-returns the current task snapshot. With `after_resource_version`, it waits for a
-later version. The server ends the stream after a complete terminal snapshot and
-may end it earlier for a deadline, cancellation, shutdown, or backpressure.
-Clients reconnect with the last received resource version; clients needing only
-a point-in-time read use `GetDevelopmentTask`.
+Assessments require the current exact change-request head and digest-verified
+bounded evidence. GitHub checks/comments and coding-time `ayni check --host`
+are projections/advisory feedback, not authoritative assessment fields or
+readiness authorization.
 
-## Compatibility
+## Compatibility and generation
 
-The package release state is recorded in [RELEASES.md](RELEASES.md). An
-additive-only package follows these rules:
+This pre-public replacement intentionally resets the Buf breaking baseline and
+release state. After the reset, `ayni.orchestrator.v1` follows additive protobuf
+rules: never reuse removed numbers/names, preserve field and RPC wire shape,
+add enum values only, and handle unknown enum values safely. No deprecated
+pilot messages, RPCs, aliases, or legacy readers remain. Future incompatible
+work uses a new package only after this new baseline has an established release
+contract.
 
-- never renumber an existing field or reuse a removed field number or name;
-- reserve removed field numbers and names in the message or enum;
-- do not change field cardinality, scalar type, service name, RPC name, or RPC
-  streaming shape;
-- add enum values only; every consumer must handle `UNSPECIFIED` and an
-  unrecognized numeric value without inventing product meaning (enum additions
-  remain potentially source-breaking for exhaustive language-level matches);
-- preserve scalar presence when absence differs from zero, false, or empty;
-- add behavior behind new fields or methods rather than changing established
-  semantics; and
-- run the Buf `FILE` breaking check against the base branch for every change.
-
-A future incompatible contract uses a new protobuf package such as
-`ayni.orchestrator.v2`; an HTTP alias is not a compatibility mechanism.
-
-## Errors
-
-Clients may send `x-request-id` metadata containing 1–64 ASCII alphanumeric,
-dash, underscore, or period characters. Once a request is decoded and reaches a
-product handler, the server returns the accepted value or a generated value in
-response metadata. TLS, HTTP/2, header-list, and message-decoding failures can
-occur before application admission and do not carry this correlation guarantee.
-
-RPCs use canonical gRPC status codes. When a stable explanation is available,
-the standard rich status details list contains an
-`ayni.orchestrator.v1.ErrorDetail`. Its `reason` is machine-readable; `message`
-and metadata are bounded, credential-free, and safe for an operator. The detail
-repeats the accepted bounded request-correlation ID when one is available.
-Clients must branch on the canonical status and reason rather than matching message
-text. Unknown reasons are handled as `ERROR_REASON_UNSPECIFIED` behavior.
-
-| Condition | Canonical status |
-| --- | --- |
-| Malformed decoded field or exceeded field bound | `INVALID_ARGUMENT` |
-| Encoded request or response exceeds its transport message limit | `OUT_OF_RANGE` |
-| Missing repository, preparation, task, or evidence | `NOT_FOUND` |
-| Idempotency key reused with different content | `ALREADY_EXISTS` |
-| Repository not ready or task phase ineligible | `FAILED_PRECONDITION` |
-| Authentication missing or invalid | `UNAUTHENTICATED` |
-| Caller lacks an operation capability | `PERMISSION_DENIED` |
-| Provider or repository dependency temporarily unavailable | `UNAVAILABLE` |
-| Caller or deadline cancellation | `CANCELLED` or `DEADLINE_EXCEEDED` |
-| Corrupt retained state or unexpected storage failure | `INTERNAL` |
-
-## Bounds
-
-Servers reject decoded fields outside these contract limits with
-`INVALID_ARGUMENT` and an `ERROR_REASON_INVALID_INPUT` detail. Tonic rejects an
-encoded message above its transport limit before field validation with
-`OUT_OF_RANGE`.
-
-| Input | Limit |
-| --- | --- |
-| Encoded request message | 1 MiB |
-| Encoded response message | 4 MiB |
-| List page | 100 resources; default 50 |
-| Page token | 512 bytes |
-| Idempotency key | 1–128 ASCII `[A-Za-z0-9._:-]` characters |
-| Repository ID | 1–64 lowercase slug characters |
-| Git revision | exactly 40 lowercase hexadecimal characters |
-| Bare SHA-256 fields | exactly 64 lowercase hexadecimal characters |
-| Manifest digest | `sha256:` followed by exactly 64 lowercase hexadecimal characters |
-| Provider/model ID | 1–128 safe ASCII bytes |
-| Task request | 1–16,384 UTF-8 bytes |
-| Acceptance criteria | 1–20 entries, at most 2,048 bytes each |
-| Protected paths | 100 entries, at most 16,384 aggregate bytes |
-| Follow-up input | 1–8,192 UTF-8 bytes |
-| Requested-input prompt | 1,024 UTF-8 bytes |
-| Safe diagnostic | 512 UTF-8 bytes |
-| Task deadline | 1 second–24 hours |
-| Changed paths | 256 entries, at most 65,536 aggregate bytes |
-| Scope violations | 512 entries, at most 524,288 aggregate bytes |
-| Evidence artifacts | 16 entries; names 1–128 safe relative-path bytes |
-| Lifecycle events | 32 per task |
-| Provider interactions | 64 per task |
-| Error metadata | 16 entries; keys 1–64 ASCII bytes, values at most 256 UTF-8 bytes |
-| Custom-client request metadata | 8 KiB and 32 entries, including one 32–512 byte bearer credential |
-| Custom-client request rate | 120 admitted RPC starts per client per 60-second server window |
-| Custom-client HTTP/2 concurrency | 32 streams per connection |
-| Custom-client unary deadline | required; at most 30 seconds |
-| Custom-client watch deadline | required; at most 5 minutes |
-
-Protected and changed paths are normalized repository-relative UTF-8 paths:
-they have no leading or trailing slash, backslash, control character, empty
-component, `.` component, or `..` component. A protected directory also protects
-all descendants.
-
-Repository identifiers, revisions, digests, model metadata, diagnostics, URLs,
-artifact names, and lifecycle reason codes retain the stricter bounds enforced
-by the application layer. Generated bindings do not replace server validation.
-
-## Generation and validation
-
-Rust bindings and the descriptor set are generated at build time by
-`crates/api` using a Cargo-pinned compiler and generator. Server-side TypeScript
-bindings are checked in under `clients/typescript/src/generated` and use a
-pnpm-locked local generator. TypeScript represents protobuf 64-bit integers as
-decimal strings so counters, costs, sequences, and installation IDs never lose
-precision in JavaScript.
-
-From the repository root:
+Rust bindings and the descriptor set are generated by `crates/api`; server-side
+TypeScript bindings are generated under `clients/typescript/src/generated`.
+Do not hand-edit generated output. Validate the delivered contract with:
 
 ```sh
 pnpm install --frozen-lockfile
-buf format -w proto
-buf lint proto
-buf generate
-pnpm typecheck
+scripts/ci/check-proto.sh
 cargo test -p ayni-orchestrator-api
 ```
 
-Do not edit generated TypeScript. CI regenerates it and rejects a diff. The
-first revision that introduces the protocol has no base contract; every later
-revision is checked against the base branch.
+## Transport boundary
 
-For approved custom clients, `scripts/api/build-contract-bundle.sh` packages the
-canonical sources and a standard descriptor set with the private source revision
-and checksums. The script performs no upload. An operator must explicitly
-approve distribution through restricted private artifact storage; public
-packages, releases, endpoints, and repository visibility remain separate
-publication decisions. Reflection is a development convenience, not the
-supported distribution channel.
+The default native listener binds pod loopback and is reached through a
+host-loopback Service port-forward. The optional custom-client listener remains
+a distinct TLS/HTTP2, capability-authorized, bounded, ClusterIP-only profile;
+it does not change the default listener or authorize public hosting. See
+[Custom-client gRPC access](../docs/custom-client-access.md).
