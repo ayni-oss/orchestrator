@@ -61,7 +61,7 @@ returned by the API or UI.
 - A GitHub App installed on the enrolled repository with Contents and Pull
   requests read/write permissions.
 - A committed `.ayni.toml` and `.ayni.lock`; the worker uses Ayni `0.13.0`.
-- The local credential file described in `.env.example`. Never commit it.
+- The local credential file described in `dev/.env.example`. Never commit it.
 
 Storage claims are 1 GiB for SQLite state, 2 GiB each for checkpoints and
 validation evidence, and 10 GiB for prepared image archives. The deploy script
@@ -87,11 +87,11 @@ change at a time.
 From a clean Docker Desktop Kubernetes namespace:
 
 ```bash
-cp .env.example .env
-# Fill values locally; do not print the file.
-scripts/local/configure-development-secrets.sh
-scripts/local/deploy.sh
-scripts/local/check.sh
+dev/ctl init
+# Fill dev/.env locally; do not print it.
+dev/ctl secrets
+dev/ctl deploy
+dev/ctl check
 ```
 
 The core check requires `pilot_ready: true`, verifies the operational and
@@ -111,10 +111,10 @@ export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-clean-check
 export AYNI_ORCHESTRATOR_WEB_LOCAL_PORT=18082
 export AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT=18083
 export AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT=15052
-scripts/local/configure-development-secrets.sh
-scripts/local/deploy.sh
-scripts/local/check.sh
-kubectl --context docker-desktop delete namespace "$AYNI_ORCHESTRATOR_NAMESPACE"
+dev/ctl secrets
+dev/ctl deploy
+dev/ctl check
+dev/ctl purge "$AYNI_ORCHESTRATOR_NAMESPACE"
 unset AYNI_ORCHESTRATOR_NAMESPACE AYNI_ORCHESTRATOR_WEB_LOCAL_PORT \
   AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT
 ```
@@ -261,8 +261,8 @@ provider response bodies.
 
 The `local` umbrella installs version-locked upstream Prometheus,
 kube-state-metrics, and Grafana chart dependencies by default.
-`scripts/local/check.sh` validates them together with the reusable application
-chart; rerun only `scripts/local/check-observability.sh` when troubleshooting
+`dev/ctl check` validates them together with the reusable application
+chart; rerun only `dev/ctl test observability` when troubleshooting
 the monitoring path. Prometheus scrapes every 15 seconds and keeps no more than 48 hours or
 900 MB in a 1 GiB `emptyDir`. That window preserves resource samples after a
 terminal Job's one-hour TTL removes its Pod. A Prometheus restart or teardown
@@ -312,7 +312,7 @@ memory-backed Grafana data, and 64 MiB Grafana scratch). These limits leave the
 Docker Desktop profile. Monitoring failure cannot block task orchestration.
 
 The observability resources are part of the local release. Normal
-`scripts/local/cleanup.sh` uninstalls them with the stateless application while
+`dev/ctl cleanup` uninstalls them with the stateless application while
 preserving the namespace, Jobs, Secrets, and all four retained PVCs.
 
 Troubleshooting:
@@ -326,7 +326,7 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/kube-s
 kubectl --context docker-desktop -n ayni-orchestrator-dev logs deployment/grafana
 ```
 
-If an `up` target is missing, rerun `check-observability.sh` and inspect the
+If an `up` target is missing, rerun `dev/ctl test observability` and inspect the
 matching Deployment logs. A `403` from a kubelet/cAdvisor target indicates that
 the metric-only `nodes/metrics` ClusterRole or binding is absent; redeploy the
 local release rather than granting `nodes/proxy` or broader access. Empty task resource panels
@@ -357,7 +357,7 @@ names first, then authorize that migration for one invocation only:
 
 ```bash
 AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES=true \
-  scripts/local/deploy.sh
+  dev/ctl deploy
 ```
 
 Never set this flag for routine upgrades or an unfamiliar namespace. The script
@@ -375,8 +375,8 @@ kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
 # In another terminal, before and after deployment:
 grpcurl -plaintext -max-time 10 -d '{}' 127.0.0.1:15051 \
   ayni.orchestrator.v1.DevelopmentTaskService/ListDevelopmentTasks
-scripts/local/deploy.sh
-scripts/local/check.sh
+dev/ctl deploy
+dev/ctl check
 ```
 
 SQLite migrations are additive. Existing tasks, checkpoints, evidence, and
@@ -409,7 +409,7 @@ backup. At minimum copy `/data/orchestrator.sqlite` from the
 `control-plane-state` claim mounted at `/data`; include `development-checkpoints`,
 `managed-check-evidence`, and `prepared-environments` to retain full recovery
 and audit data. Restore claims before starting the deployment. Check file
-ownership remains UID/GID 10001, then run `scripts/local/check.sh` and verify
+ownership remains UID/GID 10001, then run `dev/ctl check` and verify
 known task/evidence IDs.
 
 A database-only restore preserves task history but may leave an in-progress task
@@ -422,7 +422,7 @@ First cancel active tasks in the UI and wait for cancellation to be visible.
 Then:
 
 ```bash
-scripts/local/cleanup.sh
+dev/ctl cleanup
 ```
 
 This uninstalls the `ayni-orchestrator` Helm release, including the disposable
@@ -437,7 +437,14 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev delete pvc \
 ```
 
 That command permanently removes task state and retained evidence. It is not
-part of normal cleanup.
+part of normal cleanup. After backup, remove the entire labeled local environment
+(including its Secrets and Jobs) by typing the exact namespace:
+
+```bash
+dev/ctl purge ayni-orchestrator-dev
+```
+
+`purge` refuses absent, unlabeled, or non-`ayni-orchestrator-*` namespaces.
 
 ## Lifecycle and structured-log troubleshooting
 

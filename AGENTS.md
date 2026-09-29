@@ -38,7 +38,7 @@
 - Start each change from updated main on a focused branch and link its pull
   request to the issue with a closing keyword. Do not merge automatically.
 - Exercise deployable behavior on Docker Desktop Kubernetes when the change
-  affects runtime behavior. Use the `deploy/charts/local` Helm chart and the
+  affects runtime behavior. Use the `dev/charts/ayni-orchestrator-local` Helm chart and the
   explicit `docker-desktop` context as defined in
   docs/decisions/0006-local-helm-chart.md. Never fall back
   to another current cluster when the local context is absent. Local deployment

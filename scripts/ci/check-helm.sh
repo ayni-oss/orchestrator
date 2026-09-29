@@ -3,7 +3,8 @@ set -euo pipefail
 
 readonly repository_root="$(git rev-parse --show-toplevel)"
 readonly application_chart="$repository_root/deploy/charts/ayni-orchestrator"
-readonly local_chart="$repository_root/deploy/charts/local"
+readonly local_chart="$repository_root/dev/charts/ayni-orchestrator-local"
+readonly fixture_chart="$repository_root/dev/tests/charts/worker-fixtures"
 readonly scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch" "$local_chart/charts"' EXIT
 mkdir -p "$scratch/helm-plugins" "$scratch/helm-cache"
@@ -15,6 +16,12 @@ if ! command -v helm >/dev/null 2>&1; then
   echo "Helm is required to validate the deployment charts" >&2
   exit 1
 fi
+bash -n \
+  "$repository_root/dev/ctl" \
+  "$repository_root"/dev/scripts/*.sh \
+  "$repository_root"/dev/tests/*.sh \
+  "$repository_root"/dev/pilot/*.sh
+"$repository_root/dev/ctl" help >/dev/null
 if find "$repository_root" \
     \( -path "$repository_root/.git" -o -path "$repository_root/.worktrees" \) -prune -o \
     -name kustomization.yaml -print -quit | grep -q .; then
@@ -28,6 +35,7 @@ helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
 helm dependency build "$local_chart"
 helm lint --strict "$application_chart"
 helm lint --strict "$local_chart"
+helm lint --strict "$fixture_chart"
 
 helm template reusable "$application_chart" \
   --namespace reusable-install \
@@ -49,31 +57,20 @@ helm template ayni-orchestrator "$local_chart" \
   --namespace ayni-orchestrator-dev \
   --set observability.enabled=false \
   >"$scratch/no-observability.yaml"
-helm template ayni-orchestrator-managed-check "$local_chart" \
+helm template ayni-orchestrator-managed-check "$fixture_chart" \
   --namespace ayni-orchestrator-dev \
-  --set ayni-orchestrator.enabled=false \
-  --set observability.enabled=false \
   --set fixtures.managedCheck.enabled=true \
   --set fixtures.managedCheck.createEvidenceClaim=true \
   >"$scratch/managed-check.yaml"
-helm template ayni-orchestrator-artifact-rejection "$local_chart" \
+helm template ayni-orchestrator-artifact-rejection "$fixture_chart" \
   --namespace ayni-orchestrator-dev \
-  --set ayni-orchestrator.enabled=false \
-  --set observability.enabled=false \
   --set fixtures.artifactRejection.enabled=true \
   >"$scratch/artifact-rejection.yaml"
-if helm template invalid-fixtures "$local_chart" \
+if helm template invalid-fixtures "$fixture_chart" \
     --set fixtures.managedCheck.enabled=true \
     --set fixtures.artifactRejection.enabled=true \
     >"$scratch/invalid-fixtures.yaml" 2>/dev/null; then
-  echo "local chart accepted mutually exclusive managed-check fixtures" >&2
-  exit 1
-fi
-if helm template duplicate-claim "$local_chart" \
-    --set fixtures.managedCheck.enabled=true \
-    --set fixtures.managedCheck.createEvidenceClaim=true \
-    >"$scratch/duplicate-claim.yaml" 2>/dev/null; then
-  echo "local chart accepted duplicate managed-check evidence claims" >&2
+  echo "fixture chart accepted mutually exclusive managed-check fixtures" >&2
   exit 1
 fi
 
@@ -87,11 +84,11 @@ if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics)$' "$scratch/applic
   exit 1
 fi
 
-# The local chart must compose the reusable chart and version-locked upstream charts.
-grep -q '# Source: local/charts/ayni-orchestrator/' "$scratch/local.yaml"
-grep -q '# Source: local/charts/prometheus/' "$scratch/local.yaml"
-grep -q '# Source: local/charts/kube-state-metrics/' "$scratch/local.yaml"
-grep -q '# Source: local/charts/grafana/' "$scratch/local.yaml"
+# The local chart composes the reusable chart and version-locked upstream charts.
+grep -q '# Source: ayni-orchestrator-local/charts/ayni-orchestrator/' "$scratch/local.yaml"
+grep -q '# Source: ayni-orchestrator-local/charts/prometheus/' "$scratch/local.yaml"
+grep -q '# Source: ayni-orchestrator-local/charts/kube-state-metrics/' "$scratch/local.yaml"
+grep -q '# Source: ayni-orchestrator-local/charts/grafana/' "$scratch/local.yaml"
 grep -q '^  ORCHESTRATOR_KUBERNETES_NAMESPACE: "ayni-orchestrator-dev"$' "$scratch/local.yaml"
 grep -q '^  name: prometheus$' "$scratch/local.yaml"
 grep -q '^  name: grafana$' "$scratch/local.yaml"
@@ -105,6 +102,10 @@ grep -q 'sizeLimit: 1Gi' "$scratch/local.yaml"
 grep -q 'sizeLimit: 64Mi' "$scratch/local.yaml"
 if grep -q '@sha256:sha256:' "$scratch/local.yaml"; then
   echo "local chart rendered a malformed image digest" >&2
+  exit 1
+fi
+if grep -Eq '^  name: (managed-check|managed-check-artifact-rejection)$' "$scratch/local.yaml"; then
+  echo "normal local chart rendered an opt-in worker fixture" >&2
   exit 1
 fi
 
@@ -133,9 +134,10 @@ if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics)$' "$scratch/no-obs
   exit 1
 fi
 if grep -q '^  name: control-plane$' "$scratch/managed-check.yaml"; then
-  echo "managed-check fixture unexpectedly rendered the application dependency" >&2
+  echo "managed-check fixture unexpectedly rendered application resources" >&2
   exit 1
 fi
 
 helm package "$application_chart" --destination "$scratch" >/dev/null
 helm package "$local_chart" --destination "$scratch" >/dev/null
+helm package "$fixture_chart" --destination "$scratch" >/dev/null

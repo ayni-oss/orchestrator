@@ -6,20 +6,22 @@
 
 ## Decision
 
-Maintain two Helm charts under `deploy/charts`:
+Maintain a reusable application chart under `deploy/charts` and contain the
+Docker Desktop development composition under `dev`:
 
-- `ayni-orchestrator` is the reusable, namespace-neutral application chart. It
+- `deploy/charts/ayni-orchestrator` is the reusable, namespace-neutral application chart. It
   installs the control plane, operator web application, RBAC, optional protected
   custom-client listener, and retained product claims without a monitoring
   stack or Docker Desktop assumptions.
-- `local` is the Docker Desktop development umbrella. It depends on the
+- `dev/charts/ayni-orchestrator-local` is the Docker Desktop development umbrella. It depends on the
   application chart and version-locked upstream Prometheus,
   kube-state-metrics, and Grafana charts, and adds local scrape configuration,
-  least-privilege
-  monitoring RBAC, the dashboard, and managed-check fixtures.
+  least-privilege monitoring RBAC and the dashboard. Opt-in managed-check
+  fixtures are isolated in `dev/tests/charts/worker-fixtures` so they are not
+  packaged with the normal development release.
 
-`deploy/charts/local/Chart.lock` fixes the dependency chart versions selected by
-the umbrella. Generated archives under `deploy/charts/local/charts` are ignored;
+`dev/charts/ayni-orchestrator-local/Chart.lock` fixes the dependency chart versions selected by
+the umbrella. Generated archives under `dev/charts/ayni-orchestrator-local/charts` are ignored;
 local scripts build them from the lock before rendering or installing. Helm's
 lock records repository coordinates and versions rather than archive checksums,
 so upstream chart artifact immutability still depends on those repositories;

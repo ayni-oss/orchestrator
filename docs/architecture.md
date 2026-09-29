@@ -46,9 +46,10 @@ Dependencies point toward `domain`; workers do not own durable lifecycle state.
 
 The reusable `deploy/charts/ayni-orchestrator` chart owns this application
 boundary and retained product storage. The Docker Desktop
-`deploy/charts/local` umbrella composes that chart with version-locked upstream
-monitoring dependencies and local-only validation fixtures; monitoring is not a
-requirement of the reusable application chart.
+`dev/charts/ayni-orchestrator-local` umbrella composes that chart with version-locked upstream
+monitoring dependencies; monitoring is not a requirement of the reusable
+application chart. Local-only validation fixtures are isolated in
+`dev/tests/charts/worker-fixtures`.
 
 ## Durable state and retained data
 
