@@ -5,6 +5,7 @@ readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly repository_root="$(cd "$dev_directory/.." && pwd)"
 readonly scripts="$dev_directory/scripts"
 readonly tests="$dev_directory/tests"
+source "$dev_directory/lib/common.sh"
 cd "$repository_root"
 
 usage() {
@@ -46,6 +47,20 @@ parse_env_file() {
   exit 2
 }
 
+cleanup_release() {
+  local context namespace
+  context="$(dev_context)"
+  namespace="$(dev_namespace)"
+  if ! command -v helm >/dev/null 2>&1; then
+    echo "Helm is required to uninstall the local release" >&2
+    return 1
+  fi
+  helm uninstall "$DEV_RELEASE_NAME" \
+    --kube-context "$context" \
+    --namespace "$namespace" \
+    --ignore-not-found
+}
+
 command="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift
@@ -73,8 +88,8 @@ case "$command" in
     ;;
   deploy | redeploy | up)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
-    context="$($scripts/require-docker-desktop-context.sh)"
-    namespace="$($scripts/resolve-namespace.sh)"
+    context="$(dev_context)"
+    namespace="$(dev_namespace)"
     for secret in github-app-credentials openai-api development-publisher-auth; do
       if ! kubectl --context "$context" --namespace "$namespace" get "secret/$secret" >/dev/null 2>&1; then
         echo "required local Secret is missing: $secret" >&2
@@ -90,17 +105,17 @@ case "$command" in
     ;;
   status)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl status" >&2; exit 2; }
-    context="$($scripts/require-docker-desktop-context.sh)"
-    namespace="$($scripts/resolve-namespace.sh)"
+    context="$(dev_context)"
+    namespace="$(dev_namespace)"
     helm status ayni-orchestrator --kube-context "$context" --namespace "$namespace" || true
     kubectl --context "$context" --namespace "$namespace" get pods,persistentvolumeclaims
     ;;
   cleanup | down)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
-    "$scripts/cleanup.sh"
+    cleanup_release
     ;;
   purge)
-    namespace="$($scripts/resolve-namespace.sh)"
+    namespace="$(dev_namespace)"
     if [[ $# -ne 1 || "$1" != "$namespace" ]]; then
       echo "usage: dev/ctl purge $namespace" >&2
       echo "Type the exact configured namespace to confirm permanent deletion." >&2
@@ -113,7 +128,7 @@ case "$command" in
         exit 1
         ;;
     esac
-    context="$($scripts/require-docker-desktop-context.sh)"
+    context="$(dev_context)"
     environment_label="$(kubectl --context "$context" get namespace "$namespace" \
       --ignore-not-found -o jsonpath='{.metadata.labels.orchestrator\.ayni\.dev/environment}')"
     if [[ -n "$environment_label" && "$environment_label" != local ]]; then
@@ -125,16 +140,40 @@ case "$command" in
       exit 1
     fi
     echo "permanently deleting local namespace $namespace, including Secrets, Jobs, and retained volumes" >&2
-    "$scripts/cleanup.sh"
+    cleanup_release
     kubectl --context "$context" delete namespace "$namespace" --wait=true
     echo "deleted local development namespace $namespace"
     ;;
   render)
-    "$scripts/render.sh" "$@"
+    if [[ $# -ne 3 ]]; then
+      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE WORKER_IMAGE WEB_IMAGE" >&2
+      exit 2
+    fi
+    for image_ref in "$@"; do
+      if [[ -z "$image_ref" || "$image_ref" =~ [[:space:]] || "$image_ref" == *','* ]]; then
+        echo "image reference is empty or contains an unsupported character" >&2
+        exit 1
+      fi
+    done
+    case "${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}" in
+      local) custom_clients=false ;;
+      custom-clients) custom_clients=true ;;
+      *)
+        echo "AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE must be local or custom-clients" >&2
+        exit 1
+        ;;
+    esac
+    dev_build_chart_dependencies
+    helm template "$DEV_RELEASE_NAME" "$DEV_CHART" \
+      --namespace "$(dev_namespace)" \
+      --set-string "ayni-orchestrator.images.controlPlane=$1" \
+      --set-string "ayni-orchestrator.images.worker=$2" \
+      --set-string "ayni-orchestrator.images.web=$3" \
+      --set "ayni-orchestrator.customClients.enabled=$custom_clients"
     ;;
   dependencies)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl dependencies" >&2; exit 2; }
-    "$scripts/build-chart-dependencies.sh"
+    dev_build_chart_dependencies
     ;;
   test)
     test_name="${1:-}"
@@ -143,7 +182,7 @@ case "$command" in
       exit 2
     }
     case "$test_name" in
-      observability) "$scripts/check-observability.sh" ;;
+      observability) "$scripts/check.sh" --observability-only ;;
       custom-clients) "$tests/check-custom-clients.sh" ;;
       managed-check) "$tests/run-managed-check.sh" ;;
       artifact-rejection) "$tests/run-artifact-rejection-check.sh" ;;

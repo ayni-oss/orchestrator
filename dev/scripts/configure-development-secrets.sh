@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(git rev-parse --show-toplevel)"
-namespace="$("$repository_root/dev/scripts/resolve-namespace.sh")"
+readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$dev_directory/lib/common.sh"
+readonly repository_root="$DEV_REPOSITORY_ROOT"
+namespace="$(dev_namespace)"
 readonly namespace
 
 usage() {
@@ -107,7 +109,7 @@ if ! grep -q -- '-----BEGIN.*PRIVATE KEY-----' "$private_key_file"; then
 fi
 printf '%s' "$openai_api_key" > "$openai_key_file"
 
-context="$($repository_root/dev/scripts/require-docker-desktop-context.sh)"
+context="$(dev_context)"
 readonly context
 
 kubectl --context "$context" apply -f - <<EOF

@@ -3,8 +3,6 @@ fixtures:
   imagePullPolicy: Never
   managedCheck:
     enabled: false
-    createEvidenceClaim: false
-    evidenceSize: 2Gi
   artifactRejection:
     enabled: false
   repositoryUrl: https://github.com/ayni-oss/ayni.git

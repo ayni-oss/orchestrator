@@ -161,10 +161,10 @@ The deploy script:
 2. builds control-plane, worker, and SvelteKit web images labeled with the
    checkout revision and tags each with a content-identity suffix;
 3. loads all three into Docker Desktop's Kubernetes node;
-4. upgrades the `ayni-orchestrator` release from the `local` umbrella, whose
-   application dependency is `deploy/charts/ayni-orchestrator`; a prior
-   unlabeled manifest-based installation requires the explicit one-time
-   adoption flag documented in [operations](operations.md);
+4. upgrades the `ayni-orchestrator` release from the local umbrella, whose
+   application dependency is `deploy/charts/ayni-orchestrator`; incompatible
+   pre-Helm state must be removed with the guarded purge command rather than
+   adopted by routine deployment;
 5. waits for the application and monitoring Deployments; and
 6. verifies the running control-plane and web image identities and the worker
    image frozen into the control-plane Pod configuration.
@@ -199,11 +199,10 @@ A standalone Job exercises the worker without the control-plane task API:
 dev/ctl test managed-check
 ```
 
-It fetches the pinned source revision, verifies the committed Ayni lock, runs
-`env build`, `env doctor`, and an unscoped managed check through an isolated
-Docker-in-Docker engine, then stores original artifacts and a digest-bound
-manifest on `managed-check-evidence`. The fixture reuses that claim when the
-main release exists and creates a retained claim when run standalone.
+It requires the normal local release, fetches the pinned source revision,
+verifies the committed Ayni lock, runs `env build`, `env doctor`, and an
+unscoped managed check through an isolated Docker-in-Docker engine, then stores
+original artifacts and a digest-bound manifest on `managed-check-evidence`.
 
 The command refuses to replace an existing fixture release or Job. Inspect logs
 and retained data, then remove the fixture before another attempt:
@@ -213,8 +212,6 @@ helm uninstall ayni-orchestrator-managed-check \
   --kube-context docker-desktop --namespace ayni-orchestrator-dev
 ```
 
-Uninstall that fixture release before installing the main release. Its retained
-evidence claim remains in place and the guarded main deployment adopts it.
 Quality failure, source/lock mismatch, and missing artifacts remain distinct
 terminal results.
 

@@ -340,29 +340,21 @@ authentication, TLS, network isolation, durable monitoring storage, and RBAC.
 
 ## Update without losing data
 
-Never run cleanup to perform an update. Record PVC identities and task state,
-then deploy in place. The first deployment after Decision 0001's manifest flow
-uses Helm's explicit `--take-ownership` and guarded server-side field-conflict
-migration for the same-named application resources, including the four claims;
-it does not delete or recreate retained state. A release created by the first
-Decision 0006 chart revision also receives a one-time guarded replacement of
-its three disposable monitoring Deployments because the upstream dependency
-charts use different immutable selectors. Keep the fixed `ayni-orchestrator`
-release name and verify claim UIDs and known task IDs before and after either
-one-way migration.
-
-Most legacy objects carry the expected Ayni ownership label. Four objects from
-the superseded Kustomize flow do not. Inspect those objects and all colliding
-names first, then authorize that migration for one invocation only:
+Run `dev/ctl deploy` to update an existing Helm-managed environment in place;
+normal upgrades preserve the retained claims. Local development does not carry
+compatibility code for pre-Helm or otherwise unmanaged resources. If Helm reports
+a resource ownership or immutable-field conflict, preserve anything you need,
+then recreate the disposable environment:
 
 ```bash
-AYNI_ORCHESTRATOR_ADOPT_UNLABELED_LEGACY_RESOURCES=true \
-  dev/ctl deploy
+dev/ctl purge ayni-orchestrator-dev
+dev/ctl secrets
+dev/ctl deploy
 ```
 
-Never set this flag for routine upgrades or an unfamiliar namespace. The script
-still validates the known legacy signatures, refuses foreign ownership
-annotations or management labels, and stops on any inspection error.
+Do not add ownership-adoption flags or one-off migration branches to the routine
+deployment path. Shared-cluster and production migrations require a separately
+reviewed operational procedure.
 
 Before deployment, record the retained PVC identities and known task IDs through
 the browser or native gRPC. Deploy in place, run the smoke checks, and confirm the

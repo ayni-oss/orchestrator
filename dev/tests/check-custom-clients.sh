@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(git rev-parse --show-toplevel)"
+readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$dev_directory/lib/common.sh"
+readonly repository_root="$DEV_REPOSITORY_ROOT"
 if [[ $# -ne 0 ]]; then
-  echo "usage: $0" >&2
+  echo "usage: dev/ctl test custom-clients" >&2
   exit 2
 fi
-context="$($repository_root/dev/scripts/require-docker-desktop-context.sh)"
+context="$(dev_context)"
 readonly context
-namespace="$("$repository_root/dev/scripts/resolve-namespace.sh")"
+namespace="$(dev_namespace)"
 readonly namespace
 readonly grpc_port="${AYNI_ORCHESTRATOR_CUSTOM_GRPC_LOCAL_PORT:-15052}"
 readonly ca_file="${ORCHESTRATOR_CUSTOM_GRPC_CA_FILE:?ORCHESTRATOR_CUSTOM_GRPC_CA_FILE is required}"

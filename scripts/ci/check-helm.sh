@@ -18,9 +18,9 @@ if ! command -v helm >/dev/null 2>&1; then
 fi
 bash -n \
   "$repository_root/dev/ctl" \
+  "$repository_root"/dev/lib/*.sh \
   "$repository_root"/dev/scripts/*.sh \
-  "$repository_root"/dev/tests/*.sh \
-  "$repository_root"/dev/pilot/*.sh
+  "$repository_root"/dev/tests/*.sh
 "$repository_root/dev/ctl" help >/dev/null
 if find "$repository_root" \
     \( -path "$repository_root/.git" -o -path "$repository_root/.worktrees" \) -prune -o \
@@ -60,7 +60,6 @@ helm template ayni-orchestrator "$local_chart" \
 helm template ayni-orchestrator-managed-check "$fixture_chart" \
   --namespace ayni-orchestrator-dev \
   --set fixtures.managedCheck.enabled=true \
-  --set fixtures.managedCheck.createEvidenceClaim=true \
   >"$scratch/managed-check.yaml"
 helm template ayni-orchestrator-artifact-rejection "$fixture_chart" \
   --namespace ayni-orchestrator-dev \
@@ -116,7 +115,6 @@ if grep -Eq '__AYNI_NAMESPACE__|namespace=\\"ayni-orchestrator-dev\\"' "$scratch
   exit 1
 fi
 grep -q '^  name: managed-check$' "$scratch/managed-check.yaml"
-grep -q '^  name: managed-check-evidence$' "$scratch/managed-check.yaml"
 grep -q '^  name: managed-check-artifact-rejection$' "$scratch/artifact-rejection.yaml"
 grep -q '^  name: ayni-orchestrator-dev-prometheus$' "$scratch/local.yaml"
 [[ "$(grep -c '^kind: ClusterRole$' "$scratch/local.yaml")" -eq 1 ]]

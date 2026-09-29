@@ -5,10 +5,13 @@ set -euo pipefail
 # execution record after a real managed check and before the worker validates
 # and retains artifacts. A failed Job with the expected error is a pass.
 
-readonly repository_root="$(git rev-parse --show-toplevel)"
-context="$("$repository_root/dev/scripts/require-docker-desktop-context.sh")"
+readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$dev_directory/lib/common.sh"
+source "$dev_directory/lib/images.sh"
+readonly repository_root="$DEV_REPOSITORY_ROOT"
+context="$(dev_context)"
 readonly context
-namespace="$("$repository_root/dev/scripts/resolve-namespace.sh")"
+namespace="$(dev_namespace)"
 readonly namespace
 readonly release_name="ayni-orchestrator-artifact-rejection"
 readonly job_name="managed-check-artifact-rejection"
@@ -39,36 +42,22 @@ if kubectl --context "$context" --namespace "$namespace" get job "$job_name" >/d
   exit 1
 fi
 if ! kubectl --context "$context" --namespace "$namespace" get pvc managed-check-evidence >/dev/null 2>&1; then
-  echo "managed-check-evidence must already exist; install the local chart or run the managed-check fixture first" >&2
+  echo "managed-check-evidence is missing; deploy the local environment before running this test" >&2
   exit 1
 fi
-ownership_args=()
 for configmap in managed-check-artifact-rejection-inputs managed-check-artifact-rejection-wrapper; do
-  if ! kubectl --context "$context" --namespace "$namespace" get "configmap/$configmap" >/dev/null 2>&1; then
-    continue
-  fi
-  managed_by="$(kubectl --context "$context" --namespace "$namespace" get "configmap/$configmap" \
-    -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
-  owner="$(kubectl --context "$context" --namespace "$namespace" get "configmap/$configmap" \
-    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
-  owner_namespace="$(kubectl --context "$context" --namespace "$namespace" get "configmap/$configmap" \
-    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}')"
-  if [[ "$managed_by" == Helm \
-    && ( "$owner" != "$release_name" || "$owner_namespace" != "$namespace" ) ]]; then
-    echo "refusing to take $configmap from Helm release ${owner:-unknown}" >&2
+  if kubectl --context "$context" --namespace "$namespace" get "configmap/$configmap" >/dev/null 2>&1; then
+    echo "stale artifact-rejection fixture resources exist; remove them or purge the disposable environment" >&2
     exit 1
   fi
-  ownership_args+=(--take-ownership)
 done
-readonly ownership_args
 
-image_ref="$("$repository_root/dev/scripts/build-image.sh" worker)"
+image_ref="$(dev_build_image worker)"
 readonly image_ref
-"$repository_root/dev/scripts/load-image.sh" "$image_ref"
+dev_load_image "$image_ref"
 helm install "$release_name" "$chart" \
   --kube-context "$context" \
   --namespace "$namespace" \
-  "${ownership_args[@]}" \
   --set fixtures.artifactRejection.enabled=true \
   --set-string "fixtures.workerImage=$image_ref" >/dev/null
 

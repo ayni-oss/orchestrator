@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(git rev-parse --show-toplevel)"
-context="$("$repository_root/dev/scripts/require-docker-desktop-context.sh")"
+readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$dev_directory/lib/common.sh"
+source "$dev_directory/lib/images.sh"
+readonly repository_root="$DEV_REPOSITORY_ROOT"
+context="$(dev_context)"
 readonly context
-namespace="$("$repository_root/dev/scripts/resolve-namespace.sh")"
+namespace="$(dev_namespace)"
 readonly namespace
 readonly release_name="ayni-orchestrator-managed-check"
 readonly job_name="managed-check"
@@ -34,38 +37,22 @@ if kubectl --context "$context" --namespace "$namespace" get job "$job_name" >/d
   echo "$job_name already exists; inspect or explicitly remove that owned Job before starting another attempt" >&2
   exit 1
 fi
-create_evidence_claim=false
 if ! kubectl --context "$context" --namespace "$namespace" get pvc managed-check-evidence >/dev/null 2>&1; then
-  create_evidence_claim=true
+  echo "managed-check-evidence is missing; deploy the local environment before running this test" >&2
+  exit 1
 fi
-readonly create_evidence_claim
-ownership_args=()
 if kubectl --context "$context" --namespace "$namespace" get configmap/managed-check-inputs >/dev/null 2>&1; then
-  managed_by="$(kubectl --context "$context" --namespace "$namespace" get configmap/managed-check-inputs \
-    -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
-  owner="$(kubectl --context "$context" --namespace "$namespace" get configmap/managed-check-inputs \
-    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
-  owner_namespace="$(kubectl --context "$context" --namespace "$namespace" get configmap/managed-check-inputs \
-    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}')"
-  if [[ "$managed_by" == Helm \
-    && ( "$owner" != "$release_name" || "$owner_namespace" != "$namespace" ) ]]; then
-    echo "refusing to take managed-check-inputs from Helm release ${owner:-unknown}" >&2
-    exit 1
-  fi
-  ownership_args+=(--take-ownership)
+  echo "stale managed-check fixture resources exist; remove them or purge the disposable environment" >&2
+  exit 1
 fi
-readonly ownership_args
 
-image_ref="$("$repository_root/dev/scripts/build-image.sh" worker)"
+image_ref="$(dev_build_image worker)"
 readonly image_ref
-"$repository_root/dev/scripts/load-image.sh" "$image_ref"
+dev_load_image "$image_ref"
 helm install "$release_name" "$chart" \
   --kube-context "$context" \
   --namespace "$namespace" \
-  --create-namespace \
-  "${ownership_args[@]}" \
   --set fixtures.managedCheck.enabled=true \
-  --set "fixtures.managedCheck.createEvidenceClaim=$create_evidence_claim" \
   --set-string "fixtures.workerImage=$image_ref" >/dev/null
 
 deadline=$((SECONDS + 900))

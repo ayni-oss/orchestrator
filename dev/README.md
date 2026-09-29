@@ -61,12 +61,11 @@ and tags have unambiguous source provenance.
   `chmod 600 dev/.env`; tooling never inspects or copies the old credential file.
 - `charts/ayni-orchestrator-local/` is the Docker Desktop umbrella chart and
   local-only configuration.
-- `scripts/` contains implementation details behind `dev/ctl`; call `ctl` for
-  routine work.
+- `scripts/` contains the three command implementations behind `dev/ctl`.
+- `lib/` contains shared shell functions; neither directory is a public command
+  surface.
 - `tests/` contains the separate worker-fixture chart and opt-in integration
   drivers, exposed as `dev/ctl test NAME`.
-- `pilot/` contains the specialized manual math pilot harness; it is not part of
-  the routine local lifecycle.
 
 Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/local-development.md`](../docs/local-development.md) and
