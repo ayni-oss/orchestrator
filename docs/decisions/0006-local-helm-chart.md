@@ -6,20 +6,22 @@
 
 ## Decision
 
-Maintain two Helm charts under `deploy/charts`:
+Maintain a reusable application chart under `deploy/charts` and contain the
+Docker Desktop development composition under `dev`:
 
-- `ayni-orchestrator` is the reusable, namespace-neutral application chart. It
+- `deploy/charts/ayni-orchestrator` is the reusable, namespace-neutral application chart. It
   installs the control plane, operator web application, RBAC, optional protected
   custom-client listener, and retained product claims without a monitoring
   stack or Docker Desktop assumptions.
-- `local` is the Docker Desktop development umbrella. It depends on the
+- `dev/charts/ayni-orchestrator-local` is the Docker Desktop development umbrella. It depends on the
   application chart and version-locked upstream Prometheus,
   kube-state-metrics, and Grafana charts, and adds local scrape configuration,
-  least-privilege
-  monitoring RBAC, the dashboard, and managed-check fixtures.
+  least-privilege monitoring RBAC and the dashboard. Opt-in managed-check
+  fixtures are isolated in `dev/tests/charts/worker-fixtures` so they are not
+  packaged with the normal development release.
 
-`deploy/charts/local/Chart.lock` fixes the dependency chart versions selected by
-the umbrella. Generated archives under `deploy/charts/local/charts` are ignored;
+`dev/charts/ayni-orchestrator-local/Chart.lock` fixes the dependency chart versions selected by
+the umbrella. Generated archives under `dev/charts/ayni-orchestrator-local/charts` are ignored;
 local scripts build them from the lock before rendering or installing. Helm's
 lock records repository coordinates and versions rather than archive checksums,
 so upstream chart artifact immutability still depends on those repositories;
@@ -59,15 +61,13 @@ retained runtime artifacts do not belong in Git.
 
 ## Migration and storage
 
-The fixed `ayni-orchestrator` local release adopts resources from the superseded
-manifest workflow on its first upgrade. Unlabeled legacy objects require an
-explicit one-time operator adoption flag after inspection. The migration
-preserves application resource names and uses guarded ownership takeover plus
-server-side field-conflict resolution rather than deleting retained resources. The original hand-written monitoring
-Deployments have immutable selectors that differ from their upstream-chart
-replacements; the deploy script performs a one-time guarded replacement of only
-those disposable Deployments and obsolete monitoring ConfigMaps. Product Pods,
-claims, credentials, and state are not part of that replacement.
+The local environment is disposable and intentionally carries no compatibility
+path for the superseded manifest workflow or older hand-written monitoring
+resources. A collision with unmanaged or incompatible resources is resolved by
+backing up anything needed, running the guarded `dev/ctl purge` command, and
+creating a fresh Helm-managed environment. This keeps routine deployment small
+and prevents historical takeover logic from becoming a permanent maintenance
+surface.
 
 SQLite state, checkpoints, managed evidence, and prepared environments use
 persistent volume claims annotated with `helm.sh/resource-policy: keep`. Normal

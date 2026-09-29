@@ -1,28 +1,11 @@
-{{- include "local.validateFixtureSelection" . }}
+{{- include "worker-fixtures.validateSelection" . }}
 {{- if .Values.fixtures.managedCheck.enabled }}
-{{- if .Values.fixtures.managedCheck.createEvidenceClaim }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: managed-check-evidence
-  annotations:
-    helm.sh/resource-policy: keep
-  labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.fixtures.managedCheck.evidenceSize }}
----
-{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: managed-check-inputs
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "worker-fixtures.commonLabels" . | nindent 4 }}
 data:
   ORCHESTRATOR_REPOSITORY_URL: {{ .Values.fixtures.repositoryUrl | quote }}
   ORCHESTRATOR_REVISION: {{ .Values.fixtures.revision | quote }}
@@ -36,7 +19,7 @@ kind: Job
 metadata:
   name: managed-check
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "worker-fixtures.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-managed-check
 spec:
   backoffLimit: 0

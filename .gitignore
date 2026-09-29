@@ -3,7 +3,9 @@
 /.local/
 /.env
 /.env.*
-!/.env.example
+/dev/.env
+/dev/.env.*
+!/dev/.env.example
 **/.DS_Store
 node_modules/
 .pnpm-store/
@@ -11,7 +13,7 @@ node_modules/
 **/build/
 **/test-results/
 **/playwright-report/
-/deploy/charts/local/charts/
+/dev/charts/ayni-orchestrator-local/charts/
 .agents/
 .codex/
 /.worktrees/

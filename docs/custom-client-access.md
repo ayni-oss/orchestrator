@@ -97,7 +97,7 @@ Render the opt-in profile before applying it:
 
 ```sh
 AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE=custom-clients \
-  scripts/local/render.sh CONTROL_PLANE_IMAGE WORKER_IMAGE WEB_IMAGE
+  dev/ctl render CONTROL_PLANE_IMAGE WORKER_IMAGE WEB_IMAGE
 ```
 
 Create the namespace and Secret with your normal private secret-delivery
@@ -105,7 +105,7 @@ procedure; do not commit generated credentials or keys. Then deploy this profile
 instead of the standard chart values:
 
 ```sh
-AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE=custom-clients scripts/local/deploy.sh
+AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE=custom-clients dev/ctl deploy
 ```
 
 After extracting the verified descriptor bundle and provisioning a client with
@@ -117,7 +117,7 @@ export ORCHESTRATOR_CUSTOM_GRPC_CA_FILE="$HOME/.config/ayni-orchestrator/ca.pem"
 export ORCHESTRATOR_CUSTOM_GRPC_TOKEN_FILE="$HOME/.config/ayni-orchestrator/token"
 export ORCHESTRATOR_CUSTOM_GRPC_TLS_NAME=control-plane.ayni-orchestrator-dev.svc
 export ORCHESTRATOR_CUSTOM_GRPC_DESCRIPTOR=./contract/ayni.orchestrator.v1.pb
-scripts/local/check-custom-clients.sh
+dev/ctl test custom-clients
 ```
 
 The check uses an operator-controlled loopback port-forward, first verifies that

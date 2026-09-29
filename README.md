@@ -28,7 +28,7 @@ independently useful local CLI in the public
 ## Current operating boundary
 
 The reusable `deploy/charts/ayni-orchestrator` Helm chart contains the product
-workloads; the supported `deploy/charts/local` Docker Desktop umbrella adds
+workloads; the supported `dev/charts/ayni-orchestrator-local` Docker Desktop umbrella adds
 version-locked Prometheus, kube-state-metrics, and Grafana dependencies. The
 supported deployment is a single trusted-team Docker Desktop Kubernetes cluster. The
 internal web and control-plane Services are unauthenticated and
@@ -66,6 +66,7 @@ completed-work provenance.
 | Document | Purpose |
 | --- | --- |
 | [Architecture](docs/architecture.md) | Implemented components, state, execution flow, and trust boundaries |
+| [Local development quick start](dev/README.md) | Local env files and deploy, check, down, and purge commands |
 | [Local development](docs/local-development.md) | Workspace checks, image build, deployment, and API development |
 | [Operations](docs/operations.md) | Local access, preparation, updates, retention, recovery, and cleanup |
 | [Local Helm deployment decision](docs/decisions/0006-local-helm-chart.md) | Docker Desktop Kubernetes and Helm deployment model |

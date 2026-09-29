@@ -17,13 +17,3 @@ app.kubernetes.io/part-of: ayni-orchestrator-observability
 {{- define "local.prometheusClusterRoleName" -}}
 {{- printf "%s-prometheus" .Release.Namespace | trunc 63 | trimSuffix "-" -}}
 {{- end }}
-
-{{- define "local.validateFixtureSelection" -}}
-{{- if and .Values.fixtures.managedCheck.enabled .Values.fixtures.artifactRejection.enabled -}}
-{{- fail "fixtures.managedCheck.enabled and fixtures.artifactRejection.enabled cannot both be true" -}}
-{{- end -}}
-{{- $application := index .Values "ayni-orchestrator" -}}
-{{- if and $application.enabled .Values.fixtures.managedCheck.enabled .Values.fixtures.managedCheck.createEvidenceClaim -}}
-{{- fail "fixtures.managedCheck.createEvidenceClaim requires ayni-orchestrator.enabled=false" -}}
-{{- end -}}
-{{- end }}

@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repository_root="$(git rev-parse --show-toplevel)"
-namespace="$("$repository_root/scripts/local/resolve-namespace.sh")"
+readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$dev_directory/lib/common.sh"
+readonly repository_root="$DEV_REPOSITORY_ROOT"
+namespace="$(dev_namespace)"
 readonly namespace
 
 usage() {
   echo "usage: $0 [--env-file PATH]" >&2
 }
 
-env_file="$repository_root/.env"
+env_file="$repository_root/dev/.env"
 if [[ $# -eq 2 && "$1" == "--env-file" ]]; then
   env_file="$2"
 elif [[ $# -ne 0 ]]; then
@@ -19,6 +21,16 @@ fi
 
 if [[ ! -f "$env_file" ]]; then
   echo "environment file does not exist: $env_file" >&2
+  exit 1
+fi
+if env_file_mode="$(stat -f '%Lp' "$env_file" 2>/dev/null)"; then
+  :
+else
+  env_file_mode="$(stat -c '%a' "$env_file")"
+fi
+if (( (8#$env_file_mode & 8#077) != 0 )); then
+  echo "environment file must not be readable or writable by group or others: $env_file" >&2
+  echo "run: chmod 600 '$env_file'" >&2
   exit 1
 fi
 
@@ -97,7 +109,7 @@ if ! grep -q -- '-----BEGIN.*PRIVATE KEY-----' "$private_key_file"; then
 fi
 printf '%s' "$openai_api_key" > "$openai_key_file"
 
-context="$($repository_root/scripts/local/require-docker-desktop-context.sh)"
+context="$(dev_context)"
 readonly context
 
 kubectl --context "$context" apply -f - <<EOF
@@ -105,6 +117,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: $namespace
+  labels:
+    app.kubernetes.io/part-of: ayni-orchestrator
+    orchestrator.ayni.dev/environment: local
 EOF
 
 apply_secret() {

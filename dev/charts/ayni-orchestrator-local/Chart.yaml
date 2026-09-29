@@ -1,5 +1,5 @@
 apiVersion: v2
-name: local
+name: ayni-orchestrator-local
 description: Ayni Orchestrator local development stack for Docker Desktop Kubernetes
 type: application
 version: 0.1.0
@@ -8,7 +8,7 @@ kubeVersion: ">=1.32.0-0"
 dependencies:
   - name: ayni-orchestrator
     version: 0.1.0
-    repository: file://../ayni-orchestrator
+    repository: file://../../../deploy/charts/ayni-orchestrator
     condition: ayni-orchestrator.enabled
   - name: prometheus
     version: 27.38.0

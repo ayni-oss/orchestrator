@@ -1,11 +1,11 @@
-{{- include "local.validateFixtureSelection" . }}
+{{- include "worker-fixtures.validateSelection" . }}
 {{- if .Values.fixtures.artifactRejection.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: managed-check-artifact-rejection-inputs
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "worker-fixtures.commonLabels" . | nindent 4 }}
 data:
   ORCHESTRATOR_REPOSITORY_URL: {{ .Values.fixtures.repositoryUrl | quote }}
   ORCHESTRATOR_REVISION: {{ .Values.fixtures.revision | quote }}
@@ -19,7 +19,7 @@ kind: ConfigMap
 metadata:
   name: managed-check-artifact-rejection-wrapper
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "worker-fixtures.commonLabels" . | nindent 4 }}
     app.kubernetes.io/component: evidence-integrity-test
 data:
   ayni: |
@@ -41,7 +41,7 @@ kind: Job
 metadata:
   name: managed-check-artifact-rejection
   labels:
-    {{- include "local.commonLabels" . | nindent 4 }}
+    {{- include "worker-fixtures.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-managed-check
     app.kubernetes.io/component: evidence-integrity-test
 spec:

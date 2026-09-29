@@ -1,0 +1,11 @@
+fixtures:
+  workerImage: local/ayni-orchestrator-worker:replace-me
+  imagePullPolicy: Never
+  managedCheck:
+    enabled: false
+  artifactRejection:
+    enabled: false
+  repositoryUrl: https://github.com/ayni-oss/ayni.git
+  revision: 4e67795c0cba21bd82c21bdd6c921417fbe29ff6
+  lockSha256: d68ca2ac621c99865bf7b50aabc668f1e9e4b85aa79389c00e13fcda4bb56fc7
+  ayniVersion: 0.13.0

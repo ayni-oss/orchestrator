@@ -3,7 +3,8 @@
 The supported local profile runs the control plane and workers on Docker Desktop
 Kubernetes. It includes durable task orchestration, repository preparation,
 bounded coding, independent candidate validation, draft-PR publication, and the
-browser interface.
+browser interface. Local-only configuration and tooling are contained in
+[`dev/`](../dev/README.md), with `dev/ctl` as the supported command interface.
 
 ## Prerequisites
 
@@ -56,16 +57,17 @@ stack when changing deployment templates or values:
 
 ```sh
 scripts/ci/check-helm.sh
-scripts/local/render.sh local/control-plane:test local/worker:test local/web:test \
+dev/ctl render local/control-plane:test local/worker:test local/web:test \
   >/tmp/ayni-orchestrator.yaml
 ```
 
 `deploy/charts/ayni-orchestrator` is the reusable application chart.
-`deploy/charts/local` composes it with version-locked upstream Prometheus,
-kube-state-metrics, and Grafana dependencies plus the local dashboard and test
-fixtures. `scripts/local/build-chart-dependencies.sh` materializes ignored
+`dev/charts/ayni-orchestrator-local` composes it with version-locked upstream Prometheus,
+kube-state-metrics, and Grafana dependencies plus the local dashboard. Opt-in
+worker fixtures live separately in `dev/tests/charts/worker-fixtures`.
+`dev/ctl dependencies` materializes ignored
 archives from `Chart.lock`; the render and deploy scripts invoke it
-automatically. Rendered output is for inspection; use `deploy.sh` for local
+automatically. Rendered output is for inspection; use `dev/ctl deploy` for local
 installation so Helm owns the release and selects the namespace explicitly.
 
 Do not commit rendered output, logs, local credentials, or runtime artifacts.
@@ -120,18 +122,19 @@ public hosting.
 
 ## Configure local credentials
 
-Copy the documented template to the gitignored `.env` file and set the GitHub
-App ID, installation ID, OpenAI key, and base64-encoded GitHub App private key.
+Create the gitignored `dev/.env` from the documented template and set the
+GitHub App ID, installation ID, OpenAI key, and base64-encoded GitHub App private key.
 Base64 is transport encoding, not encryption.
 
 ```sh
-cp .env.example .env
-scripts/local/configure-development-secrets.sh
+dev/ctl init
+# Fill dev/.env, then sync it explicitly.
+dev/ctl secrets
 ```
 
 The bootstrap script parses only documented keys and does not source the file.
 It writes Kubernetes Secrets for the local namespace. Never print those Secrets
-as YAML or commit `.env`.
+as YAML or commit `dev/.env`.
 
 The GitHub App should be installed only on the development repository with:
 
@@ -147,8 +150,8 @@ not required by this profile.
 Use a clean committed checkout:
 
 ```sh
-scripts/local/deploy.sh
-scripts/local/check.sh
+dev/ctl deploy
+dev/ctl check
 ```
 
 The deploy script:
@@ -158,10 +161,10 @@ The deploy script:
 2. builds control-plane, worker, and SvelteKit web images labeled with the
    checkout revision and tags each with a content-identity suffix;
 3. loads all three into Docker Desktop's Kubernetes node;
-4. upgrades the `ayni-orchestrator` release from the `local` umbrella, whose
-   application dependency is `deploy/charts/ayni-orchestrator`; a prior
-   unlabeled manifest-based installation requires the explicit one-time
-   adoption flag documented in [operations](operations.md);
+4. upgrades the `ayni-orchestrator` release from the local umbrella, whose
+   application dependency is `deploy/charts/ayni-orchestrator`; incompatible
+   pre-Helm state must be removed with the guarded purge command rather than
+   adopted by routine deployment;
 5. waits for the application and monitoring Deployments; and
 6. verifies the running control-plane and web image identities and the worker
    image frozen into the control-plane Pod configuration.
@@ -182,7 +185,7 @@ has been prepared or the provider is currently reachable.
 Remove stateless resources while preserving retained state with:
 
 ```sh
-scripts/local/cleanup.sh
+dev/ctl cleanup
 ```
 
 See [local operations](operations.md) before deleting a namespace, persistent
@@ -193,14 +196,13 @@ volume, or Docker data.
 A standalone Job exercises the worker without the control-plane task API:
 
 ```sh
-scripts/local/run-managed-check.sh
+dev/ctl test managed-check
 ```
 
-It fetches the pinned source revision, verifies the committed Ayni lock, runs
-`env build`, `env doctor`, and an unscoped managed check through an isolated
-Docker-in-Docker engine, then stores original artifacts and a digest-bound
-manifest on `managed-check-evidence`. The fixture reuses that claim when the
-main release exists and creates a retained claim when run standalone.
+It requires the normal local release, fetches the pinned source revision,
+verifies the committed Ayni lock, runs `env build`, `env doctor`, and an
+unscoped managed check through an isolated Docker-in-Docker engine, then stores
+original artifacts and a digest-bound manifest on `managed-check-evidence`.
 
 The command refuses to replace an existing fixture release or Job. Inspect logs
 and retained data, then remove the fixture before another attempt:
@@ -210,15 +212,13 @@ helm uninstall ayni-orchestrator-managed-check \
   --kube-context docker-desktop --namespace ayni-orchestrator-dev
 ```
 
-Uninstall that fixture release before installing the main release. Its retained
-evidence claim remains in place and the guarded main deployment adopts it.
 Quality failure, source/lock mismatch, and missing artifacts remain distinct
 terminal results.
 
 Exercise missing-artifact rejection with:
 
 ```sh
-scripts/local/run-artifact-rejection-check.sh
+dev/ctl test artifact-rejection
 ```
 
 The dedicated test Job removes `execution.json` after Ayni runs. The unchanged
@@ -273,8 +273,8 @@ who can reach its loopback forward can operate it.
 
 The default `local` umbrella installs the version-locked Prometheus,
 kube-state-metrics, and Grafana chart dependencies with the application.
-`scripts/local/check.sh` validates the scrape targets and dashboard;
-`scripts/local/check-observability.sh` remains
+`dev/ctl check` validates the scrape targets and dashboard;
+`dev/ctl test observability` remains
 available when only the monitoring checks need to be repeated. Prometheus
 scrapes the application endpoint, namespaced Kubernetes object state, and the
 Docker Desktop kubelet/cAdvisor through a service account limited to node

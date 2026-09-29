@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly repository_root="$(cd "$dev_directory/.." && pwd)"
+readonly scripts="$dev_directory/scripts"
+readonly tests="$dev_directory/tests"
+source "$dev_directory/lib/common.sh"
+cd "$repository_root"
+
+usage() {
+  cat <<'EOF'
+Usage: dev/ctl COMMAND [OPTIONS]
+
+Local Docker Desktop development:
+  init [--env-file PATH]       Create a private env file from the template
+  secrets [--env-file PATH]    Sync the env file into Kubernetes Secrets
+  deploy                       Build images and install or upgrade in place
+  redeploy                     Alias for deploy
+  up                           Alias for deploy
+  check                        Check the application and observability stack
+  status                       Show the Helm release, pods, and retained claims
+  cleanup                      Uninstall stateless resources; preserve local data
+  down                         Alias for cleanup
+  purge NAMESPACE              Permanently delete an owned local namespace
+  render CP_IMAGE WORKER WEB   Render the complete development chart
+  dependencies                 Build locked Helm dependencies
+  test NAME                    Run: observability, custom-clients, managed-check,
+                               or artifact-rejection
+  help                         Show this help
+
+The default private env file is dev/.env. Override it with --env-file or set
+AYNI_ORCHESTRATOR_ENV_FILE. Commands always target the docker-desktop context.
+EOF
+}
+
+env_file="${AYNI_ORCHESTRATOR_ENV_FILE:-$dev_directory/.env}"
+parse_env_file() {
+  if [[ $# -eq 0 ]]; then
+    return
+  fi
+  if [[ $# -eq 2 && "$1" == "--env-file" && -n "$2" ]]; then
+    env_file="$2"
+    return
+  fi
+  echo "usage: dev/ctl $command [--env-file PATH]" >&2
+  exit 2
+}
+
+cleanup_release() {
+  local context namespace
+  context="$(dev_context)"
+  namespace="$(dev_namespace)"
+  if ! command -v helm >/dev/null 2>&1; then
+    echo "Helm is required to uninstall the local release" >&2
+    return 1
+  fi
+  helm uninstall "$DEV_RELEASE_NAME" \
+    --kube-context "$context" \
+    --namespace "$namespace" \
+    --ignore-not-found
+}
+
+command="${1:-help}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+case "$command" in
+  help | --help | -h)
+    usage
+    ;;
+  init)
+    parse_env_file "$@"
+    if [[ -e "$env_file" ]]; then
+      echo "environment file already exists: $env_file"
+      exit 0
+    fi
+    mkdir -p "$(dirname "$env_file")"
+    umask 077
+    cp "$dev_directory/.env.example" "$env_file"
+    chmod 0600 "$env_file"
+    echo "created $env_file; fill its values, then run dev/ctl secrets"
+    ;;
+  secrets)
+    parse_env_file "$@"
+    "$scripts/configure-development-secrets.sh" --env-file "$env_file"
+    ;;
+  deploy | redeploy | up)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
+    context="$(dev_context)"
+    namespace="$(dev_namespace)"
+    for secret in github-app-credentials openai-api development-publisher-auth; do
+      if ! kubectl --context "$context" --namespace "$namespace" get "secret/$secret" >/dev/null 2>&1; then
+        echo "required local Secret is missing: $secret" >&2
+        echo "configure dev/.env, then run 'dev/ctl secrets'" >&2
+        exit 1
+      fi
+    done
+    "$scripts/deploy.sh"
+    ;;
+  check)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl check" >&2; exit 2; }
+    "$scripts/check.sh"
+    ;;
+  status)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl status" >&2; exit 2; }
+    context="$(dev_context)"
+    namespace="$(dev_namespace)"
+    helm status ayni-orchestrator --kube-context "$context" --namespace "$namespace" || true
+    kubectl --context "$context" --namespace "$namespace" get pods,persistentvolumeclaims
+    ;;
+  cleanup | down)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
+    cleanup_release
+    ;;
+  purge)
+    namespace="$(dev_namespace)"
+    if [[ $# -ne 1 || "$1" != "$namespace" ]]; then
+      echo "usage: dev/ctl purge $namespace" >&2
+      echo "Type the exact configured namespace to confirm permanent deletion." >&2
+      exit 2
+    fi
+    case "$namespace" in
+      ayni-orchestrator-*) ;;
+      *)
+        echo "refusing to purge a namespace outside the ayni-orchestrator-* development prefix" >&2
+        exit 1
+        ;;
+    esac
+    context="$(dev_context)"
+    environment_label="$(kubectl --context "$context" get namespace "$namespace" \
+      --ignore-not-found -o jsonpath='{.metadata.labels.orchestrator\.ayni\.dev/environment}')"
+    if [[ -n "$environment_label" && "$environment_label" != local ]]; then
+      echo "refusing to purge namespace without orchestrator.ayni.dev/environment=local" >&2
+      exit 1
+    fi
+    if [[ -z "$environment_label" ]]; then
+      echo "refusing to purge an absent or unlabeled namespace; run dev/ctl secrets to label an existing local namespace" >&2
+      exit 1
+    fi
+    echo "permanently deleting local namespace $namespace, including Secrets, Jobs, and retained volumes" >&2
+    cleanup_release
+    kubectl --context "$context" delete namespace "$namespace" --wait=true
+    echo "deleted local development namespace $namespace"
+    ;;
+  render)
+    if [[ $# -ne 3 ]]; then
+      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE WORKER_IMAGE WEB_IMAGE" >&2
+      exit 2
+    fi
+    for image_ref in "$@"; do
+      if [[ -z "$image_ref" || "$image_ref" =~ [[:space:]] || "$image_ref" == *','* ]]; then
+        echo "image reference is empty or contains an unsupported character" >&2
+        exit 1
+      fi
+    done
+    case "${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}" in
+      local) custom_clients=false ;;
+      custom-clients) custom_clients=true ;;
+      *)
+        echo "AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE must be local or custom-clients" >&2
+        exit 1
+        ;;
+    esac
+    dev_build_chart_dependencies
+    helm template "$DEV_RELEASE_NAME" "$DEV_CHART" \
+      --namespace "$(dev_namespace)" \
+      --set-string "ayni-orchestrator.images.controlPlane=$1" \
+      --set-string "ayni-orchestrator.images.worker=$2" \
+      --set-string "ayni-orchestrator.images.web=$3" \
+      --set "ayni-orchestrator.customClients.enabled=$custom_clients"
+    ;;
+  dependencies)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl dependencies" >&2; exit 2; }
+    dev_build_chart_dependencies
+    ;;
+  test)
+    test_name="${1:-}"
+    [[ $# -eq 1 ]] || {
+      echo "usage: dev/ctl test {observability|custom-clients|managed-check|artifact-rejection}" >&2
+      exit 2
+    }
+    case "$test_name" in
+      observability) "$scripts/check.sh" --observability-only ;;
+      custom-clients) "$tests/check-custom-clients.sh" ;;
+      managed-check) "$tests/run-managed-check.sh" ;;
+      artifact-rejection) "$tests/run-artifact-rejection-check.sh" ;;
+      *)
+        echo "unknown development test: $test_name" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    echo "unknown development command: $command" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
