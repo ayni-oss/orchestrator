@@ -2,8 +2,8 @@ import { credentials, Metadata, status, type ClientOptions } from "@grpc/grpc-js
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
-  DevelopmentTaskPhase,
   DevelopmentTaskServiceClient,
+  DevelopmentTaskState,
   RepositoryServiceClient,
   type WatchDevelopmentTaskResponse,
 } from "../index.ts";
@@ -68,17 +68,16 @@ async function main(): Promise<void> {
 
   try {
     const page = await new Promise<string[]>((resolve, reject) => {
-      repositories.listRepositories(
+      repositories.listRepositoryConnections(
         { page: { pageSize: 50, pageToken: "" } },
         metadata(token),
         { deadline: deadline(UNARY_DEADLINE_MS) },
         (error, response) => error === null
-          ? resolve(response.repositories.flatMap((repository) =>
-              repository.enrollment === undefined ? [] : [repository.enrollment.id]))
+          ? resolve(response.repositoryConnections.map((repository) => repository.id))
           : reject(error),
       );
     });
-    console.log(JSON.stringify({ repositories: page }));
+    console.log(JSON.stringify({ repositoryConnections: page }));
 
     const taskId = process.env.ORCHESTRATOR_TASK_ID;
     if (taskId !== undefined) await watchTask(tasks, taskId, token);
@@ -88,11 +87,12 @@ async function main(): Promise<void> {
   }
 }
 
-function terminal(phase: DevelopmentTaskPhase | undefined): boolean {
-  return phase === DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_COMPLETED
-    || phase === DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_FAILED
-    || phase === DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CANCELLED
-    || phase === DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSUPPORTED;
+function terminal(state: DevelopmentTaskState | undefined): boolean {
+  return state === DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED
+    || state === DevelopmentTaskState.DEVELOPMENT_TASK_STATE_FAILED
+    || state === DevelopmentTaskState.DEVELOPMENT_TASK_STATE_CANCELLED
+    || state === DevelopmentTaskState.DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED
+    || state === DevelopmentTaskState.DEVELOPMENT_TASK_STATE_UNSUPPORTED;
 }
 
 async function watchTask(
@@ -103,18 +103,18 @@ async function watchTask(
   let cursor: string | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const completed = await new Promise<boolean>((resolve, reject) => {
-      let lastPhase: DevelopmentTaskPhase | undefined;
+      let lastState: DevelopmentTaskState | undefined;
       const stream = tasks.watchDevelopmentTask(
-        { taskId, ...(cursor === undefined ? {} : { afterResourceVersion: cursor }) },
+        { developmentTaskId: taskId, ...(cursor === undefined ? {} : { afterCursor: cursor }) },
         metadata(token),
         { deadline: deadline(WATCH_DEADLINE_MS) },
       );
       stream.on("data", (update: WatchDevelopmentTaskResponse) => {
-        cursor = update.resourceVersion;
-        lastPhase = update.task?.phase;
-        console.log(JSON.stringify({ taskId, resourceVersion: cursor, phase: lastPhase }));
+        cursor = update.cursor;
+        if (update.update?.$case === "developmentTask") lastState = update.update.developmentTask.state;
+        console.log(JSON.stringify({ taskId, cursor, state: lastState }));
       });
-      stream.on("end", () => resolve(terminal(lastPhase)));
+      stream.on("end", () => resolve(terminal(lastState)));
       stream.on("error", (error: { code?: number }) => {
         if (error.code === status.UNAVAILABLE || error.code === status.DEADLINE_EXCEEDED) resolve(false);
         else reject(error);

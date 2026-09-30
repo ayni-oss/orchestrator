@@ -14,9 +14,10 @@ pub struct HealthResponse {
     managed_execution: bool,
     durable_orchestration: bool,
     task_ui: &'static str,
-    repository_preparation: &'static str,
-    model_catalog: &'static str,
-    pilot_ready: bool,
+    runtime_profiles: &'static str,
+    candidate_publication: &'static str,
+    provider_models: &'static str,
+    clean_v1_contract: bool,
     domain_model_revision: u8,
 }
 
@@ -28,37 +29,31 @@ impl HealthResponse {
             managed_execution: true,
             durable_orchestration: true,
             task_ui: "separate",
-            repository_preparation: "unconfigured",
-            model_catalog: "unconfigured",
-            pilot_ready: false,
+            runtime_profiles: "contract_only",
+            candidate_publication: "unconfigured",
+            provider_models: "unconfigured",
+            clean_v1_contract: true,
             domain_model_revision: ayni_orchestrator_domain::model_revision(),
         }
     }
 
-    pub const fn ready(
-        publisher_available: bool,
-        model_catalog_configured: bool,
-        model_catalog_available: bool,
-    ) -> Self {
+    pub const fn ready(model_catalog_configured: bool, model_catalog_available: bool) -> Self {
         Self {
             component: "control-plane",
             status: "ready",
             managed_execution: true,
             durable_orchestration: true,
             task_ui: "separate",
-            repository_preparation: if publisher_available {
-                "available"
-            } else {
-                "unconfigured"
-            },
-            model_catalog: if model_catalog_available {
+            runtime_profiles: "contract_only",
+            candidate_publication: "contract_only",
+            provider_models: if model_catalog_available {
                 "available"
             } else if model_catalog_configured {
                 "unavailable"
             } else {
                 "unconfigured"
             },
-            pilot_ready: publisher_available && model_catalog_available,
+            clean_v1_contract: true,
             domain_model_revision: ayni_orchestrator_domain::model_revision(),
         }
     }

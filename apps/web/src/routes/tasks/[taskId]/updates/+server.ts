@@ -1,7 +1,9 @@
-import { BffError, type BrowserErrorDto, type DevelopmentTaskDto } from "@ayni-orchestrator/bff/server";
+import { BffError, type BrowserErrorDto, type DevelopmentTaskUpdateDto } from "@ayni-orchestrator/bff/server";
 import type { RequestHandler } from "./$types";
 import { getBff } from "$lib/server/bff.js";
-import { isCanonicalIdentifier, isResourceVersion } from "$lib/server/validation.js";
+import { isResourceVersion } from "$lib/server/validation.js";
+
+const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 
 const encoder = new TextEncoder();
 
@@ -17,7 +19,7 @@ function errorDto(error: unknown, requestId: string): BrowserErrorDto {
 }
 
 export const GET: RequestHandler = ({ locals, params, request }) => {
-  if (!isCanonicalIdentifier(params.taskId)) {
+  if (!RESOURCE_ID.test(params.taskId)) {
     return new Response("a valid task identifier is required", { status: 400 });
   }
   const cursor = request.headers.get("last-event-id") ?? undefined;
@@ -73,8 +75,12 @@ export const GET: RequestHandler = ({ locals, params, request }) => {
             params.taskId,
             cursor,
             { requestId: locals.requestId, signal: cancellation.signal },
-            (task: DevelopmentTaskDto) => {
-              enqueue(`id: ${task.resourceVersion}\nevent: task\ndata: ${JSON.stringify(task)}\n\n`);
+            (update: DevelopmentTaskUpdateDto) => {
+              if (update.kind === "development_task") {
+                enqueue(`id: ${update.cursor}\nevent: task\ndata: ${JSON.stringify(update.developmentTask)}\n\n`);
+              } else {
+                enqueue(`id: ${update.cursor}\nevent: related\ndata: ${JSON.stringify(update)}\n\n`);
+              }
             },
           );
         } catch (error) {

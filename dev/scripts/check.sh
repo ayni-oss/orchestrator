@@ -135,7 +135,7 @@ check_once() {
     -H 'x-request-id: local-readiness-check' \
     "http://127.0.0.1:$operations_port/readyz" 2>/dev/null)" || return 1
   grep -qi '^x-request-id: local-readiness-check' "$response_headers" || return 1
-  grep -q '"pilot_ready":true' <<<"$readiness" || return 1
+  grep -q '"clean_v1_contract":true' <<<"$readiness" || return 1
   metrics="$(curl_local "http://127.0.0.1:$operations_port/metrics")" || return 1
   grep -q 'orchestrator_model_interactions_total' <<<"$metrics" || return 1
   grep -q 'orchestrator_development_tasks' <<<"$metrics" || return 1

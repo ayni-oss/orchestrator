@@ -59,10 +59,12 @@ readiness authorization.
 ## Compatibility and generation
 
 This pre-public replacement intentionally resets the Buf breaking baseline and
-release state. After the reset, `ayni.orchestrator.v1` follows additive protobuf
+release state. The `proto/BASELINE` marker makes that one-time reset explicit;
+CI rejects later marker changes and compares subsequent work with the clean-v1
+base. After the reset, `ayni.orchestrator.v1` follows additive protobuf
 rules: never reuse removed numbers/names, preserve field and RPC wire shape,
 add enum values only, and handle unknown enum values safely. No deprecated
-pilot messages, RPCs, aliases, or legacy readers remain. Future incompatible
+pilot messages, RPCs, aliases, or API compatibility readers remain. Future incompatible
 work uses a new package only after this new baseline has an established release
 contract.
 

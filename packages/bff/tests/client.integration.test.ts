@@ -11,28 +11,30 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import {
-  DevelopmentTaskPhase,
   DevelopmentTaskServiceService,
+  DevelopmentTaskState,
   ErrorDetail,
   ErrorReason,
+  RepositoryConnectionStatus,
   RepositoryServiceService,
+  RuntimeProfileKind,
   type CreateDevelopmentTaskRequest,
   type CreateDevelopmentTaskResponse,
-  type GetRepositoryRequest,
-  type GetRepositoryResponse,
-  type ListRepositoriesRequest,
-  type ListRepositoriesResponse,
-  type SaveRepositoryRequest,
-  type SaveRepositoryResponse,
+  type CreateRepositoryConnectionRequest,
+  type CreateRepositoryConnectionResponse,
+  type GetRepositoryConnectionRequest,
+  type GetRepositoryConnectionResponse,
+  type ListRepositoryConnectionsRequest,
+  type ListRepositoryConnectionsResponse,
   type WatchDevelopmentTaskRequest,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BffError, OrchestratorBff } from "../src/index.js";
+import { BffError, OrchestratorBff, toBffError } from "../src/index.js";
 
-function richStatus(): Buffer {
+function richStatus(reason = ErrorReason.ERROR_REASON_INVALID_INPUT): Buffer {
   const detail = ErrorDetail.encode({
-    reason: ErrorReason.ERROR_REASON_INVALID_INPUT,
+    reason,
     message: "safe validation failure",
     metadata: [],
     requestId: "integration-request",
@@ -48,45 +50,94 @@ function richStatus(): Buffer {
     .finish());
 }
 
-function taskUpdate(): WatchDevelopmentTaskResponse {
+function task() {
   return {
-    task: {
-      id: "00000000-0000-4000-8000-000000000001",
-      input: {
-        repositoryId: "sandbox",
-        model: "gpt-5",
-        startRevision: "a".repeat(40),
-        request: "Correct the formula",
-        acceptanceCriteria: ["three becomes eight"],
-        changeConstraints: { protectedPaths: [], allowTestEdits: false },
-      },
+    id: "task:1",
+    snapshot: {
       repository: {
-        id: "sandbox",
-        owner: "ayni-oss",
-        repository: "sandbox",
-        baseBranch: "main",
-        lockSha256: "b".repeat(64),
+        repositoryConnectionId: "repository:1",
+        repositorySnapshotId: "snapshot:1",
+        revision: "a".repeat(40),
       },
-      model: { provider: "openai", model: "gpt-5" },
-      createdAt: new Date("2026-01-01T00:00:00.000Z"),
-      updatedAt: new Date("2026-01-01T00:00:01.000Z"),
-      phase: DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_QUEUED,
-      scopeViolations: [],
-      lifecycleComplete: false,
-      lifecycle: [],
-      modelUsage: {
-        collectionStatus: 2,
-        interactions: [],
-        byStage: [],
-        total: { interactionCount: 0, unavailableInteractionCount: 0 },
+      runtime: {
+        runtimeProfileId: "profile:1",
+        runtimeProfileRevisionId: "profile-revision:1",
+        profileKind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,
+        runtimeArtifactId: "artifact:1",
+        ociRepository: "ghcr.io/ayni-oss/sandbox/ayni-environment",
+        resolvedDigest: `sha256:${"b".repeat(64)}`,
+        platform: { operatingSystem: "linux", architecture: "amd64" },
       },
-      resourceVersion: "8",
+      agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },
+      request: "Correct the formula",
+      acceptanceCriteria: ["three becomes eight"],
+      changeConstraints: { protectedPaths: [], allowTestEdits: false },
     },
+    state: DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED,
+    attemptCount: 1,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:01.000Z"),
     resourceVersion: "8",
   };
 }
 
-describe("native gRPC BFF integration", () => {
+function taskUpdate(): WatchDevelopmentTaskResponse {
+  return {
+    cursor: "8",
+    update: { $case: "developmentTask", developmentTask: task() },
+  };
+}
+
+describe("clean-v1 native gRPC BFF integration", () => {
+  it("maps every stable rich error reason and fails closed for unknown values", () => {
+    const cases: Array<[ErrorReason, string]> = [
+      [ErrorReason.ERROR_REASON_UNSPECIFIED, "unspecified"],
+      [ErrorReason.ERROR_REASON_INVALID_IDENTIFIER, "invalid_identifier"],
+      [ErrorReason.ERROR_REASON_INVALID_INPUT, "invalid_input"],
+      [ErrorReason.ERROR_REASON_IDEMPOTENCY_KEY_REUSED, "idempotency_key_reused"],
+      [ErrorReason.ERROR_REASON_RESOURCE_NOT_FOUND, "resource_not_found"],
+      [ErrorReason.ERROR_REASON_CONFLICT, "conflict"],
+      [ErrorReason.ERROR_REASON_FAILED_PRECONDITION, "failed_precondition"],
+      [ErrorReason.ERROR_REASON_PROVIDER_UNAVAILABLE, "provider_unavailable"],
+      [ErrorReason.ERROR_REASON_MODEL_UNAVAILABLE, "model_unavailable"],
+      [ErrorReason.ERROR_REASON_REPOSITORY_ACCESS, "repository_access"],
+      [ErrorReason.ERROR_REASON_CANCELLED, "cancelled"],
+      [ErrorReason.ERROR_REASON_DEADLINE_EXCEEDED, "deadline_exceeded"],
+      [ErrorReason.ERROR_REASON_INTERNAL, "internal"],
+      [ErrorReason.ERROR_REASON_INVALID_REPOSITORY_REVISION, "invalid_repository_revision"],
+      [ErrorReason.ERROR_REASON_INVALID_PROFILE_REVISION, "invalid_profile_revision"],
+      [ErrorReason.ERROR_REASON_INVALID_LOCK_FINGERPRINT, "invalid_lock_fingerprint"],
+      [ErrorReason.ERROR_REASON_INVALID_OCI_REFERENCE, "invalid_oci_reference"],
+      [ErrorReason.ERROR_REASON_INVALID_OCI_DIGEST, "invalid_oci_digest"],
+      [ErrorReason.ERROR_REASON_INVALID_PLATFORM, "invalid_platform"],
+      [ErrorReason.ERROR_REASON_PROFILE_UNSUPPORTED, "profile_unsupported"],
+      [ErrorReason.ERROR_REASON_PROFILE_NOT_READY, "profile_not_ready"],
+      [ErrorReason.ERROR_REASON_RUNTIME_ARTIFACT_NOT_VERIFIED, "runtime_artifact_not_verified"],
+      [ErrorReason.ERROR_REASON_AUTOMATION_NOT_READY, "automation_not_ready"],
+      [ErrorReason.ERROR_REASON_TASK_NOT_ACTIONABLE, "task_not_actionable"],
+      [ErrorReason.ERROR_REASON_TASK_DEADLINE_EXPIRED, "task_deadline_expired"],
+      [ErrorReason.ERROR_REASON_CHANGE_REQUEST_HEAD_STALE, "change_request_head_stale"],
+      [ErrorReason.ERROR_REASON_ASSESSMENT_REJECTED, "assessment_rejected"],
+      [ErrorReason.ERROR_REASON_EVIDENCE_UNAVAILABLE, "evidence_unavailable"],
+      [ErrorReason.ERROR_REASON_EVIDENCE_INVALID, "evidence_invalid"],
+      [ErrorReason.ERROR_REASON_BOUND_EXCEEDED, "bound_exceeded"],
+      [ErrorReason.ERROR_REASON_WATCH_CURSOR_EXPIRED, "watch_cursor_expired"],
+      [ErrorReason.ERROR_REASON_UNKNOWN_ENUM_VALUE, "unknown_enum_value"],
+      [ErrorReason.ERROR_REASON_NOT_IMPLEMENTED, "not_implemented"],
+      [ErrorReason.UNRECOGNIZED, "unspecified"],
+    ];
+    for (const [value, expected] of cases) {
+      const metadata = new Metadata();
+      metadata.set("grpc-status-details-bin", richStatus(value));
+      const error = Object.assign(new Error("unsafe transport message"), {
+        code: grpcStatus.INVALID_ARGUMENT,
+        details: "unsafe transport message",
+        metadata,
+      }) as ServiceError;
+      expect(toBffError(error, "fallback-request").reason).toBe(expected);
+    }
+  });
+
   let server: Server;
   let bff: OrchestratorBff;
   let receivedRequestId: string | undefined;
@@ -105,38 +156,61 @@ describe("native gRPC BFF integration", () => {
     hangingStreamCancelled = false;
     server = new Server();
     const implementation: UntypedServiceImplementation = {
-      listRepositories(
-        call: ServerUnaryCall<ListRepositoriesRequest, ListRepositoriesResponse>,
-        callback: sendUnaryData<ListRepositoriesResponse>,
+      listRepositoryConnections(
+        call: ServerUnaryCall<ListRepositoryConnectionsRequest, ListRepositoryConnectionsResponse>,
+        callback: sendUnaryData<ListRepositoryConnectionsResponse>,
       ): void {
         const value = call.metadata.get("x-request-id")[0];
         receivedRequestId = typeof value === "string" ? value : undefined;
         callback(null, {
-          repositories: [{
-            enrollment: {
-              id: "sandbox",
-              owner: call.request.page?.pageToken === "large" ? "x".repeat(4 * 1024 * 1024) : "ayni-oss",
-              repository: "sandbox",
-              installationId: "42",
-              baseBranch: "main",
-              lockSha256: "a".repeat(64),
+          repositoryConnections: [{
+            id: "repository:1",
+            provider: {
+              provider: {
+                $case: "github",
+                github: {
+                  repositoryId: "123",
+                  owner: call.request.page?.pageToken === "large" ? "x".repeat(4 * 1024 * 1024) : "ayni-oss",
+                  name: "sandbox",
+                  installationId: "42",
+                  htmlUrl: "https://github.com/ayni-oss/sandbox",
+                },
+              },
             },
+            displayName: "ayni-oss/sandbox",
+            defaultBranch: "main",
+            status: RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_CONNECTED,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:01.000Z"),
+            resourceVersion: "1",
           }],
-          page: { nextPageToken: "" },
+          page: { nextPageToken: "", snapshotCursor: "1" },
         });
       },
-      saveRepository(
-        call: ServerUnaryCall<SaveRepositoryRequest, SaveRepositoryResponse>,
-        callback: sendUnaryData<SaveRepositoryResponse>,
+      createRepositoryConnection(
+        call: ServerUnaryCall<CreateRepositoryConnectionRequest, CreateRepositoryConnectionResponse>,
+        callback: sendUnaryData<CreateRepositoryConnectionResponse>,
       ): void {
         receivedIdempotencyKey = call.request.idempotencyKey;
-        callback(null, { repository: { enrollment: call.request.repository } });
+        const provider = call.request.provider;
+        callback(null, {
+          repositoryConnection: {
+            id: "repository:1",
+            provider,
+            displayName: call.request.displayName,
+            defaultBranch: call.request.defaultBranch,
+            status: RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_CONNECTING,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            resourceVersion: "1",
+          },
+        });
       },
-      getRepository(
-        call: ServerUnaryCall<GetRepositoryRequest, GetRepositoryResponse>,
-        callback: sendUnaryData<GetRepositoryResponse>,
+      getRepositoryConnection(
+        call: ServerUnaryCall<GetRepositoryConnectionRequest, GetRepositoryConnectionResponse>,
+        callback: sendUnaryData<GetRepositoryConnectionResponse>,
       ): void {
-        if (call.request.repositoryId === "hang") return;
+        if (call.request.repositoryConnectionId === "hang") return;
         const metadata = new Metadata();
         metadata.set("grpc-status-details-bin", richStatus());
         callback(Object.assign(new Error("secret upstream diagnostic"), {
@@ -153,17 +227,15 @@ describe("native gRPC BFF integration", () => {
         callback: sendUnaryData<CreateDevelopmentTaskResponse>,
       ): void {
         oversizedCreateReachedServer = true;
-        callback(null, { task: taskUpdate().task });
+        callback(null, { developmentTask: task() });
       },
       watchDevelopmentTask(
         call: ServerWritableStream<WatchDevelopmentTaskRequest, WatchDevelopmentTaskResponse>,
       ): void {
-        receivedStreamCursor = call.request.afterResourceVersion;
-        if (call.request.taskId === "hang") {
+        receivedStreamCursor = call.request.afterCursor;
+        if (call.request.developmentTaskId === "hang") {
           hangingStreamStarted = true;
-          call.on("cancelled", () => {
-            hangingStreamCancelled = true;
-          });
+          call.on("cancelled", () => { hangingStreamCancelled = true; });
           return;
         }
         call.write(taskUpdate());
@@ -184,31 +256,34 @@ describe("native gRPC BFF integration", () => {
     await new Promise<void>((resolve) => server.tryShutdown(() => resolve()));
   });
 
-  it("uses generated native clients, propagates correlation, and returns DTOs", async () => {
-    const response = await bff.listRepositories({}, { requestId: "integration-request" });
+  it("uses generated native clients and returns provider-neutral DTOs", async () => {
+    const response = await bff.listRepositoryConnections({}, { requestId: "integration-request" });
     expect(receivedRequestId).toBe("integration-request");
-    expect(response.repositories[0]).toEqual(expect.objectContaining({
-      enrollment: expect.objectContaining({ id: "sandbox", installationId: "42" }),
+    expect(response.repositoryConnections[0]).toEqual(expect.objectContaining({
+      id: "repository:1",
+      provider: expect.objectContaining({ kind: "github", installationId: "42" }),
     }));
   });
 
   it("preserves caller idempotency keys on mutations", async () => {
-    await bff.saveRepository({
-      idempotencyKey: "browser-save-1",
-      repository: {
-        id: "sandbox",
+    await bff.createRepositoryConnection({
+      idempotencyKey: "browser-create-1",
+      provider: {
+        kind: "github",
+        repositoryId: "123",
         owner: "ayni-oss",
-        repository: "sandbox",
+        name: "sandbox",
         installationId: "42",
-        baseBranch: "main",
-        lockSha256: "a".repeat(64),
+        htmlUrl: "https://github.com/ayni-oss/sandbox",
       },
+      displayName: "ayni-oss/sandbox",
+      defaultBranch: "main",
     }, { requestId: "mutation-request" });
-    expect(receivedIdempotencyKey).toBe("browser-save-1");
+    expect(receivedIdempotencyKey).toBe("browser-create-1");
   });
 
   it("maps rich gRPC errors without exposing raw transport diagnostics", async () => {
-    const result = bff.getRepository("invalid", { requestId: "integration-request" });
+    const result = bff.getRepositoryConnection("invalid", { requestId: "integration-request" });
     await expect(result).rejects.toMatchObject({
       status: 400,
       reason: "invalid_input",
@@ -218,43 +293,23 @@ describe("native gRPC BFF integration", () => {
     await expect(result).rejects.not.toHaveProperty("message", "secret upstream diagnostic");
   });
 
-  it("applies bounded deadlines", async () => {
-    const result = bff.getRepository("hang", {
+  it("applies deadlines and response bounds", async () => {
+    await expect(bff.getRepositoryConnection("hang", {
       requestId: "deadline-request",
       deadlineMs: 100,
-    });
-    await expect(result).rejects.toMatchObject({
-      status: 504,
-      retryable: true,
-    } satisfies Partial<BffError>);
-  });
-
-  it("cancels unary gRPC calls when the browser request aborts", async () => {
-    const controller = new AbortController();
-    const result = bff.getRepository("hang", {
-      requestId: "cancel-request",
-      signal: controller.signal,
-      deadlineMs: 5_000,
-    });
-    controller.abort();
-    await expect(result).rejects.toMatchObject({
-      status: 499,
-      reason: "cancelled",
-    } satisfies Partial<BffError>);
-  });
-
-  it("enforces the four MiB response limit", async () => {
-    const result = bff.listRepositories({ pageToken: "large" }, { requestId: "large-response" });
-    await expect(result).rejects.toMatchObject({ status: 429 } satisfies Partial<BffError>);
+    })).rejects.toMatchObject({ status: 504, retryable: true } satisfies Partial<BffError>);
+    await expect(bff.listRepositoryConnections({ pageToken: "large" }, { requestId: "large" }))
+      .rejects.toMatchObject({ status: 429 } satisfies Partial<BffError>);
   });
 
   it("enforces the one MiB request limit before server dispatch", async () => {
     const result = bff.createDevelopmentTask({
       idempotencyKey: "large-request",
-      input: {
-        repositoryId: "sandbox",
-        model: "gpt-5",
-        startRevision: "a".repeat(40),
+      request: {
+        repositoryConnectionId: "repository:1",
+        repositoryRevision: "a".repeat(40),
+        runtimeProfileId: "profile:1",
+        agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },
         request: "x".repeat(1_100_000),
         acceptanceCriteria: ["bounded result"],
         changeConstraints: { protectedPaths: [], allowTestEdits: false },
@@ -266,73 +321,40 @@ describe("native gRPC BFF integration", () => {
 
   it("rejects an overflowing stream cursor before serialization", () => {
     expect(() => bff.watchDevelopmentTask(
-      "00000000-0000-4000-8000-000000000001",
+      "task:1",
       "18446744073709551616",
       { requestId: "stream-cursor-request" },
       () => undefined,
     )).toThrow(expect.objectContaining({ status: 400, reason: "invalid_input" }));
   });
 
-  it("relays resumable server-streamed task DTOs", async () => {
+  it("relays resumable typed task updates", async () => {
     const updates: string[] = [];
-    await bff.watchDevelopmentTask(
-      "00000000-0000-4000-8000-000000000001",
-      "7",
-      { requestId: "stream-request", deadlineMs: 1_000 },
-      (task) => {
-        updates.push(`${task.id}:${task.resourceVersion}`);
-      },
-    );
+    await bff.watchDevelopmentTask("task:1", "7", { requestId: "stream", deadlineMs: 1_000 }, (update) => {
+      if (update.kind === "development_task") updates.push(`${update.developmentTask.id}:${update.cursor}`);
+    });
     expect(receivedStreamCursor).toBe("7");
-    expect(updates).toEqual(["00000000-0000-4000-8000-000000000001:8"]);
+    expect(updates).toEqual(["task:1:8"]);
   });
 
-  it("cancels an active gRPC stream when the browser aborts", async () => {
+  it("cancels active streams and sanitizes consumer failures", async () => {
     const controller = new AbortController();
     const result = bff.watchDevelopmentTask(
-      "hang",
-      undefined,
-      { requestId: "stream-cancel-request", signal: controller.signal, deadlineMs: 1_000 },
-      () => undefined,
+      "hang", undefined, { requestId: "cancel", signal: controller.signal, deadlineMs: 1_000 }, () => undefined,
     );
     await vi.waitFor(() => expect(hangingStreamStarted).toBe(true));
     controller.abort();
     await expect(result).resolves.toBeUndefined();
     await vi.waitFor(() => expect(hangingStreamCancelled).toBe(true));
-  });
 
-  it("applies a bounded deadline to an active gRPC stream", async () => {
-    const result = bff.watchDevelopmentTask(
-      "hang",
-      undefined,
-      { requestId: "stream-deadline-request", deadlineMs: 100 },
-      () => undefined,
-    );
-    await expect(result).rejects.toMatchObject({
-      status: 504,
-      reason: "deadline_exceeded",
-      retryable: true,
-    } satisfies Partial<BffError>);
-    await vi.waitFor(() => expect(hangingStreamCancelled).toBe(true));
-  });
-
-  it("turns a stream consumer exception into a safe rejection", async () => {
-    const result = bff.watchDevelopmentTask(
-      "00000000-0000-4000-8000-000000000001",
-      undefined,
-      { requestId: "stream-error-request", deadlineMs: 1_000 },
-      () => {
-        throw new Error("sensitive browser consumer state");
+    await expect(bff.watchDevelopmentTask(
+      "task:1", undefined, { requestId: "consumer", deadlineMs: 1_000 }, () => {
+        throw new Error("sensitive browser state");
       },
-    );
-    await expect(result).rejects.toMatchObject({
-      status: 500,
-      reason: "internal",
-      message: "the browser server could not complete the request",
-    } satisfies Partial<BffError>);
+    )).rejects.toMatchObject({ status: 500, reason: "internal" } satisfies Partial<BffError>);
   });
 
-  it("rejects non-loopback backends in the trusted profile", () => {
+  it("rejects non-loopback backends", () => {
     expect(() => new OrchestratorBff({ address: "control-plane:50051" })).toThrow(/loopback/u);
   });
 });

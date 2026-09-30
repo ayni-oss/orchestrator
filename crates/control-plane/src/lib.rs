@@ -1,19 +1,24 @@
 //! Native gRPC, operational HTTP, and durable orchestration for Ayni Orchestrator.
 
 mod api;
+#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
 pub(crate) mod application;
 mod application_metrics;
+#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
 mod development;
 mod development_jobs;
+#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
 mod development_lifecycle;
 mod github;
 mod grpc;
 mod grpc_access;
+#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
 mod model_catalog;
 mod model_usage;
 mod orchestration;
 mod preparation;
 mod preparation_jobs;
+#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
 mod publication;
 
 use api::{ApiError, HealthResponse};
@@ -473,7 +478,6 @@ async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(HealthResponse::ready(
-            state.publisher.is_some(),
             state.model_catalog.is_some(),
             state
                 .model_catalog
@@ -626,7 +630,7 @@ mod tests {
         let body = response.into_body().collect().await?.to_bytes();
         assert_eq!(
             body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"separate","repository_preparation":"unconfigured","model_catalog":"available","pilot_ready":false,"domain_model_revision":4}"#
+            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"separate","runtime_profiles":"contract_only","candidate_publication":"contract_only","provider_models":"available","clean_v1_contract":true,"domain_model_revision":4}"#
         );
         Ok(())
     }
@@ -642,8 +646,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
-        assert_eq!(body["model_catalog"], "unconfigured");
-        assert_eq!(body["pilot_ready"], false);
+        assert_eq!(body["provider_models"], "unconfigured");
+        assert_eq!(body["clean_v1_contract"], true);
         Ok(())
     }
 

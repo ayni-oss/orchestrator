@@ -22,236 +22,206 @@ import {
 } from "@grpc/grpc-js";
 import { Duration } from "../../../google/protobuf/duration";
 import { Timestamp } from "../../../google/protobuf/timestamp";
-import { ChangeConstraints, PageRequest, PageResponse } from "./common";
-import { ErrorReason, errorReasonFromJSON, errorReasonToJSON } from "./errors";
+import { ChangeConstraints, OciPlatform, PageRequest, PageResponse, ResourceFailure } from "./common";
+import { RuntimeProfileKind, runtimeProfileKindFromJSON, runtimeProfileKindToJSON } from "./runtime_profiles";
 
-/** DevelopmentTaskPhase is the durable phase of one development task. */
-export enum DevelopmentTaskPhase {
-  DEVELOPMENT_TASK_PHASE_UNSPECIFIED = 0,
-  DEVELOPMENT_TASK_PHASE_QUEUED = 1,
-  DEVELOPMENT_TASK_PHASE_CODING = 2,
-  DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT = 3,
-  DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED = 4,
-  DEVELOPMENT_TASK_PHASE_VALIDATING = 5,
-  DEVELOPMENT_TASK_PHASE_PR_QUEUED = 6,
-  DEVELOPMENT_TASK_PHASE_PREPARING_PR = 7,
-  DEVELOPMENT_TASK_PHASE_COMPLETED = 8,
-  DEVELOPMENT_TASK_PHASE_FAILED = 9,
-  DEVELOPMENT_TASK_PHASE_CANCELLED = 10,
-  DEVELOPMENT_TASK_PHASE_UNSUPPORTED = 11,
+/** DevelopmentTaskState is task progress, independent of publication and assessment. */
+export enum DevelopmentTaskState {
+  DEVELOPMENT_TASK_STATE_UNSPECIFIED = 0,
+  DEVELOPMENT_TASK_STATE_QUEUED = 1,
+  DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME = 2,
+  DEVELOPMENT_TASK_STATE_RUNNING = 3,
+  DEVELOPMENT_TASK_STATE_SUCCEEDED = 4,
+  DEVELOPMENT_TASK_STATE_FAILED = 5,
+  DEVELOPMENT_TASK_STATE_CANCELLED = 6,
+  DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED = 7,
+  DEVELOPMENT_TASK_STATE_UNSUPPORTED = 8,
   UNRECOGNIZED = -1,
 }
 
-export function developmentTaskPhaseFromJSON(object: any): DevelopmentTaskPhase {
+export function developmentTaskStateFromJSON(object: any): DevelopmentTaskState {
   switch (object) {
     case 0:
-    case "DEVELOPMENT_TASK_PHASE_UNSPECIFIED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSPECIFIED;
+    case "DEVELOPMENT_TASK_STATE_UNSPECIFIED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_UNSPECIFIED;
     case 1:
-    case "DEVELOPMENT_TASK_PHASE_QUEUED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_QUEUED;
+    case "DEVELOPMENT_TASK_STATE_QUEUED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED;
     case 2:
-    case "DEVELOPMENT_TASK_PHASE_CODING":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CODING;
+    case "DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME;
     case 3:
-    case "DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT;
+    case "DEVELOPMENT_TASK_STATE_RUNNING":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING;
     case 4:
-    case "DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED;
+    case "DEVELOPMENT_TASK_STATE_SUCCEEDED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED;
     case 5:
-    case "DEVELOPMENT_TASK_PHASE_VALIDATING":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATING;
+    case "DEVELOPMENT_TASK_STATE_FAILED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_FAILED;
     case 6:
-    case "DEVELOPMENT_TASK_PHASE_PR_QUEUED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PR_QUEUED;
+    case "DEVELOPMENT_TASK_STATE_CANCELLED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_CANCELLED;
     case 7:
-    case "DEVELOPMENT_TASK_PHASE_PREPARING_PR":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PREPARING_PR;
+    case "DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED;
     case 8:
-    case "DEVELOPMENT_TASK_PHASE_COMPLETED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_COMPLETED;
-    case 9:
-    case "DEVELOPMENT_TASK_PHASE_FAILED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_FAILED;
-    case 10:
-    case "DEVELOPMENT_TASK_PHASE_CANCELLED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CANCELLED;
-    case 11:
-    case "DEVELOPMENT_TASK_PHASE_UNSUPPORTED":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSUPPORTED;
+    case "DEVELOPMENT_TASK_STATE_UNSUPPORTED":
+      return DevelopmentTaskState.DEVELOPMENT_TASK_STATE_UNSUPPORTED;
     case -1:
     case "UNRECOGNIZED":
     default:
-      return DevelopmentTaskPhase.UNRECOGNIZED;
+      return DevelopmentTaskState.UNRECOGNIZED;
   }
 }
 
-export function developmentTaskPhaseToJSON(object: DevelopmentTaskPhase): string {
+export function developmentTaskStateToJSON(object: DevelopmentTaskState): string {
   switch (object) {
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSPECIFIED:
-      return "DEVELOPMENT_TASK_PHASE_UNSPECIFIED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_QUEUED:
-      return "DEVELOPMENT_TASK_PHASE_QUEUED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CODING:
-      return "DEVELOPMENT_TASK_PHASE_CODING";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT:
-      return "DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED:
-      return "DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATING:
-      return "DEVELOPMENT_TASK_PHASE_VALIDATING";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PR_QUEUED:
-      return "DEVELOPMENT_TASK_PHASE_PR_QUEUED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PREPARING_PR:
-      return "DEVELOPMENT_TASK_PHASE_PREPARING_PR";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_COMPLETED:
-      return "DEVELOPMENT_TASK_PHASE_COMPLETED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_FAILED:
-      return "DEVELOPMENT_TASK_PHASE_FAILED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CANCELLED:
-      return "DEVELOPMENT_TASK_PHASE_CANCELLED";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSUPPORTED:
-      return "DEVELOPMENT_TASK_PHASE_UNSUPPORTED";
-    case DevelopmentTaskPhase.UNRECOGNIZED:
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_UNSPECIFIED:
+      return "DEVELOPMENT_TASK_STATE_UNSPECIFIED";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED:
+      return "DEVELOPMENT_TASK_STATE_QUEUED";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME:
+      return "DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING:
+      return "DEVELOPMENT_TASK_STATE_RUNNING";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED:
+      return "DEVELOPMENT_TASK_STATE_SUCCEEDED";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_FAILED:
+      return "DEVELOPMENT_TASK_STATE_FAILED";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_CANCELLED:
+      return "DEVELOPMENT_TASK_STATE_CANCELLED";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED:
+      return "DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_UNSUPPORTED:
+      return "DEVELOPMENT_TASK_STATE_UNSUPPORTED";
+    case DevelopmentTaskState.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
   }
 }
 
-/** LifecycleStage is a measurable stage in the development pipeline. */
-export enum LifecycleStage {
-  LIFECYCLE_STAGE_UNSPECIFIED = 0,
-  LIFECYCLE_STAGE_QUEUE = 1,
-  LIFECYCLE_STAGE_CODING = 2,
-  LIFECYCLE_STAGE_VALIDATION = 3,
-  LIFECYCLE_STAGE_PR_PREPARATION = 4,
-  LIFECYCLE_STAGE_UNKNOWN = 5,
+/** DevelopmentAttemptState is one execution attempt's independent lifecycle. */
+export enum DevelopmentAttemptState {
+  DEVELOPMENT_ATTEMPT_STATE_UNSPECIFIED = 0,
+  DEVELOPMENT_ATTEMPT_STATE_QUEUED = 1,
+  DEVELOPMENT_ATTEMPT_STATE_RUNNING = 2,
+  DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT = 3,
+  DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED = 4,
+  DEVELOPMENT_ATTEMPT_STATE_FAILED = 5,
+  DEVELOPMENT_ATTEMPT_STATE_CANCELLED = 6,
+  DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED = 7,
+  DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED = 8,
   UNRECOGNIZED = -1,
 }
 
-export function lifecycleStageFromJSON(object: any): LifecycleStage {
+export function developmentAttemptStateFromJSON(object: any): DevelopmentAttemptState {
   switch (object) {
     case 0:
-    case "LIFECYCLE_STAGE_UNSPECIFIED":
-      return LifecycleStage.LIFECYCLE_STAGE_UNSPECIFIED;
+    case "DEVELOPMENT_ATTEMPT_STATE_UNSPECIFIED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_UNSPECIFIED;
     case 1:
-    case "LIFECYCLE_STAGE_QUEUE":
-      return LifecycleStage.LIFECYCLE_STAGE_QUEUE;
+    case "DEVELOPMENT_ATTEMPT_STATE_QUEUED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_QUEUED;
     case 2:
-    case "LIFECYCLE_STAGE_CODING":
-      return LifecycleStage.LIFECYCLE_STAGE_CODING;
+    case "DEVELOPMENT_ATTEMPT_STATE_RUNNING":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_RUNNING;
     case 3:
-    case "LIFECYCLE_STAGE_VALIDATION":
-      return LifecycleStage.LIFECYCLE_STAGE_VALIDATION;
+    case "DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT;
     case 4:
-    case "LIFECYCLE_STAGE_PR_PREPARATION":
-      return LifecycleStage.LIFECYCLE_STAGE_PR_PREPARATION;
+    case "DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED;
     case 5:
-    case "LIFECYCLE_STAGE_UNKNOWN":
-      return LifecycleStage.LIFECYCLE_STAGE_UNKNOWN;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return LifecycleStage.UNRECOGNIZED;
-  }
-}
-
-export function lifecycleStageToJSON(object: LifecycleStage): string {
-  switch (object) {
-    case LifecycleStage.LIFECYCLE_STAGE_UNSPECIFIED:
-      return "LIFECYCLE_STAGE_UNSPECIFIED";
-    case LifecycleStage.LIFECYCLE_STAGE_QUEUE:
-      return "LIFECYCLE_STAGE_QUEUE";
-    case LifecycleStage.LIFECYCLE_STAGE_CODING:
-      return "LIFECYCLE_STAGE_CODING";
-    case LifecycleStage.LIFECYCLE_STAGE_VALIDATION:
-      return "LIFECYCLE_STAGE_VALIDATION";
-    case LifecycleStage.LIFECYCLE_STAGE_PR_PREPARATION:
-      return "LIFECYCLE_STAGE_PR_PREPARATION";
-    case LifecycleStage.LIFECYCLE_STAGE_UNKNOWN:
-      return "LIFECYCLE_STAGE_UNKNOWN";
-    case LifecycleStage.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
-/** LifecycleOutcome is the result recorded at a lifecycle boundary. */
-export enum LifecycleOutcome {
-  LIFECYCLE_OUTCOME_UNSPECIFIED = 0,
-  LIFECYCLE_OUTCOME_QUEUED = 1,
-  LIFECYCLE_OUTCOME_STARTED = 2,
-  LIFECYCLE_OUTCOME_SUCCEEDED = 3,
-  LIFECYCLE_OUTCOME_BLOCKED = 4,
-  LIFECYCLE_OUTCOME_FAILED = 5,
-  LIFECYCLE_OUTCOME_CANCELLED = 6,
-  LIFECYCLE_OUTCOME_UNSUPPORTED = 7,
-  UNRECOGNIZED = -1,
-}
-
-export function lifecycleOutcomeFromJSON(object: any): LifecycleOutcome {
-  switch (object) {
-    case 0:
-    case "LIFECYCLE_OUTCOME_UNSPECIFIED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_UNSPECIFIED;
-    case 1:
-    case "LIFECYCLE_OUTCOME_QUEUED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_QUEUED;
-    case 2:
-    case "LIFECYCLE_OUTCOME_STARTED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_STARTED;
-    case 3:
-    case "LIFECYCLE_OUTCOME_SUCCEEDED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_SUCCEEDED;
-    case 4:
-    case "LIFECYCLE_OUTCOME_BLOCKED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_BLOCKED;
-    case 5:
-    case "LIFECYCLE_OUTCOME_FAILED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_FAILED;
+    case "DEVELOPMENT_ATTEMPT_STATE_FAILED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_FAILED;
     case 6:
-    case "LIFECYCLE_OUTCOME_CANCELLED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_CANCELLED;
+    case "DEVELOPMENT_ATTEMPT_STATE_CANCELLED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_CANCELLED;
     case 7:
-    case "LIFECYCLE_OUTCOME_UNSUPPORTED":
-      return LifecycleOutcome.LIFECYCLE_OUTCOME_UNSUPPORTED;
+    case "DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED;
+    case 8:
+    case "DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED":
+      return DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED;
     case -1:
     case "UNRECOGNIZED":
     default:
-      return LifecycleOutcome.UNRECOGNIZED;
+      return DevelopmentAttemptState.UNRECOGNIZED;
   }
 }
 
-export function lifecycleOutcomeToJSON(object: LifecycleOutcome): string {
+export function developmentAttemptStateToJSON(object: DevelopmentAttemptState): string {
   switch (object) {
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_UNSPECIFIED:
-      return "LIFECYCLE_OUTCOME_UNSPECIFIED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_QUEUED:
-      return "LIFECYCLE_OUTCOME_QUEUED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_STARTED:
-      return "LIFECYCLE_OUTCOME_STARTED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_SUCCEEDED:
-      return "LIFECYCLE_OUTCOME_SUCCEEDED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_BLOCKED:
-      return "LIFECYCLE_OUTCOME_BLOCKED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_FAILED:
-      return "LIFECYCLE_OUTCOME_FAILED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_CANCELLED:
-      return "LIFECYCLE_OUTCOME_CANCELLED";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_UNSUPPORTED:
-      return "LIFECYCLE_OUTCOME_UNSUPPORTED";
-    case LifecycleOutcome.UNRECOGNIZED:
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_UNSPECIFIED:
+      return "DEVELOPMENT_ATTEMPT_STATE_UNSPECIFIED";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_QUEUED:
+      return "DEVELOPMENT_ATTEMPT_STATE_QUEUED";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_RUNNING:
+      return "DEVELOPMENT_ATTEMPT_STATE_RUNNING";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT:
+      return "DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED:
+      return "DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_FAILED:
+      return "DEVELOPMENT_ATTEMPT_STATE_FAILED";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_CANCELLED:
+      return "DEVELOPMENT_ATTEMPT_STATE_CANCELLED";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED:
+      return "DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED:
+      return "DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED";
+    case DevelopmentAttemptState.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
   }
 }
 
-/** ModelUsageStage identifies a stage that makes provider requests. */
+/** CandidateState records immutable candidate admission, not review readiness. */
+export enum CandidateState {
+  CANDIDATE_STATE_UNSPECIFIED = 0,
+  CANDIDATE_STATE_AVAILABLE = 1,
+  CANDIDATE_STATE_REJECTED = 2,
+  UNRECOGNIZED = -1,
+}
+
+export function candidateStateFromJSON(object: any): CandidateState {
+  switch (object) {
+    case 0:
+    case "CANDIDATE_STATE_UNSPECIFIED":
+      return CandidateState.CANDIDATE_STATE_UNSPECIFIED;
+    case 1:
+    case "CANDIDATE_STATE_AVAILABLE":
+      return CandidateState.CANDIDATE_STATE_AVAILABLE;
+    case 2:
+    case "CANDIDATE_STATE_REJECTED":
+      return CandidateState.CANDIDATE_STATE_REJECTED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return CandidateState.UNRECOGNIZED;
+  }
+}
+
+export function candidateStateToJSON(object: CandidateState): string {
+  switch (object) {
+    case CandidateState.CANDIDATE_STATE_UNSPECIFIED:
+      return "CANDIDATE_STATE_UNSPECIFIED";
+    case CandidateState.CANDIDATE_STATE_AVAILABLE:
+      return "CANDIDATE_STATE_AVAILABLE";
+    case CandidateState.CANDIDATE_STATE_REJECTED:
+      return "CANDIDATE_STATE_REJECTED";
+    case CandidateState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+/** ModelUsageStage identifies an attempt stage that makes model-provider requests. */
 export enum ModelUsageStage {
   MODEL_USAGE_STAGE_UNSPECIFIED = 0,
   MODEL_USAGE_STAGE_CODING = 1,
-  MODEL_USAGE_STAGE_PR_PREPARATION = 2,
+  MODEL_USAGE_STAGE_CHANGE_SUMMARY = 2,
   UNRECOGNIZED = -1,
 }
 
@@ -264,8 +234,8 @@ export function modelUsageStageFromJSON(object: any): ModelUsageStage {
     case "MODEL_USAGE_STAGE_CODING":
       return ModelUsageStage.MODEL_USAGE_STAGE_CODING;
     case 2:
-    case "MODEL_USAGE_STAGE_PR_PREPARATION":
-      return ModelUsageStage.MODEL_USAGE_STAGE_PR_PREPARATION;
+    case "MODEL_USAGE_STAGE_CHANGE_SUMMARY":
+      return ModelUsageStage.MODEL_USAGE_STAGE_CHANGE_SUMMARY;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -279,8 +249,8 @@ export function modelUsageStageToJSON(object: ModelUsageStage): string {
       return "MODEL_USAGE_STAGE_UNSPECIFIED";
     case ModelUsageStage.MODEL_USAGE_STAGE_CODING:
       return "MODEL_USAGE_STAGE_CODING";
-    case ModelUsageStage.MODEL_USAGE_STAGE_PR_PREPARATION:
-      return "MODEL_USAGE_STAGE_PR_PREPARATION";
+    case ModelUsageStage.MODEL_USAGE_STAGE_CHANGE_SUMMARY:
+      return "MODEL_USAGE_STAGE_CHANGE_SUMMARY";
     case ModelUsageStage.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -333,7 +303,7 @@ export function modelInteractionOutcomeToJSON(object: ModelInteractionOutcome): 
   }
 }
 
-/** ModelUsageCollectionStatus states whether task usage is available and terminal. */
+/** ModelUsageCollectionStatus states whether bounded usage is available and terminal. */
 export enum ModelUsageCollectionStatus {
   MODEL_USAGE_COLLECTION_STATUS_UNSPECIFIED = 0,
   MODEL_USAGE_COLLECTION_STATUS_UNAVAILABLE = 1,
@@ -379,73 +349,29 @@ export function modelUsageCollectionStatusToJSON(object: ModelUsageCollectionSta
   }
 }
 
-/** EvidenceOutcome is the independently validated candidate outcome. */
-export enum EvidenceOutcome {
-  EVIDENCE_OUTCOME_UNSPECIFIED = 0,
-  EVIDENCE_OUTCOME_SUCCESS = 1,
-  EVIDENCE_OUTCOME_QUALITY_FAILURE = 2,
-  EVIDENCE_OUTCOME_POLICY_REJECTED = 3,
-  EVIDENCE_OUTCOME_DEPENDENCY_CHANGE_UNSUPPORTED = 4,
-  EVIDENCE_OUTCOME_SCOPE_REJECTED = 5,
-  UNRECOGNIZED = -1,
-}
-
-export function evidenceOutcomeFromJSON(object: any): EvidenceOutcome {
-  switch (object) {
-    case 0:
-    case "EVIDENCE_OUTCOME_UNSPECIFIED":
-      return EvidenceOutcome.EVIDENCE_OUTCOME_UNSPECIFIED;
-    case 1:
-    case "EVIDENCE_OUTCOME_SUCCESS":
-      return EvidenceOutcome.EVIDENCE_OUTCOME_SUCCESS;
-    case 2:
-    case "EVIDENCE_OUTCOME_QUALITY_FAILURE":
-      return EvidenceOutcome.EVIDENCE_OUTCOME_QUALITY_FAILURE;
-    case 3:
-    case "EVIDENCE_OUTCOME_POLICY_REJECTED":
-      return EvidenceOutcome.EVIDENCE_OUTCOME_POLICY_REJECTED;
-    case 4:
-    case "EVIDENCE_OUTCOME_DEPENDENCY_CHANGE_UNSUPPORTED":
-      return EvidenceOutcome.EVIDENCE_OUTCOME_DEPENDENCY_CHANGE_UNSUPPORTED;
-    case 5:
-    case "EVIDENCE_OUTCOME_SCOPE_REJECTED":
-      return EvidenceOutcome.EVIDENCE_OUTCOME_SCOPE_REJECTED;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return EvidenceOutcome.UNRECOGNIZED;
-  }
-}
-
-export function evidenceOutcomeToJSON(object: EvidenceOutcome): string {
-  switch (object) {
-    case EvidenceOutcome.EVIDENCE_OUTCOME_UNSPECIFIED:
-      return "EVIDENCE_OUTCOME_UNSPECIFIED";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_SUCCESS:
-      return "EVIDENCE_OUTCOME_SUCCESS";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_QUALITY_FAILURE:
-      return "EVIDENCE_OUTCOME_QUALITY_FAILURE";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_POLICY_REJECTED:
-      return "EVIDENCE_OUTCOME_POLICY_REJECTED";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_DEPENDENCY_CHANGE_UNSUPPORTED:
-      return "EVIDENCE_OUTCOME_DEPENDENCY_CHANGE_UNSUPPORTED";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_SCOPE_REJECTED:
-      return "EVIDENCE_OUTCOME_SCOPE_REJECTED";
-    case EvidenceOutcome.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
-/** DevelopmentTaskInput is the complete immutable user request frozen at submission. */
-export interface DevelopmentTaskInput {
-  repositoryId: string;
+/** AgentSelection freezes the agent and model selected for a task. */
+export interface AgentSelection {
+  /** provider, agent, and model are each 1 through 128 safe UTF-8 bytes. */
+  provider: string;
+  agent: string;
   model: string;
-  /** start_revision is an exact 40-character lowercase Git object ID. */
-  startRevision: string;
+}
+
+/** DevelopmentTaskRequest is the caller request before immutable identities are resolved. */
+export interface DevelopmentTaskRequest {
+  repositoryConnectionId: string;
+  /** repository_revision is exactly 40 lowercase hexadecimal characters. */
+  repositoryRevision: string;
+  runtimeProfileId: string;
+  agent?:
+    | AgentSelection
+    | undefined;
   /** request is 1 through 16,384 UTF-8 bytes. */
   request: string;
-  /** acceptance_criteria contains 1 through 20 entries of at most 2,048 bytes each. */
+  /**
+   * acceptance_criteria contains 1 through 20 entries of at most 2,048 bytes each
+   * and at most 16,384 aggregate bytes.
+   */
   acceptanceCriteria: string[];
   changeConstraints?:
     | ChangeConstraints
@@ -454,32 +380,39 @@ export interface DevelopmentTaskInput {
   deadline?: Duration | undefined;
 }
 
-/** RepositorySnapshot is the repository identity frozen into a task. */
-export interface RepositorySnapshot {
-  id: string;
-  owner: string;
-  repository: string;
-  baseBranch: string;
-  lockSha256: string;
+/** FrozenRepository freezes the source snapshot used by a task or attempt. */
+export interface FrozenRepository {
+  repositoryConnectionId: string;
+  repositorySnapshotId: string;
+  /** revision is exactly 40 lowercase hexadecimal characters. */
+  revision: string;
 }
 
-/** ModelSnapshot is the provider and model identity frozen into a task. */
-export interface ModelSnapshot {
-  provider: string;
-  model: string;
+/** FrozenRuntime freezes profile and OCI identity without a mutable tag. */
+export interface FrozenRuntime {
+  runtimeProfileId: string;
+  runtimeProfileRevisionId: string;
+  profileKind: RuntimeProfileKind;
+  runtimeArtifactId: string;
+  /** oci_repository is a normalized registry/repository name without tag or digest. */
+  ociRepository: string;
+  /** resolved_digest is `sha256:` followed by 64 lowercase hexadecimal characters. */
+  resolvedDigest: string;
+  platform?: OciPlatform | undefined;
 }
 
-/** LifecycleEvent is one append-only, idempotent task transition. */
-export interface LifecycleEvent {
-  sequence: string;
-  eventTime?: Date | undefined;
-  stage: LifecycleStage;
-  outcome: LifecycleOutcome;
-  /** reason_code is at most 64 lowercase ASCII identifier characters. */
-  reasonCode?: string | undefined;
+/** DevelopmentSnapshot is the complete immutable execution input. */
+export interface DevelopmentSnapshot {
+  repository?: FrozenRepository | undefined;
+  runtime?: FrozenRuntime | undefined;
+  agent?: AgentSelection | undefined;
+  request: string;
+  acceptanceCriteria: string[];
+  changeConstraints?: ChangeConstraints | undefined;
+  deadlineAt?: Date | undefined;
 }
 
-/** ProviderTokenUsage preserves provider counters independently; absence never means zero. */
+/** ProviderTokenUsage preserves independent counters; absence never means zero. */
 export interface ProviderTokenUsage {
   inputTokens?: string | undefined;
   outputTokens?: string | undefined;
@@ -488,8 +421,9 @@ export interface ProviderTokenUsage {
   totalTokens?: string | undefined;
 }
 
-/** EstimatedModelCost is a reproducible estimate and never provider billing truth. */
+/** EstimatedModelCost is reproducible metadata and never provider billing truth. */
 export interface EstimatedModelCost {
+  /** label, currency, and pricing_version are each at most 64 safe UTF-8 bytes. */
   label: string;
   amountMicros: string;
   currency: string;
@@ -502,8 +436,9 @@ export interface EstimatedModelCost {
   outputRateMicrosPerMillion: string;
 }
 
-/** ModelUsageInteraction contains bounded counters and correlation, never provider content. */
+/** ModelUsageInteraction contains counters and correlation, never provider content. */
 export interface ModelUsageInteraction {
+  /** call_id is 1 through 128 safe ASCII bytes. */
   callId: string;
   stage: ModelUsageStage;
   provider: string;
@@ -537,207 +472,290 @@ export interface StageModelUsage {
   summary?: ModelUsageSummary | undefined;
 }
 
-/** TaskModelUsage is the complete bounded usage view for a task. */
-export interface TaskModelUsage {
+/** AttemptModelUsage is the complete bounded usage view for an attempt. */
+export interface AttemptModelUsage {
   collectionStatus: ModelUsageCollectionStatus;
   /** interactions contains at most 64 prompt-free records. */
   interactions: ModelUsageInteraction[];
+  /** by_stage contains at most one entry per known stage. */
   byStage: StageModelUsage[];
   total?: ModelUsageSummary | undefined;
 }
 
-/** TaskFailure is the latest safe diagnostic for a non-success task. */
-export interface TaskFailure {
-  reason: ErrorReason;
-  /** message is a credential-free operator diagnostic of at most 512 UTF-8 bytes. */
-  message: string;
-}
-
-/** DevelopmentTask is one durable asynchronous request and its measured candidate. */
+/** DevelopmentTask is one durable request with frozen execution identity. */
 export interface DevelopmentTask {
   id: string;
-  input?: DevelopmentTaskInput | undefined;
-  repository?: RepositorySnapshot | undefined;
-  model?: ModelSnapshot | undefined;
-  preparationId?: string | undefined;
-  retryOfTaskId?: string | undefined;
+  snapshot?: DevelopmentSnapshot | undefined;
+  state: DevelopmentTaskState;
+  activeAttemptId?: string | undefined;
+  attemptCount: number;
+  failure?: ResourceFailure | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
-  deadlineAt?: Date | undefined;
-  phase: DevelopmentTaskPhase;
-  /** requested_input is the agent's safe prompt to the operator, at most 1,024 UTF-8 bytes. */
-  requestedInput?: string | undefined;
-  candidateCommit?:
-    | string
-    | undefined;
-  /** validation_manifest_digest is `sha256:` followed by 64 lowercase hexadecimal characters. */
-  validationManifestDigest?: string | undefined;
-  policyOrTestEdits?:
-    | boolean
-    | undefined;
-  /** scope_violations contains at most 512 bounded entries. */
-  scopeViolations: string[];
-  /** draft_pr_url is an HTTPS URL of at most 2,048 UTF-8 bytes. */
-  draftPrUrl?: string | undefined;
-  failure?: TaskFailure | undefined;
-  lifecycleComplete: boolean;
-  /** lifecycle contains at most 32 append-only transitions. */
-  lifecycle: LifecycleEvent[];
-  modelUsage?:
-    | TaskModelUsage
-    | undefined;
-  /** provided_input is set only on a linked follow-up created by ProvideDevelopmentTaskInput. */
-  providedInput?:
-    | string
-    | undefined;
-  /** resource_version increases for every durable change represented by this resource. */
   resourceVersion: string;
 }
 
-/**
- * DevelopmentTaskSummary is the bounded list projection; detail-only lifecycle,
- * evidence, and interaction records are available from the task-specific RPCs.
- */
-export interface DevelopmentTaskSummary {
+/** DevelopmentAttempt is one immutable-snapshot execution of a task. */
+export interface DevelopmentAttempt {
   id: string;
-  repositoryId: string;
-  repositoryOwner: string;
-  repositoryName: string;
-  startRevision: string;
-  request: string;
-  model?: ModelSnapshot | undefined;
-  retryOfTaskId?: string | undefined;
+  developmentTaskId: string;
+  attemptNumber: number;
+  snapshot?: DevelopmentSnapshot | undefined;
+  state: DevelopmentAttemptState;
+  /** requested_input is a safe operator prompt of at most 1,024 UTF-8 bytes. */
+  requestedInput?: string | undefined;
+  failure?: ResourceFailure | undefined;
+  modelUsage?: AttemptModelUsage | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
-  phase: DevelopmentTaskPhase;
-  candidateCommit?: string | undefined;
-  draftPrUrl?: string | undefined;
-  failure?: TaskFailure | undefined;
-  modelUsage?: ModelUsageSummary | undefined;
+  completedAt?: Date | undefined;
+  resourceVersion: string;
+}
+
+/** CandidateIdentity is the immutable output identity produced by an attempt. */
+export interface CandidateIdentity {
+  identity?: { $case: "git"; git: GitCandidate } | { $case: "bundle"; bundle: BundleCandidate } | undefined;
+}
+
+/** GitCandidate identifies one exact provider-neutral Git commit. */
+export interface GitCandidate {
+  /** commit_sha is exactly 40 lowercase hexadecimal characters. */
+  commitSha: string;
+}
+
+/** BundleCandidate identifies immutable candidate bytes when no Git commit exists. */
+export interface BundleCandidate {
+  /** digest is `sha256:` followed by 64 lowercase hexadecimal characters. */
+  digest: string;
+  sizeBytes: string;
+}
+
+/** Candidate is immutable attempt output and is not a change request or assessment. */
+export interface Candidate {
+  id: string;
+  developmentAttemptId: string;
+  repositoryConnectionId: string;
+  /** base_revision is exactly 40 lowercase hexadecimal characters. */
+  baseRevision: string;
+  identity?: CandidateIdentity | undefined;
+  state: CandidateState;
+  /**
+   * changed_paths contains at most 256 normalized repository-relative paths and
+   * at most 32,768 aggregate UTF-8 bytes.
+   */
+  changedPaths: string[];
+  failure?: ResourceFailure | undefined;
+  createdAt?: Date | undefined;
   resourceVersion: string;
 }
 
 export interface ListDevelopmentTasksRequest {
-  page?:
-    | PageRequest
-    | undefined;
-  /** phase restricts results when present. */
-  phase?: DevelopmentTaskPhase | undefined;
+  repositoryConnectionId?: string | undefined;
+  runtimeProfileId?: string | undefined;
+  state?: DevelopmentTaskState | undefined;
+  page?: PageRequest | undefined;
 }
 
 export interface ListDevelopmentTasksResponse {
-  tasks: DevelopmentTaskSummary[];
+  developmentTasks: DevelopmentTask[];
   page?: PageResponse | undefined;
 }
 
 export interface GetDevelopmentTaskRequest {
-  taskId: string;
+  developmentTaskId: string;
 }
 
 export interface GetDevelopmentTaskResponse {
-  task?: DevelopmentTask | undefined;
+  developmentTask?: DevelopmentTask | undefined;
 }
 
 export interface CreateDevelopmentTaskRequest {
   idempotencyKey: string;
-  input?: DevelopmentTaskInput | undefined;
+  request?: DevelopmentTaskRequest | undefined;
 }
 
 export interface CreateDevelopmentTaskResponse {
-  /** task normally starts in QUEUED; callers observe it until terminal. */
-  task?: DevelopmentTask | undefined;
+  developmentTask?: DevelopmentTask | undefined;
+  initialAttempt?: DevelopmentAttempt | undefined;
 }
 
 export interface CancelDevelopmentTaskRequest {
   idempotencyKey: string;
-  taskId: string;
+  developmentTaskId: string;
 }
 
 export interface CancelDevelopmentTaskResponse {
-  task?: DevelopmentTask | undefined;
+  developmentTask?: DevelopmentTask | undefined;
 }
 
 export interface RetryDevelopmentTaskRequest {
   idempotencyKey: string;
-  taskId: string;
+  developmentTaskId: string;
 }
 
 export interface RetryDevelopmentTaskResponse {
-  /** task is a new linked task; the source task remains immutable. */
-  task?: DevelopmentTask | undefined;
+  /** attempt reuses the task's frozen snapshot; retry never silently changes runtime identity. */
+  attempt?: DevelopmentAttempt | undefined;
 }
 
-export interface ProvideDevelopmentTaskInputRequest {
-  idempotencyKey: string;
-  taskId: string;
-  /** input is 1 through 8,192 UTF-8 bytes. */
-  input: string;
+export interface ListDevelopmentAttemptsRequest {
+  developmentTaskId: string;
+  page?: PageRequest | undefined;
 }
 
-export interface ProvideDevelopmentTaskInputResponse {
-  /** task is a new linked follow-up; the source task remains immutable. */
-  task?: DevelopmentTask | undefined;
+export interface ListDevelopmentAttemptsResponse {
+  attempts: DevelopmentAttempt[];
+  page?: PageResponse | undefined;
 }
 
-/** EvidenceArtifact identifies one digest-bound retained validation artifact. */
-export interface EvidenceArtifact {
-  /** name is a 1 through 128 byte safe relative artifact name. */
-  name: string;
-  /** sha256 is exactly 64 lowercase hexadecimal characters. */
-  sha256: string;
+export interface GetDevelopmentAttemptRequest {
+  developmentAttemptId: string;
 }
 
-/** DevelopmentTaskEvidence is the trusted, digest-bound validation result. */
-export interface DevelopmentTaskEvidence {
-  /** manifest_digest is `sha256:` followed by 64 lowercase hexadecimal characters. */
-  manifestDigest: string;
-  outcome: EvidenceOutcome;
-  checkExitCode: number;
-  startRevision: string;
-  candidateCommit: string;
-  lockSha256: string;
-  changeConstraints?: ChangeConstraints | undefined;
-  preparationId?: string | undefined;
-  preparationReused: boolean;
-  policyEdited: boolean;
-  testsEdited: boolean;
-  scopeViolations: string[];
-  /** changed_paths contains at most 256 repository-relative paths. */
-  changedPaths: string[];
-  /** artifacts contains at most 16 digest-bound entries; artifact content is not in this API. */
-  artifacts: EvidenceArtifact[];
+export interface GetDevelopmentAttemptResponse {
+  attempt?: DevelopmentAttempt | undefined;
 }
 
-export interface GetDevelopmentTaskEvidenceRequest {
-  taskId: string;
+export interface ListCandidatesRequest {
+  developmentTaskId?: string | undefined;
+  developmentAttemptId?: string | undefined;
+  page?: PageRequest | undefined;
 }
 
-export interface GetDevelopmentTaskEvidenceResponse {
-  evidence?: DevelopmentTaskEvidence | undefined;
+export interface ListCandidatesResponse {
+  candidates: Candidate[];
+  page?: PageResponse | undefined;
+}
+
+export interface GetCandidateRequest {
+  candidateId: string;
+}
+
+export interface GetCandidateResponse {
+  candidate?: Candidate | undefined;
 }
 
 export interface WatchDevelopmentTaskRequest {
-  taskId: string;
-  /**
-   * When absent, the server immediately sends the current snapshot. When set,
-   * the server waits until a later resource version is durable.
-   */
-  afterResourceVersion?: string | undefined;
+  developmentTaskId: string;
+  afterCursor?: string | undefined;
 }
 
 export interface WatchDevelopmentTaskResponse {
-  task?:
-    | DevelopmentTask
+  cursor: string;
+  update?:
+    | { $case: "developmentTask"; developmentTask: DevelopmentTask }
+    | { $case: "attempt"; attempt: DevelopmentAttempt }
+    | { $case: "candidate"; candidate: Candidate }
     | undefined;
-  /** resource_version is a resumable cursor and equals task.resource_version. */
-  resourceVersion: string;
 }
 
-function createBaseDevelopmentTaskInput(): DevelopmentTaskInput {
+function createBaseAgentSelection(): AgentSelection {
+  return { provider: "", agent: "", model: "" };
+}
+
+export const AgentSelection: MessageFns<AgentSelection> = {
+  encode(message: AgentSelection, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.provider !== "") {
+      writer.uint32(10).string(message.provider);
+    }
+    if (message.agent !== "") {
+      writer.uint32(18).string(message.agent);
+    }
+    if (message.model !== "") {
+      writer.uint32(26).string(message.model);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentSelection {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentSelection();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.provider = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.agent = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentSelection {
+    return {
+      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
+      agent: isSet(object.agent) ? globalThis.String(object.agent) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+    };
+  },
+
+  toJSON(message: AgentSelection): unknown {
+    const obj: any = {};
+    if (message.provider !== "") {
+      obj.provider = message.provider;
+    }
+    if (message.agent !== "") {
+      obj.agent = message.agent;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentSelection>): AgentSelection {
+    return AgentSelection.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentSelection>): AgentSelection {
+    const message = createBaseAgentSelection();
+    message.provider = object.provider ?? "";
+    message.agent = object.agent ?? "";
+    message.model = object.model ?? "";
+    return message;
+  },
+};
+
+function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
   return {
-    repositoryId: "",
-    model: "",
-    startRevision: "",
+    repositoryConnectionId: "",
+    repositoryRevision: "",
+    runtimeProfileId: "",
+    agent: undefined,
     request: "",
     acceptanceCriteria: [],
     changeConstraints: undefined,
@@ -745,16 +763,539 @@ function createBaseDevelopmentTaskInput(): DevelopmentTaskInput {
   };
 }
 
-export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
-  encode(message: DevelopmentTaskInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.repositoryId !== "") {
-      writer.uint32(10).string(message.repositoryId);
+export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
+  encode(message: DevelopmentTaskRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(10).string(message.repositoryConnectionId);
     }
-    if (message.model !== "") {
-      writer.uint32(18).string(message.model);
+    if (message.repositoryRevision !== "") {
+      writer.uint32(18).string(message.repositoryRevision);
     }
-    if (message.startRevision !== "") {
-      writer.uint32(26).string(message.startRevision);
+    if (message.runtimeProfileId !== "") {
+      writer.uint32(26).string(message.runtimeProfileId);
+    }
+    if (message.agent !== undefined) {
+      AgentSelection.encode(message.agent, writer.uint32(34).fork()).join();
+    }
+    if (message.request !== "") {
+      writer.uint32(42).string(message.request);
+    }
+    for (const v of message.acceptanceCriteria) {
+      writer.uint32(50).string(v!);
+    }
+    if (message.changeConstraints !== undefined) {
+      ChangeConstraints.encode(message.changeConstraints, writer.uint32(58).fork()).join();
+    }
+    if (message.deadline !== undefined) {
+      Duration.encode(message.deadline, writer.uint32(66).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DevelopmentTaskRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDevelopmentTaskRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryRevision = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.agent = AgentSelection.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.request = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.acceptanceCriteria.push(reader.string());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.changeConstraints = ChangeConstraints.decode(reader, reader.uint32());
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.deadline = Duration.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DevelopmentTaskRequest {
+    return {
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+      repositoryRevision: isSet(object.repositoryRevision)
+        ? globalThis.String(object.repositoryRevision)
+        : isSet(object.repository_revision)
+        ? globalThis.String(object.repository_revision)
+        : "",
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : "",
+      agent: isSet(object.agent) ? AgentSelection.fromJSON(object.agent) : undefined,
+      request: isSet(object.request) ? globalThis.String(object.request) : "",
+      acceptanceCriteria: globalThis.Array.isArray(object?.acceptanceCriteria)
+        ? object.acceptanceCriteria.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.acceptance_criteria)
+        ? object.acceptance_criteria.map((e: any) => globalThis.String(e))
+        : [],
+      changeConstraints: isSet(object.changeConstraints)
+        ? ChangeConstraints.fromJSON(object.changeConstraints)
+        : isSet(object.change_constraints)
+        ? ChangeConstraints.fromJSON(object.change_constraints)
+        : undefined,
+      deadline: isSet(object.deadline) ? Duration.fromJSON(object.deadline) : undefined,
+    };
+  },
+
+  toJSON(message: DevelopmentTaskRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.repositoryRevision !== "") {
+      obj.repositoryRevision = message.repositoryRevision;
+    }
+    if (message.runtimeProfileId !== "") {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.agent !== undefined) {
+      obj.agent = AgentSelection.toJSON(message.agent);
+    }
+    if (message.request !== "") {
+      obj.request = message.request;
+    }
+    if (message.acceptanceCriteria?.length) {
+      obj.acceptanceCriteria = message.acceptanceCriteria;
+    }
+    if (message.changeConstraints !== undefined) {
+      obj.changeConstraints = ChangeConstraints.toJSON(message.changeConstraints);
+    }
+    if (message.deadline !== undefined) {
+      obj.deadline = Duration.toJSON(message.deadline);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DevelopmentTaskRequest>): DevelopmentTaskRequest {
+    return DevelopmentTaskRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DevelopmentTaskRequest>): DevelopmentTaskRequest {
+    const message = createBaseDevelopmentTaskRequest();
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.repositoryRevision = object.repositoryRevision ?? "";
+    message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.agent = (object.agent !== undefined && object.agent !== null)
+      ? AgentSelection.fromPartial(object.agent)
+      : undefined;
+    message.request = object.request ?? "";
+    message.acceptanceCriteria = object.acceptanceCriteria?.map((e) => e) || [];
+    message.changeConstraints = (object.changeConstraints !== undefined && object.changeConstraints !== null)
+      ? ChangeConstraints.fromPartial(object.changeConstraints)
+      : undefined;
+    message.deadline = (object.deadline !== undefined && object.deadline !== null)
+      ? Duration.fromPartial(object.deadline)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseFrozenRepository(): FrozenRepository {
+  return { repositoryConnectionId: "", repositorySnapshotId: "", revision: "" };
+}
+
+export const FrozenRepository: MessageFns<FrozenRepository> = {
+  encode(message: FrozenRepository, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(10).string(message.repositoryConnectionId);
+    }
+    if (message.repositorySnapshotId !== "") {
+      writer.uint32(18).string(message.repositorySnapshotId);
+    }
+    if (message.revision !== "") {
+      writer.uint32(26).string(message.revision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FrozenRepository {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseFrozenRepository();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositorySnapshotId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.revision = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): FrozenRepository {
+    return {
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+      repositorySnapshotId: isSet(object.repositorySnapshotId)
+        ? globalThis.String(object.repositorySnapshotId)
+        : isSet(object.repository_snapshot_id)
+        ? globalThis.String(object.repository_snapshot_id)
+        : "",
+      revision: isSet(object.revision) ? globalThis.String(object.revision) : "",
+    };
+  },
+
+  toJSON(message: FrozenRepository): unknown {
+    const obj: any = {};
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.repositorySnapshotId !== "") {
+      obj.repositorySnapshotId = message.repositorySnapshotId;
+    }
+    if (message.revision !== "") {
+      obj.revision = message.revision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<FrozenRepository>): FrozenRepository {
+    return FrozenRepository.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<FrozenRepository>): FrozenRepository {
+    const message = createBaseFrozenRepository();
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.repositorySnapshotId = object.repositorySnapshotId ?? "";
+    message.revision = object.revision ?? "";
+    return message;
+  },
+};
+
+function createBaseFrozenRuntime(): FrozenRuntime {
+  return {
+    runtimeProfileId: "",
+    runtimeProfileRevisionId: "",
+    profileKind: 0,
+    runtimeArtifactId: "",
+    ociRepository: "",
+    resolvedDigest: "",
+    platform: undefined,
+  };
+}
+
+export const FrozenRuntime: MessageFns<FrozenRuntime> = {
+  encode(message: FrozenRuntime, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.runtimeProfileId !== "") {
+      writer.uint32(10).string(message.runtimeProfileId);
+    }
+    if (message.runtimeProfileRevisionId !== "") {
+      writer.uint32(18).string(message.runtimeProfileRevisionId);
+    }
+    if (message.profileKind !== 0) {
+      writer.uint32(24).int32(message.profileKind);
+    }
+    if (message.runtimeArtifactId !== "") {
+      writer.uint32(34).string(message.runtimeArtifactId);
+    }
+    if (message.ociRepository !== "") {
+      writer.uint32(42).string(message.ociRepository);
+    }
+    if (message.resolvedDigest !== "") {
+      writer.uint32(50).string(message.resolvedDigest);
+    }
+    if (message.platform !== undefined) {
+      OciPlatform.encode(message.platform, writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FrozenRuntime {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseFrozenRuntime();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.runtimeProfileRevisionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.profileKind = reader.int32() as any;
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.runtimeArtifactId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.ociRepository = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.resolvedDigest = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.platform = OciPlatform.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): FrozenRuntime {
+    return {
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : "",
+      runtimeProfileRevisionId: isSet(object.runtimeProfileRevisionId)
+        ? globalThis.String(object.runtimeProfileRevisionId)
+        : isSet(object.runtime_profile_revision_id)
+        ? globalThis.String(object.runtime_profile_revision_id)
+        : "",
+      profileKind: isSet(object.profileKind)
+        ? runtimeProfileKindFromJSON(object.profileKind)
+        : isSet(object.profile_kind)
+        ? runtimeProfileKindFromJSON(object.profile_kind)
+        : 0,
+      runtimeArtifactId: isSet(object.runtimeArtifactId)
+        ? globalThis.String(object.runtimeArtifactId)
+        : isSet(object.runtime_artifact_id)
+        ? globalThis.String(object.runtime_artifact_id)
+        : "",
+      ociRepository: isSet(object.ociRepository)
+        ? globalThis.String(object.ociRepository)
+        : isSet(object.oci_repository)
+        ? globalThis.String(object.oci_repository)
+        : "",
+      resolvedDigest: isSet(object.resolvedDigest)
+        ? globalThis.String(object.resolvedDigest)
+        : isSet(object.resolved_digest)
+        ? globalThis.String(object.resolved_digest)
+        : "",
+      platform: isSet(object.platform) ? OciPlatform.fromJSON(object.platform) : undefined,
+    };
+  },
+
+  toJSON(message: FrozenRuntime): unknown {
+    const obj: any = {};
+    if (message.runtimeProfileId !== "") {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.runtimeProfileRevisionId !== "") {
+      obj.runtimeProfileRevisionId = message.runtimeProfileRevisionId;
+    }
+    if (message.profileKind !== 0) {
+      obj.profileKind = runtimeProfileKindToJSON(message.profileKind);
+    }
+    if (message.runtimeArtifactId !== "") {
+      obj.runtimeArtifactId = message.runtimeArtifactId;
+    }
+    if (message.ociRepository !== "") {
+      obj.ociRepository = message.ociRepository;
+    }
+    if (message.resolvedDigest !== "") {
+      obj.resolvedDigest = message.resolvedDigest;
+    }
+    if (message.platform !== undefined) {
+      obj.platform = OciPlatform.toJSON(message.platform);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<FrozenRuntime>): FrozenRuntime {
+    return FrozenRuntime.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<FrozenRuntime>): FrozenRuntime {
+    const message = createBaseFrozenRuntime();
+    message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.runtimeProfileRevisionId = object.runtimeProfileRevisionId ?? "";
+    message.profileKind = object.profileKind ?? 0;
+    message.runtimeArtifactId = object.runtimeArtifactId ?? "";
+    message.ociRepository = object.ociRepository ?? "";
+    message.resolvedDigest = object.resolvedDigest ?? "";
+    message.platform = (object.platform !== undefined && object.platform !== null)
+      ? OciPlatform.fromPartial(object.platform)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
+  return {
+    repository: undefined,
+    runtime: undefined,
+    agent: undefined,
+    request: "",
+    acceptanceCriteria: [],
+    changeConstraints: undefined,
+    deadlineAt: undefined,
+  };
+}
+
+export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
+  encode(message: DevelopmentSnapshot, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repository !== undefined) {
+      FrozenRepository.encode(message.repository, writer.uint32(10).fork()).join();
+    }
+    if (message.runtime !== undefined) {
+      FrozenRuntime.encode(message.runtime, writer.uint32(18).fork()).join();
+    }
+    if (message.agent !== undefined) {
+      AgentSelection.encode(message.agent, writer.uint32(26).fork()).join();
     }
     if (message.request !== "") {
       writer.uint32(34).string(message.request);
@@ -765,13 +1306,13 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
     if (message.changeConstraints !== undefined) {
       ChangeConstraints.encode(message.changeConstraints, writer.uint32(50).fork()).join();
     }
-    if (message.deadline !== undefined) {
-      Duration.encode(message.deadline, writer.uint32(58).fork()).join();
+    if (message.deadlineAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.deadlineAt), writer.uint32(58).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): DevelopmentTaskInput {
+  decode(input: BinaryReader | Uint8Array, length?: number): DevelopmentSnapshot {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -780,7 +1321,7 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDevelopmentTaskInput();
+      const message = createBaseDevelopmentSnapshot();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -789,7 +1330,7 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
               break;
             }
 
-            message.repositoryId = reader.string();
+            message.repository = FrozenRepository.decode(reader, reader.uint32());
             continue;
           }
           case 2: {
@@ -797,7 +1338,7 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
               break;
             }
 
-            message.model = reader.string();
+            message.runtime = FrozenRuntime.decode(reader, reader.uint32());
             continue;
           }
           case 3: {
@@ -805,7 +1346,7 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
               break;
             }
 
-            message.startRevision = reader.string();
+            message.agent = AgentSelection.decode(reader, reader.uint32());
             continue;
           }
           case 4: {
@@ -837,7 +1378,7 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
               break;
             }
 
-            message.deadline = Duration.decode(reader, reader.uint32());
+            message.deadlineAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
         }
@@ -852,19 +1393,11 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
     }
   },
 
-  fromJSON(object: any): DevelopmentTaskInput {
+  fromJSON(object: any): DevelopmentSnapshot {
     return {
-      repositoryId: isSet(object.repositoryId)
-        ? globalThis.String(object.repositoryId)
-        : isSet(object.repository_id)
-        ? globalThis.String(object.repository_id)
-        : "",
-      model: isSet(object.model) ? globalThis.String(object.model) : "",
-      startRevision: isSet(object.startRevision)
-        ? globalThis.String(object.startRevision)
-        : isSet(object.start_revision)
-        ? globalThis.String(object.start_revision)
-        : "",
+      repository: isSet(object.repository) ? FrozenRepository.fromJSON(object.repository) : undefined,
+      runtime: isSet(object.runtime) ? FrozenRuntime.fromJSON(object.runtime) : undefined,
+      agent: isSet(object.agent) ? AgentSelection.fromJSON(object.agent) : undefined,
       request: isSet(object.request) ? globalThis.String(object.request) : "",
       acceptanceCriteria: globalThis.Array.isArray(object?.acceptanceCriteria)
         ? object.acceptanceCriteria.map((e: any) => globalThis.String(e))
@@ -876,20 +1409,24 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
         : isSet(object.change_constraints)
         ? ChangeConstraints.fromJSON(object.change_constraints)
         : undefined,
-      deadline: isSet(object.deadline) ? Duration.fromJSON(object.deadline) : undefined,
+      deadlineAt: isSet(object.deadlineAt)
+        ? fromJsonTimestamp(object.deadlineAt)
+        : isSet(object.deadline_at)
+        ? fromJsonTimestamp(object.deadline_at)
+        : undefined,
     };
   },
 
-  toJSON(message: DevelopmentTaskInput): unknown {
+  toJSON(message: DevelopmentSnapshot): unknown {
     const obj: any = {};
-    if (message.repositoryId !== "") {
-      obj.repositoryId = message.repositoryId;
+    if (message.repository !== undefined) {
+      obj.repository = FrozenRepository.toJSON(message.repository);
     }
-    if (message.model !== "") {
-      obj.model = message.model;
+    if (message.runtime !== undefined) {
+      obj.runtime = FrozenRuntime.toJSON(message.runtime);
     }
-    if (message.startRevision !== "") {
-      obj.startRevision = message.startRevision;
+    if (message.agent !== undefined) {
+      obj.agent = AgentSelection.toJSON(message.agent);
     }
     if (message.request !== "") {
       obj.request = message.request;
@@ -900,395 +1437,32 @@ export const DevelopmentTaskInput: MessageFns<DevelopmentTaskInput> = {
     if (message.changeConstraints !== undefined) {
       obj.changeConstraints = ChangeConstraints.toJSON(message.changeConstraints);
     }
-    if (message.deadline !== undefined) {
-      obj.deadline = Duration.toJSON(message.deadline);
+    if (message.deadlineAt !== undefined) {
+      obj.deadlineAt = message.deadlineAt.toISOString();
     }
     return obj;
   },
 
-  create(base?: DeepPartial<DevelopmentTaskInput>): DevelopmentTaskInput {
-    return DevelopmentTaskInput.fromPartial(base ?? {});
+  create(base?: DeepPartial<DevelopmentSnapshot>): DevelopmentSnapshot {
+    return DevelopmentSnapshot.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<DevelopmentTaskInput>): DevelopmentTaskInput {
-    const message = createBaseDevelopmentTaskInput();
-    message.repositoryId = object.repositoryId ?? "";
-    message.model = object.model ?? "";
-    message.startRevision = object.startRevision ?? "";
+  fromPartial(object: DeepPartial<DevelopmentSnapshot>): DevelopmentSnapshot {
+    const message = createBaseDevelopmentSnapshot();
+    message.repository = (object.repository !== undefined && object.repository !== null)
+      ? FrozenRepository.fromPartial(object.repository)
+      : undefined;
+    message.runtime = (object.runtime !== undefined && object.runtime !== null)
+      ? FrozenRuntime.fromPartial(object.runtime)
+      : undefined;
+    message.agent = (object.agent !== undefined && object.agent !== null)
+      ? AgentSelection.fromPartial(object.agent)
+      : undefined;
     message.request = object.request ?? "";
     message.acceptanceCriteria = object.acceptanceCriteria?.map((e) => e) || [];
     message.changeConstraints = (object.changeConstraints !== undefined && object.changeConstraints !== null)
       ? ChangeConstraints.fromPartial(object.changeConstraints)
       : undefined;
-    message.deadline = (object.deadline !== undefined && object.deadline !== null)
-      ? Duration.fromPartial(object.deadline)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseRepositorySnapshot(): RepositorySnapshot {
-  return { id: "", owner: "", repository: "", baseBranch: "", lockSha256: "" };
-}
-
-export const RepositorySnapshot: MessageFns<RepositorySnapshot> = {
-  encode(message: RepositorySnapshot, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.owner !== "") {
-      writer.uint32(18).string(message.owner);
-    }
-    if (message.repository !== "") {
-      writer.uint32(26).string(message.repository);
-    }
-    if (message.baseBranch !== "") {
-      writer.uint32(34).string(message.baseBranch);
-    }
-    if (message.lockSha256 !== "") {
-      writer.uint32(42).string(message.lockSha256);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): RepositorySnapshot {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseRepositorySnapshot();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.owner = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.repository = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.baseBranch = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.lockSha256 = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): RepositorySnapshot {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      owner: isSet(object.owner) ? globalThis.String(object.owner) : "",
-      repository: isSet(object.repository) ? globalThis.String(object.repository) : "",
-      baseBranch: isSet(object.baseBranch)
-        ? globalThis.String(object.baseBranch)
-        : isSet(object.base_branch)
-        ? globalThis.String(object.base_branch)
-        : "",
-      lockSha256: isSet(object.lockSha256)
-        ? globalThis.String(object.lockSha256)
-        : isSet(object.lock_sha256)
-        ? globalThis.String(object.lock_sha256)
-        : "",
-    };
-  },
-
-  toJSON(message: RepositorySnapshot): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.owner !== "") {
-      obj.owner = message.owner;
-    }
-    if (message.repository !== "") {
-      obj.repository = message.repository;
-    }
-    if (message.baseBranch !== "") {
-      obj.baseBranch = message.baseBranch;
-    }
-    if (message.lockSha256 !== "") {
-      obj.lockSha256 = message.lockSha256;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<RepositorySnapshot>): RepositorySnapshot {
-    return RepositorySnapshot.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<RepositorySnapshot>): RepositorySnapshot {
-    const message = createBaseRepositorySnapshot();
-    message.id = object.id ?? "";
-    message.owner = object.owner ?? "";
-    message.repository = object.repository ?? "";
-    message.baseBranch = object.baseBranch ?? "";
-    message.lockSha256 = object.lockSha256 ?? "";
-    return message;
-  },
-};
-
-function createBaseModelSnapshot(): ModelSnapshot {
-  return { provider: "", model: "" };
-}
-
-export const ModelSnapshot: MessageFns<ModelSnapshot> = {
-  encode(message: ModelSnapshot, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.provider !== "") {
-      writer.uint32(10).string(message.provider);
-    }
-    if (message.model !== "") {
-      writer.uint32(18).string(message.model);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ModelSnapshot {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseModelSnapshot();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.provider = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.model = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ModelSnapshot {
-    return {
-      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
-      model: isSet(object.model) ? globalThis.String(object.model) : "",
-    };
-  },
-
-  toJSON(message: ModelSnapshot): unknown {
-    const obj: any = {};
-    if (message.provider !== "") {
-      obj.provider = message.provider;
-    }
-    if (message.model !== "") {
-      obj.model = message.model;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ModelSnapshot>): ModelSnapshot {
-    return ModelSnapshot.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ModelSnapshot>): ModelSnapshot {
-    const message = createBaseModelSnapshot();
-    message.provider = object.provider ?? "";
-    message.model = object.model ?? "";
-    return message;
-  },
-};
-
-function createBaseLifecycleEvent(): LifecycleEvent {
-  return { sequence: "0", eventTime: undefined, stage: 0, outcome: 0, reasonCode: undefined };
-}
-
-export const LifecycleEvent: MessageFns<LifecycleEvent> = {
-  encode(message: LifecycleEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.sequence !== "0") {
-      writer.uint32(8).uint64(message.sequence);
-    }
-    if (message.eventTime !== undefined) {
-      Timestamp.encode(toTimestamp(message.eventTime), writer.uint32(18).fork()).join();
-    }
-    if (message.stage !== 0) {
-      writer.uint32(24).int32(message.stage);
-    }
-    if (message.outcome !== 0) {
-      writer.uint32(32).int32(message.outcome);
-    }
-    if (message.reasonCode !== undefined) {
-      writer.uint32(42).string(message.reasonCode);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): LifecycleEvent {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseLifecycleEvent();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.sequence = reader.uint64().toString();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.eventTime = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.stage = reader.int32() as any;
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.outcome = reader.int32() as any;
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.reasonCode = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): LifecycleEvent {
-    return {
-      sequence: isSet(object.sequence) ? globalThis.String(object.sequence) : "0",
-      eventTime: isSet(object.eventTime)
-        ? fromJsonTimestamp(object.eventTime)
-        : isSet(object.event_time)
-        ? fromJsonTimestamp(object.event_time)
-        : undefined,
-      stage: isSet(object.stage) ? lifecycleStageFromJSON(object.stage) : 0,
-      outcome: isSet(object.outcome) ? lifecycleOutcomeFromJSON(object.outcome) : 0,
-      reasonCode: isSet(object.reasonCode)
-        ? globalThis.String(object.reasonCode)
-        : isSet(object.reason_code)
-        ? globalThis.String(object.reason_code)
-        : undefined,
-    };
-  },
-
-  toJSON(message: LifecycleEvent): unknown {
-    const obj: any = {};
-    if (message.sequence !== "0") {
-      obj.sequence = message.sequence;
-    }
-    if (message.eventTime !== undefined) {
-      obj.eventTime = message.eventTime.toISOString();
-    }
-    if (message.stage !== 0) {
-      obj.stage = lifecycleStageToJSON(message.stage);
-    }
-    if (message.outcome !== 0) {
-      obj.outcome = lifecycleOutcomeToJSON(message.outcome);
-    }
-    if (message.reasonCode !== undefined) {
-      obj.reasonCode = message.reasonCode;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<LifecycleEvent>): LifecycleEvent {
-    return LifecycleEvent.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<LifecycleEvent>): LifecycleEvent {
-    const message = createBaseLifecycleEvent();
-    message.sequence = object.sequence ?? "0";
-    message.eventTime = object.eventTime ?? undefined;
-    message.stage = object.stage ?? 0;
-    message.outcome = object.outcome ?? 0;
-    message.reasonCode = object.reasonCode ?? undefined;
+    message.deadlineAt = object.deadlineAt ?? undefined;
     return message;
   },
 };
@@ -2326,12 +2500,12 @@ export const StageModelUsage: MessageFns<StageModelUsage> = {
   },
 };
 
-function createBaseTaskModelUsage(): TaskModelUsage {
+function createBaseAttemptModelUsage(): AttemptModelUsage {
   return { collectionStatus: 0, interactions: [], byStage: [], total: undefined };
 }
 
-export const TaskModelUsage: MessageFns<TaskModelUsage> = {
-  encode(message: TaskModelUsage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const AttemptModelUsage: MessageFns<AttemptModelUsage> = {
+  encode(message: AttemptModelUsage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.collectionStatus !== 0) {
       writer.uint32(8).int32(message.collectionStatus);
     }
@@ -2347,7 +2521,7 @@ export const TaskModelUsage: MessageFns<TaskModelUsage> = {
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): TaskModelUsage {
+  decode(input: BinaryReader | Uint8Array, length?: number): AttemptModelUsage {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -2356,7 +2530,7 @@ export const TaskModelUsage: MessageFns<TaskModelUsage> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseTaskModelUsage();
+      const message = createBaseAttemptModelUsage();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -2404,7 +2578,7 @@ export const TaskModelUsage: MessageFns<TaskModelUsage> = {
     }
   },
 
-  fromJSON(object: any): TaskModelUsage {
+  fromJSON(object: any): AttemptModelUsage {
     return {
       collectionStatus: isSet(object.collectionStatus)
         ? modelUsageCollectionStatusFromJSON(object.collectionStatus)
@@ -2423,7 +2597,7 @@ export const TaskModelUsage: MessageFns<TaskModelUsage> = {
     };
   },
 
-  toJSON(message: TaskModelUsage): unknown {
+  toJSON(message: AttemptModelUsage): unknown {
     const obj: any = {};
     if (message.collectionStatus !== 0) {
       obj.collectionStatus = modelUsageCollectionStatusToJSON(message.collectionStatus);
@@ -2440,11 +2614,11 @@ export const TaskModelUsage: MessageFns<TaskModelUsage> = {
     return obj;
   },
 
-  create(base?: DeepPartial<TaskModelUsage>): TaskModelUsage {
-    return TaskModelUsage.fromPartial(base ?? {});
+  create(base?: DeepPartial<AttemptModelUsage>): AttemptModelUsage {
+    return AttemptModelUsage.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<TaskModelUsage>): TaskModelUsage {
-    const message = createBaseTaskModelUsage();
+  fromPartial(object: DeepPartial<AttemptModelUsage>): AttemptModelUsage {
+    const message = createBaseAttemptModelUsage();
     message.collectionStatus = object.collectionStatus ?? 0;
     message.interactions = object.interactions?.map((e) => ModelUsageInteraction.fromPartial(e)) || [];
     message.byStage = object.byStage?.map((e) => StageModelUsage.fromPartial(e)) || [];
@@ -2455,114 +2629,16 @@ export const TaskModelUsage: MessageFns<TaskModelUsage> = {
   },
 };
 
-function createBaseTaskFailure(): TaskFailure {
-  return { reason: 0, message: "" };
-}
-
-export const TaskFailure: MessageFns<TaskFailure> = {
-  encode(message: TaskFailure, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.reason !== 0) {
-      writer.uint32(8).int32(message.reason);
-    }
-    if (message.message !== "") {
-      writer.uint32(18).string(message.message);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): TaskFailure {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseTaskFailure();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.reason = reader.int32() as any;
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.message = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): TaskFailure {
-    return {
-      reason: isSet(object.reason) ? errorReasonFromJSON(object.reason) : 0,
-      message: isSet(object.message) ? globalThis.String(object.message) : "",
-    };
-  },
-
-  toJSON(message: TaskFailure): unknown {
-    const obj: any = {};
-    if (message.reason !== 0) {
-      obj.reason = errorReasonToJSON(message.reason);
-    }
-    if (message.message !== "") {
-      obj.message = message.message;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<TaskFailure>): TaskFailure {
-    return TaskFailure.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<TaskFailure>): TaskFailure {
-    const message = createBaseTaskFailure();
-    message.reason = object.reason ?? 0;
-    message.message = object.message ?? "";
-    return message;
-  },
-};
-
 function createBaseDevelopmentTask(): DevelopmentTask {
   return {
     id: "",
-    input: undefined,
-    repository: undefined,
-    model: undefined,
-    preparationId: undefined,
-    retryOfTaskId: undefined,
+    snapshot: undefined,
+    state: 0,
+    activeAttemptId: undefined,
+    attemptCount: 0,
+    failure: undefined,
     createdAt: undefined,
     updatedAt: undefined,
-    deadlineAt: undefined,
-    phase: 0,
-    requestedInput: undefined,
-    candidateCommit: undefined,
-    validationManifestDigest: undefined,
-    policyOrTestEdits: undefined,
-    scopeViolations: [],
-    draftPrUrl: undefined,
-    failure: undefined,
-    lifecycleComplete: false,
-    lifecycle: [],
-    modelUsage: undefined,
-    providedInput: undefined,
     resourceVersion: "0",
   };
 }
@@ -2572,20 +2648,20 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
-    if (message.input !== undefined) {
-      DevelopmentTaskInput.encode(message.input, writer.uint32(18).fork()).join();
+    if (message.snapshot !== undefined) {
+      DevelopmentSnapshot.encode(message.snapshot, writer.uint32(18).fork()).join();
     }
-    if (message.repository !== undefined) {
-      RepositorySnapshot.encode(message.repository, writer.uint32(26).fork()).join();
+    if (message.state !== 0) {
+      writer.uint32(24).int32(message.state);
     }
-    if (message.model !== undefined) {
-      ModelSnapshot.encode(message.model, writer.uint32(34).fork()).join();
+    if (message.activeAttemptId !== undefined) {
+      writer.uint32(34).string(message.activeAttemptId);
     }
-    if (message.preparationId !== undefined) {
-      writer.uint32(42).string(message.preparationId);
+    if (message.attemptCount !== 0) {
+      writer.uint32(40).uint32(message.attemptCount);
     }
-    if (message.retryOfTaskId !== undefined) {
-      writer.uint32(50).string(message.retryOfTaskId);
+    if (message.failure !== undefined) {
+      ResourceFailure.encode(message.failure, writer.uint32(50).fork()).join();
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(58).fork()).join();
@@ -2593,47 +2669,8 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
     if (message.updatedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
     }
-    if (message.deadlineAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.deadlineAt), writer.uint32(74).fork()).join();
-    }
-    if (message.phase !== 0) {
-      writer.uint32(80).int32(message.phase);
-    }
-    if (message.requestedInput !== undefined) {
-      writer.uint32(90).string(message.requestedInput);
-    }
-    if (message.candidateCommit !== undefined) {
-      writer.uint32(98).string(message.candidateCommit);
-    }
-    if (message.validationManifestDigest !== undefined) {
-      writer.uint32(106).string(message.validationManifestDigest);
-    }
-    if (message.policyOrTestEdits !== undefined) {
-      writer.uint32(112).bool(message.policyOrTestEdits);
-    }
-    for (const v of message.scopeViolations) {
-      writer.uint32(122).string(v!);
-    }
-    if (message.draftPrUrl !== undefined) {
-      writer.uint32(130).string(message.draftPrUrl);
-    }
-    if (message.failure !== undefined) {
-      TaskFailure.encode(message.failure, writer.uint32(138).fork()).join();
-    }
-    if (message.lifecycleComplete !== false) {
-      writer.uint32(144).bool(message.lifecycleComplete);
-    }
-    for (const v of message.lifecycle) {
-      LifecycleEvent.encode(v!, writer.uint32(154).fork()).join();
-    }
-    if (message.modelUsage !== undefined) {
-      TaskModelUsage.encode(message.modelUsage, writer.uint32(162).fork()).join();
-    }
-    if (message.providedInput !== undefined) {
-      writer.uint32(170).string(message.providedInput);
-    }
     if (message.resourceVersion !== "0") {
-      writer.uint32(176).uint64(message.resourceVersion);
+      writer.uint32(72).uint64(message.resourceVersion);
     }
     return writer;
   },
@@ -2664,15 +2701,15 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
               break;
             }
 
-            message.input = DevelopmentTaskInput.decode(reader, reader.uint32());
+            message.snapshot = DevelopmentSnapshot.decode(reader, reader.uint32());
             continue;
           }
           case 3: {
-            if (tag !== 26) {
+            if (tag !== 24) {
               break;
             }
 
-            message.repository = RepositorySnapshot.decode(reader, reader.uint32());
+            message.state = reader.int32() as any;
             continue;
           }
           case 4: {
@@ -2680,15 +2717,15 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
               break;
             }
 
-            message.model = ModelSnapshot.decode(reader, reader.uint32());
+            message.activeAttemptId = reader.string();
             continue;
           }
           case 5: {
-            if (tag !== 42) {
+            if (tag !== 40) {
               break;
             }
 
-            message.preparationId = reader.string();
+            message.attemptCount = reader.uint32();
             continue;
           }
           case 6: {
@@ -2696,7 +2733,7 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
               break;
             }
 
-            message.retryOfTaskId = reader.string();
+            message.failure = ResourceFailure.decode(reader, reader.uint32());
             continue;
           }
           case 7: {
@@ -2716,111 +2753,7 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
             continue;
           }
           case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.deadlineAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 10: {
-            if (tag !== 80) {
-              break;
-            }
-
-            message.phase = reader.int32() as any;
-            continue;
-          }
-          case 11: {
-            if (tag !== 90) {
-              break;
-            }
-
-            message.requestedInput = reader.string();
-            continue;
-          }
-          case 12: {
-            if (tag !== 98) {
-              break;
-            }
-
-            message.candidateCommit = reader.string();
-            continue;
-          }
-          case 13: {
-            if (tag !== 106) {
-              break;
-            }
-
-            message.validationManifestDigest = reader.string();
-            continue;
-          }
-          case 14: {
-            if (tag !== 112) {
-              break;
-            }
-
-            message.policyOrTestEdits = reader.bool();
-            continue;
-          }
-          case 15: {
-            if (tag !== 122) {
-              break;
-            }
-
-            message.scopeViolations.push(reader.string());
-            continue;
-          }
-          case 16: {
-            if (tag !== 130) {
-              break;
-            }
-
-            message.draftPrUrl = reader.string();
-            continue;
-          }
-          case 17: {
-            if (tag !== 138) {
-              break;
-            }
-
-            message.failure = TaskFailure.decode(reader, reader.uint32());
-            continue;
-          }
-          case 18: {
-            if (tag !== 144) {
-              break;
-            }
-
-            message.lifecycleComplete = reader.bool();
-            continue;
-          }
-          case 19: {
-            if (tag !== 154) {
-              break;
-            }
-
-            message.lifecycle.push(LifecycleEvent.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 20: {
-            if (tag !== 162) {
-              break;
-            }
-
-            message.modelUsage = TaskModelUsage.decode(reader, reader.uint32());
-            continue;
-          }
-          case 21: {
-            if (tag !== 170) {
-              break;
-            }
-
-            message.providedInput = reader.string();
-            continue;
-          }
-          case 22: {
-            if (tag !== 176) {
+            if (tag !== 72) {
               break;
             }
 
@@ -2842,19 +2775,19 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
   fromJSON(object: any): DevelopmentTask {
     return {
       id: isSet(object.id) ? globalThis.String(object.id) : "",
-      input: isSet(object.input) ? DevelopmentTaskInput.fromJSON(object.input) : undefined,
-      repository: isSet(object.repository) ? RepositorySnapshot.fromJSON(object.repository) : undefined,
-      model: isSet(object.model) ? ModelSnapshot.fromJSON(object.model) : undefined,
-      preparationId: isSet(object.preparationId)
-        ? globalThis.String(object.preparationId)
-        : isSet(object.preparation_id)
-        ? globalThis.String(object.preparation_id)
+      snapshot: isSet(object.snapshot) ? DevelopmentSnapshot.fromJSON(object.snapshot) : undefined,
+      state: isSet(object.state) ? developmentTaskStateFromJSON(object.state) : 0,
+      activeAttemptId: isSet(object.activeAttemptId)
+        ? globalThis.String(object.activeAttemptId)
+        : isSet(object.active_attempt_id)
+        ? globalThis.String(object.active_attempt_id)
         : undefined,
-      retryOfTaskId: isSet(object.retryOfTaskId)
-        ? globalThis.String(object.retryOfTaskId)
-        : isSet(object.retry_of_task_id)
-        ? globalThis.String(object.retry_of_task_id)
-        : undefined,
+      attemptCount: isSet(object.attemptCount)
+        ? globalThis.Number(object.attemptCount)
+        : isSet(object.attempt_count)
+        ? globalThis.Number(object.attempt_count)
+        : 0,
+      failure: isSet(object.failure) ? ResourceFailure.fromJSON(object.failure) : undefined,
       createdAt: isSet(object.createdAt)
         ? fromJsonTimestamp(object.createdAt)
         : isSet(object.created_at)
@@ -2864,61 +2797,6 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
         ? fromJsonTimestamp(object.updatedAt)
         : isSet(object.updated_at)
         ? fromJsonTimestamp(object.updated_at)
-        : undefined,
-      deadlineAt: isSet(object.deadlineAt)
-        ? fromJsonTimestamp(object.deadlineAt)
-        : isSet(object.deadline_at)
-        ? fromJsonTimestamp(object.deadline_at)
-        : undefined,
-      phase: isSet(object.phase) ? developmentTaskPhaseFromJSON(object.phase) : 0,
-      requestedInput: isSet(object.requestedInput)
-        ? globalThis.String(object.requestedInput)
-        : isSet(object.requested_input)
-        ? globalThis.String(object.requested_input)
-        : undefined,
-      candidateCommit: isSet(object.candidateCommit)
-        ? globalThis.String(object.candidateCommit)
-        : isSet(object.candidate_commit)
-        ? globalThis.String(object.candidate_commit)
-        : undefined,
-      validationManifestDigest: isSet(object.validationManifestDigest)
-        ? globalThis.String(object.validationManifestDigest)
-        : isSet(object.validation_manifest_digest)
-        ? globalThis.String(object.validation_manifest_digest)
-        : undefined,
-      policyOrTestEdits: isSet(object.policyOrTestEdits)
-        ? globalThis.Boolean(object.policyOrTestEdits)
-        : isSet(object.policy_or_test_edits)
-        ? globalThis.Boolean(object.policy_or_test_edits)
-        : undefined,
-      scopeViolations: globalThis.Array.isArray(object?.scopeViolations)
-        ? object.scopeViolations.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.scope_violations)
-        ? object.scope_violations.map((e: any) => globalThis.String(e))
-        : [],
-      draftPrUrl: isSet(object.draftPrUrl)
-        ? globalThis.String(object.draftPrUrl)
-        : isSet(object.draft_pr_url)
-        ? globalThis.String(object.draft_pr_url)
-        : undefined,
-      failure: isSet(object.failure) ? TaskFailure.fromJSON(object.failure) : undefined,
-      lifecycleComplete: isSet(object.lifecycleComplete)
-        ? globalThis.Boolean(object.lifecycleComplete)
-        : isSet(object.lifecycle_complete)
-        ? globalThis.Boolean(object.lifecycle_complete)
-        : false,
-      lifecycle: globalThis.Array.isArray(object?.lifecycle)
-        ? object.lifecycle.map((e: any) => LifecycleEvent.fromJSON(e))
-        : [],
-      modelUsage: isSet(object.modelUsage)
-        ? TaskModelUsage.fromJSON(object.modelUsage)
-        : isSet(object.model_usage)
-        ? TaskModelUsage.fromJSON(object.model_usage)
-        : undefined,
-      providedInput: isSet(object.providedInput)
-        ? globalThis.String(object.providedInput)
-        : isSet(object.provided_input)
-        ? globalThis.String(object.provided_input)
         : undefined,
       resourceVersion: isSet(object.resourceVersion)
         ? globalThis.String(object.resourceVersion)
@@ -2933,65 +2811,26 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
     if (message.id !== "") {
       obj.id = message.id;
     }
-    if (message.input !== undefined) {
-      obj.input = DevelopmentTaskInput.toJSON(message.input);
+    if (message.snapshot !== undefined) {
+      obj.snapshot = DevelopmentSnapshot.toJSON(message.snapshot);
     }
-    if (message.repository !== undefined) {
-      obj.repository = RepositorySnapshot.toJSON(message.repository);
+    if (message.state !== 0) {
+      obj.state = developmentTaskStateToJSON(message.state);
     }
-    if (message.model !== undefined) {
-      obj.model = ModelSnapshot.toJSON(message.model);
+    if (message.activeAttemptId !== undefined) {
+      obj.activeAttemptId = message.activeAttemptId;
     }
-    if (message.preparationId !== undefined) {
-      obj.preparationId = message.preparationId;
+    if (message.attemptCount !== 0) {
+      obj.attemptCount = Math.round(message.attemptCount);
     }
-    if (message.retryOfTaskId !== undefined) {
-      obj.retryOfTaskId = message.retryOfTaskId;
+    if (message.failure !== undefined) {
+      obj.failure = ResourceFailure.toJSON(message.failure);
     }
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
     }
     if (message.updatedAt !== undefined) {
       obj.updatedAt = message.updatedAt.toISOString();
-    }
-    if (message.deadlineAt !== undefined) {
-      obj.deadlineAt = message.deadlineAt.toISOString();
-    }
-    if (message.phase !== 0) {
-      obj.phase = developmentTaskPhaseToJSON(message.phase);
-    }
-    if (message.requestedInput !== undefined) {
-      obj.requestedInput = message.requestedInput;
-    }
-    if (message.candidateCommit !== undefined) {
-      obj.candidateCommit = message.candidateCommit;
-    }
-    if (message.validationManifestDigest !== undefined) {
-      obj.validationManifestDigest = message.validationManifestDigest;
-    }
-    if (message.policyOrTestEdits !== undefined) {
-      obj.policyOrTestEdits = message.policyOrTestEdits;
-    }
-    if (message.scopeViolations?.length) {
-      obj.scopeViolations = message.scopeViolations;
-    }
-    if (message.draftPrUrl !== undefined) {
-      obj.draftPrUrl = message.draftPrUrl;
-    }
-    if (message.failure !== undefined) {
-      obj.failure = TaskFailure.toJSON(message.failure);
-    }
-    if (message.lifecycleComplete !== false) {
-      obj.lifecycleComplete = message.lifecycleComplete;
-    }
-    if (message.lifecycle?.length) {
-      obj.lifecycle = message.lifecycle.map((e) => LifecycleEvent.toJSON(e));
-    }
-    if (message.modelUsage !== undefined) {
-      obj.modelUsage = TaskModelUsage.toJSON(message.modelUsage);
-    }
-    if (message.providedInput !== undefined) {
-      obj.providedInput = message.providedInput;
     }
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
@@ -3005,87 +2844,64 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
   fromPartial(object: DeepPartial<DevelopmentTask>): DevelopmentTask {
     const message = createBaseDevelopmentTask();
     message.id = object.id ?? "";
-    message.input = (object.input !== undefined && object.input !== null)
-      ? DevelopmentTaskInput.fromPartial(object.input)
+    message.snapshot = (object.snapshot !== undefined && object.snapshot !== null)
+      ? DevelopmentSnapshot.fromPartial(object.snapshot)
       : undefined;
-    message.repository = (object.repository !== undefined && object.repository !== null)
-      ? RepositorySnapshot.fromPartial(object.repository)
+    message.state = object.state ?? 0;
+    message.activeAttemptId = object.activeAttemptId ?? undefined;
+    message.attemptCount = object.attemptCount ?? 0;
+    message.failure = (object.failure !== undefined && object.failure !== null)
+      ? ResourceFailure.fromPartial(object.failure)
       : undefined;
-    message.model = (object.model !== undefined && object.model !== null)
-      ? ModelSnapshot.fromPartial(object.model)
-      : undefined;
-    message.preparationId = object.preparationId ?? undefined;
-    message.retryOfTaskId = object.retryOfTaskId ?? undefined;
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
-    message.deadlineAt = object.deadlineAt ?? undefined;
-    message.phase = object.phase ?? 0;
-    message.requestedInput = object.requestedInput ?? undefined;
-    message.candidateCommit = object.candidateCommit ?? undefined;
-    message.validationManifestDigest = object.validationManifestDigest ?? undefined;
-    message.policyOrTestEdits = object.policyOrTestEdits ?? undefined;
-    message.scopeViolations = object.scopeViolations?.map((e) => e) || [];
-    message.draftPrUrl = object.draftPrUrl ?? undefined;
-    message.failure = (object.failure !== undefined && object.failure !== null)
-      ? TaskFailure.fromPartial(object.failure)
-      : undefined;
-    message.lifecycleComplete = object.lifecycleComplete ?? false;
-    message.lifecycle = object.lifecycle?.map((e) => LifecycleEvent.fromPartial(e)) || [];
-    message.modelUsage = (object.modelUsage !== undefined && object.modelUsage !== null)
-      ? TaskModelUsage.fromPartial(object.modelUsage)
-      : undefined;
-    message.providedInput = object.providedInput ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
     return message;
   },
 };
 
-function createBaseDevelopmentTaskSummary(): DevelopmentTaskSummary {
+function createBaseDevelopmentAttempt(): DevelopmentAttempt {
   return {
     id: "",
-    repositoryId: "",
-    repositoryOwner: "",
-    repositoryName: "",
-    startRevision: "",
-    request: "",
-    model: undefined,
-    retryOfTaskId: undefined,
-    createdAt: undefined,
-    updatedAt: undefined,
-    phase: 0,
-    candidateCommit: undefined,
-    draftPrUrl: undefined,
+    developmentTaskId: "",
+    attemptNumber: 0,
+    snapshot: undefined,
+    state: 0,
+    requestedInput: undefined,
     failure: undefined,
     modelUsage: undefined,
+    createdAt: undefined,
+    updatedAt: undefined,
+    completedAt: undefined,
     resourceVersion: "0",
   };
 }
 
-export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
-  encode(message: DevelopmentTaskSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
+  encode(message: DevelopmentAttempt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
-    if (message.repositoryId !== "") {
-      writer.uint32(18).string(message.repositoryId);
+    if (message.developmentTaskId !== "") {
+      writer.uint32(18).string(message.developmentTaskId);
     }
-    if (message.repositoryOwner !== "") {
-      writer.uint32(26).string(message.repositoryOwner);
+    if (message.attemptNumber !== 0) {
+      writer.uint32(24).uint32(message.attemptNumber);
     }
-    if (message.repositoryName !== "") {
-      writer.uint32(34).string(message.repositoryName);
+    if (message.snapshot !== undefined) {
+      DevelopmentSnapshot.encode(message.snapshot, writer.uint32(34).fork()).join();
     }
-    if (message.startRevision !== "") {
-      writer.uint32(42).string(message.startRevision);
+    if (message.state !== 0) {
+      writer.uint32(40).int32(message.state);
     }
-    if (message.request !== "") {
-      writer.uint32(50).string(message.request);
+    if (message.requestedInput !== undefined) {
+      writer.uint32(50).string(message.requestedInput);
     }
-    if (message.model !== undefined) {
-      ModelSnapshot.encode(message.model, writer.uint32(58).fork()).join();
+    if (message.failure !== undefined) {
+      ResourceFailure.encode(message.failure, writer.uint32(58).fork()).join();
     }
-    if (message.retryOfTaskId !== undefined) {
-      writer.uint32(66).string(message.retryOfTaskId);
+    if (message.modelUsage !== undefined) {
+      AttemptModelUsage.encode(message.modelUsage, writer.uint32(66).fork()).join();
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
@@ -3093,28 +2909,16 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
     if (message.updatedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(82).fork()).join();
     }
-    if (message.phase !== 0) {
-      writer.uint32(88).int32(message.phase);
-    }
-    if (message.candidateCommit !== undefined) {
-      writer.uint32(98).string(message.candidateCommit);
-    }
-    if (message.draftPrUrl !== undefined) {
-      writer.uint32(106).string(message.draftPrUrl);
-    }
-    if (message.failure !== undefined) {
-      TaskFailure.encode(message.failure, writer.uint32(114).fork()).join();
-    }
-    if (message.modelUsage !== undefined) {
-      ModelUsageSummary.encode(message.modelUsage, writer.uint32(122).fork()).join();
+    if (message.completedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.completedAt), writer.uint32(90).fork()).join();
     }
     if (message.resourceVersion !== "0") {
-      writer.uint32(128).uint64(message.resourceVersion);
+      writer.uint32(96).uint64(message.resourceVersion);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): DevelopmentTaskSummary {
+  decode(input: BinaryReader | Uint8Array, length?: number): DevelopmentAttempt {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3123,7 +2927,7 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDevelopmentTaskSummary();
+      const message = createBaseDevelopmentAttempt();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -3140,15 +2944,15 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
               break;
             }
 
-            message.repositoryId = reader.string();
+            message.developmentTaskId = reader.string();
             continue;
           }
           case 3: {
-            if (tag !== 26) {
+            if (tag !== 24) {
               break;
             }
 
-            message.repositoryOwner = reader.string();
+            message.attemptNumber = reader.uint32();
             continue;
           }
           case 4: {
@@ -3156,15 +2960,15 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
               break;
             }
 
-            message.repositoryName = reader.string();
+            message.snapshot = DevelopmentSnapshot.decode(reader, reader.uint32());
             continue;
           }
           case 5: {
-            if (tag !== 42) {
+            if (tag !== 40) {
               break;
             }
 
-            message.startRevision = reader.string();
+            message.state = reader.int32() as any;
             continue;
           }
           case 6: {
@@ -3172,7 +2976,7 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
               break;
             }
 
-            message.request = reader.string();
+            message.requestedInput = reader.string();
             continue;
           }
           case 7: {
@@ -3180,7 +2984,7 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
               break;
             }
 
-            message.model = ModelSnapshot.decode(reader, reader.uint32());
+            message.failure = ResourceFailure.decode(reader, reader.uint32());
             continue;
           }
           case 8: {
@@ -3188,7 +2992,7 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
               break;
             }
 
-            message.retryOfTaskId = reader.string();
+            message.modelUsage = AttemptModelUsage.decode(reader, reader.uint32());
             continue;
           }
           case 9: {
@@ -3208,47 +3012,15 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
             continue;
           }
           case 11: {
-            if (tag !== 88) {
+            if (tag !== 90) {
               break;
             }
 
-            message.phase = reader.int32() as any;
+            message.completedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
           case 12: {
-            if (tag !== 98) {
-              break;
-            }
-
-            message.candidateCommit = reader.string();
-            continue;
-          }
-          case 13: {
-            if (tag !== 106) {
-              break;
-            }
-
-            message.draftPrUrl = reader.string();
-            continue;
-          }
-          case 14: {
-            if (tag !== 114) {
-              break;
-            }
-
-            message.failure = TaskFailure.decode(reader, reader.uint32());
-            continue;
-          }
-          case 15: {
-            if (tag !== 122) {
-              break;
-            }
-
-            message.modelUsage = ModelUsageSummary.decode(reader, reader.uint32());
-            continue;
-          }
-          case 16: {
-            if (tag !== 128) {
+            if (tag !== 96) {
               break;
             }
 
@@ -3267,35 +3039,31 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
     }
   },
 
-  fromJSON(object: any): DevelopmentTaskSummary {
+  fromJSON(object: any): DevelopmentAttempt {
     return {
       id: isSet(object.id) ? globalThis.String(object.id) : "",
-      repositoryId: isSet(object.repositoryId)
-        ? globalThis.String(object.repositoryId)
-        : isSet(object.repository_id)
-        ? globalThis.String(object.repository_id)
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
         : "",
-      repositoryOwner: isSet(object.repositoryOwner)
-        ? globalThis.String(object.repositoryOwner)
-        : isSet(object.repository_owner)
-        ? globalThis.String(object.repository_owner)
-        : "",
-      repositoryName: isSet(object.repositoryName)
-        ? globalThis.String(object.repositoryName)
-        : isSet(object.repository_name)
-        ? globalThis.String(object.repository_name)
-        : "",
-      startRevision: isSet(object.startRevision)
-        ? globalThis.String(object.startRevision)
-        : isSet(object.start_revision)
-        ? globalThis.String(object.start_revision)
-        : "",
-      request: isSet(object.request) ? globalThis.String(object.request) : "",
-      model: isSet(object.model) ? ModelSnapshot.fromJSON(object.model) : undefined,
-      retryOfTaskId: isSet(object.retryOfTaskId)
-        ? globalThis.String(object.retryOfTaskId)
-        : isSet(object.retry_of_task_id)
-        ? globalThis.String(object.retry_of_task_id)
+      attemptNumber: isSet(object.attemptNumber)
+        ? globalThis.Number(object.attemptNumber)
+        : isSet(object.attempt_number)
+        ? globalThis.Number(object.attempt_number)
+        : 0,
+      snapshot: isSet(object.snapshot) ? DevelopmentSnapshot.fromJSON(object.snapshot) : undefined,
+      state: isSet(object.state) ? developmentAttemptStateFromJSON(object.state) : 0,
+      requestedInput: isSet(object.requestedInput)
+        ? globalThis.String(object.requestedInput)
+        : isSet(object.requested_input)
+        ? globalThis.String(object.requested_input)
+        : undefined,
+      failure: isSet(object.failure) ? ResourceFailure.fromJSON(object.failure) : undefined,
+      modelUsage: isSet(object.modelUsage)
+        ? AttemptModelUsage.fromJSON(object.modelUsage)
+        : isSet(object.model_usage)
+        ? AttemptModelUsage.fromJSON(object.model_usage)
         : undefined,
       createdAt: isSet(object.createdAt)
         ? fromJsonTimestamp(object.createdAt)
@@ -3307,22 +3075,10 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
         : isSet(object.updated_at)
         ? fromJsonTimestamp(object.updated_at)
         : undefined,
-      phase: isSet(object.phase) ? developmentTaskPhaseFromJSON(object.phase) : 0,
-      candidateCommit: isSet(object.candidateCommit)
-        ? globalThis.String(object.candidateCommit)
-        : isSet(object.candidate_commit)
-        ? globalThis.String(object.candidate_commit)
-        : undefined,
-      draftPrUrl: isSet(object.draftPrUrl)
-        ? globalThis.String(object.draftPrUrl)
-        : isSet(object.draft_pr_url)
-        ? globalThis.String(object.draft_pr_url)
-        : undefined,
-      failure: isSet(object.failure) ? TaskFailure.fromJSON(object.failure) : undefined,
-      modelUsage: isSet(object.modelUsage)
-        ? ModelUsageSummary.fromJSON(object.modelUsage)
-        : isSet(object.model_usage)
-        ? ModelUsageSummary.fromJSON(object.model_usage)
+      completedAt: isSet(object.completedAt)
+        ? fromJsonTimestamp(object.completedAt)
+        : isSet(object.completed_at)
+        ? fromJsonTimestamp(object.completed_at)
         : undefined,
       resourceVersion: isSet(object.resourceVersion)
         ? globalThis.String(object.resourceVersion)
@@ -3332,31 +3088,31 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
     };
   },
 
-  toJSON(message: DevelopmentTaskSummary): unknown {
+  toJSON(message: DevelopmentAttempt): unknown {
     const obj: any = {};
     if (message.id !== "") {
       obj.id = message.id;
     }
-    if (message.repositoryId !== "") {
-      obj.repositoryId = message.repositoryId;
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
     }
-    if (message.repositoryOwner !== "") {
-      obj.repositoryOwner = message.repositoryOwner;
+    if (message.attemptNumber !== 0) {
+      obj.attemptNumber = Math.round(message.attemptNumber);
     }
-    if (message.repositoryName !== "") {
-      obj.repositoryName = message.repositoryName;
+    if (message.snapshot !== undefined) {
+      obj.snapshot = DevelopmentSnapshot.toJSON(message.snapshot);
     }
-    if (message.startRevision !== "") {
-      obj.startRevision = message.startRevision;
+    if (message.state !== 0) {
+      obj.state = developmentAttemptStateToJSON(message.state);
     }
-    if (message.request !== "") {
-      obj.request = message.request;
+    if (message.requestedInput !== undefined) {
+      obj.requestedInput = message.requestedInput;
     }
-    if (message.model !== undefined) {
-      obj.model = ModelSnapshot.toJSON(message.model);
+    if (message.failure !== undefined) {
+      obj.failure = ResourceFailure.toJSON(message.failure);
     }
-    if (message.retryOfTaskId !== undefined) {
-      obj.retryOfTaskId = message.retryOfTaskId;
+    if (message.modelUsage !== undefined) {
+      obj.modelUsage = AttemptModelUsage.toJSON(message.modelUsage);
     }
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
@@ -3364,20 +3120,8 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
     if (message.updatedAt !== undefined) {
       obj.updatedAt = message.updatedAt.toISOString();
     }
-    if (message.phase !== 0) {
-      obj.phase = developmentTaskPhaseToJSON(message.phase);
-    }
-    if (message.candidateCommit !== undefined) {
-      obj.candidateCommit = message.candidateCommit;
-    }
-    if (message.draftPrUrl !== undefined) {
-      obj.draftPrUrl = message.draftPrUrl;
-    }
-    if (message.failure !== undefined) {
-      obj.failure = TaskFailure.toJSON(message.failure);
-    }
-    if (message.modelUsage !== undefined) {
-      obj.modelUsage = ModelUsageSummary.toJSON(message.modelUsage);
+    if (message.completedAt !== undefined) {
+      obj.completedAt = message.completedAt.toISOString();
     }
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
@@ -3385,48 +3129,565 @@ export const DevelopmentTaskSummary: MessageFns<DevelopmentTaskSummary> = {
     return obj;
   },
 
-  create(base?: DeepPartial<DevelopmentTaskSummary>): DevelopmentTaskSummary {
-    return DevelopmentTaskSummary.fromPartial(base ?? {});
+  create(base?: DeepPartial<DevelopmentAttempt>): DevelopmentAttempt {
+    return DevelopmentAttempt.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<DevelopmentTaskSummary>): DevelopmentTaskSummary {
-    const message = createBaseDevelopmentTaskSummary();
+  fromPartial(object: DeepPartial<DevelopmentAttempt>): DevelopmentAttempt {
+    const message = createBaseDevelopmentAttempt();
     message.id = object.id ?? "";
-    message.repositoryId = object.repositoryId ?? "";
-    message.repositoryOwner = object.repositoryOwner ?? "";
-    message.repositoryName = object.repositoryName ?? "";
-    message.startRevision = object.startRevision ?? "";
-    message.request = object.request ?? "";
-    message.model = (object.model !== undefined && object.model !== null)
-      ? ModelSnapshot.fromPartial(object.model)
+    message.developmentTaskId = object.developmentTaskId ?? "";
+    message.attemptNumber = object.attemptNumber ?? 0;
+    message.snapshot = (object.snapshot !== undefined && object.snapshot !== null)
+      ? DevelopmentSnapshot.fromPartial(object.snapshot)
       : undefined;
-    message.retryOfTaskId = object.retryOfTaskId ?? undefined;
-    message.createdAt = object.createdAt ?? undefined;
-    message.updatedAt = object.updatedAt ?? undefined;
-    message.phase = object.phase ?? 0;
-    message.candidateCommit = object.candidateCommit ?? undefined;
-    message.draftPrUrl = object.draftPrUrl ?? undefined;
+    message.state = object.state ?? 0;
+    message.requestedInput = object.requestedInput ?? undefined;
     message.failure = (object.failure !== undefined && object.failure !== null)
-      ? TaskFailure.fromPartial(object.failure)
+      ? ResourceFailure.fromPartial(object.failure)
       : undefined;
     message.modelUsage = (object.modelUsage !== undefined && object.modelUsage !== null)
-      ? ModelUsageSummary.fromPartial(object.modelUsage)
+      ? AttemptModelUsage.fromPartial(object.modelUsage)
       : undefined;
+    message.createdAt = object.createdAt ?? undefined;
+    message.updatedAt = object.updatedAt ?? undefined;
+    message.completedAt = object.completedAt ?? undefined;
+    message.resourceVersion = object.resourceVersion ?? "0";
+    return message;
+  },
+};
+
+function createBaseCandidateIdentity(): CandidateIdentity {
+  return { identity: undefined };
+}
+
+export const CandidateIdentity: MessageFns<CandidateIdentity> = {
+  encode(message: CandidateIdentity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    switch (message.identity?.$case) {
+      case "git":
+        GitCandidate.encode(message.identity.git, writer.uint32(10).fork()).join();
+        break;
+      case "bundle":
+        BundleCandidate.encode(message.identity.bundle, writer.uint32(18).fork()).join();
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CandidateIdentity {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCandidateIdentity();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.identity = { $case: "git", git: GitCandidate.decode(reader, reader.uint32()) };
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.identity = { $case: "bundle", bundle: BundleCandidate.decode(reader, reader.uint32()) };
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CandidateIdentity {
+    return {
+      identity: isSet(object.git)
+        ? { $case: "git", git: GitCandidate.fromJSON(object.git) }
+        : isSet(object.bundle)
+        ? { $case: "bundle", bundle: BundleCandidate.fromJSON(object.bundle) }
+        : undefined,
+    };
+  },
+
+  toJSON(message: CandidateIdentity): unknown {
+    const obj: any = {};
+    if (message.identity?.$case === "git") {
+      obj.git = GitCandidate.toJSON(message.identity.git);
+    } else if (message.identity?.$case === "bundle") {
+      obj.bundle = BundleCandidate.toJSON(message.identity.bundle);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CandidateIdentity>): CandidateIdentity {
+    return CandidateIdentity.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CandidateIdentity>): CandidateIdentity {
+    const message = createBaseCandidateIdentity();
+    switch (object.identity?.$case) {
+      case "git": {
+        if (object.identity?.git !== undefined && object.identity?.git !== null) {
+          message.identity = { $case: "git", git: GitCandidate.fromPartial(object.identity.git) };
+        }
+        break;
+      }
+      case "bundle": {
+        if (object.identity?.bundle !== undefined && object.identity?.bundle !== null) {
+          message.identity = { $case: "bundle", bundle: BundleCandidate.fromPartial(object.identity.bundle) };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseGitCandidate(): GitCandidate {
+  return { commitSha: "" };
+}
+
+export const GitCandidate: MessageFns<GitCandidate> = {
+  encode(message: GitCandidate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commitSha !== "") {
+      writer.uint32(10).string(message.commitSha);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GitCandidate {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGitCandidate();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commitSha = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GitCandidate {
+    return {
+      commitSha: isSet(object.commitSha)
+        ? globalThis.String(object.commitSha)
+        : isSet(object.commit_sha)
+        ? globalThis.String(object.commit_sha)
+        : "",
+    };
+  },
+
+  toJSON(message: GitCandidate): unknown {
+    const obj: any = {};
+    if (message.commitSha !== "") {
+      obj.commitSha = message.commitSha;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GitCandidate>): GitCandidate {
+    return GitCandidate.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GitCandidate>): GitCandidate {
+    const message = createBaseGitCandidate();
+    message.commitSha = object.commitSha ?? "";
+    return message;
+  },
+};
+
+function createBaseBundleCandidate(): BundleCandidate {
+  return { digest: "", sizeBytes: "0" };
+}
+
+export const BundleCandidate: MessageFns<BundleCandidate> = {
+  encode(message: BundleCandidate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.digest !== "") {
+      writer.uint32(10).string(message.digest);
+    }
+    if (message.sizeBytes !== "0") {
+      writer.uint32(16).uint64(message.sizeBytes);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): BundleCandidate {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseBundleCandidate();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.digest = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.sizeBytes = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): BundleCandidate {
+    return {
+      digest: isSet(object.digest) ? globalThis.String(object.digest) : "",
+      sizeBytes: isSet(object.sizeBytes)
+        ? globalThis.String(object.sizeBytes)
+        : isSet(object.size_bytes)
+        ? globalThis.String(object.size_bytes)
+        : "0",
+    };
+  },
+
+  toJSON(message: BundleCandidate): unknown {
+    const obj: any = {};
+    if (message.digest !== "") {
+      obj.digest = message.digest;
+    }
+    if (message.sizeBytes !== "0") {
+      obj.sizeBytes = message.sizeBytes;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<BundleCandidate>): BundleCandidate {
+    return BundleCandidate.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<BundleCandidate>): BundleCandidate {
+    const message = createBaseBundleCandidate();
+    message.digest = object.digest ?? "";
+    message.sizeBytes = object.sizeBytes ?? "0";
+    return message;
+  },
+};
+
+function createBaseCandidate(): Candidate {
+  return {
+    id: "",
+    developmentAttemptId: "",
+    repositoryConnectionId: "",
+    baseRevision: "",
+    identity: undefined,
+    state: 0,
+    changedPaths: [],
+    failure: undefined,
+    createdAt: undefined,
+    resourceVersion: "0",
+  };
+}
+
+export const Candidate: MessageFns<Candidate> = {
+  encode(message: Candidate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.developmentAttemptId !== "") {
+      writer.uint32(18).string(message.developmentAttemptId);
+    }
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(26).string(message.repositoryConnectionId);
+    }
+    if (message.baseRevision !== "") {
+      writer.uint32(34).string(message.baseRevision);
+    }
+    if (message.identity !== undefined) {
+      CandidateIdentity.encode(message.identity, writer.uint32(42).fork()).join();
+    }
+    if (message.state !== 0) {
+      writer.uint32(48).int32(message.state);
+    }
+    for (const v of message.changedPaths) {
+      writer.uint32(58).string(v!);
+    }
+    if (message.failure !== undefined) {
+      ResourceFailure.encode(message.failure, writer.uint32(66).fork()).join();
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
+    }
+    if (message.resourceVersion !== "0") {
+      writer.uint32(80).uint64(message.resourceVersion);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Candidate {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCandidate();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.developmentAttemptId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.baseRevision = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.identity = CandidateIdentity.decode(reader, reader.uint32());
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.changedPaths.push(reader.string());
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.failure = ResourceFailure.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.resourceVersion = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Candidate {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      developmentAttemptId: isSet(object.developmentAttemptId)
+        ? globalThis.String(object.developmentAttemptId)
+        : isSet(object.development_attempt_id)
+        ? globalThis.String(object.development_attempt_id)
+        : "",
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+      baseRevision: isSet(object.baseRevision)
+        ? globalThis.String(object.baseRevision)
+        : isSet(object.base_revision)
+        ? globalThis.String(object.base_revision)
+        : "",
+      identity: isSet(object.identity) ? CandidateIdentity.fromJSON(object.identity) : undefined,
+      state: isSet(object.state) ? candidateStateFromJSON(object.state) : 0,
+      changedPaths: globalThis.Array.isArray(object?.changedPaths)
+        ? object.changedPaths.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.changed_paths)
+        ? object.changed_paths.map((e: any) => globalThis.String(e))
+        : [],
+      failure: isSet(object.failure) ? ResourceFailure.fromJSON(object.failure) : undefined,
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+      resourceVersion: isSet(object.resourceVersion)
+        ? globalThis.String(object.resourceVersion)
+        : isSet(object.resource_version)
+        ? globalThis.String(object.resource_version)
+        : "0",
+    };
+  },
+
+  toJSON(message: Candidate): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.developmentAttemptId !== "") {
+      obj.developmentAttemptId = message.developmentAttemptId;
+    }
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.baseRevision !== "") {
+      obj.baseRevision = message.baseRevision;
+    }
+    if (message.identity !== undefined) {
+      obj.identity = CandidateIdentity.toJSON(message.identity);
+    }
+    if (message.state !== 0) {
+      obj.state = candidateStateToJSON(message.state);
+    }
+    if (message.changedPaths?.length) {
+      obj.changedPaths = message.changedPaths;
+    }
+    if (message.failure !== undefined) {
+      obj.failure = ResourceFailure.toJSON(message.failure);
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    if (message.resourceVersion !== "0") {
+      obj.resourceVersion = message.resourceVersion;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<Candidate>): Candidate {
+    return Candidate.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<Candidate>): Candidate {
+    const message = createBaseCandidate();
+    message.id = object.id ?? "";
+    message.developmentAttemptId = object.developmentAttemptId ?? "";
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.baseRevision = object.baseRevision ?? "";
+    message.identity = (object.identity !== undefined && object.identity !== null)
+      ? CandidateIdentity.fromPartial(object.identity)
+      : undefined;
+    message.state = object.state ?? 0;
+    message.changedPaths = object.changedPaths?.map((e) => e) || [];
+    message.failure = (object.failure !== undefined && object.failure !== null)
+      ? ResourceFailure.fromPartial(object.failure)
+      : undefined;
+    message.createdAt = object.createdAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
     return message;
   },
 };
 
 function createBaseListDevelopmentTasksRequest(): ListDevelopmentTasksRequest {
-  return { page: undefined, phase: undefined };
+  return { repositoryConnectionId: undefined, runtimeProfileId: undefined, state: undefined, page: undefined };
 }
 
 export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest> = {
   encode(message: ListDevelopmentTasksRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.page !== undefined) {
-      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    if (message.repositoryConnectionId !== undefined) {
+      writer.uint32(10).string(message.repositoryConnectionId);
     }
-    if (message.phase !== undefined) {
-      writer.uint32(16).int32(message.phase);
+    if (message.runtimeProfileId !== undefined) {
+      writer.uint32(18).string(message.runtimeProfileId);
+    }
+    if (message.state !== undefined) {
+      writer.uint32(24).int32(message.state);
+    }
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -3449,15 +3710,31 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
               break;
             }
 
-            message.page = PageRequest.decode(reader, reader.uint32());
+            message.repositoryConnectionId = reader.string();
             continue;
           }
           case 2: {
-            if (tag !== 16) {
+            if (tag !== 18) {
               break;
             }
 
-            message.phase = reader.int32() as any;
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.page = PageRequest.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -3474,18 +3751,34 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
 
   fromJSON(object: any): ListDevelopmentTasksRequest {
     return {
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : undefined,
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : undefined,
+      state: isSet(object.state) ? developmentTaskStateFromJSON(object.state) : undefined,
       page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
-      phase: isSet(object.phase) ? developmentTaskPhaseFromJSON(object.phase) : undefined,
     };
   },
 
   toJSON(message: ListDevelopmentTasksRequest): unknown {
     const obj: any = {};
+    if (message.repositoryConnectionId !== undefined) {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.runtimeProfileId !== undefined) {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.state !== undefined) {
+      obj.state = developmentTaskStateToJSON(message.state);
+    }
     if (message.page !== undefined) {
       obj.page = PageRequest.toJSON(message.page);
-    }
-    if (message.phase !== undefined) {
-      obj.phase = developmentTaskPhaseToJSON(message.phase);
     }
     return obj;
   },
@@ -3495,22 +3788,24 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
   },
   fromPartial(object: DeepPartial<ListDevelopmentTasksRequest>): ListDevelopmentTasksRequest {
     const message = createBaseListDevelopmentTasksRequest();
+    message.repositoryConnectionId = object.repositoryConnectionId ?? undefined;
+    message.runtimeProfileId = object.runtimeProfileId ?? undefined;
+    message.state = object.state ?? undefined;
     message.page = (object.page !== undefined && object.page !== null)
       ? PageRequest.fromPartial(object.page)
       : undefined;
-    message.phase = object.phase ?? undefined;
     return message;
   },
 };
 
 function createBaseListDevelopmentTasksResponse(): ListDevelopmentTasksResponse {
-  return { tasks: [], page: undefined };
+  return { developmentTasks: [], page: undefined };
 }
 
 export const ListDevelopmentTasksResponse: MessageFns<ListDevelopmentTasksResponse> = {
   encode(message: ListDevelopmentTasksResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.tasks) {
-      DevelopmentTaskSummary.encode(v!, writer.uint32(10).fork()).join();
+    for (const v of message.developmentTasks) {
+      DevelopmentTask.encode(v!, writer.uint32(10).fork()).join();
     }
     if (message.page !== undefined) {
       PageResponse.encode(message.page, writer.uint32(18).fork()).join();
@@ -3536,7 +3831,7 @@ export const ListDevelopmentTasksResponse: MessageFns<ListDevelopmentTasksRespon
               break;
             }
 
-            message.tasks.push(DevelopmentTaskSummary.decode(reader, reader.uint32()));
+            message.developmentTasks.push(DevelopmentTask.decode(reader, reader.uint32()));
             continue;
           }
           case 2: {
@@ -3561,8 +3856,10 @@ export const ListDevelopmentTasksResponse: MessageFns<ListDevelopmentTasksRespon
 
   fromJSON(object: any): ListDevelopmentTasksResponse {
     return {
-      tasks: globalThis.Array.isArray(object?.tasks)
-        ? object.tasks.map((e: any) => DevelopmentTaskSummary.fromJSON(e))
+      developmentTasks: globalThis.Array.isArray(object?.developmentTasks)
+        ? object.developmentTasks.map((e: any) => DevelopmentTask.fromJSON(e))
+        : globalThis.Array.isArray(object?.development_tasks)
+        ? object.development_tasks.map((e: any) => DevelopmentTask.fromJSON(e))
         : [],
       page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
     };
@@ -3570,8 +3867,8 @@ export const ListDevelopmentTasksResponse: MessageFns<ListDevelopmentTasksRespon
 
   toJSON(message: ListDevelopmentTasksResponse): unknown {
     const obj: any = {};
-    if (message.tasks?.length) {
-      obj.tasks = message.tasks.map((e) => DevelopmentTaskSummary.toJSON(e));
+    if (message.developmentTasks?.length) {
+      obj.developmentTasks = message.developmentTasks.map((e) => DevelopmentTask.toJSON(e));
     }
     if (message.page !== undefined) {
       obj.page = PageResponse.toJSON(message.page);
@@ -3584,7 +3881,7 @@ export const ListDevelopmentTasksResponse: MessageFns<ListDevelopmentTasksRespon
   },
   fromPartial(object: DeepPartial<ListDevelopmentTasksResponse>): ListDevelopmentTasksResponse {
     const message = createBaseListDevelopmentTasksResponse();
-    message.tasks = object.tasks?.map((e) => DevelopmentTaskSummary.fromPartial(e)) || [];
+    message.developmentTasks = object.developmentTasks?.map((e) => DevelopmentTask.fromPartial(e)) || [];
     message.page = (object.page !== undefined && object.page !== null)
       ? PageResponse.fromPartial(object.page)
       : undefined;
@@ -3593,13 +3890,13 @@ export const ListDevelopmentTasksResponse: MessageFns<ListDevelopmentTasksRespon
 };
 
 function createBaseGetDevelopmentTaskRequest(): GetDevelopmentTaskRequest {
-  return { taskId: "" };
+  return { developmentTaskId: "" };
 }
 
 export const GetDevelopmentTaskRequest: MessageFns<GetDevelopmentTaskRequest> = {
   encode(message: GetDevelopmentTaskRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.taskId !== "") {
-      writer.uint32(10).string(message.taskId);
+    if (message.developmentTaskId !== "") {
+      writer.uint32(10).string(message.developmentTaskId);
     }
     return writer;
   },
@@ -3622,7 +3919,7 @@ export const GetDevelopmentTaskRequest: MessageFns<GetDevelopmentTaskRequest> = 
               break;
             }
 
-            message.taskId = reader.string();
+            message.developmentTaskId = reader.string();
             continue;
           }
         }
@@ -3639,18 +3936,18 @@ export const GetDevelopmentTaskRequest: MessageFns<GetDevelopmentTaskRequest> = 
 
   fromJSON(object: any): GetDevelopmentTaskRequest {
     return {
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
         : "",
     };
   },
 
   toJSON(message: GetDevelopmentTaskRequest): unknown {
     const obj: any = {};
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
     }
     return obj;
   },
@@ -3660,19 +3957,19 @@ export const GetDevelopmentTaskRequest: MessageFns<GetDevelopmentTaskRequest> = 
   },
   fromPartial(object: DeepPartial<GetDevelopmentTaskRequest>): GetDevelopmentTaskRequest {
     const message = createBaseGetDevelopmentTaskRequest();
-    message.taskId = object.taskId ?? "";
+    message.developmentTaskId = object.developmentTaskId ?? "";
     return message;
   },
 };
 
 function createBaseGetDevelopmentTaskResponse(): GetDevelopmentTaskResponse {
-  return { task: undefined };
+  return { developmentTask: undefined };
 }
 
 export const GetDevelopmentTaskResponse: MessageFns<GetDevelopmentTaskResponse> = {
   encode(message: GetDevelopmentTaskResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.task !== undefined) {
-      DevelopmentTask.encode(message.task, writer.uint32(10).fork()).join();
+    if (message.developmentTask !== undefined) {
+      DevelopmentTask.encode(message.developmentTask, writer.uint32(10).fork()).join();
     }
     return writer;
   },
@@ -3695,7 +3992,7 @@ export const GetDevelopmentTaskResponse: MessageFns<GetDevelopmentTaskResponse> 
               break;
             }
 
-            message.task = DevelopmentTask.decode(reader, reader.uint32());
+            message.developmentTask = DevelopmentTask.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -3711,13 +4008,19 @@ export const GetDevelopmentTaskResponse: MessageFns<GetDevelopmentTaskResponse> 
   },
 
   fromJSON(object: any): GetDevelopmentTaskResponse {
-    return { task: isSet(object.task) ? DevelopmentTask.fromJSON(object.task) : undefined };
+    return {
+      developmentTask: isSet(object.developmentTask)
+        ? DevelopmentTask.fromJSON(object.developmentTask)
+        : isSet(object.development_task)
+        ? DevelopmentTask.fromJSON(object.development_task)
+        : undefined,
+    };
   },
 
   toJSON(message: GetDevelopmentTaskResponse): unknown {
     const obj: any = {};
-    if (message.task !== undefined) {
-      obj.task = DevelopmentTask.toJSON(message.task);
+    if (message.developmentTask !== undefined) {
+      obj.developmentTask = DevelopmentTask.toJSON(message.developmentTask);
     }
     return obj;
   },
@@ -3727,15 +4030,15 @@ export const GetDevelopmentTaskResponse: MessageFns<GetDevelopmentTaskResponse> 
   },
   fromPartial(object: DeepPartial<GetDevelopmentTaskResponse>): GetDevelopmentTaskResponse {
     const message = createBaseGetDevelopmentTaskResponse();
-    message.task = (object.task !== undefined && object.task !== null)
-      ? DevelopmentTask.fromPartial(object.task)
+    message.developmentTask = (object.developmentTask !== undefined && object.developmentTask !== null)
+      ? DevelopmentTask.fromPartial(object.developmentTask)
       : undefined;
     return message;
   },
 };
 
 function createBaseCreateDevelopmentTaskRequest(): CreateDevelopmentTaskRequest {
-  return { idempotencyKey: "", input: undefined };
+  return { idempotencyKey: "", request: undefined };
 }
 
 export const CreateDevelopmentTaskRequest: MessageFns<CreateDevelopmentTaskRequest> = {
@@ -3743,8 +4046,8 @@ export const CreateDevelopmentTaskRequest: MessageFns<CreateDevelopmentTaskReque
     if (message.idempotencyKey !== "") {
       writer.uint32(10).string(message.idempotencyKey);
     }
-    if (message.input !== undefined) {
-      DevelopmentTaskInput.encode(message.input, writer.uint32(18).fork()).join();
+    if (message.request !== undefined) {
+      DevelopmentTaskRequest.encode(message.request, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -3775,7 +4078,7 @@ export const CreateDevelopmentTaskRequest: MessageFns<CreateDevelopmentTaskReque
               break;
             }
 
-            message.input = DevelopmentTaskInput.decode(reader, reader.uint32());
+            message.request = DevelopmentTaskRequest.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -3797,7 +4100,7 @@ export const CreateDevelopmentTaskRequest: MessageFns<CreateDevelopmentTaskReque
         : isSet(object.idempotency_key)
         ? globalThis.String(object.idempotency_key)
         : "",
-      input: isSet(object.input) ? DevelopmentTaskInput.fromJSON(object.input) : undefined,
+      request: isSet(object.request) ? DevelopmentTaskRequest.fromJSON(object.request) : undefined,
     };
   },
 
@@ -3806,8 +4109,8 @@ export const CreateDevelopmentTaskRequest: MessageFns<CreateDevelopmentTaskReque
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
     }
-    if (message.input !== undefined) {
-      obj.input = DevelopmentTaskInput.toJSON(message.input);
+    if (message.request !== undefined) {
+      obj.request = DevelopmentTaskRequest.toJSON(message.request);
     }
     return obj;
   },
@@ -3818,21 +4121,24 @@ export const CreateDevelopmentTaskRequest: MessageFns<CreateDevelopmentTaskReque
   fromPartial(object: DeepPartial<CreateDevelopmentTaskRequest>): CreateDevelopmentTaskRequest {
     const message = createBaseCreateDevelopmentTaskRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
-    message.input = (object.input !== undefined && object.input !== null)
-      ? DevelopmentTaskInput.fromPartial(object.input)
+    message.request = (object.request !== undefined && object.request !== null)
+      ? DevelopmentTaskRequest.fromPartial(object.request)
       : undefined;
     return message;
   },
 };
 
 function createBaseCreateDevelopmentTaskResponse(): CreateDevelopmentTaskResponse {
-  return { task: undefined };
+  return { developmentTask: undefined, initialAttempt: undefined };
 }
 
 export const CreateDevelopmentTaskResponse: MessageFns<CreateDevelopmentTaskResponse> = {
   encode(message: CreateDevelopmentTaskResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.task !== undefined) {
-      DevelopmentTask.encode(message.task, writer.uint32(10).fork()).join();
+    if (message.developmentTask !== undefined) {
+      DevelopmentTask.encode(message.developmentTask, writer.uint32(10).fork()).join();
+    }
+    if (message.initialAttempt !== undefined) {
+      DevelopmentAttempt.encode(message.initialAttempt, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -3855,7 +4161,15 @@ export const CreateDevelopmentTaskResponse: MessageFns<CreateDevelopmentTaskResp
               break;
             }
 
-            message.task = DevelopmentTask.decode(reader, reader.uint32());
+            message.developmentTask = DevelopmentTask.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.initialAttempt = DevelopmentAttempt.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -3871,13 +4185,27 @@ export const CreateDevelopmentTaskResponse: MessageFns<CreateDevelopmentTaskResp
   },
 
   fromJSON(object: any): CreateDevelopmentTaskResponse {
-    return { task: isSet(object.task) ? DevelopmentTask.fromJSON(object.task) : undefined };
+    return {
+      developmentTask: isSet(object.developmentTask)
+        ? DevelopmentTask.fromJSON(object.developmentTask)
+        : isSet(object.development_task)
+        ? DevelopmentTask.fromJSON(object.development_task)
+        : undefined,
+      initialAttempt: isSet(object.initialAttempt)
+        ? DevelopmentAttempt.fromJSON(object.initialAttempt)
+        : isSet(object.initial_attempt)
+        ? DevelopmentAttempt.fromJSON(object.initial_attempt)
+        : undefined,
+    };
   },
 
   toJSON(message: CreateDevelopmentTaskResponse): unknown {
     const obj: any = {};
-    if (message.task !== undefined) {
-      obj.task = DevelopmentTask.toJSON(message.task);
+    if (message.developmentTask !== undefined) {
+      obj.developmentTask = DevelopmentTask.toJSON(message.developmentTask);
+    }
+    if (message.initialAttempt !== undefined) {
+      obj.initialAttempt = DevelopmentAttempt.toJSON(message.initialAttempt);
     }
     return obj;
   },
@@ -3887,15 +4215,18 @@ export const CreateDevelopmentTaskResponse: MessageFns<CreateDevelopmentTaskResp
   },
   fromPartial(object: DeepPartial<CreateDevelopmentTaskResponse>): CreateDevelopmentTaskResponse {
     const message = createBaseCreateDevelopmentTaskResponse();
-    message.task = (object.task !== undefined && object.task !== null)
-      ? DevelopmentTask.fromPartial(object.task)
+    message.developmentTask = (object.developmentTask !== undefined && object.developmentTask !== null)
+      ? DevelopmentTask.fromPartial(object.developmentTask)
+      : undefined;
+    message.initialAttempt = (object.initialAttempt !== undefined && object.initialAttempt !== null)
+      ? DevelopmentAttempt.fromPartial(object.initialAttempt)
       : undefined;
     return message;
   },
 };
 
 function createBaseCancelDevelopmentTaskRequest(): CancelDevelopmentTaskRequest {
-  return { idempotencyKey: "", taskId: "" };
+  return { idempotencyKey: "", developmentTaskId: "" };
 }
 
 export const CancelDevelopmentTaskRequest: MessageFns<CancelDevelopmentTaskRequest> = {
@@ -3903,8 +4234,8 @@ export const CancelDevelopmentTaskRequest: MessageFns<CancelDevelopmentTaskReque
     if (message.idempotencyKey !== "") {
       writer.uint32(10).string(message.idempotencyKey);
     }
-    if (message.taskId !== "") {
-      writer.uint32(18).string(message.taskId);
+    if (message.developmentTaskId !== "") {
+      writer.uint32(18).string(message.developmentTaskId);
     }
     return writer;
   },
@@ -3935,7 +4266,7 @@ export const CancelDevelopmentTaskRequest: MessageFns<CancelDevelopmentTaskReque
               break;
             }
 
-            message.taskId = reader.string();
+            message.developmentTaskId = reader.string();
             continue;
           }
         }
@@ -3957,10 +4288,10 @@ export const CancelDevelopmentTaskRequest: MessageFns<CancelDevelopmentTaskReque
         : isSet(object.idempotency_key)
         ? globalThis.String(object.idempotency_key)
         : "",
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
         : "",
     };
   },
@@ -3970,8 +4301,8 @@ export const CancelDevelopmentTaskRequest: MessageFns<CancelDevelopmentTaskReque
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
     }
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
     }
     return obj;
   },
@@ -3982,19 +4313,19 @@ export const CancelDevelopmentTaskRequest: MessageFns<CancelDevelopmentTaskReque
   fromPartial(object: DeepPartial<CancelDevelopmentTaskRequest>): CancelDevelopmentTaskRequest {
     const message = createBaseCancelDevelopmentTaskRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
-    message.taskId = object.taskId ?? "";
+    message.developmentTaskId = object.developmentTaskId ?? "";
     return message;
   },
 };
 
 function createBaseCancelDevelopmentTaskResponse(): CancelDevelopmentTaskResponse {
-  return { task: undefined };
+  return { developmentTask: undefined };
 }
 
 export const CancelDevelopmentTaskResponse: MessageFns<CancelDevelopmentTaskResponse> = {
   encode(message: CancelDevelopmentTaskResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.task !== undefined) {
-      DevelopmentTask.encode(message.task, writer.uint32(10).fork()).join();
+    if (message.developmentTask !== undefined) {
+      DevelopmentTask.encode(message.developmentTask, writer.uint32(10).fork()).join();
     }
     return writer;
   },
@@ -4017,7 +4348,7 @@ export const CancelDevelopmentTaskResponse: MessageFns<CancelDevelopmentTaskResp
               break;
             }
 
-            message.task = DevelopmentTask.decode(reader, reader.uint32());
+            message.developmentTask = DevelopmentTask.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -4033,13 +4364,19 @@ export const CancelDevelopmentTaskResponse: MessageFns<CancelDevelopmentTaskResp
   },
 
   fromJSON(object: any): CancelDevelopmentTaskResponse {
-    return { task: isSet(object.task) ? DevelopmentTask.fromJSON(object.task) : undefined };
+    return {
+      developmentTask: isSet(object.developmentTask)
+        ? DevelopmentTask.fromJSON(object.developmentTask)
+        : isSet(object.development_task)
+        ? DevelopmentTask.fromJSON(object.development_task)
+        : undefined,
+    };
   },
 
   toJSON(message: CancelDevelopmentTaskResponse): unknown {
     const obj: any = {};
-    if (message.task !== undefined) {
-      obj.task = DevelopmentTask.toJSON(message.task);
+    if (message.developmentTask !== undefined) {
+      obj.developmentTask = DevelopmentTask.toJSON(message.developmentTask);
     }
     return obj;
   },
@@ -4049,15 +4386,15 @@ export const CancelDevelopmentTaskResponse: MessageFns<CancelDevelopmentTaskResp
   },
   fromPartial(object: DeepPartial<CancelDevelopmentTaskResponse>): CancelDevelopmentTaskResponse {
     const message = createBaseCancelDevelopmentTaskResponse();
-    message.task = (object.task !== undefined && object.task !== null)
-      ? DevelopmentTask.fromPartial(object.task)
+    message.developmentTask = (object.developmentTask !== undefined && object.developmentTask !== null)
+      ? DevelopmentTask.fromPartial(object.developmentTask)
       : undefined;
     return message;
   },
 };
 
 function createBaseRetryDevelopmentTaskRequest(): RetryDevelopmentTaskRequest {
-  return { idempotencyKey: "", taskId: "" };
+  return { idempotencyKey: "", developmentTaskId: "" };
 }
 
 export const RetryDevelopmentTaskRequest: MessageFns<RetryDevelopmentTaskRequest> = {
@@ -4065,8 +4402,8 @@ export const RetryDevelopmentTaskRequest: MessageFns<RetryDevelopmentTaskRequest
     if (message.idempotencyKey !== "") {
       writer.uint32(10).string(message.idempotencyKey);
     }
-    if (message.taskId !== "") {
-      writer.uint32(18).string(message.taskId);
+    if (message.developmentTaskId !== "") {
+      writer.uint32(18).string(message.developmentTaskId);
     }
     return writer;
   },
@@ -4097,7 +4434,7 @@ export const RetryDevelopmentTaskRequest: MessageFns<RetryDevelopmentTaskRequest
               break;
             }
 
-            message.taskId = reader.string();
+            message.developmentTaskId = reader.string();
             continue;
           }
         }
@@ -4119,10 +4456,10 @@ export const RetryDevelopmentTaskRequest: MessageFns<RetryDevelopmentTaskRequest
         : isSet(object.idempotency_key)
         ? globalThis.String(object.idempotency_key)
         : "",
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
         : "",
     };
   },
@@ -4132,8 +4469,8 @@ export const RetryDevelopmentTaskRequest: MessageFns<RetryDevelopmentTaskRequest
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
     }
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
     }
     return obj;
   },
@@ -4144,19 +4481,19 @@ export const RetryDevelopmentTaskRequest: MessageFns<RetryDevelopmentTaskRequest
   fromPartial(object: DeepPartial<RetryDevelopmentTaskRequest>): RetryDevelopmentTaskRequest {
     const message = createBaseRetryDevelopmentTaskRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
-    message.taskId = object.taskId ?? "";
+    message.developmentTaskId = object.developmentTaskId ?? "";
     return message;
   },
 };
 
 function createBaseRetryDevelopmentTaskResponse(): RetryDevelopmentTaskResponse {
-  return { task: undefined };
+  return { attempt: undefined };
 }
 
 export const RetryDevelopmentTaskResponse: MessageFns<RetryDevelopmentTaskResponse> = {
   encode(message: RetryDevelopmentTaskResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.task !== undefined) {
-      DevelopmentTask.encode(message.task, writer.uint32(10).fork()).join();
+    if (message.attempt !== undefined) {
+      DevelopmentAttempt.encode(message.attempt, writer.uint32(10).fork()).join();
     }
     return writer;
   },
@@ -4179,7 +4516,7 @@ export const RetryDevelopmentTaskResponse: MessageFns<RetryDevelopmentTaskRespon
               break;
             }
 
-            message.task = DevelopmentTask.decode(reader, reader.uint32());
+            message.attempt = DevelopmentAttempt.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -4195,13 +4532,13 @@ export const RetryDevelopmentTaskResponse: MessageFns<RetryDevelopmentTaskRespon
   },
 
   fromJSON(object: any): RetryDevelopmentTaskResponse {
-    return { task: isSet(object.task) ? DevelopmentTask.fromJSON(object.task) : undefined };
+    return { attempt: isSet(object.attempt) ? DevelopmentAttempt.fromJSON(object.attempt) : undefined };
   },
 
   toJSON(message: RetryDevelopmentTaskResponse): unknown {
     const obj: any = {};
-    if (message.task !== undefined) {
-      obj.task = DevelopmentTask.toJSON(message.task);
+    if (message.attempt !== undefined) {
+      obj.attempt = DevelopmentAttempt.toJSON(message.attempt);
     }
     return obj;
   },
@@ -4211,32 +4548,29 @@ export const RetryDevelopmentTaskResponse: MessageFns<RetryDevelopmentTaskRespon
   },
   fromPartial(object: DeepPartial<RetryDevelopmentTaskResponse>): RetryDevelopmentTaskResponse {
     const message = createBaseRetryDevelopmentTaskResponse();
-    message.task = (object.task !== undefined && object.task !== null)
-      ? DevelopmentTask.fromPartial(object.task)
+    message.attempt = (object.attempt !== undefined && object.attempt !== null)
+      ? DevelopmentAttempt.fromPartial(object.attempt)
       : undefined;
     return message;
   },
 };
 
-function createBaseProvideDevelopmentTaskInputRequest(): ProvideDevelopmentTaskInputRequest {
-  return { idempotencyKey: "", taskId: "", input: "" };
+function createBaseListDevelopmentAttemptsRequest(): ListDevelopmentAttemptsRequest {
+  return { developmentTaskId: "", page: undefined };
 }
 
-export const ProvideDevelopmentTaskInputRequest: MessageFns<ProvideDevelopmentTaskInputRequest> = {
-  encode(message: ProvideDevelopmentTaskInputRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
+export const ListDevelopmentAttemptsRequest: MessageFns<ListDevelopmentAttemptsRequest> = {
+  encode(message: ListDevelopmentAttemptsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.developmentTaskId !== "") {
+      writer.uint32(10).string(message.developmentTaskId);
     }
-    if (message.taskId !== "") {
-      writer.uint32(18).string(message.taskId);
-    }
-    if (message.input !== "") {
-      writer.uint32(26).string(message.input);
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(18).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ProvideDevelopmentTaskInputRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): ListDevelopmentAttemptsRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4245,7 +4579,7 @@ export const ProvideDevelopmentTaskInputRequest: MessageFns<ProvideDevelopmentTa
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProvideDevelopmentTaskInputRequest();
+      const message = createBaseListDevelopmentAttemptsRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4254,7 +4588,7 @@ export const ProvideDevelopmentTaskInputRequest: MessageFns<ProvideDevelopmentTa
               break;
             }
 
-            message.idempotencyKey = reader.string();
+            message.developmentTaskId = reader.string();
             continue;
           }
           case 2: {
@@ -4262,7 +4596,332 @@ export const ProvideDevelopmentTaskInputRequest: MessageFns<ProvideDevelopmentTa
               break;
             }
 
-            message.taskId = reader.string();
+            message.page = PageRequest.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListDevelopmentAttemptsRequest {
+    return {
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
+        : "",
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListDevelopmentAttemptsRequest): unknown {
+    const obj: any = {};
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
+    }
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListDevelopmentAttemptsRequest>): ListDevelopmentAttemptsRequest {
+    return ListDevelopmentAttemptsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListDevelopmentAttemptsRequest>): ListDevelopmentAttemptsRequest {
+    const message = createBaseListDevelopmentAttemptsRequest();
+    message.developmentTaskId = object.developmentTaskId ?? "";
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListDevelopmentAttemptsResponse(): ListDevelopmentAttemptsResponse {
+  return { attempts: [], page: undefined };
+}
+
+export const ListDevelopmentAttemptsResponse: MessageFns<ListDevelopmentAttemptsResponse> = {
+  encode(message: ListDevelopmentAttemptsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attempts) {
+      DevelopmentAttempt.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListDevelopmentAttemptsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListDevelopmentAttemptsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attempts.push(DevelopmentAttempt.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.page = PageResponse.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListDevelopmentAttemptsResponse {
+    return {
+      attempts: globalThis.Array.isArray(object?.attempts)
+        ? object.attempts.map((e: any) => DevelopmentAttempt.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListDevelopmentAttemptsResponse): unknown {
+    const obj: any = {};
+    if (message.attempts?.length) {
+      obj.attempts = message.attempts.map((e) => DevelopmentAttempt.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListDevelopmentAttemptsResponse>): ListDevelopmentAttemptsResponse {
+    return ListDevelopmentAttemptsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListDevelopmentAttemptsResponse>): ListDevelopmentAttemptsResponse {
+    const message = createBaseListDevelopmentAttemptsResponse();
+    message.attempts = object.attempts?.map((e) => DevelopmentAttempt.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetDevelopmentAttemptRequest(): GetDevelopmentAttemptRequest {
+  return { developmentAttemptId: "" };
+}
+
+export const GetDevelopmentAttemptRequest: MessageFns<GetDevelopmentAttemptRequest> = {
+  encode(message: GetDevelopmentAttemptRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.developmentAttemptId !== "") {
+      writer.uint32(10).string(message.developmentAttemptId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetDevelopmentAttemptRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetDevelopmentAttemptRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.developmentAttemptId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetDevelopmentAttemptRequest {
+    return {
+      developmentAttemptId: isSet(object.developmentAttemptId)
+        ? globalThis.String(object.developmentAttemptId)
+        : isSet(object.development_attempt_id)
+        ? globalThis.String(object.development_attempt_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetDevelopmentAttemptRequest): unknown {
+    const obj: any = {};
+    if (message.developmentAttemptId !== "") {
+      obj.developmentAttemptId = message.developmentAttemptId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetDevelopmentAttemptRequest>): GetDevelopmentAttemptRequest {
+    return GetDevelopmentAttemptRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetDevelopmentAttemptRequest>): GetDevelopmentAttemptRequest {
+    const message = createBaseGetDevelopmentAttemptRequest();
+    message.developmentAttemptId = object.developmentAttemptId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetDevelopmentAttemptResponse(): GetDevelopmentAttemptResponse {
+  return { attempt: undefined };
+}
+
+export const GetDevelopmentAttemptResponse: MessageFns<GetDevelopmentAttemptResponse> = {
+  encode(message: GetDevelopmentAttemptResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attempt !== undefined) {
+      DevelopmentAttempt.encode(message.attempt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetDevelopmentAttemptResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetDevelopmentAttemptResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attempt = DevelopmentAttempt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetDevelopmentAttemptResponse {
+    return { attempt: isSet(object.attempt) ? DevelopmentAttempt.fromJSON(object.attempt) : undefined };
+  },
+
+  toJSON(message: GetDevelopmentAttemptResponse): unknown {
+    const obj: any = {};
+    if (message.attempt !== undefined) {
+      obj.attempt = DevelopmentAttempt.toJSON(message.attempt);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetDevelopmentAttemptResponse>): GetDevelopmentAttemptResponse {
+    return GetDevelopmentAttemptResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetDevelopmentAttemptResponse>): GetDevelopmentAttemptResponse {
+    const message = createBaseGetDevelopmentAttemptResponse();
+    message.attempt = (object.attempt !== undefined && object.attempt !== null)
+      ? DevelopmentAttempt.fromPartial(object.attempt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListCandidatesRequest(): ListCandidatesRequest {
+  return { developmentTaskId: undefined, developmentAttemptId: undefined, page: undefined };
+}
+
+export const ListCandidatesRequest: MessageFns<ListCandidatesRequest> = {
+  encode(message: ListCandidatesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.developmentTaskId !== undefined) {
+      writer.uint32(10).string(message.developmentTaskId);
+    }
+    if (message.developmentAttemptId !== undefined) {
+      writer.uint32(18).string(message.developmentAttemptId);
+    }
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListCandidatesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListCandidatesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.developmentTaskId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.developmentAttemptId = reader.string();
             continue;
           }
           case 3: {
@@ -4270,7 +4929,7 @@ export const ProvideDevelopmentTaskInputRequest: MessageFns<ProvideDevelopmentTa
               break;
             }
 
-            message.input = reader.string();
+            message.page = PageRequest.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -4285,133 +4944,66 @@ export const ProvideDevelopmentTaskInputRequest: MessageFns<ProvideDevelopmentTa
     }
   },
 
-  fromJSON(object: any): ProvideDevelopmentTaskInputRequest {
+  fromJSON(object: any): ListCandidatesRequest {
     return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
-        : "",
-      input: isSet(object.input) ? globalThis.String(object.input) : "",
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
+        : undefined,
+      developmentAttemptId: isSet(object.developmentAttemptId)
+        ? globalThis.String(object.developmentAttemptId)
+        : isSet(object.development_attempt_id)
+        ? globalThis.String(object.development_attempt_id)
+        : undefined,
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
     };
   },
 
-  toJSON(message: ProvideDevelopmentTaskInputRequest): unknown {
+  toJSON(message: ListCandidatesRequest): unknown {
     const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
+    if (message.developmentTaskId !== undefined) {
+      obj.developmentTaskId = message.developmentTaskId;
     }
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
+    if (message.developmentAttemptId !== undefined) {
+      obj.developmentAttemptId = message.developmentAttemptId;
     }
-    if (message.input !== "") {
-      obj.input = message.input;
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<ProvideDevelopmentTaskInputRequest>): ProvideDevelopmentTaskInputRequest {
-    return ProvideDevelopmentTaskInputRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<ListCandidatesRequest>): ListCandidatesRequest {
+    return ListCandidatesRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<ProvideDevelopmentTaskInputRequest>): ProvideDevelopmentTaskInputRequest {
-    const message = createBaseProvideDevelopmentTaskInputRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.taskId = object.taskId ?? "";
-    message.input = object.input ?? "";
-    return message;
-  },
-};
-
-function createBaseProvideDevelopmentTaskInputResponse(): ProvideDevelopmentTaskInputResponse {
-  return { task: undefined };
-}
-
-export const ProvideDevelopmentTaskInputResponse: MessageFns<ProvideDevelopmentTaskInputResponse> = {
-  encode(message: ProvideDevelopmentTaskInputResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.task !== undefined) {
-      DevelopmentTask.encode(message.task, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProvideDevelopmentTaskInputResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProvideDevelopmentTaskInputResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.task = DevelopmentTask.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProvideDevelopmentTaskInputResponse {
-    return { task: isSet(object.task) ? DevelopmentTask.fromJSON(object.task) : undefined };
-  },
-
-  toJSON(message: ProvideDevelopmentTaskInputResponse): unknown {
-    const obj: any = {};
-    if (message.task !== undefined) {
-      obj.task = DevelopmentTask.toJSON(message.task);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProvideDevelopmentTaskInputResponse>): ProvideDevelopmentTaskInputResponse {
-    return ProvideDevelopmentTaskInputResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProvideDevelopmentTaskInputResponse>): ProvideDevelopmentTaskInputResponse {
-    const message = createBaseProvideDevelopmentTaskInputResponse();
-    message.task = (object.task !== undefined && object.task !== null)
-      ? DevelopmentTask.fromPartial(object.task)
+  fromPartial(object: DeepPartial<ListCandidatesRequest>): ListCandidatesRequest {
+    const message = createBaseListCandidatesRequest();
+    message.developmentTaskId = object.developmentTaskId ?? undefined;
+    message.developmentAttemptId = object.developmentAttemptId ?? undefined;
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
       : undefined;
     return message;
   },
 };
 
-function createBaseEvidenceArtifact(): EvidenceArtifact {
-  return { name: "", sha256: "" };
+function createBaseListCandidatesResponse(): ListCandidatesResponse {
+  return { candidates: [], page: undefined };
 }
 
-export const EvidenceArtifact: MessageFns<EvidenceArtifact> = {
-  encode(message: EvidenceArtifact, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.name !== "") {
-      writer.uint32(10).string(message.name);
+export const ListCandidatesResponse: MessageFns<ListCandidatesResponse> = {
+  encode(message: ListCandidatesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.candidates) {
+      Candidate.encode(v!, writer.uint32(10).fork()).join();
     }
-    if (message.sha256 !== "") {
-      writer.uint32(18).string(message.sha256);
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): EvidenceArtifact {
+  decode(input: BinaryReader | Uint8Array, length?: number): ListCandidatesResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4420,7 +5012,7 @@ export const EvidenceArtifact: MessageFns<EvidenceArtifact> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseEvidenceArtifact();
+      const message = createBaseListCandidatesResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4429,7 +5021,7 @@ export const EvidenceArtifact: MessageFns<EvidenceArtifact> = {
               break;
             }
 
-            message.name = reader.string();
+            message.candidates.push(Candidate.decode(reader, reader.uint32()));
             continue;
           }
           case 2: {
@@ -4437,7 +5029,7 @@ export const EvidenceArtifact: MessageFns<EvidenceArtifact> = {
               break;
             }
 
-            message.sha256 = reader.string();
+            message.page = PageResponse.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -4452,392 +5044,52 @@ export const EvidenceArtifact: MessageFns<EvidenceArtifact> = {
     }
   },
 
-  fromJSON(object: any): EvidenceArtifact {
+  fromJSON(object: any): ListCandidatesResponse {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      sha256: isSet(object.sha256) ? globalThis.String(object.sha256) : "",
+      candidates: globalThis.Array.isArray(object?.candidates)
+        ? object.candidates.map((e: any) => Candidate.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
     };
   },
 
-  toJSON(message: EvidenceArtifact): unknown {
+  toJSON(message: ListCandidatesResponse): unknown {
     const obj: any = {};
-    if (message.name !== "") {
-      obj.name = message.name;
+    if (message.candidates?.length) {
+      obj.candidates = message.candidates.map((e) => Candidate.toJSON(e));
     }
-    if (message.sha256 !== "") {
-      obj.sha256 = message.sha256;
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<EvidenceArtifact>): EvidenceArtifact {
-    return EvidenceArtifact.fromPartial(base ?? {});
+  create(base?: DeepPartial<ListCandidatesResponse>): ListCandidatesResponse {
+    return ListCandidatesResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<EvidenceArtifact>): EvidenceArtifact {
-    const message = createBaseEvidenceArtifact();
-    message.name = object.name ?? "";
-    message.sha256 = object.sha256 ?? "";
-    return message;
-  },
-};
-
-function createBaseDevelopmentTaskEvidence(): DevelopmentTaskEvidence {
-  return {
-    manifestDigest: "",
-    outcome: 0,
-    checkExitCode: 0,
-    startRevision: "",
-    candidateCommit: "",
-    lockSha256: "",
-    changeConstraints: undefined,
-    preparationId: undefined,
-    preparationReused: false,
-    policyEdited: false,
-    testsEdited: false,
-    scopeViolations: [],
-    changedPaths: [],
-    artifacts: [],
-  };
-}
-
-export const DevelopmentTaskEvidence: MessageFns<DevelopmentTaskEvidence> = {
-  encode(message: DevelopmentTaskEvidence, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.manifestDigest !== "") {
-      writer.uint32(10).string(message.manifestDigest);
-    }
-    if (message.outcome !== 0) {
-      writer.uint32(16).int32(message.outcome);
-    }
-    if (message.checkExitCode !== 0) {
-      writer.uint32(24).int32(message.checkExitCode);
-    }
-    if (message.startRevision !== "") {
-      writer.uint32(34).string(message.startRevision);
-    }
-    if (message.candidateCommit !== "") {
-      writer.uint32(42).string(message.candidateCommit);
-    }
-    if (message.lockSha256 !== "") {
-      writer.uint32(50).string(message.lockSha256);
-    }
-    if (message.changeConstraints !== undefined) {
-      ChangeConstraints.encode(message.changeConstraints, writer.uint32(58).fork()).join();
-    }
-    if (message.preparationId !== undefined) {
-      writer.uint32(66).string(message.preparationId);
-    }
-    if (message.preparationReused !== false) {
-      writer.uint32(72).bool(message.preparationReused);
-    }
-    if (message.policyEdited !== false) {
-      writer.uint32(80).bool(message.policyEdited);
-    }
-    if (message.testsEdited !== false) {
-      writer.uint32(88).bool(message.testsEdited);
-    }
-    for (const v of message.scopeViolations) {
-      writer.uint32(98).string(v!);
-    }
-    for (const v of message.changedPaths) {
-      writer.uint32(106).string(v!);
-    }
-    for (const v of message.artifacts) {
-      EvidenceArtifact.encode(v!, writer.uint32(114).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): DevelopmentTaskEvidence {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDevelopmentTaskEvidence();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.manifestDigest = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.outcome = reader.int32() as any;
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.checkExitCode = reader.int32();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.startRevision = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.candidateCommit = reader.string();
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.lockSha256 = reader.string();
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.changeConstraints = ChangeConstraints.decode(reader, reader.uint32());
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.preparationId = reader.string();
-            continue;
-          }
-          case 9: {
-            if (tag !== 72) {
-              break;
-            }
-
-            message.preparationReused = reader.bool();
-            continue;
-          }
-          case 10: {
-            if (tag !== 80) {
-              break;
-            }
-
-            message.policyEdited = reader.bool();
-            continue;
-          }
-          case 11: {
-            if (tag !== 88) {
-              break;
-            }
-
-            message.testsEdited = reader.bool();
-            continue;
-          }
-          case 12: {
-            if (tag !== 98) {
-              break;
-            }
-
-            message.scopeViolations.push(reader.string());
-            continue;
-          }
-          case 13: {
-            if (tag !== 106) {
-              break;
-            }
-
-            message.changedPaths.push(reader.string());
-            continue;
-          }
-          case 14: {
-            if (tag !== 114) {
-              break;
-            }
-
-            message.artifacts.push(EvidenceArtifact.decode(reader, reader.uint32()));
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): DevelopmentTaskEvidence {
-    return {
-      manifestDigest: isSet(object.manifestDigest)
-        ? globalThis.String(object.manifestDigest)
-        : isSet(object.manifest_digest)
-        ? globalThis.String(object.manifest_digest)
-        : "",
-      outcome: isSet(object.outcome) ? evidenceOutcomeFromJSON(object.outcome) : 0,
-      checkExitCode: isSet(object.checkExitCode)
-        ? globalThis.Number(object.checkExitCode)
-        : isSet(object.check_exit_code)
-        ? globalThis.Number(object.check_exit_code)
-        : 0,
-      startRevision: isSet(object.startRevision)
-        ? globalThis.String(object.startRevision)
-        : isSet(object.start_revision)
-        ? globalThis.String(object.start_revision)
-        : "",
-      candidateCommit: isSet(object.candidateCommit)
-        ? globalThis.String(object.candidateCommit)
-        : isSet(object.candidate_commit)
-        ? globalThis.String(object.candidate_commit)
-        : "",
-      lockSha256: isSet(object.lockSha256)
-        ? globalThis.String(object.lockSha256)
-        : isSet(object.lock_sha256)
-        ? globalThis.String(object.lock_sha256)
-        : "",
-      changeConstraints: isSet(object.changeConstraints)
-        ? ChangeConstraints.fromJSON(object.changeConstraints)
-        : isSet(object.change_constraints)
-        ? ChangeConstraints.fromJSON(object.change_constraints)
-        : undefined,
-      preparationId: isSet(object.preparationId)
-        ? globalThis.String(object.preparationId)
-        : isSet(object.preparation_id)
-        ? globalThis.String(object.preparation_id)
-        : undefined,
-      preparationReused: isSet(object.preparationReused)
-        ? globalThis.Boolean(object.preparationReused)
-        : isSet(object.preparation_reused)
-        ? globalThis.Boolean(object.preparation_reused)
-        : false,
-      policyEdited: isSet(object.policyEdited)
-        ? globalThis.Boolean(object.policyEdited)
-        : isSet(object.policy_edited)
-        ? globalThis.Boolean(object.policy_edited)
-        : false,
-      testsEdited: isSet(object.testsEdited)
-        ? globalThis.Boolean(object.testsEdited)
-        : isSet(object.tests_edited)
-        ? globalThis.Boolean(object.tests_edited)
-        : false,
-      scopeViolations: globalThis.Array.isArray(object?.scopeViolations)
-        ? object.scopeViolations.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.scope_violations)
-        ? object.scope_violations.map((e: any) => globalThis.String(e))
-        : [],
-      changedPaths: globalThis.Array.isArray(object?.changedPaths)
-        ? object.changedPaths.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.changed_paths)
-        ? object.changed_paths.map((e: any) => globalThis.String(e))
-        : [],
-      artifacts: globalThis.Array.isArray(object?.artifacts)
-        ? object.artifacts.map((e: any) => EvidenceArtifact.fromJSON(e))
-        : [],
-    };
-  },
-
-  toJSON(message: DevelopmentTaskEvidence): unknown {
-    const obj: any = {};
-    if (message.manifestDigest !== "") {
-      obj.manifestDigest = message.manifestDigest;
-    }
-    if (message.outcome !== 0) {
-      obj.outcome = evidenceOutcomeToJSON(message.outcome);
-    }
-    if (message.checkExitCode !== 0) {
-      obj.checkExitCode = Math.round(message.checkExitCode);
-    }
-    if (message.startRevision !== "") {
-      obj.startRevision = message.startRevision;
-    }
-    if (message.candidateCommit !== "") {
-      obj.candidateCommit = message.candidateCommit;
-    }
-    if (message.lockSha256 !== "") {
-      obj.lockSha256 = message.lockSha256;
-    }
-    if (message.changeConstraints !== undefined) {
-      obj.changeConstraints = ChangeConstraints.toJSON(message.changeConstraints);
-    }
-    if (message.preparationId !== undefined) {
-      obj.preparationId = message.preparationId;
-    }
-    if (message.preparationReused !== false) {
-      obj.preparationReused = message.preparationReused;
-    }
-    if (message.policyEdited !== false) {
-      obj.policyEdited = message.policyEdited;
-    }
-    if (message.testsEdited !== false) {
-      obj.testsEdited = message.testsEdited;
-    }
-    if (message.scopeViolations?.length) {
-      obj.scopeViolations = message.scopeViolations;
-    }
-    if (message.changedPaths?.length) {
-      obj.changedPaths = message.changedPaths;
-    }
-    if (message.artifacts?.length) {
-      obj.artifacts = message.artifacts.map((e) => EvidenceArtifact.toJSON(e));
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<DevelopmentTaskEvidence>): DevelopmentTaskEvidence {
-    return DevelopmentTaskEvidence.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<DevelopmentTaskEvidence>): DevelopmentTaskEvidence {
-    const message = createBaseDevelopmentTaskEvidence();
-    message.manifestDigest = object.manifestDigest ?? "";
-    message.outcome = object.outcome ?? 0;
-    message.checkExitCode = object.checkExitCode ?? 0;
-    message.startRevision = object.startRevision ?? "";
-    message.candidateCommit = object.candidateCommit ?? "";
-    message.lockSha256 = object.lockSha256 ?? "";
-    message.changeConstraints = (object.changeConstraints !== undefined && object.changeConstraints !== null)
-      ? ChangeConstraints.fromPartial(object.changeConstraints)
+  fromPartial(object: DeepPartial<ListCandidatesResponse>): ListCandidatesResponse {
+    const message = createBaseListCandidatesResponse();
+    message.candidates = object.candidates?.map((e) => Candidate.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
       : undefined;
-    message.preparationId = object.preparationId ?? undefined;
-    message.preparationReused = object.preparationReused ?? false;
-    message.policyEdited = object.policyEdited ?? false;
-    message.testsEdited = object.testsEdited ?? false;
-    message.scopeViolations = object.scopeViolations?.map((e) => e) || [];
-    message.changedPaths = object.changedPaths?.map((e) => e) || [];
-    message.artifacts = object.artifacts?.map((e) => EvidenceArtifact.fromPartial(e)) || [];
     return message;
   },
 };
 
-function createBaseGetDevelopmentTaskEvidenceRequest(): GetDevelopmentTaskEvidenceRequest {
-  return { taskId: "" };
+function createBaseGetCandidateRequest(): GetCandidateRequest {
+  return { candidateId: "" };
 }
 
-export const GetDevelopmentTaskEvidenceRequest: MessageFns<GetDevelopmentTaskEvidenceRequest> = {
-  encode(message: GetDevelopmentTaskEvidenceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.taskId !== "") {
-      writer.uint32(10).string(message.taskId);
+export const GetCandidateRequest: MessageFns<GetCandidateRequest> = {
+  encode(message: GetCandidateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.candidateId !== "") {
+      writer.uint32(10).string(message.candidateId);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GetDevelopmentTaskEvidenceRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): GetCandidateRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4846,7 +5098,7 @@ export const GetDevelopmentTaskEvidenceRequest: MessageFns<GetDevelopmentTaskEvi
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetDevelopmentTaskEvidenceRequest();
+      const message = createBaseGetCandidateRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4855,7 +5107,7 @@ export const GetDevelopmentTaskEvidenceRequest: MessageFns<GetDevelopmentTaskEvi
               break;
             }
 
-            message.taskId = reader.string();
+            message.candidateId = reader.string();
             continue;
           }
         }
@@ -4870,47 +5122,47 @@ export const GetDevelopmentTaskEvidenceRequest: MessageFns<GetDevelopmentTaskEvi
     }
   },
 
-  fromJSON(object: any): GetDevelopmentTaskEvidenceRequest {
+  fromJSON(object: any): GetCandidateRequest {
     return {
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
+      candidateId: isSet(object.candidateId)
+        ? globalThis.String(object.candidateId)
+        : isSet(object.candidate_id)
+        ? globalThis.String(object.candidate_id)
         : "",
     };
   },
 
-  toJSON(message: GetDevelopmentTaskEvidenceRequest): unknown {
+  toJSON(message: GetCandidateRequest): unknown {
     const obj: any = {};
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
+    if (message.candidateId !== "") {
+      obj.candidateId = message.candidateId;
     }
     return obj;
   },
 
-  create(base?: DeepPartial<GetDevelopmentTaskEvidenceRequest>): GetDevelopmentTaskEvidenceRequest {
-    return GetDevelopmentTaskEvidenceRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<GetCandidateRequest>): GetCandidateRequest {
+    return GetCandidateRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<GetDevelopmentTaskEvidenceRequest>): GetDevelopmentTaskEvidenceRequest {
-    const message = createBaseGetDevelopmentTaskEvidenceRequest();
-    message.taskId = object.taskId ?? "";
+  fromPartial(object: DeepPartial<GetCandidateRequest>): GetCandidateRequest {
+    const message = createBaseGetCandidateRequest();
+    message.candidateId = object.candidateId ?? "";
     return message;
   },
 };
 
-function createBaseGetDevelopmentTaskEvidenceResponse(): GetDevelopmentTaskEvidenceResponse {
-  return { evidence: undefined };
+function createBaseGetCandidateResponse(): GetCandidateResponse {
+  return { candidate: undefined };
 }
 
-export const GetDevelopmentTaskEvidenceResponse: MessageFns<GetDevelopmentTaskEvidenceResponse> = {
-  encode(message: GetDevelopmentTaskEvidenceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.evidence !== undefined) {
-      DevelopmentTaskEvidence.encode(message.evidence, writer.uint32(10).fork()).join();
+export const GetCandidateResponse: MessageFns<GetCandidateResponse> = {
+  encode(message: GetCandidateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.candidate !== undefined) {
+      Candidate.encode(message.candidate, writer.uint32(10).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GetDevelopmentTaskEvidenceResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): GetCandidateResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4919,7 +5171,7 @@ export const GetDevelopmentTaskEvidenceResponse: MessageFns<GetDevelopmentTaskEv
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetDevelopmentTaskEvidenceResponse();
+      const message = createBaseGetCandidateResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4928,7 +5180,7 @@ export const GetDevelopmentTaskEvidenceResponse: MessageFns<GetDevelopmentTaskEv
               break;
             }
 
-            message.evidence = DevelopmentTaskEvidence.decode(reader, reader.uint32());
+            message.candidate = Candidate.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -4943,41 +5195,41 @@ export const GetDevelopmentTaskEvidenceResponse: MessageFns<GetDevelopmentTaskEv
     }
   },
 
-  fromJSON(object: any): GetDevelopmentTaskEvidenceResponse {
-    return { evidence: isSet(object.evidence) ? DevelopmentTaskEvidence.fromJSON(object.evidence) : undefined };
+  fromJSON(object: any): GetCandidateResponse {
+    return { candidate: isSet(object.candidate) ? Candidate.fromJSON(object.candidate) : undefined };
   },
 
-  toJSON(message: GetDevelopmentTaskEvidenceResponse): unknown {
+  toJSON(message: GetCandidateResponse): unknown {
     const obj: any = {};
-    if (message.evidence !== undefined) {
-      obj.evidence = DevelopmentTaskEvidence.toJSON(message.evidence);
+    if (message.candidate !== undefined) {
+      obj.candidate = Candidate.toJSON(message.candidate);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<GetDevelopmentTaskEvidenceResponse>): GetDevelopmentTaskEvidenceResponse {
-    return GetDevelopmentTaskEvidenceResponse.fromPartial(base ?? {});
+  create(base?: DeepPartial<GetCandidateResponse>): GetCandidateResponse {
+    return GetCandidateResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<GetDevelopmentTaskEvidenceResponse>): GetDevelopmentTaskEvidenceResponse {
-    const message = createBaseGetDevelopmentTaskEvidenceResponse();
-    message.evidence = (object.evidence !== undefined && object.evidence !== null)
-      ? DevelopmentTaskEvidence.fromPartial(object.evidence)
+  fromPartial(object: DeepPartial<GetCandidateResponse>): GetCandidateResponse {
+    const message = createBaseGetCandidateResponse();
+    message.candidate = (object.candidate !== undefined && object.candidate !== null)
+      ? Candidate.fromPartial(object.candidate)
       : undefined;
     return message;
   },
 };
 
 function createBaseWatchDevelopmentTaskRequest(): WatchDevelopmentTaskRequest {
-  return { taskId: "", afterResourceVersion: undefined };
+  return { developmentTaskId: "", afterCursor: undefined };
 }
 
 export const WatchDevelopmentTaskRequest: MessageFns<WatchDevelopmentTaskRequest> = {
   encode(message: WatchDevelopmentTaskRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.taskId !== "") {
-      writer.uint32(10).string(message.taskId);
+    if (message.developmentTaskId !== "") {
+      writer.uint32(10).string(message.developmentTaskId);
     }
-    if (message.afterResourceVersion !== undefined) {
-      writer.uint32(16).uint64(message.afterResourceVersion);
+    if (message.afterCursor !== undefined) {
+      writer.uint32(16).uint64(message.afterCursor);
     }
     return writer;
   },
@@ -5000,7 +5252,7 @@ export const WatchDevelopmentTaskRequest: MessageFns<WatchDevelopmentTaskRequest
               break;
             }
 
-            message.taskId = reader.string();
+            message.developmentTaskId = reader.string();
             continue;
           }
           case 2: {
@@ -5008,7 +5260,7 @@ export const WatchDevelopmentTaskRequest: MessageFns<WatchDevelopmentTaskRequest
               break;
             }
 
-            message.afterResourceVersion = reader.uint64().toString();
+            message.afterCursor = reader.uint64().toString();
             continue;
           }
         }
@@ -5025,26 +5277,26 @@ export const WatchDevelopmentTaskRequest: MessageFns<WatchDevelopmentTaskRequest
 
   fromJSON(object: any): WatchDevelopmentTaskRequest {
     return {
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
+      developmentTaskId: isSet(object.developmentTaskId)
+        ? globalThis.String(object.developmentTaskId)
+        : isSet(object.development_task_id)
+        ? globalThis.String(object.development_task_id)
         : "",
-      afterResourceVersion: isSet(object.afterResourceVersion)
-        ? globalThis.String(object.afterResourceVersion)
-        : isSet(object.after_resource_version)
-        ? globalThis.String(object.after_resource_version)
+      afterCursor: isSet(object.afterCursor)
+        ? globalThis.String(object.afterCursor)
+        : isSet(object.after_cursor)
+        ? globalThis.String(object.after_cursor)
         : undefined,
     };
   },
 
   toJSON(message: WatchDevelopmentTaskRequest): unknown {
     const obj: any = {};
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
     }
-    if (message.afterResourceVersion !== undefined) {
-      obj.afterResourceVersion = message.afterResourceVersion;
+    if (message.afterCursor !== undefined) {
+      obj.afterCursor = message.afterCursor;
     }
     return obj;
   },
@@ -5054,23 +5306,31 @@ export const WatchDevelopmentTaskRequest: MessageFns<WatchDevelopmentTaskRequest
   },
   fromPartial(object: DeepPartial<WatchDevelopmentTaskRequest>): WatchDevelopmentTaskRequest {
     const message = createBaseWatchDevelopmentTaskRequest();
-    message.taskId = object.taskId ?? "";
-    message.afterResourceVersion = object.afterResourceVersion ?? undefined;
+    message.developmentTaskId = object.developmentTaskId ?? "";
+    message.afterCursor = object.afterCursor ?? undefined;
     return message;
   },
 };
 
 function createBaseWatchDevelopmentTaskResponse(): WatchDevelopmentTaskResponse {
-  return { task: undefined, resourceVersion: "0" };
+  return { cursor: "0", update: undefined };
 }
 
 export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskResponse> = {
   encode(message: WatchDevelopmentTaskResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.task !== undefined) {
-      DevelopmentTask.encode(message.task, writer.uint32(10).fork()).join();
+    if (message.cursor !== "0") {
+      writer.uint32(8).uint64(message.cursor);
     }
-    if (message.resourceVersion !== "0") {
-      writer.uint32(16).uint64(message.resourceVersion);
+    switch (message.update?.$case) {
+      case "developmentTask":
+        DevelopmentTask.encode(message.update.developmentTask, writer.uint32(18).fork()).join();
+        break;
+      case "attempt":
+        DevelopmentAttempt.encode(message.update.attempt, writer.uint32(26).fork()).join();
+        break;
+      case "candidate":
+        Candidate.encode(message.update.candidate, writer.uint32(34).fork()).join();
+        break;
     }
     return writer;
   },
@@ -5089,19 +5349,38 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
         const tag = reader.uint32();
         switch (tag >>> 3) {
           case 1: {
-            if (tag !== 10) {
+            if (tag !== 8) {
               break;
             }
 
-            message.task = DevelopmentTask.decode(reader, reader.uint32());
+            message.cursor = reader.uint64().toString();
             continue;
           }
           case 2: {
-            if (tag !== 16) {
+            if (tag !== 18) {
               break;
             }
 
-            message.resourceVersion = reader.uint64().toString();
+            message.update = {
+              $case: "developmentTask",
+              developmentTask: DevelopmentTask.decode(reader, reader.uint32()),
+            };
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.update = { $case: "attempt", attempt: DevelopmentAttempt.decode(reader, reader.uint32()) };
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.update = { $case: "candidate", candidate: Candidate.decode(reader, reader.uint32()) };
             continue;
           }
         }
@@ -5118,22 +5397,30 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
 
   fromJSON(object: any): WatchDevelopmentTaskResponse {
     return {
-      task: isSet(object.task) ? DevelopmentTask.fromJSON(object.task) : undefined,
-      resourceVersion: isSet(object.resourceVersion)
-        ? globalThis.String(object.resourceVersion)
-        : isSet(object.resource_version)
-        ? globalThis.String(object.resource_version)
-        : "0",
+      cursor: isSet(object.cursor) ? globalThis.String(object.cursor) : "0",
+      update: isSet(object.developmentTask)
+        ? { $case: "developmentTask", developmentTask: DevelopmentTask.fromJSON(object.developmentTask) }
+        : isSet(object.development_task)
+        ? { $case: "developmentTask", developmentTask: DevelopmentTask.fromJSON(object.development_task) }
+        : isSet(object.attempt)
+        ? { $case: "attempt", attempt: DevelopmentAttempt.fromJSON(object.attempt) }
+        : isSet(object.candidate)
+        ? { $case: "candidate", candidate: Candidate.fromJSON(object.candidate) }
+        : undefined,
     };
   },
 
   toJSON(message: WatchDevelopmentTaskResponse): unknown {
     const obj: any = {};
-    if (message.task !== undefined) {
-      obj.task = DevelopmentTask.toJSON(message.task);
+    if (message.cursor !== "0") {
+      obj.cursor = message.cursor;
     }
-    if (message.resourceVersion !== "0") {
-      obj.resourceVersion = message.resourceVersion;
+    if (message.update?.$case === "developmentTask") {
+      obj.developmentTask = DevelopmentTask.toJSON(message.update.developmentTask);
+    } else if (message.update?.$case === "attempt") {
+      obj.attempt = DevelopmentAttempt.toJSON(message.update.attempt);
+    } else if (message.update?.$case === "candidate") {
+      obj.candidate = Candidate.toJSON(message.update.candidate);
     }
     return obj;
   },
@@ -5143,15 +5430,35 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
   },
   fromPartial(object: DeepPartial<WatchDevelopmentTaskResponse>): WatchDevelopmentTaskResponse {
     const message = createBaseWatchDevelopmentTaskResponse();
-    message.task = (object.task !== undefined && object.task !== null)
-      ? DevelopmentTask.fromPartial(object.task)
-      : undefined;
-    message.resourceVersion = object.resourceVersion ?? "0";
+    message.cursor = object.cursor ?? "0";
+    switch (object.update?.$case) {
+      case "developmentTask": {
+        if (object.update?.developmentTask !== undefined && object.update?.developmentTask !== null) {
+          message.update = {
+            $case: "developmentTask",
+            developmentTask: DevelopmentTask.fromPartial(object.update.developmentTask),
+          };
+        }
+        break;
+      }
+      case "attempt": {
+        if (object.update?.attempt !== undefined && object.update?.attempt !== null) {
+          message.update = { $case: "attempt", attempt: DevelopmentAttempt.fromPartial(object.update.attempt) };
+        }
+        break;
+      }
+      case "candidate": {
+        if (object.update?.candidate !== undefined && object.update?.candidate !== null) {
+          message.update = { $case: "candidate", candidate: Candidate.fromPartial(object.update.candidate) };
+        }
+        break;
+      }
+    }
     return message;
   },
 };
 
-/** DevelopmentTaskService submits and observes bounded repository-change workflows. */
+/** DevelopmentTaskService manages frozen requests, attempts, and immutable candidates. */
 export type DevelopmentTaskServiceService = typeof DevelopmentTaskServiceService;
 export const DevelopmentTaskServiceService = {
   listDevelopmentTasks: {
@@ -5209,31 +5516,49 @@ export const DevelopmentTaskServiceService = {
       Buffer.from(RetryDevelopmentTaskResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): RetryDevelopmentTaskResponse => RetryDevelopmentTaskResponse.decode(value),
   },
-  provideDevelopmentTaskInput: {
-    path: "/ayni.orchestrator.v1.DevelopmentTaskService/ProvideDevelopmentTaskInput" as const,
+  listDevelopmentAttempts: {
+    path: "/ayni.orchestrator.v1.DevelopmentTaskService/ListDevelopmentAttempts" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: ProvideDevelopmentTaskInputRequest): Buffer =>
-      Buffer.from(ProvideDevelopmentTaskInputRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ProvideDevelopmentTaskInputRequest =>
-      ProvideDevelopmentTaskInputRequest.decode(value),
-    responseSerialize: (value: ProvideDevelopmentTaskInputResponse): Buffer =>
-      Buffer.from(ProvideDevelopmentTaskInputResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ProvideDevelopmentTaskInputResponse =>
-      ProvideDevelopmentTaskInputResponse.decode(value),
+    requestSerialize: (value: ListDevelopmentAttemptsRequest): Buffer =>
+      Buffer.from(ListDevelopmentAttemptsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListDevelopmentAttemptsRequest => ListDevelopmentAttemptsRequest.decode(value),
+    responseSerialize: (value: ListDevelopmentAttemptsResponse): Buffer =>
+      Buffer.from(ListDevelopmentAttemptsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListDevelopmentAttemptsResponse =>
+      ListDevelopmentAttemptsResponse.decode(value),
   },
-  getDevelopmentTaskEvidence: {
-    path: "/ayni.orchestrator.v1.DevelopmentTaskService/GetDevelopmentTaskEvidence" as const,
+  getDevelopmentAttempt: {
+    path: "/ayni.orchestrator.v1.DevelopmentTaskService/GetDevelopmentAttempt" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: GetDevelopmentTaskEvidenceRequest): Buffer =>
-      Buffer.from(GetDevelopmentTaskEvidenceRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetDevelopmentTaskEvidenceRequest =>
-      GetDevelopmentTaskEvidenceRequest.decode(value),
-    responseSerialize: (value: GetDevelopmentTaskEvidenceResponse): Buffer =>
-      Buffer.from(GetDevelopmentTaskEvidenceResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetDevelopmentTaskEvidenceResponse =>
-      GetDevelopmentTaskEvidenceResponse.decode(value),
+    requestSerialize: (value: GetDevelopmentAttemptRequest): Buffer =>
+      Buffer.from(GetDevelopmentAttemptRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetDevelopmentAttemptRequest => GetDevelopmentAttemptRequest.decode(value),
+    responseSerialize: (value: GetDevelopmentAttemptResponse): Buffer =>
+      Buffer.from(GetDevelopmentAttemptResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetDevelopmentAttemptResponse => GetDevelopmentAttemptResponse.decode(value),
+  },
+  listCandidates: {
+    path: "/ayni.orchestrator.v1.DevelopmentTaskService/ListCandidates" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListCandidatesRequest): Buffer =>
+      Buffer.from(ListCandidatesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListCandidatesRequest => ListCandidatesRequest.decode(value),
+    responseSerialize: (value: ListCandidatesResponse): Buffer =>
+      Buffer.from(ListCandidatesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListCandidatesResponse => ListCandidatesResponse.decode(value),
+  },
+  getCandidate: {
+    path: "/ayni.orchestrator.v1.DevelopmentTaskService/GetCandidate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetCandidateRequest): Buffer => Buffer.from(GetCandidateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetCandidateRequest => GetCandidateRequest.decode(value),
+    responseSerialize: (value: GetCandidateResponse): Buffer =>
+      Buffer.from(GetCandidateResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetCandidateResponse => GetCandidateResponse.decode(value),
   },
   watchDevelopmentTask: {
     path: "/ayni.orchestrator.v1.DevelopmentTaskService/WatchDevelopmentTask" as const,
@@ -5254,8 +5579,10 @@ export interface DevelopmentTaskServiceServer extends UntypedServiceImplementati
   createDevelopmentTask: handleUnaryCall<CreateDevelopmentTaskRequest, CreateDevelopmentTaskResponse>;
   cancelDevelopmentTask: handleUnaryCall<CancelDevelopmentTaskRequest, CancelDevelopmentTaskResponse>;
   retryDevelopmentTask: handleUnaryCall<RetryDevelopmentTaskRequest, RetryDevelopmentTaskResponse>;
-  provideDevelopmentTaskInput: handleUnaryCall<ProvideDevelopmentTaskInputRequest, ProvideDevelopmentTaskInputResponse>;
-  getDevelopmentTaskEvidence: handleUnaryCall<GetDevelopmentTaskEvidenceRequest, GetDevelopmentTaskEvidenceResponse>;
+  listDevelopmentAttempts: handleUnaryCall<ListDevelopmentAttemptsRequest, ListDevelopmentAttemptsResponse>;
+  getDevelopmentAttempt: handleUnaryCall<GetDevelopmentAttemptRequest, GetDevelopmentAttemptResponse>;
+  listCandidates: handleUnaryCall<ListCandidatesRequest, ListCandidatesResponse>;
+  getCandidate: handleUnaryCall<GetCandidateRequest, GetCandidateResponse>;
   watchDevelopmentTask: handleServerStreamingCall<WatchDevelopmentTaskRequest, WatchDevelopmentTaskResponse>;
 }
 
@@ -5335,35 +5662,65 @@ export interface DevelopmentTaskServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: RetryDevelopmentTaskResponse) => void,
   ): ClientUnaryCall;
-  provideDevelopmentTaskInput(
-    request: ProvideDevelopmentTaskInputRequest,
-    callback: (error: ServiceError | null, response: ProvideDevelopmentTaskInputResponse) => void,
+  listDevelopmentAttempts(
+    request: ListDevelopmentAttemptsRequest,
+    callback: (error: ServiceError | null, response: ListDevelopmentAttemptsResponse) => void,
   ): ClientUnaryCall;
-  provideDevelopmentTaskInput(
-    request: ProvideDevelopmentTaskInputRequest,
+  listDevelopmentAttempts(
+    request: ListDevelopmentAttemptsRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: ProvideDevelopmentTaskInputResponse) => void,
+    callback: (error: ServiceError | null, response: ListDevelopmentAttemptsResponse) => void,
   ): ClientUnaryCall;
-  provideDevelopmentTaskInput(
-    request: ProvideDevelopmentTaskInputRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ProvideDevelopmentTaskInputResponse) => void,
-  ): ClientUnaryCall;
-  getDevelopmentTaskEvidence(
-    request: GetDevelopmentTaskEvidenceRequest,
-    callback: (error: ServiceError | null, response: GetDevelopmentTaskEvidenceResponse) => void,
-  ): ClientUnaryCall;
-  getDevelopmentTaskEvidence(
-    request: GetDevelopmentTaskEvidenceRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetDevelopmentTaskEvidenceResponse) => void,
-  ): ClientUnaryCall;
-  getDevelopmentTaskEvidence(
-    request: GetDevelopmentTaskEvidenceRequest,
+  listDevelopmentAttempts(
+    request: ListDevelopmentAttemptsRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetDevelopmentTaskEvidenceResponse) => void,
+    callback: (error: ServiceError | null, response: ListDevelopmentAttemptsResponse) => void,
+  ): ClientUnaryCall;
+  getDevelopmentAttempt(
+    request: GetDevelopmentAttemptRequest,
+    callback: (error: ServiceError | null, response: GetDevelopmentAttemptResponse) => void,
+  ): ClientUnaryCall;
+  getDevelopmentAttempt(
+    request: GetDevelopmentAttemptRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetDevelopmentAttemptResponse) => void,
+  ): ClientUnaryCall;
+  getDevelopmentAttempt(
+    request: GetDevelopmentAttemptRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetDevelopmentAttemptResponse) => void,
+  ): ClientUnaryCall;
+  listCandidates(
+    request: ListCandidatesRequest,
+    callback: (error: ServiceError | null, response: ListCandidatesResponse) => void,
+  ): ClientUnaryCall;
+  listCandidates(
+    request: ListCandidatesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListCandidatesResponse) => void,
+  ): ClientUnaryCall;
+  listCandidates(
+    request: ListCandidatesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListCandidatesResponse) => void,
+  ): ClientUnaryCall;
+  getCandidate(
+    request: GetCandidateRequest,
+    callback: (error: ServiceError | null, response: GetCandidateResponse) => void,
+  ): ClientUnaryCall;
+  getCandidate(
+    request: GetCandidateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetCandidateResponse) => void,
+  ): ClientUnaryCall;
+  getCandidate(
+    request: GetCandidateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetCandidateResponse) => void,
   ): ClientUnaryCall;
   watchDevelopmentTask(
     request: WatchDevelopmentTaskRequest,

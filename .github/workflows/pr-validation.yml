@@ -189,10 +189,17 @@ jobs:
 
       - name: Validate contract and generated bindings
         run: |
-          if test -f .contract-base/proto/buf.yaml; then
+          if ! grep -qx 'clean-v1' proto/BASELINE; then
+            echo 'The current protobuf baseline marker must be exactly clean-v1.' >&2
+            exit 1
+          elif ! test -f .contract-base/proto/BASELINE; then
+            echo 'Buf breaking comparison reset from the retired pre-clean-v1 baseline.'
+            scripts/ci/check-proto.sh
+          elif cmp -s proto/BASELINE .contract-base/proto/BASELINE; then
             scripts/ci/check-proto.sh .contract-base/proto
           else
-            scripts/ci/check-proto.sh
+            echo 'Changing the established Buf baseline marker is not permitted.' >&2
+            exit 1
           fi
 
       - name: Compile and test Rust bindings

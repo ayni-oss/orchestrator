@@ -1,18 +1,25 @@
-export { OrchestratorBff, phaseFromWire } from "./client.js";
+export { OrchestratorBff } from "./client.js";
 export { BffError, decodeErrorDetail, toBffError, type BrowserErrorDto } from "./errors.js";
 export {
   BffMappingError,
+  mapAttemptState,
   mapChangeConstraints,
+  mapDevelopmentAttempt,
+  mapDevelopmentSnapshot,
   mapDevelopmentTask,
-  mapDevelopmentTaskSummary,
-  mapEvidence,
-  mapPreparation,
-  mapPreparationStatus,
+  mapPlatform,
   mapProviderModel,
-  mapRepository,
-  mapRepositoryEnrollment,
-  mapTaskPhase,
-  mapUsageSummary,
-  toProtoTaskInput,
+  mapRepositoryConnection,
+  mapRepositoryStatus,
+  mapRuntimeArtifact,
+  mapRuntimeArtifactStatus,
+  mapRuntimeProfile,
+  mapRuntimeProfileKind,
+  mapRuntimeProfileState,
+  mapRuntimeProfileSupport,
+  mapTaskState,
+  toProtoProfileConfiguration,
+  toProtoRepositoryProvider,
+  toProtoTaskRequest,
 } from "./mapping.js";
 export type * from "./dto.js";
