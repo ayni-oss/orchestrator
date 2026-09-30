@@ -6,8 +6,10 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { Timestamp } from "../../../google/protobuf/timestamp";
+import { ErrorReason, errorReasonFromJSON, errorReasonToJSON } from "./errors";
 
-/** PageRequest selects one bounded page from a list RPC. */
+/** PageRequest selects one stable bounded page from a list RPC. */
 export interface PageRequest {
   /** page_size is 1 through 100. Zero requests the server default of 50. */
   pageSize: number;
@@ -15,20 +17,68 @@ export interface PageRequest {
   pageToken: string;
 }
 
-/** PageResponse describes the next page, when one exists. */
+/** PageResponse describes the page and the observation cursor used to produce it. */
 export interface PageResponse {
   /** next_page_token is empty when the current page is the final page. */
   nextPageToken: string;
+  /** snapshot_cursor is a resumable service cursor for this consistent list observation. */
+  snapshotCursor: string;
 }
 
-/** ChangeConstraints freezes the repository paths and test-edit authority for a task. */
+/** ChangeConstraints freezes path and test-edit authority for a development task. */
 export interface ChangeConstraints {
   /**
-   * protected_paths contains at most 100 normalized repository-relative paths
-   * with at most 16,384 aggregate UTF-8 bytes.
+   * protected_paths contains at most 100 normalized repository-relative paths,
+   * each at most 512 bytes and at most 16,384 aggregate UTF-8 bytes.
    */
   protectedPaths: string[];
   allowTestEdits: boolean;
+}
+
+/** ResourceFailure is a bounded, credential-free failure attached to a resource. */
+export interface ResourceFailure {
+  reason: ErrorReason;
+  /** message is at most 512 UTF-8 bytes and never contains credentials or raw logs. */
+  message: string;
+  /** remediation is at most 1,024 UTF-8 bytes when present. */
+  remediation?: string | undefined;
+  observedAt?: Date | undefined;
+}
+
+/** OciPlatform identifies one supported OCI image platform. */
+export interface OciPlatform {
+  /** operating_system and architecture are normalized OCI values of at most 32 ASCII bytes. */
+  operatingSystem: string;
+  architecture: string;
+  /** variant is a normalized OCI variant of at most 32 ASCII bytes when present. */
+  variant?: string | undefined;
+}
+
+/** VerifiedMetadata is one bounded metadata value verified with an immutable resource. */
+export interface VerifiedMetadata {
+  /** key is 1 through 64 lowercase ASCII identifier characters. */
+  key: string;
+  /** value is at most 512 UTF-8 bytes and must not contain credentials. */
+  value: string;
+}
+
+/** WorkflowExecution identifies one immutable provider workflow attempt. */
+export interface WorkflowExecution {
+  provider?: { $case: "github"; github: GithubWorkflowExecution } | undefined;
+}
+
+/** GithubWorkflowExecution is the GitHub-specific workflow boundary. */
+export interface GithubWorkflowExecution {
+  workflowId: string;
+  runId: string;
+  /** attempt is at least 1. */
+  attempt: number;
+  /** event_name is 1 through 64 safe ASCII bytes. */
+  eventName: string;
+  /** head_sha is exactly 40 lowercase hexadecimal characters. */
+  headSha: string;
+  /** html_url is an HTTPS URL of at most 2,048 bytes. */
+  htmlUrl: string;
 }
 
 function createBasePageRequest(): PageRequest {
@@ -125,13 +175,16 @@ export const PageRequest: MessageFns<PageRequest> = {
 };
 
 function createBasePageResponse(): PageResponse {
-  return { nextPageToken: "" };
+  return { nextPageToken: "", snapshotCursor: "0" };
 }
 
 export const PageResponse: MessageFns<PageResponse> = {
   encode(message: PageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.nextPageToken !== "") {
       writer.uint32(10).string(message.nextPageToken);
+    }
+    if (message.snapshotCursor !== "0") {
+      writer.uint32(16).uint64(message.snapshotCursor);
     }
     return writer;
   },
@@ -157,6 +210,14 @@ export const PageResponse: MessageFns<PageResponse> = {
             message.nextPageToken = reader.string();
             continue;
           }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.snapshotCursor = reader.uint64().toString();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -176,6 +237,11 @@ export const PageResponse: MessageFns<PageResponse> = {
         : isSet(object.next_page_token)
         ? globalThis.String(object.next_page_token)
         : "",
+      snapshotCursor: isSet(object.snapshotCursor)
+        ? globalThis.String(object.snapshotCursor)
+        : isSet(object.snapshot_cursor)
+        ? globalThis.String(object.snapshot_cursor)
+        : "0",
     };
   },
 
@@ -183,6 +249,9 @@ export const PageResponse: MessageFns<PageResponse> = {
     const obj: any = {};
     if (message.nextPageToken !== "") {
       obj.nextPageToken = message.nextPageToken;
+    }
+    if (message.snapshotCursor !== "0") {
+      obj.snapshotCursor = message.snapshotCursor;
     }
     return obj;
   },
@@ -193,6 +262,7 @@ export const PageResponse: MessageFns<PageResponse> = {
   fromPartial(object: DeepPartial<PageResponse>): PageResponse {
     const message = createBasePageResponse();
     message.nextPageToken = object.nextPageToken ?? "";
+    message.snapshotCursor = object.snapshotCursor ?? "0";
     return message;
   },
 };
@@ -290,6 +360,566 @@ export const ChangeConstraints: MessageFns<ChangeConstraints> = {
   },
 };
 
+function createBaseResourceFailure(): ResourceFailure {
+  return { reason: 0, message: "", remediation: undefined, observedAt: undefined };
+}
+
+export const ResourceFailure: MessageFns<ResourceFailure> = {
+  encode(message: ResourceFailure, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.reason !== 0) {
+      writer.uint32(8).int32(message.reason);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    if (message.remediation !== undefined) {
+      writer.uint32(26).string(message.remediation);
+    }
+    if (message.observedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.observedAt), writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResourceFailure {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseResourceFailure();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.reason = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.message = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.remediation = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.observedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ResourceFailure {
+    return {
+      reason: isSet(object.reason) ? errorReasonFromJSON(object.reason) : 0,
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      remediation: isSet(object.remediation) ? globalThis.String(object.remediation) : undefined,
+      observedAt: isSet(object.observedAt)
+        ? fromJsonTimestamp(object.observedAt)
+        : isSet(object.observed_at)
+        ? fromJsonTimestamp(object.observed_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ResourceFailure): unknown {
+    const obj: any = {};
+    if (message.reason !== 0) {
+      obj.reason = errorReasonToJSON(message.reason);
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    if (message.remediation !== undefined) {
+      obj.remediation = message.remediation;
+    }
+    if (message.observedAt !== undefined) {
+      obj.observedAt = message.observedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ResourceFailure>): ResourceFailure {
+    return ResourceFailure.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ResourceFailure>): ResourceFailure {
+    const message = createBaseResourceFailure();
+    message.reason = object.reason ?? 0;
+    message.message = object.message ?? "";
+    message.remediation = object.remediation ?? undefined;
+    message.observedAt = object.observedAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseOciPlatform(): OciPlatform {
+  return { operatingSystem: "", architecture: "", variant: undefined };
+}
+
+export const OciPlatform: MessageFns<OciPlatform> = {
+  encode(message: OciPlatform, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.operatingSystem !== "") {
+      writer.uint32(10).string(message.operatingSystem);
+    }
+    if (message.architecture !== "") {
+      writer.uint32(18).string(message.architecture);
+    }
+    if (message.variant !== undefined) {
+      writer.uint32(26).string(message.variant);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): OciPlatform {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseOciPlatform();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.operatingSystem = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.architecture = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.variant = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): OciPlatform {
+    return {
+      operatingSystem: isSet(object.operatingSystem)
+        ? globalThis.String(object.operatingSystem)
+        : isSet(object.operating_system)
+        ? globalThis.String(object.operating_system)
+        : "",
+      architecture: isSet(object.architecture) ? globalThis.String(object.architecture) : "",
+      variant: isSet(object.variant) ? globalThis.String(object.variant) : undefined,
+    };
+  },
+
+  toJSON(message: OciPlatform): unknown {
+    const obj: any = {};
+    if (message.operatingSystem !== "") {
+      obj.operatingSystem = message.operatingSystem;
+    }
+    if (message.architecture !== "") {
+      obj.architecture = message.architecture;
+    }
+    if (message.variant !== undefined) {
+      obj.variant = message.variant;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<OciPlatform>): OciPlatform {
+    return OciPlatform.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<OciPlatform>): OciPlatform {
+    const message = createBaseOciPlatform();
+    message.operatingSystem = object.operatingSystem ?? "";
+    message.architecture = object.architecture ?? "";
+    message.variant = object.variant ?? undefined;
+    return message;
+  },
+};
+
+function createBaseVerifiedMetadata(): VerifiedMetadata {
+  return { key: "", value: "" };
+}
+
+export const VerifiedMetadata: MessageFns<VerifiedMetadata> = {
+  encode(message: VerifiedMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): VerifiedMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseVerifiedMetadata();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.key = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.value = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): VerifiedMetadata {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: VerifiedMetadata): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<VerifiedMetadata>): VerifiedMetadata {
+    return VerifiedMetadata.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<VerifiedMetadata>): VerifiedMetadata {
+    const message = createBaseVerifiedMetadata();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseWorkflowExecution(): WorkflowExecution {
+  return { provider: undefined };
+}
+
+export const WorkflowExecution: MessageFns<WorkflowExecution> = {
+  encode(message: WorkflowExecution, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    switch (message.provider?.$case) {
+      case "github":
+        GithubWorkflowExecution.encode(message.provider.github, writer.uint32(10).fork()).join();
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WorkflowExecution {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWorkflowExecution();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.provider = { $case: "github", github: GithubWorkflowExecution.decode(reader, reader.uint32()) };
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WorkflowExecution {
+    return {
+      provider: isSet(object.github)
+        ? { $case: "github", github: GithubWorkflowExecution.fromJSON(object.github) }
+        : undefined,
+    };
+  },
+
+  toJSON(message: WorkflowExecution): unknown {
+    const obj: any = {};
+    if (message.provider?.$case === "github") {
+      obj.github = GithubWorkflowExecution.toJSON(message.provider.github);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WorkflowExecution>): WorkflowExecution {
+    return WorkflowExecution.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WorkflowExecution>): WorkflowExecution {
+    const message = createBaseWorkflowExecution();
+    switch (object.provider?.$case) {
+      case "github": {
+        if (object.provider?.github !== undefined && object.provider?.github !== null) {
+          message.provider = { $case: "github", github: GithubWorkflowExecution.fromPartial(object.provider.github) };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseGithubWorkflowExecution(): GithubWorkflowExecution {
+  return { workflowId: "0", runId: "0", attempt: 0, eventName: "", headSha: "", htmlUrl: "" };
+}
+
+export const GithubWorkflowExecution: MessageFns<GithubWorkflowExecution> = {
+  encode(message: GithubWorkflowExecution, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workflowId !== "0") {
+      writer.uint32(8).uint64(message.workflowId);
+    }
+    if (message.runId !== "0") {
+      writer.uint32(16).uint64(message.runId);
+    }
+    if (message.attempt !== 0) {
+      writer.uint32(24).uint32(message.attempt);
+    }
+    if (message.eventName !== "") {
+      writer.uint32(34).string(message.eventName);
+    }
+    if (message.headSha !== "") {
+      writer.uint32(42).string(message.headSha);
+    }
+    if (message.htmlUrl !== "") {
+      writer.uint32(50).string(message.htmlUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GithubWorkflowExecution {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGithubWorkflowExecution();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.workflowId = reader.uint64().toString();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.runId = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.attempt = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.eventName = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.headSha = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.htmlUrl = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GithubWorkflowExecution {
+    return {
+      workflowId: isSet(object.workflowId)
+        ? globalThis.String(object.workflowId)
+        : isSet(object.workflow_id)
+        ? globalThis.String(object.workflow_id)
+        : "0",
+      runId: isSet(object.runId)
+        ? globalThis.String(object.runId)
+        : isSet(object.run_id)
+        ? globalThis.String(object.run_id)
+        : "0",
+      attempt: isSet(object.attempt) ? globalThis.Number(object.attempt) : 0,
+      eventName: isSet(object.eventName)
+        ? globalThis.String(object.eventName)
+        : isSet(object.event_name)
+        ? globalThis.String(object.event_name)
+        : "",
+      headSha: isSet(object.headSha)
+        ? globalThis.String(object.headSha)
+        : isSet(object.head_sha)
+        ? globalThis.String(object.head_sha)
+        : "",
+      htmlUrl: isSet(object.htmlUrl)
+        ? globalThis.String(object.htmlUrl)
+        : isSet(object.html_url)
+        ? globalThis.String(object.html_url)
+        : "",
+    };
+  },
+
+  toJSON(message: GithubWorkflowExecution): unknown {
+    const obj: any = {};
+    if (message.workflowId !== "0") {
+      obj.workflowId = message.workflowId;
+    }
+    if (message.runId !== "0") {
+      obj.runId = message.runId;
+    }
+    if (message.attempt !== 0) {
+      obj.attempt = Math.round(message.attempt);
+    }
+    if (message.eventName !== "") {
+      obj.eventName = message.eventName;
+    }
+    if (message.headSha !== "") {
+      obj.headSha = message.headSha;
+    }
+    if (message.htmlUrl !== "") {
+      obj.htmlUrl = message.htmlUrl;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GithubWorkflowExecution>): GithubWorkflowExecution {
+    return GithubWorkflowExecution.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GithubWorkflowExecution>): GithubWorkflowExecution {
+    const message = createBaseGithubWorkflowExecution();
+    message.workflowId = object.workflowId ?? "0";
+    message.runId = object.runId ?? "0";
+    message.attempt = object.attempt ?? 0;
+    message.eventName = object.eventName ?? "";
+    message.headSha = object.headSha ?? "";
+    message.htmlUrl = object.htmlUrl ?? "";
+    return message;
+  },
+};
+
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 
 type DeepPartial<T> = T extends Builtin ? T
@@ -298,6 +928,28 @@ type DeepPartial<T> = T extends Builtin ? T
   : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
+
+function toTimestamp(date: Date): Timestamp {
+  const seconds = Math.trunc(date.getTime() / 1_000).toString();
+  const nanos = (date.getTime() % 1_000) * 1_000_000;
+  return { seconds, nanos };
+}
+
+function fromTimestamp(t: Timestamp): Date {
+  let millis = (globalThis.Number(t.seconds) || 0) * 1_000;
+  millis += (t.nanos || 0) / 1_000_000;
+  return new globalThis.Date(millis);
+}
+
+function fromJsonTimestamp(o: any): Date {
+  if (o instanceof globalThis.Date) {
+    return o;
+  } else if (typeof o === "string") {
+    return new globalThis.Date(o);
+  } else {
+    return fromTimestamp(Timestamp.fromJSON(o));
+  }
+}
 
 function isSet(value: any): boolean {
   return value !== null && value !== undefined;

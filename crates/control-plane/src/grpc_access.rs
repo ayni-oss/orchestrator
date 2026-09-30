@@ -199,9 +199,9 @@ impl Authorizer {
                     "token digests must be unique and expiry must be positive",
                 ));
             }
-            if configured.capabilities.is_empty() || configured.capabilities.len() > 10 {
+            if configured.capabilities.is_empty() || configured.capabilities.len() > 11 {
                 return Err(AccessConfigurationError::InvalidClients(
-                    "capabilities must contain 1 through 10 values",
+                    "capabilities must contain 1 through 11 values",
                 ));
             }
             let mut capabilities = HashSet::new();
@@ -360,14 +360,15 @@ impl Authorizer {
 enum Capability {
     RepositoriesRead,
     RepositoriesWrite,
+    ProfilesRead,
+    ProfilesWrite,
     ProviderModelsRead,
     TasksRead,
     TasksCreate,
     TasksCancel,
     TasksRetry,
-    TasksInput,
-    EvidenceRead,
-    PublicationsCreate,
+    ReviewsRead,
+    ReviewsWrite,
 }
 
 impl Capability {
@@ -375,14 +376,15 @@ impl Capability {
         Some(match value {
             "repositories.read" => Self::RepositoriesRead,
             "repositories.write" => Self::RepositoriesWrite,
+            "profiles.read" => Self::ProfilesRead,
+            "profiles.write" => Self::ProfilesWrite,
             "provider_models.read" => Self::ProviderModelsRead,
             "tasks.read" => Self::TasksRead,
             "tasks.create" => Self::TasksCreate,
             "tasks.cancel" => Self::TasksCancel,
             "tasks.retry" => Self::TasksRetry,
-            "tasks.input" => Self::TasksInput,
-            "evidence.read" => Self::EvidenceRead,
-            "publications.create" => Self::PublicationsCreate,
+            "reviews.read" => Self::ReviewsRead,
+            "reviews.write" => Self::ReviewsWrite,
             _ => return None,
         })
     }
@@ -391,14 +393,15 @@ impl Capability {
         match self {
             Self::RepositoriesRead => "repositories.read",
             Self::RepositoriesWrite => "repositories.write",
+            Self::ProfilesRead => "profiles.read",
+            Self::ProfilesWrite => "profiles.write",
             Self::ProviderModelsRead => "provider_models.read",
             Self::TasksRead => "tasks.read",
             Self::TasksCreate => "tasks.create",
             Self::TasksCancel => "tasks.cancel",
             Self::TasksRetry => "tasks.retry",
-            Self::TasksInput => "tasks.input",
-            Self::EvidenceRead => "evidence.read",
-            Self::PublicationsCreate => "publications.create",
+            Self::ReviewsRead => "reviews.read",
+            Self::ReviewsWrite => "reviews.write",
         }
     }
 }
@@ -412,28 +415,55 @@ struct Operation {
 
 const REPOSITORIES_READ: &[Capability] = &[Capability::RepositoriesRead];
 const REPOSITORIES_WRITE: &[Capability] = &[Capability::RepositoriesWrite];
+const PROFILES_READ: &[Capability] = &[Capability::ProfilesRead];
+const PROFILES_WRITE: &[Capability] = &[Capability::ProfilesWrite];
 const PROVIDER_MODELS_READ: &[Capability] = &[Capability::ProviderModelsRead];
 const TASKS_READ: &[Capability] = &[Capability::TasksRead];
-const TASKS_CREATE: &[Capability] = &[Capability::TasksCreate, Capability::PublicationsCreate];
+const TASKS_CREATE: &[Capability] = &[Capability::TasksCreate];
 const TASKS_CANCEL: &[Capability] = &[Capability::TasksCancel];
-const TASKS_RETRY: &[Capability] = &[Capability::TasksRetry, Capability::PublicationsCreate];
-const TASKS_INPUT: &[Capability] = &[Capability::TasksInput, Capability::PublicationsCreate];
-const EVIDENCE_READ: &[Capability] = &[Capability::EvidenceRead];
+const TASKS_RETRY: &[Capability] = &[Capability::TasksRetry];
+const REVIEWS_READ: &[Capability] = &[Capability::ReviewsRead];
+const REVIEWS_WRITE: &[Capability] = &[Capability::ReviewsWrite];
 
 fn operation(rpc: &'static str) -> Option<Operation> {
     let (required, deadline) = match rpc {
-        "ListRepositories" | "GetRepository" | "ListPreparations" | "GetPreparation" => {
-            (REPOSITORIES_READ, MAX_UNARY_DEADLINE)
+        "ListRepositoryConnections"
+        | "GetRepositoryConnection"
+        | "ListRepositorySnapshots"
+        | "GetRepositorySnapshot" => (REPOSITORIES_READ, MAX_UNARY_DEADLINE),
+        "WatchRepositories" => (REPOSITORIES_READ, MAX_WATCH_DEADLINE),
+        "CreateRepositoryConnection" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
+        "ListRuntimeProfiles"
+        | "GetRuntimeProfile"
+        | "ListRuntimeProfileRevisions"
+        | "GetRuntimeProfileRevision"
+        | "ListRuntimeArtifacts"
+        | "GetRuntimeArtifact"
+        | "ListAutomationInstallations"
+        | "GetAutomationInstallation" => (PROFILES_READ, MAX_UNARY_DEADLINE),
+        "WatchRuntimeProfiles" => (PROFILES_READ, MAX_WATCH_DEADLINE),
+        "CreateRuntimeProfile" | "InstallRepositoryAutomation" | "ReconcileRuntimeProfile" => {
+            (PROFILES_WRITE, MAX_UNARY_DEADLINE)
         }
-        "SaveRepository" | "PrepareRepository" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
         "ListProviderModels" => (PROVIDER_MODELS_READ, MAX_UNARY_DEADLINE),
-        "ListDevelopmentTasks" | "GetDevelopmentTask" => (TASKS_READ, MAX_UNARY_DEADLINE),
+        "ListDevelopmentTasks"
+        | "GetDevelopmentTask"
+        | "ListDevelopmentAttempts"
+        | "GetDevelopmentAttempt"
+        | "ListCandidates"
+        | "GetCandidate" => (TASKS_READ, MAX_UNARY_DEADLINE),
+        "WatchDevelopmentTask" => (TASKS_READ, MAX_WATCH_DEADLINE),
         "CreateDevelopmentTask" => (TASKS_CREATE, MAX_UNARY_DEADLINE),
         "CancelDevelopmentTask" => (TASKS_CANCEL, MAX_UNARY_DEADLINE),
         "RetryDevelopmentTask" => (TASKS_RETRY, MAX_UNARY_DEADLINE),
-        "ProvideDevelopmentTaskInput" => (TASKS_INPUT, MAX_UNARY_DEADLINE),
-        "GetDevelopmentTaskEvidence" => (EVIDENCE_READ, MAX_UNARY_DEADLINE),
-        "WatchDevelopmentTask" => (TASKS_READ, MAX_WATCH_DEADLINE),
+        "ListChangeRequests"
+        | "GetChangeRequest"
+        | "ListAssessments"
+        | "GetAssessment"
+        | "ListEvidenceReferences"
+        | "GetEvidenceReference" => (REVIEWS_READ, MAX_UNARY_DEADLINE),
+        "WatchReviews" => (REVIEWS_READ, MAX_WATCH_DEADLINE),
+        "PublishCandidate" => (REVIEWS_WRITE, MAX_UNARY_DEADLINE),
         _ => return None,
     };
     Some(Operation {
@@ -459,7 +489,7 @@ fn validate_deadline<T>(request: &Request<T>, operation: Operation) -> Result<()
     }
     if duration > operation.deadline {
         return Err(Status::invalid_argument(
-            if operation.rpc == "WatchDevelopmentTask" {
+            if operation.rpc.starts_with("Watch") {
                 "watch deadlines must not exceed 5 minutes"
             } else {
                 "unary deadlines must not exceed 30 seconds"
@@ -633,7 +663,7 @@ mod tests {
 
     #[test]
     fn authenticates_and_authorizes_operation_capabilities() {
-        let access = guard(u64::MAX, &["tasks.create", "publications.create"]);
+        let access = guard(u64::MAX, &["tasks.create"]);
         let accepted = access.authorize(&request(Some(TOKEN), "30S"), "CreateDevelopmentTask");
         assert_eq!(
             accepted.ok().map(|identity| identity.id().to_owned()),
@@ -642,8 +672,88 @@ mod tests {
     }
 
     #[test]
+    fn every_clean_v1_rpc_uses_its_documented_capability() {
+        let cases = [
+            ("ListRepositoryConnections", Capability::RepositoriesRead),
+            ("GetRepositoryConnection", Capability::RepositoriesRead),
+            ("ListRepositorySnapshots", Capability::RepositoriesRead),
+            ("GetRepositorySnapshot", Capability::RepositoriesRead),
+            ("WatchRepositories", Capability::RepositoriesRead),
+            ("CreateRepositoryConnection", Capability::RepositoriesWrite),
+            ("ListRuntimeProfiles", Capability::ProfilesRead),
+            ("GetRuntimeProfile", Capability::ProfilesRead),
+            ("ListRuntimeProfileRevisions", Capability::ProfilesRead),
+            ("GetRuntimeProfileRevision", Capability::ProfilesRead),
+            ("ListRuntimeArtifacts", Capability::ProfilesRead),
+            ("GetRuntimeArtifact", Capability::ProfilesRead),
+            ("ListAutomationInstallations", Capability::ProfilesRead),
+            ("GetAutomationInstallation", Capability::ProfilesRead),
+            ("WatchRuntimeProfiles", Capability::ProfilesRead),
+            ("CreateRuntimeProfile", Capability::ProfilesWrite),
+            ("InstallRepositoryAutomation", Capability::ProfilesWrite),
+            ("ReconcileRuntimeProfile", Capability::ProfilesWrite),
+            ("ListProviderModels", Capability::ProviderModelsRead),
+            ("ListDevelopmentTasks", Capability::TasksRead),
+            ("GetDevelopmentTask", Capability::TasksRead),
+            ("ListDevelopmentAttempts", Capability::TasksRead),
+            ("GetDevelopmentAttempt", Capability::TasksRead),
+            ("ListCandidates", Capability::TasksRead),
+            ("GetCandidate", Capability::TasksRead),
+            ("WatchDevelopmentTask", Capability::TasksRead),
+            ("CreateDevelopmentTask", Capability::TasksCreate),
+            ("CancelDevelopmentTask", Capability::TasksCancel),
+            ("RetryDevelopmentTask", Capability::TasksRetry),
+            ("ListChangeRequests", Capability::ReviewsRead),
+            ("GetChangeRequest", Capability::ReviewsRead),
+            ("ListAssessments", Capability::ReviewsRead),
+            ("GetAssessment", Capability::ReviewsRead),
+            ("ListEvidenceReferences", Capability::ReviewsRead),
+            ("GetEvidenceReference", Capability::ReviewsRead),
+            ("WatchReviews", Capability::ReviewsRead),
+            ("PublishCandidate", Capability::ReviewsWrite),
+        ];
+        for (rpc, capability) in cases {
+            let Some(operation) = operation(rpc) else {
+                panic!("{rpc} has no custom-client authorization mapping");
+            };
+            assert_eq!(operation.required, [capability], "{rpc}");
+            assert_eq!(
+                operation.deadline,
+                if rpc.starts_with("Watch") {
+                    MAX_WATCH_DEADLINE
+                } else {
+                    MAX_UNARY_DEADLINE
+                },
+                "{rpc}"
+            );
+        }
+
+        let all_capabilities = [
+            "repositories.read",
+            "repositories.write",
+            "profiles.read",
+            "profiles.write",
+            "provider_models.read",
+            "tasks.read",
+            "tasks.create",
+            "tasks.cancel",
+            "tasks.retry",
+            "reviews.read",
+            "reviews.write",
+        ];
+        assert!(
+            CustomClientAccess::from_parts_for_test(
+                b"certificate".to_vec(),
+                b"private-key".to_vec(),
+                &clients(u64::MAX, &all_capabilities),
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
     fn rejects_missing_invalid_forbidden_and_expired_credentials() {
-        let access = guard(u64::MAX, &["tasks.create"]);
+        let access = guard(u64::MAX, &["tasks.read"]);
         for (token, expected) in [
             (None, Code::Unauthenticated),
             (Some("x"), Code::Unauthenticated),
@@ -657,7 +767,7 @@ mod tests {
                 Some(expected)
             );
         }
-        let expired = guard(1, &["tasks.create", "publications.create"]);
+        let expired = guard(1, &["tasks.create"]);
         assert_eq!(
             expired
                 .authorize(&request(Some(TOKEN), "30S"), "CreateDevelopmentTask")
@@ -669,7 +779,7 @@ mod tests {
 
     #[test]
     fn enforces_deadlines_rate_and_configuration_bounds() {
-        let access = guard(u64::MAX, &["tasks.create", "publications.create"]);
+        let access = guard(u64::MAX, &["tasks.create"]);
         assert_eq!(
             access
                 .authorize(&request(Some(TOKEN), "31S"), "CreateDevelopmentTask")

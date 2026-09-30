@@ -1,5 +1,6 @@
 export interface PageDto {
   nextPageToken: string;
+  snapshotCursor: string;
 }
 
 export interface PageInput {
@@ -7,52 +8,227 @@ export interface PageInput {
   pageToken?: string;
 }
 
+export interface ResourceFailureDto {
+  reason: string;
+  message: string;
+  remediation?: string;
+  observedAt: string;
+}
+
+export interface OciPlatformDto {
+  operatingSystem: string;
+  architecture: string;
+  variant?: string;
+}
+
+export type RepositoryConnectionStatusDto =
+  | "connecting" | "connected" | "degraded" | "revoked" | "failed" | "unknown";
+
+export interface GithubRepositoryDto {
+  kind: "github";
+  repositoryId: string;
+  owner: string;
+  name: string;
+  installationId: string;
+  htmlUrl: string;
+}
+
+export interface RepositoryConnectionDto {
+  id: string;
+  provider: GithubRepositoryDto;
+  displayName: string;
+  defaultBranch: string;
+  status: RepositoryConnectionStatusDto;
+  failure?: ResourceFailureDto;
+  createdAt: string;
+  updatedAt: string;
+  resourceVersion: string;
+}
+
+export interface RepositoryConnectionPageDto {
+  repositoryConnections: RepositoryConnectionDto[];
+  page: PageDto;
+}
+
+export interface CreateRepositoryConnectionInput {
+  idempotencyKey: string;
+  provider: GithubRepositoryDto;
+  displayName: string;
+  defaultBranch: string;
+}
+
+export type RuntimeProfileKindDto = "ayni_managed" | "custom_runtime" | "unknown";
+export type RuntimeProfileSupportDto = "operational" | "unsupported" | "unknown";
+export type RuntimeProfileStateDto =
+  | "setup_required" | "setup_pr_open" | "awaiting_environment" | "ready"
+  | "updating" | "degraded" | "failed" | "unknown";
+
+export interface RuntimeProfileDto {
+  id: string;
+  repositoryConnectionId: string;
+  kind: RuntimeProfileKindDto;
+  support: RuntimeProfileSupportDto;
+  state: RuntimeProfileStateDto;
+  activeRevisionId?: string;
+  activeRuntimeArtifactId?: string;
+  failure?: ResourceFailureDto;
+  createdAt: string;
+  updatedAt: string;
+  resourceVersion: string;
+}
+
+export interface RuntimeProfilePageDto {
+  runtimeProfiles: RuntimeProfileDto[];
+  page: PageDto;
+}
+
+export type RuntimeProfileConfigurationDto =
+  | {
+      kind: "ayni_managed";
+      lockFingerprint: string;
+      ayniVersion: string;
+      workflowTemplateVersion: string;
+      ociRepository: string;
+    }
+  | { kind: "custom_runtime"; imageReference: string };
+
+export interface CreateRuntimeProfileInput {
+  idempotencyKey: string;
+  repositoryConnectionId: string;
+  repositorySnapshotId: string;
+  configuration: RuntimeProfileConfigurationDto;
+}
+
+export type RuntimeArtifactStatusDto =
+  | "discovered" | "verifying" | "verified" | "rejected" | "unavailable" | "failed" | "unknown";
+
+export interface RuntimeArtifactDto {
+  id: string;
+  runtimeProfileRevisionId: string;
+  ociRepository: string;
+  discoveryTag?: string;
+  resolvedDigest: string;
+  platform: OciPlatformDto;
+  status: RuntimeArtifactStatusDto;
+  verifiedMetadata: Array<{ key: string; value: string }>;
+  failure?: ResourceFailureDto;
+  createdAt: string;
+  verifiedAt?: string;
+  resourceVersion: string;
+}
+
+export interface RuntimeArtifactPageDto {
+  runtimeArtifacts: RuntimeArtifactDto[];
+  page: PageDto;
+}
+
 export interface ChangeConstraintsDto {
   protectedPaths: string[];
   allowTestEdits: boolean;
 }
 
-export type PreparationStatusDto =
+export interface AgentSelectionDto {
+  provider: string;
+  agent: string;
+  model: string;
+}
+
+export interface DevelopmentTaskInputDto {
+  repositoryConnectionId: string;
+  repositoryRevision: string;
+  runtimeProfileId: string;
+  agent: AgentSelectionDto;
+  request: string;
+  acceptanceCriteria: string[];
+  changeConstraints: ChangeConstraintsDto;
+  deadlineSeconds?: number;
+}
+
+export interface FrozenRepositoryDto {
+  repositoryConnectionId: string;
+  repositorySnapshotId: string;
+  revision: string;
+}
+
+export interface FrozenRuntimeDto {
+  runtimeProfileId: string;
+  runtimeProfileRevisionId: string;
+  profileKind: RuntimeProfileKindDto;
+  runtimeArtifactId: string;
+  ociRepository: string;
+  resolvedDigest: string;
+  platform: OciPlatformDto;
+}
+
+export interface DevelopmentSnapshotDto {
+  repository: FrozenRepositoryDto;
+  runtime: FrozenRuntimeDto;
+  agent: AgentSelectionDto;
+  request: string;
+  acceptanceCriteria: string[];
+  changeConstraints: ChangeConstraintsDto;
+  deadlineAt?: string;
+}
+
+export type DevelopmentTaskStateDto =
+  | "queued" | "waiting_for_runtime" | "running" | "succeeded" | "failed"
+  | "cancelled" | "deadline_exceeded" | "unsupported" | "unknown";
+
+export interface DevelopmentTaskDto {
+  id: string;
+  snapshot: DevelopmentSnapshotDto;
+  state: DevelopmentTaskStateDto;
+  activeAttemptId?: string;
+  attemptCount: number;
+  failure?: ResourceFailureDto;
+  createdAt: string;
+  updatedAt: string;
+  resourceVersion: string;
+}
+
+export interface DevelopmentTaskPageDto {
+  developmentTasks: DevelopmentTaskDto[];
+  page: PageDto;
+}
+
+export type DevelopmentAttemptStateDto =
   | "queued"
-  | "preparing"
-  | "ready"
-  | "setup_required"
+  | "running"
+  | "waiting_for_input"
+  | "succeeded"
   | "failed"
+  | "cancelled"
+  | "deadline_exceeded"
+  | "unsupported"
   | "unknown";
 
-export interface PreparationDto {
+export interface DevelopmentAttemptDto {
   id: string;
-  repositoryId: string;
-  revision: string;
-  lockSha256: string;
-  status: PreparationStatusDto;
-  diagnostic?: string;
-  durationSeconds?: number;
-  reuseCount: number;
+  developmentTaskId: string;
+  attemptNumber: number;
+  snapshot: DevelopmentSnapshotDto;
+  state: DevelopmentAttemptStateDto;
+  requestedInput?: string;
+  failure?: ResourceFailureDto;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  resourceVersion: string;
 }
 
-export interface RepositoryEnrollmentDto {
-  id: string;
-  owner: string;
-  repository: string;
-  installationId: string;
-  baseBranch: string;
-  lockSha256: string;
+export type DevelopmentTaskUpdateDto =
+  | { kind: "development_task"; cursor: string; developmentTask: DevelopmentTaskDto }
+  | { kind: "attempt"; cursor: string; attempt: DevelopmentAttemptDto }
+  | { kind: "candidate"; cursor: string; candidateId: string };
+
+export interface CreateDevelopmentTaskInput {
+  idempotencyKey: string;
+  request: DevelopmentTaskInputDto;
 }
 
-export interface RepositoryDto {
-  enrollment: RepositoryEnrollmentDto;
-  latestPreparation?: PreparationDto;
-}
-
-export interface RepositoryPageDto {
-  repositories: RepositoryDto[];
-  page: PageDto;
-}
-
-export interface PreparationPageDto {
-  preparations: PreparationDto[];
-  page: PageDto;
+export interface TaskActionInput {
+  idempotencyKey: string;
+  developmentTaskId: string;
 }
 
 export interface ProviderModelDto {
@@ -69,228 +245,6 @@ export interface ProviderModelPageDto {
   models: ProviderModelDto[];
   observedAt: string;
   page: PageDto;
-}
-
-export type DevelopmentTaskPhaseDto =
-  | "queued"
-  | "coding"
-  | "waiting_for_input"
-  | "validation_queued"
-  | "validating"
-  | "pr_queued"
-  | "preparing_pr"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  | "unsupported"
-  | "unknown";
-
-export type LifecycleStageDto = "queue" | "coding" | "validation" | "pr_preparation" | "unknown";
-export type LifecycleOutcomeDto =
-  | "queued"
-  | "started"
-  | "succeeded"
-  | "blocked"
-  | "failed"
-  | "cancelled"
-  | "unsupported"
-  | "unknown";
-export type ModelUsageStageDto = "coding" | "pr_preparation" | "unknown";
-export type ModelInteractionOutcomeDto = "succeeded" | "failed" | "cancelled" | "unknown";
-export type ModelUsageCollectionStatusDto = "unavailable" | "collecting" | "complete" | "unknown";
-export type EvidenceOutcomeDto =
-  | "success"
-  | "quality_failure"
-  | "policy_rejected"
-  | "dependency_change_unsupported"
-  | "scope_rejected"
-  | "unknown";
-
-export interface DevelopmentTaskInputDto {
-  repositoryId: string;
-  model: string;
-  startRevision: string;
-  request: string;
-  acceptanceCriteria: string[];
-  changeConstraints: ChangeConstraintsDto;
-  deadlineSeconds?: number;
-}
-
-export interface RepositorySnapshotDto {
-  id: string;
-  owner: string;
-  repository: string;
-  baseBranch: string;
-  lockSha256: string;
-}
-
-export interface ModelSnapshotDto {
-  provider: string;
-  model: string;
-}
-
-export interface LifecycleEventDto {
-  sequence: string;
-  eventTime: string;
-  stage: LifecycleStageDto;
-  outcome: LifecycleOutcomeDto;
-  reasonCode?: string;
-}
-
-export interface ProviderTokenUsageDto {
-  inputTokens?: string;
-  outputTokens?: string;
-  cachedInputTokens?: string;
-  reasoningTokens?: string;
-  totalTokens?: string;
-}
-
-export interface EstimatedModelCostDto {
-  label: string;
-  amountMicros: string;
-  currency: string;
-  pricingVersion: string;
-  pricedInputTokens: string;
-  pricedCachedInputTokens: string;
-  pricedOutputTokens: string;
-  inputRateMicrosPerMillion: string;
-  cachedInputRateMicrosPerMillion: string;
-  outputRateMicrosPerMillion: string;
-}
-
-export interface ModelUsageInteractionDto {
-  callId: string;
-  stage: ModelUsageStageDto;
-  provider: string;
-  model: string;
-  resolvedModel?: string;
-  startedAt: string;
-  completedAt: string;
-  latencySeconds: number;
-  outcome: ModelInteractionOutcomeDto;
-  tokens: ProviderTokenUsageDto;
-  estimatedCost?: EstimatedModelCostDto;
-}
-
-export interface ModelUsageSummaryDto extends ProviderTokenUsageDto {
-  interactionCount: number;
-  unavailableInteractionCount: number;
-  estimatedCostMicros?: string;
-  estimatedCostCurrency?: string;
-  pricingVersion?: string;
-}
-
-export interface StageModelUsageDto {
-  stage: ModelUsageStageDto;
-  summary: ModelUsageSummaryDto;
-}
-
-export interface TaskModelUsageDto {
-  collectionStatus: ModelUsageCollectionStatusDto;
-  interactions: ModelUsageInteractionDto[];
-  byStage: StageModelUsageDto[];
-  total: ModelUsageSummaryDto;
-}
-
-export interface TaskFailureDto {
-  reason: string;
-  message: string;
-}
-
-export interface DevelopmentTaskDto {
-  id: string;
-  input: DevelopmentTaskInputDto;
-  repository: RepositorySnapshotDto;
-  model: ModelSnapshotDto;
-  preparationId?: string;
-  retryOfTaskId?: string;
-  createdAt: string;
-  updatedAt: string;
-  deadlineAt?: string;
-  phase: DevelopmentTaskPhaseDto;
-  requestedInput?: string;
-  candidateCommit?: string;
-  validationManifestDigest?: string;
-  policyOrTestEdits?: boolean;
-  scopeViolations: string[];
-  draftPrUrl?: string;
-  failure?: TaskFailureDto;
-  lifecycleComplete: boolean;
-  lifecycle: LifecycleEventDto[];
-  modelUsage: TaskModelUsageDto;
-  providedInput?: string;
-  resourceVersion: string;
-}
-
-export interface DevelopmentTaskSummaryDto {
-  id: string;
-  repositoryId: string;
-  repositoryOwner: string;
-  repositoryName: string;
-  startRevision: string;
-  request: string;
-  model: ModelSnapshotDto;
-  retryOfTaskId?: string;
-  createdAt: string;
-  updatedAt: string;
-  phase: DevelopmentTaskPhaseDto;
-  candidateCommit?: string;
-  draftPrUrl?: string;
-  failure?: TaskFailureDto;
-  modelUsage: ModelUsageSummaryDto;
-  resourceVersion: string;
-}
-
-export interface DevelopmentTaskPageDto {
-  tasks: DevelopmentTaskSummaryDto[];
-  page: PageDto;
-}
-
-export interface EvidenceArtifactDto {
-  name: string;
-  sha256: string;
-}
-
-export interface DevelopmentTaskEvidenceDto {
-  manifestDigest: string;
-  outcome: EvidenceOutcomeDto;
-  checkExitCode: number;
-  startRevision: string;
-  candidateCommit: string;
-  lockSha256: string;
-  changeConstraints?: ChangeConstraintsDto;
-  preparationId?: string;
-  preparationReused: boolean;
-  policyEdited: boolean;
-  testsEdited: boolean;
-  scopeViolations: string[];
-  changedPaths: string[];
-  artifacts: EvidenceArtifactDto[];
-}
-
-export interface CreateDevelopmentTaskInput {
-  idempotencyKey: string;
-  input: DevelopmentTaskInputDto;
-}
-
-export interface SaveRepositoryInput {
-  idempotencyKey: string;
-  repository: RepositoryEnrollmentDto;
-}
-
-export interface PrepareRepositoryInput {
-  idempotencyKey: string;
-  repositoryId: string;
-  revision: string;
-}
-
-export interface TaskActionInput {
-  idempotencyKey: string;
-  taskId: string;
-}
-
-export interface ProvideTaskInput extends TaskActionInput {
-  input: string;
 }
 
 export interface RequestContext {

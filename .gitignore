@@ -6,6 +6,7 @@
 /dev/.env
 /dev/.env.*
 !/dev/.env.example
+/dev/*-github-app-credentials.json
 **/.DS_Store
 node_modules/
 .pnpm-store/

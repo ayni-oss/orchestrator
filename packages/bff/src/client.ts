@@ -7,56 +7,56 @@ import {
   type ServiceError,
 } from "@grpc/grpc-js";
 import {
-  DevelopmentTaskPhase,
   DevelopmentTaskServiceClient,
   ProviderServiceClient,
   RepositoryServiceClient,
+  RuntimeProfileServiceClient,
   type CancelDevelopmentTaskResponse,
   type CreateDevelopmentTaskResponse,
-  type GetDevelopmentTaskEvidenceResponse,
+  type CreateRepositoryConnectionResponse,
+  type CreateRuntimeProfileResponse,
   type GetDevelopmentTaskResponse,
-  type GetPreparationResponse,
-  type GetRepositoryResponse,
+  type GetRepositoryConnectionResponse,
+  type GetRuntimeProfileResponse,
   type ListDevelopmentTasksResponse,
-  type ListPreparationsResponse,
   type ListProviderModelsResponse,
-  type ListRepositoriesResponse,
-  type PrepareRepositoryResponse,
-  type ProvideDevelopmentTaskInputResponse,
+  type ListRepositoryConnectionsResponse,
+  type ListRuntimeArtifactsResponse,
+  type ListRuntimeProfilesResponse,
   type RetryDevelopmentTaskResponse,
-  type SaveRepositoryResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
 import { randomUUID } from "node:crypto";
 import type {
   CreateDevelopmentTaskInput,
+  CreateRepositoryConnectionInput,
+  CreateRuntimeProfileInput,
+  DevelopmentAttemptDto,
   DevelopmentTaskDto,
-  DevelopmentTaskEvidenceDto,
   DevelopmentTaskPageDto,
-  DevelopmentTaskPhaseDto,
+  DevelopmentTaskUpdateDto,
   PageInput,
-  PreparationDto,
-  PreparationPageDto,
-  PrepareRepositoryInput,
   ProviderModelPageDto,
-  ProvideTaskInput,
-  RepositoryDto,
-  RepositoryPageDto,
+  RepositoryConnectionDto,
+  RepositoryConnectionPageDto,
   RequestContext,
-  SaveRepositoryInput,
+  RuntimeArtifactPageDto,
+  RuntimeProfileDto,
+  RuntimeProfilePageDto,
   TaskActionInput,
 } from "./dto.js";
 import { BffError, toBffError } from "./errors.js";
 import {
   BffMappingError,
+  mapDevelopmentAttempt,
   mapDevelopmentTask,
-  mapDevelopmentTaskSummary,
-  mapEvidence,
-  mapPreparation,
   mapProviderModel,
-  mapRepository,
-  mapTaskPhase,
-  toProtoTaskInput,
+  mapRepositoryConnection,
+  mapRuntimeArtifact,
+  mapRuntimeProfile,
+  toProtoProfileConfiguration,
+  toProtoRepositoryProvider,
+  toProtoTaskRequest,
 } from "./mapping.js";
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
@@ -66,12 +66,10 @@ const MAX_UNARY_DEADLINE_MS = 30_000;
 const DEFAULT_STREAM_DEADLINE_MS = 5 * 60_000;
 const REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/u;
 const LOOPBACK_ADDRESS = /^(?:127\.0\.0\.1|localhost):(?:[1-9][0-9]{0,4})$|^\[::1\]:(?:[1-9][0-9]{0,4})$/u;
-const RESOURCE_VERSION = /^(?:0|[1-9][0-9]{0,19})$/u;
+const CURSOR = /^(?:0|[1-9][0-9]{0,19})$/u;
 const MAX_UINT64 = 18_446_744_073_709_551_615n;
 
-interface BffClientConfiguration {
-  address?: string;
-}
+interface BffClientConfiguration { address?: string }
 
 type UnaryInvoker<T> = (
   metadata: Metadata,
@@ -102,129 +100,109 @@ function page(value: PageInput = {}): { pageSize: number; pageToken: string } {
   return { pageSize, pageToken };
 }
 
-function resourceVersion(value: string | undefined): string | undefined {
-  if (value !== undefined && (!RESOURCE_VERSION.test(value) || BigInt(value) > MAX_UINT64)) {
+function cursor(value: string | undefined): string | undefined {
+  if (value !== undefined && (!CURSOR.test(value) || BigInt(value) > MAX_UINT64)) {
     throw new BffError({
       status: 400,
       reason: "invalid_input",
-      message: "the task update cursor is invalid",
+      message: "the update cursor is invalid",
       retryable: false,
     });
   }
   return value;
 }
 
-function phase(value: DevelopmentTaskPhaseDto | undefined): DevelopmentTaskPhase | undefined {
-  switch (value) {
-    case undefined:
-      return undefined;
-    case "queued":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_QUEUED;
-    case "coding":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CODING;
-    case "waiting_for_input":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT;
-    case "validation_queued":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED;
-    case "validating":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATING;
-    case "pr_queued":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PR_QUEUED;
-    case "preparing_pr":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PREPARING_PR;
-    case "completed":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_COMPLETED;
-    case "failed":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_FAILED;
-    case "cancelled":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CANCELLED;
-    case "unsupported":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSUPPORTED;
-    case "unknown":
-      return DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSPECIFIED;
-  }
+function pageDto(value: { nextPageToken: string; snapshotCursor: string } | undefined): {
+  nextPageToken: string;
+  snapshotCursor: string;
+} {
+  const page = required(value);
+  return { nextPageToken: page.nextPageToken, snapshotCursor: page.snapshotCursor };
 }
 
 export class OrchestratorBff {
   readonly #repositories: RepositoryServiceClient;
+  readonly #profiles: RuntimeProfileServiceClient;
   readonly #providers: ProviderServiceClient;
   readonly #tasks: DevelopmentTaskServiceClient;
 
   constructor(configuration: BffClientConfiguration = {}) {
     const address = configuration.address ?? "127.0.0.1:50051";
-    if (!LOOPBACK_ADDRESS.test(address)) {
-      throw new Error("the supported BFF backend address must use loopback");
-    }
+    if (!LOOPBACK_ADDRESS.test(address)) throw new Error("the supported BFF backend address must use loopback");
     const options: Partial<ClientOptions> = {
       "grpc.max_receive_message_length": MAX_RESPONSE_BYTES,
       "grpc.max_send_message_length": MAX_REQUEST_BYTES,
     };
     const channelCredentials = credentials.createInsecure();
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
+    this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
     this.#tasks = new DevelopmentTaskServiceClient(address, channelCredentials, options);
   }
 
   close(): void {
     this.#repositories.close();
+    this.#profiles.close();
     this.#providers.close();
     this.#tasks.close();
   }
 
-  async listRepositories(selection: PageInput, context: RequestContext): Promise<RepositoryPageDto> {
-    const response = await this.#unary<ListRepositoriesResponse>(context, (metadata, options, callback) =>
-      this.#repositories.listRepositories({ page: page(selection) }, metadata, options, callback));
+  async listRepositoryConnections(selection: PageInput, context: RequestContext): Promise<RepositoryConnectionPageDto> {
+    const response = await this.#unary<ListRepositoryConnectionsResponse>(context, (metadata, options, callback) =>
+      this.#repositories.listRepositoryConnections({ page: page(selection) }, metadata, options, callback));
     return {
-      repositories: response.repositories.map(mapRepository),
-      page: { nextPageToken: required(response.page).nextPageToken },
+      repositoryConnections: response.repositoryConnections.map(mapRepositoryConnection),
+      page: pageDto(response.page),
     };
   }
 
-  async getRepository(repositoryId: string, context: RequestContext): Promise<RepositoryDto> {
-    const response = await this.#unary<GetRepositoryResponse>(context, (metadata, options, callback) =>
-      this.#repositories.getRepository({ repositoryId }, metadata, options, callback));
-    return mapRepository(required(response.repository));
+  async getRepositoryConnection(repositoryConnectionId: string, context: RequestContext): Promise<RepositoryConnectionDto> {
+    const response = await this.#unary<GetRepositoryConnectionResponse>(context, (metadata, options, callback) =>
+      this.#repositories.getRepositoryConnection({ repositoryConnectionId }, metadata, options, callback));
+    return mapRepositoryConnection(required(response.repositoryConnection));
   }
 
-  async saveRepository(input: SaveRepositoryInput, context: RequestContext): Promise<RepositoryDto> {
-    const response = await this.#unary<SaveRepositoryResponse>(context, (metadata, options, callback) =>
-      this.#repositories.saveRepository({
+  async createRepositoryConnection(input: CreateRepositoryConnectionInput, context: RequestContext): Promise<RepositoryConnectionDto> {
+    const response = await this.#unary<CreateRepositoryConnectionResponse>(context, (metadata, options, callback) =>
+      this.#repositories.createRepositoryConnection({
         idempotencyKey: input.idempotencyKey,
-        repository: {
-          id: input.repository.id,
-          owner: input.repository.owner,
-          repository: input.repository.repository,
-          installationId: input.repository.installationId,
-          baseBranch: input.repository.baseBranch,
-          lockSha256: input.repository.lockSha256,
-        },
+        provider: toProtoRepositoryProvider(input),
+        displayName: input.displayName,
+        defaultBranch: input.defaultBranch,
       }, metadata, options, callback));
-    return mapRepository(required(response.repository));
+    return mapRepositoryConnection(required(response.repositoryConnection));
   }
 
-  async listPreparations(repositoryId: string, selection: PageInput, context: RequestContext): Promise<PreparationPageDto> {
-    const response = await this.#unary<ListPreparationsResponse>(context, (metadata, options, callback) =>
-      this.#repositories.listPreparations({ repositoryId, page: page(selection) }, metadata, options, callback));
-    return {
-      preparations: response.preparations.map(mapPreparation),
-      page: { nextPageToken: required(response.page).nextPageToken },
-    };
+  async listRuntimeProfiles(repositoryConnectionId: string | undefined, selection: PageInput, context: RequestContext): Promise<RuntimeProfilePageDto> {
+    const response = await this.#unary<ListRuntimeProfilesResponse>(context, (metadata, options, callback) =>
+      this.#profiles.listRuntimeProfiles({
+        ...(repositoryConnectionId === undefined ? {} : { repositoryConnectionId }),
+        page: page(selection),
+      }, metadata, options, callback));
+    return { runtimeProfiles: response.runtimeProfiles.map(mapRuntimeProfile), page: pageDto(response.page) };
   }
 
-  async getPreparation(preparationId: string, context: RequestContext): Promise<PreparationDto> {
-    const response = await this.#unary<GetPreparationResponse>(context, (metadata, options, callback) =>
-      this.#repositories.getPreparation({ preparationId }, metadata, options, callback));
-    return mapPreparation(required(response.preparation));
+  async getRuntimeProfile(runtimeProfileId: string, context: RequestContext): Promise<RuntimeProfileDto> {
+    const response = await this.#unary<GetRuntimeProfileResponse>(context, (metadata, options, callback) =>
+      this.#profiles.getRuntimeProfile({ runtimeProfileId }, metadata, options, callback));
+    return mapRuntimeProfile(required(response.runtimeProfile));
   }
 
-  async prepareRepository(input: PrepareRepositoryInput, context: RequestContext): Promise<{ preparation: PreparationDto; reused: boolean }> {
-    const response = await this.#unary<PrepareRepositoryResponse>(context, (metadata, options, callback) =>
-      this.#repositories.prepareRepository({
+  async createRuntimeProfile(input: CreateRuntimeProfileInput, context: RequestContext): Promise<RuntimeProfileDto> {
+    const response = await this.#unary<CreateRuntimeProfileResponse>(context, (metadata, options, callback) =>
+      this.#profiles.createRuntimeProfile({
         idempotencyKey: input.idempotencyKey,
-        repositoryId: input.repositoryId,
-        revision: input.revision,
+        repositoryConnectionId: input.repositoryConnectionId,
+        repositorySnapshotId: input.repositorySnapshotId,
+        configuration: toProtoProfileConfiguration(input.configuration),
       }, metadata, options, callback));
-    return { preparation: mapPreparation(required(response.preparation)), reused: response.reused };
+    return mapRuntimeProfile(required(response.runtimeProfile));
+  }
+
+  async listRuntimeArtifacts(runtimeProfileId: string, selection: PageInput, context: RequestContext): Promise<RuntimeArtifactPageDto> {
+    const response = await this.#unary<ListRuntimeArtifactsResponse>(context, (metadata, options, callback) =>
+      this.#profiles.listRuntimeArtifacts({ runtimeProfileId, page: page(selection) }, metadata, options, callback));
+    return { runtimeArtifacts: response.runtimeArtifacts.map(mapRuntimeArtifact), page: pageDto(response.page) };
   }
 
   async listProviderModels(selection: PageInput, context: RequestContext): Promise<ProviderModelPageDto> {
@@ -236,79 +214,60 @@ export class OrchestratorBff {
       provider: response.provider,
       models: response.models.map(mapProviderModel),
       observedAt: observedAt.toISOString(),
-      page: { nextPageToken: required(response.page).nextPageToken },
+      page: pageDto(response.page),
     };
   }
 
-  async listDevelopmentTasks(
-    selection: PageInput,
-    phaseFilter: DevelopmentTaskPhaseDto | undefined,
-    context: RequestContext,
-  ): Promise<DevelopmentTaskPageDto> {
+  async listDevelopmentTasks(selection: PageInput, context: RequestContext): Promise<DevelopmentTaskPageDto> {
     const response = await this.#unary<ListDevelopmentTasksResponse>(context, (metadata, options, callback) =>
-      this.#tasks.listDevelopmentTasks({
-        page: page(selection),
-        ...(phase(phaseFilter) === undefined ? {} : { phase: phase(phaseFilter) }),
-      }, metadata, options, callback));
+      this.#tasks.listDevelopmentTasks({ page: page(selection) }, metadata, options, callback));
     return {
-      tasks: response.tasks.map(mapDevelopmentTaskSummary),
-      page: { nextPageToken: required(response.page).nextPageToken },
+      developmentTasks: response.developmentTasks.map(mapDevelopmentTask),
+      page: pageDto(response.page),
     };
   }
 
-  async getDevelopmentTask(taskId: string, context: RequestContext): Promise<DevelopmentTaskDto> {
+  async getDevelopmentTask(developmentTaskId: string, context: RequestContext): Promise<DevelopmentTaskDto> {
     const response = await this.#unary<GetDevelopmentTaskResponse>(context, (metadata, options, callback) =>
-      this.#tasks.getDevelopmentTask({ taskId }, metadata, options, callback));
-    return mapDevelopmentTask(required(response.task));
+      this.#tasks.getDevelopmentTask({ developmentTaskId }, metadata, options, callback));
+    return mapDevelopmentTask(required(response.developmentTask));
   }
 
   async createDevelopmentTask(input: CreateDevelopmentTaskInput, context: RequestContext): Promise<DevelopmentTaskDto> {
     const response = await this.#unary<CreateDevelopmentTaskResponse>(context, (metadata, options, callback) =>
       this.#tasks.createDevelopmentTask({
         idempotencyKey: input.idempotencyKey,
-        input: toProtoTaskInput(input.input),
+        request: toProtoTaskRequest(input.request),
       }, metadata, options, callback));
-    return mapDevelopmentTask(required(response.task));
+    return mapDevelopmentTask(required(response.developmentTask));
   }
 
   async cancelDevelopmentTask(input: TaskActionInput, context: RequestContext): Promise<DevelopmentTaskDto> {
     const response = await this.#unary<CancelDevelopmentTaskResponse>(context, (metadata, options, callback) =>
       this.#tasks.cancelDevelopmentTask(input, metadata, options, callback));
-    return mapDevelopmentTask(required(response.task));
+    return mapDevelopmentTask(required(response.developmentTask));
   }
 
-  async retryDevelopmentTask(input: TaskActionInput, context: RequestContext): Promise<DevelopmentTaskDto> {
+  async retryDevelopmentTask(input: TaskActionInput, context: RequestContext): Promise<DevelopmentAttemptDto> {
     const response = await this.#unary<RetryDevelopmentTaskResponse>(context, (metadata, options, callback) =>
       this.#tasks.retryDevelopmentTask(input, metadata, options, callback));
-    return mapDevelopmentTask(required(response.task));
-  }
-
-  async provideDevelopmentTaskInput(input: ProvideTaskInput, context: RequestContext): Promise<DevelopmentTaskDto> {
-    const response = await this.#unary<ProvideDevelopmentTaskInputResponse>(context, (metadata, options, callback) =>
-      this.#tasks.provideDevelopmentTaskInput(input, metadata, options, callback));
-    return mapDevelopmentTask(required(response.task));
-  }
-
-  async getDevelopmentTaskEvidence(taskId: string, context: RequestContext): Promise<DevelopmentTaskEvidenceDto> {
-    const response = await this.#unary<GetDevelopmentTaskEvidenceResponse>(context, (metadata, options, callback) =>
-      this.#tasks.getDevelopmentTaskEvidence({ taskId }, metadata, options, callback));
-    return mapEvidence(required(response.evidence));
+    return mapDevelopmentAttempt(required(response.attempt));
   }
 
   watchDevelopmentTask(
-    taskId: string,
-    afterResourceVersion: string | undefined,
+    developmentTaskId: string,
+    afterCursor: string | undefined,
     context: RequestContext,
-    onUpdate: (task: DevelopmentTaskDto) => void | Promise<void>,
+    onUpdate: (update: DevelopmentTaskUpdateDto) => void | Promise<void>,
   ): Promise<void> {
     const acceptedRequestId = requestId(context.requestId);
     const metadata = new Metadata();
     metadata.set("x-request-id", acceptedRequestId);
     const duration = Math.min(Math.max(context.deadlineMs ?? DEFAULT_STREAM_DEADLINE_MS, 100), DEFAULT_STREAM_DEADLINE_MS);
-    const cursor = resourceVersion(afterResourceVersion);
+    const acceptedCursor = cursor(afterCursor);
     const stream = this.#tasks.watchDevelopmentTask({
-      taskId,
-      ...(cursor === undefined ? {} : { afterResourceVersion: cursor }),
+      developmentTaskId,
+      ...(acceptedCursor === undefined ? {} : { afterCursor: acceptedCursor }),
     }, metadata, { deadline: Date.now() + duration });
 
     return new Promise((resolve, reject) => {
@@ -320,24 +279,22 @@ export class OrchestratorBff {
         if (error === undefined || context.signal?.aborted === true) resolve();
         else reject(toBffError(error, acceptedRequestId));
       };
-      const abort = (): void => {
-        stream.cancel();
-        finish();
-      };
-      if (context.signal?.aborted === true) {
-        abort();
-        return;
-      }
+      const abort = (): void => { stream.cancel(); finish(); };
+      if (context.signal?.aborted === true) { abort(); return; }
       context.signal?.addEventListener("abort", abort, { once: true });
       stream.on("data", (response: WatchDevelopmentTaskResponse) => {
         stream.pause();
-        Promise.resolve()
-          .then(() => onUpdate(mapDevelopmentTask(required(response.task))))
-          .then(() => stream.resume())
-          .catch((error: unknown) => {
-            stream.cancel();
-            finish(error);
-          });
+        Promise.resolve().then(() => {
+          const update = required(response.update);
+          switch (update.$case) {
+            case "developmentTask":
+              return onUpdate({ kind: "development_task", cursor: response.cursor, developmentTask: mapDevelopmentTask(update.developmentTask) });
+            case "attempt":
+              return onUpdate({ kind: "attempt", cursor: response.cursor, attempt: mapDevelopmentAttempt(update.attempt) });
+            case "candidate":
+              return onUpdate({ kind: "candidate", cursor: response.cursor, candidateId: update.candidate.id });
+          }
+        }).then(() => stream.resume()).catch((error: unknown) => { stream.cancel(); finish(error); });
       });
       stream.on("error", finish);
       stream.on("end", () => finish());
@@ -375,8 +332,4 @@ export class OrchestratorBff {
       if (context.signal?.aborted === true) call.cancel();
     });
   }
-}
-
-export function phaseFromWire(value: DevelopmentTaskPhase): DevelopmentTaskPhaseDto {
-  return mapTaskPhase(value);
 }

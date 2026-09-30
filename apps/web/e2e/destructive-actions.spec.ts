@@ -1,20 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-test("cancellation requires explicit confirmation and returns focus safely", async ({ page }) => {
+test("cancellation updates the task independently from review state", async ({ page }) => {
   await page.goto("/tasks/00000000-0000-4000-8000-000000000043");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
-  const cancel = page.getByRole("button", { name: "Cancel task" });
-  await cancel.click();
-  const dialog = page.getByRole("dialog", { name: "Cancel this task?" });
-  await expect(dialog).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await expect(cancel).toBeFocused();
-  await expect(page.locator("body")).not.toHaveCSS("pointer-events", "none");
-
-  await cancel.click();
-  await page.getByRole("button", { name: "Confirm cancellation" }).click();
-  await expect(page.getByText("Cancellation requested")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page).toHaveURL(/notice=cancelled/u);
   await expect(page.getByText("Cancelled", { exact: true }).first()).toBeVisible();
 });
 

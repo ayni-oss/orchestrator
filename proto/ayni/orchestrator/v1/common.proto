@@ -2,7 +2,10 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
-// PageRequest selects one bounded page from a list RPC.
+import "ayni/orchestrator/v1/errors.proto";
+import "google/protobuf/timestamp.proto";
+
+// PageRequest selects one stable bounded page from a list RPC.
 message PageRequest {
   // page_size is 1 through 100. Zero requests the server default of 50.
   uint32 page_size = 1;
@@ -10,16 +13,66 @@ message PageRequest {
   string page_token = 2;
 }
 
-// PageResponse describes the next page, when one exists.
+// PageResponse describes the page and the observation cursor used to produce it.
 message PageResponse {
   // next_page_token is empty when the current page is the final page.
   string next_page_token = 1;
+  // snapshot_cursor is a resumable service cursor for this consistent list observation.
+  uint64 snapshot_cursor = 2;
 }
 
-// ChangeConstraints freezes the repository paths and test-edit authority for a task.
+// ChangeConstraints freezes path and test-edit authority for a development task.
 message ChangeConstraints {
-  // protected_paths contains at most 100 normalized repository-relative paths
-  // with at most 16,384 aggregate UTF-8 bytes.
+  // protected_paths contains at most 100 normalized repository-relative paths,
+  // each at most 512 bytes and at most 16,384 aggregate UTF-8 bytes.
   repeated string protected_paths = 1;
   bool allow_test_edits = 2;
+}
+
+// ResourceFailure is a bounded, credential-free failure attached to a resource.
+message ResourceFailure {
+  ErrorReason reason = 1;
+  // message is at most 512 UTF-8 bytes and never contains credentials or raw logs.
+  string message = 2;
+  // remediation is at most 1,024 UTF-8 bytes when present.
+  optional string remediation = 3;
+  google.protobuf.Timestamp observed_at = 4;
+}
+
+// OciPlatform identifies one supported OCI image platform.
+message OciPlatform {
+  // operating_system and architecture are normalized OCI values of at most 32 ASCII bytes.
+  string operating_system = 1;
+  string architecture = 2;
+  // variant is a normalized OCI variant of at most 32 ASCII bytes when present.
+  optional string variant = 3;
+}
+
+// VerifiedMetadata is one bounded metadata value verified with an immutable resource.
+message VerifiedMetadata {
+  // key is 1 through 64 lowercase ASCII identifier characters.
+  string key = 1;
+  // value is at most 512 UTF-8 bytes and must not contain credentials.
+  string value = 2;
+}
+
+// WorkflowExecution identifies one immutable provider workflow attempt.
+message WorkflowExecution {
+  oneof provider {
+    GithubWorkflowExecution github = 1;
+  }
+}
+
+// GithubWorkflowExecution is the GitHub-specific workflow boundary.
+message GithubWorkflowExecution {
+  uint64 workflow_id = 1;
+  uint64 run_id = 2;
+  // attempt is at least 1.
+  uint32 attempt = 3;
+  // event_name is 1 through 64 safe ASCII bytes.
+  string event_name = 4;
+  // head_sha is exactly 40 lowercase hexadecimal characters.
+  string head_sha = 5;
+  // html_url is an HTTPS URL of at most 2,048 bytes.
+  string html_url = 6;
 }

@@ -68,14 +68,15 @@ The identity file has this bounded form (at most 64 clients):
       "id": "automation-client",
       "token_sha256": "<64 lowercase hexadecimal SHA-256 characters>",
       "expires_at_unix": 1798761600,
-      "capabilities": ["repositories.read", "tasks.read", "evidence.read"]
+      "capabilities": ["repositories.read", "profiles.read", "tasks.read", "reviews.read"]
     }
   ]
 }
 ```
 
 Client IDs are unique 1-64 byte ASCII identifiers using letters, digits, dot,
-dash, or underscore. Token digests and IDs must be unique. Generate at least 32
+dash, or underscore. Each identity has 1 through 11 unique recognized
+capabilities. Token digests and IDs must be unique. Generate at least 32
 random bytes for each opaque token, deliver the raw value only to that client,
 and put only its SHA-256 digest in `clients.json`. The control plane reads the
 configuration at startup; rotate or revoke a token by replacing the Secret and
@@ -135,19 +136,20 @@ collide.
 
 | Capability | Authorized RPCs |
 | --- | --- |
-| `repositories.read` | `ListRepositories`, `GetRepository`, `ListPreparations`, `GetPreparation` |
-| `repositories.write` | `SaveRepository`, `PrepareRepository` |
+| `repositories.read` | `ListRepositoryConnections`, `GetRepositoryConnection`, `ListRepositorySnapshots`, `GetRepositorySnapshot`, `WatchRepositories` |
+| `repositories.write` | `CreateRepositoryConnection` |
+| `profiles.read` | `ListRuntimeProfiles`, `GetRuntimeProfile`, `ListRuntimeProfileRevisions`, `GetRuntimeProfileRevision`, `ListRuntimeArtifacts`, `GetRuntimeArtifact`, `ListAutomationInstallations`, `GetAutomationInstallation`, `WatchRuntimeProfiles` |
+| `profiles.write` | `CreateRuntimeProfile`, `InstallRepositoryAutomation`, `ReconcileRuntimeProfile` |
 | `provider_models.read` | `ListProviderModels` |
-| `tasks.read` | `ListDevelopmentTasks`, `GetDevelopmentTask`, `WatchDevelopmentTask` |
-| `tasks.create` + `publications.create` | `CreateDevelopmentTask` |
+| `tasks.read` | `ListDevelopmentTasks`, `GetDevelopmentTask`, `ListDevelopmentAttempts`, `GetDevelopmentAttempt`, `ListCandidates`, `GetCandidate`, `WatchDevelopmentTask` |
+| `tasks.create` | `CreateDevelopmentTask` |
 | `tasks.cancel` | `CancelDevelopmentTask` |
-| `tasks.retry` + `publications.create` | `RetryDevelopmentTask` |
-| `tasks.input` + `publications.create` | `ProvideDevelopmentTaskInput` |
-| `evidence.read` | `GetDevelopmentTaskEvidence` |
+| `tasks.retry` | `RetryDevelopmentTask` |
+| `reviews.read` | `ListChangeRequests`, `GetChangeRequest`, `ListAssessments`, `GetAssessment`, `ListEvidenceReferences`, `GetEvidenceReference`, `WatchReviews` |
+| `reviews.write` | `PublishCandidate` |
 
-`publications.create` is deliberately an additional requirement for operations
-that can start or resume work which may create a draft pull request. It does not
-expose a separate publication RPC.
+Task execution and candidate publication are independently authorized. Creating
+or retrying a task does not implicitly authorize publishing a change request.
 
 Send exactly one ASCII metadata value:
 
@@ -173,14 +175,14 @@ metrics.
 | client request rate | 120 admitted starts per 60-second server window | `RESOURCE_EXHAUSTED`; retry after the current window |
 | unary deadline | required, at most 30 seconds | `INVALID_ARGUMENT`; an elapsed deadline is `DEADLINE_EXCEEDED` |
 | task-watch deadline | required, at most 5 minutes | `INVALID_ARGUMENT` or `DEADLINE_EXCEEDED` |
-| task updates | one resumable server stream per watch | reconnect with the last `resource_version` |
+| service updates | one resumable server stream per watch | reconnect with the last delivered `cursor` |
 
 Transport overload is never an instruction to retry a non-idempotent request
 with a new key. Reuse the original idempotency key and apply capped exponential
 backoff with jitter. Cancel a watch when its result is no longer needed. A
-watch may end on its deadline, server shutdown, backpressure, or a terminal task
-snapshot; reconnect with `after_resource_version` equal to the last complete
-update. Point-in-time consumers use `GetDevelopmentTask`.
+watch may end on its deadline, server shutdown, backpressure, or a terminal
+resource snapshot; reconnect with `after_cursor` equal to the last complete
+update's cursor. Point-in-time consumers use the corresponding `Get` RPC.
 
 Canonical status handling:
 
@@ -197,10 +199,12 @@ Canonical status handling:
 - `DEADLINE_EXCEEDED` / `CANCELLED`: use the durable resource and idempotency key
   to determine the result before retrying.
 - `UNAVAILABLE`: reconnect or retry with bounded backoff.
+- `UNIMPLEMENTED`: the deployed control plane models the operation but has not
+  delivered its persistence/reconciliation implementation; do not retry without
+  a confirmed server upgrade.
 
-The existing application status table in [the protocol guide](../proto/README.md#errors)
-applies after admission. Clients branch on canonical codes and documented rich
-error reasons, never message text.
+After admission, clients branch on canonical codes and the stable rich
+`ErrorReason` values in `errors.proto`, never message text.
 
 ## Contract distribution and upgrades
 
@@ -279,25 +283,26 @@ kubectl --context docker-desktop --namespace ayni-orchestrator-dev \
   port-forward --address 127.0.0.1 service/control-plane 15052:50052
 ```
 
-Then list repositories:
+Then list repository connections:
 
 ```sh
 grpc_private -d '{"page":{"pageSize":50}}' "$ORCHESTRATOR_ENDPOINT" \
-  ayni.orchestrator.v1.RepositoryService/ListRepositories
+  ayni.orchestrator.v1.RepositoryService/ListRepositoryConnections
 ```
 
-Submit a task. Use real approved identifiers and keep task content free of
-credentials:
+Submit a task. Use real approved resource identifiers and an exact repository
+revision; keep task content free of credentials:
 
 ```sh
 grpc_private -d @ "$ORCHESTRATOR_ENDPOINT" \
   ayni.orchestrator.v1.DevelopmentTaskService/CreateDevelopmentTask <<'JSON'
 {
   "idempotencyKey": "client-example-create-1",
-  "input": {
-    "repositoryId": "sandbox",
-    "model": "gpt-5",
-    "startRevision": "0123456789abcdef0123456789abcdef01234567",
+  "request": {
+    "repositoryConnectionId": "repository:1",
+    "repositoryRevision": "0123456789abcdef0123456789abcdef01234567",
+    "runtimeProfileId": "profile:1",
+    "agent": {"provider": "openai", "agent": "coding-agent", "model": "gpt-5"},
     "request": "Correct the bounded retry calculation.",
     "acceptanceCriteria": ["The regression test passes."],
     "changeConstraints": {"protectedPaths": [".github"], "allowTestEdits": true},
@@ -307,13 +312,13 @@ grpc_private -d @ "$ORCHESTRATOR_ENDPOINT" \
 JSON
 ```
 
-Record `task.id` and `task.resourceVersion` from the response. Observe from that
+Record `developmentTask.id` and the delivered service cursor. Observe from that
 cursor; use a five-minute grpcurl deadline and reconnect after
-`DEADLINE_EXCEEDED` with the last received `resourceVersion`:
+`DEADLINE_EXCEEDED` with the last received `cursor`:
 
 ```sh
 grpc_private -max-time 300 \
-  -d '{"taskId":"TASK_ID","afterResourceVersion":"RESOURCE_VERSION"}' \
+  -d '{"developmentTaskId":"TASK_ID","afterCursor":"CURSOR"}' \
   "$ORCHESTRATOR_ENDPOINT" \
   ayni.orchestrator.v1.DevelopmentTaskService/WatchDevelopmentTask
 ```
@@ -321,16 +326,18 @@ grpc_private -max-time 300 \
 Cancel with a stable key:
 
 ```sh
-grpc_private -d '{"idempotencyKey":"client-example-cancel-1","taskId":"TASK_ID"}' \
+grpc_private -d '{"idempotencyKey":"client-example-cancel-1","developmentTaskId":"TASK_ID"}' \
   "$ORCHESTRATOR_ENDPOINT" \
   ayni.orchestrator.v1.DevelopmentTaskService/CancelDevelopmentTask
 ```
 
-Retrieve digest-bound evidence after validation:
+Evidence is retrieved through review resources rather than from task
+completion. List the digest-bound references for an exact-head assessment:
 
 ```sh
-grpc_private -d '{"taskId":"TASK_ID"}' "$ORCHESTRATOR_ENDPOINT" \
-  ayni.orchestrator.v1.DevelopmentTaskService/GetDevelopmentTaskEvidence
+grpc_private -d '{"assessmentId":"ASSESSMENT_ID","page":{"pageSize":50}}' \
+  "$ORCHESTRATOR_ENDPOINT" \
+  ayni.orchestrator.v1.ReviewService/ListEvidenceReferences
 ```
 
 The private TypeScript bindings also include a minimal TLS, metadata, deadline,

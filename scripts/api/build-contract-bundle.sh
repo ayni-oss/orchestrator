@@ -30,7 +30,7 @@ if [[ -e "$archive" || -e "$archive_checksum" ]]; then
   exit 1
 fi
 git -C "$repository_root" archive HEAD \
-  proto/ayni proto/README.md proto/RELEASES.md proto/buf.yaml \
+  proto/ayni proto/BASELINE proto/README.md proto/RELEASES.md proto/buf.yaml \
   | tar -x -C "$work_directory/$bundle_name"
 buf build "$work_directory/$bundle_name/proto" --as-file-descriptor-set \
   --output "$work_directory/$bundle_name/ayni.orchestrator.v1.pb"

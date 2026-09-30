@@ -1,63 +1,50 @@
 import {
-  DevelopmentTaskPhase,
+  DevelopmentAttemptState,
+  DevelopmentTaskState,
   ErrorReason,
-  EvidenceOutcome,
-  LifecycleOutcome,
-  LifecycleStage,
-  ModelInteractionOutcome,
-  ModelUsageCollectionStatus,
-  ModelUsageStage,
-  PreparationStatus,
+  RepositoryConnectionStatus,
+  RuntimeArtifactStatus,
+  RuntimeProfileKind,
+  RuntimeProfileState,
+  RuntimeProfileSupport,
   type ChangeConstraints,
-  type DevelopmentTask as ProtoDevelopmentTask,
-  type DevelopmentTaskEvidence as ProtoDevelopmentTaskEvidence,
-  type DevelopmentTaskInput as ProtoDevelopmentTaskInput,
-  type DevelopmentTaskSummary as ProtoDevelopmentTaskSummary,
-  type EstimatedModelCost,
-  type LifecycleEvent,
-  type ModelUsageInteraction,
-  type ModelUsageSummary,
+  type DevelopmentAttempt,
+  type DevelopmentSnapshot,
+  type DevelopmentTask,
+  type DevelopmentTaskRequest,
+  type OciPlatform,
   type ProviderModel,
-  type ProviderTokenUsage,
-  type RepositoryBinding,
-  type RepositoryEnrollment,
-  type StageModelUsage,
-  type TaskFailure,
-  type TaskModelUsage,
+  type RepositoryConnection,
+  type ResourceFailure,
+  type RuntimeArtifact,
+  type RuntimeProfile,
+  type RuntimeProfileConfiguration,
 } from "@ayni-orchestrator/grpc-bindings/server";
 import type {
   ChangeConstraintsDto,
+  CreateRepositoryConnectionInput,
+  DevelopmentAttemptDto,
+  DevelopmentAttemptStateDto,
+  DevelopmentSnapshotDto,
   DevelopmentTaskDto,
-  DevelopmentTaskEvidenceDto,
   DevelopmentTaskInputDto,
-  DevelopmentTaskPhaseDto,
-  DevelopmentTaskSummaryDto,
-  EstimatedModelCostDto,
-  EvidenceOutcomeDto,
-  LifecycleEventDto,
-  LifecycleOutcomeDto,
-  LifecycleStageDto,
-  ModelInteractionOutcomeDto,
-  ModelSnapshotDto,
-  ModelUsageCollectionStatusDto,
-  ModelUsageInteractionDto,
-  ModelUsageStageDto,
-  ModelUsageSummaryDto,
-  PreparationDto,
-  PreparationStatusDto,
+  DevelopmentTaskStateDto,
+  GithubRepositoryDto,
+  OciPlatformDto,
   ProviderModelDto,
-  ProviderTokenUsageDto,
-  RepositoryDto,
-  RepositoryEnrollmentDto,
-  StageModelUsageDto,
-  TaskFailureDto,
-  TaskModelUsageDto,
+  RepositoryConnectionDto,
+  RepositoryConnectionStatusDto,
+  ResourceFailureDto,
+  RuntimeArtifactDto,
+  RuntimeArtifactStatusDto,
+  RuntimeProfileConfigurationDto,
+  RuntimeProfileDto,
+  RuntimeProfileKindDto,
+  RuntimeProfileStateDto,
+  RuntimeProfileSupportDto,
 } from "./dto.js";
 
-interface DurationValue {
-  seconds: string;
-  nanos: number;
-}
+interface DurationValue { seconds: string; nanos: number }
 
 export class BffMappingError extends Error {
   constructor(message = "the control plane returned an incomplete response") {
@@ -67,10 +54,12 @@ export class BffMappingError extends Error {
 }
 
 function required<T>(value: T | null | undefined): T {
-  if (value === undefined || value === null) {
-    throw new BffMappingError();
-  }
+  if (value === undefined || value === null) throw new BffMappingError();
   return value;
+}
+
+function optional<T extends object>(key: string, value: unknown): T | object {
+  return value === undefined ? {} : { [key]: value };
 }
 
 function date(value: Date | undefined): string | undefined {
@@ -78,95 +67,280 @@ function date(value: Date | undefined): string | undefined {
   return value.toISOString();
 }
 
-function durationSeconds(value: DurationValue | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const seconds = Number(value.seconds);
-  const result = seconds + value.nanos / 1_000_000_000;
-  return Number.isFinite(result) && result >= 0 ? result : undefined;
-}
-
 function requiredDate(value: Date | undefined): string {
   return required(date(value));
 }
 
-function requiredDurationSeconds(value: DurationValue | undefined): number {
-  return required(durationSeconds(value));
+function durationSeconds(value: DurationValue | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const seconds = Number(value.seconds) + value.nanos / 1_000_000_000;
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }
 
-function optional<T extends object>(key: string, value: unknown): T | object {
-  return value === undefined ? {} : { [key]: value };
+function reason(value: ErrorReason): string {
+  return ErrorReason[value]?.replace(/^ERROR_REASON_/u, "").toLowerCase() ?? "unknown";
 }
 
-function optionalHttpsUrl<T extends object>(key: string, value: string | undefined): T | object {
-  if (value === undefined) return {};
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") throw new BffMappingError();
-  } catch (error) {
-    if (error instanceof BffMappingError) throw error;
-    throw new BffMappingError();
+function mapFailure(value: ResourceFailure | undefined): ResourceFailureDto | undefined {
+  if (value === undefined) return undefined;
+  return {
+    reason: reason(value.reason),
+    message: value.message,
+    observedAt: requiredDate(value.observedAt),
+    ...optional("remediation", value.remediation),
+  } as ResourceFailureDto;
+}
+
+export function mapRepositoryStatus(value: RepositoryConnectionStatus): RepositoryConnectionStatusDto {
+  switch (value) {
+    case RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_CONNECTING: return "connecting";
+    case RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_CONNECTED: return "connected";
+    case RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_DEGRADED: return "degraded";
+    case RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_REVOKED: return "revoked";
+    case RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_FAILED: return "failed";
+    default: return "unknown";
   }
-  return { [key]: value };
+}
+
+export function mapRepositoryConnection(value: RepositoryConnection): RepositoryConnectionDto {
+  if (value.provider?.provider?.$case !== "github") throw new BffMappingError();
+  const github = value.provider.provider.github;
+  return {
+    id: value.id,
+    provider: {
+      kind: "github",
+      repositoryId: github.repositoryId,
+      owner: github.owner,
+      name: github.name,
+      installationId: github.installationId,
+      htmlUrl: github.htmlUrl,
+    },
+    displayName: value.displayName,
+    defaultBranch: value.defaultBranch,
+    status: mapRepositoryStatus(value.status),
+    createdAt: requiredDate(value.createdAt),
+    updatedAt: requiredDate(value.updatedAt),
+    resourceVersion: value.resourceVersion,
+    ...optional("failure", mapFailure(value.failure)),
+  } as RepositoryConnectionDto;
+}
+
+export function toProtoRepositoryProvider(input: CreateRepositoryConnectionInput): {
+  provider: { $case: "github"; github: Omit<GithubRepositoryDto, "kind"> };
+} {
+  const { kind: _kind, ...github } = input.provider;
+  return { provider: { $case: "github", github } };
+}
+
+export function mapRuntimeProfileKind(value: RuntimeProfileKind): RuntimeProfileKindDto {
+  switch (value) {
+    case RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED: return "ayni_managed";
+    case RuntimeProfileKind.RUNTIME_PROFILE_KIND_CUSTOM_RUNTIME: return "custom_runtime";
+    default: return "unknown";
+  }
+}
+
+export function mapRuntimeProfileSupport(value: RuntimeProfileSupport): RuntimeProfileSupportDto {
+  switch (value) {
+    case RuntimeProfileSupport.RUNTIME_PROFILE_SUPPORT_OPERATIONAL: return "operational";
+    case RuntimeProfileSupport.RUNTIME_PROFILE_SUPPORT_UNSUPPORTED: return "unsupported";
+    default: return "unknown";
+  }
+}
+
+export function mapRuntimeProfileState(value: RuntimeProfileState): RuntimeProfileStateDto {
+  switch (value) {
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED: return "setup_required";
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN: return "setup_pr_open";
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_AWAITING_ENVIRONMENT: return "awaiting_environment";
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_READY: return "ready";
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_UPDATING: return "updating";
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_DEGRADED: return "degraded";
+    case RuntimeProfileState.RUNTIME_PROFILE_STATE_FAILED: return "failed";
+    default: return "unknown";
+  }
+}
+
+export function mapRuntimeProfile(value: RuntimeProfile): RuntimeProfileDto {
+  return {
+    id: value.id,
+    repositoryConnectionId: value.repositoryConnectionId,
+    kind: mapRuntimeProfileKind(value.kind),
+    support: mapRuntimeProfileSupport(value.support),
+    state: mapRuntimeProfileState(value.state),
+    createdAt: requiredDate(value.createdAt),
+    updatedAt: requiredDate(value.updatedAt),
+    resourceVersion: value.resourceVersion,
+    ...optional("activeRevisionId", value.activeRevisionId),
+    ...optional("activeRuntimeArtifactId", value.activeRuntimeArtifactId),
+    ...optional("failure", mapFailure(value.failure)),
+  } as RuntimeProfileDto;
+}
+
+export function toProtoProfileConfiguration(value: RuntimeProfileConfigurationDto): RuntimeProfileConfiguration {
+  return value.kind === "ayni_managed"
+    ? {
+        configuration: {
+          $case: "ayniManaged",
+          ayniManaged: {
+            lockFingerprint: value.lockFingerprint,
+            ayniVersion: value.ayniVersion,
+            workflowTemplateVersion: value.workflowTemplateVersion,
+            ociRepository: value.ociRepository,
+          },
+        },
+      }
+    : {
+        configuration: {
+          $case: "customRuntime",
+          customRuntime: { imageReference: value.imageReference },
+        },
+      };
+}
+
+export function mapPlatform(value: OciPlatform): OciPlatformDto {
+  return {
+    operatingSystem: value.operatingSystem,
+    architecture: value.architecture,
+    ...optional("variant", value.variant),
+  } as OciPlatformDto;
+}
+
+export function mapRuntimeArtifactStatus(value: RuntimeArtifactStatus): RuntimeArtifactStatusDto {
+  switch (value) {
+    case RuntimeArtifactStatus.RUNTIME_ARTIFACT_STATUS_DISCOVERED: return "discovered";
+    case RuntimeArtifactStatus.RUNTIME_ARTIFACT_STATUS_VERIFYING: return "verifying";
+    case RuntimeArtifactStatus.RUNTIME_ARTIFACT_STATUS_VERIFIED: return "verified";
+    case RuntimeArtifactStatus.RUNTIME_ARTIFACT_STATUS_REJECTED: return "rejected";
+    case RuntimeArtifactStatus.RUNTIME_ARTIFACT_STATUS_UNAVAILABLE: return "unavailable";
+    case RuntimeArtifactStatus.RUNTIME_ARTIFACT_STATUS_FAILED: return "failed";
+    default: return "unknown";
+  }
+}
+
+export function mapRuntimeArtifact(value: RuntimeArtifact): RuntimeArtifactDto {
+  return {
+    id: value.id,
+    runtimeProfileRevisionId: value.runtimeProfileRevisionId,
+    ociRepository: value.ociRepository,
+    resolvedDigest: value.resolvedDigest,
+    platform: mapPlatform(required(value.platform)),
+    status: mapRuntimeArtifactStatus(value.status),
+    verifiedMetadata: value.verifiedMetadata.map((item) => ({ key: item.key, value: item.value })),
+    createdAt: requiredDate(value.createdAt),
+    resourceVersion: value.resourceVersion,
+    ...optional("verifiedAt", date(value.verifiedAt)),
+    ...optional("discoveryTag", value.discoveryTag),
+    ...optional("failure", mapFailure(value.failure)),
+  } as RuntimeArtifactDto;
+}
+
+export function mapTaskState(value: DevelopmentTaskState): DevelopmentTaskStateDto {
+  switch (value) {
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED: return "queued";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME: return "waiting_for_runtime";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING: return "running";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED: return "succeeded";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_FAILED: return "failed";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_CANCELLED: return "cancelled";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED: return "deadline_exceeded";
+    case DevelopmentTaskState.DEVELOPMENT_TASK_STATE_UNSUPPORTED: return "unsupported";
+    default: return "unknown";
+  }
 }
 
 export function mapChangeConstraints(value: ChangeConstraints): ChangeConstraintsDto {
-  return {
-    protectedPaths: value.protectedPaths.map(String),
-    allowTestEdits: value.allowTestEdits,
-  };
+  return { protectedPaths: value.protectedPaths.map(String), allowTestEdits: value.allowTestEdits };
 }
 
-export function mapPreparationStatus(value: PreparationStatus): PreparationStatusDto {
+export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentSnapshotDto {
+  const repository = required(value.repository);
+  const runtime = required(value.runtime);
+  const agent = required(value.agent);
+  return {
+    repository: {
+      repositoryConnectionId: repository.repositoryConnectionId,
+      repositorySnapshotId: repository.repositorySnapshotId,
+      revision: repository.revision,
+    },
+    runtime: {
+      runtimeProfileId: runtime.runtimeProfileId,
+      runtimeProfileRevisionId: runtime.runtimeProfileRevisionId,
+      profileKind: mapRuntimeProfileKind(runtime.profileKind),
+      runtimeArtifactId: runtime.runtimeArtifactId,
+      ociRepository: runtime.ociRepository,
+      resolvedDigest: runtime.resolvedDigest,
+      platform: mapPlatform(required(runtime.platform)),
+    },
+    agent: { provider: agent.provider, agent: agent.agent, model: agent.model },
+    request: value.request,
+    acceptanceCriteria: value.acceptanceCriteria.map(String),
+    changeConstraints: mapChangeConstraints(required(value.changeConstraints)),
+    ...optional("deadlineAt", date(value.deadlineAt)),
+  } as DevelopmentSnapshotDto;
+}
+
+export function mapDevelopmentTask(value: DevelopmentTask): DevelopmentTaskDto {
+  return {
+    id: value.id,
+    snapshot: mapDevelopmentSnapshot(required(value.snapshot)),
+    state: mapTaskState(value.state),
+    attemptCount: value.attemptCount,
+    createdAt: requiredDate(value.createdAt),
+    updatedAt: requiredDate(value.updatedAt),
+    resourceVersion: value.resourceVersion,
+    ...optional("activeAttemptId", value.activeAttemptId),
+    ...optional("failure", mapFailure(value.failure)),
+  } as DevelopmentTaskDto;
+}
+
+export function mapAttemptState(value: DevelopmentAttemptState): DevelopmentAttemptStateDto {
   switch (value) {
-    case PreparationStatus.PREPARATION_STATUS_QUEUED:
-      return "queued";
-    case PreparationStatus.PREPARATION_STATUS_PREPARING:
-      return "preparing";
-    case PreparationStatus.PREPARATION_STATUS_READY:
-      return "ready";
-    case PreparationStatus.PREPARATION_STATUS_SETUP_REQUIRED:
-      return "setup_required";
-    case PreparationStatus.PREPARATION_STATUS_FAILED:
-      return "failed";
-    default:
-      return "unknown";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_QUEUED: return "queued";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_RUNNING: return "running";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT: return "waiting_for_input";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED: return "succeeded";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_FAILED: return "failed";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_CANCELLED: return "cancelled";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED: return "deadline_exceeded";
+    case DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED: return "unsupported";
+    default: return "unknown";
   }
 }
 
-export function mapPreparation(value: import("@ayni-orchestrator/grpc-bindings/server").Preparation): PreparationDto {
-  const diagnostic = value.diagnostic;
-  const duration = durationSeconds(value.duration);
+export function mapDevelopmentAttempt(value: DevelopmentAttempt): DevelopmentAttemptDto {
   return {
     id: value.id,
-    repositoryId: value.repositoryId,
-    revision: value.revision,
-    lockSha256: value.lockSha256,
-    status: mapPreparationStatus(value.status),
-    reuseCount: value.reuseCount,
-    ...optional("diagnostic", diagnostic),
-    ...optional("durationSeconds", duration),
-  } as PreparationDto;
+    developmentTaskId: value.developmentTaskId,
+    attemptNumber: value.attemptNumber,
+    snapshot: mapDevelopmentSnapshot(required(value.snapshot)),
+    state: mapAttemptState(value.state),
+    createdAt: requiredDate(value.createdAt),
+    updatedAt: requiredDate(value.updatedAt),
+    resourceVersion: value.resourceVersion,
+    ...optional("requestedInput", value.requestedInput),
+    ...optional("completedAt", date(value.completedAt)),
+    ...optional("failure", mapFailure(value.failure)),
+  } as DevelopmentAttemptDto;
 }
 
-export function mapRepositoryEnrollment(value: RepositoryEnrollment): RepositoryEnrollmentDto {
+export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentTaskRequest {
+  const deadlineSeconds = value.deadlineSeconds;
   return {
-    id: value.id,
-    owner: value.owner,
-    repository: value.repository,
-    installationId: value.installationId,
-    baseBranch: value.baseBranch,
-    lockSha256: value.lockSha256,
+    repositoryConnectionId: value.repositoryConnectionId,
+    repositoryRevision: value.repositoryRevision,
+    runtimeProfileId: value.runtimeProfileId,
+    agent: { ...value.agent },
+    request: value.request,
+    acceptanceCriteria: value.acceptanceCriteria.map(String),
+    changeConstraints: {
+      protectedPaths: value.changeConstraints.protectedPaths.map(String),
+      allowTestEdits: value.changeConstraints.allowTestEdits,
+    },
+    ...(deadlineSeconds === undefined
+      ? {}
+      : { deadline: { seconds: String(deadlineSeconds), nanos: 0 } }),
   };
-}
-
-export function mapRepository(value: RepositoryBinding): RepositoryDto {
-  const latestPreparation = value.latestPreparation === undefined
-    ? undefined
-    : mapPreparation(value.latestPreparation);
-  return {
-    enrollment: mapRepositoryEnrollment(required(value.enrollment)),
-    ...optional("latestPreparation", latestPreparation),
-  } as RepositoryDto;
 }
 
 export function mapProviderModel(value: ProviderModel): ProviderModelDto {
@@ -178,354 +352,4 @@ export function mapProviderModel(value: ProviderModel): ProviderModelDto {
     ...optional("contextLength", value.contextLength),
     ...optional("maxOutputTokens", value.maxOutputTokens),
   } as ProviderModelDto;
-}
-
-export function mapTaskPhase(value: DevelopmentTaskPhase): DevelopmentTaskPhaseDto {
-  switch (value) {
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_QUEUED:
-      return "queued";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CODING:
-      return "coding";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_WAITING_FOR_INPUT:
-      return "waiting_for_input";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATION_QUEUED:
-      return "validation_queued";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_VALIDATING:
-      return "validating";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PR_QUEUED:
-      return "pr_queued";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_PREPARING_PR:
-      return "preparing_pr";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_COMPLETED:
-      return "completed";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_FAILED:
-      return "failed";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_CANCELLED:
-      return "cancelled";
-    case DevelopmentTaskPhase.DEVELOPMENT_TASK_PHASE_UNSUPPORTED:
-      return "unsupported";
-    default:
-      return "unknown";
-  }
-}
-
-function mapLifecycleStage(value: LifecycleStage): LifecycleStageDto {
-  switch (value) {
-    case LifecycleStage.LIFECYCLE_STAGE_QUEUE:
-      return "queue";
-    case LifecycleStage.LIFECYCLE_STAGE_CODING:
-      return "coding";
-    case LifecycleStage.LIFECYCLE_STAGE_VALIDATION:
-      return "validation";
-    case LifecycleStage.LIFECYCLE_STAGE_PR_PREPARATION:
-      return "pr_preparation";
-    default:
-      return "unknown";
-  }
-}
-
-function mapLifecycleOutcome(value: LifecycleOutcome): LifecycleOutcomeDto {
-  switch (value) {
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_QUEUED:
-      return "queued";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_STARTED:
-      return "started";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_SUCCEEDED:
-      return "succeeded";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_BLOCKED:
-      return "blocked";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_FAILED:
-      return "failed";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_CANCELLED:
-      return "cancelled";
-    case LifecycleOutcome.LIFECYCLE_OUTCOME_UNSUPPORTED:
-      return "unsupported";
-    default:
-      return "unknown";
-  }
-}
-
-function mapUsageStage(value: ModelUsageStage): ModelUsageStageDto {
-  switch (value) {
-    case ModelUsageStage.MODEL_USAGE_STAGE_CODING:
-      return "coding";
-    case ModelUsageStage.MODEL_USAGE_STAGE_PR_PREPARATION:
-      return "pr_preparation";
-    default:
-      return "unknown";
-  }
-}
-
-function mapInteractionOutcome(value: ModelInteractionOutcome): ModelInteractionOutcomeDto {
-  switch (value) {
-    case ModelInteractionOutcome.MODEL_INTERACTION_OUTCOME_SUCCEEDED:
-      return "succeeded";
-    case ModelInteractionOutcome.MODEL_INTERACTION_OUTCOME_FAILED:
-      return "failed";
-    case ModelInteractionOutcome.MODEL_INTERACTION_OUTCOME_CANCELLED:
-      return "cancelled";
-    default:
-      return "unknown";
-  }
-}
-
-function mapCollectionStatus(value: ModelUsageCollectionStatus): ModelUsageCollectionStatusDto {
-  switch (value) {
-    case ModelUsageCollectionStatus.MODEL_USAGE_COLLECTION_STATUS_UNAVAILABLE:
-      return "unavailable";
-    case ModelUsageCollectionStatus.MODEL_USAGE_COLLECTION_STATUS_COLLECTING:
-      return "collecting";
-    case ModelUsageCollectionStatus.MODEL_USAGE_COLLECTION_STATUS_COMPLETE:
-      return "complete";
-    default:
-      return "unknown";
-  }
-}
-
-function mapEvidenceOutcome(value: EvidenceOutcome): EvidenceOutcomeDto {
-  switch (value) {
-    case EvidenceOutcome.EVIDENCE_OUTCOME_SUCCESS:
-      return "success";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_QUALITY_FAILURE:
-      return "quality_failure";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_POLICY_REJECTED:
-      return "policy_rejected";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_DEPENDENCY_CHANGE_UNSUPPORTED:
-      return "dependency_change_unsupported";
-    case EvidenceOutcome.EVIDENCE_OUTCOME_SCOPE_REJECTED:
-      return "scope_rejected";
-    default:
-      return "unknown";
-  }
-}
-
-function mapErrorReason(value: ErrorReason): string {
-  switch (value) {
-    case ErrorReason.ERROR_REASON_INVALID_IDENTIFIER:
-      return "invalid_identifier";
-    case ErrorReason.ERROR_REASON_INVALID_INPUT:
-      return "invalid_input";
-    case ErrorReason.ERROR_REASON_IDEMPOTENCY_KEY_REUSED:
-      return "idempotency_key_reused";
-    case ErrorReason.ERROR_REASON_RESOURCE_NOT_FOUND:
-      return "resource_not_found";
-    case ErrorReason.ERROR_REASON_CONFLICT:
-      return "conflict";
-    case ErrorReason.ERROR_REASON_FAILED_PRECONDITION:
-      return "failed_precondition";
-    case ErrorReason.ERROR_REASON_TASK_NOT_ACTIONABLE:
-      return "task_not_actionable";
-    case ErrorReason.ERROR_REASON_PROVIDER_UNAVAILABLE:
-      return "provider_unavailable";
-    case ErrorReason.ERROR_REASON_MODEL_UNAVAILABLE:
-      return "model_unavailable";
-    case ErrorReason.ERROR_REASON_REPOSITORY_ACCESS:
-      return "repository_access";
-    case ErrorReason.ERROR_REASON_EVIDENCE_UNAVAILABLE:
-      return "evidence_unavailable";
-    case ErrorReason.ERROR_REASON_CANCELLED:
-      return "cancelled";
-    case ErrorReason.ERROR_REASON_DEADLINE_EXCEEDED:
-      return "deadline_exceeded";
-    case ErrorReason.ERROR_REASON_INTERNAL:
-      return "internal";
-    case ErrorReason.ERROR_REASON_INVALID_SOURCE_REVISION:
-      return "invalid_source_revision";
-    case ErrorReason.ERROR_REASON_INVALID_LOCK_DIGEST:
-      return "invalid_lock_digest";
-    case ErrorReason.ERROR_REASON_REPOSITORY_NOT_READY:
-      return "repository_not_ready";
-    case ErrorReason.ERROR_REASON_TASK_PHASE_NOT_ELIGIBLE:
-      return "task_phase_not_eligible";
-    case ErrorReason.ERROR_REASON_TASK_DEADLINE_EXPIRED:
-      return "task_deadline_expired";
-    default:
-      return "unspecified";
-  }
-}
-
-function mapTaskInput(value: ProtoDevelopmentTaskInput): DevelopmentTaskInputDto {
-  return {
-    repositoryId: value.repositoryId,
-    model: value.model,
-    startRevision: value.startRevision,
-    request: value.request,
-    acceptanceCriteria: value.acceptanceCriteria.map(String),
-    changeConstraints: mapChangeConstraints(required(value.changeConstraints)),
-    ...optional("deadlineSeconds", durationSeconds(value.deadline)),
-  } as DevelopmentTaskInputDto;
-}
-
-function mapModelSnapshot(value: import("@ayni-orchestrator/grpc-bindings/server").ModelSnapshot): ModelSnapshotDto {
-  return { provider: value.provider, model: value.model };
-}
-
-function mapLifecycleEvent(value: LifecycleEvent): LifecycleEventDto {
-  return {
-    sequence: value.sequence,
-    eventTime: requiredDate(value.eventTime),
-    stage: mapLifecycleStage(value.stage),
-    outcome: mapLifecycleOutcome(value.outcome),
-    ...optional("reasonCode", value.reasonCode),
-  } as LifecycleEventDto;
-}
-
-function mapTokens(value: ProviderTokenUsage): ProviderTokenUsageDto {
-  return {
-    ...optional("inputTokens", value.inputTokens),
-    ...optional("outputTokens", value.outputTokens),
-    ...optional("cachedInputTokens", value.cachedInputTokens),
-    ...optional("reasoningTokens", value.reasoningTokens),
-    ...optional("totalTokens", value.totalTokens),
-  } as ProviderTokenUsageDto;
-}
-
-function mapEstimatedCost(value: EstimatedModelCost): EstimatedModelCostDto {
-  return {
-    label: value.label,
-    amountMicros: value.amountMicros,
-    currency: value.currency,
-    pricingVersion: value.pricingVersion,
-    pricedInputTokens: value.pricedInputTokens,
-    pricedCachedInputTokens: value.pricedCachedInputTokens,
-    pricedOutputTokens: value.pricedOutputTokens,
-    inputRateMicrosPerMillion: value.inputRateMicrosPerMillion,
-    cachedInputRateMicrosPerMillion: value.cachedInputRateMicrosPerMillion,
-    outputRateMicrosPerMillion: value.outputRateMicrosPerMillion,
-  };
-}
-
-function mapInteraction(value: ModelUsageInteraction): ModelUsageInteractionDto {
-  return {
-    callId: value.callId,
-    stage: mapUsageStage(value.stage),
-    provider: value.provider,
-    model: value.model,
-    startedAt: requiredDate(value.startedAt),
-    completedAt: requiredDate(value.completedAt),
-    latencySeconds: requiredDurationSeconds(value.latency),
-    outcome: mapInteractionOutcome(value.outcome),
-    tokens: mapTokens(required(value.tokens)),
-    ...optional("resolvedModel", value.resolvedModel),
-    ...optional("estimatedCost", value.estimatedCost === undefined ? undefined : mapEstimatedCost(value.estimatedCost)),
-  } as ModelUsageInteractionDto;
-}
-
-export function mapUsageSummary(value: ModelUsageSummary): ModelUsageSummaryDto {
-  return {
-    interactionCount: value.interactionCount,
-    unavailableInteractionCount: value.unavailableInteractionCount,
-    ...mapTokens(value),
-    ...optional("estimatedCostMicros", value.estimatedCostMicros),
-    ...optional("estimatedCostCurrency", value.estimatedCostCurrency),
-    ...optional("pricingVersion", value.pricingVersion),
-  } as ModelUsageSummaryDto;
-}
-
-function mapStageUsage(value: StageModelUsage): StageModelUsageDto {
-  return { stage: mapUsageStage(value.stage), summary: mapUsageSummary(required(value.summary)) };
-}
-
-function mapTaskUsage(value: TaskModelUsage): TaskModelUsageDto {
-  return {
-    collectionStatus: mapCollectionStatus(value.collectionStatus),
-    interactions: value.interactions.map(mapInteraction),
-    byStage: value.byStage.map(mapStageUsage),
-    total: mapUsageSummary(required(value.total)),
-  };
-}
-
-function mapFailure(value: TaskFailure | undefined): TaskFailureDto | undefined {
-  return value === undefined ? undefined : { reason: mapErrorReason(value.reason), message: value.message };
-}
-
-export function mapDevelopmentTask(value: ProtoDevelopmentTask): DevelopmentTaskDto {
-  const repository = required(value.repository);
-  return {
-    id: value.id,
-    input: mapTaskInput(required(value.input)),
-    repository: {
-      id: repository.id,
-      owner: repository.owner,
-      repository: repository.repository,
-      baseBranch: repository.baseBranch,
-      lockSha256: repository.lockSha256,
-    },
-    model: mapModelSnapshot(required(value.model)),
-    createdAt: requiredDate(value.createdAt),
-    updatedAt: requiredDate(value.updatedAt),
-    phase: mapTaskPhase(value.phase),
-    scopeViolations: value.scopeViolations.map(String),
-    lifecycleComplete: value.lifecycleComplete,
-    lifecycle: value.lifecycle.map(mapLifecycleEvent),
-    modelUsage: mapTaskUsage(required(value.modelUsage)),
-    resourceVersion: value.resourceVersion,
-    ...optional("preparationId", value.preparationId),
-    ...optional("retryOfTaskId", value.retryOfTaskId),
-    ...optional("deadlineAt", date(value.deadlineAt)),
-    ...optional("requestedInput", value.requestedInput),
-    ...optional("candidateCommit", value.candidateCommit),
-    ...optional("validationManifestDigest", value.validationManifestDigest),
-    ...optional("policyOrTestEdits", value.policyOrTestEdits),
-    ...optionalHttpsUrl("draftPrUrl", value.draftPrUrl),
-    ...optional("failure", mapFailure(value.failure)),
-    ...optional("providedInput", value.providedInput),
-  } as DevelopmentTaskDto;
-}
-
-export function mapDevelopmentTaskSummary(value: ProtoDevelopmentTaskSummary): DevelopmentTaskSummaryDto {
-  return {
-    id: value.id,
-    repositoryId: value.repositoryId,
-    repositoryOwner: value.repositoryOwner,
-    repositoryName: value.repositoryName,
-    startRevision: value.startRevision,
-    request: value.request,
-    model: mapModelSnapshot(required(value.model)),
-    createdAt: requiredDate(value.createdAt),
-    updatedAt: requiredDate(value.updatedAt),
-    phase: mapTaskPhase(value.phase),
-    modelUsage: mapUsageSummary(required(value.modelUsage)),
-    resourceVersion: value.resourceVersion,
-    ...optional("retryOfTaskId", value.retryOfTaskId),
-    ...optional("candidateCommit", value.candidateCommit),
-    ...optionalHttpsUrl("draftPrUrl", value.draftPrUrl),
-    ...optional("failure", mapFailure(value.failure)),
-  } as DevelopmentTaskSummaryDto;
-}
-
-export function mapEvidence(value: ProtoDevelopmentTaskEvidence): DevelopmentTaskEvidenceDto {
-  return {
-    manifestDigest: value.manifestDigest,
-    outcome: mapEvidenceOutcome(value.outcome),
-    checkExitCode: value.checkExitCode,
-    startRevision: value.startRevision,
-    candidateCommit: value.candidateCommit,
-    lockSha256: value.lockSha256,
-    preparationReused: value.preparationReused,
-    policyEdited: value.policyEdited,
-    testsEdited: value.testsEdited,
-    scopeViolations: value.scopeViolations.map(String),
-    changedPaths: value.changedPaths.map(String),
-    artifacts: value.artifacts.map((artifact) => ({ name: artifact.name, sha256: artifact.sha256 })),
-    ...optional("changeConstraints", value.changeConstraints === undefined ? undefined : mapChangeConstraints(value.changeConstraints)),
-    ...optional("preparationId", value.preparationId),
-  } as DevelopmentTaskEvidenceDto;
-}
-
-export function toProtoTaskInput(value: DevelopmentTaskInputDto): ProtoDevelopmentTaskInput {
-  return {
-    repositoryId: value.repositoryId,
-    model: value.model,
-    startRevision: value.startRevision,
-    request: value.request,
-    acceptanceCriteria: value.acceptanceCriteria.map(String),
-    changeConstraints: {
-      protectedPaths: value.changeConstraints.protectedPaths.map(String),
-      allowTestEdits: value.changeConstraints.allowTestEdits,
-    },
-    ...(value.deadlineSeconds === undefined
-      ? {}
-      : { deadline: { seconds: Math.trunc(value.deadlineSeconds).toString(), nanos: 0 } }),
-  };
 }

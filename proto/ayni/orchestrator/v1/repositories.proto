@@ -3,113 +3,135 @@ syntax = "proto3";
 package ayni.orchestrator.v1;
 
 import "ayni/orchestrator/v1/common.proto";
-import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
-// RepositoryService manages enrolled repositories and immutable environment preparations.
+// RepositoryService manages provider-neutral repository connections and snapshots.
 service RepositoryService {
-  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
-  rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse);
-  rpc SaveRepository(SaveRepositoryRequest) returns (SaveRepositoryResponse);
-  rpc ListPreparations(ListPreparationsRequest) returns (ListPreparationsResponse);
-  rpc GetPreparation(GetPreparationRequest) returns (GetPreparationResponse);
-  rpc PrepareRepository(PrepareRepositoryRequest) returns (PrepareRepositoryResponse);
+  rpc ListRepositoryConnections(ListRepositoryConnectionsRequest) returns (ListRepositoryConnectionsResponse);
+  rpc GetRepositoryConnection(GetRepositoryConnectionRequest) returns (GetRepositoryConnectionResponse);
+  rpc CreateRepositoryConnection(CreateRepositoryConnectionRequest) returns (CreateRepositoryConnectionResponse);
+  rpc ListRepositorySnapshots(ListRepositorySnapshotsRequest) returns (ListRepositorySnapshotsResponse);
+  rpc GetRepositorySnapshot(GetRepositorySnapshotRequest) returns (GetRepositorySnapshotResponse);
+  rpc WatchRepositories(WatchRepositoriesRequest) returns (stream WatchRepositoriesResponse);
 }
 
-// PreparationStatus is the durable state of one content-addressed preparation.
-enum PreparationStatus {
-  PREPARATION_STATUS_UNSPECIFIED = 0;
-  PREPARATION_STATUS_QUEUED = 1;
-  PREPARATION_STATUS_PREPARING = 2;
-  PREPARATION_STATUS_READY = 3;
-  PREPARATION_STATUS_SETUP_REQUIRED = 4;
-  PREPARATION_STATUS_FAILED = 5;
+// RepositoryConnectionStatus is the independently reconciled access state.
+enum RepositoryConnectionStatus {
+  REPOSITORY_CONNECTION_STATUS_UNSPECIFIED = 0;
+  REPOSITORY_CONNECTION_STATUS_CONNECTING = 1;
+  REPOSITORY_CONNECTION_STATUS_CONNECTED = 2;
+  REPOSITORY_CONNECTION_STATUS_DEGRADED = 3;
+  REPOSITORY_CONNECTION_STATUS_REVOKED = 4;
+  REPOSITORY_CONNECTION_STATUS_FAILED = 5;
 }
 
-// RepositoryEnrollment is the caller-controlled repository configuration.
-message RepositoryEnrollment {
-  string id = 1;
+// RepositoryProvider identifies a repository at its provider boundary.
+message RepositoryProvider {
+  oneof provider {
+    GithubRepository github = 1;
+  }
+}
+
+// GithubRepository contains fields that are meaningful only for GitHub.
+message GithubRepository {
+  // repository_id is the provider's stable decimal repository identifier.
+  string repository_id = 1;
+  // owner and name are each 1 through 100 safe provider-name bytes.
   string owner = 2;
-  string repository = 3;
+  string name = 3;
   uint64 installation_id = 4;
-  string base_branch = 5;
-  // lock_sha256 is exactly 64 lowercase hexadecimal characters.
-  string lock_sha256 = 6;
+  // html_url is the canonical HTTPS repository URL, at most 2,048 bytes.
+  string html_url = 5;
 }
 
-// RepositoryBinding is one enrolled source repository and its current readiness.
-message RepositoryBinding {
-  RepositoryEnrollment enrollment = 1;
-  optional Preparation latest_preparation = 2;
-}
-
-// Preparation is one asynchronous, content-addressed environment preparation.
-message Preparation {
+// RepositoryConnection is provider access configuration, not profile enrollment.
+message RepositoryConnection {
   string id = 1;
-  string repository_id = 2;
-  // revision is an exact 40-character lowercase Git object ID.
+  RepositoryProvider provider = 2;
+  // display_name is 1 through 256 UTF-8 bytes.
+  string display_name = 3;
+  // default_branch is 1 through 255 safe provider-reference bytes.
+  string default_branch = 4;
+  RepositoryConnectionStatus status = 5;
+  optional ResourceFailure failure = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  // resource_version increases on every represented durable change.
+  uint64 resource_version = 9;
+}
+
+// RepositorySnapshot is an immutable observed repository revision.
+message RepositorySnapshot {
+  string id = 1;
+  string repository_connection_id = 2;
+  // revision is exactly 40 lowercase hexadecimal characters for the GitHub MVP.
   string revision = 3;
-  string lock_sha256 = 4;
-  PreparationStatus status = 5;
-  // diagnostic is a credential-free operator message of at most 512 UTF-8 bytes.
-  optional string diagnostic = 6;
-  optional google.protobuf.Duration duration = 7;
-  uint32 reuse_count = 8;
+  // default_branch records the provider branch observed for this snapshot.
+  string default_branch = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  uint64 resource_version = 6;
 }
 
-message ListRepositoriesRequest {
+message ListRepositoryConnectionsRequest {
   PageRequest page = 1;
+  optional RepositoryConnectionStatus status = 2;
 }
 
-message ListRepositoriesResponse {
-  repeated RepositoryBinding repositories = 1;
+message ListRepositoryConnectionsResponse {
+  repeated RepositoryConnection repository_connections = 1;
   PageResponse page = 2;
 }
 
-message GetRepositoryRequest {
-  string repository_id = 1;
+message GetRepositoryConnectionRequest {
+  string repository_connection_id = 1;
 }
 
-message GetRepositoryResponse {
-  RepositoryBinding repository = 1;
+message GetRepositoryConnectionResponse {
+  RepositoryConnection repository_connection = 1;
 }
 
-message SaveRepositoryRequest {
+message CreateRepositoryConnectionRequest {
   // idempotency_key is 1 through 128 ASCII [A-Za-z0-9._:-] characters.
   string idempotency_key = 1;
-  RepositoryEnrollment repository = 2;
+  RepositoryProvider provider = 2;
+  string display_name = 3;
+  string default_branch = 4;
 }
 
-message SaveRepositoryResponse {
-  RepositoryBinding repository = 1;
+message CreateRepositoryConnectionResponse {
+  RepositoryConnection repository_connection = 1;
 }
 
-message ListPreparationsRequest {
-  string repository_id = 1;
+message ListRepositorySnapshotsRequest {
+  string repository_connection_id = 1;
   PageRequest page = 2;
 }
 
-message ListPreparationsResponse {
-  repeated Preparation preparations = 1;
+message ListRepositorySnapshotsResponse {
+  repeated RepositorySnapshot repository_snapshots = 1;
   PageResponse page = 2;
 }
 
-message GetPreparationRequest {
-  string preparation_id = 1;
+message GetRepositorySnapshotRequest {
+  string repository_snapshot_id = 1;
 }
 
-message GetPreparationResponse {
-  Preparation preparation = 1;
+message GetRepositorySnapshotResponse {
+  RepositorySnapshot repository_snapshot = 1;
 }
 
-message PrepareRepositoryRequest {
-  string idempotency_key = 1;
-  string repository_id = 2;
-  string revision = 3;
+message WatchRepositoriesRequest {
+  // after_cursor resumes strictly after a previously delivered cursor. When absent,
+  // the server emits current snapshots before waiting for later changes.
+  optional uint64 after_cursor = 1;
+  optional string repository_connection_id = 2;
 }
 
-message PrepareRepositoryResponse {
-  // preparation normally starts in QUEUED; callers observe it until terminal.
-  Preparation preparation = 1;
-  // reused is true when this request selected an already-ready identity.
-  bool reused = 2;
+message WatchRepositoriesResponse {
+  // cursor is monotonic within RepositoryService and is safe to resume.
+  uint64 cursor = 1;
+  oneof update {
+    RepositoryConnection repository_connection = 2;
+    RepositorySnapshot repository_snapshot = 3;
+  }
 }

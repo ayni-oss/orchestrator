@@ -93,16 +93,42 @@ function reason(value: ErrorReason): string {
       return "deadline_exceeded";
     case ErrorReason.ERROR_REASON_INTERNAL:
       return "internal";
-    case ErrorReason.ERROR_REASON_INVALID_SOURCE_REVISION:
-      return "invalid_source_revision";
-    case ErrorReason.ERROR_REASON_INVALID_LOCK_DIGEST:
-      return "invalid_lock_digest";
-    case ErrorReason.ERROR_REASON_REPOSITORY_NOT_READY:
-      return "repository_not_ready";
-    case ErrorReason.ERROR_REASON_TASK_PHASE_NOT_ELIGIBLE:
-      return "task_phase_not_eligible";
+    case ErrorReason.ERROR_REASON_INVALID_REPOSITORY_REVISION:
+      return "invalid_repository_revision";
+    case ErrorReason.ERROR_REASON_INVALID_PROFILE_REVISION:
+      return "invalid_profile_revision";
+    case ErrorReason.ERROR_REASON_INVALID_LOCK_FINGERPRINT:
+      return "invalid_lock_fingerprint";
+    case ErrorReason.ERROR_REASON_INVALID_OCI_REFERENCE:
+      return "invalid_oci_reference";
+    case ErrorReason.ERROR_REASON_INVALID_OCI_DIGEST:
+      return "invalid_oci_digest";
+    case ErrorReason.ERROR_REASON_INVALID_PLATFORM:
+      return "invalid_platform";
+    case ErrorReason.ERROR_REASON_PROFILE_UNSUPPORTED:
+      return "profile_unsupported";
+    case ErrorReason.ERROR_REASON_PROFILE_NOT_READY:
+      return "profile_not_ready";
+    case ErrorReason.ERROR_REASON_RUNTIME_ARTIFACT_NOT_VERIFIED:
+      return "runtime_artifact_not_verified";
+    case ErrorReason.ERROR_REASON_AUTOMATION_NOT_READY:
+      return "automation_not_ready";
     case ErrorReason.ERROR_REASON_TASK_DEADLINE_EXPIRED:
       return "task_deadline_expired";
+    case ErrorReason.ERROR_REASON_CHANGE_REQUEST_HEAD_STALE:
+      return "change_request_head_stale";
+    case ErrorReason.ERROR_REASON_ASSESSMENT_REJECTED:
+      return "assessment_rejected";
+    case ErrorReason.ERROR_REASON_EVIDENCE_INVALID:
+      return "evidence_invalid";
+    case ErrorReason.ERROR_REASON_BOUND_EXCEEDED:
+      return "bound_exceeded";
+    case ErrorReason.ERROR_REASON_WATCH_CURSOR_EXPIRED:
+      return "watch_cursor_expired";
+    case ErrorReason.ERROR_REASON_UNKNOWN_ENUM_VALUE:
+      return "unknown_enum_value";
+    case ErrorReason.ERROR_REASON_NOT_IMPLEMENTED:
+      return "not_implemented";
     default:
       return "unspecified";
   }
@@ -176,6 +202,8 @@ function statusFor(code: number): number {
       return 504;
     case grpcStatus.UNAVAILABLE:
       return 503;
+    case grpcStatus.UNIMPLEMENTED:
+      return 501;
     default:
       return 500;
   }
@@ -204,6 +232,8 @@ function genericReason(code: number): string {
       return "unauthenticated";
     case grpcStatus.PERMISSION_DENIED:
       return "permission_denied";
+    case grpcStatus.UNIMPLEMENTED:
+      return "not_implemented";
     default:
       return "internal";
   }
@@ -231,6 +261,8 @@ function genericMessage(code: number): string {
       return "authentication is required";
     case grpcStatus.PERMISSION_DENIED:
       return "the operation is not permitted";
+    case grpcStatus.UNIMPLEMENTED:
+      return "the operation is not implemented by this control plane";
     default:
       return "the control plane request failed";
   }
