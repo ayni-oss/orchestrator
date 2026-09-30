@@ -27,8 +27,10 @@ configuration and scoped Kubernetes Secrets; never commit, print, or copy them
 into task evidence.
 
 A GitHub App installation needs only the permissions documented and enforced by
-#57: repository/default-branch read, setup-PR creation, Actions/check observation
-or dispatch where needed, Packages read, and bounded comment/PR operations.
+the [GitHub and GHCR security boundary](github-security.md): repository/default-branch
+read, owned workflow/setup-PR creation, Actions/check observation or dispatch where
+needed, Packages read, and bounded comment/PR operations. Webhooks, if enabled later,
+are authenticated reconciliation hints rather than an execution or authorization path.
 The default-branch environment workflow has package-write only for its trusted
 build job; PR code never receives package-write, controller, or model
 credentials.

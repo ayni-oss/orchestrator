@@ -18,7 +18,16 @@
     url: "https://github.com/ayni-oss/orchestrator",
     redirect_url: callbackOrigin ? `${callbackOrigin}/setup/github/complete` : undefined,
     public: false,
-    default_permissions: { contents: "write", pull_requests: "write", metadata: "read" },
+    default_permissions: {
+      actions: "read",
+      checks: "read",
+      contents: "write",
+      issues: "write",
+      metadata: "read",
+      packages: "read",
+      pull_requests: "write",
+      workflows: "write",
+    },
   }));
   onMount(async () => {
     callbackOrigin = window.location.origin;
@@ -60,7 +69,7 @@
         <div class="rounded-md bg-muted p-4">
           <p class="font-medium">Configure these App settings in GitHub</p>
           <ul class="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
-            <li>Repository permissions: <strong class="text-foreground">Contents: Read and write</strong> and <strong class="text-foreground">Pull requests: Read and write</strong>.</li>
+            <li>Repository permissions: <strong class="text-foreground">Actions, Checks, and Packages: Read-only</strong>; <strong class="text-foreground">Contents, Issues, Pull requests, and Workflows: Read and write</strong>.</li>
             <li>Install only on the repositories Ayni should operate.</li>
             <li>Generate a private key after creating the App. GitHub displays its download once—store it before leaving the page.</li>
           </ul>
@@ -91,7 +100,7 @@
       </Card.Header>
       <Card.Content class="space-y-4 text-sm">
         <ol class="list-decimal space-y-2 pl-5 text-muted-foreground">
-          <li>Confirm the App has Contents and Pull requests read/write permissions.</li>
+          <li>Confirm the App has the exact permissions listed for the creation flow, including read-only Actions, Checks, and Packages access.</li>
           <li>Generate or obtain an App private key from the App owner.</li>
           <li>Install the App on the repositories this local control plane may access.</li>
           <li>Use the App ID and private key in the deployment secret configuration below.</li>
