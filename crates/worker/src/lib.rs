@@ -1,6 +1,7 @@
 //! Bounded execution of a managed Ayni check.
 
 pub mod model_usage;
+pub mod runtime_contract;
 
 use ayni_orchestrator_domain::{GitRevision, IdentityError, Sha256Digest};
 use serde::Serialize;
