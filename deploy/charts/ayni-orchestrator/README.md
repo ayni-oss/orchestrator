@@ -20,13 +20,15 @@ The target namespace must contain operator-managed Secrets before the Pod can
 become ready:
 
 - `github-app-credentials`: `app-id` and `private-key.pem`
-- `development-publisher-auth`: `token`
 - `openai-api`: optional `api-key`
 
 The chart deliberately does not create or accept credential values. Set
-`images.pullPolicy` for the target registry and size the four entries under
-`persistence` before first installation. Claims carry
-`helm.sh/resource-policy: keep` and therefore survive release uninstall.
+`images.pullPolicy` for the target registry and size
+`persistence.controlPlaneState` and `persistence.managedCheckEvidence` before
+first installation. The controller mounts only the clean database claim; pilot
+checkpoint and prepared-environment claims are not created, and it does not
+mount legacy validation evidence. Claims carry `helm.sh/resource-policy: keep`
+and therefore survive release uninstall.
 
 `customClients.enabled=true` adds the reviewed private TLS listener and requires
 the Secret named by `customClients.secretName`; see

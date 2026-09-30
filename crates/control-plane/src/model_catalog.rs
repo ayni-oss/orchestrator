@@ -1,10 +1,5 @@
-use crate::{
-    development::AgentProfile,
-    orchestration::{Store, StoreError},
-};
 use rig_core::{client::ModelListingClient, providers::openai};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     sync::{
@@ -25,7 +20,6 @@ const MAX_MODEL_ID_BYTES: usize = 128;
 const MAX_MODEL_NAME_BYTES: usize = 256;
 const MAX_OWNER_BYTES: usize = 128;
 const PROVIDER: &str = "openai";
-const SECRET_REF: &str = "openai-api";
 
 /// Provider-reported model metadata safe to return to the browser.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -200,30 +194,6 @@ impl ModelCatalog {
             .models
             .binary_search_by(|candidate| candidate.id.as_str().cmp(model))
             .is_ok())
-    }
-}
-
-impl Store {
-    pub(crate) fn discovered_model_profile_id(model: &str) -> String {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        let digest = Sha256::digest(model.as_bytes());
-        let mut suffix = String::with_capacity(32);
-        for byte in &digest[..16] {
-            suffix.push(char::from(HEX[usize::from(byte >> 4)]));
-            suffix.push(char::from(HEX[usize::from(byte & 0x0f)]));
-        }
-        format!("openai-{suffix}")
-    }
-
-    pub(crate) fn put_discovered_model(&self, model: &str) -> Result<String, StoreError> {
-        let profile = AgentProfile {
-            id: Self::discovered_model_profile_id(model),
-            provider: PROVIDER.into(),
-            model: model.into(),
-            secret_ref: SECRET_REF.into(),
-        };
-        self.put_agent_profile(&profile)?;
-        Ok(profile.id)
     }
 }
 

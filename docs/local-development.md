@@ -1,9 +1,10 @@
 # Local development
 
-> **Clean-v1 transition.** The checked-in pilot deployment/check commands do
-> not validate the replacement product. This guide describes the target local
-> topology and the validation required as #53–#68 land. Do not interpret pilot
-> preparation, local image archives, or `pilot_ready` as current v1 behavior.
+> **Clean-v1 transition.** The controller now initializes and serves the
+> versioned clean-v1 durable resource baseline. Profile-specific automation,
+> runtime execution, and managed assessment remain follow-on delivery; do not
+> interpret retired pilot preparation, local image archives, or `pilot_ready`
+> as current v1 behavior.
 
 The supported target topology is Docker Desktop Kubernetes with explicit
 `docker-desktop` context, one trusted maintainer team, and loopback-only access.
@@ -31,6 +32,31 @@ or dispatch where needed, Packages read, and bounded comment/PR operations.
 The default-branch environment workflow has package-write only for its trusted
 build job; PR code never receives package-write, controller, or model
 credentials.
+
+## One-time pilot reset
+
+The controller deliberately refuses a database containing retired pilot tables;
+it never upgrades or reads that state. Before the first clean-v1 deployment:
+
+1. Run `dev/ctl status` and record the configured `ayni-orchestrator-*`
+   namespace. If pilot data must be retained, stop writers with `dev/ctl
+   cleanup`, then copy or snapshot the retained volume using an approved local
+   backup mechanism. Store the backup outside the namespace with restricted
+   permissions. It is archival only and must never be restored into clean v1.
+2. Ensure the private environment file still exists outside Kubernetes. Run
+   `dev/ctl purge <exact-namespace>`, substituting the namespace printed by
+   `dev/ctl status`. This guarded command accepts only the configured, labeled
+   local namespace and permanently removes its Secrets, Jobs, and volumes.
+3. Recreate scoped Secrets with `dev/ctl secrets`, then install a fresh baseline
+   with `dev/ctl deploy`. Do not copy the pilot SQLite file, preparation
+   directories, checkpoints, archives, or manifests into the new volume.
+4. Run `dev/ctl check --expect-empty`. The readiness response must report `clean_schema_version: 1`;
+   initial resource lists must be empty, and logs must not report a retired
+   schema or corrupt protobuf payload.
+
+If startup rejects an unexpected old or corrupt volume, preserve it for
+investigation, repeat the guarded purge, and redeploy. Never rename pilot tables,
+change the schema marker, or use a compatibility flag to bypass the rejection.
 
 ## Target developer workflow
 

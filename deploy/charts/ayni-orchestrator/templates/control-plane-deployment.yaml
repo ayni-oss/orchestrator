@@ -57,17 +57,6 @@ spec:
                   key: app-id
             - name: GITHUB_APP_PRIVATE_KEY_PATH
               value: /run/secrets/github/private-key.pem
-            - name: DEVELOPMENT_CHECKPOINT_ROOT
-              value: /checkpoints
-            - name: DEVELOPMENT_EVIDENCE_ROOT
-              value: /evidence
-            - name: DEVELOPMENT_PREPARATION_ROOT
-              value: /preparations
-            - name: DEVELOPMENT_PUBLISH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: development-publisher-auth
-                  key: token
             - name: OPENAI_API_KEY_PATH
               value: /run/secrets/openai/api-key
           startupProbe:
@@ -109,15 +98,6 @@ spec:
               readOnly: true
             - name: github-app-key
               mountPath: /run/secrets/github
-              readOnly: true
-            - name: development-checkpoints
-              mountPath: /checkpoints
-              readOnly: true
-            - name: development-evidence
-              mountPath: /evidence
-              readOnly: true
-            - name: prepared-environments
-              mountPath: /preparations
               readOnly: true
             {{- if .Values.customClients.enabled }}
             - name: custom-grpc-access
@@ -204,18 +184,6 @@ spec:
           secret:
             secretName: github-app-credentials
             defaultMode: 288
-        - name: development-checkpoints
-          persistentVolumeClaim:
-            claimName: development-checkpoints
-            readOnly: true
-        - name: development-evidence
-          persistentVolumeClaim:
-            claimName: managed-check-evidence
-            readOnly: true
-        - name: prepared-environments
-          persistentVolumeClaim:
-            claimName: prepared-environments
-            readOnly: true
         {{- if .Values.customClients.enabled }}
         - name: custom-grpc-access
           secret:

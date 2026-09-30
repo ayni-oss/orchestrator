@@ -1,8 +1,6 @@
 use ayni_orchestrator_control_plane::{
-    AppState, Configuration, DevelopmentReconciler, KubernetesJobTransport, ModelCatalog,
-    PreparationReconciler, PublisherState, Reconciler, router, serve_custom_grpc, serve_grpc,
+    AppState, Configuration, ModelCatalog, router, serve_custom_grpc, serve_grpc,
 };
-use kube::Client;
 use std::{env, fs, io, process::ExitCode};
 use tokio::{net::TcpListener, signal, sync::watch};
 use tracing::{Instrument, error, info, warn};
@@ -51,8 +49,7 @@ async fn run() -> Result<(), io::Error> {
         }
     };
     let mut state = AppState::open(configuration.database_path(), configuration.max_attempts())
-        .map_err(io::Error::other)?
-        .with_publisher(PublisherState::from_environment().map_err(io::Error::other)?);
+        .map_err(io::Error::other)?;
     if let Some(catalog) = model_catalog {
         let warmup = catalog.clone();
         tokio::spawn(async move {
@@ -62,34 +59,19 @@ async fn run() -> Result<(), io::Error> {
         });
         state = state.with_model_catalog(catalog);
     }
-    let client = Client::try_default().await.map_err(io::Error::other)?;
-    let reconciler = Reconciler::new(
-        state.store(),
-        KubernetesJobTransport::new(
-            client.clone(),
-            configuration.kubernetes_namespace().to_owned(),
-            configuration.worker_image().to_owned(),
-        ),
-    );
-    let reconciliation_task = tokio::spawn(run_reconciliation(reconciler));
-    let development_task = state.publisher().map(|publisher| {
-        tokio::spawn(run_development_reconciliation(DevelopmentReconciler::new(
-            state.clone(),
-            client.clone(),
-            configuration.kubernetes_namespace().to_owned(),
-            configuration.worker_image().to_owned(),
-            publisher,
-        )))
+
+    let reconciliation_state = state.clone();
+    let reconciliation_task = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+        loop {
+            ticker.tick().await;
+            if let Err(error) = reconciliation_state.reconcile_once() {
+                warn!(reason_code = "clean_reconciliation_failed", %error,
+                    "clean-v1 reconciliation pass failed");
+            }
+        }
     });
-    let preparation_task = state.publisher().map(|publisher| {
-        tokio::spawn(run_preparation_reconciliation(PreparationReconciler::new(
-            state.clone(),
-            client,
-            configuration.kubernetes_namespace().to_owned(),
-            configuration.worker_image().to_owned(),
-            publisher,
-        )))
-    });
+
     let listener = TcpListener::bind(configuration.bind_address()).await?;
     info!(address = %configuration.bind_address(), "HTTP control plane started");
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
@@ -118,37 +100,7 @@ async fn run() -> Result<(), io::Error> {
     tokio::try_join!(async { http.await.map_err(io::Error::other) }, grpc, custom)?;
     signal_task.abort();
     reconciliation_task.abort();
-    if let Some(task) = development_task {
-        task.abort();
-    }
-    if let Some(task) = preparation_task {
-        task.abort();
-    }
     Ok(())
-}
-
-async fn run_preparation_reconciliation(reconciler: PreparationReconciler) {
-    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
-    loop {
-        ticker.tick().await;
-        reconciler.reconcile_once().await;
-    }
-}
-
-async fn run_development_reconciliation(reconciler: DevelopmentReconciler) {
-    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
-    loop {
-        ticker.tick().await;
-        reconciler.reconcile_once().await;
-    }
-}
-
-async fn run_reconciliation(reconciler: Reconciler<KubernetesJobTransport>) {
-    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
-    loop {
-        ticker.tick().await;
-        reconciler.reconcile_once().await;
-    }
 }
 
 async fn wait_for_shutdown(mut shutdown: watch::Receiver<bool>) {

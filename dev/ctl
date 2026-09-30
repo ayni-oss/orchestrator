@@ -18,7 +18,7 @@ Local Docker Desktop development:
   deploy                       Build images and install or upgrade in place
   redeploy                     Alias for deploy
   up                           Alias for deploy
-  check                        Check the application and observability stack
+  check [--expect-empty]       Check the stack and optionally a fresh baseline
   status                       Show the Helm release, pods, and retained claims
   cleanup                      Uninstall stateless resources; preserve local data
   down                         Alias for cleanup
@@ -90,7 +90,7 @@ case "$command" in
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
     context="$(dev_context)"
     namespace="$(dev_namespace)"
-    for secret in github-app-credentials openai-api development-publisher-auth; do
+    for secret in github-app-credentials openai-api; do
       if ! kubectl --context "$context" --namespace "$namespace" get "secret/$secret" >/dev/null 2>&1; then
         echo "required local Secret is missing: $secret" >&2
         echo "configure dev/.env, then run 'dev/ctl secrets'" >&2
@@ -100,8 +100,11 @@ case "$command" in
     "$scripts/deploy.sh"
     ;;
   check)
-    [[ $# -eq 0 ]] || { echo "usage: dev/ctl check" >&2; exit 2; }
-    "$scripts/check.sh"
+    if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --expect-empty ) ]]; then
+      echo "usage: dev/ctl check [--expect-empty]" >&2
+      exit 2
+    fi
+    "$scripts/check.sh" "$@"
     ;;
   status)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl status" >&2; exit 2; }
