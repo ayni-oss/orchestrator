@@ -2,6 +2,7 @@
 
 pub mod model_usage;
 pub mod runtime_contract;
+pub mod runtime_job;
 
 use ayni_orchestrator_domain::{GitRevision, IdentityError, Sha256Digest};
 use serde::Serialize;

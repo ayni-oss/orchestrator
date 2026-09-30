@@ -24,6 +24,15 @@ or retained logs. Unsupported platform, mutable image reference, invalid argv,
 or an unavailable launcher is an actionable unsupported-runtime outcome before
 model work begins.
 
+The runner renders a deterministic `batch/v1` Job before any Kubernetes mutation:
+its name is derived from the attempt identity, `backoffLimit` is zero, the deadline
+is bounded, a completed Job is retained briefly for diagnosis, and a retry gets a
+new attempt identity. The Job uses `RuntimeDefault` seccomp, drops all capabilities,
+runs as the dedicated agent UID/GID, mounts only workspace/scratch/output volumes,
+and disables service-account token mounting. An optional pull-secret *name* is
+attached only after controller-side creation of a short-lived attempt credential;
+the secret material is never part of this contract or the rendered diagnostics.
+
 Ayni lock interpretation, environment building, certification, and managed
 validation are profile concerns. The shared runner deliberately contains none of
 them.
