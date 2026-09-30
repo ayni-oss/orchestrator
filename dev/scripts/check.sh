@@ -58,7 +58,7 @@ dev_check_observability() (
       ayni-orchestrator-kubelet-volumes; do
       query_has_result "up{job=\"$job\"} == 1" || return 1
     done
-    query_has_result "orchestrator_development_tasks" || return 1
+    query_has_result 'orchestrator_clean_v1_schema_info{version="1"} == 1' || return 1
     query_has_result "kube_pod_info{namespace=\"$namespace\"}" || return 1
     query_has_result "container_cpu_usage_seconds_total{namespace=\"$namespace\"}" || return 1
     query_has_result "kubelet_volume_stats_used_bytes{namespace=\"$namespace\"} or container_fs_usage_bytes{job=\"ayni-orchestrator-node-storage\",id=\"/\"}" || return 1
@@ -88,14 +88,16 @@ if [[ $# -eq 1 && "$1" == --observability-only ]]; then
   dev_check_observability
   exit
 fi
-if [[ $# -ne 0 ]]; then
-  echo "usage: dev/ctl check" >&2
+expect_empty=false
+if [[ $# -eq 1 && "$1" == --expect-empty ]]; then
+  expect_empty=true
+elif [[ $# -ne 0 ]]; then
+  echo "usage: dev/ctl check [--expect-empty]" >&2
   exit 2
 fi
+readonly expect_empty
 context="$(dev_context)"
-readonly context
 namespace="$(dev_namespace)"
-readonly namespace
 readonly web_port="${AYNI_ORCHESTRATOR_WEB_LOCAL_PORT:-18080}"
 readonly operations_port="${AYNI_ORCHESTRATOR_OPERATIONS_LOCAL_PORT:-18081}"
 readonly grpc_port="${AYNI_ORCHESTRATOR_GRPC_LOCAL_PORT:-15051}"
@@ -136,10 +138,11 @@ check_once() {
     "http://127.0.0.1:$operations_port/readyz" 2>/dev/null)" || return 1
   grep -qi '^x-request-id: local-readiness-check' "$response_headers" || return 1
   grep -q '"clean_v1_contract":true' <<<"$readiness" || return 1
+  grep -q '"clean_schema_version":1' <<<"$readiness" || return 1
   metrics="$(curl_local "http://127.0.0.1:$operations_port/metrics")" || return 1
-  grep -q 'orchestrator_model_interactions_total' <<<"$metrics" || return 1
-  grep -q 'orchestrator_development_tasks' <<<"$metrics" || return 1
-  grep -q 'orchestrator_model_tokens_total' <<<"$metrics" || return 1
+  grep -q 'orchestrator_clean_v1_schema_info{version="1"} 1' <<<"$metrics" || return 1
+  grep -q 'orchestrator_grpc_admissions_total' <<<"$metrics" || return 1
+  grep -q 'orchestrator_grpc_completions_total' <<<"$metrics" || return 1
 
   curl_local "http://127.0.0.1:$web_port/healthz" | grep -q '"component":"web"' || return 1
   web_html="$(curl_local --dump-header "$response_headers" \
@@ -170,6 +173,29 @@ check_once() {
   grpc_models="$(grpcurl -plaintext -max-time 10 -H 'x-request-id: local-grpc-check' -d '{}' \
     "127.0.0.1:$grpc_port" ayni.orchestrator.v1.ProviderService/ListProviderModels)" || return 1
   grep -q '"provider": "openai"' <<<"$grpc_models" || return 1
+
+  if [[ "$expect_empty" == true ]]; then
+    local response
+    response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
+      ayni.orchestrator.v1.RepositoryService/ListRepositoryConnections)" || return 1
+    ! grep -q 'repositoryConnections' <<<"$response" || return 1
+    response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
+      ayni.orchestrator.v1.RuntimeProfileService/ListRuntimeProfiles)" || return 1
+    ! grep -q 'runtimeProfiles' <<<"$response" || return 1
+    response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
+      ayni.orchestrator.v1.DevelopmentTaskService/ListDevelopmentTasks)" || return 1
+    ! grep -q 'developmentTasks' <<<"$response" || return 1
+    response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
+      ayni.orchestrator.v1.ReviewService/ListChangeRequests)" || return 1
+    ! grep -q 'changeRequests' <<<"$response" || return 1
+    local control_plane_logs
+    control_plane_logs="$(kubectl --context "$context" --namespace "$namespace" \
+      logs deployment/control-plane --since=10m 2>&1)" || return 1
+    if grep -Eqi 'retired pilot schema|durable clean-v1 state is corrupt' \
+      <<<"$control_plane_logs"; then
+      return 1
+    fi
+  fi
 }
 
 for _ in {1..30}; do

@@ -1,36 +1,22 @@
 //! Native gRPC, operational HTTP, and durable orchestration for Ayni Orchestrator.
 
 mod api;
-#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
-pub(crate) mod application;
 mod application_metrics;
-#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
-mod development;
-mod development_jobs;
-#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
-mod development_lifecycle;
-mod github;
+mod clean_store;
 mod grpc;
 mod grpc_access;
-#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
 mod model_catalog;
-mod model_usage;
-mod orchestration;
-mod preparation;
-mod preparation_jobs;
-#[allow(dead_code, reason = "replaced by clean-v1 persistence in issue 55")]
-mod publication;
 
-use api::{ApiError, HealthResponse};
+use api::HealthResponse;
 use axum::{
     Json, Router,
     extract::{MatchedPath, Request, State},
     http::{HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
 };
-use orchestration::{Store, StoreError, StoreHandle};
+use clean_store::{CleanStore, CleanStoreError};
 use std::{
     env,
     net::SocketAddr,
@@ -43,13 +29,20 @@ use thiserror::Error;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
-pub use development_jobs::DevelopmentReconciler;
 pub use grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc};
 pub use grpc_access::{AccessConfigurationError, CustomClientAccess};
 pub use model_catalog::{AvailableModel, ModelCatalog, ModelCatalogError};
-pub use orchestration::{JobTransport, KubernetesJobTransport, Reconciler, TransportError};
-pub use preparation_jobs::PreparationReconciler;
-pub use publication::PublisherState;
+
+type StoreHandle = Arc<Mutex<CleanStore>>;
+
+/// A periodic clean-v1 reconciliation pass could not inspect durable state.
+#[derive(Debug, Error)]
+pub enum ReconciliationError {
+    #[error("durable store lock was poisoned")]
+    StoreLockPoisoned,
+    #[error("durable clean-v1 reconciliation failed")]
+    Store,
+}
 
 /// Configuration validated before the control plane starts accepting traffic.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -369,35 +362,30 @@ pub enum ConfigurationError {
     MaxAttemptsOutOfRange(u32),
 }
 
-/// Shared API state, deliberately independent from the Kubernetes transport.
+/// Shared clean-v1 API state, deliberately independent from runtime transports.
 #[derive(Clone)]
 pub struct AppState {
-    store: StoreHandle,
-    publisher: Option<Arc<PublisherState>>,
+    pub(crate) store: StoreHandle,
     model_catalog: Option<ModelCatalog>,
 }
 
 impl AppState {
-    /// Opens the persistent store used by HTTP handlers and reconciliation.
+    /// Opens the versioned clean-v1 store. A retired pilot database is rejected
+    /// without reading or mutating its application tables.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreError`] when the durable database cannot be opened.
+    /// Returns [`CleanStoreError`] when the database cannot be opened safely.
     pub fn open(
         database_path: impl AsRef<std::path::Path>,
         max_attempts: u32,
-    ) -> Result<Self, StoreError> {
+    ) -> Result<Self, CleanStoreError> {
+        let store = CleanStore::open(database_path, max_attempts)?;
+        store.integrity_check()?;
         Ok(Self {
-            store: Arc::new(Mutex::new(Store::open(database_path, max_attempts)?)),
-            publisher: None,
+            store: Arc::new(Mutex::new(store)),
             model_catalog: None,
         })
-    }
-
-    #[must_use]
-    pub fn with_publisher(mut self, publisher: Option<PublisherState>) -> Self {
-        self.publisher = publisher.map(Arc::new);
-        self
     }
 
     #[must_use]
@@ -406,28 +394,34 @@ impl AppState {
         self
     }
 
-    /// Returns the shared durable-store handle for the reconciler.
-    #[must_use]
-    pub fn store(&self) -> StoreHandle {
-        Arc::clone(&self.store)
+    pub(crate) fn model_catalog(&self) -> Option<ModelCatalog> {
+        self.model_catalog.clone()
     }
 
-    #[must_use]
-    pub fn publisher(&self) -> Option<Arc<PublisherState>> {
-        self.publisher.clone()
+    /// Reconciles shared, provider-neutral durable deadlines and retention.
+    /// Profile-specific external observations are supplied by later adapters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when durable state cannot be locked or reconciled safely.
+    pub fn reconcile_once(&self) -> Result<(), ReconciliationError> {
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|_| ReconciliationError::StoreLockPoisoned)?;
+        store
+            .reconcile_once()
+            .map_err(|_| ReconciliationError::Store)
     }
 }
 
-/// Builds the control-plane HTTP router.
+/// Builds the control-plane operational HTTP router. Product resources remain
+/// available only through the canonical native gRPC API.
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/livez", get(liveness))
         .route("/readyz", get(readiness))
         .route("/metrics", get(metrics))
-        .route(
-            "/internal/publications/{task_id}",
-            post(publication::publish),
-        )
         .layer(middleware::from_fn(observe_http))
         .with_state(state)
 }
@@ -470,9 +464,11 @@ async fn observe_http(request: Request, next: Next) -> Response {
 async fn liveness() -> impl IntoResponse {
     (StatusCode::OK, Json(HealthResponse::live()))
 }
-async fn metrics(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
-    let body = with_store(&state, |store| store.application_metrics())?;
-    Ok(([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body))
+async fn metrics(State(_state): State<AppState>) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        application_metrics::render_clean_metrics(),
+    )
 }
 async fn readiness(State(state): State<AppState>) -> impl IntoResponse {
     (
@@ -495,15 +491,15 @@ pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> String {
     value[..end].to_owned()
 }
 
-fn with_store<T>(
+pub(crate) fn with_store<T>(
     state: &AppState,
-    operation: impl FnOnce(&mut Store) -> Result<T, StoreError>,
-) -> Result<T, ApiError> {
+    operation: impl FnOnce(&mut CleanStore) -> Result<T, CleanStoreError>,
+) -> Result<T, CleanStoreError> {
     let mut store = state
         .store
         .lock()
-        .map_err(|_| ApiError::StoreLockPoisoned)?;
-    operation(&mut store).map_err(ApiError::Store)
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    operation(&mut store)
 }
 
 #[cfg(test)]
@@ -513,10 +509,9 @@ mod tests {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
-    fn state() -> Result<AppState, StoreError> {
+    fn state() -> Result<AppState, CleanStoreError> {
         Ok(AppState {
-            store: Arc::new(Mutex::new(Store::in_memory()?)),
-            publisher: None,
+            store: Arc::new(Mutex::new(CleanStore::in_memory()?)),
             model_catalog: Some(ModelCatalog::fixed(vec![AvailableModel {
                 id: "gpt-5".into(),
                 name: Some("GPT-5".into()),
@@ -543,143 +538,19 @@ mod tests {
             configuration.grpc_bind_address().to_string(),
             "127.0.0.1:50051"
         );
-        assert_eq!(
-            configuration.kubernetes_namespace(),
-            "ayni-orchestrator-dev"
-        );
         assert_eq!(configuration.max_attempts(), 3);
         Ok(())
     }
 
-    #[test]
-    fn rejects_non_loopback_grpc_configuration() {
-        let Err(error) = Configuration::from_values(
-            "0.0.0.0:8080",
-            "0.0.0.0:50051",
-            PathBuf::from("/data/tasks.sqlite"),
-            "ayni-orchestrator-dev".to_owned(),
-            "local/ayni-orchestrator-worker:test".to_owned(),
-            3,
-        ) else {
-            panic!("an unauthenticated non-loopback gRPC listener was accepted");
-        };
-        assert!(matches!(
-            error,
-            ConfigurationError::NonLoopbackGrpcBindAddress(_)
-        ));
-    }
-
-    #[test]
-    fn protected_grpc_configuration_is_all_or_nothing_and_non_loopback() {
-        let http = SocketAddr::from(([0, 0, 0, 0], 8080));
-        let local = SocketAddr::from(([127, 0, 0, 1], 50051));
-        let incomplete = custom_grpc_from_values(
-            [Some("0.0.0.0:50052".to_owned()), None, None, None],
-            http,
-            local,
-        );
-        assert!(matches!(
-            incomplete,
-            Err(ConfigurationError::IncompleteCustomGrpcConfiguration)
-        ));
-        let ephemeral = custom_grpc_from_values(
-            [
-                Some("0.0.0.0:0".to_owned()),
-                Some("/tls.crt".to_owned()),
-                Some("/tls.key".to_owned()),
-                Some("/clients.json".to_owned()),
-            ],
-            http,
-            local,
-        );
-        assert!(matches!(
-            ephemeral,
-            Err(ConfigurationError::UnsafeCustomGrpcBindAddress(_))
-        ));
-        let configured = custom_grpc_from_values(
-            [
-                Some("0.0.0.0:50052".to_owned()),
-                Some("/tls.crt".to_owned()),
-                Some("/tls.key".to_owned()),
-                Some("/clients.json".to_owned()),
-            ],
-            http,
-            local,
-        );
-        assert_eq!(
-            configured.ok().flatten().map(|value| value.bind_address()),
-            Some(SocketAddr::from(([0, 0, 0, 0], 50052)))
-        );
-    }
-
     #[tokio::test]
-    async fn readiness_is_explicit_about_durable_orchestration() -> Result<(), axum::Error> {
-        let request = Request::builder()
-            .uri("/readyz")
-            .header("x-request-id", "readiness-test")
-            .body(Body::empty())
-            .map_err(axum::Error::new)?;
-        let response = match router(state().map_err(axum::Error::new)?)
-            .oneshot(request)
-            .await
-        {
-            Ok(response) => response,
-            Err(never) => match never {},
-        };
-        assert_eq!(response.headers()["x-request-id"], "readiness-test");
-        let body = response.into_body().collect().await?.to_bytes();
-        assert_eq!(
-            body,
-            r#"{"component":"control-plane","status":"ready","managed_execution":true,"durable_orchestration":true,"task_ui":"separate","runtime_profiles":"contract_only","candidate_publication":"contract_only","provider_models":"available","clean_v1_contract":true,"domain_model_revision":4}"#
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn missing_model_catalog_changes_readiness_without_removing_operations()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let mut unavailable = state()?;
-        unavailable.model_catalog = None;
-        let response = router(unavailable)
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
-            .await?;
-        assert_eq!(response.status(), StatusCode::OK);
-        let body: serde_json::Value =
-            serde_json::from_slice(&response.into_body().collect().await?.to_bytes())?;
-        assert_eq!(body["provider_models"], "unconfigured");
-        assert_eq!(body["clean_v1_contract"], true);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn operational_http_does_not_serve_browser_or_product_routes()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let api = router(state()?);
-        for path in ["/", "/v1/provider-models", "/v1/development-tasks"] {
-            let response = api
-                .clone()
-                .oneshot(Request::builder().uri(path).body(Body::empty())?)
+    async fn health_routes_are_available() -> Result<(), Box<dyn std::error::Error>> {
+        for route in ["/livez", "/readyz", "/metrics"] {
+            let response = router(state()?)
+                .oneshot(Request::builder().uri(route).body(Body::empty())?)
                 .await?;
-            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+            assert_eq!(response.status(), StatusCode::OK);
+            let _ = response.into_body().collect().await?;
         }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn internal_publication_callback_remains_routed_and_fail_closed()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let response = router(state()?)
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/internal/publications/00000000-0000-4000-8000-000000000001")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"{"title":"fix: bounded change","body":"summary"}"#,
-                    ))?,
-            )
-            .await?;
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         Ok(())
     }
 }

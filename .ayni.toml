@@ -27,7 +27,7 @@ roots = ["."]
 [rust.size]
 # Current repository baseline is 986 lines; keep it visible as a warning and
 # reject growth beyond the next explicit ceiling.
-"*.rs" = { warn = 400, fail = 1000, exclude = ["target/**", ".ayni/**"] }
+"*.rs" = { warn = 400, fail = 1000, exclude = ["target/**", ".ayni/**", ".worktrees/**"] }
 
 [rust.complexity]
 # Current repository baseline is 30; warnings preserve the refactoring signal.

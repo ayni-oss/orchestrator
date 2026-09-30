@@ -49,8 +49,16 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   --set-string "ayni-orchestrator.images.worker=$worker_image_ref" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
-  --wait \
+  --wait=hookOnly \
   --timeout 5m
+
+# The retained evidence claim is intentionally consumed only by opt-in fixtures.
+# Wait for the actual application stack rather than requiring a WaitForFirstConsumer
+# claim to bind during every normal deployment.
+for deployment in control-plane prometheus kube-state-metrics grafana; do
+  kubectl --context "$context" --namespace "$namespace" rollout status \
+    "deployment/$deployment" --timeout=5m
+done
 
 pod=""
 actual_control_plane_image=""

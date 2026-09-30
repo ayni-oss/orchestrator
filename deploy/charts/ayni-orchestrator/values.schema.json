@@ -35,12 +35,10 @@
     "persistence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["controlPlaneState", "developmentCheckpoints", "managedCheckEvidence", "preparedEnvironments"],
+      "required": ["controlPlaneState", "managedCheckEvidence"],
       "properties": {
         "controlPlaneState": { "$ref": "#/definitions/claim" },
-        "developmentCheckpoints": { "$ref": "#/definitions/claim" },
-        "managedCheckEvidence": { "$ref": "#/definitions/claim" },
-        "preparedEnvironments": { "$ref": "#/definitions/claim" }
+        "managedCheckEvidence": { "$ref": "#/definitions/claim" }
       }
     },
     "customClients": {

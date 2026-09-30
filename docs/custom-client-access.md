@@ -199,9 +199,9 @@ Canonical status handling:
 - `DEADLINE_EXCEEDED` / `CANCELLED`: use the durable resource and idempotency key
   to determine the result before retrying.
 - `UNAVAILABLE`: reconnect or retry with bounded backoff.
-- `UNIMPLEMENTED`: the deployed control plane models the operation but has not
-  delivered its persistence/reconciliation implementation; do not retry without
-  a confirmed server upgrade.
+- `UNIMPLEMENTED`: the selected runtime profile or follow-on capability is not
+  operational in this deployment; do not retry without a confirmed server
+  upgrade or supported profile. Clean-v1 persistence itself is implemented.
 
 After admission, clients branch on canonical codes and the stable rich
 `ErrorReason` values in `errors.proto`, never message text.

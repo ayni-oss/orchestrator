@@ -1,4 +1,3 @@
-use super::*;
 
 #[test]
 fn accepts_only_bounded_safe_request_ids() {
@@ -120,7 +119,7 @@ async fn native_server_exposes_clean_services_and_provider_catalog(
 }
 
 #[tokio::test]
-async fn server_validates_bounds_before_unimplemented_resource_operations(
+async fn server_validates_bounds_before_durable_resource_operations(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use v1::repository_service_server::RepositoryService;
 
@@ -175,27 +174,44 @@ async fn unknown_request_enums_fail_closed_with_a_stable_reason(
 }
 
 #[tokio::test]
-async fn pending_clean_v1_persistence_has_a_machine_readable_status(
+async fn clean_v1_repository_operations_are_durable_and_idempotent(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use v1::repository_service_server::RepositoryService;
 
     let directory = tempfile::tempdir()?;
-    let state = AppState::open(directory.path().join("orchestrator.sqlite"), 3)?;
+    let database = directory.path().join("orchestrator.sqlite");
+    let state = AppState::open(&database, 3)?;
     let (_shutdown_sender, shutdown) = watch::channel(false);
     let api = GrpcApi::new(state, shutdown);
-    let Err(status) = api
-        .list_repository_connections(Request::new(v1::ListRepositoryConnectionsRequest {
-            page: None,
-            status: None,
-        }))
-        .await
-    else {
-        return Err("pending resource operation must not report success".into());
+    let request = v1::CreateRepositoryConnectionRequest {
+        idempotency_key: "repository:create:1".to_owned(),
+        provider: Some(v1::RepositoryProvider {
+            provider: Some(v1::repository_provider::Provider::Github(v1::GithubRepository {
+                repository_id: "123".to_owned(),
+                owner: "ayni-oss".to_owned(),
+                name: "sandbox".to_owned(),
+                installation_id: 42,
+                html_url: "https://github.com/ayni-oss/sandbox".to_owned(),
+            })),
+        }),
+        display_name: "Sandbox".to_owned(),
+        default_branch: "main".to_owned(),
     };
-    assert_eq!(status.code(), Code::Unimplemented);
-    let rich = RichStatus::decode(status.details())?;
-    let detail = v1::ErrorDetail::decode(rich.details[0].value.as_slice())?;
-    assert_eq!(detail.reason, v1::ErrorReason::NotImplemented as i32);
+    let first = api.create_repository_connection(Request::new(request.clone())).await?
+        .into_inner().repository_connection.ok_or("missing connection")?;
+    let replay = api.create_repository_connection(Request::new(request)).await?
+        .into_inner().repository_connection.ok_or("missing replay")?;
+    assert_eq!(first.id, replay.id);
+    drop(api);
+
+    let reopened = AppState::open(database, 3)?;
+    let (_shutdown_sender, shutdown) = watch::channel(false);
+    let api = GrpcApi::new(reopened, shutdown);
+    let listed = api.list_repository_connections(Request::new(
+        v1::ListRepositoryConnectionsRequest { page: None, status: None }
+    )).await?.into_inner();
+    assert_eq!(listed.repository_connections.len(), 1);
+    assert!(listed.page.is_some_and(|page| page.snapshot_cursor > 0));
     Ok(())
 }
 

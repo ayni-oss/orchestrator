@@ -117,12 +117,22 @@ fi
 grep -q '^  name: managed-check$' "$scratch/managed-check.yaml"
 grep -q '^  name: managed-check-artifact-rejection$' "$scratch/artifact-rejection.yaml"
 grep -q '^  name: ayni-orchestrator-dev-prometheus$' "$scratch/local.yaml"
+grep -q -- '--wait=hookOnly' "$repository_root/dev/scripts/deploy.sh"
+grep -q 'rollout status' "$repository_root/dev/scripts/deploy.sh"
 [[ "$(grep -c '^kind: ClusterRole$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^kind: ClusterRoleBinding$' "$scratch/local.yaml")" -eq 1 ]]
-[[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 4 ]]
-for claim in control-plane-state development-checkpoints managed-check-evidence prepared-environments; do
+[[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 2 ]]
+for claim in control-plane-state managed-check-evidence; do
   grep -q "^  name: $claim$" "$scratch/local.yaml"
 done
+if grep -Eq '^  name: (development-checkpoints|prepared-environments)$' "$scratch/local.yaml"; then
+  echo "clean-v1 chart rendered a retired pilot volume" >&2
+  exit 1
+fi
+if grep -Eq 'DEVELOPMENT_(CHECKPOINT|EVIDENCE|PREPARATION)_ROOT|mountPath: /(checkpoints|evidence|preparations)$' "$scratch/application.yaml"; then
+  echo "clean-v1 controller rendered a retired pilot state reader" >&2
+  exit 1
+fi
 if grep -Eq '^kind: Ingress$|^  type: (LoadBalancer|NodePort)$|nodes/proxy' "$scratch/local.yaml"; then
   echo "local chart rendered a forbidden public service or node-proxy permission" >&2
   exit 1

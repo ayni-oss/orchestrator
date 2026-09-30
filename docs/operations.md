@@ -1,9 +1,11 @@
 # Local operations
 
-> **Clean-v1 target runbook.** The pilot's preparation lifecycle, retained
-> archives, `pilot_ready`, and additive database migration instructions are
-> retired. This runbook becomes executable with #55–#68; it is the operating
-> contract those issues must implement and validate.
+> **Clean-v1 runbook.** The versioned clean-v1 database, durable resources,
+> idempotency, resumable observation, and shared lifecycle reconciliation are
+> implemented. The pilot's preparation lifecycle, retained archives,
+> `pilot_ready`, and additive migration instructions are retired. Provider
+> automation, runtime execution, and managed assessment are delivered by their
+> respective follow-on issues.
 
 The supported topology remains one trusted maintainer team on Docker Desktop
 Kubernetes, explicit `docker-desktop` context, and loopback-only browser/gRPC
@@ -68,11 +70,34 @@ for the replacement. Existing lock tags are never silently moved.
 
 ## Data, backup, and cleanup
 
-The clean v1 database retains resource/action records, candidates, assessments,
-evidence references, and bounded diagnostics. It does not import or read pilot
-state. A fresh baseline is required even if an old PVC exists; the documented
-reset procedure backs up anything needed outside the deployment and purges the
-old local state before v1 install. Do not restore a pilot database into v1.
+The clean v1 database retains protobuf resource payloads and indexed identities,
+monotonic versions and event cursors, durable actions, reconciliation cursors,
+and bounded pagination snapshots. Startup validates the clean schema marker and
+all persisted protobuf payloads before serving. It fails closed on an absent or
+unsupported marker in a non-empty database, any retired pilot table, or corrupt
+payload; it does not partially migrate, delete, or serve that state.
+
+For the one-time local reset, stop writers and archive any pilot volume that must
+be retained outside Kubernetes, then run `dev/ctl purge <exact-namespace>`,
+`dev/ctl secrets`, `dev/ctl deploy`, and `dev/ctl check` as specified in
+[local development](local-development.md#one-time-pilot-reset). Purge deletes the
+whole labeled local namespace, including Secrets and retained volumes. Never
+restore a pilot database into v1 or bypass rejection by editing schema metadata.
+
+For clean-v1 backup and restore, quiesce the controller and preserve the database
+and any referenced evidence as one consistency unit. Restore only to the same
+supported clean schema version. After restore, verify readiness and resume
+reconciliation. Durable external actions retain their bounded canonical request
+payload in pending/completed/failed state. Reconcilers enumerate pending intent;
+a failed action is requeued only after reading provider state, so an uncertain
+response cannot cause a duplicate effect.
+
+List continuations use signed opaque snapshot tokens, expire after 15 minutes,
+and are capped by item, byte, response, and concurrent-snapshot limits. Watch
+history is bounded per service. A cursor older than retained history—including
+an explicit zero after pruning—or ahead of the service high-water mark returns
+`OUT_OF_RANGE`/`WATCH_CURSOR_EXPIRED`; callers then take a current snapshot and
+resume from its cursor rather than guessing an offset.
 
 Retained evidence is addressed under its assessment and digest. Backup policy
 must preserve the database and evidence together; a database-only restore that

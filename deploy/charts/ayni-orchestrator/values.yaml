@@ -28,12 +28,8 @@ web:
 persistence:
   controlPlaneState:
     size: 1Gi
-  developmentCheckpoints:
-    size: 2Gi
   managedCheckEvidence:
     size: 2Gi
-  preparedEnvironments:
-    size: 10Gi
 
 customClients:
   enabled: false

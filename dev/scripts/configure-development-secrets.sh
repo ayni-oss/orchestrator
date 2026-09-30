@@ -136,10 +136,4 @@ apply_secret github-app-credentials \
   --from-file=private-key.pem="$private_key_file"
 apply_secret openai-api --from-file=api-key="$openai_key_file"
 
-if ! kubectl --context "$context" --namespace "$namespace" get secret development-publisher-auth >/dev/null 2>&1; then
-  readonly publish_token_file="$temporary_directory/publish-token"
-  openssl rand -hex 32 | tr -d '\n' > "$publish_token_file"
-  apply_secret development-publisher-auth --from-file=token="$publish_token_file"
-fi
-
 echo "configured local development Secrets in namespace $namespace"
