@@ -347,50 +347,62 @@ fn validate_resource_events(connection: &Connection) -> Result<(), CleanStoreErr
         let resource_id: String = row.get(2).map_err(CleanStoreError::Database)?;
         let version: i64 = row.get(3).map_err(CleanStoreError::Database)?;
         let payload: Vec<u8> = row.get(4).map_err(CleanStoreError::Database)?;
-        let valid = match (service.as_str(), resource_type.as_str()) {
-            (REPOSITORY_SERVICE, "repository_connection") => {
-                valid_repository_connection_event(&payload, &resource_id, version)?
-            }
-            (REPOSITORY_SERVICE, "repository_snapshot") => {
-                valid_repository_snapshot_event(&payload, &resource_id, version)?
-            }
-            (PROFILE_SERVICE, "runtime_profile") => {
-                valid_runtime_profile_event(&payload, &resource_id, version)?
-            }
-            (PROFILE_SERVICE, "runtime_profile_revision") => {
-                valid_runtime_profile_revision_event(&payload, &resource_id, version)?
-            }
-            (PROFILE_SERVICE, "runtime_artifact") => {
-                valid_runtime_artifact_event(&payload, &resource_id, version)?
-            }
-            (PROFILE_SERVICE, "automation_installation") => {
-                valid_automation_installation_event(&payload, &resource_id, version)?
-            }
-            (DEVELOPMENT_SERVICE, "development_task") => {
-                valid_development_task_event(&payload, &resource_id, version)?
-            }
-            (DEVELOPMENT_SERVICE, "development_attempt") => {
-                valid_development_attempt_event(&payload, &resource_id, version)?
-            }
-            (DEVELOPMENT_SERVICE, "candidate") => {
-                valid_candidate_event(&payload, &resource_id, version)?
-            }
-            (REVIEW_SERVICE, "change_request") => {
-                valid_change_request_event(&payload, &resource_id, version)?
-            }
-            (REVIEW_SERVICE, "assessment") => {
-                valid_assessment_event(&payload, &resource_id, version)?
-            }
-            (REVIEW_SERVICE, "evidence_reference") => {
-                valid_evidence_reference_event(&payload, &resource_id, version)?
-            }
-            _ => false,
-        };
+        let valid = valid_resource_event(
+            &service,
+            &resource_type,
+            &payload,
+            &resource_id,
+            version,
+        )?;
         if resource_id.is_empty() || version <= 0 || !valid {
             return Err(CleanStoreError::CorruptState);
         }
     }
     Ok(())
+}
+
+fn valid_resource_event(
+    service: &str,
+    resource_type: &str,
+    payload: &[u8],
+    resource_id: &str,
+    version: i64,
+) -> Result<bool, CleanStoreError> {
+    match (service, resource_type) {
+        (REPOSITORY_SERVICE, "repository_connection") => {
+            valid_repository_connection_event(payload, resource_id, version)
+        }
+        (REPOSITORY_SERVICE, "repository_snapshot") => {
+            valid_repository_snapshot_event(payload, resource_id, version)
+        }
+        (PROFILE_SERVICE, "runtime_profile") => {
+            valid_runtime_profile_event(payload, resource_id, version)
+        }
+        (PROFILE_SERVICE, "runtime_profile_revision") => {
+            valid_runtime_profile_revision_event(payload, resource_id, version)
+        }
+        (PROFILE_SERVICE, "runtime_artifact") => {
+            valid_runtime_artifact_event(payload, resource_id, version)
+        }
+        (PROFILE_SERVICE, "automation_installation") => {
+            valid_automation_installation_event(payload, resource_id, version)
+        }
+        (DEVELOPMENT_SERVICE, "development_task") => {
+            valid_development_task_event(payload, resource_id, version)
+        }
+        (DEVELOPMENT_SERVICE, "development_attempt") => {
+            valid_development_attempt_event(payload, resource_id, version)
+        }
+        (DEVELOPMENT_SERVICE, "candidate") => valid_candidate_event(payload, resource_id, version),
+        (REVIEW_SERVICE, "change_request") => {
+            valid_change_request_event(payload, resource_id, version)
+        }
+        (REVIEW_SERVICE, "assessment") => valid_assessment_event(payload, resource_id, version),
+        (REVIEW_SERVICE, "evidence_reference") => {
+            valid_evidence_reference_event(payload, resource_id, version)
+        }
+        _ => Ok(false),
+    }
 }
 
 fn valid_repository_connection_event(
