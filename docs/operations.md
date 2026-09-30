@@ -109,5 +109,7 @@ artifact; deletion is explicit and dry-run first.
 Keep operational access loopback-only. Kubernetes Secrets, GitHub App keys,
 registry/model credentials, raw workflow logs, and artifact bytes are never
 placed in comments, metrics, API browser DTOs, or retained diagnostic text.
-See [Decision 0007](decisions/0007-clean-v1-runtime-profiles.md) for the
-normative trust and identity model and #68 for the reproducible end-to-end gate.
+See the [GitHub and GHCR security boundary](github-security.md) for required App
+permissions and workflow rules, [Decision 0007](decisions/0007-clean-v1-runtime-profiles.md)
+for the normative trust and identity model, and #68 for the reproducible
+end-to-end gate.
