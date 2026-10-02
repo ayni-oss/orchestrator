@@ -64,8 +64,9 @@ and tags have unambiguous source provenance.
 - `scripts/` contains the three command implementations behind `dev/ctl`.
 - `lib/` contains shared shell functions; neither directory is a public command
   surface.
-- `tests/` contains the separate worker-fixture chart and opt-in integration
-  drivers, exposed as `dev/ctl test NAME`.
+- `tests/` contains opt-in local validation drivers, exposed as `dev/ctl test
+  NAME`. Managed runtime and assessment proof is owned by the reviewed Actions
+  workflows, not a local Docker-in-Docker fixture.
 
 Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/local-development.md`](../docs/local-development.md) and

@@ -65,8 +65,8 @@ run, and evidence digest are distinct immutable identities.
    revision verifies/reuses its valid artifact; a lock revision is `updating`
    until a new artifact is verified.
 5. The runner starts coding with `image@sha256:...`; each attempt retains that
-   digest even if the active profile later changes. `ayni check --host` is
-   advisory feedback, not a gate.
+   digest even if the active profile later changes. Plain `ayni check` in that
+   launched image is advisory feedback, not a gate.
 6. A candidate becomes a draft PR. Managed PR automation checks the exact head,
    retains a bounded manifest/signals as digest-verified evidence, and yields an
    assessment. The GitHub check and marker-owned comment are presentations.

@@ -17,6 +17,10 @@ pub struct RuntimeImage(String);
 
 impl RuntimeImage {
     /// Parses an OCI repository reference pinned to a lowercase SHA-256 digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the reference is malformed or is not digest-pinned.
     pub fn parse(value: &str) -> Result<Self, RuntimeContractError> {
         let Some((repository, digest)) = value.split_once("@sha256:") else {
             return Err(RuntimeContractError::MutableImage(value.to_owned()));
@@ -49,7 +53,7 @@ impl fmt::Display for RuntimeImage {
 /// The supported platform of one runtime artifact.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimePlatform {
-    /// Linux on x86_64.
+    /// Linux on `x86_64`.
     LinuxAmd64,
     /// Linux on ARM64.
     LinuxArm64,
@@ -57,6 +61,10 @@ pub enum RuntimePlatform {
 
 impl RuntimePlatform {
     /// Parses the canonical OCI platform value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the platform is outside the v1 allow-list.
     pub fn parse(value: &str) -> Result<Self, RuntimeContractError> {
         match value {
             "linux/amd64" => Ok(Self::LinuxAmd64),
@@ -81,6 +89,10 @@ pub struct CommandOverride(Vec<String>);
 
 impl CommandOverride {
     /// Validates a non-empty argv override supplied by trusted task construction.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an argument is empty, oversized, or contains NUL.
     pub fn new(arguments: Vec<String>) -> Result<Self, RuntimeContractError> {
         if arguments.is_empty()
             || arguments.len() > MAX_COMMAND_ARGUMENTS
@@ -112,7 +124,12 @@ pub struct RuntimeContract {
 
 impl RuntimeContract {
     /// Creates a contract after registry resolution and platform admission.
-    pub fn new(image: RuntimeImage, platform: RuntimePlatform, command: CommandOverride) -> Self {
+    #[must_use]
+    pub const fn new(
+        image: RuntimeImage,
+        platform: RuntimePlatform,
+        command: CommandOverride,
+    ) -> Self {
         Self {
             image,
             platform,
@@ -171,6 +188,7 @@ pub enum RuntimeContractError {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::{CommandOverride, RuntimeContract, RuntimeImage, RuntimePlatform};
 

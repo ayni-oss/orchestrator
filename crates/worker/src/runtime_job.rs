@@ -28,6 +28,17 @@ pub struct RuntimeJobRequest {
 
 impl RuntimeJobRequest {
     /// Renders a Kubernetes Job manifest with no service account or host mounts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the trusted request contains unsafe identifiers or
+    /// an invalid execution deadline.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the internal, serde-serializable Job representation cannot
+    /// be serialized.
+    #[allow(clippy::expect_used, clippy::too_many_lines)]
     pub fn render(&self) -> Result<RenderedRuntimeJob, RuntimeJobError> {
         if !dns_label(&self.attempt_id) || !dns_label(&self.namespace) {
             return Err(RuntimeJobError::InvalidIdentity);
@@ -274,6 +285,7 @@ struct Volume<'a> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::runtime_contract::{CommandOverride, RuntimeImage, RuntimePlatform};

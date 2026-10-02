@@ -38,7 +38,7 @@ The product never uses “basic,” “unmanaged,” or “Ayni-less” as profi
 
 | Shared foundation | Ayni Managed adapter | Custom Runtime adapter |
 | --- | --- | --- |
-| Repository connection/snapshot, profile revisions, OCI digest admission, agent tasks and attempts, candidate storage, PR/MR publication, change-request and assessment identity, evidence retention, idempotent external actions, and reconciliation | `.ayni.toml`/`.ayni.lock` interpretation, Ayni release provisioning, GitHub Actions setup and workflow templates, GHCR publication/verification, `ayni check --host` feedback, managed PR checks, signals, and default-branch environment reconciliation | Supported external OCI reference discovery and verification; repository-native checks are observed as external assessments without representing them as Ayni evidence |
+| Repository connection/snapshot, profile revisions, OCI digest admission, agent tasks and attempts, candidate storage, PR/MR publication, change-request and assessment identity, evidence retention, idempotent external actions, and reconciliation | `.ayni.toml`/`.ayni.lock` interpretation, Ayni release provisioning, GitHub Actions setup and workflow templates, GHCR publication/verification, plain `ayni check` feedback in the launched image, managed PR checks, signals, and default-branch environment reconciliation | Supported external OCI reference discovery and verification; repository-native checks are observed as external assessments without representing them as Ayni evidence |
 
 No shared resource contains mandatory Ayni lock, signal, preparation, or
 GitHub-only fields. Provider-specific identities are attached at provider
@@ -111,7 +111,7 @@ change verifies/reuses the existing artifact; a lock change creates an
 and periodically reconciles workflow state and GHCR artifacts.
 
 Coding runs in the verified `image@sha256:...` artifact on an eligible node.
-`ayni check --host` is optional agent feedback only. The managed PR workflow
+Plain `ayni check` in the launched image is optional agent feedback only. The managed PR workflow
 checks the exact PR head with managed `ayni check`; its digest-verified manifest
 and evidence produce the authoritative assessment. The GitHub check and one
 marker-owned summary comment are projections. They may be updated, deleted, or

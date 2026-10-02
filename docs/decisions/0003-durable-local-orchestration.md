@@ -3,6 +3,13 @@
 - Status: superseded by [Decision 0007](0007-clean-v1-runtime-profiles.md)
 - Date: 2026-09-17
 
+## Historical scope
+
+This superseded decision describes the retired pilot's preparation and
+worker-report storage. In particular, the `managed-check-evidence` claim is not
+part of the clean-v1 deployment; assessment evidence is introduced only with
+the trusted collector and durable assessment contract.
+
 ## Decision
 
 Use a single-replica control plane with SQLite on the retained

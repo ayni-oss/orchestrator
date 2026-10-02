@@ -24,11 +24,10 @@ become ready:
 
 The chart deliberately does not create or accept credential values. Set
 `images.pullPolicy` for the target registry and size
-`persistence.controlPlaneState` and `persistence.managedCheckEvidence` before
-first installation. The controller mounts only the clean database claim; pilot
-checkpoint and prepared-environment claims are not created, and it does not
-mount legacy validation evidence. Claims carry `helm.sh/resource-policy: keep`
-and therefore survive release uninstall.
+`persistence.controlPlaneState` before first installation. The controller
+mounts only the clean database claim; pilot checkpoint, prepared-environment,
+and managed-check-evidence claims are not created. Claims carry
+`helm.sh/resource-policy: keep` and therefore survive release uninstall.
 
 `customClients.enabled=true` adds the reviewed private TLS listener and requires
 the Secret named by `customClients.secretName`; see

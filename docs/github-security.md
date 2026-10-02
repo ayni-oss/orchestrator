@@ -53,13 +53,14 @@ or loss must converge through the periodic reconciler; webhook text and URLs are
 not trusted evidence. Subscribe only to the events needed to accelerate
 repository-installation, pull-request, and workflow-run observation.
 
-Ayni's forthcoming portable environment certificate is a separate runtime
-boundary. The trusted default-branch publication flow may create a certified
-image, while a PR flow admits an immutable image and runs its managed check.
-The controller retains the independently observed OCI digest and GitHub/GHCR
-identity; Ayni verifies the certificate, lock compatibility, and protected
-runtime content. Never duplicate the certificate verifier in workflow glue or
-make the certificate replace repository/package ownership checks.
+Ayni 0.14.0 environment certificates are a separate runtime boundary. The
+trusted default-branch publication flow may create a certified image only with
+the dedicated signing seed and key identifier supplied together in trusted CI;
+a PR flow admits an immutable image and runs its managed check. The controller
+retains the independently observed OCI digest and GitHub/GHCR identity; Ayni
+verifies the certificate, lock compatibility, and protected runtime content.
+Never duplicate the certificate verifier in workflow glue or make the
+certificate replace repository/package ownership checks.
 
 Candidate lock changes require a separately specified ephemeral certification
 policy. Until that policy exists, fail closed or report the change as unsupported:

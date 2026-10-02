@@ -277,9 +277,9 @@ jobs:
 
       - name: Install Ayni
         env:
-          AYNI_VERSION: 0.13.0
-          AYNI_ARCHIVE: ayni-ayni-v0.13.0-x86_64-unknown-linux-gnu.tar.gz
-          AYNI_SHA256: d0348577b129d9dac115b9a0bec164a73207c0d6a4bfdeb22ce8899060080ff8
+          AYNI_VERSION: 0.14.0
+          AYNI_ARCHIVE: ayni-ayni-v0.14.0-x86_64-unknown-linux-gnu.tar.gz
+          AYNI_SHA256: 5172ab4e530fda3eb1a18dac90595adb6b342c9b9773fa6e98ba4f5d7dd2058e
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/$AYNI_ARCHIVE"
@@ -297,14 +297,15 @@ jobs:
       - name: Run Ayni
         run: |
           set +e
-          ayni env build --repo-root .
+          image="ayni-pr:${{ github.event.pull_request.head.sha }}"
+          ayni env build --repo-root . --tag "$image"
           exit_code=$?
           if [ "$exit_code" -eq 0 ]; then
-            ayni env doctor --repo-root .
-            exit_code=$?
-          fi
-          if [ "$exit_code" -eq 0 ]; then
-            ayni check --config .ayni.toml --output markdown > "$RUNNER_TEMP/ayni.md"
+            docker run --rm \
+              --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
+              --workdir /workspace \
+              "$image" \
+              ayni check --config .ayni.toml --output markdown > "$RUNNER_TEMP/ayni.md"
             exit_code=$?
           fi
           exit "$exit_code"

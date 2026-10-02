@@ -3,6 +3,13 @@
 - Status: superseded by [Decision 0007](0007-clean-v1-runtime-profiles.md)
 - Date: 2026-09-25
 
+## Historical scope
+
+This superseded decision records the retired pilot preparation model only. Its
+Docker-in-Docker, build-record, archive, `env doctor`, and validation-manifest
+requirements are not current instructions. The released Ayni 0.14 integration
+contract is recorded in [the current integration contract](../ayni-0.14-integration.md).
+
 ## Decision
 
 The current profile supports one trusted Docker Desktop cluster and GitHub.com

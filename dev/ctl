@@ -25,8 +25,7 @@ Local Docker Desktop development:
   purge NAMESPACE              Permanently delete an owned local namespace
   render CP_IMAGE WORKER WEB   Render the complete development chart
   dependencies                 Build locked Helm dependencies
-  test NAME                    Run: observability, custom-clients, managed-check,
-                               or artifact-rejection
+  test NAME                    Run: observability or custom-clients
   help                         Show this help
 
 The default private env file is dev/.env. Override it with --env-file or set
@@ -181,14 +180,12 @@ case "$command" in
   test)
     test_name="${1:-}"
     [[ $# -eq 1 ]] || {
-      echo "usage: dev/ctl test {observability|custom-clients|managed-check|artifact-rejection}" >&2
+      echo "usage: dev/ctl test {observability|custom-clients}" >&2
       exit 2
     }
     case "$test_name" in
       observability) "$scripts/check.sh" --observability-only ;;
       custom-clients) "$tests/check-custom-clients.sh" ;;
-      managed-check) "$tests/run-managed-check.sh" ;;
-      artifact-rejection) "$tests/run-artifact-rejection-check.sh" ;;
       *)
         echo "unknown development test: $test_name" >&2
         exit 2
