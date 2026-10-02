@@ -7,9 +7,8 @@ use thiserror::Error;
 
 const WORKSPACE: &str = "/workspace";
 const SCRATCH: &str = "/scratch";
-const OUTPUT: &str = "/output";
-const AGENT_UID: i64 = 10_002;
-const AGENT_GID: i64 = 10_001;
+const OUTPUT: &str = "/workspace/.orchestrator/output";
+const LAUNCHER_DIRECTORY: &str = "/orchestrator";
 
 /// Trusted controller inputs used to render one attempt-owned Job.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,6 +21,8 @@ pub struct RuntimeJobRequest {
     pub runtime: RuntimeContract,
     /// Reference to a short-lived, attempt-owned registry credential secret.
     pub pull_secret: Option<String>,
+    /// `ConfigMap` containing the controller-provided agent launcher.
+    pub launcher_config_map: String,
     /// Bounded execution deadline in seconds.
     pub deadline_seconds: u32,
 }
@@ -52,6 +53,9 @@ impl RuntimeJobRequest {
             .is_some_and(|value| !dns_label(value))
         {
             return Err(RuntimeJobError::InvalidPullSecret);
+        }
+        if !dns_label(&self.launcher_config_map) {
+            return Err(RuntimeJobError::InvalidLauncher);
         }
         let name = format!("runtime-{}", self.attempt_id);
         if name.len() > 63 {
@@ -97,7 +101,8 @@ impl RuntimeJobRequest {
                             name: "agent",
                             image: self.runtime.image().as_str(),
                             image_pull_policy: "IfNotPresent",
-                            command: self.runtime.command().arguments(),
+                            command: None,
+                            args: self.runtime.launcher_arguments().arguments(),
                             env: vec![
                                 Env {
                                     name: "ORCHESTRATOR_WORKSPACE",
@@ -111,8 +116,8 @@ impl RuntimeJobRequest {
                             security_context: ContainerSecurity {
                                 allow_privilege_escalation: false,
                                 read_only_root_filesystem: true,
-                                run_as_user: AGENT_UID,
-                                run_as_group: AGENT_GID,
+                                run_as_user: self.runtime.user().uid(),
+                                run_as_group: self.runtime.user().gid(),
                                 capabilities: Capabilities { drop: vec!["ALL"] },
                             },
                             resources: Resources {
@@ -122,22 +127,31 @@ impl RuntimeJobRequest {
                             volume_mounts: vec![
                                 Mount {
                                     name: "workspace",
-                                    mount_path: WORKSPACE,
+                                    path: WORKSPACE,
+                                    read_only: false,
                                 },
                                 Mount {
                                     name: "scratch",
-                                    mount_path: SCRATCH,
+                                    path: SCRATCH,
+                                    read_only: false,
                                 },
                                 Mount {
                                     name: "output",
-                                    mount_path: OUTPUT,
+                                    path: OUTPUT,
+                                    read_only: false,
+                                },
+                                Mount {
+                                    name: "launcher",
+                                    path: LAUNCHER_DIRECTORY,
+                                    read_only: true,
                                 },
                             ],
                         }],
                         volumes: vec![
-                            Volume { name: "workspace" },
-                            Volume { name: "scratch" },
-                            Volume { name: "output" },
+                            Volume::empty_dir("workspace"),
+                            Volume::empty_dir("scratch"),
+                            Volume::empty_dir("output"),
+                            Volume::config_map("launcher", &self.launcher_config_map),
                         ],
                     },
                 },
@@ -177,6 +191,9 @@ pub enum RuntimeJobError {
     /// Pull secret reference is unsafe.
     #[error("runtime pull secret name is invalid")]
     InvalidPullSecret,
+    /// The launcher `ConfigMap` reference is unsafe.
+    #[error("runtime launcher ConfigMap name is invalid")]
+    InvalidLauncher,
     /// Deadline is outside the bounded execution window.
     #[error("runtime deadline must be between 1 and 86400 seconds, got {0}")]
     InvalidDeadline(u32),
@@ -244,7 +261,9 @@ struct Container<'a> {
     name: &'a str,
     image: &'a str,
     image_pull_policy: &'a str,
-    command: &'a [String],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    command: Option<&'a [String]>,
+    args: &'a [String],
     env: Vec<Env<'a>>,
     security_context: ContainerSecurity<'a>,
     resources: Resources<'a>,
@@ -277,10 +296,44 @@ struct Resources<'a> {
 #[serde(rename_all = "camelCase")]
 struct Mount<'a> {
     name: &'a str,
-    mount_path: &'a str,
+    #[serde(rename = "mountPath")]
+    path: &'a str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    read_only: bool,
 }
 #[derive(Serialize)]
 struct Volume<'a> {
+    name: &'a str,
+    #[serde(rename = "emptyDir")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    empty_dir: Option<EmptyDir>,
+    #[serde(rename = "configMap")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_map: Option<ConfigMapVolume<'a>>,
+}
+impl<'a> Volume<'a> {
+    const fn empty_dir(name: &'a str) -> Self {
+        Self {
+            name,
+            empty_dir: Some(EmptyDir {}),
+            config_map: None,
+        }
+    }
+
+    const fn config_map(name: &'a str, config_map_name: &'a str) -> Self {
+        Self {
+            name,
+            empty_dir: None,
+            config_map: Some(ConfigMapVolume {
+                name: config_map_name,
+            }),
+        }
+    }
+}
+#[derive(Serialize)]
+struct EmptyDir {}
+#[derive(Serialize)]
+struct ConfigMapVolume<'a> {
     name: &'a str,
 }
 
@@ -288,9 +341,9 @@ struct Volume<'a> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::runtime_contract::{CommandOverride, RuntimeImage, RuntimePlatform};
+    use crate::runtime_contract::{LauncherArguments, RuntimeImage, RuntimePlatform, RuntimeUser};
     fn request() -> RuntimeJobRequest {
-        RuntimeJobRequest { attempt_id: "a5f31d70-13b0-4d64-b7a4-cb9823a2a61d".into(), namespace: "ayni-orchestrator".into(), runtime: RuntimeContract::new(RuntimeImage::parse("ghcr.io/acme/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(), RuntimePlatform::LinuxAmd64, CommandOverride::new(vec!["/opt/ayni/agent".into()]).unwrap()), pull_secret: Some("attempt-pull".into()), deadline_seconds: 3600 }
+        RuntimeJobRequest { attempt_id: "a5f31d70-13b0-4d64-b7a4-cb9823a2a61d".into(), namespace: "ayni-orchestrator".into(), runtime: RuntimeContract::new(RuntimeImage::parse("ghcr.io/acme/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(), RuntimePlatform::LinuxAmd64, LauncherArguments::new(vec!["/orchestrator/launcher".into(), "--workspace".into(), "/workspace".into()]).unwrap(), RuntimeUser::new(10_002, 10_001).unwrap()), pull_secret: Some("attempt-pull".into()), launcher_config_map: "attempt-launcher".into(), deadline_seconds: 3600 }
     }
     #[test]
     fn renders_isolated_digest_pinned_job() {
@@ -310,6 +363,11 @@ mod tests {
             true
         );
         assert_eq!(pod["imagePullSecrets"][0]["name"], "attempt-pull");
+        assert!(pod["containers"][0].get("command").is_none());
+        assert_eq!(pod["containers"][0]["args"][0], "/orchestrator/launcher");
+        assert_eq!(pod["containers"][0]["volumeMounts"][3]["readOnly"], true);
+        assert_eq!(pod["volumes"][3]["configMap"]["name"], "attempt-launcher");
+        assert_eq!(pod["volumes"][0]["emptyDir"], serde_json::json!({}));
     }
     #[test]
     fn rejects_unsafe_job_inputs() {
@@ -318,6 +376,9 @@ mod tests {
         assert!(value.render().is_err());
         let mut value = request();
         value.deadline_seconds = 0;
+        assert!(value.render().is_err());
+        let mut value = request();
+        value.launcher_config_map = "BAD".into();
         assert!(value.render().is_err());
     }
 }

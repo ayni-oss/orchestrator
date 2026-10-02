@@ -83,12 +83,16 @@ impl RuntimePlatform {
     }
 }
 
-/// A bounded argv override. Shell strings are deliberately not a runtime contract.
+/// Bounded arguments handed to an image's existing entrypoint.
+///
+/// Kubernetes `args` replace the image `CMD`, but leave its `ENTRYPOINT` intact.
+/// That distinction is intentional: an admitted runtime is responsible for any
+/// preparation it needs before it invokes this launcher argv.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommandOverride(Vec<String>);
+pub struct LauncherArguments(Vec<String>);
 
-impl CommandOverride {
-    /// Validates a non-empty argv override supplied by trusted task construction.
+impl LauncherArguments {
+    /// Validates a non-empty launcher argv supplied by trusted task construction.
     ///
     /// # Errors
     ///
@@ -102,7 +106,7 @@ impl CommandOverride {
                     || argument.bytes().any(|byte| byte == 0)
             })
         {
-            return Err(RuntimeContractError::InvalidCommandOverride);
+            return Err(RuntimeContractError::InvalidLauncherArguments);
         }
         Ok(Self(arguments))
     }
@@ -114,12 +118,46 @@ impl CommandOverride {
     }
 }
 
+/// The effective non-root identity verified for the runtime artifact.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RuntimeUser {
+    uid: i64,
+    gid: i64,
+}
+
+impl RuntimeUser {
+    /// Creates the identity used for the launcher and writable volumes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for root or otherwise invalid Unix identities.
+    pub const fn new(uid: i64, gid: i64) -> Result<Self, RuntimeContractError> {
+        if uid <= 0 || gid <= 0 {
+            return Err(RuntimeContractError::InvalidRuntimeUser);
+        }
+        Ok(Self { uid, gid })
+    }
+
+    /// Returns the Unix user ID.
+    #[must_use]
+    pub const fn uid(self) -> i64 {
+        self.uid
+    }
+
+    /// Returns the Unix group ID.
+    #[must_use]
+    pub const fn gid(self) -> i64 {
+        self.gid
+    }
+}
+
 /// Immutable inputs required to start an isolated coding runtime.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeContract {
     image: RuntimeImage,
     platform: RuntimePlatform,
-    command: CommandOverride,
+    launcher_arguments: LauncherArguments,
+    user: RuntimeUser,
 }
 
 impl RuntimeContract {
@@ -128,12 +166,14 @@ impl RuntimeContract {
     pub const fn new(
         image: RuntimeImage,
         platform: RuntimePlatform,
-        command: CommandOverride,
+        launcher_arguments: LauncherArguments,
+        user: RuntimeUser,
     ) -> Self {
         Self {
             image,
             platform,
-            command,
+            launcher_arguments,
+            user,
         }
     }
 
@@ -149,10 +189,16 @@ impl RuntimeContract {
         self.platform
     }
 
-    /// Returns the bounded launcher argv.
+    /// Returns arguments passed to the runtime image's preserved entrypoint.
     #[must_use]
-    pub const fn command(&self) -> &CommandOverride {
-        &self.command
+    pub const fn launcher_arguments(&self) -> &LauncherArguments {
+        &self.launcher_arguments
+    }
+
+    /// Returns the effective identity verified for writable runtime paths.
+    #[must_use]
+    pub const fn user(&self) -> RuntimeUser {
+        self.user
     }
 }
 
@@ -183,14 +229,17 @@ pub enum RuntimeContractError {
     #[error("runtime platform is unsupported: {0:?}")]
     UnsupportedPlatform(String),
     /// The override is not a bounded non-shell argv.
-    #[error("runtime command override must be a bounded non-empty argv")]
-    InvalidCommandOverride,
+    #[error("runtime launcher arguments must be a bounded non-empty argv")]
+    InvalidLauncherArguments,
+    /// The runtime's effective identity would violate the non-root boundary.
+    #[error("runtime user and group must be positive non-root Unix IDs")]
+    InvalidRuntimeUser,
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{CommandOverride, RuntimeContract, RuntimeImage, RuntimePlatform};
+    use super::{LauncherArguments, RuntimeContract, RuntimeImage, RuntimePlatform, RuntimeUser};
 
     const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -206,22 +255,25 @@ mod tests {
     #[test]
     fn rejects_unsupported_platform_and_shell_like_command_contracts() {
         assert!(RuntimePlatform::parse("darwin/arm64").is_err());
-        assert!(CommandOverride::new(Vec::new()).is_err());
-        assert!(CommandOverride::new(vec!["run\0this".into()]).is_err());
+        assert!(LauncherArguments::new(Vec::new()).is_err());
+        assert!(LauncherArguments::new(vec!["run\0this".into()]).is_err());
         let contract = RuntimeContract::new(
             RuntimeImage::parse(&format!(
                 "registry.example:5000/team/runtime@sha256:{DIGEST}"
             ))
             .unwrap(),
             RuntimePlatform::parse("linux/arm64").unwrap(),
-            CommandOverride::new(vec![
-                "/opt/ayni/agent".into(),
+            LauncherArguments::new(vec![
+                "/orchestrator/launcher".into(),
                 "--workspace".into(),
                 "/workspace".into(),
             ])
             .unwrap(),
+            RuntimeUser::new(10_002, 10_001).unwrap(),
         );
         assert_eq!(contract.platform().as_str(), "linux/arm64");
-        assert_eq!(contract.command().arguments().len(), 3);
+        assert_eq!(contract.launcher_arguments().arguments().len(), 3);
+        assert_eq!(contract.user().uid(), 10_002);
+        assert!(RuntimeUser::new(0, 10_001).is_err());
     }
 }
