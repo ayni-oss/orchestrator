@@ -98,6 +98,8 @@ pub enum CleanStoreError {
     ParentMismatch,
     #[error("the runtime profile is not ready with a verified artifact")]
     ProfileNotReady,
+    #[error("the runtime profile references an unsupported onboarding workflow template: {0:?}")]
+    UnsupportedWorkflowTemplate(String),
     #[error("the task is not actionable")]
     TaskNotActionable,
     #[error("the task deadline has expired")]
@@ -213,7 +215,7 @@ mod tests {
                         v1::AyniManagedProfileRevision {
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: "0.4.0".to_owned(),
-                            workflow_template_version: "v1".to_owned(),
+                            workflow_template_version: "ayni-managed-v1".to_owned(),
                             oci_repository: "ghcr.io/ayni-oss/sandbox/environment".to_owned(),
                         },
                     ),
@@ -272,6 +274,39 @@ mod tests {
         let artifact =
             store.record_runtime_artifact(&profile.id, verified_artifact(&revision.id, DIGEST))?;
         Ok((repository, store.runtime_profile(&profile.id)?, artifact))
+    }
+
+    #[test]
+    fn onboarding_accepts_only_versioned_templates_and_records_owned_paths()
+    -> Result<(), CleanStoreError> {
+        let mut store = CleanStore::in_memory()?;
+        let repository =
+            store.create_repository_connection("repo-scope", &repository_request("repo", "123"))?;
+        let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
+        let (profile, _) = store.create_runtime_profile(
+            "profile-scope",
+            &profile_request("profile", &repository.id, &snapshot.id),
+        )?;
+        let automation = store.install_repository_automation(
+            "automation-scope",
+            &v1::InstallRepositoryAutomationRequest {
+                idempotency_key: "automation".to_owned(),
+                runtime_profile_id: profile.id,
+            },
+        )?;
+        let Some(v1::automation_installation::Provider::Github(github)) = automation.provider
+        else {
+            return Err(CleanStoreError::CorruptState);
+        };
+        assert_eq!(
+            github.environment_workflow_path,
+            ".github/workflows/ayni-managed-environment.yml"
+        );
+        assert_eq!(
+            github.assessment_workflow_path,
+            ".github/workflows/ayni-managed-assessment.yml"
+        );
+        Ok(())
     }
 
     fn task_request(

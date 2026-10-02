@@ -3,9 +3,11 @@
 mod api;
 mod application_metrics;
 mod clean_store;
+pub(crate) mod github_setup;
 mod grpc;
 mod grpc_access;
 mod model_catalog;
+pub(crate) mod onboarding_templates;
 
 use api::HealthResponse;
 use axum::{
