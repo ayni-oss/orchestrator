@@ -1,7 +1,6 @@
 {{- if .Values.enabled }}
 {{- $claims := list
-  (dict "name" "control-plane-state" "size" .Values.persistence.controlPlaneState.size)
-  (dict "name" "managed-check-evidence" "size" .Values.persistence.managedCheckEvidence.size) -}}
+  (dict "name" "control-plane-state" "size" .Values.persistence.controlPlaneState.size) -}}
 {{- range $index, $claim := $claims }}
 {{- if $index }}
 ---

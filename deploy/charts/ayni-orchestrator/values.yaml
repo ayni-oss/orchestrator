@@ -28,8 +28,6 @@ web:
 persistence:
   controlPlaneState:
     size: 1Gi
-  managedCheckEvidence:
-    size: 2Gi
 
 customClients:
   enabled: false

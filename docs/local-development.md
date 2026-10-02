@@ -75,7 +75,7 @@ change the schema marker, or use a compatibility flag to bypass the rejection.
    `image@sha256:...` digest, writable checkout, bounded scratch, and scoped
    credentials. It does not build an environment or mount a Docker socket,
    controller database, service-account token, or another task's state.
-5. Treat `ayni check --host` in the coding container as feedback. Publish a
+5. Treat plain `ayni check` in the coding container as feedback. Publish a
    candidate as a draft PR, then let managed PR automation run exact-head
    `ayni check` and retain digest-verified assessment evidence.
 

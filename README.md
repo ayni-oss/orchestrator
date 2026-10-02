@@ -26,9 +26,9 @@ without Ayni-specific fields or negative branding.
 
 A task freezes a repository revision, profile revision, and verified OCI digest.
 A candidate commit, pull-request head SHA, workflow run, and evidence digest are
-different identities. `ayni check --host` is agent feedback; managed PR execution
-is the quality gate; GitHub checks/comments are presentation; digest-verified
-evidence and OCI digests are retained identities.
+different identities. Plain `ayni check` in the launched verified image is agent
+feedback; managed PR execution is the quality gate; GitHub checks/comments are
+presentation; digest-verified evidence and OCI digests are retained identities.
 
 ## Documentation
 
@@ -41,6 +41,7 @@ evidence and OCI digests are retained identities.
 | [Operations](docs/operations.md) | Target readiness, recovery, retention, and evidence operations |
 | [Roadmap](ROADMAP.md) | Linked delivery issues and follow-ups |
 | [Local Helm deployment decision](docs/decisions/0006-local-helm-chart.md) | Existing local chart/deployment boundary; worker details are historical until revised |
+| [Ayni 0.14 integration contract](docs/ayni-0.14-integration.md) | Released launcher, certification, and assessment-evidence boundaries |
 | [Custom-client gRPC access](docs/custom-client-access.md) | Private endpoint boundary; not public hosting authorization |
 
 ## Planning and delivery

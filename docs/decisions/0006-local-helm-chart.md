@@ -20,9 +20,8 @@ Docker Desktop development composition under `dev`:
 - `dev/charts/ayni-orchestrator-local` is the Docker Desktop development umbrella. It depends on the
   application chart and version-locked upstream Prometheus,
   kube-state-metrics, and Grafana charts, and adds local scrape configuration,
-  least-privilege monitoring RBAC and the dashboard. Opt-in managed-check
-  fixtures are isolated in `dev/tests/charts/worker-fixtures` so they are not
-  packaged with the normal development release.
+  least-privilege monitoring RBAC and the dashboard. Runtime proof fixtures
+  are not packaged with the normal development release.
 
 `dev/charts/ayni-orchestrator-local/Chart.lock` fixes the dependency chart versions selected by
 the umbrella. Generated archives under `dev/charts/ayni-orchestrator-local/charts` are ignored;
@@ -73,9 +72,8 @@ creating a fresh Helm-managed environment. This keeps routine deployment small
 and prevents historical takeover logic from becoming a permanent maintenance
 surface.
 
-SQLite state, checkpoints, managed evidence, and prepared environments use
-persistent volume claims annotated with `helm.sh/resource-policy: keep`. Normal
-cleanup uninstalls the local release while preserving those claims, the
+SQLite state uses a persistent volume claim annotated with
+`helm.sh/resource-policy: keep`. Normal cleanup uninstalls the local release while preserving that claim, the
 namespace, credentials, and task Jobs. Namespace deletion, cluster reset,
 volume deletion, and broad Docker pruning are separate destructive operator
 actions. Claim sizes are install-time minimums: expansion depends on the active
@@ -83,11 +81,12 @@ storage class, and reducing a claim size is not supported.
 
 ## Worker boundary
 
-A Kubernetes pod cannot be assumed to contain a container engine. Managed Ayni
-execution therefore uses an attempt-local Docker-in-Docker sidecar. The engine
-is privileged, but it is not shared with the control plane, the host Docker
-socket, or repository-controlled processes. The worker remains non-root and has
-no Kubernetes service-account token.
+A Kubernetes pod cannot be assumed to contain a container engine. Coding and
+assessment containers pull a controller-admitted digest and start it through
+the platform launcher; they do not build an Ayni environment, use
+Docker-in-Docker, or mount a Docker socket. The worker remains non-root and has
+no Kubernetes service-account token. See the [shared runtime runner](../runtime-runner.md)
+and [Ayni 0.14 integration contract](../ayni-0.14-integration.md).
 
 ## Consequences
 
