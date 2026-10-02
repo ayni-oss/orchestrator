@@ -1,3 +1,5 @@
+use crate::{github_setup, onboarding_templates};
+
 impl CleanStore {
     pub(crate) fn install_repository_automation(
         &mut self,
@@ -32,6 +34,10 @@ impl CleanStore {
             }
             _ => return Err(CleanStoreError::InvalidTransition),
         };
+        let workflows = onboarding_templates::render(&version, &repository.default_branch)
+            .map_err(|_| CleanStoreError::UnsupportedWorkflowTemplate(version.clone()))?;
+        github_setup::setup_pull_request(&profile.id, &repository.default_branch, workflows)
+            .map_err(|_| CleanStoreError::CorruptState)?;
         let now = unix_seconds()?;
         let id = resource_id("automation");
         let installation = v1::AutomationInstallation {
@@ -43,8 +49,10 @@ impl CleanStore {
                 v1::GithubAutomationInstallation {
                     installation_id: github.installation_id,
                     setup_pull_request_number: None,
-                    environment_workflow_path: String::new(),
-                    assessment_workflow_path: String::new(),
+                    environment_workflow_path: onboarding_templates::ENVIRONMENT_WORKFLOW_PATH
+                        .to_owned(),
+                    assessment_workflow_path: onboarding_templates::ASSESSMENT_WORKFLOW_PATH
+                        .to_owned(),
                 },
             )),
             failure: None,

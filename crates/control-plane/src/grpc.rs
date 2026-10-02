@@ -293,7 +293,9 @@ impl RequestContext {
                 None,
             ),
             CleanStoreError::StaleVersion => (Code::Aborted, v1::ErrorReason::Conflict, None, None),
-            CleanStoreError::ParentMismatch | CleanStoreError::InvalidTransition => (
+            CleanStoreError::ParentMismatch
+            | CleanStoreError::InvalidTransition
+            | CleanStoreError::UnsupportedWorkflowTemplate(_) => (
                 Code::FailedPrecondition,
                 v1::ErrorReason::FailedPrecondition,
                 None,
