@@ -3,7 +3,7 @@
 # contains no daemon, credentials, package publisher, or controller state.
 ARG DOCKER_CLIENT_IMAGE
 FROM ${DOCKER_CLIENT_IMAGE} AS docker-client
-FROM ghcr.io/ayni-oss/ayni-env:0.14.2-debian@sha256:6b92c65b4592b043d58d6d4b6dc1b4fcf6c15ed8f6db59e9f3dd5dbe4dbbaba5
+FROM ghcr.io/ayni-oss/ayni-env:0.14.3-debian@sha256:7b0db084f9d2364e14ed304a8fa033b8ec513542e13c62cbc219a8453cce238d
 USER root
 COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
 USER 10001
