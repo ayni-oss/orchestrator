@@ -6,6 +6,7 @@ mod clean_store;
 pub(crate) mod github_setup;
 mod grpc;
 mod grpc_access;
+pub(crate) mod managed_environment;
 mod model_catalog;
 pub(crate) mod onboarding_templates;
 
