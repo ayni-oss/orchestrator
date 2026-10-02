@@ -109,7 +109,9 @@ JSON evidence. Workspace membership is declared consistently in `package.json`
 and `pnpm-workspace.yaml` so Ayni resolves the shared runtime and lockfile.
 `frontend:check` is only the complementary TypeScript/Svelte compilation,
 production build, and browser-bundle boundary check. Browser tests reuse that
-build; a standalone `pnpm test:e2e` still builds automatically.
+build; a standalone `pnpm test:e2e` still builds automatically. These complementary
+checks remain local commands, not a standalone frontend CI job. The Ayni job is
+the Rust/Node quality gate; it does not claim browser-test or build validation.
 
 Run Ayni before a production build in a clean checkout, as CI does. Ayni 0.14.2
 does not apply the Node size exclusions to its ESLint complexity scan, so an
