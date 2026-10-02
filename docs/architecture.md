@@ -18,7 +18,7 @@ application storage, not Kubernetes status, is the lifecycle authority.
 | API/BFF/UI | Repository connections, profile views, tasks/attempts, candidates, change requests, assessments, evidence, bounded watch/poll | Display profile state and safe profile-specific remediation |
 | Control plane | SQLite resources, idempotent actions, GitHub provider connection, OCI verification, reconciliation, candidate publication, assessment import | Ayni automation template/version and policy dispatch |
 | Runtime runner | Digest-pinned OCI execution, workspace/scratch isolation, launcher, candidate output, cancellation | No Ayni lock, signal, or validation behavior |
-| Ayni Managed automation | — | Setup PR, Actions workflows, GHCR artifact publication, default-branch verification, exact-head managed assessment and comment |
+| Ayni Managed automation | — | Optional setup PR and assessment workflows; registry verification or dedicated build Job; exact-head managed assessment and comment |
 | Evidence store | Immutable, bounded evidence references and digest conflict detection | Ayni manifests/signals only for Ayni Managed |
 
 The protocol is independent of persistence, Kubernetes, browser types, and
@@ -55,13 +55,13 @@ run, and evidence digest are distinct immutable identities.
 
 1. A repository connection selects a GitHub repository and installation. A
    profile revision records the committed Ayni contract.
-2. The controller creates/reconciles one pipelines setup PR. It never writes the
-   default branch directly.
-3. After merge, trusted default-branch automation validates the lock and
-   publishes or verifies `lock-<full-64-hex-lock-fingerprint>` in the enrolled
-   GHCR package. The controller resolves the tag, verifies ownership, platform,
-   Ayni labels, and immutable OCI digest.
-4. Only a profile with verified automation and artifact is `ready`. A source-only
+2. When assessment automation is configured, the controller creates/reconciles
+   one setup PR. It never writes the default branch directly.
+3. The profile either resolves a configured registry reference or creates a
+   dedicated Kubernetes build Job. The controller verifies the registry policy,
+   platform, Ayni labels, and immutable OCI digest; it never receives registry
+   credentials or runs image tooling.
+4. Only a profile with the required automation and verified artifact is `ready`. A source-only
    revision verifies/reuses its valid artifact; a lock revision is `updating`
    until a new artifact is verified.
 5. The runner starts coding with `image@sha256:...`; each attempt retains that
@@ -85,8 +85,8 @@ remediation state. See Decision 0007 for the normative recovery table.
 
 Repository and candidate code, build hooks, and workflow outputs are untrusted
 inputs. GitHub App credentials are short-lived and controller-scoped; candidate
-PR execution cannot publish packages or receive controller/model credentials.
-GHCR tags discover artifacts but OCI digests plus verified metadata identify
+PR execution cannot receive controller, model, or build credentials. Registry
+tags discover artifacts but OCI digests plus verified metadata identify
 them. Coding containers mount only task workspace and bounded scratch, never a
 host socket, controller database, Kubernetes token, or another task's state.
 Kubernetes node cache is not evidence. The controller retains verified evidence

@@ -49,8 +49,7 @@ impl CleanStore {
                 v1::GithubAutomationInstallation {
                     installation_id: github.installation_id,
                     setup_pull_request_number: None,
-                    environment_workflow_path: onboarding_templates::ENVIRONMENT_WORKFLOW_PATH
-                        .to_owned(),
+                    environment_workflow_path: String::new(),
                     assessment_workflow_path: onboarding_templates::ASSESSMENT_WORKFLOW_PATH
                         .to_owned(),
                 },

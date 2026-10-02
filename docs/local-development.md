@@ -19,21 +19,22 @@ validation manifests. Preserve any pilot data outside the deployment if needed,
 then use the guarded purge path before installing v1. Do not add a legacy-read
 or migration flag.
 
-The target deployment requires configuration for the GitHub App, enrolled GHCR
-coordinates, supported platform(s), Ayni release/checksum, workflow-template
-version, reconciliation interval/jitter, deadlines/concurrency, artifact bounds,
-and readiness policy. Credentials are supplied only through ignored local
-configuration and scoped Kubernetes Secrets; never commit, print, or copy them
-into task evidence.
+The target deployment requires configuration for the supported registry,
+profile source (registry or dedicated build Job), supported platform(s), Ayni
+release/checksum, reconciliation interval/jitter, deadlines/concurrency,
+artifact bounds, and readiness policy. GitHub App configuration is needed only
+when repository assessment automation is enabled. Credentials are supplied only
+through ignored local configuration and scoped Kubernetes Secrets; never commit,
+print, or copy them into task evidence.
 
-A GitHub App installation needs only the permissions documented and enforced by
-the [GitHub and GHCR security boundary](github-security.md): repository/default-branch
-read, owned workflow/setup-PR creation, Actions/check observation or dispatch where
-needed, Packages read, and bounded comment/PR operations. Webhooks, if enabled later,
-are authenticated reconciliation hints rather than an execution or authorization path.
-The default-branch environment workflow has package-write only for its trusted
-build job; PR code never receives package-write, controller, or model
-credentials.
+A GitHub App installation, when assessment automation is enabled, needs only
+the permissions documented and enforced by the
+[GitHub security boundary](github-security.md): repository/default-branch read,
+owned workflow/setup-PR creation, Actions/check observation or dispatch where
+needed, and bounded comment/PR operations. Webhooks, if enabled later, are
+authenticated reconciliation hints rather than an execution or authorization
+path. Registry pull and build-push credentials are Kubernetes-scoped; PR code
+never receives them, controller credentials, or model credentials.
 
 ## One-time pilot reset
 
@@ -67,10 +68,10 @@ change the schema marker, or use a compatibility flag to bypass the rejection.
    `.ayni.lock`; the Ayni executable is provisioned, not vendored.
 2. Review the idempotent pipelines setup PR. The profile is
    `setup_pr_open` until it merges; no default-branch mutation occurs directly.
-3. Observe trusted default-branch automation validate the lock and publish or
-   verify `ghcr.io/<owner>/<repository>/ayni-environment:lock-<full-64-hex-lock-fingerprint>`.
-   The controller independently resolves and verifies its digest, labels, owner,
-   and platform before `ready`.
+3. Select either a configured registry image source or a dedicated build Job.
+   The controller independently resolves and verifies the registry digest,
+   labels, policy, and platform before `ready`; it has no registry credential
+   material or image-builder access.
 4. Submit coding only against a ready profile. The coding Job uses the frozen
    `image@sha256:...` digest, writable checkout, bounded scratch, and scoped
    credentials. It does not build an environment or mount a Docker socket,
@@ -102,7 +103,7 @@ scripts/ci/check-helm.sh
 
 When a delivery issue changes deployment behavior, render through the explicit
 context and exercise its disposable Docker Desktop scenario. #68 owns the
-recorded end-to-end gate: exactly one setup PR; verified GHCR artifact; coding
+recorded end-to-end gate: verified configured-registry artifact; coding
 from its digest on a clean node/cache; draft PR; exact-head assessment and one
 summary comment; source-only no-op verification; lock update; and recovery
 coverage. A host check, mocked registry, or locally cached image alone is not

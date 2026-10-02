@@ -298,10 +298,7 @@ mod tests {
         else {
             return Err(CleanStoreError::CorruptState);
         };
-        assert_eq!(
-            github.environment_workflow_path,
-            ".github/workflows/ayni-managed-environment.yml"
-        );
+        assert!(github.environment_workflow_path.is_empty());
         assert_eq!(
             github.assessment_workflow_path,
             ".github/workflows/ayni-managed-assessment.yml"

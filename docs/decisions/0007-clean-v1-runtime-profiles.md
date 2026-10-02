@@ -38,7 +38,7 @@ The product never uses “basic,” “unmanaged,” or “Ayni-less” as profi
 
 | Shared foundation | Ayni Managed adapter | Custom Runtime adapter |
 | --- | --- | --- |
-| Repository connection/snapshot, profile revisions, OCI digest admission, agent tasks and attempts, candidate storage, PR/MR publication, change-request and assessment identity, evidence retention, idempotent external actions, and reconciliation | `.ayni.toml`/`.ayni.lock` interpretation, Ayni release provisioning, GitHub Actions setup and workflow templates, GHCR publication/verification, plain `ayni check` feedback in the launched image, managed PR checks, signals, and default-branch environment reconciliation | Supported external OCI reference discovery and verification; repository-native checks are observed as external assessments without representing them as Ayni evidence |
+| Repository connection/snapshot, profile revisions, OCI digest admission, agent tasks and attempts, candidate storage, PR/MR publication, change-request and assessment identity, evidence retention, idempotent external actions, and reconciliation | `.ayni.toml`/`.ayni.lock` interpretation, Ayni release provisioning, managed environment sourcing, plain `ayni check` feedback in the launched image, managed PR checks, signals, and environment reconciliation | Supported external OCI reference discovery and verification; repository-native checks are observed as external assessments without representing them as Ayni evidence |
 
 No shared resource contains mandatory Ayni lock, signal, preparation, or
 GitHub-only fields. Provider-specific identities are attached at provider
@@ -53,7 +53,7 @@ These values are related but must never be substituted for one another:
 | Repository revision | Immutable provider commit SHA captured when a profile or task reads source. |
 | Profile revision | Immutable version of the runtime profile configuration; changing a lock or supplied runtime creates a new revision. |
 | Ayni lock fingerprint | The full 64-hex fingerprint (without its `sha256:` prefix only where a tag grammar requires it) of the complete lock contract. It is neither a source SHA nor an OCI digest. |
-| OCI discovery tag | A mutable lookup reference. Ayni Managed uses `lock-<full-64-hex-lock-fingerprint>` in the enrolled repository's GHCR package. It is never authority for a task. |
+| OCI discovery tag | A mutable configured lookup reference. `lock-<full-64-hex-lock-fingerprint>` is a supported convention, never authority for a task. |
 | OCI digest | Immutable resolved manifest digest, verified with platform and metadata before admission, and frozen in every task/attempt snapshot. |
 | Candidate commit | Immutable commit produced by a particular attempt; it does not authorize publication quality or readiness. |
 | PR head SHA | Exact provider head of a change request. Assessments and readiness must bind this SHA, not merely a branch name or candidate claim. |
@@ -101,14 +101,15 @@ flowchart LR
   **evidence** have separate terminal states. A successful agent attempt is not
   a successful assessment; a comment is not evidence.
 
-For Ayni Managed, onboarding creates one idempotent pipelines setup PR. After
-merge, the trusted default-branch workflow validates the committed lock and
-publishes or verifies the lock-keyed GHCR artifact. The profile becomes ready
-only when the controller independently verifies the expected workflow,
-full-fingerprint tag, digest, platform, and Ayni metadata. A source-only
-change verifies/reuses the existing artifact; a lock change creates an
-`updating` profile revision. The controller never builds environments itself
-and periodically reconciles workflow state and GHCR artifacts.
+For Ayni Managed, onboarding creates one idempotent setup PR when repository
+assessment automation is configured. A profile either verifies an image from a
+configured OCI registry or requests a dedicated Kubernetes build Job that
+publishes to that registry. The controller never builds images or holds
+registry credentials itself. It becomes ready only after independently
+verifying the configured source, resolved digest, platform, and Ayni metadata.
+A source-only change verifies/reuses the existing artifact; a lock change
+creates an `updating` profile revision. See
+[Decision 0008](0008-managed-environment-sourcing.md).
 
 Coding runs in the verified `image@sha256:...` artifact on an eligible node.
 Plain `ayni check` in the launched image is optional agent feedback only. The managed PR workflow
@@ -122,13 +123,12 @@ act only on a current successful exact-head assessment.
 
 - GitHub App credentials are controller-held, short-lived, operation-scoped,
   and never stored in task state, evidence, comments, metrics, or logs.
-- GitHub Actions is trusted only according to its event, token, checkout,
-  pinned-template, workflow-run, and retained-evidence bindings. Candidate
-  code never receives package-write or controller credentials; `pull_request_target`
-  is not used to execute it.
-- GHCR tags are discovery references. The controller verifies ownership,
-  expected labels, platform, and resolved digest; moved or missing tags fail
-  closed.
+- GitHub Actions is optional assessment automation. Candidate code never
+  receives controller or build credentials; `pull_request_target` is not used
+  to execute it.
+- Registry references are discovery references. The controller verifies the
+  configured registry policy, expected labels, platform, and resolved digest;
+  moved or missing tags fail closed.
 - Candidate-controlled source, build hooks, and PR workflows are untrusted
   inputs. Coding containers get only the task workspace, bounded scratch, and
   scoped credentials; no controller database, host socket, Kubernetes token,
@@ -145,7 +145,7 @@ act only on a current successful exact-head assessment.
 | Setup PR closed, unmerged, or drifted | Keep `setup_required`/`setup_pr_open`; reconcile owned files and create or update the idempotent setup action after operator repair. Never mutate the default branch directly. |
 | Stale or malformed lock | Mark the profile revision degraded or updating; admit no new work for it. Repair and merge a valid lock, then verify a new artifact. |
 | Failed, stale, or unknown workflow | Retain its run identity; do not promote its output. Reconcile the exact source/head and await or dispatch only a documented safe retry. |
-| GHCR tag missing, moved, wrong owner/label, or bad digest | Mark artifact/profile degraded, preserve prior task snapshots, and require a newly verified trusted workflow result. Never rewrite a retained digest. |
+| Registry reference missing, moved, wrong owner/label, or bad digest | Mark artifact/profile degraded, preserve prior task snapshots, and require a newly verified source observation or build result. Never rewrite a retained digest. |
 | Unsupported platform/runtime | Reject task admission with an actionable profile/artifact reason; do not schedule a generic coding Job. |
 | Unavailable/revoked credentials | Persist the failed external action, surface remediation, and reconcile after access returns without duplicating provider mutations. |
 | Controller restart or uncertain response | Resume from durable actions and immutable identities, read provider/registry state before retrying, and never let a late result replace a newer desired revision or PR head. |

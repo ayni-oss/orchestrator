@@ -14,7 +14,6 @@ use thiserror::Error;
 
 pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v1";
 pub(crate) const ASSESSMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-managed-assessment.yml";
-pub(crate) const ENVIRONMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-managed-environment.yml";
 
 const AYNI_VERSION: &str = "0.14.2";
 const AYNI_ARCHIVE_SHA256: &str =
@@ -61,13 +60,7 @@ pub(crate) fn render(
     }
     Ok(SetupWorkflowFiles {
         version: TEMPLATE_VERSION,
-        files: BTreeMap::from([
-            (ASSESSMENT_WORKFLOW_PATH, assessment_workflow()),
-            (
-                ENVIRONMENT_WORKFLOW_PATH,
-                environment_workflow(default_branch),
-            ),
-        ]),
+        files: BTreeMap::from([(ASSESSMENT_WORKFLOW_PATH, assessment_workflow())]),
     })
 }
 
@@ -91,15 +84,6 @@ fn assessment_workflow() -> String {
     )
 }
 
-fn environment_workflow(default_branch: &str) -> String {
-    format!(
-        "{}name: Publish Ayni Managed environment\n\non:\n  push:\n    branches: [{}]\n    paths: [.ayni.toml, .ayni.lock]\n\nconcurrency:\n  group: ayni-managed-environment-${{{{ github.ref }}}}\n  cancel-in-progress: false\n\npermissions:\n  contents: read\n  packages: write\n\njobs:\n  publish:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 45\n    steps:\n      - name: Checkout default branch\n        uses: {CHECKOUT_ACTION} # v7.0.1\n        with:\n          ref: ${{{{ github.sha }}}}\n          persist-credentials: false\n{}      - name: Build and publish certified environment\n        shell: bash\n        env:\n          AYNI_ENV_CERTIFICATE_SIGNING_KEY: ${{{{ secrets.AYNI_ENV_CERTIFICATE_SIGNING_KEY }}}}\n          AYNI_ENV_CERTIFICATE_KEY_ID: ${{{{ vars.AYNI_ENV_CERTIFICATE_KEY_ID }}}}\n          GHCR_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}\n        run: |\n          set -euo pipefail\n          test -n \"$AYNI_ENV_CERTIFICATE_SIGNING_KEY\"\n          test -n \"$AYNI_ENV_CERTIFICATE_KEY_ID\"\n          image=\"ghcr.io/${{{{ github.repository_owner }}}}/${{{{ github.event.repository.name }}}}-ayni-env:lock-${{{{ hashFiles('.ayni.lock') }}}}\"\n          printf '%s' \"$GHCR_TOKEN\" | docker login ghcr.io --username \"${{{{ github.actor }}}}\" --password-stdin\n          ayni env build --tag \"$image\"\n          docker push \"$image\"\n",
-        header(),
-        default_branch,
-        install_ayni(),
-    )
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -109,7 +93,7 @@ mod tests {
     fn renders_deterministic_pinned_workflows() {
         let first = render(TEMPLATE_VERSION, "main").unwrap();
         assert_eq!(first, render(TEMPLATE_VERSION, "main").unwrap());
-        assert_eq!(first.files.len(), 2);
+        assert_eq!(first.files.len(), 1);
         for workflow in first.files.values() {
             assert!(workflow.contains("ayni-orchestrator-template: ayni-managed-v1"));
             assert!(workflow.contains(CHECKOUT_ACTION));
@@ -122,18 +106,15 @@ mod tests {
     }
 
     #[test]
-    fn separates_trusted_publication_from_pull_request_assessment() {
+    fn assessment_workflow_never_receives_build_or_registry_credentials() {
         let files = render(TEMPLATE_VERSION, "main").unwrap().files;
         let assessment = &files[ASSESSMENT_WORKFLOW_PATH];
-        let publication = &files[ENVIRONMENT_WORKFLOW_PATH];
         assert!(assessment.contains("pull_request:"));
         assert!(assessment.contains("contents: read"));
         assert!(!assessment.contains("packages: write"));
         assert!(!assessment.contains("AYNI_ENV_CERTIFICATE_SIGNING_KEY"));
-        assert!(publication.contains("packages: write"));
-        assert!(publication.contains("AYNI_ENV_CERTIFICATE_SIGNING_KEY"));
-        assert!(publication.contains("ayni env build"));
-        assert!(publication.contains("docker push"));
+        assert!(!assessment.contains("docker login"));
+        assert!(!assessment.contains("docker push"));
     }
 
     #[test]
