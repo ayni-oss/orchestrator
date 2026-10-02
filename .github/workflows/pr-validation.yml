@@ -277,9 +277,9 @@ jobs:
 
       - name: Install Ayni
         env:
-          AYNI_VERSION: 0.14.0
-          AYNI_ARCHIVE: ayni-ayni-v0.14.0-x86_64-unknown-linux-gnu.tar.gz
-          AYNI_SHA256: 5172ab4e530fda3eb1a18dac90595adb6b342c9b9773fa6e98ba4f5d7dd2058e
+          AYNI_VERSION: 0.14.2
+          AYNI_ARCHIVE: ayni-ayni-v0.14.2-x86_64-unknown-linux-gnu.tar.gz
+          AYNI_SHA256: 73579859f48d57aec892ca382a1d740990b187d0ebccc2c8646aa34d821927ac
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/$AYNI_ARCHIVE"
@@ -295,10 +295,12 @@ jobs:
           echo "$bin_root" >> "$GITHUB_PATH"
 
       - name: Run Ayni
+        env:
+          AYNI_EXECUTOR_IMAGE: ghcr.io/ayni-oss/ayni-env:0.14.2-debian@sha256:6b92c65b4592b043d58d6d4b6dc1b4fcf6c15ed8f6db59e9f3dd5dbe4dbbaba5
         run: |
           set +e
           image="ayni-pr:${{ github.event.pull_request.head.sha }}"
-          ayni env build --repo-root . --tag "$image"
+          ayni env build --repo-root . --tag "$image" --executor-image "$AYNI_EXECUTOR_IMAGE"
           exit_code=$?
           if [ "$exit_code" -eq 0 ]; then
             docker run --rm \
