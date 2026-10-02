@@ -63,75 +63,43 @@ function metadataRequestId(metadata: Metadata | undefined): string | undefined {
   return safeRequestId(typeof value === "string" ? value : undefined);
 }
 
+const reasonNames: Partial<Record<ErrorReason, string>> = {
+  [ErrorReason.ERROR_REASON_INVALID_IDENTIFIER]: "invalid_identifier",
+  [ErrorReason.ERROR_REASON_INVALID_INPUT]: "invalid_input",
+  [ErrorReason.ERROR_REASON_IDEMPOTENCY_KEY_REUSED]: "idempotency_key_reused",
+  [ErrorReason.ERROR_REASON_RESOURCE_NOT_FOUND]: "resource_not_found",
+  [ErrorReason.ERROR_REASON_CONFLICT]: "conflict",
+  [ErrorReason.ERROR_REASON_FAILED_PRECONDITION]: "failed_precondition",
+  [ErrorReason.ERROR_REASON_TASK_NOT_ACTIONABLE]: "task_not_actionable",
+  [ErrorReason.ERROR_REASON_PROVIDER_UNAVAILABLE]: "provider_unavailable",
+  [ErrorReason.ERROR_REASON_MODEL_UNAVAILABLE]: "model_unavailable",
+  [ErrorReason.ERROR_REASON_REPOSITORY_ACCESS]: "repository_access",
+  [ErrorReason.ERROR_REASON_EVIDENCE_UNAVAILABLE]: "evidence_unavailable",
+  [ErrorReason.ERROR_REASON_CANCELLED]: "cancelled",
+  [ErrorReason.ERROR_REASON_DEADLINE_EXCEEDED]: "deadline_exceeded",
+  [ErrorReason.ERROR_REASON_INTERNAL]: "internal",
+  [ErrorReason.ERROR_REASON_INVALID_REPOSITORY_REVISION]: "invalid_repository_revision",
+  [ErrorReason.ERROR_REASON_INVALID_PROFILE_REVISION]: "invalid_profile_revision",
+  [ErrorReason.ERROR_REASON_INVALID_LOCK_FINGERPRINT]: "invalid_lock_fingerprint",
+  [ErrorReason.ERROR_REASON_INVALID_OCI_REFERENCE]: "invalid_oci_reference",
+  [ErrorReason.ERROR_REASON_INVALID_OCI_DIGEST]: "invalid_oci_digest",
+  [ErrorReason.ERROR_REASON_INVALID_PLATFORM]: "invalid_platform",
+  [ErrorReason.ERROR_REASON_PROFILE_UNSUPPORTED]: "profile_unsupported",
+  [ErrorReason.ERROR_REASON_PROFILE_NOT_READY]: "profile_not_ready",
+  [ErrorReason.ERROR_REASON_RUNTIME_ARTIFACT_NOT_VERIFIED]: "runtime_artifact_not_verified",
+  [ErrorReason.ERROR_REASON_AUTOMATION_NOT_READY]: "automation_not_ready",
+  [ErrorReason.ERROR_REASON_TASK_DEADLINE_EXPIRED]: "task_deadline_expired",
+  [ErrorReason.ERROR_REASON_CHANGE_REQUEST_HEAD_STALE]: "change_request_head_stale",
+  [ErrorReason.ERROR_REASON_ASSESSMENT_REJECTED]: "assessment_rejected",
+  [ErrorReason.ERROR_REASON_EVIDENCE_INVALID]: "evidence_invalid",
+  [ErrorReason.ERROR_REASON_BOUND_EXCEEDED]: "bound_exceeded",
+  [ErrorReason.ERROR_REASON_WATCH_CURSOR_EXPIRED]: "watch_cursor_expired",
+  [ErrorReason.ERROR_REASON_UNKNOWN_ENUM_VALUE]: "unknown_enum_value",
+  [ErrorReason.ERROR_REASON_NOT_IMPLEMENTED]: "not_implemented",
+};
+
 function reason(value: ErrorReason): string {
-  switch (value) {
-    case ErrorReason.ERROR_REASON_INVALID_IDENTIFIER:
-      return "invalid_identifier";
-    case ErrorReason.ERROR_REASON_INVALID_INPUT:
-      return "invalid_input";
-    case ErrorReason.ERROR_REASON_IDEMPOTENCY_KEY_REUSED:
-      return "idempotency_key_reused";
-    case ErrorReason.ERROR_REASON_RESOURCE_NOT_FOUND:
-      return "resource_not_found";
-    case ErrorReason.ERROR_REASON_CONFLICT:
-      return "conflict";
-    case ErrorReason.ERROR_REASON_FAILED_PRECONDITION:
-      return "failed_precondition";
-    case ErrorReason.ERROR_REASON_TASK_NOT_ACTIONABLE:
-      return "task_not_actionable";
-    case ErrorReason.ERROR_REASON_PROVIDER_UNAVAILABLE:
-      return "provider_unavailable";
-    case ErrorReason.ERROR_REASON_MODEL_UNAVAILABLE:
-      return "model_unavailable";
-    case ErrorReason.ERROR_REASON_REPOSITORY_ACCESS:
-      return "repository_access";
-    case ErrorReason.ERROR_REASON_EVIDENCE_UNAVAILABLE:
-      return "evidence_unavailable";
-    case ErrorReason.ERROR_REASON_CANCELLED:
-      return "cancelled";
-    case ErrorReason.ERROR_REASON_DEADLINE_EXCEEDED:
-      return "deadline_exceeded";
-    case ErrorReason.ERROR_REASON_INTERNAL:
-      return "internal";
-    case ErrorReason.ERROR_REASON_INVALID_REPOSITORY_REVISION:
-      return "invalid_repository_revision";
-    case ErrorReason.ERROR_REASON_INVALID_PROFILE_REVISION:
-      return "invalid_profile_revision";
-    case ErrorReason.ERROR_REASON_INVALID_LOCK_FINGERPRINT:
-      return "invalid_lock_fingerprint";
-    case ErrorReason.ERROR_REASON_INVALID_OCI_REFERENCE:
-      return "invalid_oci_reference";
-    case ErrorReason.ERROR_REASON_INVALID_OCI_DIGEST:
-      return "invalid_oci_digest";
-    case ErrorReason.ERROR_REASON_INVALID_PLATFORM:
-      return "invalid_platform";
-    case ErrorReason.ERROR_REASON_PROFILE_UNSUPPORTED:
-      return "profile_unsupported";
-    case ErrorReason.ERROR_REASON_PROFILE_NOT_READY:
-      return "profile_not_ready";
-    case ErrorReason.ERROR_REASON_RUNTIME_ARTIFACT_NOT_VERIFIED:
-      return "runtime_artifact_not_verified";
-    case ErrorReason.ERROR_REASON_AUTOMATION_NOT_READY:
-      return "automation_not_ready";
-    case ErrorReason.ERROR_REASON_TASK_DEADLINE_EXPIRED:
-      return "task_deadline_expired";
-    case ErrorReason.ERROR_REASON_CHANGE_REQUEST_HEAD_STALE:
-      return "change_request_head_stale";
-    case ErrorReason.ERROR_REASON_ASSESSMENT_REJECTED:
-      return "assessment_rejected";
-    case ErrorReason.ERROR_REASON_EVIDENCE_INVALID:
-      return "evidence_invalid";
-    case ErrorReason.ERROR_REASON_BOUND_EXCEEDED:
-      return "bound_exceeded";
-    case ErrorReason.ERROR_REASON_WATCH_CURSOR_EXPIRED:
-      return "watch_cursor_expired";
-    case ErrorReason.ERROR_REASON_UNKNOWN_ENUM_VALUE:
-      return "unknown_enum_value";
-    case ErrorReason.ERROR_REASON_NOT_IMPLEMENTED:
-      return "not_implemented";
-    default:
-      return "unspecified";
-  }
+  return reasonNames[value] ?? "unspecified";
 }
 
 function parseAny(reader: BinaryReader): { typeUrl: string; value: Uint8Array } {

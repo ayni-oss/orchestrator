@@ -20,7 +20,7 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: "pnpm build && HOST=127.0.0.1 PORT=4173 ORCHESTRATOR_GRPC_ADDRESS=127.0.0.1:50061 node server.mjs",
+      command: `${process.env.PLAYWRIGHT_USE_EXISTING_BUILD === "1" ? "" : "pnpm build && "}HOST=127.0.0.1 PORT=4173 ORCHESTRATOR_GRPC_ADDRESS=127.0.0.1:50061 node server.mjs`,
       url: "http://127.0.0.1:4173/healthz",
       reuseExistingServer: false,
       timeout: 60_000,

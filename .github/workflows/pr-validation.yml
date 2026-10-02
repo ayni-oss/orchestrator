@@ -254,6 +254,10 @@ jobs:
         run: pnpm --filter @ayni-orchestrator/web exec playwright install --with-deps chromium
 
       - name: Validate operator application and server-only browser boundary
+        # Unit tests and source-quality signals are owned by Ayni below.
+        # Keep only compilation/bundle/browser checks here and build once.
+        env:
+          PLAYWRIGHT_USE_EXISTING_BUILD: "1"
         run: |
           pnpm frontend:check
           pnpm test:e2e

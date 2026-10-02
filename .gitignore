@@ -14,6 +14,7 @@ node_modules/
 **/build/
 **/test-results/
 **/playwright-report/
+**/.vitest/
 /dev/charts/ayni-orchestrator-local/charts/
 .agents/
 .codex/
