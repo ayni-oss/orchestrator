@@ -7,7 +7,7 @@ deps = true
 mutation = false
 
 [languages]
-enabled = ["rust"]
+enabled = ["rust", "node"]
 
 [concurrency]
 amount = 1
@@ -39,3 +39,26 @@ fn_cognitive = { warn = 20, fail = 29 }
 "crates/domain" = ["crates/control-plane", "crates/worker"]
 "crates/control-plane" = ["crates/worker"]
 "crates/worker" = ["crates/control-plane"]
+
+# Package roots keep generated protobuf bindings out of source-quality budgets.
+# Their TypeScript compilation remains part of the frontend compatibility check.
+[node]
+roots = ["apps/web", "packages/bff"]
+
+[node.tooling.test]
+command = "pnpm"
+args = ["--reporter=silent", "run", "test", "--reporter=json"]
+
+[node.size]
+"**/*.ts" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**", "**/coverage/**", "**/.vitest/**", "**/test-results/**", "**/.ayni/**"] }
+"**/*.js" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**"] }
+"**/*.mjs" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**"] }
+"**/*.svelte" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**"] }
+
+[node.complexity]
+# Existing task-form action measures 26; warn without hiding that baseline.
+fn_cyclomatic = { warn = 10, fail = 30 }
+
+[node.deps.forbidden]
+"packages/bff" = ["apps/*"]
+"clients/typescript" = ["apps/*", "packages/*"]

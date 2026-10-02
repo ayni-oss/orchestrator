@@ -53,6 +53,7 @@ function repository(): RepositoryConnection {
 
 function profile(): RuntimeProfile {
   return {
+    reconciliationMetadata: [],
     id: "profile:1",
     repositoryConnectionId: "repository:1",
     kind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,

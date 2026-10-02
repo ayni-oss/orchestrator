@@ -47,13 +47,16 @@ isolation, trusted build authority, or authoritative PR assessment.
 ## Certification and admission
 
 An unsigned `ayni env build` establishes only local lock/protected-content
-consistency. A trusted default-branch publication supplies both
+consistency and is not admitted by the managed runtime reconciler. A trusted producer supplies both
 `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID` from
-trusted CI. Ayni rejects absent pairs, malformed values, or a signing key whose
-public key does not match the lock-pinned trusted key. The controller still
-independently verifies package ownership, full-fingerprint discovery tag,
-resolved digest, platform, expected Ayni metadata, and the trusted workflow
-identity before admitting a runtime artifact.
+its isolated build environment. Ayni rejects absent pairs, malformed values, or a signing key whose
+public key does not match the lock-pinned trusted key. The controller binds the
+configured source, exact checkout, Kubernetes-observed manifest digest,
+platform, and fresh signed Ayni runtime result before admitting an artifact.
+The trusted Ayni executable performs signature and protected-content verification;
+runtime sourcing does not require a GitHub workflow identity or GHCR tag scheme.
+See [managed runtime execution](managed-runtime-execution.md) for the implemented
+trust model and deployment prerequisites.
 
 Candidate code never receives the reusable signing seed or package-write
 authority. A candidate lock change is unsupported until a separately reviewed,

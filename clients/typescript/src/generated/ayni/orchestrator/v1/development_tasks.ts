@@ -547,6 +547,8 @@ export interface Candidate {
   failure?: ResourceFailure | undefined;
   createdAt?: Date | undefined;
   resourceVersion: string;
+  /** coding_advisory is bounded to 512 bytes. It is never assessment evidence. */
+  codingAdvisory?: string | undefined;
 }
 
 export interface ListDevelopmentTasksRequest {
@@ -3431,6 +3433,7 @@ function createBaseCandidate(): Candidate {
     failure: undefined,
     createdAt: undefined,
     resourceVersion: "0",
+    codingAdvisory: undefined,
   };
 }
 
@@ -3465,6 +3468,9 @@ export const Candidate: MessageFns<Candidate> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(80).uint64(message.resourceVersion);
+    }
+    if (message.codingAdvisory !== undefined) {
+      writer.uint32(90).string(message.codingAdvisory);
     }
     return writer;
   },
@@ -3562,6 +3568,14 @@ export const Candidate: MessageFns<Candidate> = {
             message.resourceVersion = reader.uint64().toString();
             continue;
           }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.codingAdvisory = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3610,6 +3624,11 @@ export const Candidate: MessageFns<Candidate> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
+      codingAdvisory: isSet(object.codingAdvisory)
+        ? globalThis.String(object.codingAdvisory)
+        : isSet(object.coding_advisory)
+        ? globalThis.String(object.coding_advisory)
+        : undefined,
     };
   },
 
@@ -3645,6 +3664,9 @@ export const Candidate: MessageFns<Candidate> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
+    if (message.codingAdvisory !== undefined) {
+      obj.codingAdvisory = message.codingAdvisory;
+    }
     return obj;
   },
 
@@ -3667,6 +3689,7 @@ export const Candidate: MessageFns<Candidate> = {
       : undefined;
     message.createdAt = object.createdAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
+    message.codingAdvisory = object.codingAdvisory ?? undefined;
     return message;
   },
 };

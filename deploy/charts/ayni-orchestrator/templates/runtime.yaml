@@ -1,0 +1,63 @@
+{{- if and .Values.enabled .Values.runtime.enabled }}
+{{- if .Values.runtime.serviceAccounts.create }}
+{{- range $name := list "runtime-coding" "runtime-builder" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+automountServiceAccountToken: false
+imagePullSecrets:
+  {{- toYaml $.Values.runtime.serviceAccounts.imagePullSecrets | nindent 2 }}
+---
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-config
+data:
+  runtime.json: {{ dict "namespace" .Release.Namespace "worker_image" (required "runtime.workerImage must be digest pinned" .Values.runtime.workerImage) "output_claim" .Values.runtime.outputClaim "model_secret" .Values.runtime.modelSecret "interval_seconds" .Values.runtime.intervalSeconds "request_timeout_seconds" .Values.runtime.requestTimeoutSeconds "concurrency" .Values.runtime.concurrency "profiles" .Values.runtime.profiles | toJson | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.runtime.outputClaim }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.runtime.outputSize }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: runtime-controller
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, create, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, create, delete]
+  # No read/list/watch/update authority over operator credentials.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: runtime-controller
+subjects:
+  - kind: ServiceAccount
+    name: control-plane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: runtime-controller
+{{- end }}

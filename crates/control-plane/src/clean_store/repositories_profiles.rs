@@ -314,6 +314,7 @@ impl CleanStore {
         let revision_id = resource_id("profile-revision");
         let operational = kind == v1::RuntimeProfileKind::AyniManaged;
         let profile = v1::RuntimeProfile {
+            reconciliation_metadata: vec![],
             id: profile_id.clone(),
             repository_connection_id: repository.id.clone(),
             kind: kind as i32,
@@ -549,6 +550,10 @@ impl CleanStore {
         repository_snapshot_id: &str,
         configuration: v1::runtime_profile_revision::Configuration,
     ) -> Result<v1::RuntimeProfileRevision, CleanStoreError> {
+        self.record_selected_runtime_revision(profile_id, repository_snapshot_id, configuration, true)
+    }
+
+    fn record_selected_runtime_revision(&mut self, profile_id: &str, repository_snapshot_id: &str, configuration: v1::runtime_profile_revision::Configuration, replay_historical: bool) -> Result<v1::RuntimeProfileRevision, CleanStoreError> {
         let mut profile = self.runtime_profile(profile_id)?;
         let snapshot = self.repository_snapshot(repository_snapshot_id)?;
         if snapshot.repository_connection_id != profile.repository_connection_id {
@@ -585,6 +590,7 @@ impl CleanStore {
         if let Some(existing) = revisions.iter().find(|existing| {
             existing.repository_snapshot_id == repository_snapshot_id
                 && existing.configuration.as_ref() == Some(&configuration)
+                && (replay_historical || profile.active_revision_id.as_deref() == Some(existing.id.as_str()))
         }) {
             return Ok(existing.clone());
         }

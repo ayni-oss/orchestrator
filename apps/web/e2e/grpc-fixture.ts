@@ -41,6 +41,7 @@ const profile: any = {
   state: RuntimeProfileState.RUNTIME_PROFILE_STATE_READY,
   activeRevisionId: "profile-revision:1",
   activeRuntimeArtifactId: "artifact:1",
+  reconciliationMetadata: [],
   createdAt: now,
   updatedAt: now,
   resourceVersion: "2",

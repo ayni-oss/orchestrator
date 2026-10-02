@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "packageManager": "pnpm@10.31.0",
+  "workspaces": ["apps/*", "clients/*", "packages/*"],
   "engines": {
     "node": "24.14.0"
   },
@@ -15,6 +16,6 @@
     "test:e2e": "pnpm --filter @ayni-orchestrator/web test:e2e",
     "build:web": "pnpm --filter @ayni-orchestrator/web build",
     "check:browser-bundle": "pnpm --filter @ayni-orchestrator/web check:browser-bundle",
-    "frontend:check": "pnpm typecheck && pnpm test:frontend && pnpm build:web && pnpm check:browser-bundle"
+    "frontend:check": "pnpm typecheck && pnpm build:web && pnpm check:browser-bundle"
   }
 }

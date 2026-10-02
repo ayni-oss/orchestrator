@@ -96,10 +96,29 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo check --workspace --all-features
 pnpm install --frozen-lockfile
+ayni check --config "$PWD/.ayni.toml"
 pnpm frontend:check
+PLAYWRIGHT_USE_EXISTING_BUILD=1 pnpm test:e2e
 scripts/ci/check-proto.sh
 scripts/ci/check-helm.sh
 ```
+
+Ayni owns Rust and Node unit-test, size, complexity, and package-dependency
+signals. The Node roots are `apps/web` and `packages/bff`; both emit real Vitest
+JSON evidence. Workspace membership is declared consistently in `package.json`
+and `pnpm-workspace.yaml` so Ayni resolves the shared runtime and lockfile.
+`frontend:check` is only the complementary TypeScript/Svelte compilation,
+production build, and browser-bundle boundary check. Browser tests reuse that
+build; a standalone `pnpm test:e2e` still builds automatically. These complementary
+checks remain local commands, not a standalone frontend CI job. The Ayni job is
+the Rust/Node quality gate; it does not claim browser-test or build validation.
+
+Run Ayni before a production build in a clean checkout, as CI does. Ayni 0.14.2
+does not apply the Node size exclusions to its ESLint complexity scan, so an
+existing `.svelte-kit`/`build` output tree is not a valid source-only complexity
+baseline. Svelte component script complexity is not measured by this adapter;
+Svelte compilation and browser checks remain explicit. Coverage stays disabled,
+matching the existing repository policy.
 
 When a delivery issue changes deployment behavior, render through the explicit
 context and exercise its disposable Docker Desktop scenario. #68 owns the

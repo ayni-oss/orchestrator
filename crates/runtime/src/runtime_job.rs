@@ -65,7 +65,13 @@ impl RuntimeJobRequest {
             ("app.kubernetes.io/name", "ayni-orchestrator-runtime"),
             ("app.kubernetes.io/component", "coding-attempt"),
             ("ayni.io/attempt-id", self.attempt_id.as_str()),
-            ("ayni.io/runtime-platform", self.runtime.platform().as_str()),
+            (
+                "ayni.io/runtime-platform",
+                match self.runtime.platform().as_str() {
+                    "linux/amd64" => "linux-amd64",
+                    _ => "linux-arm64",
+                },
+            ),
         ]);
         let manifest = Job {
             api_version: "batch/v1",

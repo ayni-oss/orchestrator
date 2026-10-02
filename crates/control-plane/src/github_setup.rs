@@ -6,7 +6,7 @@ use thiserror::Error;
 
 /// The deterministic GitHub mutation requested by an Ayni Managed profile.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct SetupPullRequest {
+pub struct SetupPullRequest {
     pub(crate) branch: String,
     pub(crate) base_branch: String,
     pub(crate) title: &'static str,
@@ -16,7 +16,7 @@ pub(crate) struct SetupPullRequest {
 
 /// A repository identity cannot safely form an owned setup branch.
 #[derive(Debug, Error, Eq, PartialEq)]
-pub(crate) enum SetupRequestError {
+pub enum SetupRequestError {
     #[error("setup branch identity is empty or exceeds its bound")]
     InvalidProfileIdentity,
     #[error("setup PR cannot be created without the managed assessment workflow")]
@@ -27,7 +27,7 @@ pub(crate) enum SetupRequestError {
 ///
 /// Authentication is deliberately absent from the result. An adapter obtains a
 /// short-lived installation token only at call time and never retains it.
-pub(crate) fn setup_pull_request(
+pub fn setup_pull_request(
     profile_id: &str,
     base_branch: &str,
     files: SetupWorkflowFiles,
@@ -44,7 +44,7 @@ pub(crate) fn setup_pull_request(
     }
     let digest = Sha256::digest(format!("ayni.setup-pr.v1\0{profile_id}\0{}", files.version));
     Ok(SetupPullRequest {
-        branch: format!("ayni-orchestrator/setup-{:x}", digest)[..48].to_owned(),
+        branch: format!("ayni-orchestrator/setup-{digest:x}")[..48].to_owned(),
         base_branch: base_branch.to_owned(),
         title: "feat(ayni): install managed environment workflows",
         body: "This controller-owned setup PR installs the reviewed Ayni Managed assessment workflow. Review and merge it to enable managed assessment.",

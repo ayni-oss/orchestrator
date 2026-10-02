@@ -1,5 +1,5 @@
 use ayni_orchestrator_control_plane::{
-    AppState, Configuration, ModelCatalog, router, serve_custom_grpc, serve_grpc,
+    AppState, Configuration, ModelCatalog, RuntimeReconciler, router, serve_custom_grpc, serve_grpc,
 };
 use std::{env, fs, io, process::ExitCode};
 use tokio::{net::TcpListener, signal, sync::watch};
@@ -61,6 +61,8 @@ async fn run() -> Result<(), io::Error> {
     }
 
     let reconciliation_state = state.clone();
+    let runtimes = RuntimeReconciler::from_environment(state.clone()).map_err(io::Error::other)?;
+    let runtime_tasks = spawn_runtime_loops(runtimes);
     let reconciliation_task = tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
         loop {
@@ -100,6 +102,9 @@ async fn run() -> Result<(), io::Error> {
     tokio::try_join!(async { http.await.map_err(io::Error::other) }, grpc, custom)?;
     signal_task.abort();
     reconciliation_task.abort();
+    for task in runtime_tasks {
+        task.abort();
+    }
     Ok(())
 }
 
@@ -136,4 +141,28 @@ async fn shutdown_signal() {
     interrupt.await;
 
     info!("control plane received shutdown signal");
+}
+
+fn spawn_runtime_loops(
+    runtimes: Option<std::sync::Arc<RuntimeReconciler>>,
+) -> Vec<tokio::task::JoinHandle<()>> {
+    let Some(runtimes) = runtimes else {
+        return Vec::new();
+    };
+    (0..3)
+        .map(|operation| {
+            let runtimes = runtimes.clone();
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+                loop {
+                    ticker.tick().await;
+                    match operation {
+                        0 => runtimes.reconcile().await,
+                        1 => runtimes.reconcile_coding().await,
+                        _ => runtimes.reconcile_publication().await,
+                    }
+                }
+            })
+        })
+        .collect()
 }

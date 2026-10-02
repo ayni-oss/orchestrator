@@ -61,6 +61,7 @@ fn valid_candidate_report(candidate: &v1::Candidate) -> bool {
         })
         && valid_git_revision(&candidate.base_revision)
         && identity_valid
+        && candidate.coding_advisory.as_ref().is_none_or(|text| text.len() <= 512)
 }
 
 fn valid_artifact_report(artifact: &v1::RuntimeArtifact) -> bool {
@@ -177,6 +178,7 @@ fn same_candidate_report(existing: &v1::Candidate, incoming: &v1::Candidate) -> 
         && existing.identity == incoming.identity
         && existing.state == incoming.state
         && existing.changed_paths == incoming.changed_paths
+        && existing.coding_advisory == incoming.coding_advisory
         && equivalent_failure(existing.failure.as_ref(), incoming.failure.as_ref())
 }
 

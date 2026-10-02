@@ -1,8 +1,7 @@
-//! Shared admission and rendering primitives for isolated runtime Jobs.
-//!
-//! Ayni Managed environment construction and assessment collection are owned by
-//! reviewed profile workflows. This crate deliberately contains no Ayni build,
-//! Docker engine, source checkout, or evidence-collection implementation.
+//! Trusted launch operations. Build and coding commands run in separate Jobs
+//! with disjoint authority; coding results are never assessment evidence.
 
-pub mod runtime_contract;
-pub mod runtime_job;
+pub use ayni_orchestrator_runtime::{managed_runtime, runtime_contract, runtime_job};
+pub mod coding;
+pub mod model_usage;
+pub mod runtime_execution;
