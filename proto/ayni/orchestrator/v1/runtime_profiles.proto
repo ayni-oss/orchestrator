@@ -82,6 +82,9 @@ message RuntimeProfile {
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   uint64 resource_version = 11;
+  // reconciliation_metadata contains at most 16 credential-free observations.
+  // These are operational status, not artifact verification evidence.
+  repeated VerifiedMetadata reconciliation_metadata = 12;
 }
 
 // RuntimeProfileRevision is an immutable version of profile configuration.
@@ -110,6 +113,9 @@ message AyniManagedProfileRevision {
   // oci_repository is a normalized registry/repository name, without tag or digest,
   // of at most 512 ASCII bytes.
   string oci_repository = 4;
+  // runtime_source_digest binds the credential-free operator source policy.
+  // When present, this is sha256 followed by a colon and 64 lowercase hex bytes.
+  optional string runtime_source_digest = 5;
 }
 
 // CustomRuntimeProfileRevision contains no Ayni lock, workflow, or assessment fields.

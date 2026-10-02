@@ -8,6 +8,12 @@ mod grpc;
 mod grpc_access;
 pub(crate) mod managed_environment;
 mod model_catalog;
+mod runtime_coding;
+mod runtime_configuration;
+mod runtime_kubernetes;
+mod runtime_reconciler;
+mod runtime_source;
+pub use runtime_reconciler::RuntimeReconciler;
 pub(crate) mod onboarding_templates;
 
 use api::HealthResponse;

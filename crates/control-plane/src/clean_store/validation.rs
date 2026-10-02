@@ -61,6 +61,7 @@ fn validate_resource_tables(connection: &Connection) -> Result<(), CleanStoreErr
                 && value.kind != v1::RuntimeProfileKind::Unspecified as i32
                 && value.support != v1::RuntimeProfileSupport::Unspecified as i32
                 && value.state != v1::RuntimeProfileState::Unspecified as i32
+                && safe_metadata(&value.reconciliation_metadata, 16, 8192)
                 && v1::RuntimeProfileKind::try_from(value.kind).is_ok()
                 && v1::RuntimeProfileSupport::try_from(value.support).is_ok()
                 && v1::RuntimeProfileState::try_from(value.state).is_ok()
@@ -441,6 +442,7 @@ fn valid_runtime_profile_event(
         && value.kind != v1::RuntimeProfileKind::Unspecified as i32
         && value.support != v1::RuntimeProfileSupport::Unspecified as i32
         && value.state != v1::RuntimeProfileState::Unspecified as i32
+        && safe_metadata(&value.reconciliation_metadata, 16, 8192)
         && v1::RuntimeProfileKind::try_from(value.kind).is_ok()
         && v1::RuntimeProfileSupport::try_from(value.support).is_ok()
         && v1::RuntimeProfileState::try_from(value.state).is_ok()

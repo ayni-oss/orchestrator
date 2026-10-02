@@ -168,6 +168,8 @@ include!("clean_store/validation.rs");
 include!("clean_store/transitions_schema.rs");
 include!("clean_store/payloads.rs");
 include!("clean_store/pagination_events.rs");
+include!("clean_store/runtime_reconciliation.rs");
+include!("clean_store/coding_reconciliation.rs");
 
 #[cfg(test)]
 mod tests {
@@ -213,6 +215,7 @@ mod tests {
                 configuration: Some(
                     v1::runtime_profile_configuration::Configuration::AyniManaged(
                         v1::AyniManagedProfileRevision {
+                            runtime_source_digest: None,
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: "0.4.0".to_owned(),
                             workflow_template_version: "ayni-managed-v1".to_owned(),
@@ -335,4 +338,5 @@ mod tests {
 
     mod lifecycle;
     mod recovery;
+    mod runtime;
 }

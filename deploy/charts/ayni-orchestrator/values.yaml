@@ -1,5 +1,20 @@
 enabled: true
 
+# Opt-in, credential-free runtime source policy. Secret values never belong here.
+runtime:
+  enabled: false
+  workerImage: ""
+  outputClaim: runtime-outputs
+  outputSize: 4Gi
+  modelSecret: openai-api
+  intervalSeconds: 60
+  requestTimeoutSeconds: 30
+  concurrency: 4
+  profiles: {}
+  serviceAccounts:
+    create: true
+    imagePullSecrets: []
+
 images:
   controlPlane: local/ayni-orchestrator-control-plane:replace-me
   worker: local/ayni-orchestrator-worker:replace-me

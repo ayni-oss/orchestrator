@@ -5,6 +5,7 @@ members = [
     "crates/observability",
     "crates/control-plane",
     "crates/worker",
+    "crates/runtime",
 ]
 resolver = "3"
 

@@ -17,6 +17,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/control-plane-config.yaml") . | sha256sum }}
+        checksum/runtime: {{ toJson .Values.runtime | sha256sum }}
       labels:
         app.kubernetes.io/name: ayni-orchestrator-control-plane
         app.kubernetes.io/part-of: ayni-orchestrator
@@ -48,6 +49,10 @@ spec:
             - configMapRef:
                 name: control-plane-config
           env:
+            {{- if .Values.runtime.enabled }}
+            - name: ORCHESTRATOR_RUNTIME_CONFIG_PATH
+              value: /runtime-config/runtime.json
+            {{- end }}
             - name: ORCHESTRATOR_WORKER_IMAGE
               value: {{ .Values.images.worker | quote }}
             - name: GITHUB_APP_ID
@@ -86,6 +91,17 @@ spec:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
           volumeMounts:
+            {{- if .Values.runtime.enabled }}
+            - name: runtime-config
+              mountPath: /runtime-config
+              readOnly: true
+            - name: runtime-outputs
+              mountPath: /runtime-outputs
+              readOnly: true
+            - name: runtime-api-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            {{- end }}
             - name: durable-state
               mountPath: /data
             - name: control-plane-scratch
@@ -145,12 +161,36 @@ spec:
             - name: web-scratch
               mountPath: /tmp
       volumes:
+        {{- if .Values.runtime.enabled }}
+        - name: runtime-config
+          configMap:
+            name: runtime-config
+        - name: runtime-outputs
+          persistentVolumeClaim:
+            claimName: {{ .Values.runtime.outputClaim }}
+        - name: runtime-api-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+        {{- end }}
         - name: durable-state
           persistentVolumeClaim:
             claimName: control-plane-state
         - name: control-plane-scratch
           emptyDir:
-            sizeLimit: 64Mi
+            sizeLimit: 512Mi
         - name: web-scratch
           emptyDir:
             sizeLimit: 64Mi

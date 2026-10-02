@@ -314,6 +314,11 @@ export interface RuntimeProfile {
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   resourceVersion: string;
+  /**
+   * reconciliation_metadata contains at most 16 credential-free observations.
+   * These are operational status, not artifact verification evidence.
+   */
+  reconciliationMetadata: VerifiedMetadata[];
 }
 
 /** RuntimeProfileRevision is an immutable version of profile configuration. */
@@ -344,6 +349,11 @@ export interface AyniManagedProfileRevision {
    * of at most 512 ASCII bytes.
    */
   ociRepository: string;
+  /**
+   * runtime_source_digest binds the credential-free operator source policy.
+   * When present, this is sha256 followed by a colon and 64 lowercase hex bytes.
+   */
+  runtimeSourceDigest?: string | undefined;
 }
 
 /** CustomRuntimeProfileRevision contains no Ayni lock, workflow, or assessment fields. */
@@ -564,6 +574,7 @@ function createBaseRuntimeProfile(): RuntimeProfile {
     createdAt: undefined,
     updatedAt: undefined,
     resourceVersion: "0",
+    reconciliationMetadata: [],
   };
 }
 
@@ -601,6 +612,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(88).uint64(message.resourceVersion);
+    }
+    for (const v of message.reconciliationMetadata) {
+      VerifiedMetadata.encode(v!, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -706,6 +720,14 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
             message.resourceVersion = reader.uint64().toString();
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.reconciliationMetadata.push(VerifiedMetadata.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -755,6 +777,11 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
+      reconciliationMetadata: globalThis.Array.isArray(object?.reconciliationMetadata)
+        ? object.reconciliationMetadata.map((e: any) => VerifiedMetadata.fromJSON(e))
+        : globalThis.Array.isArray(object?.reconciliation_metadata)
+        ? object.reconciliation_metadata.map((e: any) => VerifiedMetadata.fromJSON(e))
+        : [],
     };
   },
 
@@ -793,6 +820,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
+    if (message.reconciliationMetadata?.length) {
+      obj.reconciliationMetadata = message.reconciliationMetadata.map((e) => VerifiedMetadata.toJSON(e));
+    }
     return obj;
   },
 
@@ -814,6 +844,7 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
+    message.reconciliationMetadata = object.reconciliationMetadata?.map((e) => VerifiedMetadata.fromPartial(e)) || [];
     return message;
   },
 };
@@ -1081,7 +1112,13 @@ export const RuntimeProfileRevision: MessageFns<RuntimeProfileRevision> = {
 };
 
 function createBaseAyniManagedProfileRevision(): AyniManagedProfileRevision {
-  return { lockFingerprint: "", ayniVersion: "", workflowTemplateVersion: "", ociRepository: "" };
+  return {
+    lockFingerprint: "",
+    ayniVersion: "",
+    workflowTemplateVersion: "",
+    ociRepository: "",
+    runtimeSourceDigest: undefined,
+  };
 }
 
 export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> = {
@@ -1097,6 +1134,9 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
     }
     if (message.ociRepository !== "") {
       writer.uint32(34).string(message.ociRepository);
+    }
+    if (message.runtimeSourceDigest !== undefined) {
+      writer.uint32(42).string(message.runtimeSourceDigest);
     }
     return writer;
   },
@@ -1146,6 +1186,14 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
             message.ociRepository = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.runtimeSourceDigest = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1180,6 +1228,11 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
         : isSet(object.oci_repository)
         ? globalThis.String(object.oci_repository)
         : "",
+      runtimeSourceDigest: isSet(object.runtimeSourceDigest)
+        ? globalThis.String(object.runtimeSourceDigest)
+        : isSet(object.runtime_source_digest)
+        ? globalThis.String(object.runtime_source_digest)
+        : undefined,
     };
   },
 
@@ -1197,6 +1250,9 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
     if (message.ociRepository !== "") {
       obj.ociRepository = message.ociRepository;
     }
+    if (message.runtimeSourceDigest !== undefined) {
+      obj.runtimeSourceDigest = message.runtimeSourceDigest;
+    }
     return obj;
   },
 
@@ -1209,6 +1265,7 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
     message.ayniVersion = object.ayniVersion ?? "";
     message.workflowTemplateVersion = object.workflowTemplateVersion ?? "";
     message.ociRepository = object.ociRepository ?? "";
+    message.runtimeSourceDigest = object.runtimeSourceDigest ?? undefined;
     return message;
   },
 };

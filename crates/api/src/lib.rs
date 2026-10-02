@@ -469,6 +469,7 @@ mod tests {
             revision_number: 1,
             configuration: Some(v1::runtime_profile_revision::Configuration::AyniManaged(
                 v1::AyniManagedProfileRevision {
+                    runtime_source_digest: None,
                     lock_fingerprint: "b".repeat(64),
                     ayni_version: "0.13.0".to_owned(),
                     workflow_template_version: "v1".to_owned(),

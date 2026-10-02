@@ -270,6 +270,8 @@ message Candidate {
   optional ResourceFailure failure = 8;
   google.protobuf.Timestamp created_at = 9;
   uint64 resource_version = 10;
+  // coding_advisory is bounded to 512 bytes. It is never assessment evidence.
+  optional string coding_advisory = 11;
 }
 
 message ListDevelopmentTasksRequest {

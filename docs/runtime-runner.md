@@ -13,18 +13,20 @@ bounded launcher argv, a verified non-root effective user, a writable
 `/workspace` checkout, and bounded scratch storage. Kubernetes supplies that
 argv as `args`, never `command`: the image entrypoint is retained and is
 responsible for any required preparation before it invokes the mounted launcher.
-The launcher is mounted from an attempt-scoped ConfigMap by the job template; a
-runtime image does not contain Orchestrator credentials or implementation.
+The execution adapter installs the trusted worker from a digest-pinned init
+image onto a read-only launcher volume; the shared renderer also supports a
+ConfigMap launcher. The runtime image need not contain Orchestrator implementation.
 The coding process runs as an unprivileged user with a read-only root filesystem,
 no Kubernetes service-account token, no host socket, no controller database, and
 no other task's volumes. Network policy and resource limits are supplied by the
 job template, not the image.
 
-Candidate output is a bounded bundle/commit protocol written at
-`/workspace/.orchestrator/output` on an attempt-owned volume. Model, GitHub,
-and registry credentials are task-scoped mounts or
-process environment only: they are never image layers, command-line arguments,
-or retained logs. Unsupported platform, mutable image reference, invalid argv,
+Candidate output is a bounded bundle/commit protocol written at `/output` on an
+attempt-specific retained subdirectory. The model key is a coding-only mount;
+the checkout init alone receives a contents-read GitHub token. Registry pull
+credentials stay with Kubernetes and are not mounted in the coding container.
+Credentials are never image layers, command-line arguments, or retained logs.
+Unsupported platform, mutable image reference, invalid argv,
 or an unavailable launcher is an actionable unsupported-runtime outcome before
 model work begins.
 
@@ -35,9 +37,9 @@ new attempt identity. The Job uses `RuntimeDefault` seccomp, drops all capabilit
 runs as the dedicated agent UID/GID, mounts only workspace/scratch/output volumes,
 and disables service-account token mounting. Its only writable volumes are
 workspace, scratch, and candidate output; the launcher mount is read-only. An
-optional pull-secret *name* is
-attached only after controller-side creation of a short-lived attempt credential;
-the secret material is never part of this contract or the rendered diagnostics.
+optional operator-owned pull-secret *name* can be attached directly or through
+the Helm-managed ServiceAccount. The secret material is never read by the
+controller or included in this contract or the rendered diagnostics.
 
 Ayni lock interpretation, environment building, certification, and managed
 validation are profile concerns. The shared runner deliberately contains none of

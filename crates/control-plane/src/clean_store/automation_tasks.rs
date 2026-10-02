@@ -1,5 +1,10 @@
 use crate::{github_setup, onboarding_templates};
 
+fn compatible_start_revision(profile: &v1::RuntimeProfile, snapshot: &v1::RepositorySnapshot, revision: &v1::RuntimeProfileRevision) -> bool {
+    profile.kind != v1::RuntimeProfileKind::AyniManaged as i32
+        || snapshot.revision == revision.repository_revision
+}
+
 impl CleanStore {
     pub(crate) fn install_repository_automation(
         &mut self,
@@ -251,6 +256,7 @@ impl CleanStore {
         let artifact = self.runtime_artifact(&artifact_id)?;
         if artifact.runtime_profile_revision_id != revision.id
             || artifact.status != v1::RuntimeArtifactStatus::Verified as i32
+            || !compatible_start_revision(&profile, &repository_snapshot, &revision)
         {
             return Err(CleanStoreError::ProfileNotReady);
         }

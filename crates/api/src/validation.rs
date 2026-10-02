@@ -209,6 +209,9 @@ pub fn create_runtime_profile(
     match configuration.configuration.as_ref() {
         Some(v1::runtime_profile_configuration::Configuration::AyniManaged(profile)) => {
             lock_fingerprint(&profile.lock_fingerprint)?;
+            if let Some(digest) = &profile.runtime_source_digest {
+                oci_digest(digest, "runtime_source_digest")?;
+            }
             safe_text(&profile.ayni_version, 1, 128, "ayni_version")?;
             safe_text(
                 &profile.workflow_template_version,
@@ -657,6 +660,7 @@ mod tests {
                 configuration: Some(
                     v1::runtime_profile_configuration::Configuration::AyniManaged(
                         v1::AyniManagedProfileRevision {
+                            runtime_source_digest: None,
                             lock_fingerprint: "d".repeat(64),
                             ayni_version: "0.13.0".to_owned(),
                             workflow_template_version: "v1".to_owned(),

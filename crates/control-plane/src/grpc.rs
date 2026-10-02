@@ -406,7 +406,10 @@ mod repositories_profiles;
 #[path = "grpc/watch.rs"]
 mod watch_streams;
 
-use watch_streams::*;
+use watch_streams::{
+    RichStatus, development_watch, elapsed_millis, page_response, profile_watch, repository_watch,
+    review_watch, valid_request_id, validate_id, validate_optional_id,
+};
 
 include!("grpc_review.rs");
 

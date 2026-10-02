@@ -33,6 +33,8 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
 helm dependency build "$local_chart"
 helm lint --strict "$application_chart"
+helm lint --strict "$application_chart" --set runtime.enabled=true \
+  --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 helm lint --strict "$local_chart"
 
 helm template reusable "$application_chart" \
@@ -41,6 +43,26 @@ helm template reusable "$application_chart" \
   --set-string images.worker=registry.example/worker:test \
   --set-string images.web=registry.example/web:test \
   >"$scratch/application.yaml"
+helm template runtime "$application_chart" --namespace runtime-test \
+  --set runtime.enabled=true \
+  --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set-string 'runtime.serviceAccounts.imagePullSecrets[0].name=registry-pull' \
+  >"$scratch/runtime.yaml"
+helm template runtime "$application_chart" --namespace runtime-test \
+  --set runtime.enabled=true --set runtime.serviceAccounts.create=false \
+  --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  >"$scratch/runtime-existing-accounts.yaml"
+for account in runtime-coding runtime-builder; do
+  grep -q "^  name: $account$" "$scratch/runtime.yaml"
+  if grep -q "^  name: $account$" "$scratch/runtime-existing-accounts.yaml"; then
+    echo "runtime rendered an operator-owned service account" >&2
+    exit 1
+  fi
+done
+grep -q 'name: registry-pull' "$scratch/runtime.yaml"
+grep -q 'serviceAccountToken:' "$scratch/runtime.yaml"
+grep -q 'verbs: \[create, delete\]' "$scratch/runtime.yaml"
+grep -q 'mountPath: /runtime-outputs' "$scratch/runtime.yaml"
 helm template ayni-orchestrator "$local_chart" \
   --namespace ayni-orchestrator-dev \
   --set-string ayni-orchestrator.images.controlPlane=local/ayni-orchestrator-control-plane:test \
