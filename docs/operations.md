@@ -21,7 +21,7 @@ is available.
 
 Metrics and structured logs use bounded, low-cardinality state/outcome labels
 for profile transitions, reconciliation duration/outcome, GitHub rate limits,
-workflow wait, GHCR verification/drift, image pull, coding, assessment import,
+workflow wait, registry verification/drift, build, image pull, coding, assessment import,
 comment update, and readiness action. They never use repository, commit, digest,
 workflow, task, PR, raw signal, URL, credential, or log text as metric labels.
 Exact identities live only in the bounded API/UI, durable records, and retained
@@ -35,13 +35,12 @@ evidence where authorized.
 2. Create/reconcile the owned pipelines setup PR. A closed/unmerged or drifted
    PR leaves the profile non-ready. Repair the installation or owned files, then
    reconcile the durable setup action; never edit the default branch directly.
-3. After merge, observe the trusted default-branch workflow. It validates the
-   current `.ayni.toml`/`.ayni.lock`, Ayni release, supported platform, and
-   workflow-template contract, then publishes or verifies only the expected
-   enrolled-repository GHCR package/tag.
-4. The controller resolves `lock-<full-64-hex-lock-fingerprint>` and verifies
-   package ownership, OCI digest, platform, Ayni labels/schema, and bounded
-   metadata. Only then can a profile be `ready`.
+3. Resolve the profile's configured registry reference or observe its dedicated
+   build Job. The controller validates the current `.ayni.toml`/`.ayni.lock`,
+   supported platform, source policy, and immutable artifact identity.
+4. The controller resolves the discovery reference and verifies registry policy,
+   OCI digest, platform, Ayni labels/schema, and bounded metadata. Only then
+   can a profile be `ready`.
 5. Coding tasks freeze profile revision and runtime `image@sha256:...`. A
    digest pull on another node is valid; building in the coding Job is not.
    Agent host checks are advisory.
@@ -62,8 +61,8 @@ for the replacement. Existing lock tags are never silently moved.
 | Setup PR drifted, closed, or not merged | Keep onboarding non-ready, reconcile the owned setup action after repair, and do not mutate default branch directly. |
 | Lock missing, stale, malformed, or unsupported | Degrade/update that profile revision and block new task admission until a merged valid lock and verified artifact exist. |
 | Workflow failed, timed out, or reports stale source/head | Retain run/attempt identity, do not import success, and reconcile exact current provider state before an allowed retry. |
-| GHCR tag absent, moved, foreign, wrong-platform, or bad metadata | Mark artifact/profile degraded; preserve historical frozen digests; require fresh trusted publication and verification. |
-| GitHub/GHCR credentials unavailable or revoked | Persist the failed action and bounded remediation, then resume reconciliation after access returns without duplicate mutations. |
+| Registry reference absent, moved, foreign, wrong-platform, or bad metadata | Mark artifact/profile degraded; preserve historical frozen digests; require fresh source verification or build result. |
+| Registry credentials unavailable or revoked | Persist the failed action and bounded remediation, then resume reconciliation after access returns without duplicate mutations. |
 | Candidate PR head changed or evidence is corrupt/oversize | Retain but reject the result as current assessment; do not update readiness or replace trusted evidence. |
 | Controller/pod restart or uncertain GitHub response | Resume durable actions, read provider/registry state before retry, and converge without duplicate PR/comment/action effects. |
 | Coding pull/runtime unsupported | Return an actionable artifact/platform result, clean task-scoped pull credentials, and never fall back to a mutable tag or local build. |
@@ -109,7 +108,7 @@ artifact; deletion is explicit and dry-run first.
 Keep operational access loopback-only. Kubernetes Secrets, GitHub App keys,
 registry/model credentials, raw workflow logs, and artifact bytes are never
 placed in comments, metrics, API browser DTOs, or retained diagnostic text.
-See the [GitHub and GHCR security boundary](github-security.md) for required App
+See the [GitHub security boundary](github-security.md) for required App
 permissions and workflow rules, [Decision 0007](decisions/0007-clean-v1-runtime-profiles.md)
 for the normative trust and identity model, and #68 for the reproducible
 end-to-end gate.

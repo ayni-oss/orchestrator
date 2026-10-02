@@ -1,4 +1,4 @@
-# GitHub and GHCR security boundary
+# GitHub security boundary
 
 Ayni Orchestrator uses a customer-owned GitHub App installed only on enrolled
 repositories. The controller obtains short-lived installation tokens; it does
@@ -17,16 +17,15 @@ The App Manifest and existing-App setup require these repository permissions:
 | Workflows | Read and write | Install and version the owned workflow files on the setup branch. |
 | Actions | Read | Observe workflow runs and bounded artifacts. |
 | Checks | Read | Observe required checks. |
-| Packages | Read | Verify the enrolled repository's GHCR package and manifest. |
 | Issues | Read and write | Maintain the one marker-owned assessment-summary comment. |
 
 Install the App only on repositories operated by this control plane. Missing
 permissions must produce an actionable per-capability remediation; do not grant
 organization-wide access or broaden another permission as a workaround.
 
-Trusted default-branch environment publication is the only workflow that will
-receive `packages: write`, and only in its publication job. Pull-request
-workflows never receive package-write, controller, model, or App credentials.
+Registry pull and build-push credentials are Kubernetes-scoped and are never
+held by the controller or GitHub workflow. Pull-request workflows never receive
+registry, controller, model, or App credentials.
 Fork handling is fail-closed until a supported policy is implemented.
 
 ## Workflow rules
@@ -40,7 +39,7 @@ PR runs.
 
 The setup PR is the only controller-initiated repository mutation. The
 controller never merges it or pushes workflows directly to the default branch.
-It verifies GHCR package ownership and immutable digests; a mutable tag,
+It verifies configured registry policy and immutable digests; a mutable tag,
 comment, or check is not authoritative evidence.
 
 ## Webhooks and certified environments
@@ -53,19 +52,19 @@ or loss must converge through the periodic reconciler; webhook text and URLs are
 not trusted evidence. Subscribe only to the events needed to accelerate
 repository-installation, pull-request, and workflow-run observation.
 
-Ayni 0.14.0 environment certificates are a separate runtime boundary. The
-trusted default-branch publication flow may create a certified image only with
-the dedicated signing seed and key identifier supplied together in trusted CI;
-a PR flow admits an immutable image and runs its managed check. The controller
-retains the independently observed OCI digest and GitHub/GHCR identity; Ayni
-verifies the certificate, lock compatibility, and protected runtime content.
-Never duplicate the certificate verifier in workflow glue or make the
-certificate replace repository/package ownership checks.
+Ayni environment certificates are a separate runtime boundary. A dedicated
+build Job may create a certified image only with the dedicated signing seed and
+key identifier supplied through its scoped Kubernetes Secret; a PR flow admits
+an immutable image and runs its managed check. The controller retains the
+independently observed OCI digest and source identity; Ayni verifies the
+certificate, lock compatibility, and protected runtime content. Never duplicate
+the certificate verifier in workflow glue or make the certificate replace
+registry-policy checks.
 
 Candidate lock changes require a separately specified ephemeral certification
 policy. Until that policy exists, fail closed or report the change as unsupported:
 a candidate-controlled `pull_request` workflow must never receive a reusable
-certificate-signing secret, publish a trusted lock tag, or weaken the configured
+certificate-signing secret, build credential, or weaken the configured
 certificate trust policy.
 
 ## Credentials and hostile input

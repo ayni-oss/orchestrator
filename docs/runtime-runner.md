@@ -41,4 +41,6 @@ the secret material is never part of this contract or the rendered diagnostics.
 
 Ayni lock interpretation, environment building, certification, and managed
 validation are profile concerns. The shared runner deliberately contains none of
-them.
+them. A build, when a profile selects one, runs in a dedicated Kubernetes build
+Job and publishes through that Job's scoped registry credentials; a coding or
+assessment Job only pulls its admitted digest.

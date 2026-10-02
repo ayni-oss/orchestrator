@@ -19,7 +19,7 @@ pub(crate) struct SetupPullRequest {
 pub(crate) enum SetupRequestError {
     #[error("setup branch identity is empty or exceeds its bound")]
     InvalidProfileIdentity,
-    #[error("setup PR cannot be created without both workflow files")]
+    #[error("setup PR cannot be created without the managed assessment workflow")]
     MissingWorkflow,
 }
 
@@ -35,13 +35,10 @@ pub(crate) fn setup_pull_request(
     if profile_id.is_empty() || profile_id.len() > 256 {
         return Err(SetupRequestError::InvalidProfileIdentity);
     }
-    if files.files.len() != 2
+    if files.files.len() != 1
         || !files
             .files
             .contains_key(crate::onboarding_templates::ASSESSMENT_WORKFLOW_PATH)
-        || !files
-            .files
-            .contains_key(crate::onboarding_templates::ENVIRONMENT_WORKFLOW_PATH)
     {
         return Err(SetupRequestError::MissingWorkflow);
     }
@@ -50,7 +47,7 @@ pub(crate) fn setup_pull_request(
         branch: format!("ayni-orchestrator/setup-{:x}", digest)[..48].to_owned(),
         base_branch: base_branch.to_owned(),
         title: "feat(ayni): install managed environment workflows",
-        body: "This controller-owned setup PR installs the reviewed Ayni Managed workflows. Review and merge it to begin environment reconciliation.",
+        body: "This controller-owned setup PR installs the reviewed Ayni Managed assessment workflow. Review and merge it to enable managed assessment.",
         files,
     })
 }
@@ -78,6 +75,6 @@ mod tests {
         assert_eq!(first.branch, second.branch);
         assert_ne!(first.branch, first.base_branch);
         assert!(first.branch.starts_with("ayni-orchestrator/setup-"));
-        assert_eq!(first.files.files.len(), 2);
+        assert_eq!(first.files.files.len(), 1);
     }
 }

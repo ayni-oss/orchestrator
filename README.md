@@ -19,9 +19,9 @@ remains private; Ayni is independently useful as a local CLI in the public
 The shared core owns repository connections, verified OCI runtime artifacts,
 agent attempts, candidates, PR/MR publication, assessments, evidence identity,
 and reconciliation. Ayni Managed adds committed Ayni lock interpretation,
-GitHub Actions automation, GHCR environment publication, advisory host checks,
-managed exact-head PR assessment, signals, and default-branch environment
-reconciliation. Custom Runtime later supplies a verified external OCI image
+optional GitHub Actions assessment automation, registry-backed or dedicated-build
+environment sourcing, advisory host checks, managed exact-head PR assessment,
+signals, and environment reconciliation. Custom Runtime later supplies a verified external OCI image
 without Ayni-specific fields or negative branding.
 
 A task freezes a repository revision, profile revision, and verified OCI digest.
