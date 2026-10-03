@@ -13,6 +13,7 @@ pub struct SourceClient {
     client: reqwest::Client,
     app_id: String,
     key: EncodingKey,
+    setup_cursor: std::sync::atomic::AtomicUsize,
 }
 
 impl SourceClient {
@@ -77,6 +78,7 @@ impl SourceClient {
             .build()
             .map_err(|_| "github_client_unavailable")?;
         Ok(Self {
+            setup_cursor: std::sync::atomic::AtomicUsize::new(0),
             client,
             app_id,
             key,
@@ -124,26 +126,7 @@ impl SourceClient {
         repository_id: &str,
         permissions: Value,
     ) -> Result<String, &'static str> {
-        #[derive(Serialize)]
-        struct Claims<'a> {
-            iat: u64,
-            exp: u64,
-            iss: &'a str,
-        }
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| "clock_invalid")?
-            .as_secs();
-        let jwt = jsonwebtoken::encode(
-            &Header::new(Algorithm::RS256),
-            &Claims {
-                iat: now.saturating_sub(60),
-                exp: now + 540,
-                iss: &self.app_id,
-            },
-            &self.key,
-        )
-        .map_err(|_| "github_authentication_failed")?;
+        let jwt = self.app_jwt()?;
         let repository_id: u64 = repository_id
             .parse()
             .map_err(|_| "repository_identity_invalid")?;
@@ -160,6 +143,29 @@ impl SourceClient {
             .filter(|v| !v.is_empty() && v.len() <= 4096)
             .map(str::to_owned)
             .ok_or("github_authentication_failed")
+    }
+
+    fn app_jwt(&self) -> Result<String, &'static str> {
+        #[derive(Serialize)]
+        struct Claims<'a> {
+            iat: u64,
+            exp: u64,
+            iss: &'a str,
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "clock_invalid")?
+            .as_secs();
+        jsonwebtoken::encode(
+            &Header::new(Algorithm::RS256),
+            &Claims {
+                iat: now.saturating_sub(60),
+                exp: now + 540,
+                iss: &self.app_id,
+            },
+            &self.key,
+        )
+        .map_err(|_| "github_authentication_failed")
     }
 
     pub(crate) async fn head(
@@ -255,3 +261,5 @@ async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str
     }
     serde_json::from_slice(&bytes).map_err(|_| "github_response_invalid")
 }
+
+include!("runtime_source_onboarding.rs");

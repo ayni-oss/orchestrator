@@ -23,10 +23,7 @@ impl RuntimeReconciler {
                 .as_ref()
                 .and_then(|s| s.runtime.as_ref())
                 .ok_or("coding_snapshot_missing")?;
-            if !self
-                .configuration
-                .profiles
-                .contains_key(&profile.runtime_profile_id)
+            if self.configured_profile(&profile.runtime_profile_id).is_err()
             {
                 continue;
             }

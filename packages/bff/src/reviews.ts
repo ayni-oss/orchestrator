@@ -1,21 +1,16 @@
+import {safeText,safeGithubLink} from "./onboarding.js";
 import {
   type Assessment, type ChangeRequest, type EvidenceReference,
   assessmentConclusionToJSON, changeRequestStateToJSON,
 } from "@ayni-orchestrator/grpc-bindings/server";
 
-function githubLink(value: string | undefined): string | undefined {
-  if (!value || value.length > 2048) return undefined;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "github.com" && !url.username && !url.password ? url.href : undefined;
-  } catch { return undefined; }
-}
 
 export function mapReview(value: ChangeRequest) {
   return {
     id: value.id, candidateId: value.candidateId || undefined,
+    failure:value.failure ? {message:safeText(value.failure.message,512),remediation:safeText(value.failure.remediation,512)} : undefined,
     head: value.headRevision, state: changeRequestStateToJSON(value.state).replace("CHANGE_REQUEST_STATE_", "").toLowerCase(),
-    url: githubLink(value.provider?.provider?.$case === "github" ? value.provider.provider.github.htmlUrl : undefined),
+    url: safeGithubLink(value.provider?.provider?.$case === "github" ? value.provider.provider.github.htmlUrl : undefined),
     readiness: value.readiness ? {
       policy: value.readiness.policy, state: value.readiness.state,
       source: value.readiness.source, authorizedHead: value.readiness.authorizedHead,
@@ -30,7 +25,8 @@ export function mapAssessment(value: Assessment) {
     id: value.id, head: value.headRevision,
     conclusion: assessmentConclusionToJSON(value.conclusion).replace("ASSESSMENT_CONCLUSION_", "").toLowerCase(),
     profileRevision: value.runtimeProfileRevisionId,
-    workflowUrl: githubLink(value.workflow?.provider?.$case === "github" ? value.workflow.provider.github.htmlUrl : undefined),
+    producer:value.producer ? `${safeText(value.producer.name,128)} ${safeText(value.producer.version,128)}` : undefined,
+    workflowUrl: safeGithubLink(value.workflow?.provider?.$case === "github" ? value.workflow.provider.github.htmlUrl : undefined),
     createdAt: value.createdAt?.toISOString(),
     evidenceIds: value.evidenceReferenceIds.slice(0, 32),
     managed: managed ? {
@@ -43,5 +39,5 @@ export function mapAssessment(value: Assessment) {
 }
 
 export function mapEvidence(value: EvidenceReference) {
-  return { id: value.id, assessmentId: value.assessmentId, name: value.name, digest: value.digest, sizeBytes: value.sizeBytes };
+  return { id: value.id, assessmentId: value.assessmentId, name: safeText(value.name,128), digest: value.digest, sizeBytes: value.sizeBytes };
 }

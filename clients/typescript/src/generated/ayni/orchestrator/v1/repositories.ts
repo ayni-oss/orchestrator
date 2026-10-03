@@ -196,6 +196,17 @@ export interface WatchRepositoriesResponse {
   } | undefined;
 }
 
+/** Connect through the operator's existing GitHub App; identities are provider-observed. */
+export interface ConnectGithubRepositoryRequest {
+  idempotencyKey: string;
+  owner: string;
+  name: string;
+}
+
+export interface ConnectGithubRepositoryResponse {
+  repositoryConnection?: RepositoryConnection | undefined;
+}
+
 function createBaseRepositoryProvider(): RepositoryProvider {
   return { provider: undefined };
 }
@@ -1918,9 +1929,201 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
   },
 };
 
+function createBaseConnectGithubRepositoryRequest(): ConnectGithubRepositoryRequest {
+  return { idempotencyKey: "", owner: "", name: "" };
+}
+
+export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryRequest> = {
+  encode(message: ConnectGithubRepositoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.owner !== "") {
+      writer.uint32(18).string(message.owner);
+    }
+    if (message.name !== "") {
+      writer.uint32(26).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConnectGithubRepositoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConnectGithubRepositoryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.owner = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConnectGithubRepositoryRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      owner: isSet(object.owner) ? globalThis.String(object.owner) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+    };
+  },
+
+  toJSON(message: ConnectGithubRepositoryRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.owner !== "") {
+      obj.owner = message.owner;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConnectGithubRepositoryRequest>): ConnectGithubRepositoryRequest {
+    return ConnectGithubRepositoryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConnectGithubRepositoryRequest>): ConnectGithubRepositoryRequest {
+    const message = createBaseConnectGithubRepositoryRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.owner = object.owner ?? "";
+    message.name = object.name ?? "";
+    return message;
+  },
+};
+
+function createBaseConnectGithubRepositoryResponse(): ConnectGithubRepositoryResponse {
+  return { repositoryConnection: undefined };
+}
+
+export const ConnectGithubRepositoryResponse: MessageFns<ConnectGithubRepositoryResponse> = {
+  encode(message: ConnectGithubRepositoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnection !== undefined) {
+      RepositoryConnection.encode(message.repositoryConnection, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConnectGithubRepositoryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConnectGithubRepositoryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnection = RepositoryConnection.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConnectGithubRepositoryResponse {
+    return {
+      repositoryConnection: isSet(object.repositoryConnection)
+        ? RepositoryConnection.fromJSON(object.repositoryConnection)
+        : isSet(object.repository_connection)
+        ? RepositoryConnection.fromJSON(object.repository_connection)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ConnectGithubRepositoryResponse): unknown {
+    const obj: any = {};
+    if (message.repositoryConnection !== undefined) {
+      obj.repositoryConnection = RepositoryConnection.toJSON(message.repositoryConnection);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConnectGithubRepositoryResponse>): ConnectGithubRepositoryResponse {
+    return ConnectGithubRepositoryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConnectGithubRepositoryResponse>): ConnectGithubRepositoryResponse {
+    const message = createBaseConnectGithubRepositoryResponse();
+    message.repositoryConnection = (object.repositoryConnection !== undefined && object.repositoryConnection !== null)
+      ? RepositoryConnection.fromPartial(object.repositoryConnection)
+      : undefined;
+    return message;
+  },
+};
+
 /** RepositoryService manages provider-neutral repository connections and snapshots. */
 export type RepositoryServiceService = typeof RepositoryServiceService;
 export const RepositoryServiceService = {
+  connectGithubRepository: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ConnectGithubRepository" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ConnectGithubRepositoryRequest): Buffer =>
+      Buffer.from(ConnectGithubRepositoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ConnectGithubRepositoryRequest => ConnectGithubRepositoryRequest.decode(value),
+    responseSerialize: (value: ConnectGithubRepositoryResponse): Buffer =>
+      Buffer.from(ConnectGithubRepositoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ConnectGithubRepositoryResponse =>
+      ConnectGithubRepositoryResponse.decode(value),
+  },
   listRepositoryConnections: {
     path: "/ayni.orchestrator.v1.RepositoryService/ListRepositoryConnections" as const,
     requestStream: false as const,
@@ -1996,6 +2199,7 @@ export const RepositoryServiceService = {
 } as const;
 
 export interface RepositoryServiceServer extends UntypedServiceImplementation {
+  connectGithubRepository: handleUnaryCall<ConnectGithubRepositoryRequest, ConnectGithubRepositoryResponse>;
   listRepositoryConnections: handleUnaryCall<ListRepositoryConnectionsRequest, ListRepositoryConnectionsResponse>;
   getRepositoryConnection: handleUnaryCall<GetRepositoryConnectionRequest, GetRepositoryConnectionResponse>;
   createRepositoryConnection: handleUnaryCall<CreateRepositoryConnectionRequest, CreateRepositoryConnectionResponse>;
@@ -2005,6 +2209,21 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
 }
 
 export interface RepositoryServiceClient extends Client {
+  connectGithubRepository(
+    request: ConnectGithubRepositoryRequest,
+    callback: (error: ServiceError | null, response: ConnectGithubRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  connectGithubRepository(
+    request: ConnectGithubRepositoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ConnectGithubRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  connectGithubRepository(
+    request: ConnectGithubRepositoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ConnectGithubRepositoryResponse) => void,
+  ): ClientUnaryCall;
   listRepositoryConnections(
     request: ListRepositoryConnectionsRequest,
     callback: (error: ServiceError | null, response: ListRepositoryConnectionsResponse) => void,

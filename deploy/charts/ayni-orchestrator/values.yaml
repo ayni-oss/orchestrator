@@ -11,6 +11,7 @@ runtime:
   requestTimeoutSeconds: 30
   concurrency: 4
   profiles: {}
+  managedRepositories: {}
   serviceAccounts:
     create: true
     imagePullSecrets: []

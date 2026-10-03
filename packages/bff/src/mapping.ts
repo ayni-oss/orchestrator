@@ -1,3 +1,4 @@
+import { safeText, safeGithubLink, safeReconciliation } from "./onboarding.js";
 import {
   DevelopmentAttemptState,
   DevelopmentTaskState,
@@ -85,9 +86,9 @@ function mapFailure(value: ResourceFailure | undefined): ResourceFailureDto | un
   if (value === undefined) return undefined;
   return {
     reason: reason(value.reason),
-    message: value.message,
+    message: safeText(value.message,512),
     observedAt: requiredDate(value.observedAt),
-    ...optional("remediation", value.remediation),
+    ...optional("remediation", value.remediation ? safeText(value.remediation,512) : undefined),
   } as ResourceFailureDto;
 }
 
@@ -113,9 +114,9 @@ export function mapRepositoryConnection(value: RepositoryConnection): Repository
       owner: github.owner,
       name: github.name,
       installationId: github.installationId,
-      htmlUrl: github.htmlUrl,
+      htmlUrl: safeGithubLink(github.htmlUrl) ?? "",
     },
-    displayName: value.displayName,
+    displayName: safeText(value.displayName),
     defaultBranch: value.defaultBranch,
     status: mapRepositoryStatus(value.status),
     createdAt: requiredDate(value.createdAt),
@@ -168,6 +169,7 @@ export function mapRuntimeProfile(value: RuntimeProfile): RuntimeProfileDto {
     kind: mapRuntimeProfileKind(value.kind),
     support: mapRuntimeProfileSupport(value.support),
     state: mapRuntimeProfileState(value.state),
+    reconciliation: safeReconciliation(value.reconciliationMetadata),
     createdAt: requiredDate(value.createdAt),
     updatedAt: requiredDate(value.updatedAt),
     resourceVersion: value.resourceVersion,
@@ -226,7 +228,7 @@ export function mapRuntimeArtifact(value: RuntimeArtifact): RuntimeArtifactDto {
     resolvedDigest: value.resolvedDigest,
     platform: mapPlatform(required(value.platform)),
     status: mapRuntimeArtifactStatus(value.status),
-    verifiedMetadata: value.verifiedMetadata.map((item) => ({ key: item.key, value: item.value })),
+    verifiedMetadata: value.verifiedMetadata.filter(item => ["certificate-key-id", "metadata-digest", "protected-content-root"].includes(item.key)).slice(0,3).map((item) => ({ key: item.key, value: safeText(item.value,256) })),
     createdAt: requiredDate(value.createdAt),
     resourceVersion: value.resourceVersion,
     ...optional("verifiedAt", date(value.verifiedAt)),
@@ -274,6 +276,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
     },
     agent: { provider: agent.provider, agent: agent.agent, model: agent.model },
     request: value.request,
+    publishDraft: value.publishDraft ?? false,
     acceptanceCriteria: value.acceptanceCriteria.map(String),
     changeConstraints: mapChangeConstraints(required(value.changeConstraints)),
     ...optional("deadlineAt", date(value.deadlineAt)),
@@ -332,6 +335,7 @@ export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentT
     runtimeProfileId: value.runtimeProfileId,
     agent: { ...value.agent },
     request: value.request,
+    publishDraft: value.publishDraft ?? false,
     acceptanceCriteria: value.acceptanceCriteria.map(String),
     changeConstraints: {
       protectedPaths: value.changeConstraints.protectedPaths.map(String),

@@ -15,6 +15,9 @@ pub struct RuntimeConfiguration {
     pub request_timeout_seconds: u64,
     #[serde(default = "concurrency")]
     pub concurrency: usize,
+    #[serde(default)]
+    pub managed_repositories: BTreeMap<String, ProfileRuntime>,
+    #[serde(default)]
     pub profiles: BTreeMap<String, ProfileRuntime>,
 }
 
@@ -104,7 +107,7 @@ impl RuntimeConfiguration {
             || !(10..=3600).contains(&self.interval_seconds)
             || !(1..=120).contains(&self.request_timeout_seconds)
             || !(1..=16).contains(&self.concurrency)
-            || self.profiles.len() > 128
+            || self.profiles.len() + self.managed_repositories.len() > 128
         {
             return Err("runtime_configuration_invalid");
         }
@@ -112,6 +115,27 @@ impl RuntimeConfiguration {
             validate_profile(profile, runtime)?;
         }
 
+        for (repository, runtime) in &self.managed_repositories {
+            let parts: Vec<_> = repository.split('/').collect();
+            if parts.len() != 2
+                || parts.iter().any(|p| {
+                    p.is_empty()
+                        || !p
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+                })
+                || runtime.build.is_some()
+            {
+                return Err("runtime_repository_configuration_invalid");
+            }
+            let expected = format!("ghcr.io/{}-ayni:lock-{{lock}}", repository.to_lowercase());
+            if runtime.image != expected {
+                return Err("runtime_repository_configuration_invalid");
+            }
+            let mut resolved = runtime.clone();
+            resolved.image = runtime.image.replace("{lock}", &"a".repeat(64));
+            validate_profile(repository, &resolved)?;
+        }
         Ok(())
     }
 }
@@ -201,6 +225,7 @@ mod tests {
             request_timeout_seconds: 30,
             concurrency: 4,
             profiles: BTreeMap::new(),
+            managed_repositories: BTreeMap::new(),
         };
         assert!(configuration.validate().is_ok());
         configuration.concurrency = 0;

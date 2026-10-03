@@ -301,6 +301,7 @@ mod tests {
             request_timeout_seconds: 30,
             concurrency: 4,
             profiles: std::collections::BTreeMap::default(),
+            managed_repositories: std::collections::BTreeMap::default(),
         };
         let runtime = ProfileRuntime {
             assessment: None,

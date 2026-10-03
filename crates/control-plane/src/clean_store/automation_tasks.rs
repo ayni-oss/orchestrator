@@ -54,7 +54,7 @@ impl CleanStore {
                 v1::GithubAutomationInstallation {
                     installation_id: github.installation_id,
                     setup_pull_request_number: None,
-                    environment_workflow_path: String::new(),
+                    environment_workflow_path: onboarding_templates::ENVIRONMENT_WORKFLOW_PATH.into(),
                     assessment_workflow_path: onboarding_templates::ASSESSMENT_WORKFLOW_PATH
                         .to_owned(),
                 },
@@ -287,6 +287,8 @@ impl CleanStore {
             acceptance_criteria: requested.acceptance_criteria.clone(),
             change_constraints: requested.change_constraints.clone(),
             deadline_at,
+            publish_draft: requested.publish_draft,
+            publication_base_branch: repository.default_branch.clone(),
         };
         let task_id = resource_id("task");
         let attempt_id = resource_id("attempt");
@@ -657,6 +659,7 @@ impl CleanStore {
     pub(crate) fn reconcile_once(&mut self) -> Result<(), CleanStoreError> {
         let _ = self.expire_deadlines(&unix_timestamp()?)?;
         self.prune_page_snapshots()?;
+        self.schedule_requested_publications()?;
         Ok(())
     }
 

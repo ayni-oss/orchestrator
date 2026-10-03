@@ -377,7 +377,11 @@ export interface DevelopmentTaskRequest {
     | ChangeConstraints
     | undefined;
   /** deadline is 1 second through 24 hours when present. */
-  deadline?: Duration | undefined;
+  deadline?:
+    | Duration
+    | undefined;
+  /** Explicitly request durable publication of the resulting candidate as a draft. */
+  publishDraft: boolean;
 }
 
 /** FrozenRepository freezes the source snapshot used by a task or attempt. */
@@ -410,6 +414,9 @@ export interface DevelopmentSnapshot {
   acceptanceCriteria: string[];
   changeConstraints?: ChangeConstraints | undefined;
   deadlineAt?: Date | undefined;
+  publishDraft: boolean;
+  /** Base branch observed when the publication request is frozen. */
+  publicationBaseBranch: string;
 }
 
 /** ProviderTokenUsage preserves independent counters; absence never means zero. */
@@ -762,6 +769,7 @@ function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
     acceptanceCriteria: [],
     changeConstraints: undefined,
     deadline: undefined,
+    publishDraft: false,
   };
 }
 
@@ -790,6 +798,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     }
     if (message.deadline !== undefined) {
       Duration.encode(message.deadline, writer.uint32(66).fork()).join();
+    }
+    if (message.publishDraft !== false) {
+      writer.uint32(72).bool(message.publishDraft);
     }
     return writer;
   },
@@ -871,6 +882,14 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
             message.deadline = Duration.decode(reader, reader.uint32());
             continue;
           }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.publishDraft = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -913,6 +932,11 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
         ? ChangeConstraints.fromJSON(object.change_constraints)
         : undefined,
       deadline: isSet(object.deadline) ? Duration.fromJSON(object.deadline) : undefined,
+      publishDraft: isSet(object.publishDraft)
+        ? globalThis.Boolean(object.publishDraft)
+        : isSet(object.publish_draft)
+        ? globalThis.Boolean(object.publish_draft)
+        : false,
     };
   },
 
@@ -942,6 +966,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     if (message.deadline !== undefined) {
       obj.deadline = Duration.toJSON(message.deadline);
     }
+    if (message.publishDraft !== false) {
+      obj.publishDraft = message.publishDraft;
+    }
     return obj;
   },
 
@@ -964,6 +991,7 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     message.deadline = (object.deadline !== undefined && object.deadline !== null)
       ? Duration.fromPartial(object.deadline)
       : undefined;
+    message.publishDraft = object.publishDraft ?? false;
     return message;
   },
 };
@@ -1285,6 +1313,8 @@ function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
     acceptanceCriteria: [],
     changeConstraints: undefined,
     deadlineAt: undefined,
+    publishDraft: false,
+    publicationBaseBranch: "",
   };
 }
 
@@ -1310,6 +1340,12 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     }
     if (message.deadlineAt !== undefined) {
       Timestamp.encode(toTimestamp(message.deadlineAt), writer.uint32(58).fork()).join();
+    }
+    if (message.publishDraft !== false) {
+      writer.uint32(64).bool(message.publishDraft);
+    }
+    if (message.publicationBaseBranch !== "") {
+      writer.uint32(74).string(message.publicationBaseBranch);
     }
     return writer;
   },
@@ -1383,6 +1419,22 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
             message.deadlineAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.publishDraft = reader.bool();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.publicationBaseBranch = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1416,6 +1468,16 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
         : isSet(object.deadline_at)
         ? fromJsonTimestamp(object.deadline_at)
         : undefined,
+      publishDraft: isSet(object.publishDraft)
+        ? globalThis.Boolean(object.publishDraft)
+        : isSet(object.publish_draft)
+        ? globalThis.Boolean(object.publish_draft)
+        : false,
+      publicationBaseBranch: isSet(object.publicationBaseBranch)
+        ? globalThis.String(object.publicationBaseBranch)
+        : isSet(object.publication_base_branch)
+        ? globalThis.String(object.publication_base_branch)
+        : "",
     };
   },
 
@@ -1442,6 +1504,12 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     if (message.deadlineAt !== undefined) {
       obj.deadlineAt = message.deadlineAt.toISOString();
     }
+    if (message.publishDraft !== false) {
+      obj.publishDraft = message.publishDraft;
+    }
+    if (message.publicationBaseBranch !== "") {
+      obj.publicationBaseBranch = message.publicationBaseBranch;
+    }
     return obj;
   },
 
@@ -1465,6 +1533,8 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
       ? ChangeConstraints.fromPartial(object.changeConstraints)
       : undefined;
     message.deadlineAt = object.deadlineAt ?? undefined;
+    message.publishDraft = object.publishDraft ?? false;
+    message.publicationBaseBranch = object.publicationBaseBranch ?? "";
     return message;
   },
 };

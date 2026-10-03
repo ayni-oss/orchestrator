@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
     const context = requestContext(locals);
     const { reviews, page } = await bff.listReviews({ pageSize: 20, pageToken: url.searchParams.get("page") ?? "" }, context);
     const selected = url.searchParams.get("review");
-    const review = reviews.find((item) => item.id === selected);
+    const review = selected ? reviews.find((item) => item.id === selected) ?? await bff.getReview(selected,context) : undefined;
     const history = review ? await bff.listAssessments(review.id, { pageSize: 100, pageToken: url.searchParams.get("history") ?? "" }, context) : undefined;
     const evidenceId = url.searchParams.get("assessment");
     const assessment = history?.assessments.find((item) => item.id === evidenceId);

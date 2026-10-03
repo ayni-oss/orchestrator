@@ -69,7 +69,7 @@ function profile(): RuntimeProfile {
 function task(): DevelopmentTask {
   return {
     id: "task:1",
-    snapshot: {
+    snapshot: { publishDraft:false, publicationBaseBranch:"main",
       repository: {
         repositoryConnectionId: "repository:1",
         repositorySnapshotId: "snapshot:1",

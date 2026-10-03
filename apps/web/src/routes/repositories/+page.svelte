@@ -31,7 +31,7 @@
       <EmptyState title="No repository connections" description="Connect an approved provider repository before creating a runtime profile." />
     {:else}
       <div class="grid gap-4 lg:grid-cols-2">
-        {#each data.repositoryConnections as item}
+        {#each data.repositoryConnections as item (item.id)}
           <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div><StatusBadge status={item.status} tone={statusTone(item.status)} /></div></Card.Header><Card.Content class="text-sm"><p>GitHub repository ID <code>{item.provider.repositoryId}</code></p><p class="text-muted-foreground">Installation {item.provider.installationId}</p></Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Profiles and identity <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
         {/each}
       </div>
@@ -39,15 +39,11 @@
     {/if}
   </section>
 
-  <Card.Root id="connect"><Card.Header><div class="flex items-center gap-3"><FolderGit2 class="size-5" /><div><Card.Title>Connect repository</Card.Title><Card.Description>GitHub-specific identity remains inside the provider boundary.</Card.Description></div></div></Card.Header><Card.Content>
+  <Card.Root id="connect"><Card.Header><div class="flex items-center gap-3"><FolderGit2 class="size-5" /><div><Card.Title>Connect repository</Card.Title><Card.Description>Use a repository already accessible to your existing GitHub App. Access and repository identity are checked before connecting.</Card.Description></div></div></Card.Header><Card.Content>
     <form method="POST" action="?/connect" class="grid gap-5 sm:grid-cols-2" use:enhance={() => { connecting = true; return async ({ update }) => { connecting = false; await update(); }; }}>
       <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <div class="space-y-2"><Label for="provider-repository-id">GitHub repository ID</Label><Input id="provider-repository-id" name="repositoryId" required inputmode="numeric" pattern="[1-9][0-9]*" /></div>
-      <div class="space-y-2"><Label for="installation-id">GitHub App installation ID</Label><Input id="installation-id" name="installationId" required inputmode="numeric" pattern="[1-9][0-9]*" /></div>
       <div class="space-y-2"><Label for="owner">Owner</Label><Input id="owner" name="owner" required maxlength={100} /></div>
       <div class="space-y-2"><Label for="repository">Repository</Label><Input id="repository" name="repository" required maxlength={100} /></div>
-      <div class="space-y-2"><Label for="display-name">Display name</Label><Input id="display-name" name="displayName" required maxlength={256} placeholder="owner/repository" /></div>
-      <div class="space-y-2"><Label for="default-branch">Default branch</Label><Input id="default-branch" name="defaultBranch" required maxlength={255} value="main" /></div>
       <div class="sm:col-span-2"><SubmitButton pending={connecting} pendingLabel="Connecting…">Connect repository</SubmitButton></div>
     </form>
   </Card.Content></Card.Root>

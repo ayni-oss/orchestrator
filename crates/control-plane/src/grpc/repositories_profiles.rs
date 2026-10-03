@@ -5,6 +5,18 @@ use super::{
 
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for GrpcApi {
+    async fn connect_github_repository(
+        &self,
+        request: Request<v1::ConnectGithubRepositoryRequest>,
+    ) -> Result<Response<v1::ConnectGithubRepositoryResponse>, Status> {
+        let context = self.context(&request, "ConnectGithubRepository")?;
+        context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let repository = self.state.connect_github(request.get_ref()).await?;
+        Ok(context.response(v1::ConnectGithubRepositoryResponse {
+            repository_connection: Some(repository),
+        }))
+    }
+
     async fn list_repository_connections(
         &self,
         request: Request<v1::ListRepositoryConnectionsRequest>,
@@ -136,6 +148,23 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
 
 #[tonic::async_trait]
 impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
+    async fn inspect_ayni_repository(
+        &self,
+        request: Request<v1::InspectAyniRepositoryRequest>,
+    ) -> Result<Response<v1::InspectAyniRepositoryResponse>, Status> {
+        let context = self.context(&request, "InspectAyniRepository")?;
+        validate_id(
+            &request.get_ref().repository_connection_id,
+            "repository_connection_id",
+        )
+        .map_err(|e| context.validation(&e))?;
+        Ok(context.response(
+            self.state
+                .inspect_ayni(&request.get_ref().repository_connection_id)
+                .await?,
+        ))
+    }
+
     async fn list_runtime_profiles(
         &self,
         request: Request<v1::ListRuntimeProfilesRequest>,

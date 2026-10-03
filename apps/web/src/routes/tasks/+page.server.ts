@@ -2,7 +2,7 @@ import type { DevelopmentTaskDto, ProviderModelDto, RepositoryConnectionDto, Req
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
-import { actionKey, isGitRevision, lines, optionalLines, requestContext, safeError, text } from "$lib/server/page.js";
+import { actionKey, lines, optionalLines, requestContext, safeError, text } from "$lib/server/page.js";
 import { isCanonicalIdentifier } from "$lib/server/validation.js";
 
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
@@ -14,7 +14,7 @@ async function listRepositoryChoices(context: RequestContext): Promise<Repositor
     const page = await getBff().listRepositoryConnections({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
     values.push(...page.repositoryConnections);
     pageToken = page.page.nextPageToken || undefined;
-  } while (pageToken !== undefined);
+  } while (pageToken !== undefined && values.length < 1000);
   return values;
 }
 
@@ -25,7 +25,7 @@ async function listProfileChoices(context: RequestContext): Promise<RuntimeProfi
     const page = await getBff().listRuntimeProfiles(undefined, { pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
     values.push(...page.runtimeProfiles);
     pageToken = page.page.nextPageToken || undefined;
-  } while (pageToken !== undefined);
+  } while (pageToken !== undefined && values.length < 1000);
   return values;
 }
 
@@ -38,7 +38,7 @@ async function listModelChoices(context: RequestContext): Promise<{ provider?: s
     provider ??= page.provider;
     models.push(...page.models);
     pageToken = page.page.nextPageToken || undefined;
-  } while (pageToken !== undefined);
+  } while (pageToken !== undefined && models.length < 1000);
   return { ...(provider === undefined ? {} : { provider }), models };
 }
 
@@ -76,7 +76,7 @@ export const actions: Actions = {
     const runtimeProfileId = text(form, "runtimeProfileId", 128);
     const provider = text(form, "provider", 128);
     const model = text(form, "model", 128);
-    const repositoryRevision = text(form, "repositoryRevision", 40);
+
     const taskRequest = text(form, "request", 16_384);
     const criteriaValue = text(form, "acceptanceCriteria", 40_960);
     const criteria = criteriaValue === undefined ? undefined : lines(criteriaValue, 20, 2_048);
@@ -90,7 +90,6 @@ export const actions: Actions = {
       || repositoryConnectionId === undefined || !RESOURCE_ID.test(repositoryConnectionId)
       || runtimeProfileId === undefined || !RESOURCE_ID.test(runtimeProfileId)
       || provider === undefined || model === undefined
-      || repositoryRevision === undefined || !isGitRevision(repositoryRevision)
       || taskRequest === undefined || criteria === undefined || !pathsValid
       || (deadlineSeconds !== undefined && (!Number.isInteger(deadlineSeconds) || deadlineSeconds < 1 || deadlineSeconds > 86_400))
     ) {
@@ -98,6 +97,11 @@ export const actions: Actions = {
     }
     let task: DevelopmentTaskDto;
     try {
+      const context=requestContext(locals);
+      const profile=await getBff().getRuntimeProfile(runtimeProfileId,context);
+      if(profile.repositoryConnectionId!==repositoryConnectionId || profile.state!=="ready" || profile.support!=="operational" || !profile.activeRevisionId || !profile.activeRuntimeArtifactId) return fail(409,{action:"create",error:{requestId:locals.requestId,message:"Select a ready runtime for this repository. Open its profile for the next step."}});
+      const revision=await getBff().getRuntimeRevision(profile.activeRevisionId,context);
+      const repositoryRevision=revision.repositoryRevision;
       task = await getBff().createDevelopmentTask({
         idempotencyKey,
         request: {
@@ -106,6 +110,7 @@ export const actions: Actions = {
           runtimeProfileId,
           agent: { provider, agent: "coding-agent", model },
           request: taskRequest,
+          publishDraft: form.get("publishDraft") === "on",
           acceptanceCriteria: criteria,
           changeConstraints: { protectedPaths, allowTestEdits: form.get("allowTestEdits") === "on" },
           ...(deadlineSeconds === undefined ? {} : { deadlineSeconds }),

@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 // RepositoryService manages provider-neutral repository connections and snapshots.
 service RepositoryService {
+  rpc ConnectGithubRepository(ConnectGithubRepositoryRequest) returns (ConnectGithubRepositoryResponse);
   rpc ListRepositoryConnections(ListRepositoryConnectionsRequest) returns (ListRepositoryConnectionsResponse);
   rpc GetRepositoryConnection(GetRepositoryConnectionRequest) returns (GetRepositoryConnectionResponse);
   rpc CreateRepositoryConnection(CreateRepositoryConnectionRequest) returns (CreateRepositoryConnectionResponse);
@@ -134,4 +135,15 @@ message WatchRepositoriesResponse {
     RepositoryConnection repository_connection = 2;
     RepositorySnapshot repository_snapshot = 3;
   }
+}
+
+// Connect through the operator's existing GitHub App; identities are provider-observed.
+message ConnectGithubRepositoryRequest {
+  string idempotency_key = 1;
+  string owner = 2;
+  string name = 3;
+}
+
+message ConnectGithubRepositoryResponse {
+  RepositoryConnection repository_connection = 1;
 }

@@ -252,6 +252,15 @@ export function toBffError(error: unknown, fallbackRequestId?: string): BffError
       retryable: false,
     });
   }
+  const onboardingErrors: Record<string,string> = {
+    github_app_unconfigured:"Your operator must configure the existing GitHub App in this deployment.",
+    github_not_found:"The App cannot see this repository. Check its name and installation access.",
+    github_authentication_failed:"GitHub App authentication failed. Ask your operator to check the deployment configuration.",
+    github_access_denied:"The App lacks access. Review its repository installation and permissions.",
+    repository_connection_conflict:"This repository is already connected or the request conflicts with retained state. Open its existing connection.",
+  };
+  const onboardingMessage=onboardingErrors[error.details];
+  if(onboardingMessage) return new BffError({status:statusFor(error.code),reason:error.details,message:onboardingMessage,retryable:false,...(safeFallbackRequestId ? {requestId:safeFallbackRequestId} : {})});
   const detail = richDetail(error);
   const requestId = safeRequestId(detail?.requestId)
     ?? metadataRequestId(error.metadata)

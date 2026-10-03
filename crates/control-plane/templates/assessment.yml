@@ -1,4 +1,4 @@
-# ayni-orchestrator-template: ayni-managed-v2
+# ayni-orchestrator-template: ayni-managed-v3
 # Only reviewed default-branch code executes on the runner. Candidate code is isolated.
 name: Ayni Managed assessment
 on:

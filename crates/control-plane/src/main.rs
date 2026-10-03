@@ -60,6 +60,15 @@ async fn run() -> Result<(), io::Error> {
         state = state.with_model_catalog(catalog);
     }
 
+    state = state.with_github_onboarding();
+    let onboarding_state = state.clone();
+    let onboarding_task = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(15));
+        loop {
+            ticker.tick().await;
+            onboarding_state.reconcile_onboarding().await;
+        }
+    });
     let reconciliation_state = state.clone();
     let runtimes = RuntimeReconciler::from_environment(state.clone()).map_err(io::Error::other)?;
     let runtime_tasks = spawn_runtime_loops(runtimes);
@@ -102,6 +111,7 @@ async fn run() -> Result<(), io::Error> {
     tokio::try_join!(async { http.await.map_err(io::Error::other) }, grpc, custom)?;
     signal_task.abort();
     reconciliation_task.abort();
+    onboarding_task.abort();
     for task in runtime_tasks {
         task.abort();
     }

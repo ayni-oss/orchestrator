@@ -19,3 +19,12 @@ test("overview and task workflows meet automated accessibility checks", async ({
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await expectAccessible(page);
 });
+
+test("repository and runtime onboarding meet accessibility checks",async({page})=>{
+ for(const path of ["/repositories","/repositories/repository:1","/profiles/profile:1"]){
+  await page.goto(path);
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
+  await expectAccessible(page);
+ }
+ await page.screenshot({path:"/tmp/orchestrator-profile-ui.png",fullPage:true});
+});

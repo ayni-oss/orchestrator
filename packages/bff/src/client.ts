@@ -9,7 +9,13 @@ import {
 import {
   DevelopmentTaskServiceClient,
   ReviewServiceClient,
+  type InspectAyniRepositoryResponse, type GetRuntimeProfileRevisionResponse,
+  type ListAutomationInstallationsResponse, type InstallRepositoryAutomationResponse,
+  type ReconcileRuntimeProfileResponse, type ListCandidatesResponse,
+  type ListDevelopmentAttemptsResponse, type PublishCandidateResponse,
+
   type ListChangeRequestsResponse,
+  type GetChangeRequestResponse,
   type ListAssessmentsResponse,
   type ListEvidenceReferencesResponse,
   ProviderServiceClient,
@@ -18,6 +24,7 @@ import {
   type CancelDevelopmentTaskResponse,
   type CreateDevelopmentTaskResponse,
   type CreateRepositoryConnectionResponse,
+  type ConnectGithubRepositoryResponse,
   type CreateRuntimeProfileResponse,
   type GetDevelopmentTaskResponse,
   type GetRepositoryConnectionResponse,
@@ -30,6 +37,7 @@ import {
   type RetryDevelopmentTaskResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
+import { mapInspection, mapRevision, mapAutomation, mapCandidate, mapAttemptUsage } from "./onboarding.js";
 import { mapReview, mapAssessment, mapEvidence } from "./reviews.js";
 import { randomUUID } from "node:crypto";
 import type {
@@ -155,6 +163,45 @@ export class OrchestratorBff {
     this.#reviews.close();
   }
 
+
+  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string }, context: RequestContext) {
+    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository(input,m,o,c));
+    return mapRepositoryConnection(required(response.repositoryConnection));
+  }
+  async inspectAyniRepository(repositoryConnectionId:string, context:RequestContext) {
+    const response=await this.#unary<InspectAyniRepositoryResponse>(context,(m,o,c)=>this.#profiles.inspectAyniRepository({repositoryConnectionId},m,o,c));
+    return mapInspection(response);
+  }
+  async getRuntimeRevision(runtimeProfileRevisionId:string, context:RequestContext) {
+    const response=await this.#unary<GetRuntimeProfileRevisionResponse>(context,(m,o,c)=>this.#profiles.getRuntimeProfileRevision({runtimeProfileRevisionId},m,o,c));
+    return mapRevision(required(response.revision));
+  }
+  async listAutomation(runtimeProfileId:string, context:RequestContext) {
+    const response=await this.#unary<ListAutomationInstallationsResponse>(context,(m,o,c)=>this.#profiles.listAutomationInstallations({runtimeProfileId,page:page({pageSize:100})},m,o,c));
+    return { installations:response.automationInstallations.map(mapAutomation), page:pageDto(response.page) };
+  }
+  async installAutomation(runtimeProfileId:string, idempotencyKey:string, context:RequestContext) {
+    const response=await this.#unary<InstallRepositoryAutomationResponse>(context,(m,o,c)=>this.#profiles.installRepositoryAutomation({runtimeProfileId,idempotencyKey},m,o,c));
+    return mapAutomation(required(response.automationInstallation));
+  }
+  async reconcileProfile(runtimeProfileId:string, idempotencyKey:string, context:RequestContext) {
+    const response=await this.#unary<ReconcileRuntimeProfileResponse>(context,(m,o,c)=>this.#profiles.reconcileRuntimeProfile({runtimeProfileId,idempotencyKey},m,o,c));
+    return mapRuntimeProfile(required(response.runtimeProfile));
+  }
+  async taskProgress(developmentTaskId:string, context:RequestContext) {
+    const attempts=await this.#unary<ListDevelopmentAttemptsResponse>(context,(m,o,c)=>this.#tasks.listDevelopmentAttempts({developmentTaskId,page:page({pageSize:100})},m,o,c));
+    const candidates=await this.#unary<ListCandidatesResponse>(context,(m,o,c)=>this.#tasks.listCandidates({developmentTaskId,page:page({pageSize:100})},m,o,c));
+    const reviews=await Promise.all(candidates.candidates.map(candidate=>this.#unary<ListChangeRequestsResponse>(context,(m,o,c)=>this.#reviews.listChangeRequests({candidateId:candidate.id,page:page({pageSize:100})},m,o,c))));
+    return {attempts:attempts.attempts.map(a=>({...mapDevelopmentAttempt(a),usage:mapAttemptUsage(a)})), candidates:candidates.candidates.map(mapCandidate), reviews:reviews.flatMap(r=>r.changeRequests.map(mapReview))};
+  }
+  async publishCandidate(input: {candidateId:string;idempotencyKey:string;title:string;body:string;baseBranch:string},context:RequestContext) {
+    const response=await this.#unary<PublishCandidateResponse>(context,(m,o,c)=>this.#reviews.publishCandidate({...input,draft:true},m,o,c));
+    return mapReview(required(response.changeRequest));
+  }
+  async getReview(changeRequestId:string,context:RequestContext) {
+    const response=await this.#unary<GetChangeRequestResponse>(context,(m,o,c)=>this.#reviews.getChangeRequest({changeRequestId},m,o,c));
+    return mapReview(required(response.changeRequest));
+  }
   async listReviews(selection: PageInput, context: RequestContext) {
     const response = await this.#unary<ListChangeRequestsResponse>(context, (metadata, options, callback) =>
       this.#reviews.listChangeRequests({ page: page(selection) }, metadata, options, callback));

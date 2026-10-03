@@ -8,6 +8,7 @@ mod grpc;
 mod grpc_access;
 pub(crate) mod managed_environment;
 mod model_catalog;
+mod onboarding;
 mod runtime_coding;
 mod runtime_configuration;
 mod runtime_kubernetes;
@@ -376,6 +377,7 @@ pub enum ConfigurationError {
 pub struct AppState {
     pub(crate) store: StoreHandle,
     model_catalog: Option<ModelCatalog>,
+    pub(crate) source: Option<Arc<runtime_source::SourceClient>>,
 }
 
 impl AppState {
@@ -394,6 +396,7 @@ impl AppState {
         Ok(Self {
             store: Arc::new(Mutex::new(store)),
             model_catalog: None,
+            source: None,
         })
     }
 
@@ -520,6 +523,7 @@ mod tests {
 
     fn state() -> Result<AppState, CleanStoreError> {
         Ok(AppState {
+            source: None,
             store: Arc::new(Mutex::new(CleanStore::in_memory()?)),
             model_catalog: Some(ModelCatalog::fixed(vec![AvailableModel {
                 id: "gpt-5".into(),

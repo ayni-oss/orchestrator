@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PollStatus from "$lib/components/poll-status.svelte";
   import type { PageProps } from "./$types";
   import CodeValue from "$lib/components/code-value.svelte";
   import Feedback from "$lib/components/feedback.svelte";
@@ -10,12 +11,14 @@
 <svelte:head><title>Reviews · Ayni Orchestrator</title></svelte:head>
 <PageHeader eyebrow="Review" title="Pull requests and assessments" description="Exact-head evidence is authoritative. Comments and checks are summaries of that evidence." />
 {#if data.error}<Feedback kind="error" title="Reviews unavailable" message={data.error.message} />{/if}
+<PollStatus />
 <div class="space-y-4">
   {#each data.reviews as review (review.id)}
     <section class="space-y-3 rounded-lg border p-4">
       <h2 class="font-semibold"><a href={`?page=${encodeURIComponent(data.pageToken ?? "")}&review=${encodeURIComponent(review.id)}`}>{review.id}</a> · {words(review.state)}</h2>
       <CodeValue value={review.head} />
       {#if review.url}<a href={review.url} rel="noreferrer">Open pull request</a>{/if}
+      {#if review.failure}<p>{review.failure.message} {review.failure.remediation}</p>{/if}
       {#if review.readiness}
         <p>Policy: {words(review.readiness.policy)}. Readiness: {words(review.readiness.state)}.</p>
         <p>Source: {review.readiness.source}. {words(review.readiness.diagnostic)}</p>
@@ -32,7 +35,9 @@
       <article class="space-y-2 rounded-lg border p-4">
         <h3>{words(assessment.conclusion)} · {assessment.head === data.review.head ? "current head" : "historical head"}</h3>
         <CodeValue value={assessment.head} />
-        {#if assessment.managed}<p>{assessment.managed.completed} targets completed; {assessment.managed.skipped} skipped. {assessment.managed.warnings} warnings; {assessment.managed.failures} failures.</p>{/if}
+        {#if assessment.producer}<p>Producer: {assessment.producer}</p>{/if}
+        <p>Profile revision: <CodeValue value={assessment.profileRevision} /></p>
+        {#if assessment.managed}<p>Runtime digest: <CodeValue value={assessment.managed.runtimeDigest} /></p><p>Manifest digest: <CodeValue value={assessment.managed.manifestDigest} /></p><p>{assessment.managed.completed} targets completed; {assessment.managed.skipped} skipped. {assessment.managed.warnings} warnings; {assessment.managed.failures} failures.</p>{/if}
         {#if assessment.workflowUrl}<a href={assessment.workflowUrl} rel="noreferrer">Workflow and retained findings</a>{/if}
         <a class="ml-4" href={`?page=${encodeURIComponent(data.pageToken ?? "")}&history=${encodeURIComponent(data.historyToken ?? "")}&review=${encodeURIComponent(data.review.id)}&assessment=${encodeURIComponent(assessment.id)}`}>Evidence identity</a>
       </article>

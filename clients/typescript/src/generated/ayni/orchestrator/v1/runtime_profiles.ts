@@ -561,6 +561,30 @@ export interface WatchRuntimeProfilesResponse {
     | undefined;
 }
 
+export interface InspectAyniRepositoryRequest {
+  repositoryConnectionId: string;
+}
+
+/** Safe onboarding observations. No credential values or private artifact bytes. */
+export interface InspectAyniRepositoryResponse {
+  repositorySnapshotId: string;
+  repositoryRevision: string;
+  lockFingerprint: string;
+  ayniVersion: string;
+  workflowTemplateVersion: string;
+  ociRepository: string;
+  policyPresent: boolean;
+  lockCompatible: boolean;
+  trustPolicyPinned: boolean;
+  reason: string;
+  workflows: WorkflowProposal[];
+}
+
+export interface WorkflowProposal {
+  path: string;
+  contents: string;
+}
+
 function createBaseRuntimeProfile(): RuntimeProfile {
   return {
     id: "",
@@ -4719,9 +4743,457 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
   },
 };
 
+function createBaseInspectAyniRepositoryRequest(): InspectAyniRepositoryRequest {
+  return { repositoryConnectionId: "" };
+}
+
+export const InspectAyniRepositoryRequest: MessageFns<InspectAyniRepositoryRequest> = {
+  encode(message: InspectAyniRepositoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(10).string(message.repositoryConnectionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InspectAyniRepositoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInspectAyniRepositoryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): InspectAyniRepositoryRequest {
+    return {
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+    };
+  },
+
+  toJSON(message: InspectAyniRepositoryRequest): unknown {
+    const obj: any = {};
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<InspectAyniRepositoryRequest>): InspectAyniRepositoryRequest {
+    return InspectAyniRepositoryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<InspectAyniRepositoryRequest>): InspectAyniRepositoryRequest {
+    const message = createBaseInspectAyniRepositoryRequest();
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    return message;
+  },
+};
+
+function createBaseInspectAyniRepositoryResponse(): InspectAyniRepositoryResponse {
+  return {
+    repositorySnapshotId: "",
+    repositoryRevision: "",
+    lockFingerprint: "",
+    ayniVersion: "",
+    workflowTemplateVersion: "",
+    ociRepository: "",
+    policyPresent: false,
+    lockCompatible: false,
+    trustPolicyPinned: false,
+    reason: "",
+    workflows: [],
+  };
+}
+
+export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResponse> = {
+  encode(message: InspectAyniRepositoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositorySnapshotId !== "") {
+      writer.uint32(10).string(message.repositorySnapshotId);
+    }
+    if (message.repositoryRevision !== "") {
+      writer.uint32(18).string(message.repositoryRevision);
+    }
+    if (message.lockFingerprint !== "") {
+      writer.uint32(26).string(message.lockFingerprint);
+    }
+    if (message.ayniVersion !== "") {
+      writer.uint32(34).string(message.ayniVersion);
+    }
+    if (message.workflowTemplateVersion !== "") {
+      writer.uint32(42).string(message.workflowTemplateVersion);
+    }
+    if (message.ociRepository !== "") {
+      writer.uint32(50).string(message.ociRepository);
+    }
+    if (message.policyPresent !== false) {
+      writer.uint32(56).bool(message.policyPresent);
+    }
+    if (message.lockCompatible !== false) {
+      writer.uint32(64).bool(message.lockCompatible);
+    }
+    if (message.trustPolicyPinned !== false) {
+      writer.uint32(72).bool(message.trustPolicyPinned);
+    }
+    if (message.reason !== "") {
+      writer.uint32(82).string(message.reason);
+    }
+    for (const v of message.workflows) {
+      WorkflowProposal.encode(v!, writer.uint32(90).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InspectAyniRepositoryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseInspectAyniRepositoryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositorySnapshotId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryRevision = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.lockFingerprint = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.ayniVersion = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.workflowTemplateVersion = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.ociRepository = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.policyPresent = reader.bool();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.lockCompatible = reader.bool();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.trustPolicyPinned = reader.bool();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.reason = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.workflows.push(WorkflowProposal.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): InspectAyniRepositoryResponse {
+    return {
+      repositorySnapshotId: isSet(object.repositorySnapshotId)
+        ? globalThis.String(object.repositorySnapshotId)
+        : isSet(object.repository_snapshot_id)
+        ? globalThis.String(object.repository_snapshot_id)
+        : "",
+      repositoryRevision: isSet(object.repositoryRevision)
+        ? globalThis.String(object.repositoryRevision)
+        : isSet(object.repository_revision)
+        ? globalThis.String(object.repository_revision)
+        : "",
+      lockFingerprint: isSet(object.lockFingerprint)
+        ? globalThis.String(object.lockFingerprint)
+        : isSet(object.lock_fingerprint)
+        ? globalThis.String(object.lock_fingerprint)
+        : "",
+      ayniVersion: isSet(object.ayniVersion)
+        ? globalThis.String(object.ayniVersion)
+        : isSet(object.ayni_version)
+        ? globalThis.String(object.ayni_version)
+        : "",
+      workflowTemplateVersion: isSet(object.workflowTemplateVersion)
+        ? globalThis.String(object.workflowTemplateVersion)
+        : isSet(object.workflow_template_version)
+        ? globalThis.String(object.workflow_template_version)
+        : "",
+      ociRepository: isSet(object.ociRepository)
+        ? globalThis.String(object.ociRepository)
+        : isSet(object.oci_repository)
+        ? globalThis.String(object.oci_repository)
+        : "",
+      policyPresent: isSet(object.policyPresent)
+        ? globalThis.Boolean(object.policyPresent)
+        : isSet(object.policy_present)
+        ? globalThis.Boolean(object.policy_present)
+        : false,
+      lockCompatible: isSet(object.lockCompatible)
+        ? globalThis.Boolean(object.lockCompatible)
+        : isSet(object.lock_compatible)
+        ? globalThis.Boolean(object.lock_compatible)
+        : false,
+      trustPolicyPinned: isSet(object.trustPolicyPinned)
+        ? globalThis.Boolean(object.trustPolicyPinned)
+        : isSet(object.trust_policy_pinned)
+        ? globalThis.Boolean(object.trust_policy_pinned)
+        : false,
+      reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
+      workflows: globalThis.Array.isArray(object?.workflows)
+        ? object.workflows.map((e: any) => WorkflowProposal.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: InspectAyniRepositoryResponse): unknown {
+    const obj: any = {};
+    if (message.repositorySnapshotId !== "") {
+      obj.repositorySnapshotId = message.repositorySnapshotId;
+    }
+    if (message.repositoryRevision !== "") {
+      obj.repositoryRevision = message.repositoryRevision;
+    }
+    if (message.lockFingerprint !== "") {
+      obj.lockFingerprint = message.lockFingerprint;
+    }
+    if (message.ayniVersion !== "") {
+      obj.ayniVersion = message.ayniVersion;
+    }
+    if (message.workflowTemplateVersion !== "") {
+      obj.workflowTemplateVersion = message.workflowTemplateVersion;
+    }
+    if (message.ociRepository !== "") {
+      obj.ociRepository = message.ociRepository;
+    }
+    if (message.policyPresent !== false) {
+      obj.policyPresent = message.policyPresent;
+    }
+    if (message.lockCompatible !== false) {
+      obj.lockCompatible = message.lockCompatible;
+    }
+    if (message.trustPolicyPinned !== false) {
+      obj.trustPolicyPinned = message.trustPolicyPinned;
+    }
+    if (message.reason !== "") {
+      obj.reason = message.reason;
+    }
+    if (message.workflows?.length) {
+      obj.workflows = message.workflows.map((e) => WorkflowProposal.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<InspectAyniRepositoryResponse>): InspectAyniRepositoryResponse {
+    return InspectAyniRepositoryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<InspectAyniRepositoryResponse>): InspectAyniRepositoryResponse {
+    const message = createBaseInspectAyniRepositoryResponse();
+    message.repositorySnapshotId = object.repositorySnapshotId ?? "";
+    message.repositoryRevision = object.repositoryRevision ?? "";
+    message.lockFingerprint = object.lockFingerprint ?? "";
+    message.ayniVersion = object.ayniVersion ?? "";
+    message.workflowTemplateVersion = object.workflowTemplateVersion ?? "";
+    message.ociRepository = object.ociRepository ?? "";
+    message.policyPresent = object.policyPresent ?? false;
+    message.lockCompatible = object.lockCompatible ?? false;
+    message.trustPolicyPinned = object.trustPolicyPinned ?? false;
+    message.reason = object.reason ?? "";
+    message.workflows = object.workflows?.map((e) => WorkflowProposal.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseWorkflowProposal(): WorkflowProposal {
+  return { path: "", contents: "" };
+}
+
+export const WorkflowProposal: MessageFns<WorkflowProposal> = {
+  encode(message: WorkflowProposal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.path !== "") {
+      writer.uint32(10).string(message.path);
+    }
+    if (message.contents !== "") {
+      writer.uint32(18).string(message.contents);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WorkflowProposal {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWorkflowProposal();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.path = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.contents = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WorkflowProposal {
+    return {
+      path: isSet(object.path) ? globalThis.String(object.path) : "",
+      contents: isSet(object.contents) ? globalThis.String(object.contents) : "",
+    };
+  },
+
+  toJSON(message: WorkflowProposal): unknown {
+    const obj: any = {};
+    if (message.path !== "") {
+      obj.path = message.path;
+    }
+    if (message.contents !== "") {
+      obj.contents = message.contents;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WorkflowProposal>): WorkflowProposal {
+    return WorkflowProposal.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WorkflowProposal>): WorkflowProposal {
+    const message = createBaseWorkflowProposal();
+    message.path = object.path ?? "";
+    message.contents = object.contents ?? "";
+    return message;
+  },
+};
+
 /** RuntimeProfileService manages versioned runtime configuration and its reconciled resources. */
 export type RuntimeProfileServiceService = typeof RuntimeProfileServiceService;
 export const RuntimeProfileServiceService = {
+  inspectAyniRepository: {
+    path: "/ayni.orchestrator.v1.RuntimeProfileService/InspectAyniRepository" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: InspectAyniRepositoryRequest): Buffer =>
+      Buffer.from(InspectAyniRepositoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): InspectAyniRepositoryRequest => InspectAyniRepositoryRequest.decode(value),
+    responseSerialize: (value: InspectAyniRepositoryResponse): Buffer =>
+      Buffer.from(InspectAyniRepositoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): InspectAyniRepositoryResponse => InspectAyniRepositoryResponse.decode(value),
+  },
   listRuntimeProfiles: {
     path: "/ayni.orchestrator.v1.RuntimeProfileService/ListRuntimeProfiles" as const,
     requestStream: false as const,
@@ -4868,6 +5340,7 @@ export const RuntimeProfileServiceService = {
 } as const;
 
 export interface RuntimeProfileServiceServer extends UntypedServiceImplementation {
+  inspectAyniRepository: handleUnaryCall<InspectAyniRepositoryRequest, InspectAyniRepositoryResponse>;
   listRuntimeProfiles: handleUnaryCall<ListRuntimeProfilesRequest, ListRuntimeProfilesResponse>;
   getRuntimeProfile: handleUnaryCall<GetRuntimeProfileRequest, GetRuntimeProfileResponse>;
   createRuntimeProfile: handleUnaryCall<CreateRuntimeProfileRequest, CreateRuntimeProfileResponse>;
@@ -4883,6 +5356,21 @@ export interface RuntimeProfileServiceServer extends UntypedServiceImplementatio
 }
 
 export interface RuntimeProfileServiceClient extends Client {
+  inspectAyniRepository(
+    request: InspectAyniRepositoryRequest,
+    callback: (error: ServiceError | null, response: InspectAyniRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  inspectAyniRepository(
+    request: InspectAyniRepositoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: InspectAyniRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  inspectAyniRepository(
+    request: InspectAyniRepositoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: InspectAyniRepositoryResponse) => void,
+  ): ClientUnaryCall;
   listRuntimeProfiles(
     request: ListRuntimeProfilesRequest,
     callback: (error: ServiceError | null, response: ListRuntimeProfilesResponse) => void,

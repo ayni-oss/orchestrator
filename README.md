@@ -38,6 +38,7 @@ presentation; digest-verified evidence and OCI digests are retained identities.
 | [Architecture](docs/architecture.md) | Target shared/profile component and resource model |
 | [Protocol contract](proto/README.md) | Target clean-v1 gRPC resources and compatibility reset |
 | [Local development](docs/local-development.md) | Target Docker Desktop workflow and validation boundary |
+| [Operator UI and Kubernetes onboarding](docs/operator-onboarding.md) | Existing App, setup PR, signed environment, request and draft PR flow |
 | [Operations](docs/operations.md) | Target readiness, recovery, retention, and evidence operations |
 | [Roadmap](ROADMAP.md) | Linked delivery issues and follow-ups |
 | [Local Helm deployment decision](docs/decisions/0006-local-helm-chart.md) | Existing local chart/deployment boundary; worker details are historical until revised |

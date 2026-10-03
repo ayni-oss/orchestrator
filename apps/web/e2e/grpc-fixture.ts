@@ -2,6 +2,10 @@ import { createServer } from "node:http";
 import { Server, ServerCredentials, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
   DevelopmentAttemptState,
+  ReviewServiceService,
+  AutomationInstallationState,
+  CandidateState,
+  ChangeRequestState,
   DevelopmentTaskServiceService,
   DevelopmentTaskState,
   ModelUsageCollectionStatus,
@@ -86,6 +90,8 @@ tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-
 
 const page = { nextPageToken: "", snapshotCursor: "10" };
 const repositoryService: UntypedServiceImplementation = {
+  connectGithubRepository(_call,callback){callback(null,{repositoryConnection:repository});},
+
   listRepositoryConnections(_call, callback) { callback(null, { repositoryConnections: [repository], page }); },
   getRepositoryConnection(_call, callback) { callback(null, { repositoryConnection: repository }); },
   createRepositoryConnection(call, callback) {
@@ -97,7 +103,16 @@ const repositoryService: UntypedServiceImplementation = {
   watchRepositories(call) { call.write({ cursor: "10", update: { $case: "repositoryConnection", repositoryConnection: repository } }); call.end(); },
 };
 
+let installation:any;
 const runtimeProfileService: UntypedServiceImplementation = {
+  inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator",workflows:[{path:".github/workflows/ayni-environment.yml",contents:"name: Build signed environment"}]});},
+  createRuntimeProfile(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profile});},
+  installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml",assessmentWorkflowPath:".github/workflows/ayni-managed-assessment.yml",triggerWorkflowPath:".github/workflows/ayni-assessment-request.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
+  reconcileRuntimeProfile(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profile});},
+
+  getRuntimeProfileRevision(_call,callback) { callback(null,{revision:{id:"profile-revision:1",runtimeProfileId:profileId,repositoryRevision:revision,repositorySnapshotId:"snapshot:1",revisionNumber:"1",resourceVersion:"1",configuration:{$case:"ayniManaged",ayniManaged:{lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni"}}}}); },
+  listAutomationInstallations(_call,callback) { callback(null,{automationInstallations:installation ? [installation] : [],page}); },
+
   listRuntimeProfiles(call, callback) {
     const profiles = call.request.repositoryConnectionId === undefined || call.request.repositoryConnectionId === repositoryId ? [profile] : [];
     callback(null, { runtimeProfiles: profiles, page });
@@ -111,6 +126,9 @@ const providerService: UntypedServiceImplementation = {
 };
 
 const taskService: UntypedServiceImplementation = {
+  listDevelopmentAttempts(_call,callback) { callback(null,{attempts:[],page}); },
+  listCandidates(call,callback) { const t=tasks.get(call.request.developmentTaskId); callback(null,{candidates:t?.snapshot.publishDraft ? [{id:"candidate:1",repositoryConnectionId:repositoryId,resourceVersion:"1",changedPaths:[],developmentAttemptId:"attempt:1",state:CandidateState.CANDIDATE_STATE_AVAILABLE,baseRevision:revision,identity:{identity:{$case:"git",git:{commitSha:"d".repeat(40)}}},codingAdvisory:"Coding-time checks are advisory."}] : [],page}); },
+
   listDevelopmentTasks(_call, callback) { callback(null, { developmentTasks: [...tasks.values()], page }); },
   getDevelopmentTask(call, callback) { callback(null, { developmentTask: tasks.get(call.request.developmentTaskId) ?? tasks.get(taskId) }); },
   createDevelopmentTask(call, callback) {
@@ -119,6 +137,8 @@ const taskService: UntypedServiceImplementation = {
     const created = task(id, DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED, request.request);
     created.snapshot = {
       ...snapshot(request.request, request.repositoryRevision, request.agent.model),
+      publishDraft:request.publishDraft,
+      publicationBaseBranch:"main",
       agent: request.agent,
       acceptanceCriteria: request.acceptanceCriteria,
       changeConstraints: request.changeConstraints,
@@ -149,12 +169,16 @@ const taskService: UntypedServiceImplementation = {
 };
 
 const grpc = new Server();
+grpc.addService(ReviewServiceService, {listChangeRequests(_call:any,callback:any){callback(null,{changeRequests:[{id:"review:1",resourceVersion:"1",candidateId:"candidate:1",repositoryConnectionId:repositoryId,headRevision:"d".repeat(40),baseRevision:revision,state:ChangeRequestState.CHANGE_REQUEST_STATE_DRAFT,provider:{provider:{$case:"github",github:{repositoryId:"123",pullRequestNumber:"9",htmlUrl:"https://github.com/ayni-oss/sandbox/pull/9"}}}}],page});}});
 grpc.addService(RepositoryServiceService, repositoryService);
 grpc.addService(RuntimeProfileServiceService, runtimeProfileService);
 grpc.addService(ProviderServiceService, providerService);
 grpc.addService(DevelopmentTaskServiceService, taskService);
 grpc.bindAsync("127.0.0.1:50061", ServerCredentials.createInsecure(), (error) => { if (error) throw error; });
-const health = createServer((_request, response) => { response.writeHead(200, { "content-type": "text/plain" }); response.end("ok"); });
+const health = createServer((request, response) => {
+ const url=new URL(request.url ?? "/","http://127.0.0.1");
+ if(request.method==="POST" && url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
+ response.writeHead(200, { "content-type": "text/plain" }); response.end("ok"); });
 health.listen(50062, "127.0.0.1");
 function shutdown(): void { health.close(); grpc.tryShutdown(() => process.exit(0)); }
 process.on("SIGTERM", shutdown);

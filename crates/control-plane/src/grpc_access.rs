@@ -432,7 +432,9 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "ListRepositorySnapshots"
         | "GetRepositorySnapshot" => (REPOSITORIES_READ, MAX_UNARY_DEADLINE),
         "WatchRepositories" => (REPOSITORIES_READ, MAX_WATCH_DEADLINE),
-        "CreateRepositoryConnection" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
+        "CreateRepositoryConnection" | "ConnectGithubRepository" => {
+            (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE)
+        }
         "ListRuntimeProfiles"
         | "GetRuntimeProfile"
         | "ListRuntimeProfileRevisions"
@@ -442,9 +444,10 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "ListAutomationInstallations"
         | "GetAutomationInstallation" => (PROFILES_READ, MAX_UNARY_DEADLINE),
         "WatchRuntimeProfiles" => (PROFILES_READ, MAX_WATCH_DEADLINE),
-        "CreateRuntimeProfile" | "InstallRepositoryAutomation" | "ReconcileRuntimeProfile" => {
-            (PROFILES_WRITE, MAX_UNARY_DEADLINE)
-        }
+        "InspectAyniRepository"
+        | "CreateRuntimeProfile"
+        | "InstallRepositoryAutomation"
+        | "ReconcileRuntimeProfile" => (PROFILES_WRITE, MAX_UNARY_DEADLINE),
         "ListProviderModels" => (PROVIDER_MODELS_READ, MAX_UNARY_DEADLINE),
         "ListDevelopmentTasks"
         | "GetDevelopmentTask"

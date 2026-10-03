@@ -69,6 +69,7 @@ export interface RuntimeProfileDto {
   kind: RuntimeProfileKindDto;
   support: RuntimeProfileSupportDto;
   state: RuntimeProfileStateDto;
+  reconciliation: Array<{key:string;value:string}>;
   activeRevisionId?: string;
   activeRuntimeArtifactId?: string;
   failure?: ResourceFailureDto;
@@ -142,6 +143,7 @@ export interface DevelopmentTaskInputDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineSeconds?: number;
+  publishDraft?: boolean;
 }
 
 export interface FrozenRepositoryDto {
@@ -168,6 +170,7 @@ export interface DevelopmentSnapshotDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineAt?: string;
+  publishDraft: boolean;
 }
 
 export type DevelopmentTaskStateDto =

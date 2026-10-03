@@ -1,0 +1,67 @@
+# ayni-orchestrator-template: ayni-managed-v3
+name: Ayni environment
+on:
+  push:
+    branches: [@@DEFAULT_BRANCH@@]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: ayni-environment-${{ github.repository_id }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.event.repository.private == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Ayni
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --output "$RUNNER_TEMP/ayni.tar.gz" \
+            https://github.com/ayni-oss/ayni/releases/download/ayni-v@@AYNI_VERSION@@/ayni-ayni-v@@AYNI_VERSION@@-x86_64-unknown-linux-gnu.tar.gz
+          echo "@@AYNI_SHA256@@  $RUNNER_TEMP/ayni.tar.gz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/ayni-bin"
+          tar -xzf "$RUNNER_TEMP/ayni.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/ayni-bin"
+          echo "$RUNNER_TEMP/ayni-bin" >> "$GITHUB_PATH"
+      - name: Build signed environment
+        shell: bash
+        env:
+          AYNI_ENV_CERTIFICATE_SIGNING_KEY: ${{ secrets.AYNI_ENV_CERTIFICATE_SIGNING_KEY }}
+          AYNI_ENV_CERTIFICATE_KEY_ID: ${{ secrets.AYNI_ENV_CERTIFICATE_KEY_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$AYNI_ENV_CERTIFICATE_SIGNING_KEY" || -z "$AYNI_ENV_CERTIFICATE_KEY_ID" ]]; then
+            echo 'Configure both producer signing values and commit the matching public trust policy before building.' >&2
+            exit 1
+          fi
+          fingerprint=$(jq -er '.fingerprint' .ayni.lock)
+          [[ "$fingerprint" =~ ^sha256:[a-f0-9]{64}$ ]]
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-ayni:lock-${fingerprint#sha256:}"
+          ayni env build --executor-image '@@AYNI_EXECUTOR_IMAGE@@' --tag "$image"
+          printf '%s\n' "$image" > "$RUNNER_TEMP/environment-image"
+      - name: Publish private environment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          image=$(cat "$RUNNER_TEMP/environment-image")
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          package=${GITHUB_REPOSITORY#*/}-ayni
+          # Existing public packages must never receive private source-derived layers.
+          owner_type=$(gh api "users/$owner" --jq .type)
+          namespace=users
+          [[ "$owner_type" != Organization ]] || namespace=orgs
+          if gh api "$namespace/$owner/packages/container/${package,,}" > "$RUNNER_TEMP/package.json" 2> "$RUNNER_TEMP/package-error"; then
+            [[ "$(jq -r .visibility "$RUNNER_TEMP/package.json")" == private ]]
+          else
+            grep -q '(HTTP 404)' "$RUNNER_TEMP/package-error"
+          fi
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null
+          docker push "$image"

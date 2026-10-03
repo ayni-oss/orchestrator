@@ -1,6 +1,6 @@
 # Managed PR assessments
 
-Repository automation version `ayni-managed-v2` installs two reviewed workflows.
+Repository automation version `ayni-managed-v3` installs the environment build and two assessment workflows.
 `Ayni assessment request` observes opened, reopened, synchronize, and
 ready-for-review events. It executes no checkout or candidate program.
 `Ayni Managed assessment` runs from the default branch on `workflow_run`, with
@@ -10,7 +10,7 @@ from an immutable private worker image. Neither workflow uses
 
 ## Configuration
 
-The profile must already have an installed v2 automation and an admitted signed
+The profile must already have an installed v3 automation and an admitted signed
 Linux/amd64 environment. Add this operator-owned configuration to its existing
 `runtime.profiles` entry:
 

@@ -12,7 +12,8 @@ export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
   if (!RESOURCE_ID.test(params.taskId)) return { task: undefined, requestId: locals.requestId, actionKeys, error: { status: 400, reason: "invalid_identifier", message: "The task identifier is invalid.", requestId: locals.requestId, retryable: false } };
   try {
     const task = await getBff().getDevelopmentTask(params.taskId, requestContext(locals));
-    return { task, requestId: locals.requestId, actionKeys };
+    const progress=await getBff().taskProgress(params.taskId,requestContext(locals));
+    return { task, progress, requestId: locals.requestId, actionKeys };
   } catch (error) {
     return { task: undefined, requestId: locals.requestId, actionKeys, error: safeError(error, locals.requestId) };
   }

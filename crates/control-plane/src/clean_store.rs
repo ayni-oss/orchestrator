@@ -166,6 +166,7 @@ include!("clean_store/automation_tasks.rs");
 include!("clean_store/review.rs");
 include!("clean_store/assessment_import.rs");
 include!("clean_store/readiness.rs");
+include!("clean_store/onboarding.rs");
 include!("clean_store/validation.rs");
 include!("clean_store/transitions_schema.rs");
 include!("clean_store/payloads.rs");
@@ -220,7 +221,7 @@ mod tests {
                             runtime_source_digest: None,
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: "0.4.0".to_owned(),
-                            workflow_template_version: "ayni-managed-v2".to_owned(),
+                            workflow_template_version: "ayni-managed-v3".to_owned(),
                             oci_repository: "ghcr.io/ayni-oss/sandbox/environment".to_owned(),
                         },
                     ),
@@ -303,7 +304,10 @@ mod tests {
         else {
             return Err(CleanStoreError::CorruptState);
         };
-        assert!(github.environment_workflow_path.is_empty());
+        assert_eq!(
+            github.environment_workflow_path,
+            crate::onboarding_templates::ENVIRONMENT_WORKFLOW_PATH
+        );
         assert_eq!(
             github.assessment_workflow_path,
             ".github/workflows/ayni-managed-assessment.yml"
@@ -319,6 +323,7 @@ mod tests {
         v1::CreateDevelopmentTaskRequest {
             idempotency_key: key.to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                publish_draft: false,
                 repository_connection_id: repository_id.to_owned(),
                 repository_revision: REVISION.to_owned(),
                 runtime_profile_id: profile_id.to_owned(),

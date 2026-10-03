@@ -35,7 +35,7 @@ pub fn setup_pull_request(
     if profile_id.is_empty() || profile_id.len() > 256 {
         return Err(SetupRequestError::InvalidProfileIdentity);
     }
-    if files.files.len() != 2
+    if files.files.len() != 3
         || !files
             .files
             .contains_key(crate::onboarding_templates::ASSESSMENT_WORKFLOW_PATH)
@@ -44,10 +44,10 @@ pub fn setup_pull_request(
     }
     let digest = Sha256::digest(format!("ayni.setup-pr.v1\0{profile_id}\0{}", files.version));
     Ok(SetupPullRequest {
-        branch: format!("ayni-orchestrator/setup-{digest:x}")[..48].to_owned(),
+        branch: format!("setup/runtime-{digest:x}")[..48].to_owned(),
         base_branch: base_branch.to_owned(),
         title: "feat(ayni): install managed environment workflows",
-        body: "This controller-owned setup PR installs the reviewed Ayni Managed assessment workflow. Review and merge it to enable managed assessment.",
+        body: "This controller-owned setup PR installs the reviewed environment producer and managed assessment workflows. Review and merge it to enable managed assessment.",
         files,
     })
 }
@@ -74,7 +74,7 @@ mod tests {
         .unwrap();
         assert_eq!(first.branch, second.branch);
         assert_ne!(first.branch, first.base_branch);
-        assert!(first.branch.starts_with("ayni-orchestrator/setup-"));
-        assert_eq!(first.files.files.len(), 2);
+        assert!(first.branch.starts_with("setup/runtime-"));
+        assert_eq!(first.files.files.len(), 3);
     }
 }

@@ -521,3 +521,99 @@ fn service_events_are_monotonic_and_resumable() -> Result<(), CleanStoreError> {
     assert_eq!(high_water, 0);
     Ok(())
 }
+
+#[test]
+fn requested_draft_publication_is_frozen_and_resumes_once_after_restart()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("publication.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let mut request = task_request(&repository.id, &profile.id, "auto-task");
+    request.request.as_mut().ok_or("request")?.publish_draft = true;
+    let (task, attempt) = store.create_development_task("auto-task", &request)?;
+    let frozen = task.snapshot.as_ref().ok_or("snapshot")?;
+    assert!(frozen.publish_draft);
+    assert_eq!(frozen.publication_base_branch, "main");
+    let running = store.transition_attempt(
+        &attempt.id,
+        attempt.resource_version,
+        v1::DevelopmentAttemptState::Running,
+        None,
+    )?;
+    store.transition_attempt(
+        &attempt.id,
+        running.resource_version,
+        v1::DevelopmentAttemptState::Succeeded,
+        None,
+    )?;
+    let candidate = store.record_candidate(v1::Candidate {
+        development_attempt_id: attempt.id,
+        repository_connection_id: repository.id,
+        base_revision: REVISION.into(),
+        identity: Some(v1::CandidateIdentity {
+            identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
+                commit_sha: SECOND_REVISION.into(),
+            })),
+        }),
+        state: v1::CandidateState::Available as i32,
+        changed_paths: vec!["src/lib.rs".into()],
+        ..Default::default()
+    })?;
+    drop(store);
+    let mut store = CleanStore::open(&path, 3)?;
+    store.schedule_requested_publications()?;
+    store.schedule_requested_publications()?;
+    let actions = store.pending_external_actions("PublishCandidate")?;
+    assert_eq!(actions.len(), 1);
+    let publication = v1::PublishCandidateRequest::decode(actions[0].request_payload.as_slice())?;
+    assert_eq!(publication.candidate_id, candidate.id);
+    assert_eq!(publication.base_branch, "main");
+    assert!(publication.draft);
+    assert_eq!(store.development_task(&task.id)?.snapshot, task.snapshot);
+    Ok(())
+}
+
+#[test]
+fn setup_observation_recovers_from_provider_failure() -> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let repository = store
+        .create_repository_connection("setup-repo", &repository_request("setup-repo", "123"))?;
+    let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
+    let (profile, _) = store.create_runtime_profile(
+        "setup-profile",
+        &profile_request("setup-profile", &repository.id, &snapshot.id),
+    )?;
+    let installation = store.install_repository_automation(
+        "setup-recovery",
+        &v1::InstallRepositoryAutomationRequest {
+            idempotency_key: "setup-recovery".into(),
+            runtime_profile_id: profile.id,
+        },
+    )?;
+    store.observe_setup(
+        &installation.id,
+        Some(8),
+        v1::AutomationInstallationState::Degraded,
+        Some("github_unavailable"),
+    )?;
+    store.observe_setup(
+        &installation.id,
+        Some(8),
+        v1::AutomationInstallationState::SetupPrOpen,
+        None,
+    )?;
+    store.observe_setup(
+        &installation.id,
+        Some(8),
+        v1::AutomationInstallationState::Installed,
+        None,
+    )?;
+    let observed = store.automation_installation(&installation.id)?;
+    assert_eq!(
+        observed.state,
+        v1::AutomationInstallationState::Installed as i32
+    );
+    assert!(observed.failure.is_none());
+    Ok(())
+}
