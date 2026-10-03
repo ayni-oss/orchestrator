@@ -11,7 +11,7 @@ fn report(revision: &str) -> VerificationReport {
         runtime: VerifiedRuntime {
             lock_fingerprint: format!("sha256:{}", "c".repeat(64)),
             platform: "linux/amd64".into(),
-            ayni_version: "0.14.3".into(),
+            ayni_version: "0.14.4".into(),
             certificate_key_id: "test-producer".into(),
             metadata_digest: DIGEST.into(),
             protected_content_root: DIGEST.into(),

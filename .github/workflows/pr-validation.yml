@@ -240,9 +240,9 @@ jobs:
 
       - name: Install Ayni
         env:
-          AYNI_VERSION: 0.14.3
-          AYNI_ARCHIVE: ayni-ayni-v0.14.3-x86_64-unknown-linux-gnu.tar.gz
-          AYNI_SHA256: 9a691826723a54dd9407e028210ab7ae2949601dc499de25bef5c68340cb2009
+          AYNI_VERSION: 0.14.4
+          AYNI_ARCHIVE: ayni-ayni-v0.14.4-x86_64-unknown-linux-gnu.tar.gz
+          AYNI_SHA256: e1a4ef87b21e2a2afdc2fd151dfacec77becc320a41579e75fcde165582badc6
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/$AYNI_ARCHIVE"
@@ -259,7 +259,7 @@ jobs:
 
       - name: Run Ayni
         env:
-          AYNI_EXECUTOR_IMAGE: ghcr.io/ayni-oss/ayni-env:0.14.3-debian@sha256:7b0db084f9d2364e14ed304a8fa033b8ec513542e13c62cbc219a8453cce238d
+          AYNI_EXECUTOR_IMAGE: ghcr.io/ayni-oss/ayni-env:0.14.4-debian@sha256:bc2bdcd92302482339d57b0eb05146c6a60dc97f82312227fb6e10b89f39c26b
         run: |
           set +e
           image="ayni-pr:${{ github.event.pull_request.head.sha }}"

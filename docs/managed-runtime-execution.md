@@ -39,7 +39,7 @@ Only this init receives the token; it never persists it in Git configuration.
 
 Kubernetes pulls the selected runtime using its own authentication. The image's
 entrypoint remains intact. Before admission, the mounted worker rejects unsigned
-runtime metadata, invokes the image's trusted Ayni 0.14.3 executable, and binds
+runtime metadata, invokes the image's trusted Ayni 0.14.4 executable, and binds
 its fresh signals to the exact certificate, lock file, full fingerprint,
 platform, and version. Ayni—not another controller implementation—performs the
 signature and protected-content verification. Quality findings do not invalidate

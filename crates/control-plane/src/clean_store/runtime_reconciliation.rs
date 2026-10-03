@@ -43,7 +43,7 @@ impl CleanStore {
         let snapshot = self.observe_repository_snapshot(&profile.repository_connection_id, revision)?;
         fingerprint.clone_into(&mut configuration.lock_fingerprint);
         repository.clone_into(&mut configuration.oci_repository);
-        configuration.ayni_version = "0.14.3".into();
+        configuration.ayni_version = "0.14.4".into();
         configuration.runtime_source_digest = Some(source_digest.to_owned());
         let revision = self.record_selected_runtime_revision(profile_id, &snapshot.id, v1::runtime_profile_revision::Configuration::AyniManaged(configuration), false)?;
         Ok(revision.id)

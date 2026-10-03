@@ -15,9 +15,9 @@ use thiserror::Error;
 pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v1";
 pub(crate) const ASSESSMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-managed-assessment.yml";
 
-const AYNI_VERSION: &str = "0.14.3";
+const AYNI_VERSION: &str = "0.14.4";
 const AYNI_ARCHIVE_SHA256: &str =
-    "9a691826723a54dd9407e028210ab7ae2949601dc499de25bef5c68340cb2009";
+    "e1a4ef87b21e2a2afdc2fd151dfacec77becc320a41579e75fcde165582badc6";
 const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
 
 /// Immutable files proposed by an Ayni Managed setup PR.
