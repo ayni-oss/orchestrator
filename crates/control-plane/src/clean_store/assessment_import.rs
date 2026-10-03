@@ -46,18 +46,7 @@ impl CleanStore {
                 change.state = state as i32;
                 change.resource_version += 1;
                 change.updated_at = Some(timestamp(unix_seconds()?));
-                if let Some(readiness) = &mut change.readiness {
-                    if !readiness.authorized_head.is_empty() && readiness.authorized_head != head {
-                        readiness.state = "obsolete".into();
-                        readiness.diagnostic = "new_head_requires_assessment".into();
-                    } else if state == v1::ChangeRequestState::Open
-                        && readiness.state != "completed"
-                        && readiness.state != "pending"
-                    {
-                        readiness.source = "maintainer".into();
-                        readiness.state = "manual".into();
-                    }
-                }
+                update_observed_readiness(&mut change, head, state);
                 let transaction = self
                     .connection
                     .transaction()
@@ -151,36 +140,7 @@ impl CleanStore {
         };
         let mut retained = artifacts.clone();
         retained.insert("manifest.json".into(), manifest_bytes.to_vec());
-        // A separate directory next to the controller database is never mounted
-        // into coding or assessment containers. create_new + byte comparison
-        // makes a crash between retention and commit safely replayable.
-        if let Some(path) = &self.path {
-            let directory = path
-                .parent()
-                .ok_or(CleanStoreError::CorruptState)?
-                .join("assessments")
-                .join(id.replace(':', "-"));
-            fs::create_dir_all(&directory).map_err(CleanStoreError::CreateDirectory)?;
-            for (name, bytes) in &retained {
-                use std::io::Write;
-                let path = directory.join(name);
-                let mut temporary = tempfile::NamedTempFile::new_in(&directory)
-                    .map_err(CleanStoreError::CreateDirectory)?;
-                temporary
-                    .write_all(bytes)
-                    .and_then(|()| temporary.as_file().sync_all())
-                    .map_err(CleanStoreError::CreateDirectory)?;
-                match temporary.persist_noclobber(&path) {
-                    Ok(_) => {}
-                    Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-                        if fs::read(&path).map_err(CleanStoreError::CreateDirectory)? != *bytes {
-                            return Err(CleanStoreError::IdempotencyConflict);
-                        }
-                    }
-                    Err(error) => return Err(CleanStoreError::CreateDirectory(error.error)),
-                }
-            }
-        }
+        retain_assessment_files(self.path.as_deref(), &id, &retained)?;
         let evidence: Vec<_> = retained
             .iter()
             .enumerate()
@@ -270,4 +230,53 @@ impl CleanStore {
         transaction.commit().map_err(CleanStoreError::Database)?;
         Ok(assessment)
     }
+}
+
+fn update_observed_readiness(change: &mut v1::ChangeRequest, head: &str, state: v1::ChangeRequestState) {
+                if let Some(readiness) = &mut change.readiness {
+                    if !readiness.authorized_head.is_empty() && readiness.authorized_head != head {
+                        readiness.state = "obsolete".into();
+                        readiness.diagnostic = "new_head_requires_assessment".into();
+                    } else if state == v1::ChangeRequestState::Open
+                        && readiness.state != "completed"
+                        && readiness.state != "pending"
+                    {
+                        readiness.source = "maintainer".into();
+                        readiness.state = "manual".into();
+                    }
+                }
+}
+
+fn retain_assessment_files(database: Option<&std::path::Path>, id: &str, retained: &std::collections::BTreeMap<String, Vec<u8>>) -> Result<(), CleanStoreError> {
+        // A separate directory next to the controller database is never mounted
+        // into coding or assessment containers. create_new + byte comparison
+        // makes a crash between retention and commit safely replayable.
+        if let Some(path) = database {
+            let directory = path
+                .parent()
+                .ok_or(CleanStoreError::CorruptState)?
+                .join("assessments")
+                .join(id.replace(':', "-"));
+            fs::create_dir_all(&directory).map_err(CleanStoreError::CreateDirectory)?;
+            for (name, bytes) in retained {
+                use std::io::Write;
+                let path = directory.join(name);
+                let mut temporary = tempfile::NamedTempFile::new_in(&directory)
+                    .map_err(CleanStoreError::CreateDirectory)?;
+                temporary
+                    .write_all(bytes)
+                    .and_then(|()| temporary.as_file().sync_all())
+                    .map_err(CleanStoreError::CreateDirectory)?;
+                match temporary.persist_noclobber(&path) {
+                    Ok(_) => {}
+                    Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        if fs::read(&path).map_err(CleanStoreError::CreateDirectory)? != *bytes {
+                            return Err(CleanStoreError::IdempotencyConflict);
+                        }
+                    }
+                    Err(error) => return Err(CleanStoreError::CreateDirectory(error.error)),
+                }
+            }
+        }
+    Ok(())
 }

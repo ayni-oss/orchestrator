@@ -18,6 +18,54 @@ pub async fn run() -> io::Result<()> {
 }
 
 async fn prepare() -> Result<(String, Value, Manifest, std::path::PathBuf), &'static str> {
+    let (repository, pull, head, base) = assessment_pull().await?;
+    let run_id = variable("GITHUB_RUN_ID")?
+        .parse()
+        .map_err(|_| "run_invalid")?;
+    let run = api(&format!("repos/{repository}/actions/runs/{run_id}"), None).await?;
+    let producer_image = variable("ASSESSMENT_PRODUCER_IMAGE")?;
+    let producer_digest = producer_image
+        .split_once('@')
+        .map(|(_, d)| d)
+        .filter(|d| assessment::digest(d))
+        .ok_or("producer_invalid")?;
+    let identity = RunIdentity {
+        repository_id: pull["base"]["repo"]["id"]
+            .as_u64()
+            .ok_or("repository_invalid")?
+            .to_string(),
+        pull_request: pull["number"].as_u64().ok_or("pull_identity_invalid")?,
+        head,
+        base,
+        profile_revision: variable("ASSESSMENT_PROFILE_REVISION")?,
+        workflow_id: run["workflow_id"].as_u64().ok_or("workflow_invalid")?,
+        run_id,
+        attempt: variable("GITHUB_RUN_ATTEMPT")?
+            .parse()
+            .map_err(|_| "attempt_invalid")?,
+        workflow_sha: variable("GITHUB_SHA")?,
+        producer_digest: producer_digest.into(),
+    };
+    let temporary = Path::new(&variable("RUNNER_TEMP")?).join(format!("assessment-{run_id}"));
+    fs::create_dir(&temporary).map_err(|_| "collector_storage_unavailable")?;
+    let manifest = Manifest {
+        version: assessment::VERSION.into(),
+        run: identity,
+        runtime_digest: variable("ASSESSMENT_RUNTIME_DIGEST")?,
+        lock_fingerprint: variable("ASSESSMENT_LOCK_FINGERPRINT")?,
+        contract_digest: variable("ASSESSMENT_CONTRACT_DIGEST")?,
+        source_before: String::new(),
+        source_after: String::new(),
+        ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+        platform: "linux/amd64".into(),
+        exit_code: -1,
+        outcome: Outcome::InfrastructureFailed,
+        artifacts: BTreeMap::new(),
+    };
+    Ok((repository, pull, manifest, temporary))
+}
+
+async fn assessment_pull() -> Result<(String, Value, String, String), &'static str> {
     let event: Value = serde_json::from_slice(
         &crate::runtime_execution::read_bounded(
             Path::new(&variable("GITHUB_EVENT_PATH")?),
@@ -51,50 +99,7 @@ async fn prepare() -> Result<(String, Value, Manifest, std::path::PathBuf), &'st
     {
         return Err("stale_trigger");
     }
-    let run_id = variable("GITHUB_RUN_ID")?
-        .parse()
-        .map_err(|_| "run_invalid")?;
-    let run = api(&format!("repos/{repository}/actions/runs/{run_id}"), None).await?;
-    let producer_image = variable("ASSESSMENT_PRODUCER_IMAGE")?;
-    let producer_digest = producer_image
-        .split_once('@')
-        .map(|(_, d)| d)
-        .filter(|d| assessment::digest(d))
-        .ok_or("producer_invalid")?;
-    let identity = RunIdentity {
-        repository_id: pull["base"]["repo"]["id"]
-            .as_u64()
-            .ok_or("repository_invalid")?
-            .to_string(),
-        pull_request: number,
-        head,
-        base,
-        profile_revision: variable("ASSESSMENT_PROFILE_REVISION")?,
-        workflow_id: run["workflow_id"].as_u64().ok_or("workflow_invalid")?,
-        run_id,
-        attempt: variable("GITHUB_RUN_ATTEMPT")?
-            .parse()
-            .map_err(|_| "attempt_invalid")?,
-        workflow_sha: variable("GITHUB_SHA")?,
-        producer_digest: producer_digest.into(),
-    };
-    let temporary = Path::new(&variable("RUNNER_TEMP")?).join(format!("assessment-{run_id}"));
-    fs::create_dir(&temporary).map_err(|_| "collector_storage_unavailable")?;
-    let manifest = Manifest {
-        version: assessment::VERSION.into(),
-        run: identity,
-        runtime_digest: variable("ASSESSMENT_RUNTIME_DIGEST")?,
-        lock_fingerprint: variable("ASSESSMENT_LOCK_FINGERPRINT")?,
-        contract_digest: variable("ASSESSMENT_CONTRACT_DIGEST")?,
-        source_before: String::new(),
-        source_after: String::new(),
-        ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
-        platform: "linux/amd64".into(),
-        exit_code: -1,
-        outcome: Outcome::InfrastructureFailed,
-        artifacts: BTreeMap::new(),
-    };
-    Ok((repository, pull, manifest, temporary))
+    Ok((repository, pull, head, base))
 }
 
 async fn execute() -> Result<(), &'static str> {

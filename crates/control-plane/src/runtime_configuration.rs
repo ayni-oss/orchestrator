@@ -96,7 +96,7 @@ impl RuntimeConfiguration {
     }
 
     fn validate(&self) -> Result<(), &'static str> {
-        use ayni_orchestrator_runtime::runtime_contract::{RuntimeImage, RuntimePlatform};
+        use ayni_orchestrator_runtime::runtime_contract::RuntimeImage;
         if !name(&self.namespace)
             || !name(&self.output_claim)
             || !name(&self.model_secret)
@@ -109,51 +109,58 @@ impl RuntimeConfiguration {
             return Err("runtime_configuration_invalid");
         }
         for (profile, runtime) in &self.profiles {
-            if runtime
-                .assessment
-                .as_ref()
-                .is_some_and(|assessment| RuntimeImage::parse(&assessment.producer_image).is_err())
-            {
-                return Err("assessment_producer_invalid");
-            }
-            if profile.is_empty()
-                || profile.len() > 256
-                || RuntimePlatform::parse(&runtime.platform).is_err()
-                || !name(&runtime.service_account)
-                || runtime
-                    .pull_secret
-                    .as_deref()
-                    .is_some_and(|secret| !name(secret))
-                || runtime.image.is_empty()
-                || runtime.image.len() > 512
-                || image_repository(&runtime.image).is_none()
-                || !runtime.image.bytes().all(|b| {
-                    b.is_ascii_lowercase()
-                        || b.is_ascii_digit()
-                        || matches!(b, b'/' | b'.' | b'_' | b'-' | b':' | b'@')
-                })
-            {
-                return Err("runtime_configuration_invalid");
-            }
-            if let Some(build) = &runtime.build
-                && (RuntimeImage::parse(&build.image).is_err()
-                    || !name(&build.service_account)
-                    || !name(&build.registry_secret)
-                    || !name(&build.signing_secret)
-                    || !name(&build.engine_secret)
-                    || runtime.image.contains('@')
-                    || !build.engine_host.starts_with("tcp://")
-                    || build.engine_host.len() <= 11
-                    || !build.engine_host.ends_with(":2376")
-                    || !build.engine_host[6..build.engine_host.len() - 5]
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-')))
-            {
-                return Err("runtime_build_configuration_invalid");
-            }
+            validate_profile(profile, runtime)?;
         }
+
         Ok(())
     }
+}
+
+fn validate_profile(profile: &str, runtime: &ProfileRuntime) -> Result<(), &'static str> {
+    use ayni_orchestrator_runtime::runtime_contract::{RuntimeImage, RuntimePlatform};
+    if runtime
+        .assessment
+        .as_ref()
+        .is_some_and(|assessment| RuntimeImage::parse(&assessment.producer_image).is_err())
+    {
+        return Err("assessment_producer_invalid");
+    }
+    if profile.is_empty()
+        || profile.len() > 256
+        || RuntimePlatform::parse(&runtime.platform).is_err()
+        || !name(&runtime.service_account)
+        || runtime
+            .pull_secret
+            .as_deref()
+            .is_some_and(|secret| !name(secret))
+        || runtime.image.is_empty()
+        || runtime.image.len() > 512
+        || image_repository(&runtime.image).is_none()
+        || !runtime.image.bytes().all(|b| {
+            b.is_ascii_lowercase()
+                || b.is_ascii_digit()
+                || matches!(b, b'/' | b'.' | b'_' | b'-' | b':' | b'@')
+        })
+    {
+        return Err("runtime_configuration_invalid");
+    }
+    if let Some(build) = &runtime.build
+        && (RuntimeImage::parse(&build.image).is_err()
+            || !name(&build.service_account)
+            || !name(&build.registry_secret)
+            || !name(&build.signing_secret)
+            || !name(&build.engine_secret)
+            || runtime.image.contains('@')
+            || !build.engine_host.starts_with("tcp://")
+            || build.engine_host.len() <= 11
+            || !build.engine_host.ends_with(":2376")
+            || !build.engine_host[6..build.engine_host.len() - 5]
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-')))
+    {
+        return Err("runtime_build_configuration_invalid");
+    }
+    Ok(())
 }
 
 pub fn image_repository(image: &str) -> Option<&str> {

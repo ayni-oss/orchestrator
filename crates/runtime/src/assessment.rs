@@ -164,20 +164,66 @@ fn validate_signals(
     if value["contract_digest"] != manifest.contract_digest
         || value["invocation"]["command"] != "check"
         || value["completion"]["scope"] != "repository"
-        || value["tool_versions"].as_array().is_none_or(|tools| {
-            tools.is_empty()
-                || tools.len() > 256
-                || tools.iter().any(|tool| {
-                    ["tool", "version"].iter().any(|field| {
-                        tool[field].as_str().is_none_or(|v| {
-                            v.is_empty() || v.len() > 256 || v.chars().any(char::is_control)
-                        })
-                    })
-                })
-        })
+        || invalid_tool_versions(&value["tool_versions"])
     {
         return Err("assessment_accounting_invalid");
     }
+    let (completed, skipped) = validate_completion(&value)?;
+    let rows = value["rows"].as_array().ok_or("assessment_rows_invalid")?;
+    validate_target_rows(rows, completed, skipped)?;
+    let aggregate = &value["aggregate"];
+    let failing = count(aggregate, "failing_rows")?;
+    if rows.len() > 4096
+        || count(aggregate, "total_rows")? as usize != rows.len()
+        || rows.iter().any(|row| row["pass"].as_bool().is_none())
+        || rows.iter().filter(|row| row["pass"] == false).count() != failing as usize
+        || count(aggregate, "passing_rows")? as usize + failing as usize != rows.len()
+        || (completed > 0 && rows.is_empty())
+    {
+        return Err("assessment_rows_invalid");
+    }
+    validate_outcome(manifest, skipped, failing)?;
+    Ok(Summary {
+        completed,
+        skipped,
+        warnings: count(aggregate, "warning_offenders")?,
+        failures: count(aggregate, "failing_offenders")?,
+    })
+}
+
+fn validate_outcome(manifest: &Manifest, skipped: u32, failing: u32) -> Result<(), &'static str> {
+    let outcome = if skipped > 0 {
+        Outcome::Incomplete
+    } else if failing > 0 {
+        Outcome::QualityFailed
+    } else {
+        Outcome::Succeeded
+    };
+    if manifest.outcome != outcome
+        || (outcome == Outcome::Succeeded && manifest.exit_code != 0)
+        || (outcome == Outcome::QualityFailed && manifest.exit_code != 1)
+        || (outcome == Outcome::Incomplete && manifest.exit_code != 4)
+    {
+        return Err("assessment_outcome_mismatch");
+    }
+    Ok(())
+}
+
+fn invalid_tool_versions(value: &Value) -> bool {
+    value.as_array().is_none_or(|tools| {
+        tools.is_empty()
+            || tools.len() > 256
+            || tools.iter().any(|tool| {
+                ["tool", "version"].iter().any(|field| {
+                    tool[field].as_str().is_none_or(|v| {
+                        v.is_empty() || v.len() > 256 || v.chars().any(char::is_control)
+                    })
+                })
+            })
+    })
+}
+
+fn validate_completion(value: &Value) -> Result<(u32, u32), &'static str> {
     let completion = &value["completion"];
     let expected = count(completion, "expected_targets")?;
     let detected = count(completion, "detected_targets")?;
@@ -201,39 +247,7 @@ fn validate_signals(
     {
         return Err("assessment_accounting_invalid");
     }
-    let rows = value["rows"].as_array().ok_or("assessment_rows_invalid")?;
-    validate_target_rows(rows, completed, skipped)?;
-    let aggregate = &value["aggregate"];
-    let failing = count(aggregate, "failing_rows")?;
-    if rows.len() > 4096
-        || count(aggregate, "total_rows")? as usize != rows.len()
-        || rows.iter().any(|row| row["pass"].as_bool().is_none())
-        || rows.iter().filter(|row| row["pass"] == false).count() != failing as usize
-        || count(aggregate, "passing_rows")? as usize + failing as usize != rows.len()
-        || (completed > 0 && rows.is_empty())
-    {
-        return Err("assessment_rows_invalid");
-    }
-    let outcome = if skipped > 0 {
-        Outcome::Incomplete
-    } else if failing > 0 {
-        Outcome::QualityFailed
-    } else {
-        Outcome::Succeeded
-    };
-    if manifest.outcome != outcome
-        || (outcome == Outcome::Succeeded && manifest.exit_code != 0)
-        || (outcome == Outcome::QualityFailed && manifest.exit_code != 1)
-        || (outcome == Outcome::Incomplete && manifest.exit_code != 4)
-    {
-        return Err("assessment_outcome_mismatch");
-    }
-    Ok(Summary {
-        completed,
-        skipped,
-        warnings: count(aggregate, "warning_offenders")?,
-        failures: count(aggregate, "failing_offenders")?,
-    })
+    Ok((completed, skipped))
 }
 
 fn count(value: &Value, field: &str) -> Result<u32, &'static str> {
