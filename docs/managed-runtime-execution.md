@@ -39,7 +39,7 @@ Only this init receives the token; it never persists it in Git configuration.
 
 Kubernetes pulls the selected runtime using its own authentication. The image's
 entrypoint remains intact. Before admission, the mounted worker rejects unsigned
-runtime metadata, invokes the image's trusted Ayni 0.14.5 executable, and binds
+runtime metadata, invokes the image's trusted Ayni executable at the integration's pinned release, and binds
 its fresh signals to the exact certificate, lock file, full fingerprint,
 platform, and version. Ayni—not another controller implementation—performs the
 signature and protected-content verification. Quality findings do not invalidate
@@ -149,7 +149,7 @@ overwriting a conflicting branch. It does not check out or execute candidate
 code. Provider lookup precedes PR creation so an uncertain response can be
 recovered. The PR body carries the advisory disclosure; no pre-publication
 managed validation Job or assessment is synthesized. Exact-head authoritative
-assessment remains the separate #62/#63 workflow.
+assessment uses the separate [managed PR workflow](managed-pr-assessments.md).
 
 ## Validation boundary
 

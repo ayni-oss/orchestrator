@@ -64,10 +64,11 @@ message GithubChangeRequest {
   string html_url = 3;
 }
 
-// ChangeRequest is a provider review object published from one candidate.
+// ChangeRequest is a provider review object, optionally published from an agent candidate.
 message ChangeRequest {
   string id = 1;
   string repository_connection_id = 2;
+  // candidate_id is empty for an observed human-authored PR.
   string candidate_id = 3;
   ChangeRequestProvider provider = 4;
   // base_revision and head_revision are exact 40-character lowercase Git object IDs.
@@ -78,6 +79,22 @@ message ChangeRequest {
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   uint64 resource_version = 11;
+  // readiness is a safe projection of the controller's durable publication action.
+  ReadinessStatus readiness = 12;
+}
+
+// ReadinessStatus distinguishes policy, provider observations and controller actions.
+message ReadinessStatus {
+  // policy is DRAFT_ONLY or READY_AFTER_SUCCESSFUL_ASSESSMENT.
+  string policy = 1;
+  // state is pending, completed, blocked, manual, or obsolete.
+  string state = 2;
+  // source is orchestrator or maintainer; it never derives from comment content.
+  string source = 3;
+  string authorized_head = 4;
+  string assessment_id = 5;
+  // diagnostic is a bounded safe reason code, never a provider error or log.
+  string diagnostic = 6;
 }
 
 // AssessmentProducer identifies the bounded producer implementation.
@@ -176,6 +193,8 @@ message PublishCandidateRequest {
   string body = 4;
   // base_branch is 1 through 255 safe provider-reference bytes.
   string base_branch = 5;
+  // Retained for wire compatibility. Orchestrator publication always starts draft;
+  // only the reviewed controller readiness policy can subsequently mark it ready.
   bool draft = 6;
 }
 

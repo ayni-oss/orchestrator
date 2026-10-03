@@ -8,6 +8,10 @@ import {
 } from "@grpc/grpc-js";
 import {
   DevelopmentTaskServiceClient,
+  ReviewServiceClient,
+  type ListChangeRequestsResponse,
+  type ListAssessmentsResponse,
+  type ListEvidenceReferencesResponse,
   ProviderServiceClient,
   RepositoryServiceClient,
   RuntimeProfileServiceClient,
@@ -26,6 +30,7 @@ import {
   type RetryDevelopmentTaskResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
+import { mapReview, mapAssessment, mapEvidence } from "./reviews.js";
 import { randomUUID } from "node:crypto";
 import type {
   CreateDevelopmentTaskInput,
@@ -125,6 +130,7 @@ export class OrchestratorBff {
   readonly #profiles: RuntimeProfileServiceClient;
   readonly #providers: ProviderServiceClient;
   readonly #tasks: DevelopmentTaskServiceClient;
+  readonly #reviews: ReviewServiceClient;
 
   constructor(configuration: BffClientConfiguration = {}) {
     const address = configuration.address ?? "127.0.0.1:50051";
@@ -138,6 +144,7 @@ export class OrchestratorBff {
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
     this.#tasks = new DevelopmentTaskServiceClient(address, channelCredentials, options);
+    this.#reviews = new ReviewServiceClient(address, channelCredentials, options);
   }
 
   close(): void {
@@ -145,6 +152,25 @@ export class OrchestratorBff {
     this.#profiles.close();
     this.#providers.close();
     this.#tasks.close();
+    this.#reviews.close();
+  }
+
+  async listReviews(selection: PageInput, context: RequestContext) {
+    const response = await this.#unary<ListChangeRequestsResponse>(context, (metadata, options, callback) =>
+      this.#reviews.listChangeRequests({ page: page(selection) }, metadata, options, callback));
+    return { reviews: response.changeRequests.map(mapReview), page: pageDto(response.page) };
+  }
+
+  async listAssessments(changeRequestId: string, selection: PageInput, context: RequestContext) {
+    const response = await this.#unary<ListAssessmentsResponse>(context, (metadata, options, callback) =>
+      this.#reviews.listAssessments({ changeRequestId, page: page(selection) }, metadata, options, callback));
+    return { assessments: response.assessments.map(mapAssessment), page: pageDto(response.page) };
+  }
+
+  async listEvidence(assessmentId: string, selection: PageInput, context: RequestContext) {
+    const response = await this.#unary<ListEvidenceReferencesResponse>(context, (metadata, options, callback) =>
+      this.#reviews.listEvidenceReferences({ assessmentId, page: page(selection) }, metadata, options, callback));
+    return { evidence: response.evidenceReferences.map(mapEvidence), page: pageDto(response.page) };
   }
 
   async listRepositoryConnections(selection: PageInput, context: RequestContext): Promise<RepositoryConnectionPageDto> {

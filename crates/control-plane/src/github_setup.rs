@@ -35,7 +35,7 @@ pub fn setup_pull_request(
     if profile_id.is_empty() || profile_id.len() > 256 {
         return Err(SetupRequestError::InvalidProfileIdentity);
     }
-    if files.files.len() != 1
+    if files.files.len() != 2
         || !files
             .files
             .contains_key(crate::onboarding_templates::ASSESSMENT_WORKFLOW_PATH)
@@ -75,6 +75,6 @@ mod tests {
         assert_eq!(first.branch, second.branch);
         assert_ne!(first.branch, first.base_branch);
         assert!(first.branch.starts_with("ayni-orchestrator/setup-"));
-        assert_eq!(first.files.files.len(), 1);
+        assert_eq!(first.files.files.len(), 2);
     }
 }

@@ -217,10 +217,11 @@ export interface GithubChangeRequest {
   htmlUrl: string;
 }
 
-/** ChangeRequest is a provider review object published from one candidate. */
+/** ChangeRequest is a provider review object, optionally published from an agent candidate. */
 export interface ChangeRequest {
   id: string;
   repositoryConnectionId: string;
+  /** candidate_id is empty for an observed human-authored PR. */
   candidateId: string;
   provider?:
     | ChangeRequestProvider
@@ -233,6 +234,22 @@ export interface ChangeRequest {
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   resourceVersion: string;
+  /** readiness is a safe projection of the controller's durable publication action. */
+  readiness?: ReadinessStatus | undefined;
+}
+
+/** ReadinessStatus distinguishes policy, provider observations and controller actions. */
+export interface ReadinessStatus {
+  /** policy is DRAFT_ONLY or READY_AFTER_SUCCESSFUL_ASSESSMENT. */
+  policy: string;
+  /** state is pending, completed, blocked, manual, or obsolete. */
+  state: string;
+  /** source is orchestrator or maintainer; it never derives from comment content. */
+  source: string;
+  authorizedHead: string;
+  assessmentId: string;
+  /** diagnostic is a bounded safe reason code, never a provider error or log. */
+  diagnostic: string;
 }
 
 /** AssessmentProducer identifies the bounded producer implementation. */
@@ -333,6 +350,10 @@ export interface PublishCandidateRequest {
   body: string;
   /** base_branch is 1 through 255 safe provider-reference bytes. */
   baseBranch: string;
+  /**
+   * Retained for wire compatibility. Orchestrator publication always starts draft;
+   * only the reviewed controller readiness policy can subsequently mark it ready.
+   */
   draft: boolean;
 }
 
@@ -599,6 +620,7 @@ function createBaseChangeRequest(): ChangeRequest {
     createdAt: undefined,
     updatedAt: undefined,
     resourceVersion: "0",
+    readiness: undefined,
   };
 }
 
@@ -636,6 +658,9 @@ export const ChangeRequest: MessageFns<ChangeRequest> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(88).uint64(message.resourceVersion);
+    }
+    if (message.readiness !== undefined) {
+      ReadinessStatus.encode(message.readiness, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -741,6 +766,14 @@ export const ChangeRequest: MessageFns<ChangeRequest> = {
             message.resourceVersion = reader.uint64().toString();
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.readiness = ReadinessStatus.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -794,6 +827,7 @@ export const ChangeRequest: MessageFns<ChangeRequest> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
+      readiness: isSet(object.readiness) ? ReadinessStatus.fromJSON(object.readiness) : undefined,
     };
   },
 
@@ -832,6 +866,9 @@ export const ChangeRequest: MessageFns<ChangeRequest> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
+    if (message.readiness !== undefined) {
+      obj.readiness = ReadinessStatus.toJSON(message.readiness);
+    }
     return obj;
   },
 
@@ -855,6 +892,166 @@ export const ChangeRequest: MessageFns<ChangeRequest> = {
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
+    message.readiness = (object.readiness !== undefined && object.readiness !== null)
+      ? ReadinessStatus.fromPartial(object.readiness)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseReadinessStatus(): ReadinessStatus {
+  return { policy: "", state: "", source: "", authorizedHead: "", assessmentId: "", diagnostic: "" };
+}
+
+export const ReadinessStatus: MessageFns<ReadinessStatus> = {
+  encode(message: ReadinessStatus, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.policy !== "") {
+      writer.uint32(10).string(message.policy);
+    }
+    if (message.state !== "") {
+      writer.uint32(18).string(message.state);
+    }
+    if (message.source !== "") {
+      writer.uint32(26).string(message.source);
+    }
+    if (message.authorizedHead !== "") {
+      writer.uint32(34).string(message.authorizedHead);
+    }
+    if (message.assessmentId !== "") {
+      writer.uint32(42).string(message.assessmentId);
+    }
+    if (message.diagnostic !== "") {
+      writer.uint32(50).string(message.diagnostic);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReadinessStatus {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReadinessStatus();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.policy = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.source = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.authorizedHead = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.assessmentId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.diagnostic = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ReadinessStatus {
+    return {
+      policy: isSet(object.policy) ? globalThis.String(object.policy) : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+      authorizedHead: isSet(object.authorizedHead)
+        ? globalThis.String(object.authorizedHead)
+        : isSet(object.authorized_head)
+        ? globalThis.String(object.authorized_head)
+        : "",
+      assessmentId: isSet(object.assessmentId)
+        ? globalThis.String(object.assessmentId)
+        : isSet(object.assessment_id)
+        ? globalThis.String(object.assessment_id)
+        : "",
+      diagnostic: isSet(object.diagnostic) ? globalThis.String(object.diagnostic) : "",
+    };
+  },
+
+  toJSON(message: ReadinessStatus): unknown {
+    const obj: any = {};
+    if (message.policy !== "") {
+      obj.policy = message.policy;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    if (message.authorizedHead !== "") {
+      obj.authorizedHead = message.authorizedHead;
+    }
+    if (message.assessmentId !== "") {
+      obj.assessmentId = message.assessmentId;
+    }
+    if (message.diagnostic !== "") {
+      obj.diagnostic = message.diagnostic;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ReadinessStatus>): ReadinessStatus {
+    return ReadinessStatus.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ReadinessStatus>): ReadinessStatus {
+    const message = createBaseReadinessStatus();
+    message.policy = object.policy ?? "";
+    message.state = object.state ?? "";
+    message.source = object.source ?? "";
+    message.authorizedHead = object.authorizedHead ?? "";
+    message.assessmentId = object.assessmentId ?? "";
+    message.diagnostic = object.diagnostic ?? "";
     return message;
   },
 };

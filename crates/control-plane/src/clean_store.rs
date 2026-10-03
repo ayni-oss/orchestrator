@@ -31,7 +31,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -164,6 +164,8 @@ include!("clean_store/store.rs");
 include!("clean_store/repositories_profiles.rs");
 include!("clean_store/automation_tasks.rs");
 include!("clean_store/review.rs");
+include!("clean_store/assessment_import.rs");
+include!("clean_store/readiness.rs");
 include!("clean_store/validation.rs");
 include!("clean_store/transitions_schema.rs");
 include!("clean_store/payloads.rs");
@@ -218,7 +220,7 @@ mod tests {
                             runtime_source_digest: None,
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: "0.4.0".to_owned(),
-                            workflow_template_version: "ayni-managed-v1".to_owned(),
+                            workflow_template_version: "ayni-managed-v2".to_owned(),
                             oci_repository: "ghcr.io/ayni-oss/sandbox/environment".to_owned(),
                         },
                     ),
@@ -338,5 +340,6 @@ mod tests {
 
     mod lifecycle;
     mod recovery;
+    mod reviews;
     mod runtime;
 }

@@ -214,6 +214,7 @@ impl CleanStore {
         let now = unix_seconds()?;
         let id = resource_id("change-request");
         let change_request = v1::ChangeRequest {
+            readiness: None,
             id: id.clone(),
             repository_connection_id: candidate.repository_connection_id.clone(),
             candidate_id: candidate.id,

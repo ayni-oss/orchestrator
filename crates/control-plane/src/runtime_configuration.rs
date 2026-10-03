@@ -29,6 +29,25 @@ pub struct ProfileRuntime {
     pub pull_secret: Option<String>,
     #[serde(default)]
     pub build: Option<BuildRuntime>,
+    #[serde(default)]
+    pub assessment: Option<AssessmentConfiguration>,
+}
+
+/// Only operator configuration can select the trusted collector and readiness policy.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AssessmentConfiguration {
+    pub producer_image: String,
+    #[serde(default)]
+    pub publication_policy: PublicationPolicy,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PublicationPolicy {
+    #[default]
+    DraftOnly,
+    ReadyAfterSuccessfulAssessment,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -90,6 +109,13 @@ impl RuntimeConfiguration {
             return Err("runtime_configuration_invalid");
         }
         for (profile, runtime) in &self.profiles {
+            if runtime
+                .assessment
+                .as_ref()
+                .is_some_and(|assessment| RuntimeImage::parse(&assessment.producer_image).is_err())
+            {
+                return Err("assessment_producer_invalid");
+            }
             if profile.is_empty()
                 || profile.len() > 256
                 || RuntimePlatform::parse(&runtime.platform).is_err()

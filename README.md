@@ -43,6 +43,7 @@ presentation; digest-verified evidence and OCI digests are retained identities.
 | [Local Helm deployment decision](docs/decisions/0006-local-helm-chart.md) | Existing local chart/deployment boundary; worker details are historical until revised |
 | [Ayni 0.14 integration contract](docs/ayni-0.14-integration.md) | Released launcher, certification, and assessment-evidence boundaries |
 | [Managed runtime execution](docs/managed-runtime-execution.md) | Helm-managed ServiceAccounts, registry/build sources, coding, and publication |
+| [Managed PR assessments](docs/managed-pr-assessments.md) | Trusted Actions collection, immutable assessments, summaries, and readiness policy |
 | [Custom-client gRPC access](docs/custom-client-access.md) | Private endpoint boundary; not public hosting authorization |
 
 ## Planning and delivery
