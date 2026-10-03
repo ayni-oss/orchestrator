@@ -50,8 +50,11 @@ product data. None of these commands changes the current Kubernetes context,
 resets Docker Desktop, deletes shared Docker volumes, or performs a broad Docker
 prune.
 
-The deployment path requires a clean committed checkout so built image labels
-and tags have unambiguous source provenance.
+The deployment path can build directly from a dirty local checkout. Images carry
+the current commit revision and a dirty-source label; generated local tags also
+include the image content ID so each rebuilt source snapshot gets its own tag.
+This keeps local iteration fast while making it clear that a dirty image is not
+reproducible from its commit alone.
 
 ## Layout
 
