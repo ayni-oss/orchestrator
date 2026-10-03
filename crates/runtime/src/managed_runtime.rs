@@ -165,15 +165,15 @@ mod tests {
         let expected = RuntimeExpectation {
             lock_fingerprint: fingerprint.clone(),
             platform: "linux/amd64".into(),
-            ayni_version: "0.14.4".into(),
+            ayni_version: "0.14.5".into(),
         };
         let certificate = json!({"key_id":"producer", "signature":"b".repeat(128), "certificate": {
-            "schema_version":"2", "lock_fingerprint":fingerprint, "platform":"linux/amd64", "ayni_version":"0.14.4",
+            "schema_version":"2", "lock_fingerprint":fingerprint, "platform":"linux/amd64", "ayni_version":"0.14.5",
             "tool_inventory_digest": format!("sha256:{}", "c".repeat(64)), "protected_content_root":format!("sha256:{}", "d".repeat(64))
         }});
         let metadata = certificate.to_string().into_bytes();
         let signals = json!({"schema_version":"0.5.0", "execution_mode":"managed", "environment_lock_fingerprint":expected.lock_fingerprint,
-            "ayni_version":"0.14.4", "prebuilt_runtime":{"metadata_path":"/etc/ayni/runtime.json", "metadata_digest":format!("sha256:{:x}", Sha256::digest(&metadata)), "certificate":certificate}});
+            "ayni_version":"0.14.5", "prebuilt_runtime":{"metadata_path":"/etc/ayni/runtime.json", "metadata_digest":format!("sha256:{:x}", Sha256::digest(&metadata)), "certificate":certificate}});
         (expected, metadata, signals)
     }
 

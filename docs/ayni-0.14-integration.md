@@ -9,10 +9,10 @@ verification.
 
 | Item | Pinned value |
 | --- | --- |
-| Ayni release | `ayni-v0.14.4` |
-| Linux x86_64 archive | `ayni-ayni-v0.14.4-x86_64-unknown-linux-gnu.tar.gz` |
-| Archive SHA-256 | `e1a4ef87b21e2a2afdc2fd151dfacec77becc320a41579e75fcde165582badc6` |
-| Release executor | `ghcr.io/ayni-oss/ayni-env:0.14.4-debian@sha256:bc2bdcd92302482339d57b0eb05146c6a60dc97f82312227fb6e10b89f39c26b` |
+| Ayni release | `ayni-v0.14.5` |
+| Linux x86_64 archive | `ayni-ayni-v0.14.5-x86_64-unknown-linux-gnu.tar.gz` |
+| Archive SHA-256 | `45d20c9ae833b0cd403a917b2e07667cb2a6a4130a71d2bf94691c1d651e0139` |
+| Release executor | `ghcr.io/ayni-oss/ayni-env:0.14.5-debian@sha256:d8818c4638e51d9d85ff09e050c035e3e6e548b38acc9b349de2a05c2f6253c8` |
 | Supported managed platforms | `linux/amd64`, `linux/arm64` |
 | Repository lock | Ayni-generated committed `.ayni.lock`, schema `0.9.0` and recipe `2` |
 | Discovery tag | `lock-<full-64-hex-lock-fingerprint>` |
