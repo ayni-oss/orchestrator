@@ -373,7 +373,7 @@ mod tests {
                 expected: crate::managed_runtime::RuntimeExpectation {
                     lock_fingerprint: String::new(),
                     platform: "linux/amd64".into(),
-                    ayni_version: "0.14.2".into(),
+                    ayni_version: "0.14.5".into(),
                 },
             },
             request: "edit".into(),

@@ -424,7 +424,7 @@ impl RuntimeReconciler {
             || report.lock_digest != pending.lock_digest
             || report.runtime.lock_fingerprint != pending.request.expected.lock_fingerprint
             || report.runtime.platform != pending.request.expected.platform
-            || report.runtime.ayni_version != "0.14.2"
+            || report.runtime.ayni_version != "0.14.5"
             || report.runtime.certificate_key_id == "unsigned"
         {
             return Err("runtime_result_mismatch");
@@ -561,7 +561,7 @@ impl RuntimeReconciler {
                 expected: RuntimeExpectation {
                     lock_fingerprint: format!("sha256:{}", identity.fingerprint),
                     platform: runtime.platform.clone(),
-                    ayni_version: "0.14.2".into(),
+                    ayni_version: "0.14.5".into(),
                 },
             },
         });

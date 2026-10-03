@@ -87,6 +87,46 @@ profile variant but is not operational until #66.
 
 ## Validation commands
 
+### Testing an unreleased Ayni fix
+
+Use the sibling Ayni checkout for the local repair loop; publishing a release is
+not a prerequisite. From this repository, build the checkout CLI, stage tracked
+working-tree files into a clean temporary directory, and run the same image-build
+and container-check sequence as CI:
+
+```sh
+(cd ../ayni && cargo build -p ayni-cli)
+ayni_bin="$(cd ../ayni && pwd)/target/debug/ayni"
+check_root="$(mktemp -d)"
+git ls-files -z | rsync -a --from0 --files-from=- ./ "$check_root/"
+"$ayni_bin" env build --repo-root "$check_root" \
+  --tag local/orchestrator-ayni-checkout \
+  --executor-image "$AYNI_EXECUTOR_IMAGE"
+docker run --rm --user "$(id -u):$(id -g)" \
+  --env HOME=/tmp/home --env XDG_CACHE_HOME=/tmp/cache \
+  --env MISE_CACHE_DIR=/tmp/mise --env CARGO_HOME=/tmp/cargo \
+  --env CARGO_TARGET_DIR=/tmp/target \
+  --mount "type=bind,source=$check_root,target=/workspace" \
+  --workdir /workspace local/orchestrator-ayni-checkout \
+  ayni check --config .ayni.toml --output markdown
+```
+
+Set `AYNI_EXECUTOR_IMAGE` to the immutable executor reference matching the
+checkout version. A released executor is sufficient for changes solely to the
+host-side image recipe; changes to code executed inside the container require a
+Linux executor built from that checkout too. Use Ayni's candidate-image tooling
+and a local registry for that case, not a public release. If the checkout changes
+lock inputs or version, regenerate the lock in the temporary snapshot with its
+CLI and the existing pinned provisioning base. Never hand-edit the fingerprint.
+The snapshot and its `.ayni/last/signals.json` remain available for inspection.
+
+Both image construction and the in-container check must pass before claiming
+managed compatibility. A host test pass alone is insufficient. Keep private
+source, logs, and fixtures out of public Ayni contributions; upstream regression
+tests must stand alone.
+
+### Repository checks
+
 The usual workspace checks remain required for documentation and implementation
 changes:
 
