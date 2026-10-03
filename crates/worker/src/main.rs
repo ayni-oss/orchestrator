@@ -22,6 +22,9 @@ async fn run() -> io::Result<()> {
         fs::copy(env::current_exe()?, "/launcher/runtime-worker")?;
         return Ok(());
     }
+    if operation == "assess-actions" {
+        return ayni_orchestrator_worker::assessment_actions::run().await;
+    }
     if operation == "prepare-output" {
         let name = env::args()
             .nth(2)

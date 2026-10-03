@@ -510,6 +510,7 @@ mod tests {
             resource_version: 2,
         })?;
         let change_request = round_trip(&v1::ChangeRequest {
+            readiness: None,
             id: "change-request:1".to_owned(),
             repository_connection_id: "repository:1".to_owned(),
             candidate_id: "candidate:1".to_owned(),

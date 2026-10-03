@@ -88,7 +88,8 @@ impl SourceClient {
         installation: u64,
         repository_id: &str,
     ) -> Result<String, &'static str> {
-        self.scoped_token(installation, repository_id, false).await
+        self.scoped_token(installation, repository_id, json!({"contents":"read"}))
+            .await
     }
 
     pub(crate) async fn publication_token(
@@ -96,14 +97,32 @@ impl SourceClient {
         installation: u64,
         repository_id: &str,
     ) -> Result<String, &'static str> {
-        self.scoped_token(installation, repository_id, true).await
+        self.scoped_token(
+            installation,
+            repository_id,
+            json!({"contents":"write","pull_requests":"write"}),
+        )
+        .await
+    }
+
+    pub(crate) async fn review_token(
+        &self,
+        installation: u64,
+        repository_id: &str,
+    ) -> Result<String, &'static str> {
+        self.scoped_token(
+            installation,
+            repository_id,
+            json!({"contents":"read","actions":"read","checks":"read","pull_requests":"write"}),
+        )
+        .await
     }
 
     async fn scoped_token(
         &self,
         installation: u64,
         repository_id: &str,
-        publish: bool,
+        permissions: Value,
     ) -> Result<String, &'static str> {
         #[derive(Serialize)]
         struct Claims<'a> {
@@ -134,7 +153,7 @@ impl SourceClient {
                 "https://api.github.com/app/installations/{installation}/access_tokens"
             ))
             .bearer_auth(jwt)
-            .json(&json!({"repository_ids":[repository_id], "permissions":if publish { json!({"contents":"write","pull_requests":"write"}) } else { json!({"contents":"read"}) }}));
+            .json(&json!({"repository_ids":[repository_id], "permissions":permissions}));
         let value = bounded(request).await?;
         value["token"]
             .as_str()
@@ -174,11 +193,24 @@ impl SourceClient {
         revision: &str,
         token: &str,
     ) -> Result<Vec<u8>, &'static str> {
+        self.file(owner, repository, revision, ".ayni.lock", token)
+            .await
+    }
+
+    pub(crate) async fn file(
+        &self,
+        owner: &str,
+        repository: &str,
+        revision: &str,
+        path: &str,
+        token: &str,
+    ) -> Result<Vec<u8>, &'static str> {
         let mut url =
             reqwest::Url::parse("https://api.github.com").map_err(|_| "github_url_invalid")?;
         url.path_segments_mut()
             .map_err(|()| "github_url_invalid")?
-            .extend(["repos", owner, repository, "contents", ".ayni.lock"]);
+            .extend(["repos", owner, repository, "contents"])
+            .extend(path.split('/'));
         let value = bounded(
             self.client
                 .get(url)
@@ -198,6 +230,8 @@ impl SourceClient {
             .map_err(|_| "repository_lock_invalid")
     }
 }
+
+include!("runtime_source_review.rs");
 
 async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str> {
     let mut response = request

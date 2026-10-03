@@ -239,12 +239,12 @@ jobs:
           persist-credentials: false
 
       - name: Install Ayni
-        env:
-          AYNI_VERSION: 0.14.5
-          AYNI_ARCHIVE: ayni-ayni-v0.14.5-x86_64-unknown-linux-gnu.tar.gz
-          AYNI_SHA256: 45d20c9ae833b0cd403a917b2e07667cb2a6a4130a71d2bf94691c1d651e0139
         run: |
           set -euo pipefail
+          release=crates/runtime/ayni-release.json
+          AYNI_VERSION=$(jq -er .cli_version "$release")
+          AYNI_ARCHIVE="ayni-ayni-v${AYNI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          AYNI_SHA256=$(jq -er .linux_amd64_archive_sha256 "$release")
           archive="$RUNNER_TEMP/$AYNI_ARCHIVE"
           install_root="$RUNNER_TEMP/ayni"
           bin_root="$RUNNER_TEMP/ayni-bin"
@@ -258,10 +258,9 @@ jobs:
           echo "$bin_root" >> "$GITHUB_PATH"
 
       - name: Run Ayni
-        env:
-          AYNI_EXECUTOR_IMAGE: ghcr.io/ayni-oss/ayni-env:0.14.5-debian@sha256:d8818c4638e51d9d85ff09e050c035e3e6e548b38acc9b349de2a05c2f6253c8
         run: |
           set +e
+          AYNI_EXECUTOR_IMAGE=$(jq -er .executor_image crates/runtime/ayni-release.json) || exit 1
           image="ayni-pr:${{ github.event.pull_request.head.sha }}"
           ayni env build --repo-root . --tag "$image" --executor-image "$AYNI_EXECUTOR_IMAGE"
           exit_code=$?

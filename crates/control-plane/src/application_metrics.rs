@@ -29,7 +29,7 @@ pub fn render_clean_metrics() -> String {
     let mut output = String::from(
         "# HELP orchestrator_clean_v1_schema_info Clean-v1 durable schema information.\n\
          # TYPE orchestrator_clean_v1_schema_info gauge\n\
-         orchestrator_clean_v1_schema_info{version=\"1\"} 1\n",
+         orchestrator_clean_v1_schema_info{version=\"2\"} 1\n",
     );
     output.push_str(
         "# HELP orchestrator_grpc_admissions_total gRPC requests admitted or rejected by the access boundary.\n\
@@ -89,7 +89,7 @@ mod tests {
         record_grpc_admission("GetRuntimeProfile", "allow", Code::Ok);
         record_grpc_completion("GetRuntimeProfile", Code::NotFound);
         let rendered = render_clean_metrics();
-        assert!(rendered.contains("orchestrator_clean_v1_schema_info{version=\"1\"} 1"));
+        assert!(rendered.contains("orchestrator_clean_v1_schema_info{version=\"2\"} 1"));
         assert!(rendered.contains("rpc=\"GetRuntimeProfile\""));
         assert!(!rendered.contains("repository_id"));
     }

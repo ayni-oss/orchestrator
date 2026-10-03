@@ -68,7 +68,7 @@ impl RuntimeReconciler {
                     &token,
                 )
                 .await?;
-                self.source.create_pull(&github.owner, &github.name, &token, &serde_json::json!({"head":branch,"base":request.base_branch,"title":request.title,"draft":request.draft,"body":format!("{}\n\n{}\n\n<!-- orchestrator-candidate:{} -->",request.body,candidate.coding_advisory.as_deref().unwrap_or("Coding-time checks are advisory; no assessment is available."),candidate.id)})).await?
+                self.source.create_pull(&github.owner, &github.name, &token, &serde_json::json!({"head":branch,"base":request.base_branch,"title":request.title,"draft":true,"body":format!("{}\n\n{}\n\n<!-- orchestrator-candidate:{} -->",request.body,candidate.coding_advisory.as_deref().unwrap_or("Coding-time checks are advisory; no assessment is available."),candidate.id)})).await?
             };
             let (provider, state) = publication_identity(
                 &pull,

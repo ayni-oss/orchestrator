@@ -20,7 +20,7 @@ impl HealthResponse {
             runtime_profiles: "durable",
             provider_models: "unconfigured",
             clean_v1_contract: true,
-            clean_schema_version: 1,
+            clean_schema_version: 2,
         }
     }
 
@@ -38,7 +38,7 @@ impl HealthResponse {
                 "unconfigured"
             },
             clean_v1_contract: true,
-            clean_schema_version: 1,
+            clean_schema_version: 2,
         }
     }
 }

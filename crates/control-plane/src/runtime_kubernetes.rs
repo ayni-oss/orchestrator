@@ -303,6 +303,7 @@ mod tests {
             profiles: std::collections::BTreeMap::default(),
         };
         let runtime = ProfileRuntime {
+            assessment: None,
             image: "registry/runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime".into(),

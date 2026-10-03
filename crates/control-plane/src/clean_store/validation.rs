@@ -195,13 +195,12 @@ fn validate_resource_tables(connection: &Connection) -> Result<(), CleanStoreErr
         |row, value| {
             Ok(!value.id.is_empty()
                 && !value.repository_connection_id.is_empty()
-                && !value.candidate_id.is_empty()
                 && !value.head_revision.is_empty()
                 && value.state != v1::ChangeRequestState::Unspecified as i32
                 && v1::ChangeRequestState::try_from(value.state).is_ok()
                 && value.id == row.get::<_, String>(1)?
                 && value.repository_connection_id == row.get::<_, String>(2)?
-                && value.candidate_id == row.get::<_, String>(3)?
+                && value.candidate_id == row.get::<_, Option<String>>(3)?.unwrap_or_default()
                 && value.state == row.get::<_, i32>(4)?
                 && value.head_revision == row.get::<_, String>(5)?
                 && valid_version_and_cursor(value.resource_version, row.get(6)?, row.get(7)?))
@@ -330,6 +329,7 @@ fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
         }
         "PublishCandidate" => v1::PublishCandidateRequest::decode(payload)
             .is_ok_and(|value| api_validation::publish_candidate(&value).is_ok()),
+        "MarkReady" => v1::ReadinessStatus::decode(payload).is_ok_and(|value| value.policy == "READY_AFTER_SUCCESSFUL_ASSESSMENT" && value.state == "pending" && valid_git_revision(&value.authorized_head) && !value.assessment_id.is_empty()),
         _ => false,
     }
 }
@@ -537,7 +537,6 @@ fn valid_change_request_event(
     let value = decode::<v1::ChangeRequest>(payload)?;
     Ok(value.id == resource_id
         && !value.repository_connection_id.is_empty()
-        && !value.candidate_id.is_empty()
         && valid_git_revision(&value.head_revision)
         && value.state != v1::ChangeRequestState::Unspecified as i32
         && v1::ChangeRequestState::try_from(value.state).is_ok()

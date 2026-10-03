@@ -53,7 +53,7 @@ it never upgrades or reads that state. Before the first clean-v1 deployment:
 3. Recreate scoped Secrets with `dev/ctl secrets`, then install a fresh baseline
    with `dev/ctl deploy`. Do not copy the pilot SQLite file, preparation
    directories, checkpoints, archives, or manifests into the new volume.
-4. Run `dev/ctl check --expect-empty`. The readiness response must report `clean_schema_version: 1`;
+4. Run `dev/ctl check --expect-empty`. The readiness response must report `clean_schema_version: 2`;
    initial resource lists must be empty, and logs must not report a retired
    schema or corrupt protobuf payload.
 

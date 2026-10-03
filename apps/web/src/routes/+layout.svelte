@@ -12,6 +12,7 @@
     { href: "/setup/github", label: "Connect GitHub", icon: PlugZap },
     { href: "/repositories", label: "Repositories", icon: FolderGit2 },
     { href: "/tasks", label: "Tasks", icon: ListTodo },
+    { href: "/reviews", label: "Reviews", icon: ListTodo },
   ];
   const active = (href: string): boolean => href === "/" ? page.url.pathname === "/" : page.url.pathname.startsWith(href);
   onMount(() => { document.documentElement.dataset.hydrated = "true"; });

@@ -9,10 +9,7 @@ verification.
 
 | Item | Pinned value |
 | --- | --- |
-| Ayni release | `ayni-v0.14.5` |
-| Linux x86_64 archive | `ayni-ayni-v0.14.5-x86_64-unknown-linux-gnu.tar.gz` |
-| Archive SHA-256 | `45d20c9ae833b0cd403a917b2e07667cb2a6a4130a71d2bf94691c1d651e0139` |
-| Release executor | `ghcr.io/ayni-oss/ayni-env:0.14.5-debian@sha256:d8818c4638e51d9d85ff09e050c035e3e6e548b38acc9b349de2a05c2f6253c8` |
+| CLI release, archive checksum, executor digest | [`crates/runtime/ayni-release.json`](../crates/runtime/ayni-release.json) |
 | Supported managed platforms | `linux/amd64`, `linux/arm64` |
 | Repository lock | Ayni-generated committed `.ayni.lock`, schema `0.9.0` and recipe `2` |
 | Discovery tag | `lock-<full-64-hex-lock-fingerprint>` |
@@ -22,6 +19,43 @@ Mise versions, provisioning base and variant, platforms, runtimes/components,
 signal tools, dependency inputs, capabilities, and resource limits. It is not
 a repository revision or an OCI digest. Source-only edits reuse an unchanged
 lock artifact; changing a covered input requires a new lock and artifact.
+
+## Release ownership and upgrades
+
+Ayni is independently useful for code measurement and tool environments.
+Orchestrator coordinates code changes with or without Ayni. Its task, candidate,
+review and evidence resources remain orchestration concepts; Ayni release and
+artifact compatibility belong to the Ayni integration. GitHub Actions collection
+and GitHub readiness are the current provider implementation, not requirements
+for future VCS providers or custom runtime profiles.
+
+The release manifest is the single editable source for the active Ayni CLI
+version, Linux archive checksum, immutable executor and signals schema. Rust
+builds consume it through the runtime crate; setup workflow rendering and this
+repository's CI consume the same pins. Runtime results must match the persisted
+execution expectation. Do not replace these checks with “latest” or accept a
+candidate-selected version. Custom runtime profiles do not depend on this pin.
+
+To upgrade, update the manifest from the official release, verify adapter
+compatibility and regenerate `.ayni.lock` with that CLI. Rebuild the controller,
+collector and builder images; review the rendered setup workflow update and
+select a fresh admitted profile revision/environment before enabling readiness.
+Existing profile revisions and retained evidence keep their original version
+identities. Generated locks and historical fixtures are records, not additional
+release settings. A new artifact schema can require adapter changes; changing
+only a version string does not establish compatibility.
+
+The runtime-builder recipe receives the manifest's executor explicitly:
+
+```sh
+docker build -f deploy/images/runtime-builder/Dockerfile \
+  --build-arg AYNI_EXECUTOR_IMAGE="$(jq -er .executor_image crates/runtime/ayni-release.json)" \
+  --build-arg DOCKER_CLIENT_IMAGE="$DOCKER_CLIENT_IMAGE" \
+  -t local/orchestrator-runtime-builder:development .
+```
+
+`DOCKER_CLIENT_IMAGE` must be an operator-approved immutable image. Building
+locally does not authorize registry publication or signed environment admission.
 
 ## Launcher and runtime boundary
 

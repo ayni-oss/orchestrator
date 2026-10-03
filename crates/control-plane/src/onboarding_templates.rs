@@ -12,13 +12,9 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v1";
+pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v2";
+pub(crate) const TRIGGER_WORKFLOW_PATH: &str = ".github/workflows/ayni-assessment-request.yml";
 pub(crate) const ASSESSMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-managed-assessment.yml";
-
-const AYNI_VERSION: &str = "0.14.5";
-const AYNI_ARCHIVE_SHA256: &str =
-    "45d20c9ae833b0cd403a917b2e07667cb2a6a4130a71d2bf94691c1d651e0139";
-const CHECKOUT_ACTION: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
 
 /// Immutable files proposed by an Ayni Managed setup PR.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,28 +56,27 @@ pub(crate) fn render(
     }
     Ok(SetupWorkflowFiles {
         version: TEMPLATE_VERSION,
-        files: BTreeMap::from([(ASSESSMENT_WORKFLOW_PATH, assessment_workflow())]),
+        files: BTreeMap::from([
+            (ASSESSMENT_WORKFLOW_PATH, assessment_workflow()),
+            (TRIGGER_WORKFLOW_PATH, trigger_workflow()),
+        ]),
     })
 }
 
-fn header() -> String {
-    format!(
-        "# ayni-orchestrator-template: {TEMPLATE_VERSION}\n# This file is controller-owned; edits require setup-PR review.\n"
-    )
-}
-
-fn install_ayni() -> String {
-    format!(
-        "      - name: Install pinned Ayni\n        shell: bash\n        run: |\n          set -euo pipefail\n          archive=\"$RUNNER_TEMP/ayni.tar.gz\"\n          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --output \"$archive\" \\\n+            \"https://github.com/ayni-oss/ayni/releases/download/ayni-v{AYNI_VERSION}/ayni-ayni-v{AYNI_VERSION}-x86_64-unknown-linux-gnu.tar.gz\"\n          echo \"{AYNI_ARCHIVE_SHA256}  $archive\" | sha256sum --check\n          mkdir -p \"$RUNNER_TEMP/ayni-bin\"\n          tar --extract --gzip --file \"$archive\" --directory \"$RUNNER_TEMP/ayni-bin\"\n          echo \"$RUNNER_TEMP/ayni-bin\" >> \"$GITHUB_PATH\"\n"
-    )
-}
-
 fn assessment_workflow() -> String {
-    format!(
-        "{}name: Ayni Managed assessment\n\non:\n  pull_request:\n    types: [opened, reopened, synchronize]\n\nconcurrency:\n  group: ayni-managed-assessment-${{{{ github.event.pull_request.number }}}}\n  cancel-in-progress: true\n\npermissions:\n  contents: read\n\njobs:\n  assess:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n      - name: Checkout exact pull-request head\n        uses: {CHECKOUT_ACTION} # v7.0.1\n        with:\n          ref: ${{{{ github.event.pull_request.head.sha }}}}\n          persist-credentials: false\n{}      - name: Check the admitted runtime\n        shell: bash\n        env:\n          AYNI_RUNTIME_IMAGE: ${{{{ vars.AYNI_RUNTIME_IMAGE }}}}\n        run: |\n          set -euo pipefail\n          test -n \"$AYNI_RUNTIME_IMAGE\"\n          case \"$AYNI_RUNTIME_IMAGE\" in *@sha256:*) ;; *) echo \"Ayni runtime must be digest-pinned\" >&2; exit 1 ;; esac\n          docker run --rm --read-only --user 10002:10001 -v \"$GITHUB_WORKSPACE:/workspace\" -w /workspace \"$AYNI_RUNTIME_IMAGE\" ayni check\n",
-        header(),
-        install_ayni(),
-    )
+    include_str!("../templates/assessment.yml")
+        .replace(
+            "@@AYNI_VERSION@@",
+            ayni_orchestrator_runtime::ayni_release::CLI_VERSION,
+        )
+        .replace(
+            "@@AYNI_SHA256@@",
+            ayni_orchestrator_runtime::ayni_release::LINUX_AMD64_ARCHIVE_SHA256,
+        )
+}
+
+fn trigger_workflow() -> String {
+    include_str!("../templates/assessment-trigger.yml").to_owned()
 }
 
 #[cfg(test)]
@@ -93,10 +88,9 @@ mod tests {
     fn renders_deterministic_pinned_workflows() {
         let first = render(TEMPLATE_VERSION, "main").unwrap();
         assert_eq!(first, render(TEMPLATE_VERSION, "main").unwrap());
-        assert_eq!(first.files.len(), 1);
+        assert_eq!(first.files.len(), 2);
         for workflow in first.files.values() {
-            assert!(workflow.contains("ayni-orchestrator-template: ayni-managed-v1"));
-            assert!(workflow.contains(CHECKOUT_ACTION));
+            assert!(workflow.contains("ayni-orchestrator-template: ayni-managed-v2"));
             assert!(workflow.contains("concurrency:"));
             assert!(!workflow.contains("@main"));
             assert!(!workflow.contains("--host"));
@@ -109,11 +103,17 @@ mod tests {
     fn assessment_workflow_never_receives_build_or_registry_credentials() {
         let files = render(TEMPLATE_VERSION, "main").unwrap().files;
         let assessment = &files[ASSESSMENT_WORKFLOW_PATH];
-        assert!(assessment.contains("pull_request:"));
+        assert!(assessment.contains("workflow_run:"));
+        assert!(!assessment.contains("@@AYNI_"));
+        assert!(assessment.contains(ayni_orchestrator_runtime::ayni_release::CLI_VERSION));
+        assert!(
+            assessment
+                .contains(ayni_orchestrator_runtime::ayni_release::LINUX_AMD64_ARCHIVE_SHA256)
+        );
         assert!(assessment.contains("contents: read"));
         assert!(!assessment.contains("packages: write"));
         assert!(!assessment.contains("AYNI_ENV_CERTIFICATE_SIGNING_KEY"));
-        assert!(!assessment.contains("docker login"));
+        assert!(assessment.contains("packages: read"));
         assert!(!assessment.contains("docker push"));
     }
 

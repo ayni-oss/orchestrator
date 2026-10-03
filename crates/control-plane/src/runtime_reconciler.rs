@@ -144,6 +144,9 @@ impl RuntimeReconciler {
         if let Err(reason) = self.publish_candidates().await {
             tracing::warn!(reason_code = reason, "candidate publication deferred");
         }
+        if let Err(reason) = self.review_assessments().await {
+            tracing::warn!(reason_code = reason, "assessment reconciliation deferred");
+        }
     }
 
     /// Initializes opt-in runtime execution from an operator configuration file.
@@ -424,7 +427,7 @@ impl RuntimeReconciler {
             || report.lock_digest != pending.lock_digest
             || report.runtime.lock_fingerprint != pending.request.expected.lock_fingerprint
             || report.runtime.platform != pending.request.expected.platform
-            || report.runtime.ayni_version != "0.14.5"
+            || report.runtime.ayni_version != pending.request.expected.ayni_version
             || report.runtime.certificate_key_id == "unsigned"
         {
             return Err("runtime_result_mismatch");
@@ -561,7 +564,7 @@ impl RuntimeReconciler {
                 expected: RuntimeExpectation {
                     lock_fingerprint: format!("sha256:{}", identity.fingerprint),
                     platform: runtime.platform.clone(),
-                    ayni_version: "0.14.5".into(),
+                    ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
                 },
             },
         });
@@ -581,6 +584,7 @@ impl RuntimeReconciler {
 
 include!("runtime_reconciler_coding.rs");
 include!("runtime_publication.rs");
+include!("runtime_reviews.rs");
 
 fn now() -> Result<u64, &'static str> {
     SystemTime::now()

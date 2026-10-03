@@ -1,0 +1,16 @@
+# ayni-orchestrator-template: ayni-managed-v2
+name: Ayni assessment request
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: assessment-request-${{ github.repository_id }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  request:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo 'Assessment is executed by the reviewed default-branch workflow.'

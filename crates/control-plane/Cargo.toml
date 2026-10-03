@@ -36,6 +36,7 @@ tonic-health.workspace = true
 tonic-reflection.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 http-body-util.workspace = true
