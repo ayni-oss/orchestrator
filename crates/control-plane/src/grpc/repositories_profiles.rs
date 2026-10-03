@@ -5,6 +5,88 @@ use super::{
 
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for GrpcApi {
+    async fn list_github_installations(
+        &self,
+        request: Request<v1::ListGithubInstallationsRequest>,
+    ) -> Result<Response<v1::ListGithubInstallationsResponse>, Status> {
+        let context = self.context(&request, "ListGithubInstallations")?;
+        let value = self
+            .state
+            .onboarding_source()?
+            .github_installations()
+            .await
+            .map_err(|reason| Status::failed_precondition(reason))?;
+        let installations = value["installations"]
+            .as_array()
+            .ok_or_else(|| Status::failed_precondition("github_installations_invalid"))?
+            .iter()
+            .map(|item| {
+                Ok(v1::GithubInstallationOption {
+                    installation_id: item["installation_id"]
+                        .as_u64()
+                        .ok_or_else(|| Status::failed_precondition("github_installation_invalid"))?
+                        .to_string(),
+                    owner: item["owner"]
+                        .as_str()
+                        .filter(|v| !v.is_empty())
+                        .ok_or_else(|| Status::failed_precondition("github_owner_invalid"))?
+                        .to_owned(),
+                    app_name: value["app_name"]
+                        .as_str()
+                        .unwrap_or("GitHub App")
+                        .to_owned(),
+                })
+            })
+            .collect::<Result<Vec<_>, Status>>()?;
+        Ok(context.response(v1::ListGithubInstallationsResponse { installations }))
+    }
+
+    async fn list_github_installation_repositories(
+        &self,
+        request: Request<v1::ListGithubInstallationRepositoriesRequest>,
+    ) -> Result<Response<v1::ListGithubInstallationRepositoriesResponse>, Status> {
+        let context = self.context(&request, "ListGithubInstallationRepositories")?;
+        let id = request
+            .get_ref()
+            .installation_id
+            .parse::<u64>()
+            .ok()
+            .filter(|id| *id > 0)
+            .ok_or_else(|| Status::invalid_argument("github_installation_invalid"))?;
+        let value = self
+            .state
+            .onboarding_source()?
+            .installation_repositories(id)
+            .await
+            .map_err(|reason| Status::failed_precondition(reason))?;
+        let repositories = value["repositories"]
+            .as_array()
+            .ok_or_else(|| Status::failed_precondition("github_repositories_invalid"))?
+            .iter()
+            .map(|item| {
+                Ok(v1::GithubRepositoryOption {
+                    repository_id: item["id"]
+                        .as_u64()
+                        .ok_or_else(|| Status::failed_precondition("github_repository_invalid"))?
+                        .to_string(),
+                    owner: item["owner"]["login"]
+                        .as_str()
+                        .ok_or_else(|| Status::failed_precondition("github_repository_invalid"))?
+                        .to_owned(),
+                    name: item["name"]
+                        .as_str()
+                        .ok_or_else(|| Status::failed_precondition("github_repository_invalid"))?
+                        .to_owned(),
+                    default_branch: item["default_branch"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                })
+            })
+            .collect::<Result<Vec<_>, Status>>()?;
+        Ok(context.response(v1::ListGithubInstallationRepositoriesResponse { repositories }))
+    }
+
     async fn connect_github_repository(
         &self,
         request: Request<v1::ConnectGithubRepositoryRequest>,

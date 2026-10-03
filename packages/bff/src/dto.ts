@@ -50,6 +50,9 @@ export interface RepositoryConnectionPageDto {
   page: PageDto;
 }
 
+export interface GithubInstallationOptionDto { installationId: string; owner: string; appName: string }
+export interface GithubRepositoryOptionDto { repositoryId: string; owner: string; name: string; defaultBranch: string }
+
 export interface CreateRepositoryConnectionInput {
   idempotencyKey: string;
   provider: GithubRepositoryDto;

@@ -32,6 +32,8 @@ import {
   type ListDevelopmentTasksResponse,
   type ListProviderModelsResponse,
   type ListRepositoryConnectionsResponse,
+  type ListGithubInstallationsResponse,
+  type ListGithubInstallationRepositoriesResponse,
   type ListRuntimeArtifactsResponse,
   type ListRuntimeProfilesResponse,
   type RetryDevelopmentTaskResponse,
@@ -52,6 +54,8 @@ import type {
   ProviderModelPageDto,
   RepositoryConnectionDto,
   RepositoryConnectionPageDto,
+  GithubInstallationOptionDto,
+  GithubRepositoryOptionDto,
   RequestContext,
   RuntimeArtifactPageDto,
   RuntimeProfileDto,
@@ -167,6 +171,14 @@ export class OrchestratorBff {
   async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string }, context: RequestContext) {
     const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository(input,m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
+  }
+  async listGithubInstallations(context: RequestContext): Promise<GithubInstallationOptionDto[]> {
+    const response = await this.#unary<ListGithubInstallationsResponse>(context, (m,o,c)=>this.#repositories.listGithubInstallations({},m,o,c));
+    return response.installations.map(item=>({installationId:item.installationId,owner:item.owner,appName:item.appName}));
+  }
+  async listGithubInstallationRepositories(installationId: string, context: RequestContext): Promise<GithubRepositoryOptionDto[]> {
+    const response = await this.#unary<ListGithubInstallationRepositoriesResponse>(context, (m,o,c)=>this.#repositories.listGithubInstallationRepositories({installationId},m,o,c));
+    return response.repositories.map(item=>({repositoryId:item.repositoryId,owner:item.owner,name:item.name,defaultBranch:item.defaultBranch}));
   }
   async inspectAyniRepository(repositoryConnectionId:string, context:RequestContext) {
     const response=await this.#unary<InspectAyniRepositoryResponse>(context,(m,o,c)=>this.#profiles.inspectAyniRepository({repositoryConnectionId},m,o,c));

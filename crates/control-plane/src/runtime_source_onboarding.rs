@@ -1,4 +1,41 @@
 impl SourceClient {
+    pub(crate) async fn github_installations(&self) -> Result<Value, &'static str> {
+        let jwt = self.app_jwt()?;
+        let app = bounded(self.client.get("https://api.github.com/app").bearer_auth(&jwt)).await?;
+        let app_name = app["name"].as_str().ok_or("github_app_invalid")?;
+        let mut items = Vec::new();
+        for page in 1..=20 {
+            let page = page.to_string();
+            let installations = bounded(self.client.get("https://api.github.com/app/installations")
+                .bearer_auth(&jwt).query(&[("per_page", "100"), ("page", page.as_str())])).await?;
+            let batch = installations.as_array().ok_or("github_installations_invalid")?;
+            let count = batch.len();
+            items.extend(batch.iter().cloned());
+            if count < 100 { break; }
+        }
+        Ok(json!({"app_name": app_name, "installations": items.iter().map(|item| json!({
+            "installation_id": item["id"], "owner": item["account"]["login"]
+        })).collect::<Vec<_>>()}))
+    }
+
+    pub(crate) async fn installation_repositories(&self, installation_id: u64) -> Result<Value, &'static str> {
+        let jwt = self.app_jwt()?;
+        let access = bounded(self.client.post(format!("https://api.github.com/app/installations/{installation_id}/access_tokens"))
+            .bearer_auth(jwt)).await?;
+        let token = access["token"].as_str().ok_or("github_authentication_failed")?;
+        let mut repositories = Vec::new();
+        for page in 1..=20 {
+            let page = page.to_string();
+            let result = bounded(self.client.get("https://api.github.com/installation/repositories")
+                .bearer_auth(&token).query(&[("per_page", "100"), ("page", page.as_str())])).await?;
+            let batch = result["repositories"].as_array().ok_or("github_repositories_invalid")?;
+            let count = batch.len();
+            repositories.extend(batch.iter().cloned());
+            if count < 100 { break; }
+        }
+        Ok(json!({"repositories": repositories}))
+    }
+
     pub(crate) fn setup_action_offset(&self, count: usize) -> usize {
         self.setup_cursor
             .fetch_add(8, std::sync::atomic::Ordering::Relaxed)

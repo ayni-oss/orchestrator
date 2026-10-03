@@ -35,7 +35,7 @@ impl AppState {
         self
     }
 
-    fn onboarding_source(&self) -> Result<&SourceClient, Status> {
+    pub(crate) fn onboarding_source(&self) -> Result<&SourceClient, Status> {
         self.source
             .as_deref()
             .ok_or_else(|| Status::unavailable("github_app_unconfigured"))

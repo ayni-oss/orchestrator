@@ -9,7 +9,6 @@
   import SubmitButton from "$lib/components/submit-button.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import { statusTone } from "$lib/presentation.js";
 
@@ -39,12 +38,22 @@
     {/if}
   </section>
 
-  <Card.Root id="connect"><Card.Header><div class="flex items-center gap-3"><FolderGit2 class="size-5" /><div><Card.Title>Connect repository</Card.Title><Card.Description>Use a repository already accessible to your existing GitHub App. Access and repository identity are checked before connecting.</Card.Description></div></div></Card.Header><Card.Content>
+  <Card.Root id="connect"><Card.Header><div class="flex items-center gap-3"><FolderGit2 class="size-5" /><div><Card.Title>Connect repository</Card.Title><Card.Description>Select the GitHub App installation and repository. Repository identity and branch settings are filled in from GitHub.</Card.Description></div></div></Card.Header><Card.Content class="space-y-5">
+    {#if data.installations?.length}
+    {@const appNames = [...new Set(data.installations.map((item) => item.appName))]}
+    <form method="GET" action="/repositories" class="grid gap-5 sm:grid-cols-2">
+      <div class="space-y-2"><Label for="github-app">GitHub App</Label><select id="github-app" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={appNames[0]} disabled={appNames.length === 1} aria-label="GitHub App">{#each appNames as appName}<option value={appName}>{appName}</option>{/each}</select></div>
+      <div class="space-y-2"><Label for="installationId">GitHub owner</Label><select id="installationId" name="installationId" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={data.selectedInstallationId} onchange={(event) => event.currentTarget.form?.requestSubmit()} required><option value="" disabled>Select an owner</option>{#each data.installations as installation (installation.installationId)}<option value={installation.installationId}>{installation.owner}</option>{/each}</select></div>
+    </form>
+    {#if data.repositories?.length}
     <form method="POST" action="?/connect" class="grid gap-5 sm:grid-cols-2" use:enhance={() => { connecting = true; return async ({ update }) => { connecting = false; await update(); }; }}>
       <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <div class="space-y-2"><Label for="owner">Owner</Label><Input id="owner" name="owner" required maxlength={100} /></div>
-      <div class="space-y-2"><Label for="repository">Repository</Label><Input id="repository" name="repository" required maxlength={100} /></div>
-      <div class="sm:col-span-2"><SubmitButton pending={connecting} pendingLabel="Connecting…">Connect repository</SubmitButton></div>
+      <input type="hidden" name="installationId" value={data.selectedInstallationId} />
+      <input type="hidden" name="owner" value={data.installations.find((item) => item.installationId === data.selectedInstallationId)?.owner ?? ""} />
+      <div class="space-y-2"><Label for="repository">Repository</Label><select id="repository" name="repository" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required><option value="" disabled selected>Select a repository</option>{#each data.repositories as repository (`${repository.owner}/${repository.name}`)}<option value={repository.name}>{repository.name}</option>{/each}</select></div>
+      <div class="flex items-end"><SubmitButton pending={connecting} pendingLabel="Connecting…">Connect repository</SubmitButton></div>
     </form>
+    {:else}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
+    {:else if data.backend === "connected"}<p class="text-sm text-muted-foreground">No GitHub App installations are available. Configure the App and grant it access to an owner.</p>{/if}
   </Card.Content></Card.Root>
 </div>
