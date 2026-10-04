@@ -38,6 +38,8 @@ github_app_id=""
 github_app_installation_id=""
 github_app_private_key_b64=""
 openai_api_key=""
+ayni_environment_signing_key=""
+ayni_environment_key_id=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ -z "$line" || "$line" == \#* ]] && continue
   if [[ ! "$line" =~ ^([A-Z0-9_]+)=(.*)$ ]]; then
@@ -51,6 +53,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     GITHUB_APP_INSTALLATION_ID) github_app_installation_id="$value" ;;
     GITHUB_APP_PRIVATE_KEY_B64) github_app_private_key_b64="$value" ;;
     OPENAI_API_KEY) openai_api_key="$value" ;;
+    AYNI_ENV_CERTIFICATE_SIGNING_KEY) ayni_environment_signing_key="$value" ;;
+    AYNI_ENV_CERTIFICATE_KEY_ID) ayni_environment_key_id="$value" ;;
     *)
       echo "unsupported environment-file key: $key" >&2
       exit 1
@@ -79,6 +83,19 @@ if [[ -n "$github_app_installation_id" \
   exit 1
 fi
 
+configure_ayni_environment_signing=false
+if [[ -n "$ayni_environment_signing_key" || -n "$ayni_environment_key_id" ]]; then
+  if [[ ! "$ayni_environment_signing_key" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "Ayni environment signing key must be a 32-byte lowercase hexadecimal seed" >&2
+    exit 1
+  fi
+  if [[ ! "$ayni_environment_key_id" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
+    echo "Ayni environment certificate key ID must be 1 through 128 safe characters" >&2
+    exit 1
+  fi
+  configure_ayni_environment_signing=true
+fi
+
 temporary_directory="$(mktemp -d)"
 readonly temporary_directory
 cleanup() {
@@ -98,6 +115,8 @@ decode_base64() {
 readonly app_id_file="$temporary_directory/app-id"
 readonly private_key_file="$temporary_directory/private-key.pem"
 readonly openai_key_file="$temporary_directory/api-key"
+readonly ayni_signing_key_file="$temporary_directory/ayni-signing-key"
+readonly ayni_key_id_file="$temporary_directory/ayni-key-id"
 printf '%s' "$github_app_id" > "$app_id_file"
 if ! printf '%s' "$github_app_private_key_b64" | decode_base64 > "$private_key_file"; then
   echo "GitHub App private key is not valid base64" >&2
@@ -108,6 +127,10 @@ if ! grep -q -- '-----BEGIN.*PRIVATE KEY-----' "$private_key_file"; then
   exit 1
 fi
 printf '%s' "$openai_api_key" > "$openai_key_file"
+if [[ "$configure_ayni_environment_signing" == true ]]; then
+  printf '%s' "$ayni_environment_signing_key" > "$ayni_signing_key_file"
+  printf '%s' "$ayni_environment_key_id" > "$ayni_key_id_file"
+fi
 
 context="$(dev_context)"
 readonly context
@@ -135,5 +158,10 @@ apply_secret github-app-credentials \
   --from-file=app-id="$app_id_file" \
   --from-file=private-key.pem="$private_key_file"
 apply_secret openai-api --from-file=api-key="$openai_key_file"
+if [[ "$configure_ayni_environment_signing" == true ]]; then
+  apply_secret environment-producer \
+    --from-file=signing-key="$ayni_signing_key_file" \
+    --from-file=key-id="$ayni_key_id_file"
+fi
 
 echo "configured local development Secrets in namespace $namespace"

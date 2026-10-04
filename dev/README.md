@@ -19,9 +19,16 @@ dev/ctl deploy
 dev/ctl check
 ```
 
-`deploy` and its `redeploy` alias safely re-run in place: they rebuild all three
-project images, load them into Docker Desktop Kubernetes, and run
-`helm upgrade --install`. Credential updates stay explicit through `secrets`.
+`deploy` and its `redeploy` alias safely re-run in place: they reconcile the
+selected private env file into Kubernetes Secrets, rebuild all three project
+images, load them into Docker Desktop Kubernetes, and run `helm upgrade
+--install`. Use `secrets` when only credential values need to be refreshed.
+Set `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID` in the
+mode-600 `dev/.env` when using the dedicated Kubernetes environment builder.
+`dev/ctl secrets` then provisions the `environment-producer` Secret. Reference
+that name as `build.signing_secret` in the runtime profile configuration; the
+build Job consumes the values without mounting them into the control-plane or
+web containers. These settings are optional when builds use GitHub Actions.
 
 Use a different ignored env file when working with an isolated profile:
 
@@ -29,7 +36,8 @@ Use a different ignored env file when working with an isolated profile:
 dev/ctl init --env-file dev/.env.alice
 AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
   dev/ctl secrets --env-file dev/.env.alice
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice dev/ctl deploy
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
+  dev/ctl deploy --env-file dev/.env.alice
 ```
 
 ## Lifecycle
@@ -37,7 +45,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice dev/ctl deploy
 | Command | Effect |
 | --- | --- |
 | `dev/ctl secrets` | Parse the private env file and update local Kubernetes Secrets |
-| `dev/ctl deploy` | Build and install or redeploy the complete stack in place |
+| `dev/ctl deploy` | Sync Secrets, build, and install or redeploy the complete stack in place |
 | `dev/ctl check` | Check application, gRPC, browser, metrics, and dashboards |
 | `dev/ctl status` | Show the release, Pods, and retained claims |
 | `dev/ctl cleanup` | Uninstall the release while preserving Secrets, Jobs, and retained claims |

@@ -92,10 +92,15 @@ it is not a claim of daemonless Ayni support.
 
 The engine Secret provides `ca.pem`, `cert.pem`, and `key.pem`. The registry
 Secret supplies `.dockerconfigjson`; the signing Secret supplies `signing-key`
-and `key-id` for Ayni's supported certificate environment variables. Only the
-build Job references those credentials. It runs `ayni env build --tag` and then
-pushes that tag to the configured private registry. The controller neither
-executes image-building tooling nor reads registry/signing Secret contents.
+and `key-id` for Ayni's supported certificate environment variables. For the
+local Docker Desktop environment, `dev/ctl secrets` creates this Secret as
+`environment-producer` from the optional `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and
+`AYNI_ENV_CERTIFICATE_KEY_ID` entries in the mode-600 `dev/.env`; set
+`build.signing_secret` to that name. Other installations provision the referenced
+Secret through their secret manager. Only the build Job references those
+credentials. It runs `ayni env build --tag` and then pushes that tag to the
+configured private registry. The controller neither executes image-building
+tooling nor reads registry/signing Secret contents.
 Kubernetes Secret/ServiceAccount separation is deployment wiring, not a defence
 against a compromised controller with permission to create arbitrary Pods;
 stronger tenancy requires admission policy and separate namespaces.

@@ -15,9 +15,9 @@ Usage: dev/ctl COMMAND [OPTIONS]
 Local Docker Desktop development:
   init [--env-file PATH]       Create a private env file from the template
   secrets [--env-file PATH]    Sync the env file into Kubernetes Secrets
-  deploy                       Build images and install or upgrade in place
-  redeploy                     Alias for deploy
-  up                           Alias for deploy
+  deploy [--env-file PATH]     Sync Secrets, build images, and install or upgrade
+  redeploy [--env-file PATH]   Alias for deploy
+  up [--env-file PATH]         Alias for deploy
   check [--expect-empty]       Check the stack and optionally a fresh baseline
   status                       Show the Helm release, pods, and retained claims
   cleanup                      Uninstall stateless resources; preserve local data
@@ -86,16 +86,8 @@ case "$command" in
     "$scripts/configure-development-secrets.sh" --env-file "$env_file"
     ;;
   deploy | redeploy | up)
-    [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
-    context="$(dev_context)"
-    namespace="$(dev_namespace)"
-    for secret in github-app-credentials openai-api; do
-      if ! kubectl --context "$context" --namespace "$namespace" get "secret/$secret" >/dev/null 2>&1; then
-        echo "required local Secret is missing: $secret" >&2
-        echo "configure dev/.env, then run 'dev/ctl secrets'" >&2
-        exit 1
-      fi
-    done
+    parse_env_file "$@"
+    "$scripts/configure-development-secrets.sh" --env-file "$env_file"
     "$scripts/deploy.sh"
     ;;
   check)
