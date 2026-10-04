@@ -36,10 +36,15 @@ export const actions: Actions = {
     if (!key || !/^[0-9a-f-]{36}$/u.test(key)) return fail(400,{error:{message:"Refresh and try again."}});
     let profile;
     try {
-      const inspection=await getBff().inspectAyniRepository(params.repositoryId,requestContext(locals));
-      if (!inspection.policyPresent || !inspection.lockCompatible) return fail(409,{error:{message:"Commit a supported Ayni policy and generated lock on the default branch, then inspect again."}});
-      profile=await getBff().createRuntimeProfile({idempotencyKey:key,repositoryConnectionId:params.repositoryId,repositorySnapshotId:inspection.snapshotId,configuration:{kind:"ayni_managed",lockFingerprint:inspection.fingerprint,ayniVersion:inspection.version,workflowTemplateVersion:inspection.template,ociRepository:inspection.repository}},requestContext(locals));
-      await getBff().installAutomation(profile.id,key,requestContext(locals));
+      const context=requestContext(locals);
+      const existing=await getBff().listRuntimeProfiles(params.repositoryId,{pageSize:100},context);
+      profile=existing.runtimeProfiles.find((candidate)=>candidate.kind==="ayni_managed");
+      if (!profile) {
+        const inspection=await getBff().inspectAyniRepository(params.repositoryId,context);
+        if (!inspection.policyPresent || !inspection.lockCompatible) return fail(409,{error:{message:"Commit a supported Ayni policy and generated lock on the default branch, then inspect again."}});
+        profile=await getBff().createRuntimeProfile({idempotencyKey:key,repositoryConnectionId:params.repositoryId,repositorySnapshotId:inspection.snapshotId,configuration:{kind:"ayni_managed",lockFingerprint:inspection.fingerprint,ayniVersion:inspection.version,workflowTemplateVersion:inspection.template,ociRepository:inspection.repository}},context);
+        await getBff().installAutomation(profile.id,key,context);
+      }
     } catch(error) { const mapped=safeError(error,locals.requestId); return fail(mapped.status,{error:mapped}); }
     redirect(303,`/profiles/${encodeURIComponent(profile.id)}`);
   },

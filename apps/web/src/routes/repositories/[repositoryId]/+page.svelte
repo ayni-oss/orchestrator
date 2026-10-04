@@ -11,6 +11,7 @@
   import * as Card from "$lib/components/ui/card/index.js";
   import { formatDate, statusTone, words } from "$lib/presentation.js";
   let { data, form }: PageProps = $props();
+  const managedProfile = $derived(data.runtimeProfiles.find((profile) => profile.kind === "ayni_managed"));
 </script>
 
 <svelte:head><title>{data.repositoryConnection?.displayName ?? "Repository unavailable"} · Ayni Orchestrator</title></svelte:head>
@@ -29,7 +30,7 @@
         <dl class="space-y-2 text-sm"><div><dt>Default-branch revision</dt><dd><CodeValue value={inspection.head} /></dd></div><div><dt>Policy</dt><dd>{inspection.policyPresent ? "Present" : "Missing — commit .ayni.toml"}</dd></div><div><dt>Managed lock</dt><dd>{inspection.lockCompatible ? "Compatible" : "Generate and commit a lock with the supported Ayni release"}</dd></div><div><dt>Certificate trust policy</dt><dd>{inspection.trustPinned ? "Pinned policy observed; certificate verification is still required" : "Configure a public trust key and regenerate the lock before building"}</dd></div><div><dt>Environment package</dt><dd><CodeValue value={inspection.repository} /></dd></div></dl>
         <p class="text-sm">After merge, GitHub Actions builds the signed environment. The operator must supply the matching signing configuration. A profile is ready only after Orchestrator verifies the produced image.</p>
         {#each inspection.workflows as workflow (workflow.path)}<details class="rounded-lg border p-3"><summary>{workflow.path}</summary><pre class="mt-3 overflow-x-auto text-xs">{workflow.contents}</pre></details>{/each}
-        <form method="POST" action="?/onboard" use:enhance><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><Button type="submit" disabled={!inspection.policyPresent || !inspection.lockCompatible}>Create profile and setup PR</Button></form>
+        {#if managedProfile}<Button href={`/profiles/${encodeURIComponent(managedProfile.id)}`}>Open managed profile</Button>{:else}<form method="POST" action="?/onboard" use:enhance><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><Button type="submit" disabled={!inspection.policyPresent || !inspection.lockCompatible}>Create profile and setup PR</Button></form>{/if}
       {/if}
       <details><summary>Custom Runtime</summary><p class="mt-2 text-sm text-muted-foreground">Orchestrator supports a separate runtime model for repositories without Ayni. Custom Runtime execution is not available in this release.</p></details>
     </Card.Content></Card.Root>

@@ -47,6 +47,57 @@ impl SourceClient {
         }
     }
 
+    pub(crate) async fn find_setup_pull(
+        &self,
+        owner: &str,
+        repository: &str,
+        title: &str,
+        base: &str,
+        token: &str,
+    ) -> Result<Option<Value>, &'static str> {
+        let value = bounded(
+            self.client
+                .get(format!(
+                    "https://api.github.com/repos/{owner}/{repository}/pulls"
+                ))
+                .bearer_auth(token)
+                .query(&[("state", "open"), ("base", base), ("per_page", "100")]),
+        )
+        .await?;
+        let mut matches = value
+            .as_array()
+            .ok_or("publication_response_invalid")?
+            .iter()
+            .filter(|pull| {
+                pull["title"].as_str() == Some(title)
+                    && pull["head"]["ref"]
+                        .as_str()
+                        .is_some_and(|branch| branch.starts_with("setup/runtime-"))
+            });
+        let pull = matches.next().cloned();
+        if matches.next().is_some() {
+            return Err("publication_identity_conflict");
+        }
+        Ok(pull)
+    }
+
+    pub(crate) async fn pull(
+        &self,
+        owner: &str,
+        repository: &str,
+        number: u64,
+        token: &str,
+    ) -> Result<Value, &'static str> {
+        bounded(
+            self.client
+                .get(format!(
+                    "https://api.github.com/repos/{owner}/{repository}/pulls/{number}"
+                ))
+                .bearer_auth(token),
+        )
+        .await
+    }
+
     pub(crate) async fn create_pull(
         &self,
         owner: &str,
@@ -54,13 +105,14 @@ impl SourceClient {
         token: &str,
         body: &Value,
     ) -> Result<Value, &'static str> {
-        bounded(
+        bounded_operation(
             self.client
                 .post(format!(
                     "https://api.github.com/repos/{owner}/{repository}/pulls"
                 ))
                 .bearer_auth(token)
                 .json(body),
+            "create_pull_request",
         )
         .await
     }
@@ -137,13 +189,15 @@ impl SourceClient {
             ))
             .bearer_auth(jwt)
             .json(&json!({"repository_ids":[repository_id], "permissions":permissions}));
-        let value = bounded(request).await.map_err(|reason| {
-            if reason == "github_request_invalid" {
-                "github_permissions_missing"
-            } else {
-                reason
-            }
-        })?;
+        let value = bounded_operation(request, "create_installation_token")
+            .await
+            .map_err(|reason| {
+                if reason == "github_request_invalid" {
+                    "github_permissions_missing"
+                } else {
+                    reason
+                }
+            })?;
         value["token"]
             .as_str()
             .filter(|v| !v.is_empty() && v.len() <= 4096)
@@ -246,23 +300,19 @@ impl SourceClient {
 include!("runtime_source_review.rs");
 
 async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str> {
+    bounded_operation(request, "github_api").await
+}
+
+async fn bounded_operation(
+    request: reqwest::RequestBuilder,
+    operation: &'static str,
+) -> Result<Value, &'static str> {
     let mut response = request
         .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
         .await
         .map_err(|_| "github_unavailable")?;
     let status = response.status().as_u16();
-    match status {
-        200..=299 => {}
-        401 | 403 => return Err("github_access_denied"),
-        429 => return Err("github_rate_limited"),
-        404 => return Err("github_not_found"),
-        422 => return Err("github_request_invalid"),
-        _ => {
-            tracing::warn!(http_status = status, "GitHub request failed");
-            return Err("github_unavailable");
-        }
-    }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "github_unavailable")? {
         if bytes.len() + chunk.len() > 2_097_152 {
@@ -270,7 +320,57 @@ async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str
         }
         bytes.extend_from_slice(&chunk);
     }
+    if !(200..=299).contains(&status) {
+        let reason = github_error_reason(status, &bytes);
+        tracing::warn!(
+            provider = "github",
+            operation,
+            http_status = status,
+            reason_code = reason,
+            "GitHub request rejected"
+        );
+        return Err(reason);
+    }
     serde_json::from_slice(&bytes).map_err(|_| "github_response_invalid")
+}
+
+fn github_error_reason(status: u16, body: &[u8]) -> &'static str {
+    match status {
+        401 | 403 => "github_access_denied",
+        404 => "github_not_found",
+        429 => "github_rate_limited",
+        422 => {
+            let value = serde_json::from_slice::<Value>(body).unwrap_or_default();
+            let mut message = value["message"]
+                .as_str()
+                .map(str::to_lowercase)
+                .unwrap_or_default();
+            if let Some(errors) = value["errors"].as_array() {
+                for error in errors {
+                    if let Some(detail) = error["message"].as_str() {
+                        message.push(' ');
+                        message.push_str(&detail.to_lowercase());
+                    }
+                    if let Some(code) = error["code"].as_str() {
+                        message.push(' ');
+                        message.push_str(&code.to_lowercase());
+                    }
+                }
+            }
+            if message.contains("permissions requested are not granted") {
+                "github_permissions_missing"
+            } else if message.contains("reference already exists") {
+                "github_reference_exists"
+            } else if message.contains("reference update failed") {
+                "github_reference_update_failed"
+            } else if message.contains("spam") || message.contains("submitted too quickly") {
+                "github_secondary_rate_limited"
+            } else {
+                "github_request_invalid"
+            }
+        }
+        _ => "github_unavailable",
+    }
 }
 
 include!("runtime_source_onboarding.rs");

@@ -38,7 +38,7 @@ impl SourceClient {
 
     pub(crate) fn setup_action_offset(&self, count: usize) -> usize {
         self.setup_cursor
-            .fetch_add(8, std::sync::atomic::Ordering::Relaxed)
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             % count.max(1)
     }
 
@@ -103,11 +103,20 @@ impl SourceClient {
             "https://api.github.com/repos/{}/{}/{path}",
             github.owner, github.name
         );
-        bounded(if let Some(body) = body {
-            self.client.post(url).bearer_auth(token).json(body)
-        } else {
-            self.client.get(url).bearer_auth(token)
-        })
+        let operation = match (path, body.is_some()) {
+            ("git/trees", true) => "create_tree",
+            ("git/commits", true) => "create_commit",
+            ("git/refs", true) => "create_reference",
+            _ => "read_setup_repository",
+        };
+        bounded_operation(
+            if let Some(body) = body {
+                self.client.post(url).bearer_auth(token).json(body)
+            } else {
+                self.client.get(url).bearer_auth(token)
+            },
+            operation,
+        )
         .await
     }
 

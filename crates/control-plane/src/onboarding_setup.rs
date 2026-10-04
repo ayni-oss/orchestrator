@@ -4,8 +4,8 @@ impl AppState {
             s.pending_external_actions("InstallRepositoryAutomation")
         })
         .map_err(|_| "setup_store_unavailable")?;
-        // Open PRs retain pending intent. Rotate the bounded batch so they cannot
-        // starve newly requested repositories while waiting for a maintainer.
+        // Open PRs retain pending intent. Rotate one action per pass so repositories
+        // cannot starve each other or create a provider mutation burst.
         let offset = self
             .source
             .as_ref()
@@ -15,7 +15,7 @@ impl AppState {
             .iter()
             .cycle()
             .skip(offset)
-            .take(actions.len().min(8))
+            .take(1)
         {
             if let Err(reason) = self.reconcile_setup_action(action).await {
                 tracing::warn!(reason_code = reason, "setup action deferred");
@@ -59,7 +59,21 @@ impl AppState {
         )
         .map_err(|_| "setup_template_invalid")?;
         let token = source.setup_token(github).await?;
-        let pull = if let Some(pull) = source
+        let recorded_pull = match &installation.provider {
+            Some(v1::automation_installation::Provider::Github(provider)) => {
+                provider.setup_pull_request_number
+            }
+            None => None,
+        };
+        if let Some(number) = recorded_pull {
+            let pull = source
+                .pull(&github.owner, &github.name, number, &token)
+                .await?;
+            return self
+                .observe_setup_pull(id, &repository, github, &request, &token, pull, action)
+                .await;
+        }
+        let exact_pull = source
             .find_pull(
                 &github.owner,
                 &github.name,
@@ -67,13 +81,41 @@ impl AppState {
                 &request.base_branch,
                 &token,
             )
-            .await?
-        {
+            .await?;
+        let owned_pull = if exact_pull.is_none() {
+            source
+                .find_setup_pull(
+                    &github.owner,
+                    &github.name,
+                    request.title,
+                    &request.base_branch,
+                    &token,
+                )
+                .await?
+        } else {
+            None
+        };
+        let pull = if let Some(pull) = exact_pull.or(owned_pull) {
             pull
         } else {
             source.setup_branch(github, &request, &token).await?;
             source.create_pull(&github.owner,&github.name,&token,&serde_json::json!({"head":request.branch,"base":request.base_branch,"title":request.title,"body":request.body,"draft":true})).await?
         };
+        self.observe_setup_pull(id, &repository, github, &request, &token, pull, action)
+            .await
+    }
+
+    async fn observe_setup_pull(
+        &self,
+        id: &str,
+        repository: &v1::RepositoryConnection,
+        github: &v1::GithubRepository,
+        request: &crate::github_setup::SetupPullRequest,
+        token: &str,
+        pull: serde_json::Value,
+        action: &crate::clean_store::DurableAction,
+    ) -> Result<(), &'static str> {
+        let source = self.source.as_ref().ok_or("github_app_unconfigured")?;
         let number = pull["number"].as_u64().ok_or("setup_pull_invalid")?;
         let merged = pull["merged_at"].as_str().is_some();
         if merged {
@@ -82,12 +124,12 @@ impl AppState {
                     &github.owner,
                     &github.name,
                     &repository.default_branch,
-                    &token,
+                    token,
                 )
                 .await?;
             for (path, expected) in &request.files.files {
                 if source
-                    .file(&github.owner, &github.name, &head, path, &token)
+                    .file(&github.owner, &github.name, &head, path, token)
                     .await?
                     != expected.as_bytes()
                 {
@@ -122,7 +164,9 @@ fn public_setup_failure(reason: &str) -> &'static str {
         "github_access_denied" | "github_not_found" | "github_permissions_missing" => {
             "provider_access_required"
         }
-        "github_rate_limited" | "github_unavailable" => "provider_temporarily_unavailable",
+        "github_rate_limited" | "github_secondary_rate_limited" | "github_unavailable" => {
+            "provider_temporarily_unavailable"
+        }
         _ => "repository_automation_failed",
     }
 }
