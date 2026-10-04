@@ -89,75 +89,6 @@ impl CleanStore {
         )
     }
 
-    pub(crate) fn reject_candidate(
-        &mut self,
-        id: &str,
-        expected_version: u64,
-        failure: v1::ResourceFailure,
-    ) -> Result<v1::Candidate, CleanStoreError> {
-        let mut resource = self.candidate(id)?;
-        if resource.resource_version != expected_version {
-            return Err(CleanStoreError::StaleVersion);
-        }
-        let current = v1::CandidateState::try_from(resource.state)
-            .map_err(|_| CleanStoreError::CorruptState)?;
-        if !valid_candidate_transition(current, v1::CandidateState::Rejected) {
-            return Err(CleanStoreError::InvalidTransition);
-        }
-        let task_id: String = self
-            .connection
-            .query_row(
-                "SELECT development_task_id FROM candidates WHERE id=?1",
-                [id],
-                |row| row.get(0),
-            )
-            .map_err(CleanStoreError::Database)?;
-        let task = self.development_task(&task_id)?;
-        let repository_id = task
-            .snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.repository.as_ref())
-            .map(|repository| repository.repository_connection_id.as_str())
-            .ok_or(CleanStoreError::CorruptState)?;
-        resource.state = v1::CandidateState::Rejected as i32;
-        resource.failure = bounded_failure(Some(failure));
-        resource.resource_version = resource.resource_version.saturating_add(1);
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        let cursor = append_event(
-            &transaction,
-            DEVELOPMENT_SERVICE,
-            "candidate",
-            &resource.id,
-            resource.resource_version,
-            Some(repository_id),
-            Some(&task_id),
-            &resource,
-        )?;
-        let changed = transaction
-            .execute(
-                "UPDATE candidates SET state=?1,payload=?2,resource_version=?3,event_cursor=?4
-             WHERE id=?5 AND resource_version=?6",
-                params![
-                    resource.state,
-                    resource.encode_to_vec(),
-                    i64::try_from(resource.resource_version)
-                        .map_err(|_| CleanStoreError::CorruptState)?,
-                    i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
-                    resource.id,
-                    i64::try_from(expected_version).map_err(|_| CleanStoreError::CorruptState)?
-                ],
-            )
-            .map_err(CleanStoreError::Database)?;
-        if changed != 1 {
-            return Err(CleanStoreError::StaleVersion);
-        }
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(resource)
-    }
-
     pub(crate) fn list_candidates(
         &mut self,
         task_id: Option<&str>,
@@ -346,6 +277,7 @@ impl CleanStore {
         Ok(change_request)
     }
 
+    #[cfg(test)]
     pub(crate) fn retry_change_request_publication(
         &mut self,
         operation_key: &str,
@@ -425,59 +357,6 @@ impl CleanStore {
         )
     }
 
-    pub(crate) fn record_assessment(
-        &mut self,
-        mut assessment: v1::Assessment,
-    ) -> Result<v1::Assessment, CleanStoreError> {
-        if !valid_assessment_report(&assessment) {
-            return Err(CleanStoreError::BoundExceeded);
-        }
-        let change_request = self.change_request(&assessment.change_request_id)?;
-        if assessment.repository_connection_id != change_request.repository_connection_id {
-            return Err(CleanStoreError::ParentMismatch);
-        }
-        if assessment.id.is_empty() {
-            assessment.id = resource_id("assessment");
-        }
-        assessment.resource_version = 1;
-        if assessment.created_at.is_none() {
-            assessment.created_at = Some(timestamp(unix_seconds()?));
-        }
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        let cursor = append_event(
-            &transaction,
-            REVIEW_SERVICE,
-            "assessment",
-            &assessment.id,
-            1,
-            Some(&assessment.repository_connection_id),
-            Some(&assessment.change_request_id),
-            &assessment,
-        )?;
-        transaction
-            .execute(
-                "INSERT INTO assessments(
-                    id,repository_connection_id,change_request_id,head_revision,conclusion,
-                    payload,resource_version,event_cursor
-                 ) VALUES (?1,?2,?3,?4,?5,?6,1,?7)",
-                params![
-                    assessment.id,
-                    assessment.repository_connection_id,
-                    assessment.change_request_id,
-                    assessment.head_revision,
-                    assessment.conclusion,
-                    assessment.encode_to_vec(),
-                    i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?
-                ],
-            )
-            .map_err(map_constraint)?;
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(assessment)
-    }
-
     pub(crate) fn assessment(&self, id: &str) -> Result<v1::Assessment, CleanStoreError> {
         get_payload(
             &self.connection,
@@ -522,49 +401,6 @@ impl CleanStore {
             },
             REVIEW_SERVICE,
         )
-    }
-
-    pub(crate) fn record_evidence_reference(
-        &mut self,
-        mut evidence: v1::EvidenceReference,
-    ) -> Result<v1::EvidenceReference, CleanStoreError> {
-        if !valid_evidence_report(&evidence) {
-            return Err(CleanStoreError::BoundExceeded);
-        }
-        let assessment = self.assessment(&evidence.assessment_id)?;
-        if evidence.id.is_empty() {
-            evidence.id = resource_id("evidence");
-        }
-        evidence.resource_version = 1;
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        let cursor = append_event(
-            &transaction,
-            REVIEW_SERVICE,
-            "evidence_reference",
-            &evidence.id,
-            1,
-            Some(&assessment.repository_connection_id),
-            Some(&assessment.change_request_id),
-            &evidence,
-        )?;
-        transaction
-            .execute(
-                "INSERT INTO evidence_references(
-                    id,assessment_id,payload,resource_version,event_cursor
-                 ) VALUES (?1,?2,?3,1,?4)",
-                params![
-                    evidence.id,
-                    evidence.assessment_id,
-                    evidence.encode_to_vec(),
-                    i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?
-                ],
-            )
-            .map_err(map_constraint)?;
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(evidence)
     }
 
     pub(crate) fn evidence_reference(

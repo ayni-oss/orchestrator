@@ -16,7 +16,7 @@ impl RuntimeReconciler {
     async fn review_profile(
         &self,
         profile_id: &str,
-        policy: &ayni_orchestrator_kubernetes::configuration::AssessmentConfiguration,
+        policy: &crate::runtime_configuration::AssessmentConfiguration,
     ) -> Result<(), &'static str> {
         let (repository, automation) = {
             let mut store = self
@@ -354,7 +354,7 @@ impl RuntimeReconciler {
     async fn import_run(
         &self,
         profile_id: &str,
-        policy: &ayni_orchestrator_kubernetes::configuration::AssessmentConfiguration,
+        policy: &crate::runtime_configuration::AssessmentConfiguration,
         repository: &v1::RepositoryConnection,
         github: &v1::GithubRepository,
         run: &serde_json::Value,

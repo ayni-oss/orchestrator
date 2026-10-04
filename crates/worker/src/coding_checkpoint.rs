@@ -1,8 +1,6 @@
 //! Atomic recovery snapshots, independent of model completion and Ayni success.
-use crate::{
-    activity::ActivityLog,
-    coding::{CodingRequest, freeze_with_advisory},
-};
+use crate::{activity::ActivityLog, coding::freeze_with_advisory};
+use ayni_orchestrator_profile_ayni::coding::CodingRequest;
 use ayni_orchestrator_runtime::activity::Stage;
 use std::{fs, io, path::Path};
 

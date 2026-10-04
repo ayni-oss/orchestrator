@@ -23,7 +23,7 @@ Local Docker Desktop development:
   cleanup                      Uninstall stateless resources; preserve local data
   down                         Alias for cleanup
   purge NAMESPACE              Permanently delete an owned local namespace
-  render CP_IMAGE WORKER WEB   Render the complete development chart
+  render CP WORKER_DIGEST WEB   Render the complete development chart
   dependencies                 Build locked Helm dependencies
   test NAME                    Run: observability or custom-clients
   help                         Show this help
@@ -140,7 +140,7 @@ case "$command" in
     ;;
   render)
     if [[ $# -ne 3 ]]; then
-      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE WORKER_IMAGE WEB_IMAGE" >&2
+      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE WORKER_DIGEST WEB_IMAGE" >&2
       exit 2
     fi
     for image_ref in "$@"; do
@@ -161,7 +161,8 @@ case "$command" in
     helm template "$DEV_RELEASE_NAME" "$DEV_CHART" \
       --namespace "$(dev_namespace)" \
       --set-string "ayni-orchestrator.images.controlPlane=$1" \
-      --set-string "ayni-orchestrator.images.worker=$2" \
+      --set ayni-orchestrator.runtime.enabled=true \
+      --set-string "ayni-orchestrator.runtime.workerImage=$2" \
       --set-string "ayni-orchestrator.images.web=$3" \
       --set "ayni-orchestrator.customClients.enabled=$custom_clients"
     ;;

@@ -1,6 +1,7 @@
 //! Trusted GitHub-hosted launcher. Never runs candidate programs on the host.
 //! The Docker socket, GitHub token, and retained output are not candidate mounts.
 use ayni_orchestrator_profile_ayni::assessment::{self, Manifest, Outcome, RunIdentity};
+use ayni_orchestrator_runtime::runtime_execution::read_bounded;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use std::fmt::Write as _;
@@ -67,11 +68,8 @@ async fn prepare() -> Result<(String, Value, Manifest, std::path::PathBuf), &'st
 
 async fn assessment_pull() -> Result<(String, Value, String, String), &'static str> {
     let event: Value = serde_json::from_slice(
-        &crate::runtime_execution::read_bounded(
-            Path::new(&variable("GITHUB_EVENT_PATH")?),
-            1024 * 1024,
-        )
-        .map_err(|_| "event_unavailable")?,
+        &read_bounded(Path::new(&variable("GITHUB_EVENT_PATH")?), 1024 * 1024)
+            .map_err(|_| "event_unavailable")?,
     )
     .map_err(|_| "event_invalid")?;
     let repository = variable("GITHUB_REPOSITORY")?;
@@ -269,10 +267,10 @@ async fn measure(
     checkout(repository, &manifest.run.head, &workspace).await?;
     checkout(repository, &manifest.run.workflow_sha, &baseline).await?;
     for name in [".ayni.lock", ".ayni.toml"] {
-        let head = crate::runtime_execution::read_bounded(&workspace.join(name), 1024 * 1024)
-            .map_err(|_| "policy_missing")?;
-        let trusted = crate::runtime_execution::read_bounded(&baseline.join(name), 1024 * 1024)
-            .map_err(|_| "policy_missing")?;
+        let head =
+            read_bounded(&workspace.join(name), 1024 * 1024).map_err(|_| "policy_missing")?;
+        let trusted =
+            read_bounded(&baseline.join(name), 1024 * 1024).map_err(|_| "policy_missing")?;
         if head != trusted {
             manifest.outcome = Outcome::Unsupported;
             return Ok(BTreeMap::new());
@@ -343,11 +341,8 @@ async fn collect_result(
                 return Err("signals_path_unsafe");
             }
         }
-        let signals = crate::runtime_execution::read_bounded(
-            &workspace.join(".ayni/last/signals.json"),
-            8 * 1024 * 1024,
-        )
-        .map_err(|_| "signals_missing")?;
+        let signals = read_bounded(&workspace.join(".ayni/last/signals.json"), 8 * 1024 * 1024)
+            .map_err(|_| "signals_missing")?;
         if stdout != signals || manifest.source_before != manifest.source_after {
             return Err("source_or_output_changed");
         }
@@ -363,8 +358,7 @@ async fn collect_result(
             1024,
         )
         .await?;
-        let metadata = crate::runtime_execution::read_bounded(&metadata_path, 1024 * 1024)
-            .map_err(|_| "runtime_missing")?;
+        let metadata = read_bounded(&metadata_path, 1024 * 1024).map_err(|_| "runtime_missing")?;
         artifacts.insert("signals.json".into(), signals);
         artifacts.insert("runtime.json".into(), metadata);
         manifest.outcome = match exit {

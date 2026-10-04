@@ -108,12 +108,13 @@ nor signing/push credentials.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `crates/api`, `clients/typescript` | Public gRPC schema, generated bindings and request syntax validation |
-| `crates/domain` | Shared identities, constraints and usage values; not yet a complete application resource model |
+| `crates/domain` | Shared change constraints, scope bounds and usage values |
 | `crates/runtime` | Profile-neutral typed execution/coding contracts, activity, candidate reports, OCI/launcher admission and bounded input reading |
 | `crates/profile-ayni` | Explicit managed execution types, Ayni expectation/result validation, release pin, and the existing Actions assessment contract |
-| `crates/kubernetes` | Operator execution configuration, Job rendering, submission, observation and cleanup |
+| `crates/kubernetes` | Execution-only deployment/workload configuration, neutral Job construction, submission, observation and cleanup |
 | `crates/control-plane/src/application.rs` | Shared application state and durable reconciliation entry point |
 | `crates/control-plane/src/configuration.rs` | Server process/listener configuration |
+| `crates/control-plane/src/runtime_configuration.rs` | Runtime JSON admission, reconciliation scheduling, managed image derivation and publication policy; explicit mapping to Kubernetes inputs |
 | `crates/control-plane/src/http.rs`, `http/` | Operational router and health JSON using only projected model availability |
 | `crates/control-plane/src/grpc*` | Native user-facing transport, access enforcement and response mapping |
 | `crates/control-plane/src/clean_store*`, `runtime_reconciler*` | Existing durable lifecycle and reconciliation, still coupled to protobuf resource types |
@@ -153,13 +154,14 @@ environment resolution, task admission, then assessment/publication. Keep wire
 conversion at gRPC and explicit persistence codec boundaries. Move managed
 evidence rules out of generic storage while preserving shared identity and
 digest checks. Introduce explicit profile dispatch before admitting custom
-tasks, and separate common coding workload construction from managed verifier
-topology as that path is implemented.
+tasks. Coding, build and verification Jobs already share neutral workload
+construction rather than deriving one operation from another's manifest.
 
-The extracted Kubernetes configuration still carries inherited publication
-policy and managed GHCR source derivation. Move those decisions to the
-application/profile layer with their use cases; the extraction does not make
-that configuration fully provider-neutral.
+The Kubernetes adapter receives only execution settings. Application scheduling,
+publication policy and managed GHCR source derivation live in the control plane.
+Runtime JSON retains its strict format and is mapped explicitly into adapter
+inputs. The digest-pinned `runtime.workerImage` chart setting is the only worker
+image setting; the namespace comes from the Helm release.
 
 The supported deployment remains Docker Desktop, one trusted team, loopback
 access and one controller replica. This structural change does not alter the

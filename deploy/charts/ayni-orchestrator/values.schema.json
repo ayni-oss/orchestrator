@@ -41,10 +41,9 @@
     "images": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["controlPlane", "worker", "web", "pullPolicy"],
+      "required": ["controlPlane", "web", "pullPolicy"],
       "properties": {
         "controlPlane": { "$ref": "#/definitions/image" },
-        "worker": { "$ref": "#/definitions/image" },
         "web": { "$ref": "#/definitions/image" },
         "pullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] }
       }

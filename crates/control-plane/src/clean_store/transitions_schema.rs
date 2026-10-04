@@ -74,6 +74,7 @@ const fn valid_profile_transition(
     )
 }
 
+#[cfg(test)]
 const fn valid_artifact_transition(
     current: v1::RuntimeArtifactStatus,
     next: v1::RuntimeArtifactStatus,
@@ -89,42 +90,6 @@ const fn valid_artifact_transition(
             State::Verified | State::Rejected | State::Unavailable | State::Failed
         ) | (State::Verified, State::Unavailable)
             | (State::Unavailable, State::Verifying | State::Failed)
-    )
-}
-
-const fn valid_automation_transition(
-    current: v1::AutomationInstallationState,
-    next: v1::AutomationInstallationState,
-) -> bool {
-    use v1::AutomationInstallationState as State;
-    matches!(
-        (current, next),
-        (
-            State::SetupRequired,
-            State::SetupPrOpen | State::Installed | State::Degraded | State::Failed
-        ) | (
-            State::SetupPrOpen,
-            State::SetupRequired
-                | State::Installed
-                | State::Updating
-                | State::Degraded
-                | State::Failed
-        ) | (State::Installed, State::Updating | State::Degraded)
-            | (
-                State::Updating,
-                State::Installed | State::Degraded | State::Failed
-            )
-            | (
-                State::Degraded,
-                State::SetupRequired | State::Updating | State::Installed | State::Failed
-            )
-    )
-}
-
-const fn valid_candidate_transition(current: v1::CandidateState, next: v1::CandidateState) -> bool {
-    matches!(
-        (current, next),
-        (v1::CandidateState::Available, v1::CandidateState::Rejected)
     )
 }
 
@@ -194,26 +159,21 @@ struct ActionRow {
     request_hash: Vec<u8>,
     request_payload: Vec<u8>,
     state: String,
-    target_type: Option<String>,
     target_id: Option<String>,
-    failure: Option<String>,
 }
 
 impl ActionRow {
-    fn into_action(self, operation: &str, key: &str) -> DurableAction {
+    fn into_action(self, key: &str) -> DurableAction {
         let state = match self.state.as_str() {
             "completed" => DurableActionState::Completed,
             "failed" => DurableActionState::Failed,
             _ => DurableActionState::Pending,
         };
         DurableAction {
-            operation: operation.to_owned(),
             idempotency_key: key.to_owned(),
             state,
-            target_type: self.target_type,
             target_id: self.target_id,
             request_payload: self.request_payload,
-            failure: self.failure,
         }
     }
 }
@@ -225,7 +185,7 @@ fn action_row(
 ) -> Result<Option<ActionRow>, CleanStoreError> {
     connection
         .query_row(
-            "SELECT request_hash,request_payload,state,target_type,target_id,failure FROM durable_actions
+            "SELECT request_hash,request_payload,state,target_id FROM durable_actions
              WHERE operation=?1 AND idempotency_key=?2",
             params![operation, key],
             |row| {
@@ -233,9 +193,7 @@ fn action_row(
                     request_hash: row.get(0)?,
                     request_payload: row.get(1)?,
                     state: row.get(2)?,
-                    target_type: row.get(3)?,
-                    target_id: row.get(4)?,
-                    failure: row.get(5)?,
+                    target_id: row.get(3)?,
                 })
             },
         )

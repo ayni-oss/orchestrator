@@ -1,6 +1,5 @@
 //! Durable clean-v1 resource storage.
 #![allow(
-    dead_code,
     clippy::items_after_test_module,
     clippy::needless_pass_by_ref_mut,
     clippy::needless_pass_by_value,
@@ -127,7 +126,6 @@ pub(crate) struct Page<T> {
 pub(crate) struct StoredEvent {
     pub cursor: u64,
     pub resource_type: String,
-    pub resource_id: String,
     pub payload: Vec<u8>,
 }
 
@@ -140,13 +138,10 @@ pub(crate) enum DurableActionState {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DurableAction {
-    pub operation: String,
     pub idempotency_key: String,
     pub state: DurableActionState,
-    pub target_type: Option<String>,
     pub target_id: Option<String>,
     pub request_payload: Vec<u8>,
-    pub failure: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

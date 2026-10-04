@@ -117,56 +117,6 @@ impl CleanStore {
         )
     }
 
-    pub(crate) fn transition_automation_installation(
-        &mut self,
-        id: &str,
-        expected_version: u64,
-        state: v1::AutomationInstallationState,
-        failure: Option<v1::ResourceFailure>,
-    ) -> Result<v1::AutomationInstallation, CleanStoreError> {
-        let mut resource = self.automation_installation(id)?;
-        if resource.resource_version != expected_version {
-            return Err(CleanStoreError::StaleVersion);
-        }
-        let current = v1::AutomationInstallationState::try_from(resource.state)
-            .map_err(|_| CleanStoreError::CorruptState)?;
-        if !valid_automation_transition(current, state) {
-            return Err(CleanStoreError::InvalidTransition);
-        }
-        let profile = self.runtime_profile(&resource.runtime_profile_id)?;
-        resource.state = state as i32;
-        resource.failure = bounded_failure(failure);
-        resource.updated_at = Some(timestamp(unix_seconds()?));
-        resource.resource_version = resource.resource_version.saturating_add(1);
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        let cursor = append_event(
-            &transaction,
-            PROFILE_SERVICE,
-            "automation_installation",
-            &resource.id,
-            resource.resource_version,
-            Some(&profile.repository_connection_id),
-            Some(&profile.id),
-            &resource,
-        )?;
-        let changed = transaction.execute(
-            "UPDATE automation_installations SET state=?1,payload=?2,resource_version=?3,event_cursor=?4
-             WHERE id=?5 AND resource_version=?6",
-            params![resource.state, resource.encode_to_vec(),
-                i64::try_from(resource.resource_version).map_err(|_| CleanStoreError::CorruptState)?,
-                i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?, resource.id,
-                i64::try_from(expected_version).map_err(|_| CleanStoreError::CorruptState)?],
-        ).map_err(CleanStoreError::Database)?;
-        if changed != 1 {
-            return Err(CleanStoreError::StaleVersion);
-        }
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(resource)
-    }
-
     pub(crate) fn list_automation_installations(
         &mut self,
         profile_id: &str,

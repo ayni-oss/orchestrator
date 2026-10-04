@@ -250,7 +250,7 @@ impl RuntimeReconciler {
         self.kubernetes
             .start_coding(
                 name,
-                &runtime,
+                &runtime.execution_runtime(),
                 &request,
                 &token,
                 &format!("{}@{}", frozen.oci_repository, frozen.resolved_digest),

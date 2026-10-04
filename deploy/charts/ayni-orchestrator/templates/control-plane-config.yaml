@@ -9,8 +9,6 @@ data:
   ORCHESTRATOR_BIND_ADDRESS: 0.0.0.0:8080
   ORCHESTRATOR_GRPC_BIND_ADDRESS: 127.0.0.1:50051
   ORCHESTRATOR_DATABASE_PATH: /data/orchestrator.sqlite
-  ORCHESTRATOR_KUBERNETES_NAMESPACE: {{ .Release.Namespace | quote }}
-  ORCHESTRATOR_WORKER_IMAGE: {{ .Values.images.worker | quote }}
   ORCHESTRATOR_MAX_ATTEMPTS: {{ .Values.controlPlane.maxAttempts | quote }}
   {{- if .Values.customClients.enabled }}
   ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS: 0.0.0.0:50052

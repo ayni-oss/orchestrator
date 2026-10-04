@@ -2,10 +2,13 @@
 use crate::{
     activity::ActivityLog,
     model_usage::{TrackedModel, UsageTracker},
-    runtime_execution::{command, git, read_bounded, verify},
+    runtime_execution::{command, git, verify},
 };
 use ayni_orchestrator_domain::ModelUsageStage;
-use ayni_orchestrator_runtime::activity::Stage;
+use ayni_orchestrator_profile_ayni::coding::CodingRequest;
+use ayni_orchestrator_runtime::{
+    activity::Stage, coding::CodingReport, runtime_execution::read_bounded,
+};
 use rig_agent::{
     client::AgentModelExt,
     completion::Prompt,
@@ -19,9 +22,6 @@ use std::{fs, io, path::Path, process::Stdio};
 use tokio::io::AsyncReadExt;
 
 pub const ADVISORY_INSTRUCTIONS: &str = "Read AGENTS.md and repository instructions. Make only the requested changes. Run plain `ayni check` before completing and repair actionable failures. Never weaken .ayni.toml or .ayni.lock merely to pass. Coding-time checks are advisory even when Ayni reports managed execution; only the later exact-head PR assessment is authoritative. Do not build an environment or access GitHub. The task runner checkpoints your edits and automatically commits and publishes the saved work as a draft, even if checks or the model fail. Run the final Ayni check before handing off; report remaining failures truthfully. If essential information is missing, respond INPUT_REQUIRED: followed by one concrete question.";
-
-pub use ayni_orchestrator_profile_ayni::coding::CodingRequest;
-pub use ayni_orchestrator_runtime::coding::CodingReport;
 
 #[derive(Clone)]
 struct RunCommand {
@@ -460,10 +460,10 @@ mod tests {
 
     fn coding_request(revision: String) -> CodingRequest {
         CodingRequest {
-            execution: crate::runtime_execution::ExecutionRequest {
+            execution: ayni_orchestrator_profile_ayni::runtime_execution::ExecutionRequest {
                 repository_url: "https://github.com/team/repo.git".into(),
                 revision,
-                expected: crate::managed_runtime::RuntimeExpectation {
+                expected: ayni_orchestrator_profile_ayni::managed_runtime::RuntimeExpectation {
                     lock_fingerprint: String::new(),
                     platform: "linux/amd64".into(),
                     ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),

@@ -12,7 +12,8 @@ helm upgrade --install ayni-orchestrator deploy/charts/ayni-orchestrator \
   --namespace ayni-orchestrator \
   --create-namespace \
   --set-string images.controlPlane=REGISTRY/CONTROL_PLANE:TAG \
-  --set-string images.worker=REGISTRY/WORKER:TAG \
+  --set runtime.enabled=true \
+  --set-string runtime.workerImage=REGISTRY/WORKER@sha256:WORKER_DIGEST \
   --set-string images.web=REGISTRY/WEB:TAG
 ```
 

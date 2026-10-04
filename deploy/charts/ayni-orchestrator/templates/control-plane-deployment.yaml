@@ -53,8 +53,6 @@ spec:
             - name: ORCHESTRATOR_RUNTIME_CONFIG_PATH
               value: /runtime-config/runtime.json
             {{- end }}
-            - name: ORCHESTRATOR_WORKER_IMAGE
-              value: {{ .Values.images.worker | quote }}
             - name: GITHUB_APP_ID
               valueFrom:
                 secretKeyRef:
