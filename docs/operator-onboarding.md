@@ -61,9 +61,11 @@ The supplied claim uses ReadWriteOnce.
    the centrally pinned release in `crates/runtime/ayni-release.json`. Inspection
    reports missing policy, incompatible lock, and missing certificate trust policy.
    A policy fingerprint is an observation, not proof of a valid signature.
-3. Review the proposed files and select **Create profile and setup PR**. The
-   durable controller creates a draft PR containing the environment build workflow
-   and the assessment trigger/collector workflows. It never commits to the default
+3. Review the expected files and select **Set up runtime**. The controller first
+   checks those files at the default-branch SHA using read access. Matching files
+   complete setup without a branch or PR. Missing or different files trigger a
+   draft PR containing the environment build and assessment workflows. Provider
+   access or availability failures remain errors and never imply missing files. It never commits to the default
    branch or merges the PR. An interrupted response is recovered by the deterministic
    branch and existing PR identity; conflicting branch contents are not overwritten.
 4. Configure the producer signing key and key ID in the repository's Actions

@@ -48,8 +48,9 @@ export const actions: Actions = {
       profile=revisions.find(({revision})=>revision.managed?.fingerprint===inspection.fingerprint)?.profile;
       if (!profile) {
         profile=await getBff().createRuntimeProfile({idempotencyKey:key,repositoryConnectionId:params.repositoryId,repositorySnapshotId:inspection.snapshotId,configuration:{kind:"ayni_managed",lockFingerprint:inspection.fingerprint,ayniVersion:inspection.version,workflowTemplateVersion:inspection.template,ociRepository:inspection.repository}},context);
-        await getBff().installAutomation(profile.id,key,context);
       }
+      const automation=await getBff().listAutomation(profile.id,context);
+      if (!automation.installations.length) await getBff().installAutomation(profile.id,key,context);
     } catch(error) { const mapped=safeError(error,locals.requestId); return fail(mapped.status,{error:mapped}); }
     redirect(303,`/profiles/${encodeURIComponent(profile.id)}`);
   },

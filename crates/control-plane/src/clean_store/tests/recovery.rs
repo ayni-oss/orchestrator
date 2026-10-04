@@ -617,3 +617,50 @@ fn setup_observation_recovers_from_provider_failure() -> Result<(), CleanStoreEr
     assert!(observed.failure.is_none());
     Ok(())
 }
+
+#[test]
+fn matching_workflows_complete_setup_without_a_pull_request() -> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let repository = store
+        .create_repository_connection("reuse-repo", &repository_request("reuse-repo", "123"))?;
+    let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
+    let (profile, _) = store.create_runtime_profile(
+        "reuse-profile",
+        &profile_request("reuse-profile", &repository.id, &snapshot.id),
+    )?;
+    let installation = store.install_repository_automation(
+        "reuse-setup",
+        &v1::InstallRepositoryAutomationRequest {
+            idempotency_key: "reuse-setup".into(),
+            runtime_profile_id: profile.id.clone(),
+        },
+    )?;
+    for _ in 0..2 {
+        store.observe_setup(
+            &installation.id,
+            None,
+            v1::AutomationInstallationState::Installed,
+            None,
+        )?;
+        store.complete_external_action("InstallRepositoryAutomation", "reuse-setup")?;
+    }
+    let installed = store.automation_installation(&installation.id)?;
+    assert_eq!(
+        installed.state,
+        v1::AutomationInstallationState::Installed as i32
+    );
+    let Some(v1::automation_installation::Provider::Github(github)) = installed.provider else {
+        return Err(CleanStoreError::CorruptState);
+    };
+    assert!(github.setup_pull_request_number.is_none());
+    assert!(
+        store
+            .pending_external_actions("InstallRepositoryAutomation")?
+            .is_empty()
+    );
+    assert_eq!(
+        store.runtime_profile(&profile.id)?.state,
+        v1::RuntimeProfileState::AwaitingEnvironment as i32
+    );
+    Ok(())
+}

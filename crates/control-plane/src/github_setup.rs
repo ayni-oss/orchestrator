@@ -52,6 +52,30 @@ pub fn setup_pull_request(
     })
 }
 
+/// Observe the expected files before requesting any provider write permission.
+/// A missing/different file needs setup; an observation error must stay an error.
+///
+/// # Errors
+/// Propagates provider failures rather than treating inaccessible files as absent.
+pub async fn installed_workflows_match<F, R>(
+    files: &SetupWorkflowFiles,
+    mut read: F,
+) -> Result<bool, &'static str>
+where
+    F: FnMut(&'static str) -> R,
+    R: std::future::Future<Output = Result<Vec<u8>, &'static str>>,
+{
+    let mut matches = true;
+    for (path, expected) in &files.files {
+        match read(path).await {
+            Ok(actual) => matches &= actual == expected.as_bytes(),
+            Err("github_not_found") => matches = false,
+            Err(reason) => return Err(reason),
+        }
+    }
+    Ok(matches)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -76,5 +100,36 @@ mod tests {
         assert_ne!(first.branch, first.base_branch);
         assert!(first.branch.starts_with("setup/runtime-"));
         assert_eq!(first.files.files.len(), 3);
+    }
+    #[tokio::test]
+    async fn existing_workflows_need_no_setup_but_observation_errors_fail_closed() {
+        let files = render(TEMPLATE_VERSION, "main").unwrap();
+        assert_eq!(
+            installed_workflows_match(&files, |path| std::future::ready(Ok(files.files[path]
+                .as_bytes()
+                .to_vec())))
+            .await,
+            Ok(true)
+        );
+        assert_eq!(
+            installed_workflows_match(&files, |_| std::future::ready(Ok(b"different".to_vec())))
+                .await,
+            Ok(false)
+        );
+        assert_eq!(
+            installed_workflows_match(&files, |_| std::future::ready(Err("github_not_found")))
+                .await,
+            Ok(false)
+        );
+        for reason in [
+            "github_access_denied",
+            "github_rate_limited",
+            "github_unavailable",
+        ] {
+            assert_eq!(
+                installed_workflows_match(&files, |_| std::future::ready(Err(reason))).await,
+                Err(reason)
+            );
+        }
     }
 }

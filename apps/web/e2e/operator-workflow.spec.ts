@@ -37,7 +37,7 @@ test("repository setup PR and requested draft publication are visible", async ({
  await page.getByRole("link",{name:"Profiles and identity"}).click();
  await page.getByRole("button",{name:"Inspect repository"}).click();
  await expect(page.getByText(".github/workflows/ayni-environment.yml",{exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Create profile and setup PR"}).click();
+ await page.getByRole("button",{name:"Set up runtime"}).click();
  await expect(page.getByRole("link",{name:"Open setup PR #8"})).toHaveAttribute("href","https://github.com/ayni-oss/sandbox/pull/8");
  await page.reload();
  await expect(page.getByRole("link",{name:"Open setup PR #8"})).toBeVisible();
@@ -53,7 +53,7 @@ test("repository setup PR and requested draft publication are visible", async ({
 });
 
 test("every managed profile state explains the next step",async({page,request})=>{
- const states=["Open the setup PR","Review and merge the setup PR","Wait for the environment build","The signed environment passed verification","A new repository revision is being verified","Repair provider access","Review the failure below"];
+ const states=["Open the setup PR","Review and merge the setup PR","Checking the expected image","The signed environment passed verification","A new repository revision is being verified","Repair provider access","Review the failure below"];
  try { for(let index=0;index<states.length;index++) {
   await request.post(`http://127.0.0.1:50062/profile-state?value=${index+1}`);
   await page.goto("/profiles/profile:1");

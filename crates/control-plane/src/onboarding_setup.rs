@@ -53,6 +53,16 @@ impl AppState {
                 .map_err(|_| "setup_template_invalid")?,
         )
         .map_err(|_| "setup_template_invalid")?;
+        let read_token = source.token(github.installation_id, &github.repository_id).await?;
+        let head = source.head(&github.owner, &github.name, &repository.default_branch, &read_token).await?;
+        if crate::github_setup::installed_workflows_match(&request.files, |path| {
+            source.file(&github.owner, &github.name, &head, path, &read_token)
+        }).await? {
+            return with_store(self, |s| {
+                s.observe_setup(id, None, v1::AutomationInstallationState::Installed, None)?;
+                s.complete_external_action("InstallRepositoryAutomation", &action.idempotency_key)
+            }).map_err(|_| "setup_store_unavailable");
+        }
         let token = source.setup_token(github).await?;
         let recorded_pull = match &installation.provider {
             Some(v1::automation_installation::Provider::Github(provider)) => {

@@ -25,7 +25,7 @@ async function mutate(event:Parameters<Actions[string]>[0], install:boolean) {
     const bff=getBff(),context=requestContext(event.locals);
     if(install) await bff.installAutomation(event.params.profileId!,key,context);
     else await bff.reconcileProfile(event.params.profileId!,key,context);
-    return {success:install ? "Setup PR requested. You can safely leave this page." : "Reconciliation requested."};
+    return {success:install ? "Runtime setup requested. Matching pipelines will be reused." : "Reconciliation requested."};
   } catch(error) { const mapped=safeError(error,event.locals.requestId); return fail(mapped.status,{error:mapped}); }
 }
 export const actions:Actions={install:event=>mutate(event,true),reconcile:event=>mutate(event,false)};
