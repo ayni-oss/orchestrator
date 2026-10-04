@@ -30,6 +30,13 @@ that name as `build.signing_secret` in the runtime profile configuration; the
 build Job consumes the values without mounting them into the control-plane or
 web containers. These settings are optional when builds use GitHub Actions.
 
+For private GHCR runtime images, optionally set `GHCR_PULL_USERNAME` and
+`GHCR_PULL_TOKEN` (a classic personal access token with `read:packages`) in the
+same mode-600 `dev/.env`. `dev/ctl secrets` creates the Kubernetes
+`runtime-pull` imagePullSecret. Reference `runtime-pull` as the runtime
+`pull_secret`; it is used by Kubernetes to fetch a runtime image before the
+container starts and is never mounted into the application.
+
 Use a different ignored env file when working with an isolated profile:
 
 ```sh
