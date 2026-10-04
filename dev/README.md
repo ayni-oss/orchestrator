@@ -19,9 +19,10 @@ dev/ctl deploy
 dev/ctl check
 ```
 
-`deploy` and its `redeploy` alias safely re-run in place: they rebuild all three
-project images, load them into Docker Desktop Kubernetes, and run
-`helm upgrade --install`. Credential updates stay explicit through `secrets`.
+`deploy` and its `redeploy` alias safely re-run in place: they reconcile the
+selected private env file into Kubernetes Secrets, rebuild all three project
+images, load them into Docker Desktop Kubernetes, and run `helm upgrade
+--install`. Use `secrets` when only credential values need to be refreshed.
 Set `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID` in the
 mode-600 `dev/.env` when using the dedicated Kubernetes environment builder.
 `dev/ctl secrets` then provisions the `environment-producer` Secret. Reference
@@ -29,13 +30,21 @@ that name as `build.signing_secret` in the runtime profile configuration; the
 build Job consumes the values without mounting them into the control-plane or
 web containers. These settings are optional when builds use GitHub Actions.
 
+For private GHCR runtime images, optionally set `GHCR_PULL_USERNAME` and
+`GHCR_PULL_TOKEN` (a classic personal access token with `read:packages`) in the
+same mode-600 `dev/.env`. `dev/ctl secrets` creates the Kubernetes
+`runtime-pull` imagePullSecret. Reference `runtime-pull` as the runtime
+`pull_secret`; it is used by Kubernetes to fetch a runtime image before the
+container starts and is never mounted into the application.
+
 Use a different ignored env file when working with an isolated profile:
 
 ```sh
 dev/ctl init --env-file dev/.env.alice
 AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
   dev/ctl secrets --env-file dev/.env.alice
-AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice dev/ctl deploy
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
+  dev/ctl deploy --env-file dev/.env.alice
 ```
 
 ## Lifecycle
@@ -43,7 +52,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice dev/ctl deploy
 | Command | Effect |
 | --- | --- |
 | `dev/ctl secrets` | Parse the private env file and update local Kubernetes Secrets |
-| `dev/ctl deploy` | Build and install or redeploy the complete stack in place |
+| `dev/ctl deploy` | Sync Secrets, build, and install or redeploy the complete stack in place |
 | `dev/ctl check` | Check application, gRPC, browser, metrics, and dashboards |
 | `dev/ctl status` | Show the release, Pods, and retained claims |
 | `dev/ctl cleanup` | Uninstall the release while preserving Secrets, Jobs, and retained claims |
@@ -56,8 +65,11 @@ product data. None of these commands changes the current Kubernetes context,
 resets Docker Desktop, deletes shared Docker volumes, or performs a broad Docker
 prune.
 
-The deployment path requires a clean committed checkout so built image labels
-and tags have unambiguous source provenance.
+The deployment path can build directly from a dirty local checkout. Images carry
+the current commit revision and a dirty-source label; generated local tags also
+include the image content ID so each rebuilt source snapshot gets its own tag.
+This keeps local iteration fast while making it clear that a dirty image is not
+reproducible from its commit alone.
 
 ## Layout
 

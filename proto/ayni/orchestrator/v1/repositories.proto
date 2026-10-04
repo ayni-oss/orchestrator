@@ -7,12 +7,37 @@ import "google/protobuf/timestamp.proto";
 
 // RepositoryService manages provider-neutral repository connections and snapshots.
 service RepositoryService {
+  rpc ListGithubInstallations(ListGithubInstallationsRequest) returns (ListGithubInstallationsResponse);
+  rpc ListGithubInstallationRepositories(ListGithubInstallationRepositoriesRequest) returns (ListGithubInstallationRepositoriesResponse);
+  rpc ConnectGithubRepository(ConnectGithubRepositoryRequest) returns (ConnectGithubRepositoryResponse);
   rpc ListRepositoryConnections(ListRepositoryConnectionsRequest) returns (ListRepositoryConnectionsResponse);
   rpc GetRepositoryConnection(GetRepositoryConnectionRequest) returns (GetRepositoryConnectionResponse);
   rpc CreateRepositoryConnection(CreateRepositoryConnectionRequest) returns (CreateRepositoryConnectionResponse);
   rpc ListRepositorySnapshots(ListRepositorySnapshotsRequest) returns (ListRepositorySnapshotsResponse);
   rpc GetRepositorySnapshot(GetRepositorySnapshotRequest) returns (GetRepositorySnapshotResponse);
   rpc WatchRepositories(WatchRepositoriesRequest) returns (stream WatchRepositoriesResponse);
+}
+
+message GithubInstallationOption {
+  string installation_id = 1;
+  string owner = 2;
+  string app_name = 3;
+}
+message GithubRepositoryOption {
+  string repository_id = 1;
+  string owner = 2;
+  string name = 3;
+  string default_branch = 4;
+}
+message ListGithubInstallationsRequest {}
+message ListGithubInstallationsResponse {
+  repeated GithubInstallationOption installations = 1;
+}
+message ListGithubInstallationRepositoriesRequest {
+  string installation_id = 1;
+}
+message ListGithubInstallationRepositoriesResponse {
+  repeated GithubRepositoryOption repositories = 1;
 }
 
 // RepositoryConnectionStatus is the independently reconciled access state.
@@ -134,4 +159,15 @@ message WatchRepositoriesResponse {
     RepositoryConnection repository_connection = 2;
     RepositorySnapshot repository_snapshot = 3;
   }
+}
+
+// Connect through the operator's existing GitHub App; identities are provider-observed.
+message ConnectGithubRepositoryRequest {
+  string idempotency_key = 1;
+  string owner = 2;
+  string name = 3;
+}
+
+message ConnectGithubRepositoryResponse {
+  RepositoryConnection repository_connection = 1;
 }

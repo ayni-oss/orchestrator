@@ -2,14 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bff = vi.hoisted(() => ({
   listRepositoryConnections: vi.fn(),
-  createRepositoryConnection: vi.fn(),
+  connectGithubRepository: vi.fn(),
+  listGithubInstallations: vi.fn(),
+  listGithubInstallationRepositories: vi.fn(),
 }));
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
 import { actions } from "../routes/repositories/+page.server.js";
 
 describe("repository connection route actions", () => {
   const requestSignal = new AbortController().signal;
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bff.listGithubInstallations.mockResolvedValue([{ installationId: "42", owner: "ayni-oss" }]);
+    bff.listGithubInstallationRepositories.mockResolvedValue([{ owner: "ayni-oss", name: "sandbox" }]);
+  });
 
   it("rejects invalid provider identity before invoking gRPC", async () => {
     const action = actions.connect;
@@ -19,11 +25,11 @@ describe("repository connection route actions", () => {
       request: new Request("http://127.0.0.1/repositories?/connect", { method: "POST", body: new URLSearchParams({ repositoryId: "not-numeric" }) }),
     } as never);
     expect(result).toMatchObject({ status: 400, data: { error: { reason: "invalid_input" } } });
-    expect(bff.createRepositoryConnection).not.toHaveBeenCalled();
+    expect(bff.connectGithubRepository).not.toHaveBeenCalled();
   });
 
   it("sends a provider-bounded connection with an idempotency key", async () => {
-    bff.createRepositoryConnection.mockImplementationOnce(async (input) => ({ id: "repository:1", displayName: input.displayName }));
+    bff.connectGithubRepository.mockImplementationOnce(async (input) => ({ id: "repository:1", displayName: `${input.owner}/${input.name}` }));
     const action = actions.connect;
     if (action === undefined) throw new Error("connect action is absent");
     const body = new URLSearchParams({
@@ -37,9 +43,9 @@ describe("repository connection route actions", () => {
     });
     const result = await action({ locals: { requestId: "repo-save", requestSignal }, request: new Request("http://127.0.0.1/repositories?/connect", { method: "POST", body }) } as never);
     expect(result).toEqual({ action: "connect", success: "Connected ayni-oss/sandbox." });
-    expect(bff.createRepositoryConnection).toHaveBeenCalledWith(expect.objectContaining({
+    expect(bff.connectGithubRepository).toHaveBeenCalledWith(expect.objectContaining({
       idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/u),
-      provider: expect.objectContaining({ kind: "github", repositoryId: "123" }),
+      owner:"ayni-oss", name:"sandbox",
     }), expect.objectContaining({ requestId: "repo-save" }));
   });
 });

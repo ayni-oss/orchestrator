@@ -100,6 +100,8 @@ message DevelopmentTaskRequest {
   ChangeConstraints change_constraints = 7;
   // deadline is 1 second through 24 hours when present.
   optional google.protobuf.Duration deadline = 8;
+  // Explicitly request durable publication of the resulting candidate as a draft.
+  bool publish_draft = 9;
 }
 
 // FrozenRepository freezes the source snapshot used by a task or attempt.
@@ -132,6 +134,9 @@ message DevelopmentSnapshot {
   repeated string acceptance_criteria = 5;
   ChangeConstraints change_constraints = 6;
   optional google.protobuf.Timestamp deadline_at = 7;
+  bool publish_draft = 8;
+  // Base branch observed when the publication request is frozen.
+  string publication_base_branch = 9;
 }
 
 // ProviderTokenUsage preserves independent counters; absence never means zero.

@@ -2,9 +2,104 @@ use super::{
     BoxGrpcStream, GrpcApi, Request, Response, Status, api_validation, page_response,
     profile_watch, repository_watch, v1, validate_id, validate_optional_id, with_store,
 };
+use crate::onboarding::provider_error;
 
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for GrpcApi {
+    async fn list_github_installations(
+        &self,
+        request: Request<v1::ListGithubInstallationsRequest>,
+    ) -> Result<Response<v1::ListGithubInstallationsResponse>, Status> {
+        let context = self.context(&request, "ListGithubInstallations")?;
+        let value = self
+            .state
+            .onboarding_source()?
+            .github_installations()
+            .await
+            .map_err(provider_error)?;
+        let installations = value["installations"]
+            .as_array()
+            .ok_or_else(|| provider_error("github_installations_invalid"))?
+            .iter()
+            .map(|item| {
+                Ok(v1::GithubInstallationOption {
+                    installation_id: item["installation_id"]
+                        .as_u64()
+                        .ok_or_else(|| provider_error("github_installation_invalid"))?
+                        .to_string(),
+                    owner: item["owner"]
+                        .as_str()
+                        .filter(|v| !v.is_empty())
+                        .ok_or_else(|| provider_error("github_owner_invalid"))?
+                        .to_owned(),
+                    app_name: value["app_name"]
+                        .as_str()
+                        .unwrap_or("GitHub App")
+                        .to_owned(),
+                })
+            })
+            .collect::<Result<Vec<_>, Status>>()?;
+        Ok(context.response(v1::ListGithubInstallationsResponse { installations }))
+    }
+
+    async fn list_github_installation_repositories(
+        &self,
+        request: Request<v1::ListGithubInstallationRepositoriesRequest>,
+    ) -> Result<Response<v1::ListGithubInstallationRepositoriesResponse>, Status> {
+        let context = self.context(&request, "ListGithubInstallationRepositories")?;
+        let id = request
+            .get_ref()
+            .installation_id
+            .parse::<u64>()
+            .ok()
+            .filter(|id| *id > 0)
+            .ok_or_else(|| Status::invalid_argument("provider_installation_invalid"))?;
+        let value = self
+            .state
+            .onboarding_source()?
+            .installation_repositories(id)
+            .await
+            .map_err(provider_error)?;
+        let repositories = value["repositories"]
+            .as_array()
+            .ok_or_else(|| provider_error("github_repositories_invalid"))?
+            .iter()
+            .map(|item| {
+                Ok(v1::GithubRepositoryOption {
+                    repository_id: item["id"]
+                        .as_u64()
+                        .ok_or_else(|| provider_error("github_repository_invalid"))?
+                        .to_string(),
+                    owner: item["owner"]["login"]
+                        .as_str()
+                        .ok_or_else(|| provider_error("github_repository_invalid"))?
+                        .to_owned(),
+                    name: item["name"]
+                        .as_str()
+                        .ok_or_else(|| provider_error("github_repository_invalid"))?
+                        .to_owned(),
+                    default_branch: item["default_branch"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                })
+            })
+            .collect::<Result<Vec<_>, Status>>()?;
+        Ok(context.response(v1::ListGithubInstallationRepositoriesResponse { repositories }))
+    }
+
+    async fn connect_github_repository(
+        &self,
+        request: Request<v1::ConnectGithubRepositoryRequest>,
+    ) -> Result<Response<v1::ConnectGithubRepositoryResponse>, Status> {
+        let context = self.context(&request, "ConnectGithubRepository")?;
+        context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let repository = self.state.connect_github(request.get_ref()).await?;
+        Ok(context.response(v1::ConnectGithubRepositoryResponse {
+            repository_connection: Some(repository),
+        }))
+    }
+
     async fn list_repository_connections(
         &self,
         request: Request<v1::ListRepositoryConnectionsRequest>,
@@ -136,6 +231,23 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
 
 #[tonic::async_trait]
 impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
+    async fn inspect_ayni_repository(
+        &self,
+        request: Request<v1::InspectAyniRepositoryRequest>,
+    ) -> Result<Response<v1::InspectAyniRepositoryResponse>, Status> {
+        let context = self.context(&request, "InspectAyniRepository")?;
+        validate_id(
+            &request.get_ref().repository_connection_id,
+            "repository_connection_id",
+        )
+        .map_err(|e| context.validation(&e))?;
+        Ok(context.response(
+            self.state
+                .inspect_ayni(&request.get_ref().repository_connection_id)
+                .await?,
+        ))
+    }
+
     async fn list_runtime_profiles(
         &self,
         request: Request<v1::ListRuntimeProfilesRequest>,

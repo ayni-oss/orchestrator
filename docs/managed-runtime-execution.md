@@ -9,14 +9,13 @@ Set `runtime.serviceAccounts.create=false` and supply each profile's
 `runtime.serviceAccounts.imagePullSecrets` contains existing Secret names;
 Helm never creates registry passwords or signing keys.
 
-Example application-chart values for self-service Ayni Managed enrollment
-(replace the placeholder digest):
+Example application-chart values (replace the placeholder worker digest):
 
 ```yaml
 runtime:
   enabled: true
   workerImage: registry.internal/orchestrator/worker@sha256:<worker-manifest-digest>
-  intervalSeconds: 60
+  intervalSeconds: 300
   requestTimeoutSeconds: 30
   concurrency: 4
   outputClaim: runtime-outputs
@@ -31,16 +30,17 @@ runtime:
     pull_secret: runtime-pull
 ```
 
-For an App-authorized Ayni Managed profile, the controller derives the only
-accepted source as
-`ghcr.io/<connected-owner>/<connected-repository>-ayni:lock-<full-lock-fingerprint>`.
-It compares that repository with the OCI coordinate frozen in the profile
-revision before creating a Job. The controller reads the exact default-branch
-SHA and bounded lock through the repository's GitHub App installation, creates
-an immutable source-policy revision, and persists verification intent before
-creating a Job. A digest-pinned trusted worker init container checks out that
-SHA with a contents-read token. Only this init receives the token; it never
-persists it in Git configuration.
+Connected repositories enrolled through managed onboarding automatically resolve
+an image in their own `ghcr.io/<owner>/<repository>-ayni` namespace using the
+selected lock fingerprint. Onboarding is the repository enrollment boundary;
+operators supply deployment-wide execution policy, not a second repository list.
+Explicit `runtime.profiles` entries take precedence and continue to support other
+registry coordinates or dedicated build sources. The
+controller reads the exact default-branch SHA and bounded lock through the
+repository's GitHub App installation, creates an immutable source-policy
+revision, and persists verification intent before creating a Job. A digest-pinned
+trusted worker init container checks out that SHA with a contents-read token.
+Only this init receives the token; it never persists it in Git configuration.
 
 Kubernetes pulls the selected runtime using its own authentication. The image's
 entrypoint remains intact. Before admission, the mounted worker rejects unsigned
@@ -97,10 +97,15 @@ it is not a claim of daemonless Ayni support.
 
 The engine Secret provides `ca.pem`, `cert.pem`, and `key.pem`. The registry
 Secret supplies `.dockerconfigjson`; the signing Secret supplies `signing-key`
-and `key-id` for Ayni's supported certificate environment variables. Only the
-build Job references those credentials. It runs `ayni env build --tag` and then
-pushes that tag to the configured private registry. The controller neither
-executes image-building tooling nor reads registry/signing Secret contents.
+and `key-id` for Ayni's supported certificate environment variables. For the
+local Docker Desktop environment, `dev/ctl secrets` creates this Secret as
+`environment-producer` from the optional `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and
+`AYNI_ENV_CERTIFICATE_KEY_ID` entries in the mode-600 `dev/.env`; set
+`build.signing_secret` to that name. Other installations provision the referenced
+Secret through their secret manager. Only the build Job references those
+credentials. It runs `ayni env build --tag` and then pushes that tag to the
+configured private registry. The controller neither executes image-building
+tooling nor reads registry/signing Secret contents.
 Kubernetes Secret/ServiceAccount separation is deployment wiring, not a defence
 against a compromised controller with permission to create arbitrary Pods;
 stronger tenancy requires admission policy and separate namespaces.

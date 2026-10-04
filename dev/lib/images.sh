@@ -10,17 +10,20 @@ dev_build_image() {
   esac
 
   local dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/$component/Dockerfile"
-  local revision build_image_ref image_ref image_id content_id
+  local revision source_dirty build_image_ref image_ref image_id content_id
   revision="$(git -C "$DEV_REPOSITORY_ROOT" rev-parse --short=12 HEAD)"
-  build_image_ref="${requested_image_ref:-local/ayni-orchestrator-$component:build-git-${revision}-$$}"
+  source_dirty=false
   if [[ -n "$(git -C "$DEV_REPOSITORY_ROOT" status --porcelain)" ]]; then
-    echo "refusing to build an image from a dirty checkout; commit or supply an explicit provenance process" >&2
-    return 1
+    source_dirty=true
   fi
+  build_image_ref="${requested_image_ref:-local/ayni-orchestrator-$component:build-git-${revision}-$$}"
 
-  docker build \
+  # The mounted worker executable must match the generated managed runtime.
+  if [[ "$component" == worker ]]; then set -- --platform linux/amd64; else set --; fi
+  docker build "$@" \
     --file "$dockerfile" \
     --label "org.opencontainers.image.revision=$(git -C "$DEV_REPOSITORY_ROOT" rev-parse HEAD)" \
+    --label "org.opencontainers.image.source.dirty=$source_dirty" \
     --tag "$build_image_ref" \
     "$DEV_REPOSITORY_ROOT" >&2
 
@@ -42,19 +45,37 @@ dev_load_image() {
   local image_ref="${1:?image reference is required}"
   local node_name="desktop-control-plane"
   local runtime_image_ref="docker.io/$image_ref"
-  local node_id node_labels
+  local node_id node_labels platform
   node_id="$(docker inspect "$node_name" --format '{{.Id}}')"
   node_labels="$(docker inspect "$node_name" --format '{{index .Config.Labels "io.x-k8s.kind.cluster"}} {{index .Config.Labels "io.x-k8s.kind.role"}}')"
   if [[ "$node_labels" != "desktop control-plane" ]]; then
     echo "Docker Desktop node $node_name is not the expected kind control-plane node" >&2
     return 1
   fi
-  docker save "$image_ref" | docker exec -i "$node_id" ctr --namespace k8s.io images import - >&2
+  # Export the concrete manifest, not an index selected using the node's CPU.
+  # The AMD64 worker intentionally runs under emulation on Apple Silicon.
+  platform="$(docker image inspect "$image_ref" --format '{{.Os}}/{{.Architecture}}')"
+  docker save --platform "$platform" "$image_ref" \
+    | docker exec -i "$node_id" ctr --namespace k8s.io images import --platform "$platform" - >&2
   if ! docker exec "$node_id" ctr --namespace k8s.io images list --quiet | grep -Fxq "$runtime_image_ref"; then
     echo "Docker Desktop node did not retain image $image_ref" >&2
     return 1
   fi
   echo "loaded image=$image_ref node=$node_name" >&2
+}
+
+# Pin the manifest loaded into the local node and retain its digest alias for Jobs.
+dev_pin_worker_image() {
+  local image_ref="${1:?worker image is required}"
+  local loaded_ref="docker.io/$image_ref" digest pinned
+  digest="$(docker exec desktop-control-plane ctr --namespace k8s.io images list "name==$loaded_ref" | awk 'NR==2 {print $3}')"
+  if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+    echo "loaded worker manifest digest is unavailable" >&2
+    return 1
+  fi
+  pinned="${loaded_ref%:*}@$digest"
+  docker exec desktop-control-plane ctr --namespace k8s.io images tag --force "$loaded_ref" "$pinned" >&2
+  printf '%s\n' "$pinned"
 }
 
 # Remove only obsolete project tags, never cache, volumes, or unrelated images.
@@ -63,6 +84,7 @@ dev_prune_images() (
   local worker_image_ref="${2:?worker image is required}"
   local web_image_ref="${3:?web image is required}"
   local node_id temporary_directory keep runtime_ref local_ref image_ref
+  local pinned_worker="${4:?pinned runtime worker is required}"
   node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
   temporary_directory="$(mktemp -d)"
   trap 'rm -rf "$temporary_directory"' EXIT
@@ -71,7 +93,8 @@ dev_prune_images() (
   printf '%s\n%s\n%s\n' "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref" > "$keep"
   kubectl --context docker-desktop get pods --all-namespaces \
     -o jsonpath='{range .items[*]}{range .spec.initContainers[*]}{.image}{"\n"}{end}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' \
-    | grep '^local/ayni-orchestrator-' >> "$keep" || true
+    | sed 's#^docker.io/##' | grep '^local/ayni-orchestrator-' >> "$keep" || true
+  printf '%s\n' "${pinned_worker#docker.io/}" >> "$keep"
   sort -u "$keep" -o "$keep"
 
   while IFS= read -r runtime_ref; do

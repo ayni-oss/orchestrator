@@ -309,6 +309,11 @@ impl CleanStore {
                 v1::runtime_profile_revision::Configuration::CustomRuntime(value),
             ),
         };
+        if let v1::runtime_profile_revision::Configuration::AyniManaged(requested) =
+            &revision_configuration
+        {
+            self.ensure_managed_lock_available(&repository.id, &requested.lock_fingerprint)?;
+        }
         let now = unix_seconds()?;
         let profile_id = resource_id("profile");
         let revision_id = resource_id("profile-revision");

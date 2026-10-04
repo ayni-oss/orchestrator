@@ -81,6 +81,34 @@ export function repositoryConnectionStatusToJSON(object: RepositoryConnectionSta
   }
 }
 
+export interface GithubInstallationOption {
+  installationId: string;
+  owner: string;
+  appName: string;
+}
+
+export interface GithubRepositoryOption {
+  repositoryId: string;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+}
+
+export interface ListGithubInstallationsRequest {
+}
+
+export interface ListGithubInstallationsResponse {
+  installations: GithubInstallationOption[];
+}
+
+export interface ListGithubInstallationRepositoriesRequest {
+  installationId: string;
+}
+
+export interface ListGithubInstallationRepositoriesResponse {
+  repositories: GithubRepositoryOption[];
+}
+
 /** RepositoryProvider identifies a repository at its provider boundary. */
 export interface RepositoryProvider {
   provider?: { $case: "github"; github: GithubRepository } | undefined;
@@ -195,6 +223,522 @@ export interface WatchRepositoriesResponse {
     repositorySnapshot: RepositorySnapshot;
   } | undefined;
 }
+
+/** Connect through the operator's existing GitHub App; identities are provider-observed. */
+export interface ConnectGithubRepositoryRequest {
+  idempotencyKey: string;
+  owner: string;
+  name: string;
+}
+
+export interface ConnectGithubRepositoryResponse {
+  repositoryConnection?: RepositoryConnection | undefined;
+}
+
+function createBaseGithubInstallationOption(): GithubInstallationOption {
+  return { installationId: "", owner: "", appName: "" };
+}
+
+export const GithubInstallationOption: MessageFns<GithubInstallationOption> = {
+  encode(message: GithubInstallationOption, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.installationId !== "") {
+      writer.uint32(10).string(message.installationId);
+    }
+    if (message.owner !== "") {
+      writer.uint32(18).string(message.owner);
+    }
+    if (message.appName !== "") {
+      writer.uint32(26).string(message.appName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GithubInstallationOption {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGithubInstallationOption();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.installationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.owner = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.appName = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GithubInstallationOption {
+    return {
+      installationId: isSet(object.installationId)
+        ? globalThis.String(object.installationId)
+        : isSet(object.installation_id)
+        ? globalThis.String(object.installation_id)
+        : "",
+      owner: isSet(object.owner) ? globalThis.String(object.owner) : "",
+      appName: isSet(object.appName)
+        ? globalThis.String(object.appName)
+        : isSet(object.app_name)
+        ? globalThis.String(object.app_name)
+        : "",
+    };
+  },
+
+  toJSON(message: GithubInstallationOption): unknown {
+    const obj: any = {};
+    if (message.installationId !== "") {
+      obj.installationId = message.installationId;
+    }
+    if (message.owner !== "") {
+      obj.owner = message.owner;
+    }
+    if (message.appName !== "") {
+      obj.appName = message.appName;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GithubInstallationOption>): GithubInstallationOption {
+    return GithubInstallationOption.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GithubInstallationOption>): GithubInstallationOption {
+    const message = createBaseGithubInstallationOption();
+    message.installationId = object.installationId ?? "";
+    message.owner = object.owner ?? "";
+    message.appName = object.appName ?? "";
+    return message;
+  },
+};
+
+function createBaseGithubRepositoryOption(): GithubRepositoryOption {
+  return { repositoryId: "", owner: "", name: "", defaultBranch: "" };
+}
+
+export const GithubRepositoryOption: MessageFns<GithubRepositoryOption> = {
+  encode(message: GithubRepositoryOption, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryId !== "") {
+      writer.uint32(10).string(message.repositoryId);
+    }
+    if (message.owner !== "") {
+      writer.uint32(18).string(message.owner);
+    }
+    if (message.name !== "") {
+      writer.uint32(26).string(message.name);
+    }
+    if (message.defaultBranch !== "") {
+      writer.uint32(34).string(message.defaultBranch);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GithubRepositoryOption {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGithubRepositoryOption();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.owner = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.defaultBranch = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GithubRepositoryOption {
+    return {
+      repositoryId: isSet(object.repositoryId)
+        ? globalThis.String(object.repositoryId)
+        : isSet(object.repository_id)
+        ? globalThis.String(object.repository_id)
+        : "",
+      owner: isSet(object.owner) ? globalThis.String(object.owner) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      defaultBranch: isSet(object.defaultBranch)
+        ? globalThis.String(object.defaultBranch)
+        : isSet(object.default_branch)
+        ? globalThis.String(object.default_branch)
+        : "",
+    };
+  },
+
+  toJSON(message: GithubRepositoryOption): unknown {
+    const obj: any = {};
+    if (message.repositoryId !== "") {
+      obj.repositoryId = message.repositoryId;
+    }
+    if (message.owner !== "") {
+      obj.owner = message.owner;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.defaultBranch !== "") {
+      obj.defaultBranch = message.defaultBranch;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GithubRepositoryOption>): GithubRepositoryOption {
+    return GithubRepositoryOption.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GithubRepositoryOption>): GithubRepositoryOption {
+    const message = createBaseGithubRepositoryOption();
+    message.repositoryId = object.repositoryId ?? "";
+    message.owner = object.owner ?? "";
+    message.name = object.name ?? "";
+    message.defaultBranch = object.defaultBranch ?? "";
+    return message;
+  },
+};
+
+function createBaseListGithubInstallationsRequest(): ListGithubInstallationsRequest {
+  return {};
+}
+
+export const ListGithubInstallationsRequest: MessageFns<ListGithubInstallationsRequest> = {
+  encode(_: ListGithubInstallationsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListGithubInstallationsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListGithubInstallationsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): ListGithubInstallationsRequest {
+    return {};
+  },
+
+  toJSON(_: ListGithubInstallationsRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListGithubInstallationsRequest>): ListGithubInstallationsRequest {
+    return ListGithubInstallationsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<ListGithubInstallationsRequest>): ListGithubInstallationsRequest {
+    const message = createBaseListGithubInstallationsRequest();
+    return message;
+  },
+};
+
+function createBaseListGithubInstallationsResponse(): ListGithubInstallationsResponse {
+  return { installations: [] };
+}
+
+export const ListGithubInstallationsResponse: MessageFns<ListGithubInstallationsResponse> = {
+  encode(message: ListGithubInstallationsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.installations) {
+      GithubInstallationOption.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListGithubInstallationsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListGithubInstallationsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.installations.push(GithubInstallationOption.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListGithubInstallationsResponse {
+    return {
+      installations: globalThis.Array.isArray(object?.installations)
+        ? object.installations.map((e: any) => GithubInstallationOption.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListGithubInstallationsResponse): unknown {
+    const obj: any = {};
+    if (message.installations?.length) {
+      obj.installations = message.installations.map((e) => GithubInstallationOption.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListGithubInstallationsResponse>): ListGithubInstallationsResponse {
+    return ListGithubInstallationsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListGithubInstallationsResponse>): ListGithubInstallationsResponse {
+    const message = createBaseListGithubInstallationsResponse();
+    message.installations = object.installations?.map((e) => GithubInstallationOption.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseListGithubInstallationRepositoriesRequest(): ListGithubInstallationRepositoriesRequest {
+  return { installationId: "" };
+}
+
+export const ListGithubInstallationRepositoriesRequest: MessageFns<ListGithubInstallationRepositoriesRequest> = {
+  encode(message: ListGithubInstallationRepositoriesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.installationId !== "") {
+      writer.uint32(10).string(message.installationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListGithubInstallationRepositoriesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListGithubInstallationRepositoriesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.installationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListGithubInstallationRepositoriesRequest {
+    return {
+      installationId: isSet(object.installationId)
+        ? globalThis.String(object.installationId)
+        : isSet(object.installation_id)
+        ? globalThis.String(object.installation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListGithubInstallationRepositoriesRequest): unknown {
+    const obj: any = {};
+    if (message.installationId !== "") {
+      obj.installationId = message.installationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListGithubInstallationRepositoriesRequest>): ListGithubInstallationRepositoriesRequest {
+    return ListGithubInstallationRepositoriesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(
+    object: DeepPartial<ListGithubInstallationRepositoriesRequest>,
+  ): ListGithubInstallationRepositoriesRequest {
+    const message = createBaseListGithubInstallationRepositoriesRequest();
+    message.installationId = object.installationId ?? "";
+    return message;
+  },
+};
+
+function createBaseListGithubInstallationRepositoriesResponse(): ListGithubInstallationRepositoriesResponse {
+  return { repositories: [] };
+}
+
+export const ListGithubInstallationRepositoriesResponse: MessageFns<ListGithubInstallationRepositoriesResponse> = {
+  encode(message: ListGithubInstallationRepositoriesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.repositories) {
+      GithubRepositoryOption.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListGithubInstallationRepositoriesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListGithubInstallationRepositoriesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositories.push(GithubRepositoryOption.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListGithubInstallationRepositoriesResponse {
+    return {
+      repositories: globalThis.Array.isArray(object?.repositories)
+        ? object.repositories.map((e: any) => GithubRepositoryOption.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListGithubInstallationRepositoriesResponse): unknown {
+    const obj: any = {};
+    if (message.repositories?.length) {
+      obj.repositories = message.repositories.map((e) => GithubRepositoryOption.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListGithubInstallationRepositoriesResponse>): ListGithubInstallationRepositoriesResponse {
+    return ListGithubInstallationRepositoriesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(
+    object: DeepPartial<ListGithubInstallationRepositoriesResponse>,
+  ): ListGithubInstallationRepositoriesResponse {
+    const message = createBaseListGithubInstallationRepositoriesResponse();
+    message.repositories = object.repositories?.map((e) => GithubRepositoryOption.fromPartial(e)) || [];
+    return message;
+  },
+};
 
 function createBaseRepositoryProvider(): RepositoryProvider {
   return { provider: undefined };
@@ -1918,9 +2462,226 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
   },
 };
 
+function createBaseConnectGithubRepositoryRequest(): ConnectGithubRepositoryRequest {
+  return { idempotencyKey: "", owner: "", name: "" };
+}
+
+export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryRequest> = {
+  encode(message: ConnectGithubRepositoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.owner !== "") {
+      writer.uint32(18).string(message.owner);
+    }
+    if (message.name !== "") {
+      writer.uint32(26).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConnectGithubRepositoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConnectGithubRepositoryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.owner = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConnectGithubRepositoryRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      owner: isSet(object.owner) ? globalThis.String(object.owner) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+    };
+  },
+
+  toJSON(message: ConnectGithubRepositoryRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.owner !== "") {
+      obj.owner = message.owner;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConnectGithubRepositoryRequest>): ConnectGithubRepositoryRequest {
+    return ConnectGithubRepositoryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConnectGithubRepositoryRequest>): ConnectGithubRepositoryRequest {
+    const message = createBaseConnectGithubRepositoryRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.owner = object.owner ?? "";
+    message.name = object.name ?? "";
+    return message;
+  },
+};
+
+function createBaseConnectGithubRepositoryResponse(): ConnectGithubRepositoryResponse {
+  return { repositoryConnection: undefined };
+}
+
+export const ConnectGithubRepositoryResponse: MessageFns<ConnectGithubRepositoryResponse> = {
+  encode(message: ConnectGithubRepositoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnection !== undefined) {
+      RepositoryConnection.encode(message.repositoryConnection, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConnectGithubRepositoryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConnectGithubRepositoryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnection = RepositoryConnection.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConnectGithubRepositoryResponse {
+    return {
+      repositoryConnection: isSet(object.repositoryConnection)
+        ? RepositoryConnection.fromJSON(object.repositoryConnection)
+        : isSet(object.repository_connection)
+        ? RepositoryConnection.fromJSON(object.repository_connection)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ConnectGithubRepositoryResponse): unknown {
+    const obj: any = {};
+    if (message.repositoryConnection !== undefined) {
+      obj.repositoryConnection = RepositoryConnection.toJSON(message.repositoryConnection);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConnectGithubRepositoryResponse>): ConnectGithubRepositoryResponse {
+    return ConnectGithubRepositoryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConnectGithubRepositoryResponse>): ConnectGithubRepositoryResponse {
+    const message = createBaseConnectGithubRepositoryResponse();
+    message.repositoryConnection = (object.repositoryConnection !== undefined && object.repositoryConnection !== null)
+      ? RepositoryConnection.fromPartial(object.repositoryConnection)
+      : undefined;
+    return message;
+  },
+};
+
 /** RepositoryService manages provider-neutral repository connections and snapshots. */
 export type RepositoryServiceService = typeof RepositoryServiceService;
 export const RepositoryServiceService = {
+  listGithubInstallations: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ListGithubInstallations" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListGithubInstallationsRequest): Buffer =>
+      Buffer.from(ListGithubInstallationsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListGithubInstallationsRequest => ListGithubInstallationsRequest.decode(value),
+    responseSerialize: (value: ListGithubInstallationsResponse): Buffer =>
+      Buffer.from(ListGithubInstallationsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListGithubInstallationsResponse =>
+      ListGithubInstallationsResponse.decode(value),
+  },
+  listGithubInstallationRepositories: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ListGithubInstallationRepositories" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListGithubInstallationRepositoriesRequest): Buffer =>
+      Buffer.from(ListGithubInstallationRepositoriesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListGithubInstallationRepositoriesRequest =>
+      ListGithubInstallationRepositoriesRequest.decode(value),
+    responseSerialize: (value: ListGithubInstallationRepositoriesResponse): Buffer =>
+      Buffer.from(ListGithubInstallationRepositoriesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListGithubInstallationRepositoriesResponse =>
+      ListGithubInstallationRepositoriesResponse.decode(value),
+  },
+  connectGithubRepository: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ConnectGithubRepository" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ConnectGithubRepositoryRequest): Buffer =>
+      Buffer.from(ConnectGithubRepositoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ConnectGithubRepositoryRequest => ConnectGithubRepositoryRequest.decode(value),
+    responseSerialize: (value: ConnectGithubRepositoryResponse): Buffer =>
+      Buffer.from(ConnectGithubRepositoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ConnectGithubRepositoryResponse =>
+      ConnectGithubRepositoryResponse.decode(value),
+  },
   listRepositoryConnections: {
     path: "/ayni.orchestrator.v1.RepositoryService/ListRepositoryConnections" as const,
     requestStream: false as const,
@@ -1996,6 +2757,12 @@ export const RepositoryServiceService = {
 } as const;
 
 export interface RepositoryServiceServer extends UntypedServiceImplementation {
+  listGithubInstallations: handleUnaryCall<ListGithubInstallationsRequest, ListGithubInstallationsResponse>;
+  listGithubInstallationRepositories: handleUnaryCall<
+    ListGithubInstallationRepositoriesRequest,
+    ListGithubInstallationRepositoriesResponse
+  >;
+  connectGithubRepository: handleUnaryCall<ConnectGithubRepositoryRequest, ConnectGithubRepositoryResponse>;
   listRepositoryConnections: handleUnaryCall<ListRepositoryConnectionsRequest, ListRepositoryConnectionsResponse>;
   getRepositoryConnection: handleUnaryCall<GetRepositoryConnectionRequest, GetRepositoryConnectionResponse>;
   createRepositoryConnection: handleUnaryCall<CreateRepositoryConnectionRequest, CreateRepositoryConnectionResponse>;
@@ -2005,6 +2772,51 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
 }
 
 export interface RepositoryServiceClient extends Client {
+  listGithubInstallations(
+    request: ListGithubInstallationsRequest,
+    callback: (error: ServiceError | null, response: ListGithubInstallationsResponse) => void,
+  ): ClientUnaryCall;
+  listGithubInstallations(
+    request: ListGithubInstallationsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListGithubInstallationsResponse) => void,
+  ): ClientUnaryCall;
+  listGithubInstallations(
+    request: ListGithubInstallationsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListGithubInstallationsResponse) => void,
+  ): ClientUnaryCall;
+  listGithubInstallationRepositories(
+    request: ListGithubInstallationRepositoriesRequest,
+    callback: (error: ServiceError | null, response: ListGithubInstallationRepositoriesResponse) => void,
+  ): ClientUnaryCall;
+  listGithubInstallationRepositories(
+    request: ListGithubInstallationRepositoriesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListGithubInstallationRepositoriesResponse) => void,
+  ): ClientUnaryCall;
+  listGithubInstallationRepositories(
+    request: ListGithubInstallationRepositoriesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListGithubInstallationRepositoriesResponse) => void,
+  ): ClientUnaryCall;
+  connectGithubRepository(
+    request: ConnectGithubRepositoryRequest,
+    callback: (error: ServiceError | null, response: ConnectGithubRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  connectGithubRepository(
+    request: ConnectGithubRepositoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ConnectGithubRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  connectGithubRepository(
+    request: ConnectGithubRepositoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ConnectGithubRepositoryResponse) => void,
+  ): ClientUnaryCall;
   listRepositoryConnections(
     request: ListRepositoryConnectionsRequest,
     callback: (error: ServiceError | null, response: ListRepositoryConnectionsResponse) => void,

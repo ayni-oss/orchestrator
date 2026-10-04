@@ -1,4 +1,4 @@
-# ayni-orchestrator-template: ayni-managed-v2
+# ayni-orchestrator-template: ayni-managed-v3
 name: Ayni assessment request
 on:
   pull_request:

@@ -7,13 +7,15 @@ runtime:
   outputClaim: runtime-outputs
   outputSize: 4Gi
   modelSecret: openai-api
-  intervalSeconds: 60
+  intervalSeconds: 300
   requestTimeoutSeconds: 30
   concurrency: 4
+  # Docker Desktop-only architecture emulation is enabled by the local chart.
+  # Production releases retain strict runtime platform scheduling.
+  allowEmulation: false
   profiles: {}
-  # Shared policy for App-authorized Ayni Managed repositories. Their GHCR
-  # environment references are derived from the connected GitHub repository and
-  # committed lock; no per-repository Kubernetes allowlist is required.
+  # Deployment-wide policy for connected managed repositories; no repository map.
+  # The local chart supplies this policy automatically.
   managedRuntime: null
   serviceAccounts:
     create: true

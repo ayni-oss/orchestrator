@@ -533,6 +533,7 @@ mod tests {
         v1::CreateDevelopmentTaskRequest {
             idempotency_key: "task:1".to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                publish_draft: false,
                 repository_connection_id: "repo:1".to_owned(),
                 repository_revision: "a".repeat(40),
                 runtime_profile_id: "profile:1".to_owned(),

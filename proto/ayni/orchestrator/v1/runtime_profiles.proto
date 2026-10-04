@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 // RuntimeProfileService manages versioned runtime configuration and its reconciled resources.
 service RuntimeProfileService {
+  rpc InspectAyniRepository(InspectAyniRepositoryRequest) returns (InspectAyniRepositoryResponse);
   rpc ListRuntimeProfiles(ListRuntimeProfilesRequest) returns (ListRuntimeProfilesResponse);
   rpc GetRuntimeProfile(GetRuntimeProfileRequest) returns (GetRuntimeProfileResponse);
   rpc CreateRuntimeProfile(CreateRuntimeProfileRequest) returns (CreateRuntimeProfileResponse);
@@ -319,4 +320,28 @@ message WatchRuntimeProfilesResponse {
     RuntimeArtifact runtime_artifact = 4;
     AutomationInstallation automation_installation = 5;
   }
+}
+
+message InspectAyniRepositoryRequest {
+  string repository_connection_id = 1;
+}
+
+// Safe onboarding observations. No credential values or private artifact bytes.
+message InspectAyniRepositoryResponse {
+  string repository_snapshot_id = 1;
+  string repository_revision = 2;
+  string lock_fingerprint = 3;
+  string ayni_version = 4;
+  string workflow_template_version = 5;
+  string oci_repository = 6;
+  bool policy_present = 7;
+  bool lock_compatible = 8;
+  bool trust_policy_pinned = 9;
+  string reason = 10;
+  repeated WorkflowProposal workflows = 11;
+}
+
+message WorkflowProposal {
+  string path = 1;
+  string contents = 2;
 }

@@ -47,8 +47,11 @@ pod-loopback listener.
 
 For every deployable change:
 
-1. Build control-plane, web, and worker images from a clean committed checkout.
-2. Tag and label them with the source revision.
+1. Build control-plane, web, and worker images from the current checkout,
+   including uncommitted local changes when present.
+2. Label them with the source revision and whether the source checkout was dirty.
+   Generated local tags include each image's content ID; dirty images are not
+   reproducible from the commit revision alone.
 3. Load them into Docker Desktop's Kubernetes node explicitly.
 4. Build version-locked dependencies, then lint and render both charts with the
    exact application image values.

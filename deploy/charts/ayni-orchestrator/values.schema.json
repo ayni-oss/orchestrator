@@ -17,6 +17,7 @@
         "intervalSeconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
         "requestTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
         "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "allowEmulation": { "type": "boolean" },
         "profiles": { "type": "object", "maxProperties": 128 },
         "managedRuntime": {
           "type": ["object", "null"],

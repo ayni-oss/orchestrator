@@ -43,10 +43,10 @@ pub fn checkout(
             return Err(io::Error::other("invalid source credential"));
         }
         fetch
-            .env("GIT_CONFIG_COUNT", "1")
-            .env("GIT_CONFIG_KEY_0", "http.https://github.com/.extraheader")
+            .env("GIT_CONFIG_COUNT", "2")
+            .env("GIT_CONFIG_KEY_1", "http.https://github.com/.extraheader")
             .env(
-                "GIT_CONFIG_VALUE_0",
+                "GIT_CONFIG_VALUE_1",
                 format!(
                     "AUTHORIZATION: basic {}",
                     STANDARD.encode(format!("x-access-token:{token}"))
@@ -212,6 +212,7 @@ pub(crate) fn command(program: &str, workspace: &Path) -> Command {
             std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".into()),
         )
         .env("HOME", "/scratch")
+        .env("XDG_CACHE_HOME", "/scratch/cache")
         .env("CARGO_HOME", "/scratch/cargo")
         .env("MISE_DATA_DIR", "/opt/ayni/mise")
         .env("MISE_TRUSTED_CONFIG_PATHS", "/etc/ayni")
@@ -225,6 +226,11 @@ pub(crate) fn command(program: &str, workspace: &Path) -> Command {
         .env("TMPDIR", "/scratch")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        // Kubernetes emptyDir roots are root-owned, even with fsGroup access.
+        // Trust only this assigned checkout, including Git invoked by Ayni.
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "safe.directory")
+        .env("GIT_CONFIG_VALUE_0", workspace)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -268,6 +274,27 @@ pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
 mod tests {
     use super::*;
     use crate::managed_runtime::RuntimeExpectation;
+
+    #[test]
+    fn git_trusts_only_the_assigned_workspace() -> io::Result<()> {
+        let workspace = tempfile::tempdir()?;
+        let other = tempfile::tempdir()?;
+        git(workspace.path(), &["init", "--quiet"])?;
+        git(other.path(), &["init", "--quiet"])?;
+        let mut trusted = command("git", workspace.path());
+        trusted
+            .env("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+            .args(["rev-parse", "--show-toplevel"]);
+        assert!(trusted.status()?.success());
+        let mut untrusted = command("git", workspace.path());
+        untrusted
+            .current_dir(other.path())
+            .env("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
+            .args(["rev-parse", "--show-toplevel"]);
+        assert!(!untrusted.status()?.success());
+        Ok(())
+    }
+
     #[test]
     fn rejects_untrusted_checkout_transport_and_revision() {
         let mut request = ExecutionRequest {

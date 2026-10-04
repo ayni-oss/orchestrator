@@ -252,6 +252,15 @@ export function toBffError(error: unknown, fallbackRequestId?: string): BffError
       retryable: false,
     });
   }
+  const onboardingErrors: Record<string,string> = {
+    repository_provider_unconfigured:"Your operator must configure the repository provider for this deployment.",
+    provider_access_required:"The repository provider connection needs attention. Ask your operator to review its access and permissions.",
+    provider_temporarily_unavailable:"The repository provider is temporarily unavailable. Try again shortly.",
+    repository_provider_failed:"The repository provider could not complete the request. Ask your operator to review the integration.",
+    repository_connection_conflict:"This repository is already connected or the request conflicts with retained state. Open its existing connection.",
+  };
+  const onboardingMessage=onboardingErrors[error.details];
+  if(onboardingMessage) return new BffError({status:statusFor(error.code),reason:error.details,message:onboardingMessage,retryable:false,...(safeFallbackRequestId ? {requestId:safeFallbackRequestId} : {})});
   const detail = richDetail(error);
   const requestId = safeRequestId(detail?.requestId)
     ?? metadataRequestId(error.metadata)

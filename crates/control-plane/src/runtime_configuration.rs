@@ -15,6 +15,10 @@ pub struct RuntimeConfiguration {
     pub request_timeout_seconds: u64,
     #[serde(default = "concurrency")]
     pub concurrency: usize,
+    /// Local Docker Desktop only; production keeps platform node selection.
+    #[serde(default)]
+    pub allow_emulation: bool,
+    #[serde(default)]
     pub profiles: BTreeMap<String, ProfileRuntime>,
     /// Deployment-wide execution policy for App-authorized Ayni Managed
     /// repositories. Their environment image is derived from GitHub identity
@@ -111,6 +115,21 @@ impl RuntimeConfiguration {
         .map_err(|_| "runtime_configuration_invalid")?;
         config.validate()?;
         Ok(Some(config))
+    }
+
+    /// Bind deployment policy only to the connected repository's frozen namespace.
+    pub(crate) fn managed_runtime(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+        managed: &ayni_orchestrator_api::v1::AyniManagedProfileRevision,
+    ) -> Option<ProfileRuntime> {
+        let runtime = self
+            .managed_runtime
+            .as_ref()?
+            .profile_runtime(&github.owner, &github.name, &managed.lock_fingerprint)
+            .ok()?;
+        (image_repository(&runtime.image) == Some(managed.oci_repository.as_str()))
+            .then_some(runtime)
     }
 
     fn validate(&self) -> Result<(), &'static str> {
@@ -258,9 +277,8 @@ pub fn name(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn rejects_unbounded_scheduling_and_credential_values() {
-        let mut configuration = RuntimeConfiguration {
+    fn configuration() -> RuntimeConfiguration {
+        RuntimeConfiguration {
             namespace: "test".into(),
             output_claim: "output".into(),
             model_secret: "model".into(),
@@ -268,9 +286,15 @@ mod tests {
             interval_seconds: 60,
             request_timeout_seconds: 30,
             concurrency: 4,
+            allow_emulation: false,
             profiles: BTreeMap::new(),
             managed_runtime: None,
-        };
+        }
+    }
+
+    #[test]
+    fn rejects_unbounded_scheduling_and_credential_values() {
+        let mut configuration = configuration();
         assert!(configuration.validate().is_ok());
         configuration.concurrency = 0;
         assert!(configuration.validate().is_err());
@@ -279,16 +303,52 @@ mod tests {
     }
 
     #[test]
-    fn derives_managed_image_from_connected_repository_and_lock() {
+    fn managed_discovery_requires_policy_and_matching_repository_namespace()
+    -> Result<(), &'static str> {
+        let mut configuration = configuration();
+        let github = ayni_orchestrator_api::v1::GithubRepository {
+            owner: "Example".into(),
+            name: "Sandbox".into(),
+            ..Default::default()
+        };
+        let mut managed = ayni_orchestrator_api::v1::AyniManagedProfileRevision {
+            oci_repository: "ghcr.io/example/sandbox-ayni".into(),
+            lock_fingerprint: "a".repeat(64),
+            ..Default::default()
+        };
+        assert!(configuration.managed_runtime(&github, &managed).is_none());
+        configuration.managed_runtime = Some(ManagedRuntime {
+            platform: "linux/amd64".into(),
+            service_account: "runtime-coding".into(),
+            pull_secret: Some("runtime-pull".into()),
+            assessment: None,
+        });
+        assert!(configuration.validate().is_ok());
+        let runtime = configuration
+            .managed_runtime(&github, &managed)
+            .ok_or("managed runtime missing")?;
+        assert_eq!(runtime.pull_secret.as_deref(), Some("runtime-pull"));
+        assert_eq!(
+            runtime.image,
+            format!("ghcr.io/example/sandbox-ayni:lock-{}", "a".repeat(64))
+        );
+        managed.oci_repository = "ghcr.io/another/repository-ayni".into();
+        assert!(configuration.managed_runtime(&github, &managed).is_none());
+        managed.oci_repository = "ghcr.io/example/sandbox-ayni".into();
+        managed.lock_fingerprint = "invalid".into();
+        assert!(configuration.managed_runtime(&github, &managed).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn derives_managed_image_from_connected_repository_and_lock() -> Result<(), &'static str> {
         let runtime = ManagedRuntime {
             platform: "linux/amd64".into(),
             service_account: "runtime-coding".into(),
             pull_secret: Some("environment-pull".into()),
             assessment: None,
         };
-        let profile = runtime
-            .profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))
-            .unwrap();
+        let profile = runtime.profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))?;
         assert_eq!(
             profile.image,
             format!("ghcr.io/ayni-oss/sandbox-ayni:lock-{}", "ab".repeat(32))
@@ -298,5 +358,6 @@ mod tests {
                 .profile_runtime("../owner", "sandbox", &"a".repeat(64))
                 .is_err()
         );
+        Ok(())
     }
 }

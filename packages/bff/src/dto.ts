@@ -50,6 +50,9 @@ export interface RepositoryConnectionPageDto {
   page: PageDto;
 }
 
+export interface GithubInstallationOptionDto { installationId: string; owner: string; appName: string }
+export interface GithubRepositoryOptionDto { repositoryId: string; owner: string; name: string; defaultBranch: string }
+
 export interface CreateRepositoryConnectionInput {
   idempotencyKey: string;
   provider: GithubRepositoryDto;
@@ -69,6 +72,7 @@ export interface RuntimeProfileDto {
   kind: RuntimeProfileKindDto;
   support: RuntimeProfileSupportDto;
   state: RuntimeProfileStateDto;
+  reconciliation: Array<{key:string;value:string}>;
   activeRevisionId?: string;
   activeRuntimeArtifactId?: string;
   failure?: ResourceFailureDto;
@@ -142,6 +146,7 @@ export interface DevelopmentTaskInputDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineSeconds?: number;
+  publishDraft?: boolean;
 }
 
 export interface FrozenRepositoryDto {
@@ -168,6 +173,7 @@ export interface DevelopmentSnapshotDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineAt?: string;
+  publishDraft: boolean;
 }
 
 export type DevelopmentTaskStateDto =

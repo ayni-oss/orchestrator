@@ -113,11 +113,7 @@ impl RuntimeReconciler {
             .as_ref()
             .ok_or("coding_snapshot_missing")?;
         let frozen = snapshot.runtime.as_ref().ok_or("coding_snapshot_missing")?;
-        let runtime = self
-            .configuration
-            .profiles
-            .get(profile_id)
-            .ok_or("runtime_source_missing")?;
+        let runtime = self.configured_profile(profile_id)?;
         let (repository, revision) = {
             let store = self
                 .state

@@ -117,9 +117,9 @@ impl RuntimeReconciler {
         &self,
     ) -> Result<BTreeMap<String, crate::runtime_configuration::ProfileRuntime>, &'static str> {
         let mut profiles = self.configuration.profiles.clone();
-        let Some(managed_runtime) = &self.configuration.managed_runtime else {
+        if self.configuration.managed_runtime.is_none() {
             return Ok(profiles);
-        };
+        }
         let mut store = self
             .state
             .store
@@ -145,8 +145,11 @@ impl RuntimeReconciler {
                 let repository = store
                     .repository_connection(&profile.repository_connection_id)
                     .map_err(|_| "repository_missing")?;
+                if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
+                    continue;
+                }
                 let Some(v1::repository_provider::Provider::Github(github)) =
-                    repository.provider.and_then(|provider| provider.provider)
+                    repository.provider.and_then(|p| p.provider)
                 else {
                     continue;
                 };
@@ -161,21 +164,13 @@ impl RuntimeReconciler {
                 else {
                     continue;
                 };
-                let runtime = managed_runtime.profile_runtime(
-                    &github.owner,
-                    &github.name,
-                    &managed.lock_fingerprint,
-                )?;
-                if crate::runtime_configuration::image_repository(&runtime.image)
-                    != Some(managed.oci_repository.as_str())
-                {
+                let Some(runtime) = self.configuration.managed_runtime(&github, &managed) else {
                     continue;
-                }
+                };
                 profiles.insert(profile.id, runtime);
             }
             page.page_token = result.next_page_token;
             if page.page_token.is_empty() {
-                drop(store);
                 return Ok(profiles);
             }
         }
@@ -191,7 +186,6 @@ impl RuntimeReconciler {
             .remove(id)
             .ok_or("runtime_source_missing")
     }
-
     /// Reconciles coding separately from provider publication and image builds.
     pub async fn reconcile_coding(&self) {
         let Ok(_guard) = self.coding_pass.try_lock() else {
