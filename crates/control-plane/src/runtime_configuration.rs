@@ -279,16 +279,14 @@ mod tests {
     }
 
     #[test]
-    fn derives_managed_image_from_connected_repository_and_lock() {
+    fn derives_managed_image_from_connected_repository_and_lock() -> Result<(), &'static str> {
         let runtime = ManagedRuntime {
             platform: "linux/amd64".into(),
             service_account: "runtime-coding".into(),
             pull_secret: Some("environment-pull".into()),
             assessment: None,
         };
-        let profile = runtime
-            .profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))
-            .unwrap();
+        let profile = runtime.profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))?;
         assert_eq!(
             profile.image,
             format!("ghcr.io/ayni-oss/sandbox-ayni:lock-{}", "ab".repeat(32))
@@ -298,5 +296,6 @@ mod tests {
                 .profile_runtime("../owner", "sandbox", &"a".repeat(64))
                 .is_err()
         );
+        Ok(())
     }
 }

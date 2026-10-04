@@ -131,10 +131,14 @@ fn coding_job(
     }));
     pod["containers"][0]["workingDir"] = json!("/workspace");
     pod["containers"][0]["env"] = crate::runtime_kubernetes::runtime_environment();
+    // The worker rejects symlinks. Project ConfigMap and Secret keys as
+    // read-only files so its bounded reader sees regular files.
     pod["containers"][0]["volumeMounts"] = json!([
         {"name":"workspace","mountPath":"/workspace"}, {"name":"scratch","mountPath":"/scratch"},
-        {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request","readOnly":true},
-        {"name":"output","mountPath":"/output","subPath":name}, {"name":"model","mountPath":"/model","readOnly":true}
+        {"name":"launcher","mountPath":"/launcher","readOnly":true},
+        {"name":"request","mountPath":"/request/coding.json","subPath":"coding.json","readOnly":true},
+        {"name":"output","mountPath":"/output","subPath":name},
+        {"name":"model","mountPath":"/model/api-key","subPath":"api-key","readOnly":true}
     ]);
     pod["volumes"] = support["spec"]["template"]["spec"]["volumes"].clone();
     let volumes = pod["volumes"].as_array_mut().ok_or("coding_job_invalid")?;
@@ -208,6 +212,23 @@ mod tests {
         assert!(pod.node_name.is_none());
         assert_eq!(pod.service_account_name.as_deref(), Some("runtime-coding"));
         assert_eq!(pod.automount_service_account_token, Some(false));
+        for (name, path, key) in [
+            ("request", "/request/coding.json", "coding.json"),
+            ("model", "/model/api-key", "api-key"),
+        ] {
+            assert!(
+                pod.containers[0]
+                    .volume_mounts
+                    .iter()
+                    .flatten()
+                    .any(|mount| {
+                        mount.name == name
+                            && mount.mount_path == path
+                            && mount.sub_path.as_deref() == Some(key)
+                            && mount.read_only == Some(true)
+                    })
+            );
+        }
         let json = serde_json::to_string(&pod)?;
         for forbidden in [
             "push-only",
