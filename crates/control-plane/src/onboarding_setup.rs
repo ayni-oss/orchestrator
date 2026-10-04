@@ -11,12 +11,7 @@ impl AppState {
             .as_ref()
             .ok_or("github_app_unconfigured")?
             .setup_action_offset(actions.len());
-        for action in actions
-            .iter()
-            .cycle()
-            .skip(offset)
-            .take(1)
-        {
+        for action in actions.iter().cycle().skip(offset).take(1) {
             if let Err(reason) = self.reconcile_setup_action(action).await {
                 tracing::warn!(reason_code = reason, "setup action deferred");
                 if let Some(id) = &action.target_id {
@@ -105,6 +100,7 @@ impl AppState {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn observe_setup_pull(
         &self,
         id: &str,

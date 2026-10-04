@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tonic::Status;
 
-pub(crate) fn provider_error(reason: &'static str) -> Status {
+pub fn provider_error(reason: &'static str) -> Status {
     tracing::warn!(
         provider = "github",
         reason_code = reason,

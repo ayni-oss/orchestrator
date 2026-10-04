@@ -1,37 +1,73 @@
 impl SourceClient {
     pub(crate) async fn github_installations(&self) -> Result<Value, &'static str> {
         let jwt = self.app_jwt()?;
-        let app = bounded(self.client.get("https://api.github.com/app").bearer_auth(&jwt)).await?;
+        let app = bounded(
+            self.client
+                .get("https://api.github.com/app")
+                .bearer_auth(&jwt),
+        )
+        .await?;
         let app_name = app["name"].as_str().ok_or("github_app_invalid")?;
         let mut items = Vec::new();
         for page in 1..=20 {
             let page = page.to_string();
-            let installations = bounded(self.client.get("https://api.github.com/app/installations")
-                .bearer_auth(&jwt).query(&[("per_page", "100"), ("page", page.as_str())])).await?;
-            let batch = installations.as_array().ok_or("github_installations_invalid")?;
+            let installations = bounded(
+                self.client
+                    .get("https://api.github.com/app/installations")
+                    .bearer_auth(&jwt)
+                    .query(&[("per_page", "100"), ("page", page.as_str())]),
+            )
+            .await?;
+            let batch = installations
+                .as_array()
+                .ok_or("github_installations_invalid")?;
             let count = batch.len();
             items.extend(batch.iter().cloned());
-            if count < 100 { break; }
+            if count < 100 {
+                break;
+            }
         }
-        Ok(json!({"app_name": app_name, "installations": items.iter().map(|item| json!({
+        Ok(
+            json!({"app_name": app_name, "installations": items.iter().map(|item| json!({
             "installation_id": item["id"], "owner": item["account"]["login"]
-        })).collect::<Vec<_>>()}))
+        })).collect::<Vec<_>>()}),
+        )
     }
 
-    pub(crate) async fn installation_repositories(&self, installation_id: u64) -> Result<Value, &'static str> {
+    pub(crate) async fn installation_repositories(
+        &self,
+        installation_id: u64,
+    ) -> Result<Value, &'static str> {
         let jwt = self.app_jwt()?;
-        let access = bounded(self.client.post(format!("https://api.github.com/app/installations/{installation_id}/access_tokens"))
-            .bearer_auth(jwt)).await?;
-        let token = access["token"].as_str().ok_or("github_authentication_failed")?;
+        let access = bounded(
+            self.client
+                .post(format!(
+                    "https://api.github.com/app/installations/{installation_id}/access_tokens"
+                ))
+                .bearer_auth(jwt),
+        )
+        .await?;
+        let token = access["token"]
+            .as_str()
+            .ok_or("github_authentication_failed")?;
         let mut repositories = Vec::new();
         for page in 1..=20 {
             let page = page.to_string();
-            let result = bounded(self.client.get("https://api.github.com/installation/repositories")
-                .bearer_auth(&token).query(&[("per_page", "100"), ("page", page.as_str())])).await?;
-            let batch = result["repositories"].as_array().ok_or("github_repositories_invalid")?;
+            let result = bounded(
+                self.client
+                    .get("https://api.github.com/installation/repositories")
+                    .bearer_auth(token)
+                    .query(&[("per_page", "100"), ("page", page.as_str())]),
+            )
+            .await?;
+            let batch = result["repositories"]
+                .as_array()
+                .ok_or("github_repositories_invalid")?;
             let count = batch.len();
             repositories.extend(batch.iter().cloned());
-            if count < 100 { break; }
+            if count < 100 {
+                break;
+            }
         }
         Ok(json!({"repositories": repositories}))
     }
@@ -104,10 +140,10 @@ impl SourceClient {
             github.owner, github.name
         );
         let operation = match (path, body.is_some()) {
-            ("git/trees", true) => "create_tree",
-            ("git/commits", true) => "create_commit",
-            ("git/refs", true) => "create_reference",
-            _ => "read_setup_repository",
+            ("git/trees", true) => GithubOperation::CreateTree,
+            ("git/commits", true) => GithubOperation::CreateCommit,
+            ("git/refs", true) => GithubOperation::CreateReference,
+            _ => GithubOperation::Read,
         };
         bounded_operation(
             if let Some(body) = body {
@@ -118,6 +154,47 @@ impl SourceClient {
             operation,
         )
         .await
+        .map_err(|error| error.reason())
+    }
+
+    async fn setup_reference(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+        branch: &str,
+        token: &str,
+    ) -> Result<Option<String>, &'static str> {
+        let mut url =
+            reqwest::Url::parse("https://api.github.com").map_err(|_| "github_url_invalid")?;
+        url.path_segments_mut()
+            .map_err(|()| "github_url_invalid")?
+            .extend([
+                "repos",
+                github.owner.as_str(),
+                github.name.as_str(),
+                "git",
+                "ref",
+                "heads",
+                branch,
+            ]);
+        match bounded_operation(
+            self.client.get(url).bearer_auth(token),
+            GithubOperation::ReadSetupReference,
+        )
+        .await
+        {
+            Ok(value) => value["object"]["sha"]
+                .as_str()
+                .filter(|sha| {
+                    sha.len() == 40
+                        && sha
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+                })
+                .map(|sha| Some(sha.to_owned()))
+                .ok_or("repository_head_invalid"),
+            Err(error) if error.kind == GithubErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.reason()),
+        }
     }
 
     pub(crate) async fn setup_branch(
@@ -126,24 +203,17 @@ impl SourceClient {
         request: &crate::github_setup::SetupPullRequest,
         token: &str,
     ) -> Result<(), &'static str> {
-        match self
-            .head(&github.owner, &github.name, &request.branch, token)
-            .await
-        {
-            Ok(head) => {
-                for (path, expected) in &request.files.files {
-                    if self
-                        .file(&github.owner, &github.name, &head, path, token)
-                        .await?
-                        != expected.as_bytes()
-                    {
-                        return Err("setup_branch_conflict");
-                    }
+        if let Some(head) = self.setup_reference(github, &request.branch, token).await? {
+            for (path, expected) in &request.files.files {
+                if self
+                    .file(&github.owner, &github.name, &head, path, token)
+                    .await?
+                    != expected.as_bytes()
+                {
+                    return Err("setup_branch_conflict");
                 }
-                return Ok(());
             }
-            Err("github_not_found") => {}
-            Err(reason) => return Err(reason),
+            return Ok(());
         }
         let head = self
             .head(&github.owner, &github.name, &request.base_branch, token)
