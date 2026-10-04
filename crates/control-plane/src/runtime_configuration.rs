@@ -66,7 +66,7 @@ pub struct BuildRuntime {
 }
 
 const fn interval() -> u64 {
-    60
+    300
 }
 fn runtime_account() -> String {
     "runtime-coding".into()

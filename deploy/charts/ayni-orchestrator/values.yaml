@@ -7,7 +7,7 @@ runtime:
   outputClaim: runtime-outputs
   outputSize: 4Gi
   modelSecret: openai-api
-  intervalSeconds: 60
+  intervalSeconds: 300
   requestTimeoutSeconds: 30
   concurrency: 4
   profiles: {}

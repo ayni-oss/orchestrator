@@ -15,7 +15,7 @@ Example application-chart values (replace the placeholder digest and profile ID)
 runtime:
   enabled: true
   workerImage: registry.internal/orchestrator/worker@sha256:<worker-manifest-digest>
-  intervalSeconds: 60
+  intervalSeconds: 300
   requestTimeoutSeconds: 30
   concurrency: 4
   outputClaim: runtime-outputs
