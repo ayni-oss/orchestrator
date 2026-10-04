@@ -32,12 +32,12 @@ rm -rf "$local_chart/charts"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
 helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
 helm dependency build "$local_chart"
-helm lint --strict "$application_chart"
+helm lint --strict "$application_chart" --set runtime.enabled=false
 helm lint --strict "$application_chart" --set runtime.enabled=true \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-helm lint --strict "$local_chart"
+helm lint --strict "$local_chart" --set ayni-orchestrator.runtime.enabled=false
 
-helm template reusable "$application_chart" \
+helm template reusable "$application_chart" --set runtime.enabled=false \
   --namespace reusable-install \
   --set-string images.controlPlane=registry.example/control-plane:test \
   --set-string images.worker=registry.example/worker:test \
@@ -52,6 +52,15 @@ helm template runtime "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true --set runtime.serviceAccounts.create=false \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >"$scratch/runtime-existing-accounts.yaml"
+# Managed onboarding inherits deployment policy without a repository allowlist.
+helm template runtime-defaults "$application_chart" --namespace runtime-test \
+  --set runtime.enabled=true \
+  --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set-string runtime.managedDefaults.pull_secret=shared-runtime-pull \
+  >"$scratch/runtime-defaults.yaml"
+grep -Fq '\"managed_repositories\":{}' "$scratch/runtime-defaults.yaml"
+grep -Fq '\"managed_defaults\":{' "$scratch/runtime-defaults.yaml"
+grep -Fq '\"pull_secret\":\"shared-runtime-pull\"' "$scratch/runtime-defaults.yaml"
 for account in runtime-coding runtime-builder; do
   grep -q "^  name: $account$" "$scratch/runtime.yaml"
   if grep -q "^  name: $account$" "$scratch/runtime-existing-accounts.yaml"; then
@@ -63,17 +72,17 @@ grep -q 'name: registry-pull' "$scratch/runtime.yaml"
 grep -q 'serviceAccountToken:' "$scratch/runtime.yaml"
 grep -q 'verbs: \[create, delete\]' "$scratch/runtime.yaml"
 grep -q 'mountPath: /runtime-outputs' "$scratch/runtime.yaml"
-helm template ayni-orchestrator "$local_chart" \
+helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
   --namespace ayni-orchestrator-dev \
   --set-string ayni-orchestrator.images.controlPlane=local/ayni-orchestrator-control-plane:test \
   --set-string ayni-orchestrator.images.worker=local/ayni-orchestrator-worker:test \
   --set-string ayni-orchestrator.images.web=local/ayni-orchestrator-web:test \
   >"$scratch/local.yaml"
-helm template ayni-orchestrator "$local_chart" \
+helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
   --namespace isolated-local \
   --set ayni-orchestrator.customClients.enabled=true \
   >"$scratch/custom-clients.yaml"
-helm template ayni-orchestrator "$local_chart" \
+helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
   --namespace ayni-orchestrator-dev \
   --set observability.enabled=false \
   >"$scratch/no-observability.yaml"

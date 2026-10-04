@@ -3,13 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const bff = vi.hoisted(() => ({
   listRepositoryConnections: vi.fn(),
   connectGithubRepository: vi.fn(),
+  listGithubInstallations: vi.fn(),
+  listGithubInstallationRepositories: vi.fn(),
 }));
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
 import { actions } from "../routes/repositories/+page.server.js";
 
 describe("repository connection route actions", () => {
   const requestSignal = new AbortController().signal;
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bff.listGithubInstallations.mockResolvedValue([{ installationId: "42", owner: "ayni-oss" }]);
+    bff.listGithubInstallationRepositories.mockResolvedValue([{ owner: "ayni-oss", name: "sandbox" }]);
+  });
 
   it("rejects invalid provider identity before invoking gRPC", async () => {
     const action = actions.connect;

@@ -90,6 +90,8 @@ tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-
 
 const page = { nextPageToken: "", snapshotCursor: "10" };
 const repositoryService: UntypedServiceImplementation = {
+  listGithubInstallations(_call, callback) { callback(null, { installations: [{ installationId: "42", owner: "ayni-oss", appName: "Ayni" }] }); },
+  listGithubInstallationRepositories(_call, callback) { callback(null, { repositories: [{ repositoryId: "123", owner: "ayni-oss", name: "sandbox", defaultBranch: "main" }] }); },
   connectGithubRepository(_call,callback){callback(null,{repositoryConnection:repository});},
 
   listRepositoryConnections(_call, callback) { callback(null, { repositoryConnections: [repository], page }); },
@@ -104,9 +106,10 @@ const repositoryService: UntypedServiceImplementation = {
 };
 
 let installation:any;
+let profileEnrolled = true;
 const runtimeProfileService: UntypedServiceImplementation = {
   inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator",workflows:[{path:".github/workflows/ayni-environment.yml",contents:"name: Build signed environment"}]});},
-  createRuntimeProfile(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profile});},
+  createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profile});},
   installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml",assessmentWorkflowPath:".github/workflows/ayni-managed-assessment.yml",triggerWorkflowPath:".github/workflows/ayni-assessment-request.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
   reconcileRuntimeProfile(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profile});},
 
@@ -114,7 +117,7 @@ const runtimeProfileService: UntypedServiceImplementation = {
   listAutomationInstallations(_call,callback) { callback(null,{automationInstallations:installation ? [installation] : [],page}); },
 
   listRuntimeProfiles(call, callback) {
-    const profiles = call.request.repositoryConnectionId === undefined || call.request.repositoryConnectionId === repositoryId ? [profile] : [];
+    const profiles = profileEnrolled && (call.request.repositoryConnectionId === undefined || call.request.repositoryConnectionId === repositoryId) ? [profile] : [];
     callback(null, { runtimeProfiles: profiles, page });
   },
   getRuntimeProfile(_call, callback) { callback(null, { runtimeProfile: profile }); },
@@ -177,6 +180,7 @@ grpc.addService(DevelopmentTaskServiceService, taskService);
 grpc.bindAsync("127.0.0.1:50061", ServerCredentials.createInsecure(), (error) => { if (error) throw error; });
 const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
+ if(request.method==="POST" && url.pathname==="/reset-onboarding") { profileEnrolled=false; installation=undefined; }
  if(request.method==="POST" && url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
  response.writeHead(200, { "content-type": "text/plain" }); response.end("ok"); });
 health.listen(50062, "127.0.0.1");

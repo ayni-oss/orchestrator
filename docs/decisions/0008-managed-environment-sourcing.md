@@ -10,7 +10,8 @@ Ayni Managed profiles obtain their runtime image by one of two explicit,
 versioned sources:
 
 1. **Registry source.** The operator supplies an OCI repository and discovery
-   reference. The controller resolves and verifies the immutable digest and
+   reference, or repository onboarding derives its own GHCR namespace and lock
+   tag under deployment-wide managed defaults. The controller resolves and verifies the immutable digest and
    Ayni runtime metadata before admitting it.
 2. **Orchestrator build source.** The controller creates one bounded,
    dedicated Kubernetes build Job for the profile revision. The Job builds from

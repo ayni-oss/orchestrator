@@ -22,7 +22,43 @@ pub struct RuntimeConfiguration {
     #[serde(default)]
     pub managed_repositories: BTreeMap<String, ProfileRuntime>,
     #[serde(default)]
+    pub managed_defaults: ManagedDefaults,
+    #[serde(default)]
     pub profiles: BTreeMap<String, ProfileRuntime>,
+}
+
+/// Deployment-wide execution policy for repositories enrolled through onboarding.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ManagedDefaults {
+    pub platform: String,
+    pub service_account: String,
+    pub pull_secret: Option<String>,
+    pub assessment: Option<AssessmentConfiguration>,
+}
+
+impl Default for ManagedDefaults {
+    fn default() -> Self {
+        Self {
+            platform: "linux/amd64".into(),
+            service_account: runtime_account(),
+            pull_secret: None,
+            assessment: None,
+        }
+    }
+}
+
+impl ManagedDefaults {
+    fn runtime(&self, image: String) -> ProfileRuntime {
+        ProfileRuntime {
+            image,
+            platform: self.platform.clone(),
+            service_account: self.service_account.clone(),
+            pull_secret: self.pull_secret.clone(),
+            assessment: self.assessment.clone(),
+            build: None,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -102,6 +138,33 @@ impl RuntimeConfiguration {
         Ok(Some(config))
     }
 
+    /// Infer only the onboarding-owned GHCR namespace. Explicit repository policy
+    /// overrides deployment defaults; an explicit profile is handled by the caller.
+    pub(crate) fn managed_runtime(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+        managed: &ayni_orchestrator_api::v1::AyniManagedProfileRevision,
+    ) -> Option<ProfileRuntime> {
+        let repository = format!("{}/{}", github.owner, github.name);
+        let expected = format!("ghcr.io/{}-ayni", repository.to_lowercase());
+        if managed.oci_repository != expected
+            || !ayni_orchestrator_runtime::assessment::digest(&format!(
+                "sha256:{}",
+                managed.lock_fingerprint
+            ))
+        {
+            return None;
+        }
+        let image = format!("{expected}:lock-{}", managed.lock_fingerprint);
+        let mut runtime = self
+            .managed_repositories
+            .get(&repository)
+            .cloned()
+            .unwrap_or_else(|| self.managed_defaults.runtime(image));
+        runtime.image = runtime.image.replace("{lock}", &managed.lock_fingerprint);
+        (image_repository(&runtime.image) == Some(expected.as_str())).then_some(runtime)
+    }
+
     fn validate(&self) -> Result<(), &'static str> {
         use ayni_orchestrator_runtime::runtime_contract::RuntimeImage;
         if !name(&self.namespace)
@@ -115,6 +178,13 @@ impl RuntimeConfiguration {
         {
             return Err("runtime_configuration_invalid");
         }
+        validate_profile(
+            "managed-defaults",
+            &self.managed_defaults.runtime(format!(
+                "ghcr.io/example/repository-ayni:lock-{}",
+                "a".repeat(64)
+            )),
+        )?;
         for (profile, runtime) in &self.profiles {
             validate_profile(profile, runtime)?;
         }
@@ -218,9 +288,8 @@ pub fn name(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn rejects_unbounded_scheduling_and_credential_values() {
-        let mut configuration = RuntimeConfiguration {
+    fn configuration() -> RuntimeConfiguration {
+        RuntimeConfiguration {
             namespace: "test".into(),
             output_claim: "output".into(),
             model_secret: "model".into(),
@@ -231,11 +300,96 @@ mod tests {
             allow_emulation: false,
             profiles: BTreeMap::new(),
             managed_repositories: BTreeMap::new(),
-        };
+            managed_defaults: ManagedDefaults::default(),
+        }
+    }
+
+    #[test]
+    fn rejects_unbounded_scheduling_and_credential_values() {
+        let mut configuration = configuration();
         assert!(configuration.validate().is_ok());
         configuration.concurrency = 0;
         assert!(configuration.validate().is_err());
         assert!(!name("token:value"));
         assert!(!name("../secret"));
+    }
+    #[test]
+    fn onboarding_derives_runtime_without_repository_configuration() {
+        let mut configuration = configuration();
+        configuration.managed_defaults.pull_secret = Some("runtime-pull".into());
+        let github = ayni_orchestrator_api::v1::GithubRepository {
+            owner: "Example".into(),
+            name: "Sandbox".into(),
+            ..Default::default()
+        };
+        let mut managed = ayni_orchestrator_api::v1::AyniManagedProfileRevision {
+            oci_repository: "ghcr.io/example/sandbox-ayni".into(),
+            lock_fingerprint: "a".repeat(64),
+            ..Default::default()
+        };
+        let Some(runtime) = configuration.managed_runtime(&github, &managed) else {
+            panic!("onboarded repository must resolve without an operator repository entry");
+        };
+        assert_eq!(
+            runtime.image,
+            format!("ghcr.io/example/sandbox-ayni:lock-{}", "a".repeat(64))
+        );
+        assert_eq!(runtime.platform, "linux/amd64");
+        assert_eq!(runtime.service_account, "runtime-coding");
+        assert_eq!(runtime.pull_secret.as_deref(), Some("runtime-pull"));
+        assert!(runtime.build.is_none());
+        managed.lock_fingerprint = "b".repeat(64);
+        assert!(
+            configuration
+                .managed_runtime(&github, &managed)
+                .is_some_and(|r| r.image.ends_with(&"b".repeat(64)))
+        );
+        managed.oci_repository = "ghcr.io/another/repository-ayni".into();
+        assert!(configuration.managed_runtime(&github, &managed).is_none());
+        managed.oci_repository = "ghcr.io/example/sandbox-ayni".into();
+        managed.lock_fingerprint = "invalid".into();
+        assert!(configuration.managed_runtime(&github, &managed).is_none());
+    }
+
+    #[test]
+    fn repository_override_takes_precedence_over_managed_defaults() {
+        let mut configuration = configuration();
+        let github = ayni_orchestrator_api::v1::GithubRepository {
+            owner: "example".into(),
+            name: "sandbox".into(),
+            ..Default::default()
+        };
+        let managed = ayni_orchestrator_api::v1::AyniManagedProfileRevision {
+            oci_repository: "ghcr.io/example/sandbox-ayni".into(),
+            lock_fingerprint: "a".repeat(64),
+            ..Default::default()
+        };
+        let mut runtime = configuration
+            .managed_defaults
+            .runtime("ghcr.io/example/sandbox-ayni:lock-{lock}".into());
+        runtime.service_account = "custom-account".into();
+        runtime.platform = "linux/arm64".into();
+        configuration
+            .managed_repositories
+            .insert("example/sandbox".into(), runtime);
+        assert!(configuration.validate().is_ok());
+        let Some(runtime) = configuration.managed_runtime(&github, &managed) else {
+            panic!("repository override must resolve");
+        };
+        assert_eq!(runtime.service_account, "custom-account");
+        assert_eq!(runtime.platform, "linux/arm64");
+        assert!(runtime.image.ends_with(&managed.lock_fingerprint));
+    }
+
+    #[test]
+    fn managed_defaults_validate_platform_and_secret_references() {
+        let mut configuration = configuration();
+        configuration.managed_defaults.platform = "unknown".into();
+        assert!(configuration.validate().is_err());
+        configuration.managed_defaults.platform = "linux/amd64".into();
+        configuration.managed_defaults.pull_secret = Some("../secret".into());
+        assert!(configuration.validate().is_err());
+        configuration.managed_defaults.pull_secret = Some("runtime-pull".into());
+        assert!(configuration.validate().is_ok());
     }
 }

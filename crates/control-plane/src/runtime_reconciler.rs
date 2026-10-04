@@ -117,9 +117,6 @@ impl RuntimeReconciler {
         &self,
     ) -> Result<BTreeMap<String, crate::runtime_configuration::ProfileRuntime>, &'static str> {
         let mut profiles = self.configuration.profiles.clone();
-        if self.configuration.managed_repositories.is_empty() {
-            return Ok(profiles);
-        }
         let mut store = self
             .state
             .store
@@ -145,13 +142,12 @@ impl RuntimeReconciler {
                 let repository = store
                     .repository_connection(&profile.repository_connection_id)
                     .map_err(|_| "repository_missing")?;
+                if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
+                    continue;
+                }
                 let Some(v1::repository_provider::Provider::Github(github)) =
                     repository.provider.and_then(|p| p.provider)
                 else {
-                    continue;
-                };
-                let key = format!("{}/{}", github.owner, github.name);
-                let Some(configured) = self.configuration.managed_repositories.get(&key) else {
                     continue;
                 };
                 let Some(revision_id) = profile.active_revision_id else {
@@ -165,19 +161,9 @@ impl RuntimeReconciler {
                 else {
                     continue;
                 };
-                if !ayni_orchestrator_runtime::assessment::digest(&format!(
-                    "sha256:{}",
-                    managed.lock_fingerprint
-                )) {
+                let Some(runtime) = self.configuration.managed_runtime(&github, &managed) else {
                     continue;
-                }
-                let mut runtime = configured.clone();
-                runtime.image = runtime.image.replace("{lock}", &managed.lock_fingerprint);
-                if crate::runtime_configuration::image_repository(&runtime.image)
-                    != Some(managed.oci_repository.as_str())
-                {
-                    continue;
-                }
+                };
                 profiles.insert(profile.id, runtime);
             }
             page.page_token = result.next_page_token;

@@ -9,7 +9,7 @@ Set `runtime.serviceAccounts.create=false` and supply each profile's
 `runtime.serviceAccounts.imagePullSecrets` contains existing Secret names;
 Helm never creates registry passwords or signing keys.
 
-Example application-chart values (replace the placeholder digest and profile ID):
+Example application-chart values (replace the placeholder worker digest):
 
 ```yaml
 runtime:
@@ -24,13 +24,19 @@ runtime:
     create: true
     imagePullSecrets:
       - name: runtime-pull
-  profiles:
-    "profile:<id>":
-      image: registry.internal/team/environment:reviewed-lock
-      platform: linux/amd64
+  managedDefaults:
+    platform: linux/amd64
+    service_account: runtime-coding
+    pull_secret: runtime-pull
 ```
 
-The source is explicit; no registry coordinate is inferred from GitHub. The
+Connected repositories enrolled through managed onboarding automatically resolve
+an image in their own `ghcr.io/<owner>/<repository>-ayni` namespace using the
+selected lock fingerprint. Onboarding is the repository enrollment boundary;
+operators supply deployment-wide execution policy, not a second repository list.
+Optional `runtime.managedRepositories` overrides those defaults per repository.
+Explicit `runtime.profiles` entries take precedence and continue to support other
+registry coordinates or dedicated build sources. The
 controller reads the exact default-branch SHA and bounded lock through the
 repository's GitHub App installation, creates an immutable source-policy
 revision, and persists verification intent before creating a Job. A digest-pinned

@@ -19,32 +19,39 @@ App for the selected repositories with contents, workflows and pull-request writ
 access, Actions read access, and the check/comment permissions described in
 [managed PR assessments](managed-pr-assessments.md). No credentials enter the UI.
 
-An operator enables each approved repository once, without knowing the future
-profile ID. For example (replace the image digests and credential references):
+An operator enables runtime execution once for the deployment, without repository
+names or future profile IDs. For example (replace the worker digest and credential
+reference):
 
 ```yaml
 runtime:
   enabled: true
   workerImage: registry.example/private/worker@sha256:<worker-digest>
-  managedRepositories:
-    ayni-oss/sandbox:
-      image: ghcr.io/ayni-oss/sandbox-ayni:lock-{lock}
-      platform: linux/amd64
-      service_account: runtime-coding
-      pull_secret: private-environment-pull
-      assessment:
-        producer_image: registry.example/private/worker@sha256:<worker-digest>
-        publication_policy: DRAFT_ONLY
+  managedDefaults:
+    platform: linux/amd64
+    service_account: runtime-coding
+    pull_secret: runtime-pull
 ```
 
-`{lock}` is the full 64-character lock fingerprint of the selected profile
-revision. Only an explicitly approved repository and its matching private GHCR
-package can use this automatic binding. Existing `runtime.profiles` entries still
-support explicit profile configuration and take precedence. Use the generated
-workflow's `linux/amd64` platform; an arm64 image needs a separate reviewed build
-configuration. The control plane and runtime Jobs must be able to share the
-output claim; multi-node installations need storage access modes/topology suitable
-for their scheduling. The supplied claim uses ReadWriteOnce.
+Connecting a repository and creating its managed profile authorizes automatic
+runtime discovery within that repository's onboarding-owned GHCR namespace.
+The controller derives `ghcr.io/<owner>/<repository>-ayni:lock-<fingerprint>`
+from the provider-observed repository identity and the selected profile revision.
+It only automatically binds connected GitHub repositories whose profile image
+namespace matches that identity. An image must still pass signed runtime
+verification before use. A GitHub App installation alone does not enroll a
+repository; it must be connected and have an Ayni Managed profile.
+
+`runtime.managedDefaults` applies platform, ServiceAccount, pull-secret reference,
+and optional assessment policy deployment-wide. The local chart supplies
+`runtime-pull`, matching `dev/ctl secrets`. No per-repository Helm edit or redeploy
+is needed when onboarding another repository. `runtime.managedRepositories`
+remains an optional per-repository override; `runtime.profiles` overrides both
+for explicit sources. These maps are overrides, not repository allowlists.
+Use the generated workflow's `linux/amd64` platform; an arm64 override needs a
+matching reviewed build configuration. The control plane and runtime Jobs must
+share the output claim; multi-node installations need suitable storage topology.
+The supplied claim uses ReadWriteOnce.
 
 1. Open **Repositories**, enter owner and repository name, and connect. The server
    uses the existing App to observe repository identity, installation and default

@@ -27,10 +27,11 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 });
 
 // Provider operations are fixture-backed; this tests browser/BFF behavior, not live GitHub.
-test("repository setup PR and requested draft publication are visible", async ({page})=>{
+test("repository setup PR and requested draft publication are visible", async ({page,request})=>{
+ await request.post("http://127.0.0.1:50062/reset-onboarding");
  await page.goto("/repositories");
- await page.getByLabel("Owner",{exact:true}).fill("ayni-oss");
- await page.getByLabel("Repository",{exact:true}).fill("sandbox");
+ await expect(page.getByLabel("GitHub owner",{exact:true})).toHaveValue("42");
+ await page.getByLabel("Repository",{exact:true}).selectOption("sandbox");
  await page.getByRole("button",{name:"Connect repository",exact:true}).click();
  await expect(page.getByText("Connected ayni-oss/sandbox.",{exact:true})).toBeVisible();
  await page.getByRole("link",{name:"Profiles and identity"}).click();
