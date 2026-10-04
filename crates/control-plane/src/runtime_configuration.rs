@@ -155,7 +155,7 @@ impl ManagedRuntime {
         }
         let runtime = ProfileRuntime {
             image: format!(
-                "ghcr.io/{}-{}-ayni:lock-{}",
+                "ghcr.io/{}/{}-ayni:lock-{}",
                 owner.to_lowercase(),
                 repository.to_lowercase(),
                 lock_fingerprint.to_lowercase()
@@ -291,7 +291,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             profile.image,
-            format!("ghcr.io/ayni-oss-sandbox-ayni:lock-{}", "ab".repeat(32))
+            format!("ghcr.io/ayni-oss/sandbox-ayni:lock-{}", "ab".repeat(32))
         );
         assert!(
             runtime
