@@ -6,6 +6,8 @@ members = [
     "crates/control-plane",
     "crates/worker",
     "crates/runtime",
+    "crates/profile-ayni",
+    "crates/kubernetes",
 ]
 resolver = "3"
 

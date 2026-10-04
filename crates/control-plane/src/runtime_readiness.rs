@@ -1,14 +1,14 @@
 impl RuntimeReconciler {
     async fn reconcile_readiness(
         &self,
-        policy: &crate::runtime_configuration::AssessmentConfiguration,
+        policy: &ayni_orchestrator_kubernetes::configuration::AssessmentConfiguration,
         github: &v1::GithubRepository,
         token: &str,
         change: &v1::ChangeRequest,
         assessment: &v1::Assessment,
         pull: &serde_json::Value,
     ) -> Result<(), &'static str> {
-        use crate::runtime_configuration::PublicationPolicy;
+        use ayni_orchestrator_kubernetes::configuration::PublicationPolicy;
         let enabled =
             policy.publication_policy == PublicationPolicy::ReadyAfterSuccessfulAssessment;
         let mut status = v1::ReadinessStatus {

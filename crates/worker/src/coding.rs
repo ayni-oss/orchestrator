@@ -20,7 +20,8 @@ use tokio::io::AsyncReadExt;
 
 pub const ADVISORY_INSTRUCTIONS: &str = "Read AGENTS.md and repository instructions. Make only the requested changes. Run plain `ayni check` before completing and repair actionable failures. Never weaken .ayni.toml or .ayni.lock merely to pass. Coding-time checks are advisory even when Ayni reports managed execution; only the later exact-head PR assessment is authoritative. Do not build an environment or access GitHub. The task runner checkpoints your edits and automatically commits and publishes the saved work as a draft, even if checks or the model fail. Run the final Ayni check before handing off; report remaining failures truthfully. If essential information is missing, respond INPUT_REQUIRED: followed by one concrete question.";
 
-pub use ayni_orchestrator_runtime::coding::{CodingReport, CodingRequest};
+pub use ayni_orchestrator_profile_ayni::coding::CodingRequest;
+pub use ayni_orchestrator_runtime::coding::CodingReport;
 
 #[derive(Clone)]
 struct RunCommand {
@@ -429,7 +430,7 @@ mod tests {
                 expected: crate::managed_runtime::RuntimeExpectation {
                     lock_fingerprint: String::new(),
                     platform: "linux/amd64".into(),
-                    ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+                    ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
                 },
             },
             request: "edit".into(),

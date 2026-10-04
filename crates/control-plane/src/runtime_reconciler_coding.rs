@@ -173,7 +173,7 @@ impl RuntimeReconciler {
         profile_id: &str,
         name: &str,
     ) -> Result<(), &'static str> {
-        use ayni_orchestrator_runtime::coding::CodingRequest;
+        use ayni_orchestrator_profile_ayni::coding::CodingRequest;
         let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
         let source = snapshot
             .repository

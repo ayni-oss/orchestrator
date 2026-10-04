@@ -1,25 +1,29 @@
 //! Shared digest-only runner wiring and durable coding result collection.
+use crate::job::RuntimeJobRequest;
 use crate::{
-    runtime_configuration::{ProfileRuntime, RuntimeConfiguration},
-    runtime_kubernetes::{RuntimeKubernetes, verification_job},
+    configuration::{ProfileRuntime, RuntimeConfiguration},
+    execution::{RuntimeKubernetes, verification_job},
 };
-use ayni_orchestrator_runtime::{
-    coding::CodingRequest,
-    runtime_contract::{
-        LauncherArguments, RuntimeContract, RuntimeImage, RuntimePlatform, RuntimeUser,
-    },
-    runtime_job::RuntimeJobRequest,
+use ayni_orchestrator_profile_ayni::{coding::CodingRequest, runtime_execution::ExecutionRequest};
+use ayni_orchestrator_runtime::runtime_contract::{
+    LauncherArguments, RuntimeContract, RuntimeImage, RuntimePlatform, RuntimeUser,
 };
 use k8s_openapi::api::batch::v1::Job;
 use kube::Api;
 use serde_json::json;
 
 impl RuntimeKubernetes {
-    pub(crate) async fn start_build(
+    /// Starts or adopts a dedicated build Job using operator-scoped authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code for missing build configuration, invalid
+    /// requests, Kubernetes failures, or a conflicting operation identity.
+    pub async fn start_build(
         &self,
         name: &str,
         runtime: &ProfileRuntime,
-        request: &ayni_orchestrator_runtime::runtime_execution::ExecutionRequest,
+        request: &ExecutionRequest,
         token: &str,
     ) -> Result<(), &'static str> {
         let job = build_job(name, &self.configuration, runtime)?;
@@ -35,7 +39,13 @@ impl RuntimeKubernetes {
         .await
     }
 
-    pub(crate) async fn start_coding(
+    /// Starts or adopts a coding Job using the attempt's verified image digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code for invalid runtime admission or request
+    /// data, Kubernetes failures, or a conflicting operation identity.
+    pub async fn start_coding(
         &self,
         name: &str,
         runtime: &ProfileRuntime,
@@ -58,7 +68,12 @@ impl RuntimeKubernetes {
         self.create(name, data, token, &job).await
     }
 
-    pub(crate) async fn coding_state(&self, name: &str) -> Result<&'static str, &'static str> {
+    /// Reports the current completion state of a coding Job.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code when the Kubernetes Job cannot be inspected.
+    pub async fn coding_state(&self, name: &str) -> Result<&'static str, &'static str> {
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let Some(job) = jobs
             .get_opt(name)
@@ -130,7 +145,7 @@ fn coding_job(
         "volumeMounts":[{"name":"output","mountPath":"/outputs"}]
     }));
     pod["containers"][0]["workingDir"] = json!("/workspace");
-    pod["containers"][0]["env"] = crate::runtime_kubernetes::runtime_environment();
+    pod["containers"][0]["env"] = crate::execution::runtime_environment();
     pod["containers"][0]["env"]
         .as_array_mut()
         .ok_or("coding_job_invalid")?

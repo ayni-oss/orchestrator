@@ -34,7 +34,7 @@ impl CleanStore {
                 ayni_orchestrator_runtime::runtime_execution::read_bounded(&path, 10 * 1024 * 1024)
                     .map_err(CleanStoreError::CreateDirectory)?;
             if bytes.len() as u64 != evidence.size_bytes
-                || ayni_orchestrator_runtime::assessment::sha256(&bytes) != evidence.digest
+                || ayni_orchestrator_profile_ayni::assessment::sha256(&bytes) != evidence.digest
             {
                 return Err(CleanStoreError::IdempotencyConflict);
             }
@@ -76,7 +76,7 @@ impl CleanStore {
                 ayni_orchestrator_runtime::runtime_execution::read_bounded(&path, 10 * 1024 * 1024)
                     .map_err(CleanStoreError::CreateDirectory)?;
             if bytes.len() as u64 != evidence.size_bytes
-                || ayni_orchestrator_runtime::assessment::sha256(&bytes) != evidence.digest
+                || ayni_orchestrator_profile_ayni::assessment::sha256(&bytes) != evidence.digest
             {
                 return Err(CleanStoreError::IdempotencyConflict);
             }

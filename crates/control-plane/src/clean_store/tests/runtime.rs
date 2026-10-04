@@ -1,5 +1,5 @@
 use super::*;
-use ayni_orchestrator_runtime::{
+use ayni_orchestrator_profile_ayni::{
     managed_runtime::VerifiedRuntime, runtime_execution::VerificationReport,
 };
 
@@ -11,7 +11,7 @@ fn report(revision: &str) -> VerificationReport {
         runtime: VerifiedRuntime {
             lock_fingerprint: format!("sha256:{}", "c".repeat(64)),
             platform: "linux/amd64".into(),
-            ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+            ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
             certificate_key_id: "test-producer".into(),
             metadata_digest: DIGEST.into(),
             protected_content_root: DIGEST.into(),

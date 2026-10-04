@@ -1,4 +1,3 @@
-use crate::managed_runtime::{RuntimeExpectation, VerifiedRuntime};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -7,22 +6,15 @@ use std::{
 };
 
 /// Frozen, credential-free execution request mounted read-only by Kubernetes.
+///
+/// A profile supplies its explicit admission expectations. The shared request
+/// does not require a particular tool, certification policy, or assessment model.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ExecutionRequest {
+pub struct ExecutionRequest<Profile> {
     pub repository_url: String,
     pub revision: String,
-    pub expected: RuntimeExpectation,
-}
-
-/// Result of a runtime verification invocation. Quality remains advisory.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct VerificationReport {
-    pub revision: String,
-    pub lock_digest: String,
-    pub runtime: VerifiedRuntime,
-    pub check_exit_code: i32,
+    pub expected: Profile,
 }
 
 /// Read a bounded ordinary file, rejecting symlinks and special files.
