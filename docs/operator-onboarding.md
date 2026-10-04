@@ -57,7 +57,7 @@ The supplied claim uses ReadWriteOnce.
    branch; these are not user-entered IDs.
 2. Open **Profiles and identity**, then **Inspect repository**. The default branch
    must already contain `.ayni.toml` and a generated `.ayni.lock` compatible with
-   the centrally pinned release in `crates/runtime/ayni-release.json`. Inspection
+   the centrally pinned release in `crates/profile-ayni/ayni-release.json`. Inspection
    reports missing policy, incompatible lock, and missing certificate trust policy.
    A policy fingerprint is an observation, not proof of a valid signature.
 3. Review the expected files and select **Set up runtime**. The controller first

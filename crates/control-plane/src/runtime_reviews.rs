@@ -1,4 +1,4 @@
-use ayni_orchestrator_runtime::assessment::{self, Admission, Manifest};
+use ayni_orchestrator_profile_ayni::assessment::{self, Admission, Manifest};
 
 impl RuntimeReconciler {
     async fn review_assessments(&self) -> Result<(), &'static str> {
@@ -16,7 +16,7 @@ impl RuntimeReconciler {
     async fn review_profile(
         &self,
         profile_id: &str,
-        policy: &crate::runtime_configuration::AssessmentConfiguration,
+        policy: &ayni_orchestrator_kubernetes::configuration::AssessmentConfiguration,
     ) -> Result<(), &'static str> {
         let (repository, automation) = {
             let mut store = self
@@ -354,7 +354,7 @@ impl RuntimeReconciler {
     async fn import_run(
         &self,
         profile_id: &str,
-        policy: &crate::runtime_configuration::AssessmentConfiguration,
+        policy: &ayni_orchestrator_kubernetes::configuration::AssessmentConfiguration,
         repository: &v1::RepositoryConnection,
         github: &v1::GithubRepository,
         run: &serde_json::Value,

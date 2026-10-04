@@ -1,6 +1,6 @@
 //! Deterministic Kubernetes Job rendering for one isolated coding attempt.
 
-use crate::runtime_contract::{RuntimeContract, RuntimeContractError};
+use ayni_orchestrator_runtime::runtime_contract::{RuntimeContract, RuntimeContractError};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use thiserror::Error;
@@ -168,7 +168,7 @@ impl RuntimeJobRequest {
     }
 }
 
-/// Rendered Job identity and provider-neutral JSON manifest.
+/// Rendered Job identity and Kubernetes JSON manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RenderedRuntimeJob {
     pub name: String,
@@ -347,7 +347,9 @@ struct ConfigMapVolume<'a> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::runtime_contract::{LauncherArguments, RuntimeImage, RuntimePlatform, RuntimeUser};
+    use ayni_orchestrator_runtime::runtime_contract::{
+        LauncherArguments, RuntimeImage, RuntimePlatform, RuntimeUser,
+    };
     fn request() -> RuntimeJobRequest {
         RuntimeJobRequest { attempt_id: "a5f31d70-13b0-4d64-b7a4-cb9823a2a61d".into(), namespace: "ayni-orchestrator".into(), runtime: RuntimeContract::new(RuntimeImage::parse("ghcr.io/acme/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(), RuntimePlatform::LinuxAmd64, LauncherArguments::new(vec!["/orchestrator/launcher".into(), "--workspace".into(), "/workspace".into()]).unwrap(), RuntimeUser::new(10_002, 10_001).unwrap()), pull_secret: Some("attempt-pull".into()), launcher_config_map: "attempt-launcher".into(), deadline_seconds: 3600 }
     }

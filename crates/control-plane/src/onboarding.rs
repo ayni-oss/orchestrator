@@ -151,7 +151,7 @@ impl AppState {
         let mut result = v1::InspectAyniRepositoryResponse {
             repository_snapshot_id: snapshot.id,
             repository_revision: head.clone(),
-            ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+            ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
             workflow_template_version: onboarding_templates::TEMPLATE_VERSION.into(),
             oci_repository: format!(
                 "ghcr.io/{}-ayni",
@@ -206,7 +206,7 @@ impl AppState {
 }
 
 fn inspect_lock(bytes: &[u8], result: &mut v1::InspectAyniRepositoryResponse) {
-    use ayni_orchestrator_runtime::{assessment, ayni_release};
+    use ayni_orchestrator_profile_ayni::{assessment, ayni_release};
     let Ok(lock) = serde_json::from_slice::<Value>(bytes) else {
         result.reason = "lock_invalid".into();
         return;
@@ -246,7 +246,7 @@ mod tests {
             policy_present: true,
             ..Default::default()
         };
-        let mut lock = serde_json::json!({"schema_version":"0.9.0","ayni_version":ayni_orchestrator_runtime::ayni_release::CLI_VERSION,"fingerprint":format!("sha256:{}","a".repeat(64)),"certificate_trust_policy":{"fingerprint":ayni_orchestrator_runtime::assessment::sha256(b"{}")}});
+        let mut lock = serde_json::json!({"schema_version":"0.9.0","ayni_version":ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION,"fingerprint":format!("sha256:{}","a".repeat(64)),"certificate_trust_policy":{"fingerprint":ayni_orchestrator_profile_ayni::assessment::sha256(b"{}")}});
         inspect_lock(&serde_json::to_vec(&lock)?, &mut inspection);
         assert!(inspection.lock_compatible);
         assert!(!inspection.trust_policy_pinned);

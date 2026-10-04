@@ -3,39 +3,43 @@
 Ayni Orchestrator is a private development-workflow control plane that produces
 reviewable repository changes on controlled infrastructure. Its pre-public v1
 is being replaced by one shared foundation with **Ayni Managed** and **Custom
-Runtime** runtime profiles. Ayni Managed is the first complete profile; Custom
-Runtime is a named later follow-up. The normative design is
+Runtime** runtime profiles. Ayni Managed is the implemented execution path;
+Custom Runtime remains a follow-up. The agreed product journey is
+**Connectors → Projects → Tasks**, defined in
+[Decision 0009](docs/decisions/0009-connectors-projects-and-internal-assessments.md),
+which retains the shared runtime foundations from
 [Decision 0007](docs/decisions/0007-clean-v1-runtime-profiles.md).
 
-The checked-in pilot API, SQLite state, local preparation archives, and
-validation lifecycle are retired design history. They are replaced directly,
-without a migration, compatibility API, or legacy-read path by delivery issues
-[#53–#68](https://github.com/ayni-oss/orchestrator/issues/51). This repository
-remains private; Ayni is independently useful as a local CLI in the public
+The implementation still includes repository-first onboarding and Actions
+assessment collection. The accepted replacement flows are tracked by
+[the product epic](https://github.com/ayni-oss/orchestrator/issues/90); see the
+[architecture](docs/architecture.md) for current ownership and remaining gaps.
+This repository remains private; Ayni is independently useful as a local CLI in the public
 [`ayni-oss/ayni`](https://github.com/ayni-oss/ayni) repository.
 
 ## Target product
 
-The shared core owns repository connections, verified OCI runtime artifacts,
-agent attempts, candidates, PR/MR publication, assessments, evidence identity,
-and reconciliation. Ayni Managed adds committed Ayni lock interpretation,
-optional GitHub Actions assessment automation, registry-backed or dedicated-build
-environment sourcing, advisory host checks, managed exact-head PR assessment,
-signals, and environment reconciliation. Custom Runtime later supplies a verified external OCI image
-without Ayni-specific fields or negative branding.
+Connectors manage access. Projects own repository readiness and environments.
+Tasks develop and verify work. Both runtime profiles share admission, attempts,
+candidates, cancellation, evidence binding, publication and reconciliation.
+Ayni Managed adds certified environments and Ayni assessment policy; Custom
+Runtime supplies a supported container without mandatory Ayni metadata.
 
-A task freezes a repository revision, profile revision, and verified OCI digest.
-A candidate commit, pull-request head SHA, workflow run, and evidence digest are
-different identities. Plain `ayni check` in the launched verified image is agent
-feedback; managed PR execution is the quality gate; GitHub checks/comments are
-presentation; digest-verified evidence and OCI digests are retained identities.
+A task freezes repository/source, profile revision, verified OCI digest and
+execution limits. Ayni runs during development as feedback. A separate internal
+Job verifies each final candidate commit before publication, with at most three
+repair cycles. Drafts preserve valid work with its actual assessment outcome.
+Evidence stays outside candidate-writable storage and binds the precise commit
+and execution. GitHub Actions are not the target assessment authority.
 
 ## Documentation
 
 | Document | Purpose |
 | --- | --- |
+| [Connectors, projects and internal assessments](docs/decisions/0009-connectors-projects-and-internal-assessments.md) | Accepted product journey and trust boundaries |
 | [Clean-v1 runtime-profile decision](docs/decisions/0007-clean-v1-runtime-profiles.md) | Normative names, ownership, identity, lifecycle, trust, recovery, and issue map |
-| [Architecture](docs/architecture.md) | Target shared/profile component and resource model |
+| [Architecture](docs/architecture.md) | Interface ownership, shared orchestration, runtime profiles, and implementation boundaries |
+| [Interface boundaries](docs/decisions/0010-orchestration-interface-boundaries.md) | Dependency direction and incremental application extraction |
 | [Protocol contract](proto/README.md) | Target clean-v1 gRPC resources and compatibility reset |
 | [Local development](docs/local-development.md) | Target Docker Desktop workflow and validation boundary |
 | [Operator UI and Kubernetes onboarding](docs/operator-onboarding.md) | Existing App, setup PR, signed environment, request and draft PR flow |

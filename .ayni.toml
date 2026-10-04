@@ -35,10 +35,13 @@ fn_cyclomatic = { warn = 10, fail = 31 }
 fn_cognitive = { warn = 20, fail = 29 }
 
 [rust.deps.forbidden]
-"crates/api" = ["crates/domain", "crates/observability", "crates/control-plane", "crates/worker"]
-"crates/domain" = ["crates/control-plane", "crates/worker"]
+"crates/api" = ["crates/domain", "crates/observability", "crates/runtime", "crates/profile-ayni", "crates/kubernetes", "crates/control-plane", "crates/worker"]
+"crates/domain" = ["crates/api", "crates/observability", "crates/runtime", "crates/profile-ayni", "crates/kubernetes", "crates/control-plane", "crates/worker"]
+"crates/runtime" = ["crates/api", "crates/observability", "crates/profile-ayni", "crates/kubernetes", "crates/control-plane", "crates/worker"]
+"crates/profile-ayni" = ["crates/api", "crates/observability", "crates/kubernetes", "crates/control-plane", "crates/worker"]
+"crates/kubernetes" = ["crates/api", "crates/control-plane", "crates/worker"]
 "crates/control-plane" = ["crates/worker"]
-"crates/worker" = ["crates/control-plane"]
+"crates/worker" = ["crates/api", "crates/kubernetes", "crates/control-plane"]
 
 # Package roots keep generated protobuf bindings out of source-quality budgets.
 # Their TypeScript compilation remains part of the frontend compatibility check.

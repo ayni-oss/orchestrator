@@ -1,9 +1,8 @@
 //! Trusted launch operations for a mounted checkout and an admitted runtime.
 
 use crate::managed_runtime;
-pub use ayni_orchestrator_runtime::runtime_execution::{
-    ExecutionRequest, VerificationReport, read_bounded,
-};
+pub use ayni_orchestrator_profile_ayni::runtime_execution::{ExecutionRequest, VerificationReport};
+pub use ayni_orchestrator_runtime::runtime_execution::read_bounded;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use std::{
