@@ -287,7 +287,7 @@ impl CleanStore {
             acceptance_criteria: requested.acceptance_criteria.clone(),
             change_constraints: requested.change_constraints.clone(),
             deadline_at,
-            publish_draft: requested.publish_draft,
+            publish_draft: true,
             publication_base_branch: repository.default_branch.clone(),
         };
         let task_id = resource_id("task");
@@ -304,6 +304,7 @@ impl CleanStore {
             resource_version: 1,
         };
         let attempt = v1::DevelopmentAttempt {
+            agent_activity: vec![],
             id: attempt_id.clone(),
             development_task_id: task_id.clone(),
             attempt_number: 1,
@@ -585,6 +586,7 @@ impl CleanStore {
         let attempt_number = task.attempt_count.saturating_add(1);
         let attempt_id = resource_id("attempt");
         let attempt = v1::DevelopmentAttempt {
+            agent_activity: vec![],
             id: attempt_id.clone(),
             development_task_id: task.id.clone(),
             attempt_number,

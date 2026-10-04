@@ -211,6 +211,20 @@ impl RuntimeKubernetes {
         Ok(Observation::Verified { digest, report })
     }
 
+    pub(crate) async fn coding_stopped(&self, name: &str) -> Result<bool, &'static str> {
+        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let pods = pods
+            .list(&ListParams::default().labels(&format!("job-name={name}")))
+            .await
+            .map_err(|_| "kubernetes_unavailable")?;
+        Ok(pods.items.iter().all(|pod| {
+            pod.status
+                .as_ref()
+                .and_then(|s| s.phase.as_deref())
+                .is_some_and(|phase| matches!(phase, "Succeeded" | "Failed"))
+        }))
+    }
+
     pub(crate) async fn cleanup(&self, name: &str) -> Result<(), &'static str> {
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let maps: Api<ConfigMap> =

@@ -106,8 +106,8 @@ impl CleanStore {
             let candidate: v1::Candidate = decode(&bytes)?;
             let attempt = self.development_attempt(&candidate.development_attempt_id)?;
             let task = self.development_task(&attempt.development_task_id)?;
-            if task.state != v1::DevelopmentTaskState::Succeeded as i32
-                || task.active_attempt_id.as_deref() != Some(attempt.id.as_str())
+            if ![v1::DevelopmentAttemptState::Succeeded as i32, v1::DevelopmentAttemptState::Failed as i32, v1::DevelopmentAttemptState::DeadlineExceeded as i32, v1::DevelopmentAttemptState::WaitingForInput as i32].contains(&attempt.state)
+                || task.state == v1::DevelopmentTaskState::Cancelled as i32
             {
                 continue;
             }

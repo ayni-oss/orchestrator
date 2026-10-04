@@ -25,7 +25,7 @@ impl CleanStore {
             };
         }
         let attempt = self.development_attempt(&candidate.development_attempt_id)?;
-        if attempt.state != v1::DevelopmentAttemptState::Succeeded as i32 {
+        if ![v1::DevelopmentAttemptState::Succeeded as i32, v1::DevelopmentAttemptState::Failed as i32, v1::DevelopmentAttemptState::DeadlineExceeded as i32, v1::DevelopmentAttemptState::WaitingForInput as i32].contains(&attempt.state) {
             return Err(CleanStoreError::InvalidTransition);
         }
         let task = self.development_task(&attempt.development_task_id)?;

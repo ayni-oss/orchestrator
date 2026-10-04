@@ -139,14 +139,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         request: Request<v1::CreateDevelopmentTaskRequest>,
     ) -> Result<Response<v1::CreateDevelopmentTaskResponse>, Status> {
         let context = self.context(&request, "CreateDevelopmentTask")?;
-        if request
-            .get_ref()
-            .request
-            .as_ref()
-            .is_some_and(|r| r.publish_draft)
-        {
-            self.context(&request, "PublishCandidate")?;
-        }
+        self.context(&request, "PublishCandidate")?;
         api_validation::create_development_task(request.get_ref())
             .map_err(|error| context.validation(&error))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;

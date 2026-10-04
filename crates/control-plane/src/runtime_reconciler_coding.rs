@@ -8,69 +8,94 @@ impl RuntimeReconciler {
             .coding_attempts(profile_id)
             .map_err(|_| "coding_state_invalid")?;
         for attempt in attempts.into_iter().take(self.configuration.concurrency) {
-            let name = operation_name(&attempt.id, 0);
-            let current = v1::DevelopmentAttemptState::try_from(attempt.state)
-                .map_err(|_| "coding_state_invalid")?;
-            if matches!(
-                current,
-                v1::DevelopmentAttemptState::Cancelled
-                    | v1::DevelopmentAttemptState::DeadlineExceeded
-                    | v1::DevelopmentAttemptState::Failed
-                    | v1::DevelopmentAttemptState::Unsupported
-                    | v1::DevelopmentAttemptState::WaitingForInput
-            ) {
-                self.cleanup_coding_attempt(&attempt, &name).await?;
-                continue;
-            }
-            let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
-            let frozen = snapshot.runtime.as_ref().ok_or("coding_snapshot_missing")?;
-            if frozen.profile_kind != v1::RuntimeProfileKind::AyniManaged as i32 {
-                continue;
-            }
-            let job_state = self.kubernetes.coding_state(&name).await?;
-            match job_state {
-                "missing" if current == v1::DevelopmentAttemptState::Running => {
-                    self.coding_failed(&attempt, "coding_job_lost")?;
-                }
-                "missing" if current == v1::DevelopmentAttemptState::Queued => {
-                    self.start_coding_attempt(&attempt, profile_id, &name)
-                        .await?;
-                }
-                "failed" => {
-                    self.coding_failed(&attempt, "coding_job_failed")?;
-                }
-                "succeeded" => {
-                    self.finish_coding_attempt(&attempt, &name)?;
-                    self.kubernetes.cleanup(&name).await?;
-                    self.state
-                        .store
-                        .lock()
-                        .map_err(|_| "runtime_store_unavailable")?
-                        .coding_cleanup_complete(&attempt.id)
-                        .map_err(|_| "coding_state_invalid")?;
-                }
-                "missing" => {
-                    let mut store = self
-                        .state
-                        .store
-                        .lock()
-                        .map_err(|_| "runtime_store_unavailable")?;
-                    if store
-                        .coding_candidate_exists(&attempt.id)
-                        .map_err(|_| "coding_state_invalid")?
-                    {
-                        store
-                            .coding_cleanup_complete(&attempt.id)
-                            .map_err(|_| "coding_state_invalid")?;
-                    } else {
-                        return Err("coding_completed_job_missing");
-                    }
-                    drop(store);
-                }
-                _ => {}
-            }
+            self.reconcile_coding_attempt(attempt, profile_id).await?;
         }
         Ok(())
+    }
+
+    async fn reconcile_coding_attempt(&self, attempt: v1::DevelopmentAttempt, profile_id: &str) -> Result<(), &'static str> {
+        let name = operation_name(&attempt.id, 0);
+        // Read output after observing Job status, so terminal records are collected
+        // before any cleanup. The same path also collects live progress.
+        let job_state = self.kubernetes.coding_state(&name).await?;
+        let attempt = self.collect_activity(attempt, &name)?;
+        let current = v1::DevelopmentAttemptState::try_from(attempt.state)
+            .map_err(|_| "coding_state_invalid")?;
+        if coding_needs_cleanup(current) {
+            self.cleanup_coding_attempt(&attempt, &name).await?;
+            return Ok(());
+        }
+        let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
+        let frozen = snapshot.runtime.as_ref().ok_or("coding_snapshot_missing")?;
+        if frozen.profile_kind != v1::RuntimeProfileKind::AyniManaged as i32 {
+            return Ok(());
+        }
+        match job_state {
+            "missing" if current == v1::DevelopmentAttemptState::Running => {
+                self.coding_failed(&attempt, "coding_job_lost")?;
+            }
+            "missing" if current == v1::DevelopmentAttemptState::Queued => {
+                self.start_coding_attempt(&attempt, profile_id, &name)
+                    .await?;
+            }
+            "failed" => {
+                let reason = attempt.agent_activity.last().map_or_else(
+                    || "Coding worker failed before activity was retained. Inspect init containers, scheduling, and image pulls.".to_owned(),
+                    |event| format!("Coding worker failed. Last activity: {}.", event.message),
+                );
+                self.coding_failed(&attempt, &reason)?;
+            }
+            "succeeded" => {
+                self.finish_coding_attempt(&attempt, &name)?;
+                let fresh = self.state.store.lock().map_err(|_| "runtime_store_unavailable")?
+                    .development_attempt(&attempt.id).map_err(|_| "coding_state_invalid")?;
+                self.cleanup_coding_attempt(&fresh, &name).await?;
+            }
+            "missing" => {
+                let mut store = self
+                    .state
+                    .store
+                    .lock()
+                    .map_err(|_| "runtime_store_unavailable")?;
+                if store
+                    .coding_candidate_exists(&attempt.id)
+                    .map_err(|_| "coding_state_invalid")?
+                {
+                    store
+                        .coding_cleanup_complete(&attempt.id)
+                        .map_err(|_| "coding_state_invalid")?;
+                } else {
+                    return Err("coding_completed_job_missing");
+                }
+                drop(store);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+
+    fn collect_activity(&self, attempt: v1::DevelopmentAttempt, name: &str) -> Result<v1::DevelopmentAttempt, &'static str> {
+        use ayni_orchestrator_runtime::{activity::{Activity, valid}, runtime_execution::read_bounded};
+        let path = std::path::Path::new("/runtime-outputs").join(name).join("activity.json");
+        let events = read_bounded(&path, 65536).ok()
+            .and_then(|bytes| serde_json::from_slice::<Vec<Activity>>(&bytes).ok())
+            .filter(|events| valid(events));
+        let Some(events) = events else { return Ok(attempt); };
+        let activity = events.into_iter().map(|event| v1::AgentActivity {
+            sequence: event.sequence,
+            observed_at: Some(prost_types::Timestamp {
+                seconds: event.timestamp_ms / 1000,
+                nanos: i32::try_from((event.timestamp_ms % 1000) * 1_000_000).unwrap_or(0),
+            }),
+            message: event.failure.map_or_else(
+                || event.stage.message().to_owned(),
+                |failure| format!("{}: {}", event.stage.message(), failure.message()),
+            ),
+            failed: event.failed,
+        }).collect();
+        self.state.store.lock().map_err(|_| "runtime_store_unavailable")?
+            .coding_activity(&attempt.id, activity).map_err(|_| "coding_state_invalid")
     }
 
     async fn cleanup_coding_attempt(
@@ -90,6 +115,12 @@ impl RuntimeReconciler {
                 .map_err(|_| "coding_state_invalid")?;
         }
         self.kubernetes.cleanup(name).await?;
+        if !self.kubernetes.coding_stopped(name).await? { return Ok(()); }
+        if [v1::DevelopmentAttemptState::Failed as i32,
+            v1::DevelopmentAttemptState::DeadlineExceeded as i32,
+            v1::DevelopmentAttemptState::WaitingForInput as i32].contains(&attempt.state) {
+            self.recover_coding_checkpoint(attempt, name)?;
+        }
         self.state
             .store
             .lock()
@@ -97,6 +128,42 @@ impl RuntimeReconciler {
             .coding_cleanup_complete(&attempt.id)
             .map_err(|_| "coding_state_invalid")?;
 
+        Ok(())
+    }
+
+    fn recover_coding_checkpoint(&self, attempt: &v1::DevelopmentAttempt, name: &str) -> Result<(), &'static str> {
+        use ayni_orchestrator_runtime::runtime_execution::read_bounded;
+        // Once publication owns a candidate, retries must not replace its bundle.
+        if self.state.store.lock().map_err(|_| "runtime_store_unavailable")?
+            .coding_candidate_exists(&attempt.id).map_err(|_| "coding_state_invalid")? {
+            return Ok(());
+        }
+        let directory = std::path::Path::new("/runtime-outputs").join(name);
+        let pointer = match read_bounded(&directory.join("checkpoint"), 40) {
+            Ok(pointer) => pointer,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err("coding_checkpoint_unavailable"),
+        };
+        let sha = std::str::from_utf8(&pointer).map_err(|_| "coding_checkpoint_invalid")?;
+        if sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("coding_checkpoint_invalid");
+        }
+        let checkpoint = directory.join("checkpoints").join(sha);
+        let (report, _) = collect_coding_result(&checkpoint)?;
+        if report.commit.as_deref() != Some(sha) { return Err("coding_checkpoint_invalid"); }
+        let source = attempt.snapshot.as_ref().and_then(|s| s.repository.as_ref()).ok_or("coding_snapshot_missing")?;
+        self.state.store.lock().map_err(|_| "runtime_store_unavailable")?
+            .record_candidate(v1::Candidate {
+                development_attempt_id: attempt.id.clone(),
+                repository_connection_id: source.repository_connection_id.clone(),
+                base_revision: source.revision.clone(),
+                identity: Some(v1::CandidateIdentity { identity: Some(v1::candidate_identity::Identity::Git(
+                    v1::GitCandidate { commit_sha: sha.into() })) }),
+                state: v1::CandidateState::Available as i32,
+                changed_paths: report.changed_paths,
+                coding_advisory: Some(report.advisory),
+                ..Default::default()
+            }).map_err(|_| "coding_candidate_rejected")?;
         Ok(())
     }
 
@@ -429,4 +496,15 @@ fn coding_seconds_remaining(snapshot: &v1::DevelopmentSnapshot) -> u64 {
             .unwrap_or(0)
             .saturating_sub(now().unwrap_or(u64::MAX))
     })
+}
+
+
+const fn coding_needs_cleanup(state: v1::DevelopmentAttemptState) -> bool {
+    matches!(state,
+        v1::DevelopmentAttemptState::Cancelled
+            | v1::DevelopmentAttemptState::DeadlineExceeded
+            | v1::DevelopmentAttemptState::Failed
+            | v1::DevelopmentAttemptState::Unsupported
+            | v1::DevelopmentAttemptState::WaitingForInput
+    )
 }

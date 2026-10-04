@@ -137,11 +137,24 @@ async fn push_candidate(
     token: &str,
 ) -> Result<(), &'static str> {
     use ayni_orchestrator_runtime::{coding::CodingReport, runtime_execution::read_bounded};
-    let report: CodingReport = serde_json::from_slice(
-        &read_bounded(&directory.join("report.json"), 65536)
-            .map_err(|_| "publication_report_unavailable")?,
-    )
-    .map_err(|_| "publication_report_invalid")?;
+    if head.len() != 40 || !head.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("publication_head_invalid");
+    }
+    let final_report = read_bounded(&directory.join("report.json"), 65536).ok()
+        .and_then(|bytes| serde_json::from_slice::<CodingReport>(&bytes).ok())
+        .filter(|report| report.commit.as_deref() == Some(head));
+    let (directory, report) = if let Some(report) = final_report {
+        (directory.to_owned(), report)
+    } else {
+        // Recovery generations remain on the read-only output volume. Never
+        // rewrite worker output or substitute a newer checkpoint for this head.
+        let checkpoint = directory.join("checkpoints").join(head);
+        let report = serde_json::from_slice::<CodingReport>(
+            &read_bounded(&checkpoint.join("report.json"), 65536)
+                .map_err(|_| "publication_report_unavailable")?)
+            .map_err(|_| "publication_report_invalid")?;
+        (checkpoint, report)
+    };
     let bundle = read_bounded(&directory.join("candidate.bundle"), 64 * 1024 * 1024)
         .map_err(|_| "publication_bundle_unavailable")?;
     if report.commit.as_deref() != Some(head)

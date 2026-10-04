@@ -249,31 +249,137 @@ pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
     let mut child = command("git", workspace)
         .args(arguments)
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()?;
-    let mut bytes = Vec::new();
-    child
-        .stdout
+    let stderr = child
+        .stderr
         .take()
-        .ok_or_else(|| io::Error::other("git stdout missing"))?
-        .take(1_048_577)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() > 1_048_576 {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(io::Error::other("git output oversized"));
+        .ok_or_else(|| io::Error::other("git stderr missing"))?;
+    std::thread::scope(|scope| {
+        // Drain both pipes concurrently; retain only a bounded diagnostic prefix.
+        let diagnostic = scope.spawn(|| bounded_diagnostic(stderr));
+        let mut bytes = Vec::new();
+        let read = child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("git stdout missing"))?
+            .take(1_048_577)
+            .read_to_end(&mut bytes);
+        if read.is_err() || bytes.len() > 1_048_576 {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::other("git output oversized or unreadable"));
+        }
+        let status = child.wait()?;
+        let diagnostic = diagnostic.join().unwrap_or_default();
+        if !status.success() {
+            let operation = arguments
+                .iter()
+                .copied()
+                .find(|value| {
+                    matches!(
+                        *value,
+                        "read-tree"
+                            | "reset"
+                            | "add"
+                            | "diff"
+                            | "commit"
+                            | "bundle"
+                            | "rev-parse"
+                            | "fetch"
+                            | "checkout"
+                            | "init"
+                            | "ls-tree"
+                            | "ls-files"
+                            | "show"
+                            | "rm"
+                    )
+                })
+                .unwrap_or("source");
+            let failure = git_failure(operation, &diagnostic);
+            tracing::error!(operation, exit_code = status.code(), failure = ?failure, "git operation failed");
+            return Err(io::Error::other(GitFailure(failure)));
+        }
+        String::from_utf8(bytes)
+            .map(|value| value.trim_end_matches('\n').to_owned())
+            .map_err(io::Error::other)
+    })
+}
+
+#[derive(Debug)]
+pub(crate) struct GitFailure(pub ayni_orchestrator_runtime::activity::Failure);
+impl std::fmt::Display for GitFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.message())
     }
-    if !child.wait()?.success() {
-        return Err(io::Error::other("source operation failed"));
+}
+impl std::error::Error for GitFailure {}
+
+fn bounded_diagnostic(mut reader: impl Read) -> Vec<u8> {
+    let mut retained = Vec::new();
+    let mut buffer = [0; 4096];
+    while let Ok(read) = reader.read(&mut buffer) {
+        if read == 0 {
+            break;
+        }
+        let keep = read.min(8192_usize.saturating_sub(retained.len()));
+        retained.extend_from_slice(&buffer[..keep]);
     }
-    String::from_utf8(bytes)
-        .map(|value| value.trim_end_matches('\n').to_owned())
-        .map_err(io::Error::other)
+    retained
+}
+
+fn git_failure(operation: &str, bytes: &[u8]) -> ayni_orchestrator_runtime::activity::Failure {
+    use ayni_orchestrator_runtime::activity::Failure;
+    let diagnostic = String::from_utf8_lossy(bytes);
+    if diagnostic.contains("Permission denied") || diagnostic.contains("Read-only file system") {
+        return Failure::GitPermissions;
+    }
+    if diagnostic.contains("index.lock") && diagnostic.contains("File exists") {
+        return Failure::GitIndexLocked;
+    }
+    if diagnostic.contains("ignored by one of your .gitignore files") {
+        return Failure::GitIgnored;
+    }
+    if diagnostic.contains("Author identity unknown") {
+        return Failure::GitIdentity;
+    }
+    match operation {
+        "read-tree" | "reset" => Failure::GitIndex,
+        "add" => Failure::GitStage,
+        "diff" => Failure::GitDiff,
+        "commit" => Failure::GitCommit,
+        "bundle" => Failure::GitBundle,
+        _ => Failure::GitSource,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::managed_runtime::RuntimeExpectation;
+
+    #[test]
+    fn git_failure_retains_safe_operation_without_raw_diagnostics() -> io::Result<()> {
+        let workspace = tempfile::tempdir()?;
+        git(workspace.path(), &["init", "--quiet"])?;
+        let error = git(workspace.path(), &["read-tree", "private-missing-revision"])
+            .err()
+            .ok_or_else(|| io::Error::other("expected failure"))?;
+        assert!(matches!(
+            crate::activity::io_failure(&error),
+            ayni_orchestrator_runtime::activity::Failure::GitIndex
+        ));
+        assert!(!error.to_string().contains("private-missing-revision"));
+        assert_eq!(
+            bounded_diagnostic(vec![b'x'; 100_000].as_slice()).len(),
+            8192
+        );
+        assert!(matches!(
+            git_failure("add", b"private-file: Permission denied"),
+            ayni_orchestrator_runtime::activity::Failure::GitPermissions
+        ));
+        Ok(())
+    }
 
     #[test]
     fn git_trusts_only_the_assigned_workspace() -> io::Result<()> {
