@@ -292,6 +292,12 @@ impl RequestContext {
                 None,
                 None,
             ),
+            CleanStoreError::ManagedLockProfileAlreadyExists { profile_id } => (
+                Code::AlreadyExists,
+                v1::ErrorReason::Conflict,
+                Some("runtime_profile"),
+                Some(profile_id.as_str()),
+            ),
             CleanStoreError::StaleVersion => (Code::Aborted, v1::ErrorReason::Conflict, None, None),
             CleanStoreError::ParentMismatch
             | CleanStoreError::InvalidTransition

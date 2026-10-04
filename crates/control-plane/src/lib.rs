@@ -36,7 +36,7 @@ use std::{
     time::Instant,
 };
 use thiserror::Error;
-use tracing::{Instrument, debug, debug_span, info};
+use tracing::{Instrument, debug, debug_span};
 use uuid::Uuid;
 
 pub use grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc};

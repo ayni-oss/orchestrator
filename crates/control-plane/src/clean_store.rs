@@ -90,6 +90,8 @@ pub enum CleanStoreError {
     },
     #[error("idempotency key was reused with different request content")]
     IdempotencyConflict,
+    #[error("runtime profile {profile_id} already owns this managed repository lock")]
+    ManagedLockProfileAlreadyExists { profile_id: String },
     #[error("the requested resource transition is not supported")]
     InvalidTransition,
     #[error("the resource changed after it was observed")]

@@ -37,11 +37,16 @@ export const actions: Actions = {
     let profile;
     try {
       const context=requestContext(locals);
+      const inspection=await getBff().inspectAyniRepository(params.repositoryId,context);
+      if (!inspection.policyPresent || !inspection.lockCompatible) return fail(409,{error:{message:"Commit a supported Ayni policy and generated lock on the default branch, then inspect again."}});
       const existing=await getBff().listRuntimeProfiles(params.repositoryId,{pageSize:100},context);
-      profile=existing.runtimeProfiles.find((candidate)=>candidate.kind==="ayni_managed");
+      const managedProfiles=existing.runtimeProfiles.filter((candidate)=>candidate.kind==="ayni_managed" && candidate.activeRevisionId);
+      const revisions=await Promise.all(managedProfiles.map(async (candidate)=>({
+        profile:candidate,
+        revision:await getBff().getRuntimeRevision(candidate.activeRevisionId!,context),
+      })));
+      profile=revisions.find(({revision})=>revision.managed?.fingerprint===inspection.fingerprint)?.profile;
       if (!profile) {
-        const inspection=await getBff().inspectAyniRepository(params.repositoryId,context);
-        if (!inspection.policyPresent || !inspection.lockCompatible) return fail(409,{error:{message:"Commit a supported Ayni policy and generated lock on the default branch, then inspect again."}});
         profile=await getBff().createRuntimeProfile({idempotencyKey:key,repositoryConnectionId:params.repositoryId,repositorySnapshotId:inspection.snapshotId,configuration:{kind:"ayni_managed",lockFingerprint:inspection.fingerprint,ayniVersion:inspection.version,workflowTemplateVersion:inspection.template,ociRepository:inspection.repository}},context);
         await getBff().installAutomation(profile.id,key,context);
       }
