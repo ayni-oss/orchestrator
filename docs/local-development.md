@@ -8,6 +8,14 @@
 
 The supported target topology is Docker Desktop Kubernetes with explicit
 `docker-desktop` context, one trusted maintainer team, and loopback-only access.
+`dev/ctl deploy` enables managed runtime execution, builds the worker for the
+workflow's `linux/amd64` platform, and pins its loaded manifest digest automatically.
+Image loading selects the concrete platform manifest so Apple Silicon nodes can
+run the worker under emulation without trying to fetch a local tag from Docker Hub.
+Connected repositories inherit the local `runtime-pull` Secret reference; no
+per-repository Helm values are needed. Helm plugins are disabled for this command.
+The reusable production chart remains opt-in.
+
 `dev/ctl` remains the local command boundary. It must never fall back to another
 cluster, reset retained data, or print local credentials.
 
@@ -66,12 +74,12 @@ change the schema marker, or use a compatibility flag to bypass the rejection.
 1. Enroll a GitHub repository as a **repository connection** and create an
    **Ayni Managed** profile. It must contain committed `.ayni.toml` and
    `.ayni.lock`; the Ayni executable is provisioned, not vendored.
-2. Review the idempotent pipelines setup PR. The profile is
-   `setup_pr_open` until it merges; no default-branch mutation occurs directly.
-3. Select either a configured registry image source or a dedicated build Job.
-   The controller independently resolves and verifies the registry digest,
-   labels, policy, and platform before `ready`; it has no registry credential
-   material or image-builder access.
+2. Set up the runtime. Matching workflows on the default branch are reused. If
+   workflows are missing or different, review the setup PR; the profile stays
+   `setup_pr_open` until it merges.
+3. The controller checks the repository's expected GHCR image automatically and
+   verifies its identity, certificate, and platform before marking it `ready`.
+   If the image is missing, run the environment workflow and retry reconciliation.
 4. Submit coding only against a ready profile. The coding Job uses the frozen
    `image@sha256:...` digest, writable checkout, bounded scratch, and scoped
    credentials. It does not build an environment or mount a Docker socket,

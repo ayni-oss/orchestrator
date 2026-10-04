@@ -256,7 +256,8 @@ pub fn verification_job(
     let resources = json!({"requests":{"cpu":"500m","memory":"1Gi"}, "limits":{"cpu":"2","memory":"4Gi","ephemeral-storage":"8Gi"}});
     let workspace = json!({"name":"workspace","mountPath":"/workspace"});
     let scratch = json!({"name":"scratch","mountPath":"/scratch"});
-    let request = json!({"name":"request","mountPath":"/request","readOnly":true});
+    // Mount the immutable key as a regular file: the worker rejects symlinks.
+    let request = json!({"name":"request","mountPath":"/request/execution.json","subPath":"execution.json","readOnly":true});
     let pulls: Vec<_> = runtime
         .pull_secret
         .iter()
@@ -323,6 +324,22 @@ mod tests {
             .spec
             .and_then(|s| s.template.spec)
             .ok_or("pod_missing")?;
+        for container in pod
+            .containers
+            .iter()
+            .chain(pod.init_containers.iter().flatten())
+        {
+            for mount in container
+                .volume_mounts
+                .iter()
+                .flatten()
+                .filter(|m| m.name == "request")
+            {
+                assert_eq!(mount.mount_path, "/request/execution.json");
+                assert_eq!(mount.sub_path.as_deref(), Some("execution.json"));
+                assert_eq!(mount.read_only, Some(true));
+            }
+        }
         assert_eq!(pod.automount_service_account_token, Some(false));
         assert!(pod.containers[0].command.is_none());
         assert!(

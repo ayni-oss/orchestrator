@@ -133,7 +133,7 @@ fn coding_job(
     pod["containers"][0]["env"] = crate::runtime_kubernetes::runtime_environment();
     pod["containers"][0]["volumeMounts"] = json!([
         {"name":"workspace","mountPath":"/workspace"}, {"name":"scratch","mountPath":"/scratch"},
-        {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request","readOnly":true},
+        {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request/coding.json","subPath":"coding.json","readOnly":true},
         {"name":"output","mountPath":"/output","subPath":name}, {"name":"model","mountPath":"/model","readOnly":true}
     ]);
     pod["volumes"] = support["spec"]["template"]["spec"]["volumes"].clone();
@@ -202,6 +202,16 @@ mod tests {
         let image = format!("registry.test/team/runtime@sha256:{}", "c".repeat(64));
         let job = coding_job("coding-test", &configuration, &runtime, &image, 3600)?;
         let pod = job.spec.ok_or("spec")?.template.spec.ok_or("pod")?;
+        assert!(
+            pod.containers[0]
+                .volume_mounts
+                .iter()
+                .flatten()
+                .any(|m| m.name == "request"
+                    && m.mount_path == "/request/coding.json"
+                    && m.sub_path.as_deref() == Some("coding.json")
+                    && m.read_only == Some(true))
+        );
         assert_eq!(pod.containers.len(), 1);
         assert_eq!(pod.containers[0].image.as_deref(), Some(image.as_str()));
         assert!(pod.containers[0].command.is_none());

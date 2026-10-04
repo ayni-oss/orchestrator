@@ -4,6 +4,8 @@ set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
 source "$dev_directory/lib/images.sh"
+# Local deployment uses no Helm plugins or encrypted Helm values.
+export HELM_NO_PLUGINS=1
 
 if [[ $# -ne 0 ]]; then
   echo "usage: dev/ctl deploy" >&2
@@ -39,6 +41,7 @@ web_image_ref="$(dev_build_image web)"
 dev_load_image "$control_plane_image_ref"
 dev_load_image "$worker_image_ref"
 dev_load_image "$web_image_ref"
+runtime_worker_image="$(dev_pin_worker_image "$worker_image_ref")"
 
 echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
@@ -49,6 +52,8 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   --set-string "ayni-orchestrator.images.worker=$worker_image_ref" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
+  --set ayni-orchestrator.runtime.enabled=true \
+  --set-string "ayni-orchestrator.runtime.workerImage=$runtime_worker_image" \
   --wait=hookOnly \
   --timeout 5m
 
@@ -95,4 +100,4 @@ if [[ -z "$pod" ]]; then
 fi
 
 echo "deployed pod=$pod control_plane_image=$actual_control_plane_image control_plane_imageID=$actual_control_plane_image_id worker_image=$actual_worker_image web_image=$actual_web_image web_imageID=$actual_web_image_id"
-dev_prune_images "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref"
+dev_prune_images "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref" "$runtime_worker_image"
