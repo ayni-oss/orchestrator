@@ -6,3 +6,7 @@ pub mod assessment_actions;
 pub mod coding;
 pub mod model_usage;
 pub mod runtime_execution;
+
+pub mod activity;
+
+mod coding_checkpoint;

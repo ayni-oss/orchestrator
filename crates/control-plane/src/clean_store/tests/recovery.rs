@@ -523,14 +523,28 @@ fn service_events_are_monotonic_and_resumable() -> Result<(), CleanStoreError> {
 }
 
 #[test]
-fn requested_draft_publication_is_frozen_and_resumes_once_after_restart()
+fn saved_work_publication_resumes_once_for_success_failure_and_deadline()
 -> Result<(), Box<dyn std::error::Error>> {
+    for state in [
+        v1::DevelopmentAttemptState::Succeeded,
+        v1::DevelopmentAttemptState::Failed,
+        v1::DevelopmentAttemptState::DeadlineExceeded,
+        v1::DevelopmentAttemptState::WaitingForInput,
+    ] {
+        retained_candidate_publishes_after_restart(state)?;
+    }
+    Ok(())
+}
+
+fn retained_candidate_publishes_after_restart(
+    state: v1::DevelopmentAttemptState,
+) -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
     let path = directory.path().join("publication.sqlite");
     let mut store = CleanStore::open(&path, 3)?;
     let (repository, profile, _) = ready_profile(&mut store)?;
     let mut request = task_request(&repository.id, &profile.id, "auto-task");
-    request.request.as_mut().ok_or("request")?.publish_draft = true;
+    request.request.as_mut().ok_or("request")?.publish_draft = false; // Legacy opt-out cannot discard new task work.
     let (task, attempt) = store.create_development_task("auto-task", &request)?;
     let frozen = task.snapshot.as_ref().ok_or("snapshot")?;
     assert!(frozen.publish_draft);
@@ -541,12 +555,7 @@ fn requested_draft_publication_is_frozen_and_resumes_once_after_restart()
         v1::DevelopmentAttemptState::Running,
         None,
     )?;
-    store.transition_attempt(
-        &attempt.id,
-        running.resource_version,
-        v1::DevelopmentAttemptState::Succeeded,
-        None,
-    )?;
+    store.transition_attempt(&attempt.id, running.resource_version, state, None)?;
     let candidate = store.record_candidate(v1::Candidate {
         development_attempt_id: attempt.id,
         repository_connection_id: repository.id,
@@ -560,6 +569,15 @@ fn requested_draft_publication_is_frozen_and_resumes_once_after_restart()
         changed_paths: vec!["src/lib.rs".into()],
         ..Default::default()
     })?;
+    if state == v1::DevelopmentAttemptState::Failed {
+        store.retry_development_task(
+            "retry-with-checkpoint",
+            &v1::RetryDevelopmentTaskRequest {
+                idempotency_key: "retry-with-checkpoint".into(),
+                development_task_id: task.id.clone(),
+            },
+        )?;
+    }
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
     store.schedule_requested_publications()?;

@@ -110,7 +110,7 @@ export const actions: Actions = {
           runtimeProfileId,
           agent: { provider, agent: "coding-agent", model },
           request: taskRequest,
-          publishDraft: form.get("publishDraft") === "on",
+          publishDraft: true,
           acceptanceCriteria: criteria,
           changeConstraints: { protectedPaths, allowTestEdits: form.get("allowTestEdits") === "on" },
           ...(deadlineSeconds === undefined ? {} : { deadlineSeconds }),

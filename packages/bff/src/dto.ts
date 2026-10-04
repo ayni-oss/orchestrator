@@ -209,6 +209,7 @@ export type DevelopmentAttemptStateDto =
   | "unknown";
 
 export interface DevelopmentAttemptDto {
+  agentActivity: Array<{ sequence: number; observedAt?: string; message: string; failed: boolean }>;
   id: string;
   developmentTaskId: string;
   attemptNumber: number;

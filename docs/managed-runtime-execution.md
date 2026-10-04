@@ -138,7 +138,8 @@ Protected paths are rejected. Without test-edit permission, dedicated test files
 and changes to Rust files containing inline tests are conservatively rejected.
 
 Generated `.ayni` and `.orchestrator` output is excluded even if the model staged
-it. The launcher freezes a signed-off candidate commit and a bounded Git bundle.
+it. The launcher stages normal source changes and restores these paths from the
+frozen base in the index, so ignored artifact directories do not fail staging. The launcher freezes a signed-off candidate commit and a bounded Git bundle.
 This is not a cryptographic producer signature or assessment evidence. Usage
 records contain counters, never prompts. Requested input is surfaced on the
 attempt; a new task can supply clarified instructions. A retry retains the
@@ -152,6 +153,28 @@ retention policy's responsibility. The local ReadWriteOnce claim assumes the
 single-node Docker Desktop topology; multi-node operators need compatible shared
 storage or a future object-store output transport.
 
+New development tasks always request automatic draft publication; the legacy
+`publish_draft` input no longer opts out, and task creation requires publication
+authority. Existing frozen snapshots retain their original publication setting.
+A failed advisory check never blocks committing or pushing a valid candidate.
+
+The runner saves a constrained Git commit and bundle after each tool returns,
+and again when the model ends (including provider errors and turn exhaustion).
+Commands are serialized with checkpoint creation. Each generation is completed
+before an atomic pointer selects it; a failed save preserves the preceding
+checkpoint. Only the latest generation is retained. On worker failure, deadline,
+lost Job, or an input request, the controller collects that checkpoint before
+marking cleanup complete and schedules the same durable draft publication flow.
+Task failure remains visible; a recovery PR explicitly describes partial work
+and does not claim a passing Ayni check. A retry does not suppress publication of
+an earlier failed attempt's saved work. Explicit cancellation suppresses publication.
+
+This protects the last completed checkpoint, not edits in a tool still running
+when a process or node is killed. No changes, protected-path violations, storage
+failure, or Git failure can prevent a new checkpoint. Existing valid checkpoints
+remain recoverable. GitHub failures leave durable publication intent for retry;
+publication is not considered complete until the provider confirms it.
+
 An explicit `PublishCandidate` request resumes through the shared durable action.
 The controller imports the bundle into a fresh bare Git object database, verifies
 the frozen commit and ancestry, and pushes a deterministic branch without
@@ -160,6 +183,24 @@ code. Provider lookup precedes PR creation so an uncertain response can be
 recovered. The PR body carries the advisory disclosure; no pre-publication
 managed validation Job or assessment is synthesized. Exact-head authoritative
 assessment uses the separate [managed PR workflow](managed-pr-assessments.md).
+
+## Worker diagnostics and agent logs
+
+Workers initialize the shared JSON logger. Coding attempts atomically retain the
+latest 256 timestamped activity records in their output directory. Rig lifecycle
+hooks report model requests/responses and tool start/return events independently
+of the selected provider. They do not record prompts, commands, tool output,
+model text, or private reasoning. Safe error categories distinguish provider
+access, rate limits, transport errors, malformed responses, and turn exhaustion.
+
+The controller collects these advisory records on its runtime reconciliation
+interval and again after observing completion, before removing the Job. Attempt
+records and task-page **Agent logs** survive worker cleanup and controller restart.
+The page refreshes every ten seconds; collection latency also depends on the
+configured runtime reconciliation interval. Each retry has its own log. Historical
+attempts and workers that never started may have no retained activity; inspect
+Kubernetes init-container status, scheduling, and image-pull events in that case.
+A missing or invalid activity file never becomes execution or assessment evidence.
 
 ## Validation boundary
 

@@ -194,7 +194,7 @@ impl RuntimeReconciler {
         for profile in self.configured_profiles().unwrap_or_default().keys() {
             let result = tokio::time::timeout(
                 Duration::from_secs(self.configuration.request_timeout_seconds * 8),
-                self.coding(profile),
+                Box::pin(self.coding(profile)),
             )
             .await
             .unwrap_or(Err("coding_observation_timeout"));

@@ -100,7 +100,7 @@ message DevelopmentTaskRequest {
   ChangeConstraints change_constraints = 7;
   // deadline is 1 second through 24 hours when present.
   optional google.protobuf.Duration deadline = 8;
-  // Explicitly request durable publication of the resulting candidate as a draft.
+  // Retained for wire compatibility. New tasks always publish saved work as draft.
   bool publish_draft = 9;
 }
 
@@ -222,6 +222,15 @@ message DevelopmentTask {
   uint64 resource_version = 9;
 }
 
+// AgentActivity is an advisory, content-free worker lifecycle observation.
+message AgentActivity {
+  uint32 sequence = 1;
+  google.protobuf.Timestamp observed_at = 2;
+  // message is a collector-owned description, never model or tool content.
+  string message = 3;
+  bool failed = 4;
+}
+
 // DevelopmentAttempt is one immutable-snapshot execution of a task.
 message DevelopmentAttempt {
   string id = 1;
@@ -237,6 +246,8 @@ message DevelopmentAttempt {
   google.protobuf.Timestamp updated_at = 10;
   optional google.protobuf.Timestamp completed_at = 11;
   uint64 resource_version = 12;
+  // At most 256 recent observations, retained after worker cleanup.
+  repeated AgentActivity agent_activity = 13;
 }
 
 // CandidateIdentity is the immutable output identity produced by an attempt.

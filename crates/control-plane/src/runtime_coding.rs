@@ -131,6 +131,10 @@ fn coding_job(
     }));
     pod["containers"][0]["workingDir"] = json!("/workspace");
     pod["containers"][0]["env"] = crate::runtime_kubernetes::runtime_environment();
+    pod["containers"][0]["env"]
+        .as_array_mut()
+        .ok_or("coding_job_invalid")?
+        .push(json!({"name":"JOB_NAME","value":name}));
     pod["containers"][0]["volumeMounts"] = json!([
         {"name":"workspace","mountPath":"/workspace"}, {"name":"scratch","mountPath":"/scratch"},
         {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request/coding.json","subPath":"coding.json","readOnly":true},

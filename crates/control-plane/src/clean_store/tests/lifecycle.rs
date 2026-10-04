@@ -633,3 +633,62 @@ fn create_task_replay_keeps_the_original_initial_attempt() -> Result<(), CleanSt
     assert_eq!(replayed_task.active_attempt_id, Some(retry.id));
     Ok(())
 }
+
+#[test]
+fn activity_survives_restart_and_retry_keeps_separate_logs()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("activity.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (task, attempt) = store.create_development_task(
+        "activity-task",
+        &task_request(&repository.id, &profile.id, "activity"),
+    )?;
+    let events = vec![v1::AgentActivity {
+        sequence: 1,
+        observed_at: Some(timestamp(1)),
+        message: "Waiting for a model response".into(),
+        failed: false,
+    }];
+    let observed = store.coding_activity(&attempt.id, events.clone())?;
+    assert_eq!(
+        store
+            .coding_activity(&attempt.id, events.clone())?
+            .resource_version,
+        observed.resource_version
+    );
+    let running = store.transition_attempt(
+        &attempt.id,
+        observed.resource_version,
+        v1::DevelopmentAttemptState::Running,
+        None,
+    )?;
+    store.transition_attempt(
+        &attempt.id,
+        running.resource_version,
+        v1::DevelopmentAttemptState::Failed,
+        None,
+    )?;
+    store.coding_cleanup_complete(&attempt.id)?;
+    drop(store);
+    let mut store = CleanStore::open(&path, 3)?;
+    assert_eq!(
+        store.development_attempt(&attempt.id)?.agent_activity,
+        events
+    );
+    let retry = store.retry_development_task(
+        "activity-retry",
+        &v1::RetryDevelopmentTaskRequest {
+            idempotency_key: "activity-retry".into(),
+            development_task_id: task.id,
+        },
+    )?;
+    assert!(retry.agent_activity.is_empty());
+    assert_eq!(
+        store.development_attempt(&attempt.id)?.agent_activity,
+        events
+    );
+    store.integrity_check()?;
+    Ok(())
+}

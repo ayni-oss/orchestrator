@@ -1,4 +1,5 @@
 import {
+  DevelopmentAttempt,
   DevelopmentAttemptState,
   DevelopmentTaskState,
   RepositoryConnectionStatus,
@@ -10,6 +11,7 @@ import {
   type RepositoryConnection,
   type RuntimeProfile,
 } from "@ayni-orchestrator/grpc-bindings/server";
+import { mapDevelopmentAttempt } from "../src/mapping.js";
 import { describe, expect, it } from "vitest";
 import {
   BffMappingError,
@@ -173,5 +175,26 @@ describe("clean-v1 browser DTO mappings", () => {
       agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },
       deadline: { seconds: "60", nanos: 0 },
     }));
+  });
+});
+
+
+it("retains bounded activity on failed attempts for task polling and watch updates", () => {
+  const original = task();
+  const attempt = DevelopmentAttempt.fromPartial({
+    id: "attempt:1", developmentTaskId: original.id, snapshot: original.snapshot,
+    state: DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_FAILED,
+    createdAt: original.createdAt, updatedAt: original.updatedAt,
+    agentActivity: Array.from({ length: 300 }, (_, index) => ({
+      sequence: index + 1, observedAt: original.createdAt,
+      message: "Waiting for a model response", failed: index === 299,
+    })),
+  });
+  const mapped = mapDevelopmentAttempt(attempt);
+  expect(mapped.agentActivity).toHaveLength(256);
+  expect(mapped.agentActivity[0]?.sequence).toBe(45);
+  expect(mapped.agentActivity.at(-1)).toEqual({
+    sequence: 300, observedAt: original.createdAt?.toISOString(),
+    message: "Waiting for a model response", failed: true,
   });
 });

@@ -33,17 +33,30 @@
       {#if !terminal}<form method="POST" action="?/cancel" use:enhance={() => { pending = "cancel"; return async ({ update }) => { pending = undefined; await update(); }; }}><input type="hidden" name="idempotencyKey" value={data.actionKeys.cancel} /><SubmitButton variant="destructive" pending={pending === "cancel"}><X aria-hidden="true" /> Cancel</SubmitButton></form>{/if}
     </div></div>
 
+    {#if task.failure}<Feedback kind="error" title="Task failed" message={task.failure.message} />{/if}
+    <Card.Root><Card.Header><Card.Title>Agent logs</Card.Title><Card.Description>Worker stages and Rig model/tool activity. Logs are advisory and omit private reasoning, prompts, and command output.</Card.Description></Card.Header><Card.Content class="space-y-5">
+      {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
+        <section class="space-y-2">
+          <h3 class="text-sm font-medium">Attempt {attempt.attemptNumber} · {words(attempt.state)}</h3>
+          {#if attempt.failure}<p class="text-sm text-destructive">{attempt.failure.message}</p>{/if}
+          <ol class="max-h-80 space-y-2 overflow-auto text-sm" aria-label={`Activity for attempt ${attempt.attemptNumber}`}>
+            {#each attempt.agentActivity ?? [] as event (event.sequence)}
+              <li class={event.failed ? "text-destructive" : "text-muted-foreground"}><time>{event.observedAt ? formatDate(event.observedAt) : "Time unavailable"}</time> · {event.message}{event.failed ? " — failed" : ""}</li>
+            {:else}<li class="text-muted-foreground">No worker activity has been retained for this attempt yet.</li>{/each}
+          </ol>
+        </section>
+      {:else}<p class="text-sm text-muted-foreground">Waiting for the first attempt.</p>{/each}
+    </Card.Content></Card.Root>
     <div class="grid gap-6 lg:grid-cols-2">
       <Card.Root><Card.Header><Card.Title>Frozen repository and runtime</Card.Title></Card.Header><Card.Content><dl class="space-y-4 text-sm"><div><dt class="text-muted-foreground">Repository revision</dt><dd><CodeValue value={task.snapshot.repository.revision} /></dd></div><div><dt class="text-muted-foreground">Profile revision</dt><dd><CodeValue value={task.snapshot.runtime.runtimeProfileRevisionId} /></dd></div><div><dt class="text-muted-foreground">OCI image</dt><dd><CodeValue value={`${task.snapshot.runtime.ociRepository}@${task.snapshot.runtime.resolvedDigest}`} /></dd></div><div><dt class="text-muted-foreground">Platform</dt><dd>{task.snapshot.runtime.platform.operatingSystem}/{task.snapshot.runtime.platform.architecture}</dd></div></dl></Card.Content></Card.Root>
       <Card.Root><Card.Header><Card.Title>Frozen request</Card.Title></Card.Header><Card.Content class="space-y-4 text-sm"><p><strong>Agent:</strong> {task.snapshot.agent.agent} · {task.snapshot.agent.provider}/{task.snapshot.agent.model}</p><div><h3 class="font-medium">Acceptance criteria</h3><ol class="mt-2 list-decimal pl-5">{#each task.snapshot.acceptanceCriteria as criterion}<li>{criterion}</li>{/each}</ol></div><p><strong>Deadline:</strong> {task.snapshot.deadlineAt ? formatDate(task.snapshot.deadlineAt) : "none"}</p><p><strong>Test edits:</strong> {task.snapshot.changeConstraints.allowTestEdits ? "authorized" : "protected"}</p></Card.Content></Card.Root>
     </div>
     <Card.Root><Card.Header><Card.Title>Candidate and pull request</Card.Title><Card.Description>Coding-time checks are advisory. The authoritative assessment runs separately against the exact PR head.</Card.Description></Card.Header><Card.Content class="space-y-4">
       {#each data.progress?.candidates ?? [] as candidate (candidate.id)}<div class="space-y-2"><div class="flex flex-wrap gap-3"><StatusBadge status={candidate.state} tone={statusTone(candidate.state)} />{#if candidate.head}<CodeValue value={candidate.head} />{/if}</div>{#if candidate.advisory}<p class="text-sm">{candidate.advisory}</p>{/if}</div>{:else}<p class="text-sm text-muted-foreground">No candidate is available yet.</p>{/each}
-      {#each data.progress?.reviews ?? [] as review (review.id)}<div class="space-y-2"><div class="flex flex-wrap gap-3"><StatusBadge status={review.state} tone={statusTone(review.state)} />{#if review.url}<a class="underline" href={review.url} target="_blank" rel="noreferrer">Open pull request</a>{/if}</div>{#if review.failure}<p class="text-sm">{review.failure.message} {review.failure.remediation}</p>{/if}<p><a class="text-sm underline" href={`/reviews?review=${encodeURIComponent(review.id)}`}>View exact-head assessment and evidence</a></p></div>{:else}<p class="text-sm text-muted-foreground">{task.snapshot.publishDraft ? "Draft publication is requested and resumes automatically after coding succeeds, including after a restart." : "Automatic publication was not requested."}</p>{/each}
+      {#each data.progress?.reviews ?? [] as review (review.id)}<div class="space-y-2"><div class="flex flex-wrap gap-3"><StatusBadge status={review.state} tone={statusTone(review.state)} />{#if review.url}<a class="underline" href={review.url} target="_blank" rel="noreferrer">Open pull request</a>{/if}</div>{#if review.failure}<p class="text-sm">{review.failure.message} {review.failure.remediation}</p>{/if}<p><a class="text-sm underline" href={`/reviews?review=${encodeURIComponent(review.id)}`}>View exact-head assessment and evidence</a></p></div>{:else}<p class="text-sm text-muted-foreground">{task.snapshot.publishDraft ? "Saved work is published as a draft automatically, including recovery checkpoints from failed attempts. Publication resumes after a restart." : "Automatic publication was not requested."}</p>{/each}
     </Card.Content></Card.Root>
     <Card.Root><Card.Header><Card.Title>Attempts and model usage</Card.Title></Card.Header><Card.Content class="space-y-3">
     {#each data.progress?.attempts ?? [] as attempt (attempt.id)}<div class="text-sm"><p>Attempt {attempt.attemptNumber} · {words(attempt.state)}</p><p class="text-muted-foreground">Input tokens: {attempt.usage.input ?? "unavailable"} · Output tokens: {attempt.usage.output ?? "unavailable"} · Interactions: {attempt.usage.interactions}</p>{#if attempt.failure}<p>{attempt.failure.message}</p>{/if}</div>{:else}<p class="text-sm">Waiting for the first attempt.</p>{/each}
     </Card.Content></Card.Root>
-    {#if task.failure}<Feedback kind="error" title={words(task.failure.reason)} message={task.failure.message} />{/if}
   {/if}
 </div>

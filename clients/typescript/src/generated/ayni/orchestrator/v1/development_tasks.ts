@@ -380,7 +380,7 @@ export interface DevelopmentTaskRequest {
   deadline?:
     | Duration
     | undefined;
-  /** Explicitly request durable publication of the resulting candidate as a draft. */
+  /** Retained for wire compatibility. New tasks always publish saved work as draft. */
   publishDraft: boolean;
 }
 
@@ -502,6 +502,17 @@ export interface DevelopmentTask {
   resourceVersion: string;
 }
 
+/** AgentActivity is an advisory, content-free worker lifecycle observation. */
+export interface AgentActivity {
+  sequence: number;
+  observedAt?:
+    | Date
+    | undefined;
+  /** message is a collector-owned description, never model or tool content. */
+  message: string;
+  failed: boolean;
+}
+
 /** DevelopmentAttempt is one immutable-snapshot execution of a task. */
 export interface DevelopmentAttempt {
   id: string;
@@ -517,6 +528,8 @@ export interface DevelopmentAttempt {
   updatedAt?: Date | undefined;
   completedAt?: Date | undefined;
   resourceVersion: string;
+  /** At most 256 recent observations, retained after worker cleanup. */
+  agentActivity: AgentActivity[];
 }
 
 /** CandidateIdentity is the immutable output identity produced by an attempt. */
@@ -2932,6 +2945,127 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
   },
 };
 
+function createBaseAgentActivity(): AgentActivity {
+  return { sequence: 0, observedAt: undefined, message: "", failed: false };
+}
+
+export const AgentActivity: MessageFns<AgentActivity> = {
+  encode(message: AgentActivity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sequence !== 0) {
+      writer.uint32(8).uint32(message.sequence);
+    }
+    if (message.observedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.observedAt), writer.uint32(18).fork()).join();
+    }
+    if (message.message !== "") {
+      writer.uint32(26).string(message.message);
+    }
+    if (message.failed !== false) {
+      writer.uint32(32).bool(message.failed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentActivity {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentActivity();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.sequence = reader.uint32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.observedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.message = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.failed = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentActivity {
+    return {
+      sequence: isSet(object.sequence) ? globalThis.Number(object.sequence) : 0,
+      observedAt: isSet(object.observedAt)
+        ? fromJsonTimestamp(object.observedAt)
+        : isSet(object.observed_at)
+        ? fromJsonTimestamp(object.observed_at)
+        : undefined,
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      failed: isSet(object.failed) ? globalThis.Boolean(object.failed) : false,
+    };
+  },
+
+  toJSON(message: AgentActivity): unknown {
+    const obj: any = {};
+    if (message.sequence !== 0) {
+      obj.sequence = Math.round(message.sequence);
+    }
+    if (message.observedAt !== undefined) {
+      obj.observedAt = message.observedAt.toISOString();
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    if (message.failed !== false) {
+      obj.failed = message.failed;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentActivity>): AgentActivity {
+    return AgentActivity.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentActivity>): AgentActivity {
+    const message = createBaseAgentActivity();
+    message.sequence = object.sequence ?? 0;
+    message.observedAt = object.observedAt ?? undefined;
+    message.message = object.message ?? "";
+    message.failed = object.failed ?? false;
+    return message;
+  },
+};
+
 function createBaseDevelopmentAttempt(): DevelopmentAttempt {
   return {
     id: "",
@@ -2946,6 +3080,7 @@ function createBaseDevelopmentAttempt(): DevelopmentAttempt {
     updatedAt: undefined,
     completedAt: undefined,
     resourceVersion: "0",
+    agentActivity: [],
   };
 }
 
@@ -2986,6 +3121,9 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(96).uint64(message.resourceVersion);
+    }
+    for (const v of message.agentActivity) {
+      AgentActivity.encode(v!, writer.uint32(106).fork()).join();
     }
     return writer;
   },
@@ -3099,6 +3237,14 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
             message.resourceVersion = reader.uint64().toString();
             continue;
           }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.agentActivity.push(AgentActivity.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3157,6 +3303,11 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
+      agentActivity: globalThis.Array.isArray(object?.agentActivity)
+        ? object.agentActivity.map((e: any) => AgentActivity.fromJSON(e))
+        : globalThis.Array.isArray(object?.agent_activity)
+        ? object.agent_activity.map((e: any) => AgentActivity.fromJSON(e))
+        : [],
     };
   },
 
@@ -3198,6 +3349,9 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
+    if (message.agentActivity?.length) {
+      obj.agentActivity = message.agentActivity.map((e) => AgentActivity.toJSON(e));
+    }
     return obj;
   },
 
@@ -3224,6 +3378,7 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     message.updatedAt = object.updatedAt ?? undefined;
     message.completedAt = object.completedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
+    message.agentActivity = object.agentActivity?.map((e) => AgentActivity.fromPartial(e)) || [];
     return message;
   },
 };
