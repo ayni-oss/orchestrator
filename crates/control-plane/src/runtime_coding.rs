@@ -134,7 +134,8 @@ fn coding_job(
     pod["containers"][0]["volumeMounts"] = json!([
         {"name":"workspace","mountPath":"/workspace"}, {"name":"scratch","mountPath":"/scratch"},
         {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request/coding.json","subPath":"coding.json","readOnly":true},
-        {"name":"output","mountPath":"/output","subPath":name}, {"name":"model","mountPath":"/model","readOnly":true}
+        {"name":"output","mountPath":"/output","subPath":name},
+        {"name":"model","mountPath":"/model/api-key","subPath":"api-key","readOnly":true}
     ]);
     pod["volumes"] = support["spec"]["template"]["spec"]["volumes"].clone();
     let volumes = pod["volumes"].as_array_mut().ok_or("coding_job_invalid")?;
@@ -210,6 +211,16 @@ mod tests {
                 .any(|m| m.name == "request"
                     && m.mount_path == "/request/coding.json"
                     && m.sub_path.as_deref() == Some("coding.json")
+                    && m.read_only == Some(true))
+        );
+        assert!(
+            pod.containers[0]
+                .volume_mounts
+                .iter()
+                .flatten()
+                .any(|m| m.name == "model"
+                    && m.mount_path == "/model/api-key"
+                    && m.sub_path.as_deref() == Some("api-key")
                     && m.read_only == Some(true))
         );
         assert_eq!(pod.containers.len(), 1);
