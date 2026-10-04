@@ -22,6 +22,12 @@ dev/ctl check
 `deploy` and its `redeploy` alias safely re-run in place: they rebuild all three
 project images, load them into Docker Desktop Kubernetes, and run
 `helm upgrade --install`. Credential updates stay explicit through `secrets`.
+Set `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID` in the
+mode-600 `dev/.env` when using the dedicated Kubernetes environment builder.
+`dev/ctl secrets` then provisions the `environment-producer` Secret. Reference
+that name as `build.signing_secret` in the runtime profile configuration; the
+build Job consumes the values without mounting them into the control-plane or
+web containers. These settings are optional when builds use GitHub Actions.
 
 Use a different ignored env file when working with an isolated profile:
 
