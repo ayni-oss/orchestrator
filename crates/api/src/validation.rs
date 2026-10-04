@@ -244,10 +244,13 @@ pub fn create_development_task(
         .request
         .as_ref()
         .ok_or_else(|| ValidationError::new(v1::ErrorReason::InvalidInput, "request"))?;
-    resource_id(
-        &request.repository_connection_id,
-        "repository_connection_id",
-    )?;
+    resource_id(&request.project_id, "project_id")?;
+    if !request.repository_connection_id.is_empty() {
+        resource_id(
+            &request.repository_connection_id,
+            "repository_connection_id",
+        )?;
+    }
     git_revision(&request.repository_revision, "repository_revision")?;
     resource_id(&request.runtime_profile_id, "runtime_profile_id")?;
     let agent = request
@@ -511,6 +514,8 @@ fn lower_hex(value: &str, length: usize) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+include!("validation_projects.rs");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,6 +538,7 @@ mod tests {
         v1::CreateDevelopmentTaskRequest {
             idempotency_key: "task:1".to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                project_id: "project:test".into(),
                 publish_draft: false,
                 repository_connection_id: "repo:1".to_owned(),
                 repository_revision: "a".repeat(40),

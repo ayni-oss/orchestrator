@@ -290,6 +290,10 @@ grpc_private -d '{"page":{"pageSize":50}}' "$ORCHESTRATOR_ENDPOINT" \
   ayni.orchestrator.v1.RepositoryService/ListRepositoryConnections
 ```
 
+Create an active project with `ProjectService/CreateProject` for the repository
+before submitting work. Project reads use `repositories.read`; create, rename,
+and archive use `repositories.write`.
+
 Submit a task. Use real approved resource identifiers and an exact repository
 revision; keep task content free of credentials:
 
@@ -299,6 +303,7 @@ grpc_private -d @ "$ORCHESTRATOR_ENDPOINT" \
 {
   "idempotencyKey": "client-example-create-1",
   "request": {
+    "projectId": "project:1",
     "repositoryConnectionId": "repository:1",
     "repositoryRevision": "0123456789abcdef0123456789abcdef01234567",
     "runtimeProfileId": "profile:1",

@@ -4,8 +4,9 @@ Ayni Orchestrator is a private development-workflow control plane that produces
 reviewable repository changes on controlled infrastructure. Its pre-public v1
 is being replaced by one shared foundation with **Ayni Managed** and **Custom
 Runtime** runtime profiles. Ayni Managed is the first complete profile; Custom
-Runtime is a named later follow-up. The normative design is
-[Decision 0007](docs/decisions/0007-clean-v1-runtime-profiles.md).
+Runtime is a named later follow-up. The product journey is **Connectors → Projects → Tasks**. The normative
+product design is [Decision 0009](docs/decisions/0009-connectors-projects-and-internal-assessments.md),
+which retains the shared runtime foundations from Decision 0007.
 
 The checked-in pilot API, SQLite state, local preparation archives, and
 validation lifecycle are retired design history. They are replaced directly,
@@ -16,24 +17,24 @@ remains private; Ayni is independently useful as a local CLI in the public
 
 ## Target product
 
-The shared core owns repository connections, verified OCI runtime artifacts,
-agent attempts, candidates, PR/MR publication, assessments, evidence identity,
-and reconciliation. Ayni Managed adds committed Ayni lock interpretation,
-optional GitHub Actions assessment automation, registry-backed or dedicated-build
-environment sourcing, advisory host checks, managed exact-head PR assessment,
-signals, and environment reconciliation. Custom Runtime later supplies a verified external OCI image
-without Ayni-specific fields or negative branding.
+A project is a named workspace with one repository in this release. Tasks belong
+to the project and freeze its repository revision, profile revision, and verified
+OCI digest. Archiving retains history and prevents new tasks and retries.
+Repository connections and runtime profiles remain independently reconciled
+implementation resources beneath projects.
 
-A task freezes a repository revision, profile revision, and verified OCI digest.
-A candidate commit, pull-request head SHA, workflow run, and evidence digest are
-different identities. Plain `ayni check` in the launched verified image is agent
-feedback; managed PR execution is the quality gate; GitHub checks/comments are
-presentation; digest-verified evidence and OCI digests are retained identities.
+The accepted architecture adds encrypted dynamic VCS connectors, internally built
+certified environments, and independent exact-commit Ayni assessments inside the
+Orchestrator deployment. Ayni configuration and locks remain repository-owned
+prerequisites. Registry/signing credentials are existing Kubernetes Secret
+references; coding workloads never receive them. Delivery is tracked by
+[the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
 
 ## Documentation
 
 | Document | Purpose |
 | --- | --- |
+| [Connectors, projects and internal assessments](docs/decisions/0009-connectors-projects-and-internal-assessments.md) | Product hierarchy, ownership, credential and assessment decisions |
 | [Clean-v1 runtime-profile decision](docs/decisions/0007-clean-v1-runtime-profiles.md) | Normative names, ownership, identity, lifecycle, trust, recovery, and issue map |
 | [Architecture](docs/architecture.md) | Target shared/profile component and resource model |
 | [Protocol contract](proto/README.md) | Target clean-v1 gRPC resources and compatibility reset |

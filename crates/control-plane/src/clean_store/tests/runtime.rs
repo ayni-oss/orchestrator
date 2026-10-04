@@ -24,7 +24,7 @@ fn admission_requires_the_verified_source_revision() -> Result<(), CleanStoreErr
     let mut store = CleanStore::in_memory()?;
     let (repository, profile, _) = ready_profile(&mut store)?;
     store.observe_repository_snapshot(&repository.id, SECOND_REVISION)?;
-    let mut request = task_request(&repository.id, &profile.id, "new");
+    let mut request = task_request(&store, &repository.id, &profile.id, "new")?;
     request
         .request
         .as_mut()
@@ -43,7 +43,7 @@ fn fresh_source_verification_reuses_digest_but_not_stale_revision() -> Result<()
     let (repository, profile, _) = ready_profile(&mut store)?;
     let (_, attempt) = store.create_development_task(
         "initial",
-        &task_request(&repository.id, &profile.id, "initial"),
+        &task_request(&store, &repository.id, &profile.id, "initial")?,
     )?;
     let revision = store.prepare_runtime_revision(
         &profile.id,

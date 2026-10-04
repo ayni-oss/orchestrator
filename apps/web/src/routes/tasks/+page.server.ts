@@ -1,4 +1,4 @@
-import type { DevelopmentTaskDto, ProviderModelDto, RepositoryConnectionDto, RequestContext, RuntimeProfileDto } from "@ayni-orchestrator/bff/server";
+import type { DevelopmentTaskDto, ProviderModelDto, ProjectDto, RequestContext, RuntimeProfileDto } from "@ayni-orchestrator/bff/server";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
@@ -7,13 +7,13 @@ import { isCanonicalIdentifier } from "$lib/server/validation.js";
 
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 
-async function listRepositoryChoices(context: RequestContext): Promise<RepositoryConnectionDto[]> {
-  const values: RepositoryConnectionDto[] = [];
+async function listProjectChoices(context: RequestContext): Promise<ProjectDto[]> {
+  const values: ProjectDto[] = [];
   let pageToken: string | undefined;
   do {
-    const page = await getBff().listRepositoryConnections({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
-    values.push(...page.repositoryConnections);
-    pageToken = page.page.nextPageToken || undefined;
+    const result = await getBff().listProjects({pageSize:100, ...(pageToken === undefined ? {} : {pageToken})}, context, true);
+    values.push(...result.projects);
+    pageToken = result.page.nextPageToken || undefined;
   } while (pageToken !== undefined && values.length < 1000);
   return values;
 }
@@ -49,7 +49,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   const context = requestContext(locals);
   const [tasks, repositories, profiles, models] = await Promise.allSettled([
     getBff().listDevelopmentTasks({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context),
-    listRepositoryChoices(context),
+    listProjectChoices(context),
     listProfileChoices(context),
     listModelChoices(context),
   ]);
@@ -57,7 +57,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   return {
     tasks: tasks.status === "fulfilled" ? tasks.value.developmentTasks : [],
     nextPageToken: tasks.status === "fulfilled" ? tasks.value.page.nextPageToken || undefined : undefined,
-    repositoryConnections: repositories.status === "fulfilled" ? repositories.value : [],
+    projects: repositories.status === "fulfilled" ? repositories.value : [],
     runtimeProfiles: profiles.status === "fulfilled" ? profiles.value : [],
     provider: models.status === "fulfilled" ? models.value.provider : undefined,
     models: models.status === "fulfilled" ? models.value.models : [],
@@ -72,7 +72,7 @@ export const actions: Actions = {
   create: async ({ locals, request }) => {
     const form = await request.formData();
     const idempotencyKey = text(form, "idempotencyKey", 36);
-    const repositoryConnectionId = text(form, "repositoryConnectionId", 128);
+    const projectId = text(form, "projectId", 128);
     const runtimeProfileId = text(form, "runtimeProfileId", 128);
     const provider = text(form, "provider", 128);
     const model = text(form, "model", 128);
@@ -87,7 +87,7 @@ export const actions: Actions = {
     const pathsValid = protectedPaths !== undefined && new Set(protectedPaths).size === protectedPaths.length && protectedPaths.every((path) => !path.startsWith("/") && !path.endsWith("/") && !path.includes("\\") && path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
     if (
       idempotencyKey === undefined || !isCanonicalIdentifier(idempotencyKey)
-      || repositoryConnectionId === undefined || !RESOURCE_ID.test(repositoryConnectionId)
+      || projectId === undefined || !RESOURCE_ID.test(projectId)
       || runtimeProfileId === undefined || !RESOURCE_ID.test(runtimeProfileId)
       || provider === undefined || model === undefined
       || taskRequest === undefined || criteria === undefined || !pathsValid
@@ -98,6 +98,9 @@ export const actions: Actions = {
     let task: DevelopmentTaskDto;
     try {
       const context=requestContext(locals);
+      const project=await getBff().getProject(projectId,context);
+      if(project.state!=="active") return fail(409,{action:"create",error:{requestId:locals.requestId,message:"This project is archived."}});
+      const repositoryConnectionId=project.repositoryConnectionIds[0]!;
       const profile=await getBff().getRuntimeProfile(runtimeProfileId,context);
       if(profile.repositoryConnectionId!==repositoryConnectionId || profile.state!=="ready" || profile.support!=="operational" || !profile.activeRevisionId || !profile.activeRuntimeArtifactId) return fail(409,{action:"create",error:{requestId:locals.requestId,message:"Select a ready runtime for this repository. Open its profile for the next step."}});
       const revision=await getBff().getRuntimeRevision(profile.activeRevisionId,context);
@@ -105,6 +108,7 @@ export const actions: Actions = {
       task = await getBff().createDevelopmentTask({
         idempotencyKey,
         request: {
+          projectId,
           repositoryConnectionId,
           repositoryRevision,
           runtimeProfileId,

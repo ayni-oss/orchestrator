@@ -43,6 +43,7 @@ mod tests {
             services,
             BTreeSet::from([
                 "DevelopmentTaskService",
+                "ProjectService",
                 "ProviderService",
                 "RepositoryService",
                 "ReviewService",

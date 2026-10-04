@@ -285,6 +285,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
 
 export function mapDevelopmentTask(value: DevelopmentTask): DevelopmentTaskDto {
   return {
+    projectId: value.projectId,
     id: value.id,
     snapshot: mapDevelopmentSnapshot(required(value.snapshot)),
     state: mapTaskState(value.state),
@@ -334,6 +335,7 @@ export function mapDevelopmentAttempt(value: DevelopmentAttempt): DevelopmentAtt
 export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentTaskRequest {
   const deadlineSeconds = value.deadlineSeconds;
   return {
+    projectId: value.projectId,
     repositoryConnectionId: value.repositoryConnectionId,
     repositoryRevision: value.repositoryRevision,
     runtimeProfileId: value.runtimeProfileId,

@@ -103,6 +103,9 @@ pub async fn serve(
     health_reporter
         .set_serving::<v1::review_service_server::ReviewServiceServer<GrpcApi>>()
         .await;
+    health_reporter
+        .set_serving::<v1::project_service_server::ProjectServiceServer<GrpcApi>>()
+        .await;
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
@@ -113,6 +116,7 @@ pub async fn serve(
     Server::builder()
         .add_service(health)
         .add_service(reflection)
+        .add_service(project_server(api.clone()))
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
         .add_service(provider_server(api.clone()))
@@ -157,6 +161,7 @@ pub async fn serve_custom(
     info!(address = %address, tls = true, authentication = "bearer", reflection = false,
         "custom-client gRPC control plane started");
     server
+        .add_service(project_server(api.clone()))
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
         .add_service(provider_server(api.clone()))
@@ -169,6 +174,12 @@ pub async fn serve_custom(
         })
         .await
         .map_err(io::Error::other)
+}
+
+fn project_server(api: GrpcApi) -> v1::project_service_server::ProjectServiceServer<GrpcApi> {
+    v1::project_service_server::ProjectServiceServer::new(api)
+        .max_decoding_message_size(MAX_REQUEST_BYTES)
+        .max_encoding_message_size(MAX_RESPONSE_BYTES)
 }
 
 fn repository_server(
@@ -298,8 +309,15 @@ impl RequestContext {
                 Some("runtime_profile"),
                 Some(profile_id.as_str()),
             ),
+            CleanStoreError::RepositoryAlreadyAssigned => (
+                Code::AlreadyExists,
+                v1::ErrorReason::Conflict,
+                Some("project"),
+                None,
+            ),
             CleanStoreError::StaleVersion => (Code::Aborted, v1::ErrorReason::Conflict, None, None),
-            CleanStoreError::ParentMismatch
+            CleanStoreError::ProjectArchived
+            | CleanStoreError::ParentMismatch
             | CleanStoreError::InvalidTransition
             | CleanStoreError::UnsupportedWorkflowTemplate(_) => (
                 Code::FailedPrecondition,
@@ -407,6 +425,7 @@ impl RequestContext {
     }
 }
 
+mod projects;
 mod providers_tasks;
 mod repositories_profiles;
 #[path = "grpc/watch.rs"]

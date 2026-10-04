@@ -71,6 +71,7 @@ function profile(): RuntimeProfile {
 function task(): DevelopmentTask {
   return {
     id: "task:1",
+    projectId: "project:1",
     snapshot: { publishDraft:false, publicationBaseBranch:"main",
       repository: {
         repositoryConnectionId: "repository:1",
@@ -163,6 +164,7 @@ describe("clean-v1 browser DTO mappings", () => {
   it("freezes explicit agent, model, profile, request, constraints, and deadline input", () => {
     expect(toProtoTaskRequest({
       repositoryConnectionId: "repository:1",
+      projectId: "project:1",
       repositoryRevision: "a".repeat(40),
       runtimeProfileId: "profile:1",
       agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },

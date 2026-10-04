@@ -87,6 +87,8 @@ message AgentSelection {
 
 // DevelopmentTaskRequest is the caller request before immutable identities are resolved.
 message DevelopmentTaskRequest {
+  // Required project; repository_connection_id, when supplied, is a membership assertion.
+  string project_id = 10;
   string repository_connection_id = 1;
   // repository_revision is exactly 40 lowercase hexadecimal characters.
   string repository_revision = 2;
@@ -211,6 +213,7 @@ message AttemptModelUsage {
 
 // DevelopmentTask is one durable request with frozen execution identity.
 message DevelopmentTask {
+  string project_id = 10;
   string id = 1;
   DevelopmentSnapshot snapshot = 2;
   DevelopmentTaskState state = 3;
@@ -291,6 +294,7 @@ message Candidate {
 }
 
 message ListDevelopmentTasksRequest {
+  optional string project_id = 5;
   optional string repository_connection_id = 1;
   optional string runtime_profile_id = 2;
   optional DevelopmentTaskState state = 3;

@@ -144,39 +144,6 @@ fn history_does_not_overwrite_current_provider_head() -> Result<(), Box<dyn std:
 }
 
 #[test]
-fn expands_clean_schema_without_losing_existing_repository_state()
--> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let path = directory.path().join("state.sqlite");
-    let connection = Connection::open(&path)?;
-    connection.execute_batch(
-        &CLEAN_SCHEMA
-            .replace(
-                "VALUES ('control_plane',2,unixepoch())",
-                "VALUES ('control_plane',1,unixepoch())",
-            )
-            .replace(
-                "candidate_id TEXT REFERENCES",
-                "candidate_id TEXT NOT NULL REFERENCES",
-            ),
-    )?;
-    drop(connection);
-    let mut store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 2);
-    let (repository, _, _) = ready_profile(&mut store)?;
-    store.observe_review(
-        &repository.id,
-        provider(),
-        SECOND_REVISION,
-        REVISION,
-        v1::ChangeRequestState::Open,
-    )?;
-    drop(store);
-    CleanStore::open(path, 3)?.integrity_check()?;
-    Ok(())
-}
-
-#[test]
 fn readiness_rejects_human_prs_even_with_successful_evidence()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
@@ -221,8 +188,10 @@ fn readiness_intent_is_durable_idempotent_and_invalidated_by_new_head()
     let path = directory.path().join("state.sqlite");
     let mut store = CleanStore::open(&path, 3)?;
     let (repository, profile, _) = ready_profile(&mut store)?;
-    let (_, attempt) = store
-        .create_development_task("task", &task_request(&repository.id, &profile.id, "task"))?;
+    let (_, attempt) = store.create_development_task(
+        "task",
+        &task_request(&store, &repository.id, &profile.id, "task")?,
+    )?;
     let running = store.transition_attempt(
         &attempt.id,
         attempt.resource_version,

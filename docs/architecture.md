@@ -1,5 +1,10 @@
 # Architecture
 
+[Decision 0009](decisions/0009-connectors-projects-and-internal-assessments.md)
+supersedes the repository-first journey and Actions assessment authority below.
+Projects now own tasks through immutable single-repository membership; the
+remaining sections describe the existing shared runtime implementation.
+
 > **Clean-v1 target.** This document defines the replacement architecture
 > accepted in [Decision 0007](decisions/0007-clean-v1-runtime-profiles.md).
 > The checked-in pilot implementation is retired design history, not a current

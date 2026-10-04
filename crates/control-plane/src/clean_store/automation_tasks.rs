@@ -232,7 +232,7 @@ impl CleanStore {
             .request
             .as_ref()
             .ok_or(CleanStoreError::CorruptState)?;
-        let repository = self.repository_connection(&requested.repository_connection_id)?;
+        let repository = self.project_task_repository(requested)?;
         let repository_snapshot =
             self.repository_snapshot_for_revision(&repository.id, &requested.repository_revision)?;
         let profile = self.runtime_profile(&requested.runtime_profile_id)?;
@@ -293,6 +293,7 @@ impl CleanStore {
         let task_id = resource_id("task");
         let attempt_id = resource_id("attempt");
         let task = v1::DevelopmentTask {
+            project_id: requested.project_id.clone(),
             id: task_id.clone(),
             snapshot: Some(snapshot.clone()),
             state: v1::DevelopmentTaskState::Queued as i32,
@@ -347,8 +348,8 @@ impl CleanStore {
             .execute(
                 "INSERT INTO development_tasks(
                     id,repository_connection_id,runtime_profile_id,state,active_attempt_id,
-                    deadline_at_seconds,deadline_at_nanos,payload,resource_version,event_cursor
-                 ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9)",
+                    deadline_at_seconds,deadline_at_nanos,payload,resource_version,event_cursor,project_id
+                 ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10)",
                 params![
                     task_id,
                     repository.id,
@@ -364,7 +365,8 @@ impl CleanStore {
                         .and_then(|value| value.deadline_at.as_ref())
                         .map(|value| value.nanos),
                     task.encode_to_vec(),
-                    i64::try_from(task_cursor).map_err(|_| CleanStoreError::CorruptState)?
+                    i64::try_from(task_cursor).map_err(|_| CleanStoreError::CorruptState)?,
+                    task.project_id
                 ],
             )
             .map_err(map_constraint)?;
@@ -410,6 +412,7 @@ impl CleanStore {
 
     pub(crate) fn list_development_tasks(
         &mut self,
+        project_id: Option<&str>,
         repository_connection_id: Option<&str>,
         runtime_profile_id: Option<&str>,
         state: Option<i32>,
@@ -417,6 +420,7 @@ impl CleanStore {
     ) -> Result<Page<v1::DevelopmentTask>, CleanStoreError> {
         let state_text = state.map_or_else(String::new, |value| value.to_string());
         let filter = encode_filter(&[
+            project_id.unwrap_or(""),
             repository_connection_id.unwrap_or(""),
             runtime_profile_id.unwrap_or(""),
             &state_text,
@@ -432,11 +436,12 @@ impl CleanStore {
                          WHERE (?1 IS NULL OR repository_connection_id=?1)
                            AND (?2 IS NULL OR runtime_profile_id=?2)
                            AND (?3 IS NULL OR state=?3)
+                           AND (?4 IS NULL OR project_id=?4)
                          ORDER BY id",
                     )
                     .map_err(CleanStoreError::Database)?;
                 let mut rows = statement
-                    .query(params![repository_connection_id, runtime_profile_id, state])
+                    .query(params![repository_connection_id, runtime_profile_id, state, project_id])
                     .map_err(CleanStoreError::Database)?;
                 collect_bounded_payloads(&mut rows)
             },
@@ -566,6 +571,7 @@ impl CleanStore {
                 .development_attempt(&existing.target_id.ok_or(CleanStoreError::CorruptState)?);
         }
         let mut task = self.development_task(&request.development_task_id)?;
+        self.active_project_repository(&task.project_id)?;
         if !matches!(
             v1::DevelopmentTaskState::try_from(task.state).ok(),
             Some(v1::DevelopmentTaskState::Failed | v1::DevelopmentTaskState::DeadlineExceeded)

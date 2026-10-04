@@ -5,7 +5,7 @@ fn initializes_exact_clean_schema_and_reopens() -> Result<(), Box<dyn std::error
     let directory = tempdir()?;
     let path = directory.path().join("orchestrator.sqlite");
     let store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 2);
+    assert_eq!(store.schema_version()?, 3);
     assert!(existing_tables(&store.connection)?.contains(&"runtime_profiles".to_owned()));
     assert!(!existing_tables(&store.connection)?.contains(&"repository_bindings".to_owned()));
     drop(store);
@@ -392,7 +392,7 @@ fn task_freezes_runtime_and_rejects_stale_or_invalid_transitions() -> Result<(),
     let (repository, profile, first_artifact) = ready_profile(&mut store)?;
     let (task, attempt) = store.create_development_task(
         "task-scope",
-        &task_request(&repository.id, &profile.id, "task"),
+        &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
     let frozen = task
         .snapshot
@@ -411,7 +411,7 @@ fn task_freezes_runtime_and_rejects_stale_or_invalid_transitions() -> Result<(),
     let second_snapshot = store.observe_repository_snapshot(&repository.id, SECOND_REVISION)?;
     let second_revision =
         store.record_runtime_profile_revision(&profile.id, &second_snapshot.id, configuration)?;
-    let mut waiting_request = task_request(&repository.id, &profile.id, "waiting-task");
+    let mut waiting_request = task_request(&store, &repository.id, &profile.id, "waiting-task")?;
     if let Some(request) = waiting_request.request.as_mut() {
         request.repository_revision = SECOND_REVISION.to_owned();
     }
@@ -499,7 +499,7 @@ fn cancellation_is_terminal_against_late_reports() -> Result<(), CleanStoreError
     let (repository, profile, _) = ready_profile(&mut store)?;
     let (task, attempt) = store.create_development_task(
         "task-scope",
-        &task_request(&repository.id, &profile.id, "task"),
+        &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
     let cancelled = store.cancel_development_task(
         "cancel-scope",
@@ -518,7 +518,7 @@ fn cancellation_is_terminal_against_late_reports() -> Result<(), CleanStoreError
     )?;
     let (second_task, _) = store.create_development_task(
         "second-task-scope",
-        &task_request(&repository.id, &profile.id, "second-task"),
+        &task_request(&store, &repository.id, &profile.id, "second-task")?,
     )?;
     assert!(matches!(
         store.cancel_development_task(
@@ -553,7 +553,7 @@ fn clean_marker_does_not_hide_retired_tables() -> Result<(), Box<dyn std::error:
     drop(connection);
     assert!(matches!(
         CleanStore::open(&path, 3),
-        Err(CleanStoreError::RetiredPilotSchema)
+        Err(CleanStoreError::CorruptState)
     ));
     let connection = Connection::open(path)?;
     assert_eq!(
@@ -604,7 +604,7 @@ fn create_profile_replay_keeps_the_original_revision() -> Result<(), CleanStoreE
 fn create_task_replay_keeps_the_original_initial_attempt() -> Result<(), CleanStoreError> {
     let mut store = CleanStore::in_memory()?;
     let (repository, profile, _) = ready_profile(&mut store)?;
-    let request = task_request(&repository.id, &profile.id, "task");
+    let request = task_request(&store, &repository.id, &profile.id, "task")?;
     let (task, initial) = store.create_development_task("task-scope", &request)?;
     let running = store.transition_attempt(
         &initial.id,
@@ -643,7 +643,7 @@ fn activity_survives_restart_and_retry_keeps_separate_logs()
     let (repository, profile, _) = ready_profile(&mut store)?;
     let (task, attempt) = store.create_development_task(
         "activity-task",
-        &task_request(&repository.id, &profile.id, "activity"),
+        &task_request(&store, &repository.id, &profile.id, "activity")?,
     )?;
     let events = vec![v1::AgentActivity {
         sequence: 1,

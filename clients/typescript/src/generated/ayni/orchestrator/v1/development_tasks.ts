@@ -359,6 +359,8 @@ export interface AgentSelection {
 
 /** DevelopmentTaskRequest is the caller request before immutable identities are resolved. */
 export interface DevelopmentTaskRequest {
+  /** Required project; repository_connection_id, when supplied, is a membership assertion. */
+  projectId: string;
   repositoryConnectionId: string;
   /** repository_revision is exactly 40 lowercase hexadecimal characters. */
   repositoryRevision: string;
@@ -491,6 +493,7 @@ export interface AttemptModelUsage {
 
 /** DevelopmentTask is one durable request with frozen execution identity. */
 export interface DevelopmentTask {
+  projectId: string;
   id: string;
   snapshot?: DevelopmentSnapshot | undefined;
   state: DevelopmentTaskState;
@@ -572,6 +575,7 @@ export interface Candidate {
 }
 
 export interface ListDevelopmentTasksRequest {
+  projectId?: string | undefined;
   repositoryConnectionId?: string | undefined;
   runtimeProfileId?: string | undefined;
   state?: DevelopmentTaskState | undefined;
@@ -774,6 +778,7 @@ export const AgentSelection: MessageFns<AgentSelection> = {
 
 function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
   return {
+    projectId: "",
     repositoryConnectionId: "",
     repositoryRevision: "",
     runtimeProfileId: "",
@@ -788,6 +793,9 @@ function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
 
 export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
   encode(message: DevelopmentTaskRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectId !== "") {
+      writer.uint32(82).string(message.projectId);
+    }
     if (message.repositoryConnectionId !== "") {
       writer.uint32(10).string(message.repositoryConnectionId);
     }
@@ -831,6 +839,14 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
           case 1: {
             if (tag !== 10) {
               break;
@@ -917,6 +933,11 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
 
   fromJSON(object: any): DevelopmentTaskRequest {
     return {
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
       repositoryConnectionId: isSet(object.repositoryConnectionId)
         ? globalThis.String(object.repositoryConnectionId)
         : isSet(object.repository_connection_id)
@@ -955,6 +976,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
 
   toJSON(message: DevelopmentTaskRequest): unknown {
     const obj: any = {};
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
     if (message.repositoryConnectionId !== "") {
       obj.repositoryConnectionId = message.repositoryConnectionId;
     }
@@ -990,6 +1014,7 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
   },
   fromPartial(object: DeepPartial<DevelopmentTaskRequest>): DevelopmentTaskRequest {
     const message = createBaseDevelopmentTaskRequest();
+    message.projectId = object.projectId ?? "";
     message.repositoryConnectionId = object.repositoryConnectionId ?? "";
     message.repositoryRevision = object.repositoryRevision ?? "";
     message.runtimeProfileId = object.runtimeProfileId ?? "";
@@ -2716,6 +2741,7 @@ export const AttemptModelUsage: MessageFns<AttemptModelUsage> = {
 
 function createBaseDevelopmentTask(): DevelopmentTask {
   return {
+    projectId: "",
     id: "",
     snapshot: undefined,
     state: 0,
@@ -2730,6 +2756,9 @@ function createBaseDevelopmentTask(): DevelopmentTask {
 
 export const DevelopmentTask: MessageFns<DevelopmentTask> = {
   encode(message: DevelopmentTask, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectId !== "") {
+      writer.uint32(82).string(message.projectId);
+    }
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
@@ -2773,6 +2802,14 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
           case 1: {
             if (tag !== 10) {
               break;
@@ -2859,6 +2896,11 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
 
   fromJSON(object: any): DevelopmentTask {
     return {
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
       id: isSet(object.id) ? globalThis.String(object.id) : "",
       snapshot: isSet(object.snapshot) ? DevelopmentSnapshot.fromJSON(object.snapshot) : undefined,
       state: isSet(object.state) ? developmentTaskStateFromJSON(object.state) : 0,
@@ -2893,6 +2935,9 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
 
   toJSON(message: DevelopmentTask): unknown {
     const obj: any = {};
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
     if (message.id !== "") {
       obj.id = message.id;
     }
@@ -2928,6 +2973,7 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
   },
   fromPartial(object: DeepPartial<DevelopmentTask>): DevelopmentTask {
     const message = createBaseDevelopmentTask();
+    message.projectId = object.projectId ?? "";
     message.id = object.id ?? "";
     message.snapshot = (object.snapshot !== undefined && object.snapshot !== null)
       ? DevelopmentSnapshot.fromPartial(object.snapshot)
@@ -3920,11 +3966,20 @@ export const Candidate: MessageFns<Candidate> = {
 };
 
 function createBaseListDevelopmentTasksRequest(): ListDevelopmentTasksRequest {
-  return { repositoryConnectionId: undefined, runtimeProfileId: undefined, state: undefined, page: undefined };
+  return {
+    projectId: undefined,
+    repositoryConnectionId: undefined,
+    runtimeProfileId: undefined,
+    state: undefined,
+    page: undefined,
+  };
 }
 
 export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest> = {
   encode(message: ListDevelopmentTasksRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectId !== undefined) {
+      writer.uint32(42).string(message.projectId);
+    }
     if (message.repositoryConnectionId !== undefined) {
       writer.uint32(10).string(message.repositoryConnectionId);
     }
@@ -3953,6 +4008,14 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
           case 1: {
             if (tag !== 10) {
               break;
@@ -3999,6 +4062,11 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
 
   fromJSON(object: any): ListDevelopmentTasksRequest {
     return {
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : undefined,
       repositoryConnectionId: isSet(object.repositoryConnectionId)
         ? globalThis.String(object.repositoryConnectionId)
         : isSet(object.repository_connection_id)
@@ -4016,6 +4084,9 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
 
   toJSON(message: ListDevelopmentTasksRequest): unknown {
     const obj: any = {};
+    if (message.projectId !== undefined) {
+      obj.projectId = message.projectId;
+    }
     if (message.repositoryConnectionId !== undefined) {
       obj.repositoryConnectionId = message.repositoryConnectionId;
     }
@@ -4036,6 +4107,7 @@ export const ListDevelopmentTasksRequest: MessageFns<ListDevelopmentTasksRequest
   },
   fromPartial(object: DeepPartial<ListDevelopmentTasksRequest>): ListDevelopmentTasksRequest {
     const message = createBaseListDevelopmentTasksRequest();
+    message.projectId = object.projectId ?? undefined;
     message.repositoryConnectionId = object.repositoryConnectionId ?? undefined;
     message.runtimeProfileId = object.runtimeProfileId ?? undefined;
     message.state = object.state ?? undefined;

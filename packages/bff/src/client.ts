@@ -7,6 +7,8 @@ import {
   type ServiceError,
 } from "@grpc/grpc-js";
 import {
+  ProjectServiceClient, ProjectState,
+  type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
   ReviewServiceClient,
   type InspectAyniRepositoryResponse, type GetRuntimeProfileRevisionResponse,
@@ -43,6 +45,7 @@ import { mapInspection, mapRevision, mapAutomation, mapCandidate, mapAttemptUsag
 import { mapReview, mapAssessment, mapEvidence } from "./reviews.js";
 import { randomUUID } from "node:crypto";
 import type {
+  ProjectDto,
   CreateDevelopmentTaskInput,
   CreateRepositoryConnectionInput,
   CreateRuntimeProfileInput,
@@ -137,7 +140,13 @@ function pageDto(value: { nextPageToken: string; snapshotCursor: string } | unde
   return { nextPageToken: page.nextPageToken, snapshotCursor: page.snapshotCursor };
 }
 
+function mapProject(value: Project): ProjectDto {
+  if (value.repositoryConnectionIds.length !== 1 || ![ProjectState.PROJECT_STATE_ACTIVE, ProjectState.PROJECT_STATE_ARCHIVED].includes(value.state)) throw new BffMappingError();
+  return {id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion};
+}
+
 export class OrchestratorBff {
+  readonly #projects: ProjectServiceClient;
   readonly #repositories: RepositoryServiceClient;
   readonly #profiles: RuntimeProfileServiceClient;
   readonly #providers: ProviderServiceClient;
@@ -152,6 +161,7 @@ export class OrchestratorBff {
       "grpc.max_send_message_length": MAX_REQUEST_BYTES,
     };
     const channelCredentials = credentials.createInsecure();
+    this.#projects = new ProjectServiceClient(address, channelCredentials, options);
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
@@ -159,7 +169,29 @@ export class OrchestratorBff {
     this.#reviews = new ReviewServiceClient(address, channelCredentials, options);
   }
 
+  async listProjects(selection: PageInput, context: RequestContext, activeOnly = false) {
+    const response = await this.#unary<ListProjectsResponse>(context, (m,o,c) => this.#projects.listProjects({page:page(selection), ...(activeOnly ? {state:ProjectState.PROJECT_STATE_ACTIVE} : {})},m,o,c));
+    return {projects:response.projects.map(mapProject), page:pageDto(response.page)};
+  }
+  async getProject(projectId:string, context:RequestContext):Promise<ProjectDto> {
+    const response = await this.#unary<GetProjectResponse>(context,(m,o,c)=>this.#projects.getProject({projectId},m,o,c));
+    return mapProject(required(response.project));
+  }
+  async createProject(input:{idempotencyKey:string;displayName:string;repositoryConnectionId:string}, context:RequestContext):Promise<ProjectDto> {
+    const response = await this.#unary<CreateProjectResponse>(context,(m,o,c)=>this.#projects.createProject(input,m,o,c));
+    return mapProject(required(response.project));
+  }
+  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string}, context:RequestContext):Promise<ProjectDto> {
+    const response = await this.#unary<UpdateProjectResponse>(context,(m,o,c)=>this.#projects.updateProject(input,m,o,c));
+    return mapProject(required(response.project));
+  }
+  async archiveProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string}, context:RequestContext):Promise<ProjectDto> {
+    const response = await this.#unary<ArchiveProjectResponse>(context,(m,o,c)=>this.#projects.archiveProject(input,m,o,c));
+    return mapProject(required(response.project));
+  }
+
   close(): void {
+    this.#projects.close();
     this.#repositories.close();
     this.#profiles.close();
     this.#providers.close();
@@ -303,9 +335,9 @@ export class OrchestratorBff {
     };
   }
 
-  async listDevelopmentTasks(selection: PageInput, context: RequestContext): Promise<DevelopmentTaskPageDto> {
+  async listDevelopmentTasks(selection: PageInput, context: RequestContext, projectId?: string): Promise<DevelopmentTaskPageDto> {
     const response = await this.#unary<ListDevelopmentTasksResponse>(context, (metadata, options, callback) =>
-      this.#tasks.listDevelopmentTasks({ page: page(selection) }, metadata, options, callback));
+      this.#tasks.listDevelopmentTasks({ page: page(selection), ...(projectId ? {projectId} : {}) }, metadata, options, callback));
     return {
       developmentTasks: response.developmentTasks.map(mapDevelopmentTask),
       page: pageDto(response.page),

@@ -31,7 +31,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -55,6 +55,8 @@ const CLEAN_TABLES: &[&str] = &[
     "event_watermarks",
     "evidence_references",
     "page_snapshots",
+    "project_repositories",
+    "projects",
     "reconciliation_cursors",
     "repository_connections",
     "repository_snapshots",
@@ -63,6 +65,8 @@ const CLEAN_TABLES: &[&str] = &[
     "runtime_profile_revisions",
     "runtime_profiles",
 ];
+
+pub(crate) const PROJECT_SERVICE: &str = "projects";
 
 pub(crate) const REPOSITORY_SERVICE: &str = "repositories";
 pub(crate) const PROFILE_SERVICE: &str = "runtime_profiles";
@@ -92,6 +96,10 @@ pub enum CleanStoreError {
     IdempotencyConflict,
     #[error("runtime profile {profile_id} already owns this managed repository lock")]
     ManagedLockProfileAlreadyExists { profile_id: String },
+    #[error("the repository already belongs to an active project")]
+    RepositoryAlreadyAssigned,
+    #[error("the project is archived")]
+    ProjectArchived,
     #[error("the requested resource transition is not supported")]
     InvalidTransition,
     #[error("the resource changed after it was observed")]
@@ -163,6 +171,7 @@ pub(crate) struct CleanStore {
 }
 
 include!("clean_store/store.rs");
+include!("clean_store/projects.rs");
 include!("clean_store/repositories_profiles.rs");
 include!("clean_store/profile_identity.rs");
 include!("clean_store/automation_tasks.rs");
@@ -275,6 +284,14 @@ mod tests {
     > {
         let repository =
             store.create_repository_connection("repo-scope", &repository_request("repo", "123"))?;
+        store.create_project(
+            "project-scope",
+            &v1::CreateProjectRequest {
+                idempotency_key: "project".into(),
+                display_name: "Sandbox".into(),
+                repository_connection_id: repository.id.clone(),
+            },
+        )?;
         let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
         let (profile, revision) = store.create_runtime_profile(
             "profile-scope",
@@ -319,13 +336,16 @@ mod tests {
     }
 
     fn task_request(
+        store: &CleanStore,
         repository_id: &str,
         profile_id: &str,
         key: &str,
-    ) -> v1::CreateDevelopmentTaskRequest {
-        v1::CreateDevelopmentTaskRequest {
+    ) -> Result<v1::CreateDevelopmentTaskRequest, CleanStoreError> {
+        let project_id: String = store.connection.query_row("SELECT project_id FROM project_repositories WHERE repository_connection_id=?1 AND active=1", [repository_id], |r| r.get(0)).map_err(CleanStoreError::Database)?;
+        Ok(v1::CreateDevelopmentTaskRequest {
             idempotency_key: key.to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                project_id,
                 publish_draft: false,
                 repository_connection_id: repository_id.to_owned(),
                 repository_revision: REVISION.to_owned(),
@@ -343,11 +363,14 @@ mod tests {
                     nanos: 0,
                 }),
             }),
-        }
+        })
     }
 
     mod lifecycle;
+    mod projects;
     mod recovery;
     mod reviews;
     mod runtime;
 }
+
+include!("clean_store/project_validation.rs");

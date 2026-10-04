@@ -87,7 +87,7 @@ fn publication_action_retains_intent_and_requeues_after_observation() -> Result<
     let (repository, profile, _) = ready_profile(&mut store)?;
     let (task, attempt) = store.create_development_task(
         "task-scope",
-        &task_request(&repository.id, &profile.id, "task"),
+        &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
     let running = store.transition_attempt(
         &attempt.id,
@@ -225,7 +225,7 @@ fn reconciliation_expires_task_and_attempt_deadlines() -> Result<(), CleanStoreE
     let (repository, profile, _) = ready_profile(&mut store)?;
     let (task, attempt) = store.create_development_task(
         "task-scope",
-        &task_request(&repository.id, &profile.id, "task"),
+        &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
     assert_eq!(store.expire_deadlines(&timestamp(i64::MAX / 2))?, 1);
     assert_eq!(
@@ -543,7 +543,7 @@ fn retained_candidate_publishes_after_restart(
     let path = directory.path().join("publication.sqlite");
     let mut store = CleanStore::open(&path, 3)?;
     let (repository, profile, _) = ready_profile(&mut store)?;
-    let mut request = task_request(&repository.id, &profile.id, "auto-task");
+    let mut request = task_request(&store, &repository.id, &profile.id, "auto-task")?;
     request.request.as_mut().ok_or("request")?.publish_draft = false; // Legacy opt-out cannot discard new task work.
     let (task, attempt) = store.create_development_task("auto-task", &request)?;
     let frozen = task.snapshot.as_ref().ok_or("snapshot")?;

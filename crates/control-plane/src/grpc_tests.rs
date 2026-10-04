@@ -249,3 +249,37 @@ async fn custom_runtime_is_explicitly_unsupported_in_the_ayni_first_release(
     assert_eq!(detail.reason, v1::ErrorReason::ProfileUnsupported as i32);
     Ok(())
 }
+
+#[tokio::test]
+async fn project_api_validates_membership_versions_and_archive() -> Result<(), Box<dyn std::error::Error>> {
+    use v1::project_service_server::ProjectService;
+    use v1::repository_service_server::RepositoryService;
+    let directory = tempfile::tempdir()?;
+    let state = AppState::open(directory.path().join("projects.sqlite"), 3)?;
+    let (_sender, shutdown) = watch::channel(false);
+    let api = GrpcApi::new(state, shutdown);
+    let invalid = api.create_project(Request::new(v1::CreateProjectRequest {
+        idempotency_key: "project".into(), display_name: "   ".into(), repository_connection_id: "repository:1".into(),
+    })).await;
+    assert_eq!(invalid.err().ok_or("expected invalid input")?.code(), Code::InvalidArgument);
+    let repo = api.create_repository_connection(Request::new(v1::CreateRepositoryConnectionRequest {
+        idempotency_key: "repository".into(), display_name: "Sandbox".into(), default_branch: "main".into(),
+        provider: Some(v1::RepositoryProvider { provider: Some(v1::repository_provider::Provider::Github(v1::GithubRepository {
+            repository_id: "123".into(), owner: "ayni-oss".into(), name: "sandbox".into(), installation_id: 42, html_url: "https://github.com/ayni-oss/sandbox".into(),
+        })) }),
+    })).await?.into_inner().repository_connection.ok_or("missing repository")?;
+    let project = api.create_project(Request::new(v1::CreateProjectRequest {
+        idempotency_key: "project".into(), display_name: "Sandbox".into(), repository_connection_id: repo.id,
+    })).await?.into_inner().project.ok_or("missing project")?;
+    let rename = api.update_project(Request::new(v1::UpdateProjectRequest {
+        idempotency_key: "rename".into(), project_id: project.id.clone(), display_name: "Renamed".into(), expected_resource_version: 2,
+    })).await;
+    assert_eq!(rename.err().ok_or("expected stale version")?.code(), Code::Aborted);
+    let archived = api.archive_project(Request::new(v1::ArchiveProjectRequest {
+        idempotency_key: "archive".into(), project_id: project.id.clone(), expected_resource_version: 1,
+    })).await?.into_inner().project.ok_or("missing archive")?;
+    assert_eq!(archived.state, v1::ProjectState::Archived as i32);
+    let listed = api.list_projects(Request::new(v1::ListProjectsRequest { state: Some(v1::ProjectState::Archived as i32), page: None })).await?.into_inner();
+    assert_eq!(listed.projects, vec![archived]);
+    Ok(())
+}

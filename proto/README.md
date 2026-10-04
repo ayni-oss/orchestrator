@@ -85,3 +85,19 @@ host-loopback Service port-forward. The optional custom-client listener remains
 a distinct TLS/HTTP2, capability-authorized, bounded, ClusterIP-only profile;
 it does not change the default listener or authorize public hosting. See
 [Custom-client gRPC access](../docs/custom-client-access.md).
+
+## Project ownership
+
+`ProjectService` exposes create/list/get/update/archive. Projects have a separate
+one-repository membership and active/archived lifecycle. Only one active project
+may claim a provider repository; archiving retains membership and history.
+Create, update and archive require idempotency keys; updates/archive also require
+`expected_resource_version`. Reads use `repositories.read`, mutations use
+`repositories.write` on custom-client endpoints.
+
+`DevelopmentTaskRequest.project_id` is required. The server resolves its member
+repository; `repository_connection_id`, when present, asserts that membership.
+The selected runtime profile must belong to the resolved repository. Task
+responses include `project_id`, and list requests may filter by it. Archived
+projects reject new tasks and retries; completed idempotent replays remain
+readable. Schema version 3 is a fresh-install boundary, not a data migration.

@@ -138,7 +138,7 @@ check_once() {
     "http://127.0.0.1:$operations_port/readyz" 2>/dev/null)" || return 1
   grep -qi '^x-request-id: local-readiness-check' "$response_headers" || return 1
   grep -q '"clean_v1_contract":true' <<<"$readiness" || return 1
-  grep -q '"clean_schema_version":2' <<<"$readiness" || return 1
+  grep -q '"clean_schema_version":3' <<<"$readiness" || return 1
   metrics="$(curl_local "http://127.0.0.1:$operations_port/metrics")" || return 1
   grep -q 'orchestrator_clean_v1_schema_info{version="2"} 1' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_admissions_total' <<<"$metrics" || return 1
