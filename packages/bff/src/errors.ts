@@ -253,10 +253,10 @@ export function toBffError(error: unknown, fallbackRequestId?: string): BffError
     });
   }
   const onboardingErrors: Record<string,string> = {
-    github_app_unconfigured:"Your operator must configure the existing GitHub App in this deployment.",
-    github_not_found:"The App cannot see this repository. Check its name and installation access.",
-    github_authentication_failed:"GitHub App authentication failed. Ask your operator to check the deployment configuration.",
-    github_access_denied:"The App lacks access. Review its repository installation and permissions.",
+    repository_provider_unconfigured:"Your operator must configure the repository provider for this deployment.",
+    provider_access_required:"The repository provider connection needs attention. Ask your operator to review its access and permissions.",
+    provider_temporarily_unavailable:"The repository provider is temporarily unavailable. Try again shortly.",
+    repository_provider_failed:"The repository provider could not complete the request. Ask your operator to review the integration.",
     repository_connection_conflict:"This repository is already connected or the request conflicts with retained state. Open its existing connection.",
   };
   const onboardingMessage=onboardingErrors[error.details];

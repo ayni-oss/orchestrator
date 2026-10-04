@@ -25,7 +25,7 @@ impl AppState {
                             id,
                             None,
                             v1::AutomationInstallationState::Degraded,
-                            Some(reason),
+                            Some(public_setup_failure(reason)),
                         )
                     });
                 }
@@ -114,5 +114,15 @@ impl AppState {
             Ok(())
         })
         .map_err(|_| "setup_store_unavailable")
+    }
+}
+
+fn public_setup_failure(reason: &str) -> &'static str {
+    match reason {
+        "github_access_denied" | "github_not_found" | "github_permissions_missing" => {
+            "provider_access_required"
+        }
+        "github_rate_limited" | "github_unavailable" => "provider_temporarily_unavailable",
+        _ => "repository_automation_failed",
     }
 }

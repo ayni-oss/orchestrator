@@ -14,16 +14,19 @@ impl CleanStore {
             github.setup_pull_request_number = pull;
         }
         let failure = reason.map(|reason| {
-            let (message, remediation) = if reason == "github_permissions_missing" {
-                (
-                    "The GitHub App installation is missing a permission required to create the setup PR.",
-                    "Grant the App Contents, Pull requests, and Workflows read and write access in GitHub, approve the updated permissions for this installation, then retry reconciliation.",
-                )
-            } else {
-                (
-                    reason,
-                    "Review GitHub App contents, workflows and pull-request permissions; repair or reopen the owned setup PR, then retry.",
-                )
+            let (message, remediation) = match reason {
+                "provider_access_required" => (
+                    "Repository provider access needs attention.",
+                    "Review the provider integration's repository access and required permissions, then retry reconciliation.",
+                ),
+                "provider_temporarily_unavailable" => (
+                    "The repository provider is temporarily unavailable.",
+                    "Wait briefly, then retry reconciliation. If the failure continues, review the provider integration.",
+                ),
+                _ => (
+                    "Repository automation could not be completed.",
+                    "Review the provider integration and the owned setup request, then retry reconciliation.",
+                ),
             };
             v1::ResourceFailure {
                 reason: v1::ErrorReason::RuntimeArtifactNotVerified as i32,

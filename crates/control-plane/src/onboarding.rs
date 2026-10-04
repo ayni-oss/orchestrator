@@ -5,8 +5,21 @@ use serde_json::Value;
 use std::sync::Arc;
 use tonic::Status;
 
-fn provider_error(reason: &'static str) -> Status {
-    Status::failed_precondition(reason)
+pub(crate) fn provider_error(reason: &'static str) -> Status {
+    tracing::warn!(
+        provider = "github",
+        reason_code = reason,
+        "repository provider request failed"
+    );
+    let public_reason = match reason {
+        "github_app_unconfigured" => "repository_provider_unconfigured",
+        "github_access_denied" | "github_not_found" | "github_permissions_missing" => {
+            "provider_access_required"
+        }
+        "github_rate_limited" | "github_unavailable" => "provider_temporarily_unavailable",
+        _ => "repository_provider_failed",
+    };
+    Status::failed_precondition(public_reason)
 }
 
 fn github(repository: &v1::RepositoryConnection) -> Result<&v1::GithubRepository, Status> {
@@ -36,9 +49,10 @@ impl AppState {
     }
 
     pub(crate) fn onboarding_source(&self) -> Result<&SourceClient, Status> {
-        self.source
-            .as_deref()
-            .ok_or_else(|| Status::unavailable("github_app_unconfigured"))
+        self.source.as_deref().ok_or_else(|| {
+            let status = provider_error("github_app_unconfigured");
+            Status::unavailable(status.message().to_owned())
+        })
     }
 
     pub(crate) async fn connect_github(

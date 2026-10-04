@@ -2,6 +2,7 @@ use super::{
     BoxGrpcStream, GrpcApi, Request, Response, Status, api_validation, page_response,
     profile_watch, repository_watch, v1, validate_id, validate_optional_id, with_store,
 };
+use crate::onboarding::provider_error;
 
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for GrpcApi {
@@ -15,21 +16,21 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
             .onboarding_source()?
             .github_installations()
             .await
-            .map_err(|reason| Status::failed_precondition(reason))?;
+            .map_err(provider_error)?;
         let installations = value["installations"]
             .as_array()
-            .ok_or_else(|| Status::failed_precondition("github_installations_invalid"))?
+            .ok_or_else(|| provider_error("github_installations_invalid"))?
             .iter()
             .map(|item| {
                 Ok(v1::GithubInstallationOption {
                     installation_id: item["installation_id"]
                         .as_u64()
-                        .ok_or_else(|| Status::failed_precondition("github_installation_invalid"))?
+                        .ok_or_else(|| provider_error("github_installation_invalid"))?
                         .to_string(),
                     owner: item["owner"]
                         .as_str()
                         .filter(|v| !v.is_empty())
-                        .ok_or_else(|| Status::failed_precondition("github_owner_invalid"))?
+                        .ok_or_else(|| provider_error("github_owner_invalid"))?
                         .to_owned(),
                     app_name: value["app_name"]
                         .as_str()
@@ -52,30 +53,30 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
             .parse::<u64>()
             .ok()
             .filter(|id| *id > 0)
-            .ok_or_else(|| Status::invalid_argument("github_installation_invalid"))?;
+            .ok_or_else(|| Status::invalid_argument("provider_installation_invalid"))?;
         let value = self
             .state
             .onboarding_source()?
             .installation_repositories(id)
             .await
-            .map_err(|reason| Status::failed_precondition(reason))?;
+            .map_err(provider_error)?;
         let repositories = value["repositories"]
             .as_array()
-            .ok_or_else(|| Status::failed_precondition("github_repositories_invalid"))?
+            .ok_or_else(|| provider_error("github_repositories_invalid"))?
             .iter()
             .map(|item| {
                 Ok(v1::GithubRepositoryOption {
                     repository_id: item["id"]
                         .as_u64()
-                        .ok_or_else(|| Status::failed_precondition("github_repository_invalid"))?
+                        .ok_or_else(|| provider_error("github_repository_invalid"))?
                         .to_string(),
                     owner: item["owner"]["login"]
                         .as_str()
-                        .ok_or_else(|| Status::failed_precondition("github_repository_invalid"))?
+                        .ok_or_else(|| provider_error("github_repository_invalid"))?
                         .to_owned(),
                     name: item["name"]
                         .as_str()
-                        .ok_or_else(|| Status::failed_precondition("github_repository_invalid"))?
+                        .ok_or_else(|| provider_error("github_repository_invalid"))?
                         .to_owned(),
                     default_branch: item["default_branch"]
                         .as_str()
