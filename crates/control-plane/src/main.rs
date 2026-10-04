@@ -3,7 +3,7 @@ use ayni_orchestrator_control_plane::{
 };
 use std::{env, fs, io, process::ExitCode};
 use tokio::{net::TcpListener, signal, sync::watch};
-use tracing::{Instrument, error, info, warn};
+use tracing::{Instrument, debug, error, info, warn};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -84,7 +84,7 @@ async fn run() -> Result<(), io::Error> {
     });
 
     let listener = TcpListener::bind(configuration.bind_address()).await?;
-    info!(address = %configuration.bind_address(), "HTTP control plane started");
+    debug!(address = %configuration.bind_address(), "HTTP control plane started");
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
     let signal_task = tokio::spawn(async move {
         shutdown_signal().await;

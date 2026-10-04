@@ -36,7 +36,7 @@ use std::{
     time::Instant,
 };
 use thiserror::Error;
-use tracing::{Instrument, info, info_span};
+use tracing::{Instrument, debug, debug_span, info};
 use uuid::Uuid;
 
 pub use grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc};
@@ -457,13 +457,13 @@ async fn observe_http(request: Request, next: Next) -> Response {
         .get::<MatchedPath>()
         .map_or("unmatched", MatchedPath::as_str)
         .to_owned();
-    let span = info_span!("http.request", %request_id, %method, %route);
+    let span = debug_span!("http.request", %request_id, %method, %route);
     async move {
         let started = Instant::now();
         let mut response = next.run(request).await;
         let status = response.status().as_u16();
         let latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-        info!(status, latency_ms, "HTTP request completed");
+        debug!(status, latency_ms, "HTTP request completed");
         if let Ok(value) = HeaderValue::from_str(&request_id) {
             response.headers_mut().insert("x-request-id", value);
         }
