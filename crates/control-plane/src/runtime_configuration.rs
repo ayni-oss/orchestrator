@@ -303,7 +303,8 @@ mod tests {
     }
 
     #[test]
-    fn managed_discovery_requires_policy_and_matching_repository_namespace() {
+    fn managed_discovery_requires_policy_and_matching_repository_namespace()
+    -> Result<(), &'static str> {
         let mut configuration = configuration();
         let github = ayni_orchestrator_api::v1::GithubRepository {
             owner: "Example".into(),
@@ -323,7 +324,9 @@ mod tests {
             assessment: None,
         });
         assert!(configuration.validate().is_ok());
-        let runtime = configuration.managed_runtime(&github, &managed).unwrap();
+        let runtime = configuration
+            .managed_runtime(&github, &managed)
+            .ok_or("managed runtime missing")?;
         assert_eq!(runtime.pull_secret.as_deref(), Some("runtime-pull"));
         assert_eq!(
             runtime.image,
@@ -334,19 +337,18 @@ mod tests {
         managed.oci_repository = "ghcr.io/example/sandbox-ayni".into();
         managed.lock_fingerprint = "invalid".into();
         assert!(configuration.managed_runtime(&github, &managed).is_none());
+        Ok(())
     }
 
     #[test]
-    fn derives_managed_image_from_connected_repository_and_lock() {
+    fn derives_managed_image_from_connected_repository_and_lock() -> Result<(), &'static str> {
         let runtime = ManagedRuntime {
             platform: "linux/amd64".into(),
             service_account: "runtime-coding".into(),
             pull_secret: Some("environment-pull".into()),
             assessment: None,
         };
-        let profile = runtime
-            .profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))
-            .unwrap();
+        let profile = runtime.profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))?;
         assert_eq!(
             profile.image,
             format!("ghcr.io/ayni-oss/sandbox-ayni:lock-{}", "ab".repeat(32))
@@ -356,5 +358,6 @@ mod tests {
                 .profile_runtime("../owner", "sandbox", &"a".repeat(64))
                 .is_err()
         );
+        Ok(())
     }
 }

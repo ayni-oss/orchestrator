@@ -164,6 +164,7 @@ pub(crate) struct CleanStore {
 
 include!("clean_store/store.rs");
 include!("clean_store/repositories_profiles.rs");
+include!("clean_store/profile_identity.rs");
 include!("clean_store/automation_tasks.rs");
 include!("clean_store/review.rs");
 include!("clean_store/assessment_import.rs");
