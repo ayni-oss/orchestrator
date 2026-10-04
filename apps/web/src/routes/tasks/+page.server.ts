@@ -68,6 +68,17 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   };
 };
 
+async function taskSelection(projectId: string, runtimeProfileId: string, context: RequestContext) {
+  const bff = getBff();
+  const project = await bff.getProject(projectId, context);
+  if (project.state !== "active") return undefined;
+  const repositoryConnectionId = project.repositoryConnectionIds[0]!;
+  const profile = await bff.getRuntimeProfile(runtimeProfileId, context);
+  if (profile.repositoryConnectionId !== repositoryConnectionId || profile.state !== "ready" || profile.support !== "operational" || !profile.activeRevisionId || !profile.activeRuntimeArtifactId) return undefined;
+  const revision = await bff.getRuntimeRevision(profile.activeRevisionId, context);
+  return {repositoryConnectionId, repositoryRevision: revision.repositoryRevision};
+}
+
 export const actions: Actions = {
   create: async ({ locals, request }) => {
     const form = await request.formData();
@@ -98,13 +109,9 @@ export const actions: Actions = {
     let task: DevelopmentTaskDto;
     try {
       const context=requestContext(locals);
-      const project=await getBff().getProject(projectId,context);
-      if(project.state!=="active") return fail(409,{action:"create",error:{requestId:locals.requestId,message:"This project is archived."}});
-      const repositoryConnectionId=project.repositoryConnectionIds[0]!;
-      const profile=await getBff().getRuntimeProfile(runtimeProfileId,context);
-      if(profile.repositoryConnectionId!==repositoryConnectionId || profile.state!=="ready" || profile.support!=="operational" || !profile.activeRevisionId || !profile.activeRuntimeArtifactId) return fail(409,{action:"create",error:{requestId:locals.requestId,message:"Select a ready runtime for this repository. Open its profile for the next step."}});
-      const revision=await getBff().getRuntimeRevision(profile.activeRevisionId,context);
-      const repositoryRevision=revision.repositoryRevision;
+      const selection = await taskSelection(projectId, runtimeProfileId, context);
+      if (!selection) return fail(409,{action:"create",error:{requestId:locals.requestId,message:"Select an active project with a ready runtime."}});
+      const {repositoryConnectionId, repositoryRevision} = selection;
       task = await getBff().createDevelopmentTask({
         idempotencyKey,
         request: {
