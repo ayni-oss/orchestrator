@@ -309,8 +309,7 @@ mod tests {
             concurrency: 4,
             allow_emulation: false,
             profiles: std::collections::BTreeMap::default(),
-            managed_repositories: std::collections::BTreeMap::default(),
-            managed_defaults: crate::runtime_configuration::ManagedDefaults::default(),
+            managed_runtime: None,
         };
         let runtime = ProfileRuntime {
             assessment: None,
@@ -381,8 +380,7 @@ mod tests {
             concurrency: 4,
             allow_emulation: true,
             profiles: std::collections::BTreeMap::default(),
-            managed_repositories: std::collections::BTreeMap::default(),
-            managed_defaults: crate::runtime_configuration::ManagedDefaults::default(),
+            managed_runtime: None,
         };
         let runtime = ProfileRuntime {
             assessment: None,

@@ -27,7 +27,7 @@ reference):
 runtime:
   enabled: true
   workerImage: registry.example/private/worker@sha256:<worker-digest>
-  managedDefaults:
+  managedRuntime:
     platform: linux/amd64
     service_account: runtime-coding
     pull_secret: runtime-pull
@@ -42,12 +42,11 @@ namespace matches that identity. An image must still pass signed runtime
 verification before use. A GitHub App installation alone does not enroll a
 repository; it must be connected and have an Ayni Managed profile.
 
-`runtime.managedDefaults` applies platform, ServiceAccount, pull-secret reference,
+`runtime.managedRuntime` applies platform, ServiceAccount, pull-secret reference,
 and optional assessment policy deployment-wide. The local chart supplies
 `runtime-pull`, matching `dev/ctl secrets`. No per-repository Helm edit or redeploy
-is needed when onboarding another repository. `runtime.managedRepositories`
-remains an optional per-repository override; `runtime.profiles` overrides both
-for explicit sources. These maps are overrides, not repository allowlists.
+is needed when onboarding another repository. `runtime.profiles` remains an
+optional override for explicit sources.
 Use the generated workflow's `linux/amd64` platform; an arm64 override needs a
 matching reviewed build configuration. The control plane and runtime Jobs must
 share the output claim; multi-node installations need suitable storage topology.

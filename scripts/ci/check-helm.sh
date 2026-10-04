@@ -56,10 +56,10 @@ helm template runtime "$application_chart" --namespace runtime-test \
 helm template runtime-defaults "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-  --set-string runtime.managedDefaults.pull_secret=shared-runtime-pull \
+  --set-string runtime.managedRuntime.platform=linux/amd64 \
+  --set-string runtime.managedRuntime.pull_secret=shared-runtime-pull \
   >"$scratch/runtime-defaults.yaml"
-grep -Fq '\"managed_repositories\":{}' "$scratch/runtime-defaults.yaml"
-grep -Fq '\"managed_defaults\":{' "$scratch/runtime-defaults.yaml"
+grep -Fq '\"managed_runtime\":{' "$scratch/runtime-defaults.yaml"
 grep -Fq '\"pull_secret\":\"shared-runtime-pull\"' "$scratch/runtime-defaults.yaml"
 for account in runtime-coding runtime-builder; do
   grep -q "^  name: $account$" "$scratch/runtime.yaml"

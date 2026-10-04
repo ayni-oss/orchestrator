@@ -117,6 +117,9 @@ impl RuntimeReconciler {
         &self,
     ) -> Result<BTreeMap<String, crate::runtime_configuration::ProfileRuntime>, &'static str> {
         let mut profiles = self.configuration.profiles.clone();
+        if self.configuration.managed_runtime.is_none() {
+            return Ok(profiles);
+        }
         let mut store = self
             .state
             .store

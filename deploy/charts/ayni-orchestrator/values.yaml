@@ -14,13 +14,9 @@ runtime:
   # Production releases retain strict runtime platform scheduling.
   allowEmulation: false
   profiles: {}
-  # Connected onboarded repositories inherit these settings automatically.
-  managedDefaults:
-    platform: linux/amd64
-    service_account: runtime-coding
-    pull_secret: null
-  # Optional per-repository overrides; onboarding does not require an entry.
-  managedRepositories: {}
+  # Deployment-wide policy for connected managed repositories; no repository map.
+  # The local chart supplies this policy automatically.
+  managedRuntime: null
   serviceAccounts:
     create: true
     imagePullSecrets: []

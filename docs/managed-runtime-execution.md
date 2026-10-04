@@ -24,7 +24,7 @@ runtime:
     create: true
     imagePullSecrets:
       - name: runtime-pull
-  managedDefaults:
+  managedRuntime:
     platform: linux/amd64
     service_account: runtime-coding
     pull_secret: runtime-pull
@@ -34,7 +34,6 @@ Connected repositories enrolled through managed onboarding automatically resolve
 an image in their own `ghcr.io/<owner>/<repository>-ayni` namespace using the
 selected lock fingerprint. Onboarding is the repository enrollment boundary;
 operators supply deployment-wide execution policy, not a second repository list.
-Optional `runtime.managedRepositories` overrides those defaults per repository.
 Explicit `runtime.profiles` entries take precedence and continue to support other
 registry coordinates or dedicated build sources. The
 controller reads the exact default-branch SHA and bounded lock through the

@@ -18,17 +18,18 @@
         "requestTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
         "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
         "allowEmulation": { "type": "boolean" },
-        "managedDefaults": {
-          "type": "object", "additionalProperties": false,
+        "profiles": { "type": "object", "maxProperties": 128 },
+        "managedRuntime": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
           "properties": {
             "platform": { "enum": ["linux/amd64", "linux/arm64"] },
             "service_account": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
-            "pull_secret": { "type": ["string", "null"], "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
+            "pull_secret": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
             "assessment": { "type": "object" }
-          }
-        },
-        "managedRepositories": { "type": "object", "maxProperties": 128 },
-        "profiles": { "type": "object", "maxProperties": 128 }
+          },
+          "required": ["platform"]
+        }
         ,"serviceAccounts": {
           "type": "object", "additionalProperties": false, "required": ["create", "imagePullSecrets"],
           "properties": { "create": { "type": "boolean" }, "imagePullSecrets": { "type": "array", "maxItems": 16, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 } } } } }
