@@ -137,7 +137,13 @@ impl SourceClient {
             ))
             .bearer_auth(jwt)
             .json(&json!({"repository_ids":[repository_id], "permissions":permissions}));
-        let value = bounded(request).await?;
+        let value = bounded(request).await.map_err(|reason| {
+            if reason == "github_request_invalid" {
+                "github_permissions_missing"
+            } else {
+                reason
+            }
+        })?;
         value["token"]
             .as_str()
             .filter(|v| !v.is_empty() && v.len() <= 4096)
@@ -245,12 +251,17 @@ async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str
         .send()
         .await
         .map_err(|_| "github_unavailable")?;
-    match response.status().as_u16() {
+    let status = response.status().as_u16();
+    match status {
         200..=299 => {}
         401 | 403 => return Err("github_access_denied"),
         429 => return Err("github_rate_limited"),
         404 => return Err("github_not_found"),
-        _ => return Err("github_unavailable"),
+        422 => return Err("github_request_invalid"),
+        _ => {
+            tracing::warn!(http_status = status, "GitHub request failed");
+            return Err("github_unavailable");
+        }
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "github_unavailable")? {

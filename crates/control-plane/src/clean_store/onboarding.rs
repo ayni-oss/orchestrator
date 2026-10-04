@@ -13,9 +13,24 @@ impl CleanStore {
         {
             github.setup_pull_request_number = pull;
         }
-        let failure = reason.map(|reason| v1::ResourceFailure {
-            reason: v1::ErrorReason::RuntimeArtifactNotVerified as i32,
-            message: reason.into(), remediation: Some("Review GitHub App contents, workflows and pull-request permissions; repair or reopen the owned setup PR, then retry.".into()), observed_at: None,
+        let failure = reason.map(|reason| {
+            let (message, remediation) = if reason == "github_permissions_missing" {
+                (
+                    "The GitHub App installation is missing a permission required to create the setup PR.",
+                    "Grant the App Contents, Pull requests, and Workflows read and write access in GitHub, approve the updated permissions for this installation, then retry reconciliation.",
+                )
+            } else {
+                (
+                    reason,
+                    "Review GitHub App contents, workflows and pull-request permissions; repair or reopen the owned setup PR, then retry.",
+                )
+            };
+            v1::ResourceFailure {
+                reason: v1::ErrorReason::RuntimeArtifactNotVerified as i32,
+                message: message.into(),
+                remediation: Some(remediation.into()),
+                observed_at: None,
+            }
         });
         let mut profile = self.runtime_profile(&resource.runtime_profile_id)?;
         resource.state = state as i32;
