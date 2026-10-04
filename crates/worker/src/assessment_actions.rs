@@ -1,6 +1,6 @@
 //! Trusted GitHub-hosted launcher. Never runs candidate programs on the host.
 //! The Docker socket, GitHub token, and retained output are not candidate mounts.
-use ayni_orchestrator_runtime::assessment::{self, Manifest, Outcome, RunIdentity};
+use ayni_orchestrator_profile_ayni::assessment::{self, Manifest, Outcome, RunIdentity};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use std::fmt::Write as _;
@@ -56,7 +56,7 @@ async fn prepare() -> Result<(String, Value, Manifest, std::path::PathBuf), &'st
         contract_digest: variable("ASSESSMENT_CONTRACT_DIGEST")?,
         source_before: String::new(),
         source_after: String::new(),
-        ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+        ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
         platform: "linux/amd64".into(),
         exit_code: -1,
         outcome: Outcome::InfrastructureFailed,
@@ -285,7 +285,7 @@ async fn measure(
         serde_json::from_slice(&fs::read(baseline.join(".ayni.lock")).map_err(|_| "lock_missing")?)
             .map_err(|_| "lock_invalid")?;
     if lock["fingerprint"] != manifest.lock_fingerprint
-        || lock["ayni_version"] != ayni_orchestrator_runtime::ayni_release::CLI_VERSION
+        || lock["ayni_version"] != ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION
         || lock["schema_version"] != "0.9.0"
     {
         manifest.outcome = Outcome::PolicyRejected;

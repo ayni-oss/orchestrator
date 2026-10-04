@@ -1,108 +1,175 @@
 # Architecture
 
+Ayni Orchestrator has **one orchestration lifecycle with separate interfaces and
+runtime profiles**. The product journey is **Connectors → Projects → Tasks**.
 [Decision 0009](decisions/0009-connectors-projects-and-internal-assessments.md)
-supersedes the repository-first journey and Actions assessment authority below.
-Projects now own tasks through immutable single-repository membership; the
-remaining sections describe the existing shared runtime implementation.
+defines the agreed product; [Decision 0010](decisions/0010-orchestration-interface-boundaries.md)
+defines the code boundaries. These decisions describe the target, not a claim
+that every product flow is implemented.
 
-> **Clean-v1 target.** This document defines the replacement architecture
-> accepted in [Decision 0007](decisions/0007-clean-v1-runtime-profiles.md).
-> The checked-in pilot implementation is retired design history, not a current
-> product capability; delivery is tracked by #53–#68.
+The project foundation provides named, single-repository projects with
+project-owned tasks, immutable repository membership, and archive history. The
+remaining connector, project-readiness, environment-production, and internal
+assessment flows are target behavior; current implementation ownership and gaps
+are tracked in [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
 
-Ayni Orchestrator is an application-API-first control plane for producing
-reviewable repository changes. One shared foundation supports closed runtime
-profiles: **Ayni Managed** (first operational profile) and **Custom Runtime**
-(follow-up #66). Kubernetes Jobs are bounded execution resources; durable
-application storage, not Kubernetes status, is the lifecycle authority.
+## Three interfaces, different responsibilities
 
-## Components and ownership
-
-| Component | Shared responsibility | Profile responsibility |
+| Interface | Direction and contract | Owns |
 | --- | --- | --- |
-| API/BFF/UI | Repository connections, profile views, tasks/attempts, candidates, change requests, assessments, evidence, bounded watch/poll | Display profile state and safe profile-specific remediation |
-| Control plane | SQLite resources, idempotent actions, GitHub provider connection, OCI verification, reconciliation, candidate publication, assessment import | Ayni automation template/version and policy dispatch |
-| Runtime runner | Digest-pinned OCI execution, workspace/scratch isolation, launcher, candidate output, cancellation | No Ayni lock, signal, or validation behavior |
-| Ayni Managed automation | — | Optional setup PR and assessment workflows; registry verification or dedicated build Job; exact-head managed assessment and comment |
-| Evidence store | Immutable, bounded evidence references and digest conflict detection | Ayni manifests/signals only for Ayni Managed |
+| Native gRPC | Inbound, versioned user contract in `proto/ayni/orchestrator/v1` | Authentication, capabilities, request bounds, protobuf conversion, status mapping, pagination and watch transport |
+| Server HTTP | Inbound, server-specific operational and browser integration endpoints | Liveness, readiness, metrics; protected provider callbacks and one-time credential exchange when those flows are implemented |
+| Kubernetes | Outbound, internal execution adapter using the Kubernetes API | Deterministic Jobs and related resources, isolation, credential references, scheduling, observation and cleanup |
 
-The protocol is independent of persistence, Kubernetes, browser types, and
-provider implementation. The server-side BFF remains an adapter, never a second
-product API. The supported local deployment boundary remains Docker Desktop,
-one trusted team, loopback access, and a single controller replica until a
-separate topology decision changes it.
+The gRPC API is the product API. The server-side web BFF adapts it to browser
+forms and sessions; it does not implement another lifecycle. HTTP callbacks
+must enter the same application use cases after protocol-specific validation.
+Their bounded secret-bearing bodies must not enter logs, caches or ordinary
+resource responses. Operational readiness is distinct from a project's
+readiness to admit a task: connector configuration must remain possible when
+execution infrastructure is unavailable.
 
-## Resources and flow
+Kubernetes Jobs are disposable execution resources. They are not user-facing
+product resources or a second database. Durable application state decides
+admission, retries, cancellation, readiness and publication. Job completion is
+an observation, not proof that an environment or candidate is valid. This
+design does not require product CRDs or expose Kubernetes objects through gRPC.
 
-```mermaid
-flowchart TD
-  repo[Repository connection] --> profile[Runtime profile revision]
-  profile --> automation[Repository automation]
-  profile --> artifact[Verified runtime artifact]
-  automation --> readiness[Profile readiness]
-  artifact --> readiness
-  readiness --> task[Development task]
-  task --> attempt[Agent attempt]
-  attempt --> candidate[Candidate commit/bundle]
-  candidate --> change[Draft change request]
-  change --> assessment[Exact-head assessment]
-  assessment --> evidence[Digest-verified evidence]
-```
+## Shared orchestration and profile policy
 
-All nodes are separate durable resources. Each external mutation has a durable
-idempotency/action record before the call; reconciliation uses deterministic
-provider identities and read-before-retry after uncertainty. A task freezes its
-repository revision, profile revision, OCI digest, model/agent selection,
-request, constraints, and deadline. A candidate commit, PR head SHA, workflow
-run, and evidence digest are distinct immutable identities.
+The core owns connector/project identity, repository membership, immutable
+profile revisions, task admission, attempts, deadlines, budgets, cancellation,
+candidates, evidence binding, publication and reconciliation. A project has
+exactly one repository in this release. A connector can serve many projects.
 
-## Ayni Managed flow
+Both profiles use the same task and candidate lifecycle, persistence,
+Kubernetes execution adapter and provider publication path. A profile adds
+explicit admission and verification policy; absence of Ayni metadata must
+never be interpreted as permission to skip a managed check.
 
-1. A repository connection selects a GitHub repository and installation. A
-   profile revision records the committed Ayni contract.
-2. When assessment automation is configured, the controller creates/reconciles
-   one setup PR. It never writes the default branch directly.
-3. The profile either resolves a configured registry reference or creates a
-   dedicated Kubernetes build Job. The controller verifies the registry policy,
-   platform, Ayni labels, and immutable OCI digest; it never receives registry
-   credentials or runs image tooling.
-4. Only a profile with the required automation and verified artifact is `ready`. A source-only
-   revision verifies/reuses its valid artifact; a lock revision is `updating`
-   until a new artifact is verified.
-5. The runner starts coding with `image@sha256:...`; each attempt retains that
-   digest even if the active profile later changes. Plain `ayni check` in that
-   launched image is advisory feedback, not a gate.
-6. A candidate becomes a draft PR. Managed PR automation checks the exact head,
-   retains a bounded manifest/signals as digest-verified evidence, and yields an
-   assessment. The GitHub check and marker-owned comment are presentations.
+| Shared responsibility | Ayni Managed policy | Custom Runtime policy |
+| --- | --- | --- |
+| Admit an immutable OCI digest and platform | Verify committed Ayni inputs, producer trust and certificate through supported Ayni contracts | Validate the supplied container against the supported launcher, platform and isolation contract |
+| Resolve the execution environment | Discover, or internally build a genuinely missing certified environment | Resolve and verify the owner's supplied image; no Ayni build or signing requirement |
+| Develop and checkpoint immutable candidates | Make Ayni available as development feedback | Run the repository's supported native tooling without requiring Ayni |
+| Bind assessments and evidence to the exact candidate | Independent internal Ayni verifier and bounded repair policy | Explicit custom assessment policy; do not label unassessed work as Ayni-verified |
+| Publish and reconcile review objects | Present bounded Ayni findings and actual final outcome | Present the actual custom assessment or unassessed outcome |
 
-## Reconciliation and failure model
+Ayni owns lock interpretation, policy evaluation and certificate verification.
+Orchestrator owns execution identity and verifies that observations and evidence
+belong to the operation being reconciled. Shared scheduling and publication
+must not acquire mandatory Ayni lock, signal or GitHub workflow fields.
 
-Repository/profile readiness, artifact availability, task execution, change
-request publication, and assessment import reconcile independently. A failed
-new lock never falls back silently to an old artifact for new tasks, while old
-in-flight work can finish on its frozen digest. Missing or moved tags,
-malformed locks/metadata, unsupported platforms, failed/stale workflows,
-credential loss, and controller restart fail closed and expose a bounded
-remediation state. See Decision 0007 for the normative recovery table.
+## Product flow and trust
 
-## Trust boundary
+Connector setup validates a GitHub App and persists its operational credentials
+with authenticated encryption. The encryption root remains in an existing
+operator-managed namespace Secret. Registry pull/push, producer signing,
+build-engine and model credentials remain deployment Secret references, not
+connector records. Installation discovery can refresh without recreating a
+connector. Disabling one prevents new provider operations and degrades affected
+projects without deleting history.
 
-Repository and candidate code, build hooks, and workflow outputs are untrusted
-inputs. GitHub App credentials are short-lived and controller-scoped; candidate
-PR execution cannot receive controller, model, or build credentials. Registry
-tags discover artifacts but OCI digests plus verified metadata identify
-them. Coding containers mount only task workspace and bounded scratch, never a
-host socket, controller database, Kubernetes token, or another task's state.
-Kubernetes node cache is not evidence. The controller retains verified evidence
-under assessment identities; comments, checks, and host feedback cannot
-substitute for it.
+Project inspection is tied to an observed default-branch commit. For Ayni
+Managed it checks access, committed inputs, compatibility, producer trust,
+owned integration files and the environment. Missing Ayni inputs require owner
+action. An idempotent setup PR changes only owned integration files when needed;
+the target does not install GitHub build or assessment workflows. Reinspect
+after merge before advancing readiness.
 
-## Retained state
+Environment discovery uses the deterministic identity and private
+`ghcr.io/<owner>/<repository>-ayni` package. Only confirmed absence authorizes a
+deduplicated internal build intent. Access errors, invalid signatures, drift
+and uncertain publication require remediation or reconciliation. Independent
+verification binds the platform-specific manifest digest before admission.
+Source-only changes can reuse the same environment after verification.
 
-The clean baseline stores repository connections, profiles/revisions, artifacts,
-automation/actions, tasks/attempts, candidates, change requests/publication
-actions, assessments, evidence references, reconciliation cursors, and bounded
-usage/diagnostics. The pilot's preparation archives and task-wide validation
-paths are not migrated or read. Retention and safe later GHCR retirement are
-specified by #55 and #67.
+Task admission freezes repository/source, profile revision, digest/platform,
+constraints, deadline and model budget. The agent develops in that image and
+saves a checkpoint. The target Ayni verifier uses a fresh checkout of that
+candidate in the same image, retaining evidence outside candidate-writable
+storage. Findings allow at most three repair cycles within the original limits;
+every repaired commit needs a new assessment. Candidate policy/lock changes
+that invalidate the frozen environment require owner review rather than
+automatic replacement certification.
+
+Evidence binds project/task/attempt, base and candidate commits, verifier Job,
+profile revision, runtime digest, lock/configuration, platform, Ayni version and
+artifact digests. Valid work may become a draft with passed, failed, incomplete
+or environment-update-required status. Cancellation blocks subsequent automatic
+publication; no changes or no valid candidate produce no PR. Changed owned PR
+heads invalidate earlier assessment authority. Reassessment does not silently
+start another agent repair session.
+
+External mutations have durable intent and deterministic identities before
+execution. After an uncertain response, reconcile existing Job, registry or
+provider state before retrying. Preserve task history and frozen digests across
+profile changes. Coding workloads receive no Kubernetes token, host socket,
+controller database, signing key or registry-push credential. Checkout and
+model credentials have separate workload scope; the verifier has neither model
+nor signing/push credentials.
+
+## Code structure
+
+| Location | Current ownership |
+| --- | --- |
+| `proto/`, `crates/api`, `clients/typescript` | Public gRPC schema, generated bindings and request syntax validation |
+| `crates/domain` | Shared identities, constraints and usage values; not yet a complete application resource model |
+| `crates/runtime` | Profile-neutral typed execution/coding contracts, activity, candidate reports, OCI/launcher admission and bounded input reading |
+| `crates/profile-ayni` | Explicit managed execution types, Ayni expectation/result validation, release pin, and the existing Actions assessment contract |
+| `crates/kubernetes` | Operator execution configuration, Job rendering, submission, observation and cleanup |
+| `crates/control-plane/src/application.rs` | Shared application state and durable reconciliation entry point |
+| `crates/control-plane/src/configuration.rs` | Server process/listener configuration |
+| `crates/control-plane/src/http.rs`, `http/` | Operational router and health JSON using only projected model availability |
+| `crates/control-plane/src/grpc*` | Native user-facing transport, access enforcement and response mapping |
+| `crates/control-plane/src/clean_store*`, `runtime_reconciler*` | Existing durable lifecycle and reconciliation, still coupled to protobuf resource types |
+| `crates/control-plane/src/runtime_source*`, `onboarding*` | Existing GitHub integration and managed onboarding |
+| `crates/worker` | Executable launcher, checkout, agent and explicit managed verification/build operations |
+| `packages/bff`, `apps/web` | Server-side browser adapter and UI |
+
+Dependencies point from adapters toward the contracts they implement. The
+runtime crate cannot depend on Ayni, Kubernetes, gRPC or executables. The Ayni
+profile can depend on shared runtime contracts; Kubernetes can depend on both
+when rendering managed workloads. Neither the worker nor Kubernetes depends on
+the public API. The control-plane executable composes those pieces. The
+repository's Ayni dependency policy enforces these crate boundaries.
+
+Managed requests instantiate the generic execution/coding contract with a
+required `RuntimeExpectation`. This preserves the serialized managed request
+shape and fail-closed validation. A typed custom request can use its own
+admission data without importing Ayni. That separation alone does not enable
+custom execution in the current reconciler or worker.
+
+## Implementation limits and next boundaries
+
+The current managed path still uses repository-first onboarding and Actions
+assessment collection. Its assessment contract requires a PR and workflow/run
+identity; it must not be reused as the pre-publication internal verifier
+contract. The connector, project readiness, internal environment production and
+repair flows above remain tracked by [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
+The project foundation is implemented with single-repository membership and
+project-owned tasks; connector management and project readiness remain follow-up
+work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
+remains unimplemented end to end.
+
+Application logic still reads generated protobuf resources, stores protobuf
+payloads and calls concrete providers. Do not describe this as a fully isolated
+core. Extract real use cases with their commands, results and ports into an
+application crate as they are changed: connector operations, project inspection,
+environment resolution, task admission, then assessment/publication. Keep wire
+conversion at gRPC and explicit persistence codec boundaries. Move managed
+evidence rules out of generic storage while preserving shared identity and
+digest checks. Introduce explicit profile dispatch before admitting custom
+tasks, and separate common coding workload construction from managed verifier
+topology as that path is implemented.
+
+The extracted Kubernetes configuration still carries inherited publication
+policy and managed GHCR source derivation. Move those decisions to the
+application/profile layer with their use cases; the extraction does not make
+that configuration fully provider-neutral.
+
+The supported deployment remains Docker Desktop, one trusted team, loopback
+access and one controller replica. This structural change does not alter the
+protobuf contract, persisted schema, managed JSON format or rendered workload
+isolation. Durable architecture belongs here; acceptance and delivery status
+belong in the linked issues.

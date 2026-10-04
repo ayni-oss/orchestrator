@@ -101,7 +101,13 @@ const fn concurrency() -> usize {
 }
 
 impl RuntimeConfiguration {
-    pub(crate) fn from_environment() -> Result<Option<Self>, &'static str> {
+    /// Loads and validates the optional operator-owned runtime configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code when the configured file is unavailable,
+    /// oversized, malformed, or contains unsupported execution settings.
+    pub fn from_environment() -> Result<Option<Self>, &'static str> {
         let Ok(path) = env::var("ORCHESTRATOR_RUNTIME_CONFIG_PATH") else {
             return Ok(None);
         };
@@ -118,18 +124,20 @@ impl RuntimeConfiguration {
     }
 
     /// Bind deployment policy only to the connected repository's frozen namespace.
-    pub(crate) fn managed_runtime(
+    #[must_use]
+    pub fn managed_runtime(
         &self,
-        github: &ayni_orchestrator_api::v1::GithubRepository,
-        managed: &ayni_orchestrator_api::v1::AyniManagedProfileRevision,
+        owner: &str,
+        repository: &str,
+        lock_fingerprint: &str,
+        oci_repository: &str,
     ) -> Option<ProfileRuntime> {
         let runtime = self
             .managed_runtime
             .as_ref()?
-            .profile_runtime(&github.owner, &github.name, &managed.lock_fingerprint)
+            .profile_runtime(owner, repository, lock_fingerprint)
             .ok()?;
-        (image_repository(&runtime.image) == Some(managed.oci_repository.as_str()))
-            .then_some(runtime)
+        (image_repository(&runtime.image) == Some(oci_repository)).then_some(runtime)
     }
 
     fn validate(&self) -> Result<(), &'static str> {
@@ -157,6 +165,11 @@ impl RuntimeConfiguration {
 
 impl ManagedRuntime {
     /// Derives the only acceptable GHCR reference for a connected repository.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code when repository identity, lock identity, or
+    /// operator execution settings are invalid.
     pub fn profile_runtime(
         &self,
         owner: &str,
@@ -250,6 +263,8 @@ fn github_component(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
+/// Returns the repository portion of a validated OCI image reference.
+#[must_use]
 pub fn image_repository(image: &str) -> Option<&str> {
     use ayni_orchestrator_runtime::runtime_contract::RuntimeImage;
     if image.contains('@') {
@@ -264,7 +279,7 @@ pub fn image_repository(image: &str) -> Option<&str> {
     Some(repository)
 }
 
-pub fn name(value: &str) -> bool {
+fn name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 63
         && !value.starts_with('-')
@@ -306,17 +321,15 @@ mod tests {
     fn managed_discovery_requires_policy_and_matching_repository_namespace()
     -> Result<(), &'static str> {
         let mut configuration = configuration();
-        let github = ayni_orchestrator_api::v1::GithubRepository {
-            owner: "Example".into(),
-            name: "Sandbox".into(),
-            ..Default::default()
-        };
-        let mut managed = ayni_orchestrator_api::v1::AyniManagedProfileRevision {
-            oci_repository: "ghcr.io/example/sandbox-ayni".into(),
-            lock_fingerprint: "a".repeat(64),
-            ..Default::default()
-        };
-        assert!(configuration.managed_runtime(&github, &managed).is_none());
+        let owner = "Example";
+        let repository = "Sandbox";
+        let oci_repository = "ghcr.io/example/sandbox-ayni";
+        let lock_fingerprint = "a".repeat(64);
+        assert!(
+            configuration
+                .managed_runtime(owner, repository, &lock_fingerprint, oci_repository)
+                .is_none()
+        );
         configuration.managed_runtime = Some(ManagedRuntime {
             platform: "linux/amd64".into(),
             service_account: "runtime-coding".into(),
@@ -325,18 +338,28 @@ mod tests {
         });
         assert!(configuration.validate().is_ok());
         let runtime = configuration
-            .managed_runtime(&github, &managed)
+            .managed_runtime(owner, repository, &lock_fingerprint, oci_repository)
             .ok_or("managed runtime missing")?;
         assert_eq!(runtime.pull_secret.as_deref(), Some("runtime-pull"));
         assert_eq!(
             runtime.image,
             format!("ghcr.io/example/sandbox-ayni:lock-{}", "a".repeat(64))
         );
-        managed.oci_repository = "ghcr.io/another/repository-ayni".into();
-        assert!(configuration.managed_runtime(&github, &managed).is_none());
-        managed.oci_repository = "ghcr.io/example/sandbox-ayni".into();
-        managed.lock_fingerprint = "invalid".into();
-        assert!(configuration.managed_runtime(&github, &managed).is_none());
+        assert!(
+            configuration
+                .managed_runtime(
+                    owner,
+                    repository,
+                    &lock_fingerprint,
+                    "ghcr.io/another/repository-ayni"
+                )
+                .is_none()
+        );
+        assert!(
+            configuration
+                .managed_runtime(owner, repository, "invalid", oci_repository)
+                .is_none()
+        );
         Ok(())
     }
 

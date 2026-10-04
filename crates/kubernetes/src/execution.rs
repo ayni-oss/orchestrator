@@ -1,6 +1,6 @@
 //! Kubernetes execution transport. Secret contents are never read back.
-use crate::runtime_configuration::{ProfileRuntime, RuntimeConfiguration};
-use ayni_orchestrator_runtime::runtime_execution::{ExecutionRequest, VerificationReport};
+use crate::configuration::{ProfileRuntime, RuntimeConfiguration};
+use ayni_orchestrator_profile_ayni::runtime_execution::{ExecutionRequest, VerificationReport};
 use k8s_openapi::api::{
     batch::v1::Job,
     core::v1::{ConfigMap, Pod, Secret},
@@ -28,7 +28,12 @@ pub enum Observation {
 }
 
 impl RuntimeKubernetes {
-    pub(crate) fn new(configuration: RuntimeConfiguration) -> Result<Self, &'static str> {
+    /// Creates an executor using only the deployed pod's Kubernetes identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if in-cluster configuration or client setup fails.
+    pub fn new(configuration: RuntimeConfiguration) -> Result<Self, &'static str> {
         // Runtime execution is a deployed controller feature. Never fall back
         // to a developer's current kubeconfig context when run on a host.
         let config = kube::Config::incluster().map_err(|_| "kubernetes_incluster_required")?;
@@ -39,7 +44,13 @@ impl RuntimeKubernetes {
         })
     }
 
-    pub(crate) async fn start(
+    /// Starts or adopts a verification Job with an immutable execution request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code for invalid requests, Kubernetes failures,
+    /// or a conflicting operation identity.
+    pub async fn start(
         &self,
         name: &str,
         runtime: &ProfileRuntime,
@@ -132,7 +143,13 @@ impl RuntimeKubernetes {
         }
     }
 
-    pub(crate) async fn observe(&self, name: &str) -> Result<Observation, &'static str> {
+    /// Reads a verification Job and validates its completed pod identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if Kubernetes is unavailable or the completed
+    /// pod does not contain a valid verification result and image digest.
+    pub async fn observe(&self, name: &str) -> Result<Observation, &'static str> {
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let Some(job) = jobs
             .get_opt(name)
@@ -211,7 +228,12 @@ impl RuntimeKubernetes {
         Ok(Observation::Verified { digest, report })
     }
 
-    pub(crate) async fn coding_stopped(&self, name: &str) -> Result<bool, &'static str> {
+    /// Reports whether every pod belonging to a coding Job has terminated.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if the Job's pods cannot be inspected.
+    pub async fn coding_stopped(&self, name: &str) -> Result<bool, &'static str> {
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let pods = pods
             .list(&ListParams::default().labels(&format!("job-name={name}")))
@@ -225,7 +247,12 @@ impl RuntimeKubernetes {
         }))
     }
 
-    pub(crate) async fn cleanup(&self, name: &str) -> Result<(), &'static str> {
+    /// Removes an operation's Job, immutable request, and source credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if any Kubernetes deletion fails.
+    pub async fn cleanup(&self, name: &str) -> Result<(), &'static str> {
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let maps: Api<ConfigMap> =
             Api::namespaced(self.client.clone(), &self.configuration.namespace);
@@ -253,6 +280,8 @@ impl RuntimeKubernetes {
     }
 }
 
+/// Derives a deterministic Kubernetes operation name from a profile sequence.
+#[must_use]
 pub fn operation_name(profile: &str, sequence: u64) -> String {
     format!(
         "runtime-{:x}",
@@ -261,6 +290,11 @@ pub fn operation_name(profile: &str, sequence: u64) -> String {
         .to_owned()
 }
 
+/// Renders a verification Job with source credentials confined to checkout.
+///
+/// # Errors
+///
+/// Returns a bounded error code if the Job representation cannot be decoded.
 pub fn verification_job(
     name: &str,
     configuration: &RuntimeConfiguration,
@@ -298,7 +332,7 @@ pub fn verification_job(
         }}}})).map_err(|_| "runtime_job_invalid")
 }
 
-pub fn runtime_environment() -> serde_json::Value {
+pub(crate) fn runtime_environment() -> serde_json::Value {
     json!([
         {"name":"HOME","value":"/scratch"}, {"name":"TMPDIR","value":"/scratch"},
         {"name":"XDG_CACHE_HOME","value":"/scratch/cache"},

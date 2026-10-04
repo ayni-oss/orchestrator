@@ -9,7 +9,7 @@ verification.
 
 | Item | Pinned value |
 | --- | --- |
-| CLI release, archive checksum, executor digest | [`crates/runtime/ayni-release.json`](../crates/runtime/ayni-release.json) |
+| CLI release, archive checksum, executor digest | [`crates/profile-ayni/ayni-release.json`](../crates/profile-ayni/ayni-release.json) |
 | Supported managed platforms | `linux/amd64`, `linux/arm64` |
 | Repository lock | Ayni-generated committed `.ayni.lock`, schema `0.9.0` and recipe `2` |
 | Discovery tag | `lock-<full-64-hex-lock-fingerprint>` |
@@ -49,7 +49,7 @@ The runtime-builder recipe receives the manifest's executor explicitly:
 
 ```sh
 docker build -f deploy/images/runtime-builder/Dockerfile \
-  --build-arg AYNI_EXECUTOR_IMAGE="$(jq -er .executor_image crates/runtime/ayni-release.json)" \
+  --build-arg AYNI_EXECUTOR_IMAGE="$(jq -er .executor_image crates/profile-ayni/ayni-release.json)" \
   --build-arg DOCKER_CLIENT_IMAGE="$DOCKER_CLIENT_IMAGE" \
   -t local/orchestrator-runtime-builder:development .
 ```

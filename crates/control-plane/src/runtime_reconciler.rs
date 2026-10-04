@@ -1,12 +1,11 @@
 //! Periodic, restartable managed runtime verification.
-use crate::{
-    AppState,
-    runtime_configuration::RuntimeConfiguration,
-    runtime_kubernetes::{Observation, RuntimeKubernetes, operation_name},
-    runtime_source::SourceClient,
-};
+use crate::{AppState, runtime_source::SourceClient};
 use ayni_orchestrator_api::v1;
-use ayni_orchestrator_runtime::{
+use ayni_orchestrator_kubernetes::{
+    configuration::RuntimeConfiguration,
+    execution::{Observation, RuntimeKubernetes, operation_name},
+};
+use ayni_orchestrator_profile_ayni::{
     managed_runtime::RuntimeExpectation, runtime_execution::ExecutionRequest,
 };
 use serde::{Deserialize, Serialize};
@@ -32,7 +31,7 @@ pub struct RuntimeCursor {
 impl RuntimeCursor {
     fn update_status(
         &mut self,
-        runtime: &crate::runtime_configuration::ProfileRuntime,
+        runtime: &ayni_orchestrator_kubernetes::configuration::ProfileRuntime,
         fingerprint: String,
     ) -> Result<(), &'static str> {
         self.status.insert(
@@ -93,7 +92,7 @@ struct PendingVerification {
 
 struct ProfileObservation<'a> {
     id: &'a str,
-    runtime: &'a crate::runtime_configuration::ProfileRuntime,
+    runtime: &'a ayni_orchestrator_kubernetes::configuration::ProfileRuntime,
     time: u64,
     github: v1::GithubRepository,
     head: String,
@@ -115,7 +114,10 @@ pub struct RuntimeReconciler {
 impl RuntimeReconciler {
     fn configured_profiles(
         &self,
-    ) -> Result<BTreeMap<String, crate::runtime_configuration::ProfileRuntime>, &'static str> {
+    ) -> Result<
+        BTreeMap<String, ayni_orchestrator_kubernetes::configuration::ProfileRuntime>,
+        &'static str,
+    > {
         let mut profiles = self.configuration.profiles.clone();
         if self.configuration.managed_runtime.is_none() {
             return Ok(profiles);
@@ -164,7 +166,12 @@ impl RuntimeReconciler {
                 else {
                     continue;
                 };
-                let Some(runtime) = self.configuration.managed_runtime(&github, &managed) else {
+                let Some(runtime) = self.configuration.managed_runtime(
+                    &github.owner,
+                    &github.name,
+                    &managed.lock_fingerprint,
+                    &managed.oci_repository,
+                ) else {
                     continue;
                 };
                 profiles.insert(profile.id, runtime);
@@ -181,7 +188,7 @@ impl RuntimeReconciler {
     fn configured_profile(
         &self,
         id: &str,
-    ) -> Result<crate::runtime_configuration::ProfileRuntime, &'static str> {
+    ) -> Result<ayni_orchestrator_kubernetes::configuration::ProfileRuntime, &'static str> {
         self.configured_profiles()?
             .remove(id)
             .ok_or("runtime_source_missing")
@@ -482,7 +489,7 @@ impl RuntimeReconciler {
         observation: &ProfileObservation<'_>,
         cursor: &mut RuntimeCursor,
         digest: String,
-        report: &ayni_orchestrator_runtime::runtime_execution::VerificationReport,
+        report: &ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport,
     ) -> Result<(), &'static str> {
         let id = observation.id;
         let runtime = observation.runtime;
@@ -587,8 +594,9 @@ impl RuntimeReconciler {
             .await?;
         let identity = crate::managed_environment::parse_lock(&bytes)
             .map_err(|_| "repository_lock_invalid")?;
-        let repository_image = crate::runtime_configuration::image_repository(&runtime.image)
-            .ok_or("runtime_image_invalid")?;
+        let repository_image =
+            ayni_orchestrator_kubernetes::configuration::image_repository(&runtime.image)
+                .ok_or("runtime_image_invalid")?;
         let revision = self
             .state
             .store
@@ -633,7 +641,7 @@ impl RuntimeReconciler {
                 expected: RuntimeExpectation {
                     lock_fingerprint: format!("sha256:{}", identity.fingerprint),
                     platform: runtime.platform.clone(),
-                    ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+                    ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
                 },
             },
         });

@@ -1,5 +1,5 @@
 use super::*;
-use ayni_orchestrator_runtime::assessment::{
+use ayni_orchestrator_profile_ayni::assessment::{
     Manifest, Outcome, RunIdentity, Summary, VERSION, sha256,
 };
 use std::collections::BTreeMap;
@@ -32,7 +32,7 @@ fn manifest(revision: &str) -> Manifest {
         contract_digest: DIGEST.into(),
         source_before: DIGEST.into(),
         source_after: DIGEST.into(),
-        ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
+        ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
         platform: "linux/amd64".into(),
         exit_code: 0,
         outcome: Outcome::Succeeded,

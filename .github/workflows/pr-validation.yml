@@ -241,7 +241,7 @@ jobs:
       - name: Install Ayni
         run: |
           set -euo pipefail
-          release=crates/runtime/ayni-release.json
+          release=crates/profile-ayni/ayni-release.json
           AYNI_VERSION=$(jq -er .cli_version "$release")
           AYNI_ARCHIVE="ayni-ayni-v${AYNI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
           AYNI_SHA256=$(jq -er .linux_amd64_archive_sha256 "$release")
@@ -260,7 +260,7 @@ jobs:
       - name: Run Ayni
         run: |
           set +e
-          AYNI_EXECUTOR_IMAGE=$(jq -er .executor_image crates/runtime/ayni-release.json) || exit 1
+          AYNI_EXECUTOR_IMAGE=$(jq -er .executor_image crates/profile-ayni/ayni-release.json) || exit 1
           image="ayni-pr:${{ github.event.pull_request.head.sha }}"
           ayni env build --repo-root . --tag "$image" --executor-image "$AYNI_EXECUTOR_IMAGE"
           exit_code=$?

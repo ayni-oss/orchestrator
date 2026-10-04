@@ -43,13 +43,13 @@ impl CleanStore {
         let snapshot = self.observe_repository_snapshot(&profile.repository_connection_id, revision)?;
         fingerprint.clone_into(&mut configuration.lock_fingerprint);
         repository.clone_into(&mut configuration.oci_repository);
-        configuration.ayni_version = ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into();
+        configuration.ayni_version = ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into();
         configuration.runtime_source_digest = Some(source_digest.to_owned());
         let revision = self.record_selected_runtime_revision(profile_id, &snapshot.id, v1::runtime_profile_revision::Configuration::AyniManaged(configuration), false)?;
         Ok(revision.id)
     }
 
-    pub(crate) fn activate_runtime(&mut self, profile_id: &str, revision_id: &str, image: &str, digest: &str, report: &ayni_orchestrator_runtime::runtime_execution::VerificationReport) -> Result<(), CleanStoreError> {
+    pub(crate) fn activate_runtime(&mut self, profile_id: &str, revision_id: &str, image: &str, digest: &str, report: &ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport) -> Result<(), CleanStoreError> {
         let profile = self.runtime_profile(profile_id)?;
         if profile.active_revision_id.as_deref() != Some(revision_id) { return Err(CleanStoreError::StaleVersion); }
         let revision = self.runtime_profile_revision(revision_id)?;

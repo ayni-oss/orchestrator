@@ -80,15 +80,15 @@ fn pinned_workflow(template: &str) -> String {
     template
         .replace(
             "@@AYNI_EXECUTOR_IMAGE@@",
-            ayni_orchestrator_runtime::ayni_release::EXECUTOR_IMAGE,
+            ayni_orchestrator_profile_ayni::ayni_release::EXECUTOR_IMAGE,
         )
         .replace(
             "@@AYNI_VERSION@@",
-            ayni_orchestrator_runtime::ayni_release::CLI_VERSION,
+            ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION,
         )
         .replace(
             "@@AYNI_SHA256@@",
-            ayni_orchestrator_runtime::ayni_release::LINUX_AMD64_ARCHIVE_SHA256,
+            ayni_orchestrator_profile_ayni::ayni_release::LINUX_AMD64_ARCHIVE_SHA256,
         )
 }
 
@@ -122,10 +122,10 @@ mod tests {
         let assessment = &files[ASSESSMENT_WORKFLOW_PATH];
         assert!(assessment.contains("workflow_run:"));
         assert!(!assessment.contains("@@AYNI_"));
-        assert!(assessment.contains(ayni_orchestrator_runtime::ayni_release::CLI_VERSION));
+        assert!(assessment.contains(ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION));
         assert!(
             assessment
-                .contains(ayni_orchestrator_runtime::ayni_release::LINUX_AMD64_ARCHIVE_SHA256)
+                .contains(ayni_orchestrator_profile_ayni::ayni_release::LINUX_AMD64_ARCHIVE_SHA256)
         );
         assert!(assessment.contains("contents: read"));
         assert!(!assessment.contains("packages: write"));

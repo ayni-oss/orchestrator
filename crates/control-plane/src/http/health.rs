@@ -1,7 +1,9 @@
+//! JSON responses for this server's operational probes.
+
 use serde::Serialize;
 
 #[derive(Serialize)]
-pub struct HealthResponse {
+pub(super) struct HealthResponse {
     component: &'static str,
     status: &'static str,
     durable_orchestration: bool,
@@ -12,7 +14,7 @@ pub struct HealthResponse {
 }
 
 impl HealthResponse {
-    pub const fn live() -> Self {
+    pub(super) const fn live() -> Self {
         Self {
             component: "control-plane",
             status: "live",
@@ -24,7 +26,10 @@ impl HealthResponse {
         }
     }
 
-    pub const fn ready(model_catalog_configured: bool, model_catalog_available: bool) -> Self {
+    pub(super) const fn ready(
+        model_catalog_configured: bool,
+        model_catalog_available: bool,
+    ) -> Self {
         Self {
             component: "control-plane",
             status: "ready",

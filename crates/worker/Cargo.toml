@@ -11,6 +11,7 @@ publish.workspace = true
 ayni-orchestrator-observability = { path = "../observability" }
 tracing.workspace = true
 ayni-orchestrator-runtime = { path = "../runtime" }
+ayni-orchestrator-profile-ayni = { path = "../profile-ayni" }
 ayni-orchestrator-domain = { path = "../domain" }
 serde.workspace = true
 serde_json.workspace = true

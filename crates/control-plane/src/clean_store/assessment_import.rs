@@ -103,13 +103,13 @@ impl CleanStore {
     pub(crate) fn import_review(
         &mut self,
         change: &v1::ChangeRequest,
-        manifest: &ayni_orchestrator_runtime::assessment::Manifest,
-        summary: &ayni_orchestrator_runtime::assessment::Summary,
+        manifest: &ayni_orchestrator_profile_ayni::assessment::Manifest,
+        summary: &ayni_orchestrator_profile_ayni::assessment::Summary,
         manifest_bytes: &[u8],
         artifacts: &std::collections::BTreeMap<String, Vec<u8>>,
         workflow_url: &str,
     ) -> Result<v1::Assessment, CleanStoreError> {
-        use ayni_orchestrator_runtime::assessment::{Outcome, sha256};
+        use ayni_orchestrator_profile_ayni::assessment::{Outcome, sha256};
         let identity = format!(
             "{}:{}:{}",
             manifest.run.repository_id, manifest.run.run_id, manifest.run.attempt

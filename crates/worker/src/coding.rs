@@ -20,7 +20,8 @@ use tokio::io::AsyncReadExt;
 
 pub const ADVISORY_INSTRUCTIONS: &str = "Read AGENTS.md and repository instructions. Make only the requested changes. Run plain `ayni check` before completing and repair actionable failures. Never weaken .ayni.toml or .ayni.lock merely to pass. Coding-time checks are advisory even when Ayni reports managed execution; only the later exact-head PR assessment is authoritative. Do not build an environment or access GitHub. The task runner checkpoints your edits and automatically commits and publishes the saved work as a draft, even if checks or the model fail. Run the final Ayni check before handing off; report remaining failures truthfully. If essential information is missing, respond INPUT_REQUIRED: followed by one concrete question.";
 
-pub use ayni_orchestrator_runtime::coding::{CodingReport, CodingRequest};
+pub use ayni_orchestrator_profile_ayni::coding::CodingRequest;
+pub use ayni_orchestrator_runtime::coding::CodingReport;
 
 #[derive(Clone)]
 struct RunCommand {
@@ -390,83 +391,11 @@ mod tests {
         let root = tempfile::tempdir()?;
         let output = tempfile::tempdir()?;
         let workspace = root.path();
-        git(workspace, &["init", "--quiet"])?;
-        fs::write(workspace.join("file.txt"), "before")?;
-        fs::write(workspace.join(".gitignore"), "/.ayni/\n/target/\n")?;
-        git(workspace, &["add", "."])?;
-        git(
-            workspace,
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.invalid",
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "-m",
-                "test: base",
-            ],
-        )?;
-        let revision = git(workspace, &["rev-parse", "HEAD"])?;
-        fs::write(workspace.join("new.rs"), "pub fn value() -> u8 { 1 }\n")?;
-        git(workspace, &["add", "new.rs"])?;
-        assert!(!rust_test_file_changed(workspace, "new.rs", &revision));
-        fs::write(workspace.join("new.rs"), "#[test] fn value() {}\n")?;
-        git(workspace, &["add", "new.rs"])?;
-        assert!(rust_test_file_changed(workspace, "new.rs", &revision));
-        git(workspace, &["rm", "--force", "new.rs"])?;
-        fs::write(workspace.join("file.txt"), "after")?;
-        fs::create_dir(workspace.join(".ayni"))?;
-        fs::write(workspace.join(".ayni/signals.json"), "untrusted")?;
-        // Even force-staged ignored evidence must not enter the candidate.
-        git(workspace, &["add", "--force", ".ayni/signals.json"])?;
-        git(workspace, &["add", "--all"])?;
-        let request = CodingRequest {
-            execution: crate::runtime_execution::ExecutionRequest {
-                repository_url: "https://github.com/team/repo.git".into(),
-                revision,
-                expected: crate::managed_runtime::RuntimeExpectation {
-                    lock_fingerprint: String::new(),
-                    platform: "linux/amd64".into(),
-                    ayni_version: ayni_orchestrator_runtime::ayni_release::CLI_VERSION.into(),
-                },
-            },
-            request: "edit".into(),
-            acceptance_criteria: vec!["changed".into()],
-            constraints: ayni_orchestrator_domain::ChangeConstraints {
-                protected_paths: vec![],
-                allow_test_edits: true,
-            },
-            model: "test".into(),
-        };
-        crate::coding_checkpoint::save(&request, workspace, output.path())?;
-        let first = fs::read_to_string(output.path().join("checkpoint"))?;
-        fs::write(workspace.join("file.txt"), "latest edit")?;
-        crate::coding_checkpoint::save(&request, workspace, output.path())?;
-        let latest = fs::read_to_string(output.path().join("checkpoint"))?;
-        assert_ne!(first, latest);
-        let saved = output.path().join("checkpoints").join(&latest);
-        let checkpoint: CodingReport =
-            serde_json::from_slice(&fs::read(saved.join("report.json"))?)?;
-        assert_eq!(checkpoint.commit.as_deref(), Some(latest.as_str()));
-        assert_eq!(fs::read_dir(output.path().join("checkpoints"))?.count(), 1);
-        assert!(checkpoint.advisory.contains("partial work"));
-        git(
-            workspace,
-            &[
-                "bundle",
-                "verify",
-                saved.join("candidate.bundle").to_str().ok_or("path")?,
-            ],
-        )?;
-        let mut protected = request.clone();
-        protected.constraints.protected_paths = vec!["file.txt".into()];
-        assert!(crate::coding_checkpoint::save(&protected, workspace, output.path()).is_err());
-        assert_eq!(
-            fs::read_to_string(output.path().join("checkpoint"))?,
-            latest
-        );
+        let revision = initialize_workspace(workspace)?;
+        stage_candidate_with_untrusted_evidence(workspace, &revision)?;
+        let request = coding_request(revision);
+        assert_checkpoint_recovery(&request, workspace, output.path())?;
+
         // Finalization after a checkpoint still emits a complete candidate.
         let report = freeze(&request, workspace, output.path())?;
         assert_eq!(report.changed_paths, ["file.txt"]);
@@ -487,6 +416,98 @@ mod tests {
                     .ok_or("path")?,
             ],
         )?;
+        Ok(())
+    }
+
+    fn initialize_workspace(workspace: &Path) -> io::Result<String> {
+        git(workspace, &["init", "--quiet"])?;
+        fs::write(workspace.join("file.txt"), "before")?;
+        fs::write(workspace.join(".gitignore"), "/.ayni/\n/target/\n")?;
+        git(workspace, &["add", "."])?;
+        git(
+            workspace,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-m",
+                "test: base",
+            ],
+        )?;
+        git(workspace, &["rev-parse", "HEAD"])
+    }
+
+    fn stage_candidate_with_untrusted_evidence(workspace: &Path, revision: &str) -> io::Result<()> {
+        fs::write(workspace.join("new.rs"), "pub fn value() -> u8 { 1 }\n")?;
+        git(workspace, &["add", "new.rs"])?;
+        assert!(!rust_test_file_changed(workspace, "new.rs", revision));
+        fs::write(workspace.join("new.rs"), "#[test] fn value() {}\n")?;
+        git(workspace, &["add", "new.rs"])?;
+        assert!(rust_test_file_changed(workspace, "new.rs", revision));
+        git(workspace, &["rm", "--force", "new.rs"])?;
+        fs::write(workspace.join("file.txt"), "after")?;
+        fs::create_dir(workspace.join(".ayni"))?;
+        fs::write(workspace.join(".ayni/signals.json"), "untrusted")?;
+        // Even force-staged ignored evidence must not enter the candidate.
+        git(workspace, &["add", "--force", ".ayni/signals.json"])?;
+        git(workspace, &["add", "--all"])?;
+        Ok(())
+    }
+
+    fn coding_request(revision: String) -> CodingRequest {
+        CodingRequest {
+            execution: crate::runtime_execution::ExecutionRequest {
+                repository_url: "https://github.com/team/repo.git".into(),
+                revision,
+                expected: crate::managed_runtime::RuntimeExpectation {
+                    lock_fingerprint: String::new(),
+                    platform: "linux/amd64".into(),
+                    ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
+                },
+            },
+            request: "edit".into(),
+            acceptance_criteria: vec!["changed".into()],
+            constraints: ayni_orchestrator_domain::ChangeConstraints {
+                protected_paths: vec![],
+                allow_test_edits: true,
+            },
+            model: "test".into(),
+        }
+    }
+
+    fn assert_checkpoint_recovery(
+        request: &CodingRequest,
+        workspace: &Path,
+        output: &Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        crate::coding_checkpoint::save(request, workspace, output)?;
+        let first = fs::read_to_string(output.join("checkpoint"))?;
+        fs::write(workspace.join("file.txt"), "latest edit")?;
+        crate::coding_checkpoint::save(request, workspace, output)?;
+        let latest = fs::read_to_string(output.join("checkpoint"))?;
+        assert_ne!(first, latest);
+        let saved = output.join("checkpoints").join(&latest);
+        let checkpoint: CodingReport =
+            serde_json::from_slice(&fs::read(saved.join("report.json"))?)?;
+        assert_eq!(checkpoint.commit.as_deref(), Some(latest.as_str()));
+        assert_eq!(fs::read_dir(output.join("checkpoints"))?.count(), 1);
+        assert!(checkpoint.advisory.contains("partial work"));
+        git(
+            workspace,
+            &[
+                "bundle",
+                "verify",
+                saved.join("candidate.bundle").to_str().ok_or("path")?,
+            ],
+        )?;
+        let mut protected = request.clone();
+        protected.constraints.protected_paths = vec!["file.txt".into()];
+        assert!(crate::coding_checkpoint::save(&protected, workspace, output).is_err());
+        assert_eq!(fs::read_to_string(output.join("checkpoint"))?, latest);
         Ok(())
     }
 }
