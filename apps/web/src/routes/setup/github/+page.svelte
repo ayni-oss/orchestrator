@@ -10,10 +10,12 @@
   const ownerIsValid = $derived(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/u.test(owner));
   let flowState = $state("");
   let callbackOrigin = $state("");
+  let appSuffix = $state("");
   const organizationAppUrl = $derived(ownerIsValid && flowState ? `https://github.com/organizations/${encodeURIComponent(owner)}/settings/apps/new?state=${encodeURIComponent(flowState)}` : undefined);
   const personalAppUrl = $derived(flowState ? `https://github.com/settings/apps/new?state=${encodeURIComponent(flowState)}` : undefined);
+  const appName = $derived(`Ayni Orchestrator (${appSuffix})`);
   const appManifest = $derived(JSON.stringify({
-    name: "Ayni Orchestrator",
+    name: appName,
     description: "Customer-owned GitHub App for a trusted local Ayni Orchestrator deployment.",
     url: "https://github.com/ayni-oss/orchestrator",
     redirect_url: callbackOrigin ? `${callbackOrigin}/setup/github/complete` : undefined,
@@ -31,6 +33,7 @@
   }));
   onMount(async () => {
     callbackOrigin = window.location.origin;
+    appSuffix = Array.from(crypto.getRandomValues(new Uint8Array(4)), byte => byte.toString(16).padStart(2, "0")).join("");
     const response = await fetch("/setup/github/start", { method: "POST" });
     if (response.ok) flowState = (await response.json() as { state: string }).state;
   });
@@ -69,6 +72,7 @@
         <div class="rounded-md bg-muted p-4">
           <p class="font-medium">Configure these App settings in GitHub</p>
           <ul class="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            <li>App name: <strong class="text-foreground">{appName}</strong>. The random suffix makes the name unique while keeping it within GitHub’s 34-character limit.</li>
             <li>Repository permissions: <strong class="text-foreground">Actions, Checks, and Packages: Read-only</strong>; <strong class="text-foreground">Contents, Issues, Pull requests, and Workflows: Read and write</strong>.</li>
             <li>Install only on the repositories Ayni should operate.</li>
             <li>Generate a private key after creating the App. GitHub displays its download once—store it before leaving the page.</li>
