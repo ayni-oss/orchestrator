@@ -10,6 +10,9 @@ runtime:
   intervalSeconds: 300
   requestTimeoutSeconds: 30
   concurrency: 4
+  # Docker Desktop-only architecture emulation is enabled by the local chart.
+  # Production releases retain strict runtime platform scheduling.
+  allowEmulation: false
   profiles: {}
   managedRepositories: {}
   serviceAccounts:

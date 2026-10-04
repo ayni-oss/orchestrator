@@ -1,5 +1,9 @@
 ayni-orchestrator:
   enabled: true
+  runtime:
+    # Docker Desktop on Apple Silicon may emulate the amd64 managed image.
+    # This value is intentionally confined to the local development chart.
+    allowEmulation: true
   images:
     controlPlane: local/ayni-orchestrator-control-plane:replace-me
     worker: local/ayni-orchestrator-worker:replace-me

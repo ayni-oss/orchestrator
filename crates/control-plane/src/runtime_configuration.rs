@@ -15,6 +15,10 @@ pub struct RuntimeConfiguration {
     pub request_timeout_seconds: u64,
     #[serde(default = "concurrency")]
     pub concurrency: usize,
+    /// Docker Desktop can emulate a foreign image architecture for local-only
+    /// development. Production keeps the platform node selector enabled.
+    #[serde(default)]
+    pub allow_emulation: bool,
     #[serde(default)]
     pub managed_repositories: BTreeMap<String, ProfileRuntime>,
     #[serde(default)]
@@ -224,6 +228,7 @@ mod tests {
             interval_seconds: 60,
             request_timeout_seconds: 30,
             concurrency: 4,
+            allow_emulation: false,
             profiles: BTreeMap::new(),
             managed_repositories: BTreeMap::new(),
         };

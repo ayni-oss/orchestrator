@@ -16,7 +16,7 @@ kind: ConfigMap
 metadata:
   name: runtime-config
 data:
-  runtime.json: {{ dict "namespace" .Release.Namespace "worker_image" (required "runtime.workerImage must be digest pinned" .Values.runtime.workerImage) "output_claim" .Values.runtime.outputClaim "model_secret" .Values.runtime.modelSecret "interval_seconds" .Values.runtime.intervalSeconds "request_timeout_seconds" .Values.runtime.requestTimeoutSeconds "concurrency" .Values.runtime.concurrency "profiles" .Values.runtime.profiles "managed_repositories" .Values.runtime.managedRepositories | toJson | quote }}
+  runtime.json: {{ dict "namespace" .Release.Namespace "worker_image" (required "runtime.workerImage must be digest pinned" .Values.runtime.workerImage) "output_claim" .Values.runtime.outputClaim "model_secret" .Values.runtime.modelSecret "interval_seconds" .Values.runtime.intervalSeconds "request_timeout_seconds" .Values.runtime.requestTimeoutSeconds "concurrency" .Values.runtime.concurrency "allow_emulation" .Values.runtime.allowEmulation "profiles" .Values.runtime.profiles "managed_repositories" .Values.runtime.managedRepositories | toJson | quote }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

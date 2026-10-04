@@ -262,10 +262,15 @@ pub fn verification_job(
         .iter()
         .map(|name| json!({"name":name}))
         .collect();
+    let node_selector = if configuration.allow_emulation {
+        json!({})
+    } else {
+        json!({"kubernetes.io/os":"linux","kubernetes.io/arch":runtime.platform.split('/').nth(1)})
+    };
     serde_json::from_value(json!({"apiVersion":"batch/v1","kind":"Job","metadata":{"name":name,"namespace":configuration.namespace,"labels":{"ayni.io/runtime-operation":name}},
         "spec":{"backoffLimit":0,"activeDeadlineSeconds":1800,"template":{"metadata":{"labels":{"ayni.io/runtime-operation":name}},"spec":{
             "restartPolicy":"Never","serviceAccountName":runtime.service_account,"automountServiceAccountToken":false,"imagePullSecrets":pulls,
-            "nodeSelector":{"kubernetes.io/os":"linux","kubernetes.io/arch":runtime.platform.split('/').nth(1)},
+            "nodeSelector":node_selector,
             "securityContext":{"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
             "initContainers":[
                 {"name":"launcher","image":configuration.worker_image,"args":["install"],"securityContext":security,"resources":resources,"volumeMounts":[{"name":"launcher","mountPath":"/launcher"}]},
@@ -300,6 +305,7 @@ mod tests {
             interval_seconds: 60,
             request_timeout_seconds: 30,
             concurrency: 4,
+            allow_emulation: false,
             profiles: std::collections::BTreeMap::default(),
             managed_repositories: std::collections::BTreeMap::default(),
         };
@@ -325,12 +331,50 @@ mod tests {
                 .is_some_and(|env| env.iter().all(|e| e.value_from.is_none()))
         );
         assert_eq!(pod.service_account_name.as_deref(), Some("runtime"));
+        assert_eq!(
+            pod.node_selector
+                .as_ref()
+                .and_then(|selectors| selectors.get("kubernetes.io/arch"))
+                .map(String::as_str),
+            Some("amd64")
+        );
         assert!(
             pod.volumes
                 .ok_or("volumes_missing")?
                 .iter()
                 .all(|v| v.host_path.is_none())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn local_emulation_omits_only_the_platform_node_selector() -> Result<(), &'static str> {
+        let configuration = RuntimeConfiguration {
+            namespace: "test".into(),
+            worker_image: "worker".into(),
+            output_claim: "output".into(),
+            model_secret: "model".into(),
+            interval_seconds: 60,
+            request_timeout_seconds: 30,
+            concurrency: 4,
+            allow_emulation: true,
+            profiles: std::collections::BTreeMap::default(),
+            managed_repositories: std::collections::BTreeMap::default(),
+        };
+        let runtime = ProfileRuntime {
+            assessment: None,
+            image: "registry/runtime:lock".into(),
+            platform: "linux/amd64".into(),
+            service_account: "runtime".into(),
+            pull_secret: None,
+            build: None,
+        };
+        let job = verification_job("verify-test", &configuration, &runtime)?;
+        let pod = job
+            .spec
+            .and_then(|s| s.template.spec)
+            .ok_or("pod_missing")?;
+        assert_eq!(pod.node_selector, Some(std::collections::BTreeMap::new()));
         Ok(())
     }
 }
