@@ -212,6 +212,7 @@ pub(crate) fn command(program: &str, workspace: &Path) -> Command {
             std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".into()),
         )
         .env("HOME", "/scratch")
+        .env("XDG_CACHE_HOME", "/scratch/cache")
         .env("CARGO_HOME", "/scratch/cargo")
         .env("MISE_DATA_DIR", "/opt/ayni/mise")
         .env("MISE_TRUSTED_CONFIG_PATHS", "/etc/ayni")

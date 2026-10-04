@@ -287,6 +287,7 @@ pub fn verification_job(
 pub fn runtime_environment() -> serde_json::Value {
     json!([
         {"name":"HOME","value":"/scratch"}, {"name":"TMPDIR","value":"/scratch"},
+        {"name":"XDG_CACHE_HOME","value":"/scratch/cache"},
         {"name":"CARGO_HOME","value":"/scratch/cargo"},
         {"name":"MISE_CACHE_DIR","value":"/scratch/mise-cache"}, {"name":"MISE_STATE_DIR","value":"/scratch/mise-state"}
     ])
@@ -341,6 +342,9 @@ mod tests {
             }
         }
         assert_eq!(pod.automount_service_account_token, Some(false));
+        assert!(pod.containers[0].env.iter().flatten().any(|variable| {
+            variable.name == "XDG_CACHE_HOME" && variable.value.as_deref() == Some("/scratch/cache")
+        }));
         assert!(pod.containers[0].command.is_none());
         assert!(
             pod.containers[0]
