@@ -113,12 +113,91 @@ pub struct RuntimeReconciler {
 }
 
 impl RuntimeReconciler {
+    fn configured_profiles(
+        &self,
+    ) -> Result<BTreeMap<String, crate::runtime_configuration::ProfileRuntime>, &'static str> {
+        let mut profiles = self.configuration.profiles.clone();
+        let Some(managed_runtime) = &self.configuration.managed_runtime else {
+            return Ok(profiles);
+        };
+        let mut store = self
+            .state
+            .store
+            .lock()
+            .map_err(|_| "runtime_store_unavailable")?;
+        let mut page = v1::PageRequest {
+            page_size: 100,
+            page_token: String::new(),
+        };
+        for _ in 0..100 {
+            let result = store
+                .list_runtime_profiles(
+                    None,
+                    Some(v1::RuntimeProfileKind::AyniManaged as i32),
+                    None,
+                    Some(&page),
+                )
+                .map_err(|_| "runtime_profile_missing")?;
+            for profile in result.items {
+                if profiles.contains_key(&profile.id) {
+                    continue;
+                }
+                let repository = store
+                    .repository_connection(&profile.repository_connection_id)
+                    .map_err(|_| "repository_missing")?;
+                let Some(v1::repository_provider::Provider::Github(github)) =
+                    repository.provider.and_then(|provider| provider.provider)
+                else {
+                    continue;
+                };
+                let Some(revision_id) = profile.active_revision_id else {
+                    continue;
+                };
+                let revision = store
+                    .runtime_profile_revision(&revision_id)
+                    .map_err(|_| "runtime_revision_missing")?;
+                let Some(v1::runtime_profile_revision::Configuration::AyniManaged(managed)) =
+                    revision.configuration
+                else {
+                    continue;
+                };
+                let runtime = managed_runtime.profile_runtime(
+                    &github.owner,
+                    &github.name,
+                    &managed.lock_fingerprint,
+                )?;
+                if crate::runtime_configuration::image_repository(&runtime.image)
+                    != Some(managed.oci_repository.as_str())
+                {
+                    continue;
+                }
+                profiles.insert(profile.id, runtime);
+            }
+            page.page_token = result.next_page_token;
+            if page.page_token.is_empty() {
+                drop(store);
+                return Ok(profiles);
+            }
+        }
+        drop(store);
+        Err("runtime_profile_limit_exceeded")
+    }
+
+    fn configured_profile(
+        &self,
+        id: &str,
+    ) -> Result<crate::runtime_configuration::ProfileRuntime, &'static str> {
+        self.configured_profiles()?
+            .remove(id)
+            .ok_or("runtime_source_missing")
+    }
+
     /// Reconciles coding separately from provider publication and image builds.
     pub async fn reconcile_coding(&self) {
         let Ok(_guard) = self.coding_pass.try_lock() else {
             return;
         };
-        for profile in self.configuration.profiles.keys() {
+        for profile in self.configured_profiles().unwrap_or_default().keys() {
             let result = tokio::time::timeout(
                 Duration::from_secs(self.configuration.request_timeout_seconds * 8),
                 self.coding(profile),
@@ -176,7 +255,7 @@ impl RuntimeReconciler {
             return;
         };
         let mut tasks = JoinSet::new();
-        for profile in self.configuration.profiles.keys() {
+        for profile in self.configured_profiles().unwrap_or_default().keys() {
             while tasks.len() >= self.configuration.concurrency {
                 let _ = tasks.join_next().await;
             }
@@ -256,14 +335,10 @@ impl RuntimeReconciler {
         if cursor.next_at > time {
             return Ok(());
         }
-        let runtime = self
-            .configuration
-            .profiles
-            .get(id)
-            .ok_or("runtime_source_missing")?;
+        let runtime = self.configured_profile(id)?;
         let source_digest = format!(
             "sha256:{:x}",
-            Sha256::digest(serde_json::to_vec(runtime).map_err(|_| "runtime_source_invalid")?)
+            Sha256::digest(serde_json::to_vec(&runtime).map_err(|_| "runtime_source_invalid")?)
         );
         let Some(v1::repository_provider::Provider::Github(github)) =
             repository.provider.and_then(|p| p.provider)
@@ -285,7 +360,7 @@ impl RuntimeReconciler {
             .await?;
         let observation = ProfileObservation {
             id,
-            runtime,
+            runtime: &runtime,
             time,
             github,
             head,

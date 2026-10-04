@@ -2,7 +2,7 @@ use ayni_orchestrator_runtime::assessment::{self, Admission, Manifest};
 
 impl RuntimeReconciler {
     async fn review_assessments(&self) -> Result<(), &'static str> {
-        for (profile, runtime) in &self.configuration.profiles {
+        for (profile, runtime) in &self.configured_profiles()? {
             let Some(policy) = &runtime.assessment else {
                 continue;
             };

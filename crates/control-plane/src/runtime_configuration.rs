@@ -16,6 +16,11 @@ pub struct RuntimeConfiguration {
     #[serde(default = "concurrency")]
     pub concurrency: usize,
     pub profiles: BTreeMap<String, ProfileRuntime>,
+    /// Deployment-wide execution policy for App-authorized Ayni Managed
+    /// repositories. Their environment image is derived from GitHub identity
+    /// and the committed lock rather than configured repository by repository.
+    #[serde(default)]
+    pub managed_runtime: Option<ManagedRuntime>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -29,6 +34,19 @@ pub struct ProfileRuntime {
     pub pull_secret: Option<String>,
     #[serde(default)]
     pub build: Option<BuildRuntime>,
+    #[serde(default)]
+    pub assessment: Option<AssessmentConfiguration>,
+}
+
+/// Shared Kubernetes execution settings for self-service Ayni Managed profiles.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedRuntime {
+    pub platform: String,
+    #[serde(default = "runtime_account")]
+    pub service_account: String,
+    #[serde(default)]
+    pub pull_secret: Option<String>,
     #[serde(default)]
     pub assessment: Option<AssessmentConfiguration>,
 }
@@ -111,8 +129,50 @@ impl RuntimeConfiguration {
         for (profile, runtime) in &self.profiles {
             validate_profile(profile, runtime)?;
         }
-
+        if let Some(runtime) = &self.managed_runtime {
+            runtime.validate()?;
+        }
         Ok(())
+    }
+}
+
+impl ManagedRuntime {
+    /// Derives the only acceptable GHCR reference for a connected repository.
+    pub fn profile_runtime(
+        &self,
+        owner: &str,
+        repository: &str,
+        lock_fingerprint: &str,
+    ) -> Result<ProfileRuntime, &'static str> {
+        if !github_component(owner)
+            || !github_component(repository)
+            || lock_fingerprint.len() != 64
+            || !lock_fingerprint
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err("runtime_repository_identity_invalid");
+        }
+        let runtime = ProfileRuntime {
+            image: format!(
+                "ghcr.io/{}-{}-ayni:lock-{}",
+                owner.to_lowercase(),
+                repository.to_lowercase(),
+                lock_fingerprint.to_lowercase()
+            ),
+            platform: self.platform.clone(),
+            service_account: self.service_account.clone(),
+            pull_secret: self.pull_secret.clone(),
+            build: None,
+            assessment: self.assessment.clone(),
+        };
+        validate_profile("managed", &runtime)?;
+        Ok(runtime)
+    }
+
+    fn validate(&self) -> Result<(), &'static str> {
+        self.profile_runtime("owner", "repository", &"a".repeat(64))
+            .map(|_| ())
     }
 }
 
@@ -163,6 +223,14 @@ fn validate_profile(profile: &str, runtime: &ProfileRuntime) -> Result<(), &'sta
     Ok(())
 }
 
+fn github_component(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
 pub fn image_repository(image: &str) -> Option<&str> {
     use ayni_orchestrator_runtime::runtime_contract::RuntimeImage;
     if image.contains('@') {
@@ -201,11 +269,34 @@ mod tests {
             request_timeout_seconds: 30,
             concurrency: 4,
             profiles: BTreeMap::new(),
+            managed_runtime: None,
         };
         assert!(configuration.validate().is_ok());
         configuration.concurrency = 0;
         assert!(configuration.validate().is_err());
         assert!(!name("token:value"));
         assert!(!name("../secret"));
+    }
+
+    #[test]
+    fn derives_managed_image_from_connected_repository_and_lock() {
+        let runtime = ManagedRuntime {
+            platform: "linux/amd64".into(),
+            service_account: "runtime-coding".into(),
+            pull_secret: Some("environment-pull".into()),
+            assessment: None,
+        };
+        let profile = runtime
+            .profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))
+            .unwrap();
+        assert_eq!(
+            profile.image,
+            format!("ghcr.io/ayni-oss-sandbox-ayni:lock-{}", "ab".repeat(32))
+        );
+        assert!(
+            runtime
+                .profile_runtime("../owner", "sandbox", &"a".repeat(64))
+                .is_err()
+        );
     }
 }
