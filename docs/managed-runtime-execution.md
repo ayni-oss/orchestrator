@@ -9,7 +9,8 @@ Set `runtime.serviceAccounts.create=false` and supply each profile's
 `runtime.serviceAccounts.imagePullSecrets` contains existing Secret names;
 Helm never creates registry passwords or signing keys.
 
-Example application-chart values (replace the placeholder digest and profile ID):
+Example application-chart values for self-service Ayni Managed enrollment
+(replace the placeholder digest):
 
 ```yaml
 runtime:
@@ -24,18 +25,22 @@ runtime:
     create: true
     imagePullSecrets:
       - name: runtime-pull
-  profiles:
-    "profile:<id>":
-      image: registry.internal/team/environment:reviewed-lock
-      platform: linux/amd64
+  managedRuntime:
+    platform: linux/amd64
+    service_account: runtime-coding
+    pull_secret: runtime-pull
 ```
 
-The source is explicit; no registry coordinate is inferred from GitHub. The
-controller reads the exact default-branch SHA and bounded lock through the
-repository's GitHub App installation, creates an immutable source-policy
-revision, and persists verification intent before creating a Job. A digest-pinned
-trusted worker init container checks out that SHA with a contents-read token.
-Only this init receives the token; it never persists it in Git configuration.
+For an App-authorized Ayni Managed profile, the controller derives the only
+accepted source as
+`ghcr.io/<connected-owner>/<connected-repository>-ayni:lock-<full-lock-fingerprint>`.
+It compares that repository with the OCI coordinate frozen in the profile
+revision before creating a Job. The controller reads the exact default-branch
+SHA and bounded lock through the repository's GitHub App installation, creates
+an immutable source-policy revision, and persists verification intent before
+creating a Job. A digest-pinned trusted worker init container checks out that
+SHA with a contents-read token. Only this init receives the token; it never
+persists it in Git configuration.
 
 Kubernetes pulls the selected runtime using its own authentication. The image's
 entrypoint remains intact. Before admission, the mounted worker rejects unsigned

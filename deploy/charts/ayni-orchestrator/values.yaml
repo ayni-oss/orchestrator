@@ -11,6 +11,10 @@ runtime:
   requestTimeoutSeconds: 30
   concurrency: 4
   profiles: {}
+  # Shared policy for App-authorized Ayni Managed repositories. Their GHCR
+  # environment references are derived from the connected GitHub repository and
+  # committed lock; no per-repository Kubernetes allowlist is required.
+  managedRuntime: null
   serviceAccounts:
     create: true
     imagePullSecrets: []
