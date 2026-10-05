@@ -78,6 +78,10 @@ pub enum CleanStoreError {
     CreateDirectory(#[source] std::io::Error),
     #[error("durable SQLite operation failed")]
     Database(#[source] rusqlite::Error),
+    #[error("could not start the database worker")]
+    DatabaseWorker(#[source] std::io::Error),
+    #[error("the database worker is unavailable")]
+    StoreUnavailable,
     #[error(
         "the database contains the retired pilot schema; back it up if needed, then run the documented guarded purge/reset procedure"
     )]
@@ -400,4 +404,5 @@ use project_validation::{valid_project, validate_projects};
 use transitions_schema::add_duration;
 pub(crate) use transitions_schema::request_digest;
 
+pub(crate) mod database;
 pub(crate) mod task_cancellation;

@@ -102,7 +102,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         .and_then(|()| api_validation::page(value.page.as_ref()))
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let page = with_store(&self.state, |store| {
+        let page = with_store(&self.state, move |store| {
             store.list_development_tasks(
                 message.project_id.as_deref(),
                 message.repository_connection_id.as_deref(),
@@ -111,6 +111,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
                 message.page.as_ref(),
             )
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::ListDevelopmentTasksResponse {
             development_tasks: page.items.clone(),
@@ -128,9 +129,11 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
             "development_task_id",
         )
         .map_err(|error| context.validation(&error))?;
-        let resource = with_store(&self.state, |store| {
-            store.development_task(&request.get_ref().development_task_id)
+        let message = request.into_inner();
+        let resource = with_store(&self.state, move |store| {
+            store.development_task(&message.development_task_id)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetDevelopmentTaskResponse {
             development_task: Some(resource),
@@ -149,9 +152,10 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         let message = request.into_inner();
         let command = task_mapping::task_command(&key, &message)
             .map_err(|error| context.store_error(&error))?;
-        let (task, attempt) = with_store(&self.state, |store| {
+        let (task, attempt) = with_store(&self.state, move |store| {
             task_mapping::admit_task(store, command)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::CreateDevelopmentTaskResponse {
             development_task: Some(task),
@@ -172,9 +176,10 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
         let command = task_mapping::cancel_command(&key, &message);
-        let task = with_store(&self.state, |store| {
+        let task = with_store(&self.state, move |store| {
             task_mapping::cancel_task(store, command)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::CancelDevelopmentTaskResponse {
             development_task: Some(task),
@@ -193,9 +198,10 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         )
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let attempt = with_store(&self.state, |store| {
+        let attempt = with_store(&self.state, move |store| {
             store.retry_development_task(&key, &message)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::RetryDevelopmentTaskResponse {
             attempt: Some(attempt),
@@ -214,9 +220,10 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         .and_then(|()| api_validation::page(request.get_ref().page.as_ref()))
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let page = with_store(&self.state, |store| {
+        let page = with_store(&self.state, move |store| {
             store.list_development_attempts(&message.development_task_id, message.page.as_ref())
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::ListDevelopmentAttemptsResponse {
             attempts: page.items.clone(),
@@ -234,9 +241,11 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
             "development_attempt_id",
         )
         .map_err(|error| context.validation(&error))?;
-        let resource = with_store(&self.state, |store| {
-            store.development_attempt(&request.get_ref().development_attempt_id)
+        let message = request.into_inner();
+        let resource = with_store(&self.state, move |store| {
+            store.development_attempt(&message.development_attempt_id)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetDevelopmentAttemptResponse {
             attempt: Some(resource),
@@ -259,13 +268,14 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
             .and_then(|()| api_validation::page(value.page.as_ref()))
             .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let page = with_store(&self.state, |store| {
+        let page = with_store(&self.state, move |store| {
             store.list_candidates(
                 message.development_task_id.as_deref(),
                 message.development_attempt_id.as_deref(),
                 message.page.as_ref(),
             )
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::ListCandidatesResponse {
             candidates: page.items.clone(),
@@ -280,9 +290,11 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         let context = self.context(&request, "GetCandidate")?;
         validate_id(&request.get_ref().candidate_id, "candidate_id")
             .map_err(|error| context.validation(&error))?;
-        let resource = with_store(&self.state, |store| {
-            store.candidate(&request.get_ref().candidate_id)
+        let message = request.into_inner();
+        let resource = with_store(&self.state, move |store| {
+            store.candidate(&message.candidate_id)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetCandidateResponse {
             candidate: Some(resource),
@@ -301,16 +313,17 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
             "development_task_id",
         )
         .map_err(|error| context.validation(&error))?;
-        with_store(&self.state, |store| {
-            store
-                .development_task(&request.get_ref().development_task_id)
-                .map(|_| ())
+        let message = request.into_inner();
+        let task_id = message.development_task_id.clone();
+        with_store(&self.state, move |store| {
+            store.development_task(&task_id).map(|_| ())
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         let stream = development_watch(
             self.state.clone(),
             self.shutdown.clone(),
-            request.into_inner(),
+            message,
             context.request_id.clone(),
         );
         Ok(context.response(Box::pin(stream)))

@@ -6,7 +6,7 @@
 use crate::{
     adapters::github as runtime_source,
     adapters::models::ModelCatalog,
-    adapters::sqlite::{CleanStore, CleanStoreError},
+    adapters::sqlite::{CleanStore, CleanStoreError, database::Database},
 };
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -26,6 +26,7 @@ pub enum ReconciliationError {
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) store: StoreHandle,
+    pub(crate) database: Database,
     model_catalog: Option<ModelCatalog>,
     pub(crate) source: Option<Arc<runtime_source::SourceClient>>,
 }
@@ -43,8 +44,11 @@ impl AppState {
     ) -> Result<Self, CleanStoreError> {
         let store = CleanStore::open(database_path, max_attempts)?;
         store.integrity_check()?;
+        let store = Arc::new(Mutex::new(store));
+        let database = Database::start(store.clone())?;
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store,
+            database,
             model_catalog: None,
             source: None,
         })
@@ -75,6 +79,13 @@ impl AppState {
             .reconcile_once()
             .map_err(|_| ReconciliationError::Store)
     }
+}
+
+pub async fn with_store_async<T: Send + 'static>(
+    state: &AppState,
+    operation: impl FnOnce(&mut CleanStore) -> Result<T, CleanStoreError> + Send + 'static,
+) -> Result<T, CleanStoreError> {
+    state.database.execute(operation).await
 }
 
 pub fn with_store<T>(

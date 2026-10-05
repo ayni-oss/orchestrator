@@ -1,6 +1,16 @@
 use super::*;
 
 impl CleanStore {
+    pub(super) fn event_watermark(&self) -> Result<i64, CleanStoreError> {
+        self.connection
+            .query_row(
+                "SELECT COALESCE(MAX(cursor),0) FROM resource_events",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(CleanStoreError::Database)
+    }
+
     pub(crate) fn open(path: impl AsRef<Path>, max_attempts: u32) -> Result<Self, CleanStoreError> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {

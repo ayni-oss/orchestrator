@@ -32,7 +32,7 @@ impl v1::review_service_server::ReviewService for GrpcApi {
         .and_then(|()| api_validation::page(value.page.as_ref()))
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let page = with_store(&self.state, |store| {
+        let page = with_store(&self.state, move |store| {
             store.list_change_requests(
                 message.repository_connection_id.as_deref(),
                 message.candidate_id.as_deref(),
@@ -40,6 +40,7 @@ impl v1::review_service_server::ReviewService for GrpcApi {
                 message.page.as_ref(),
             )
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::ListChangeRequestsResponse {
             change_requests: page.items.clone(),
@@ -54,9 +55,11 @@ impl v1::review_service_server::ReviewService for GrpcApi {
         let context = self.context(&request, "GetChangeRequest")?;
         validate_id(&request.get_ref().change_request_id, "change_request_id")
             .map_err(|error| context.validation(&error))?;
-        let resource = with_store(&self.state, |store| {
-            store.change_request(&request.get_ref().change_request_id)
+        let message = request.into_inner();
+        let resource = with_store(&self.state, move |store| {
+            store.change_request(&message.change_request_id)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetChangeRequestResponse {
             change_request: Some(resource),
@@ -72,8 +75,11 @@ impl v1::review_service_server::ReviewService for GrpcApi {
             .map_err(|error| context.validation(&error))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
-        let resource = with_store(&self.state, |store| store.publish_candidate(&key, &message))
-            .map_err(|error| context.store_error(&error))?;
+        let resource = with_store(&self.state, move |store| {
+            store.publish_candidate(&key, &message)
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::PublishCandidateResponse {
             change_request: Some(resource),
         }))
@@ -110,7 +116,7 @@ impl v1::review_service_server::ReviewService for GrpcApi {
             .and_then(|()| api_validation::page(value.page.as_ref()))
             .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let page = with_store(&self.state, |store| {
+        let page = with_store(&self.state, move |store| {
             store.list_assessments(
                 &message.change_request_id,
                 message.head_revision.as_deref(),
@@ -118,6 +124,7 @@ impl v1::review_service_server::ReviewService for GrpcApi {
                 message.page.as_ref(),
             )
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::ListAssessmentsResponse {
             assessments: page.items.clone(),
@@ -132,9 +139,11 @@ impl v1::review_service_server::ReviewService for GrpcApi {
         let context = self.context(&request, "GetAssessment")?;
         validate_id(&request.get_ref().assessment_id, "assessment_id")
             .map_err(|error| context.validation(&error))?;
-        let resource = with_store(&self.state, |store| {
-            store.assessment(&request.get_ref().assessment_id)
+        let message = request.into_inner();
+        let resource = with_store(&self.state, move |store| {
+            store.assessment(&message.assessment_id)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetAssessmentResponse {
             assessment: Some(resource),
@@ -150,9 +159,10 @@ impl v1::review_service_server::ReviewService for GrpcApi {
             .and_then(|()| api_validation::page(request.get_ref().page.as_ref()))
             .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
-        let page = with_store(&self.state, |store| {
+        let page = with_store(&self.state, move |store| {
             store.list_evidence_references(&message.assessment_id, message.page.as_ref())
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::ListEvidenceReferencesResponse {
             evidence_references: page.items.clone(),
@@ -170,9 +180,11 @@ impl v1::review_service_server::ReviewService for GrpcApi {
             "evidence_reference_id",
         )
         .map_err(|error| context.validation(&error))?;
-        let resource = with_store(&self.state, |store| {
-            store.evidence_reference(&request.get_ref().evidence_reference_id)
+        let message = request.into_inner();
+        let resource = with_store(&self.state, move |store| {
+            store.evidence_reference(&message.evidence_reference_id)
         })
+        .await
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetEvidenceReferenceResponse {
             evidence_reference: Some(resource),

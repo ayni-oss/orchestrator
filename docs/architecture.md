@@ -153,6 +153,14 @@ are distinct application types. Cancellation decisions use neutral lifecycle sta
 the persistence adapter commits the action and task/unfinished-attempt changes
 together, retaining completed attempts and their versions.
 
+Native gRPC persistence and durable watches use a bounded 64-request database
+queue serviced by a dedicated thread. Accepted work finishes even if a caller
+disconnects; retries replay its durable identity. Event notifications are emitted
+after the operation changes the committed event watermark. Watches register
+before reading their cursor, then await notification with a periodic recovery
+poll; notifications never replace durable event authority. Background onboarding
+and reconciliation still use direct store access during their migration.
+
 Kubernetes completion supplies bounded raw output; managed evidence interpretation
 remains with the controller. Server reconciliation loops and finite model warmup
 are tracked. Unexpected task failure stops the server; shutdown signals periodic

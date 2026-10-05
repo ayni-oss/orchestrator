@@ -9,8 +9,9 @@ pub(super) fn repository_watch(
     async_stream::stream! {
         let mut cursor = request.after_cursor.unwrap_or(0);
         if request.after_cursor.is_none() {
-            match with_store(&state, |store| store.initial_events(
-                REPOSITORY_SERVICE, request.repository_connection_id.as_deref(), None)) {
+            let query = request.clone();
+            match with_store(&state, move |store| store.initial_events(
+                REPOSITORY_SERVICE, query.repository_connection_id.as_deref(), None)).await {
                 Ok((events, high_water)) => {
                     for event in events {
                         match repository_update(&event) {
@@ -24,8 +25,13 @@ pub(super) fn repository_watch(
             }
         }
         loop {
-            let events = with_store(&state, |store| store.events_after(
-                REPOSITORY_SERVICE, cursor, request.repository_connection_id.as_deref(), None));
+            let notifications = state.database.notifications();
+            let notified = notifications.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let query = request.clone();
+            let events = with_store(&state, move |store| store.events_after(
+                REPOSITORY_SERVICE, cursor, query.repository_connection_id.as_deref(), None)).await;
             match events {
                 Ok(events) => for event in events {
                     cursor = event.cursor;
@@ -37,7 +43,8 @@ pub(super) fn repository_watch(
                 Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
             }
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_millis(100)) => {},
+                () = notified => {},
+                () = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
                 changed = shutdown.changed() => {
                     if changed.is_err() || *shutdown.borrow() { return; }
                 }
@@ -55,9 +62,10 @@ pub(super) fn profile_watch(
     async_stream::stream! {
         let mut cursor = request.after_cursor.unwrap_or(0);
         if request.after_cursor.is_none() {
-            match with_store(&state, |store| store.initial_events(
-                PROFILE_SERVICE, request.repository_connection_id.as_deref(),
-                request.runtime_profile_id.as_deref())) {
+            let query = request.clone();
+            match with_store(&state, move |store| store.initial_events(
+                PROFILE_SERVICE, query.repository_connection_id.as_deref(),
+                query.runtime_profile_id.as_deref())).await {
                 Ok((events, high_water)) => {
                     for event in events {
                         match profile_update(&event) {
@@ -71,9 +79,14 @@ pub(super) fn profile_watch(
             }
         }
         loop {
-            let events = with_store(&state, |store| store.events_after(
-                PROFILE_SERVICE, cursor, request.repository_connection_id.as_deref(),
-                request.runtime_profile_id.as_deref()));
+            let notifications = state.database.notifications();
+            let notified = notifications.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let query = request.clone();
+            let events = with_store(&state, move |store| store.events_after(
+                PROFILE_SERVICE, cursor, query.repository_connection_id.as_deref(),
+                query.runtime_profile_id.as_deref())).await;
             match events {
                 Ok(events) => for event in events {
                     cursor = event.cursor;
@@ -85,7 +98,8 @@ pub(super) fn profile_watch(
                 Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
             }
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_millis(100)) => {},
+                () = notified => {},
+                () = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
                 changed = shutdown.changed() => if changed.is_err() || *shutdown.borrow() { return; }
             }
         }
@@ -101,8 +115,9 @@ pub(super) fn development_watch(
     async_stream::stream! {
         let mut cursor = request.after_cursor.unwrap_or(0);
         if request.after_cursor.is_none() {
-            match with_store(&state, |store| store.initial_events(
-                DEVELOPMENT_SERVICE, None, Some(&request.development_task_id))) {
+            let query = request.clone();
+            match with_store(&state, move |store| store.initial_events(
+                DEVELOPMENT_SERVICE, None, Some(&query.development_task_id))).await {
                 Ok((events, high_water)) => {
                     for event in events {
                         match development_update(&event) {
@@ -116,8 +131,13 @@ pub(super) fn development_watch(
             }
         }
         loop {
-            let events = with_store(&state, |store| store.events_after(
-                DEVELOPMENT_SERVICE, cursor, None, Some(&request.development_task_id)));
+            let notifications = state.database.notifications();
+            let notified = notifications.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let query = request.clone();
+            let events = with_store(&state, move |store| store.events_after(
+                DEVELOPMENT_SERVICE, cursor, None, Some(&query.development_task_id))).await;
             match events {
                 Ok(events) => for event in events {
                     cursor = event.cursor;
@@ -129,7 +149,8 @@ pub(super) fn development_watch(
                 Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
             }
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_millis(100)) => {},
+                () = notified => {},
+                () = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
                 changed = shutdown.changed() => if changed.is_err() || *shutdown.borrow() { return; }
             }
         }
@@ -145,9 +166,10 @@ pub(super) fn review_watch(
     async_stream::stream! {
         let mut cursor = request.after_cursor.unwrap_or(0);
         if request.after_cursor.is_none() {
-            match with_store(&state, |store| store.initial_events(
-                REVIEW_SERVICE, request.repository_connection_id.as_deref(),
-                request.change_request_id.as_deref())) {
+            let query = request.clone();
+            match with_store(&state, move |store| store.initial_events(
+                REVIEW_SERVICE, query.repository_connection_id.as_deref(),
+                query.change_request_id.as_deref())).await {
                 Ok((events, high_water)) => {
                     for event in events {
                         match review_update(&event) {
@@ -161,9 +183,14 @@ pub(super) fn review_watch(
             }
         }
         loop {
-            let events = with_store(&state, |store| store.events_after(
-                REVIEW_SERVICE, cursor, request.repository_connection_id.as_deref(),
-                request.change_request_id.as_deref()));
+            let notifications = state.database.notifications();
+            let notified = notifications.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let query = request.clone();
+            let events = with_store(&state, move |store| store.events_after(
+                REVIEW_SERVICE, cursor, query.repository_connection_id.as_deref(),
+                query.change_request_id.as_deref())).await;
             match events {
                 Ok(events) => for event in events {
                     cursor = event.cursor;
@@ -175,7 +202,8 @@ pub(super) fn review_watch(
                 Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
             }
             tokio::select! {
-                () = tokio::time::sleep(std::time::Duration::from_millis(100)) => {},
+                () = notified => {},
+                () = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
                 changed = shutdown.changed() => if changed.is_err() || *shutdown.borrow() { return; }
             }
         }

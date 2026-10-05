@@ -10,8 +10,8 @@ use crate::{
         CleanStoreError, DEVELOPMENT_SERVICE, PROFILE_SERVICE, REPOSITORY_SERVICE, REVIEW_SERVICE,
         StoredEvent,
     },
+    application::with_store_async as with_store,
     process::metrics::record_grpc_completion,
-    with_store,
 };
 use ayni_orchestrator_api::{FILE_DESCRIPTOR_SET, v1, validation as api_validation};
 use prost::Message;
@@ -365,8 +365,12 @@ impl RequestContext {
             | CleanStoreError::UnsupportedSchemaVersion(_)
             | CleanStoreError::CreateDirectory(_)
             | CleanStoreError::Database(_)
+            | CleanStoreError::DatabaseWorker(_)
             | CleanStoreError::CorruptState
             | CleanStoreError::Clock => (Code::Internal, v1::ErrorReason::Internal, None, None),
+            CleanStoreError::StoreUnavailable => {
+                (Code::Unavailable, v1::ErrorReason::Internal, None, None)
+            }
         };
         self.status(
             code,

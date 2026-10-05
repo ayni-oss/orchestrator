@@ -1,7 +1,7 @@
 //! Exercises the native transport and durable lifecycle together. Source,
 //! environment and worker observations are fixtures, not provider execution.
 
-use super::{AppState, Code, RichStatus, Status, serve, v1, with_store};
+use super::{AppState, Code, RichStatus, Status, serve, v1};
 use prost::Message;
 use std::{path::Path, time::Duration};
 use tokio::{sync::watch, task::JoinHandle};
@@ -277,3 +277,5 @@ fn assert_frozen_inputs(
 }
 
 mod lifecycle;
+
+use crate::with_store;

@@ -9,7 +9,9 @@ impl v1::project_service_server::ProjectService for GrpcApi {
         let context = self.context(&request, "CreateProject")?;
         api_validation::create_project(request.get_ref()).map_err(|e| context.validation(&e))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
-        let project = with_store(&self.state, |s| s.create_project(&key, request.get_ref()))
+        let message = request.into_inner();
+        let project = with_store(&self.state, move |s| s.create_project(&key, &message))
+            .await
             .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::CreateProjectResponse {
             project: Some(project),
@@ -34,9 +36,11 @@ impl v1::project_service_server::ProjectService for GrpcApi {
                 )
             })
             .map_err(|e| context.validation(&e))?;
-        let page = with_store(&self.state, |s| {
-            s.list_projects(value.state, value.page.as_ref())
+        let message = request.into_inner();
+        let page = with_store(&self.state, move |s| {
+            s.list_projects(message.state, message.page.as_ref())
         })
+        .await
         .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::ListProjectsResponse {
             projects: page.items.clone(),
@@ -51,7 +55,9 @@ impl v1::project_service_server::ProjectService for GrpcApi {
         let context = self.context(&request, "GetProject")?;
         api_validation::resource_id(&request.get_ref().project_id, "project_id")
             .map_err(|e| context.validation(&e))?;
-        let project = with_store(&self.state, |s| s.project(&request.get_ref().project_id))
+        let message = request.into_inner();
+        let project = with_store(&self.state, move |s| s.project(&message.project_id))
+            .await
             .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::GetProjectResponse {
             project: Some(project),
@@ -72,7 +78,9 @@ impl v1::project_service_server::ProjectService for GrpcApi {
         .and_then(|()| api_validation::project_name(&value.display_name))
         .map_err(|e| context.validation(&e))?;
         let key = context.idempotency_key(&value.idempotency_key)?;
-        let project = with_store(&self.state, |s| s.update_project(&key, value))
+        let message = request.into_inner();
+        let project = with_store(&self.state, move |s| s.update_project(&key, &message))
+            .await
             .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::UpdateProjectResponse {
             project: Some(project),
@@ -92,7 +100,9 @@ impl v1::project_service_server::ProjectService for GrpcApi {
         )
         .map_err(|e| context.validation(&e))?;
         let key = context.idempotency_key(&value.idempotency_key)?;
-        let project = with_store(&self.state, |s| s.archive_project(&key, value))
+        let message = request.into_inner();
+        let project = with_store(&self.state, move |s| s.archive_project(&key, &message))
+            .await
             .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::ArchiveProjectResponse {
             project: Some(project),
