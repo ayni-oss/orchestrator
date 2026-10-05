@@ -16,10 +16,19 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       bff.listRepositoryConnections({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context),
       bff.listGithubInstallations(context),
     ]);
+    const runtimeProfiles = await Promise.all(result.repositoryConnections.map(async (repository) => {
+      try {
+        const profiles = await bff.listRuntimeProfiles(repository.id, { pageSize: 10 }, context);
+        return [repository.id, profiles.runtimeProfiles] as const;
+      } catch {
+        return [repository.id, []] as const;
+      }
+    }));
     const installation = installations.find((item) => item.installationId === selectedInstallationId) ?? installations[0];
     const repositories = installation ? await bff.listGithubInstallationRepositories(installation.installationId, context) : [];
     return {
       repositoryConnections: result.repositoryConnections,
+      runtimeProfiles: Object.fromEntries(runtimeProfiles),
       nextPageToken: result.page.nextPageToken || undefined,
       installations,
       selectedInstallationId: installation?.installationId ?? "",
@@ -29,7 +38,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { repositoryConnections: [], installations: [], selectedInstallationId: "", repositories: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { repositoryConnections: [], runtimeProfiles: {}, installations: [], selectedInstallationId: "", repositories: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 
