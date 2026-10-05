@@ -119,7 +119,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -163,6 +163,14 @@ poll; notifications never replace durable event authority. Repository onboarding
 coding, assessment import, publication and readiness all use this queue.
 Provider and Kubernetes requests execute outside database operations.
 
+Readiness observation, authorization and confirmation are application-owned use
+cases with closed policy/state/source values. They load current durable facts,
+preserve newer status when historical evidence arrives, and observe uncertain
+provider transitions without repeating them. Authorization persists intent before
+provider mutation; confirmation rejects changed heads or assessment identities.
+SQLite maps the existing protobuf representation and atomically persists status,
+actions and events, while provider checks remain in the integration coordinator.
+
 Kubernetes completion supplies bounded raw output; managed evidence interpretation
 remains with the controller. Server reconciliation loops and finite model warmup
 are tracked. Unexpected task failure stops the server; shutdown signals periodic
@@ -187,7 +195,7 @@ project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
-Outside task admission and cancellation, application logic still reads generated protobuf resources,
+Outside task admission, cancellation and readiness decisions, application logic still reads generated protobuf resources,
 stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
 core. Continue extracting real use cases with their commands, results and ports into the
 application crate: reconciliation, connector operations, project

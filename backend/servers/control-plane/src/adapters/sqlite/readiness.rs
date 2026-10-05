@@ -2,6 +2,7 @@ use super::{
     CleanStore, CleanStoreError, Digest, Message, Sha256, decode, params,
     persist_change_request_update, request_digest, timestamp, unix_seconds, v1,
 };
+use ayni_orchestrator_application::readiness::{self, Command, Repository};
 
 pub(super) type RetainedReviewEvidence = (Vec<u8>, std::collections::BTreeMap<String, Vec<u8>>);
 
@@ -103,15 +104,13 @@ impl CleanStore {
         let key = readiness_key(id, &status.assessment_id);
         if action {
             let assessment = self.assessment(&status.assessment_id)?;
-            if status.policy != "READY_AFTER_SUCCESSFUL_ASSESSMENT"
-                || status.state != "pending"
-                || change.state != v1::ChangeRequestState::Draft as i32
-                || assessment.change_request_id != id
-                || assessment.head_revision != change.head_revision
-                || assessment.conclusion != v1::AssessmentConclusion::Succeeded as i32
-                || status.authorized_head != assessment.head_revision
-                || change.candidate_id.is_empty()
-            {
+            let status = super::readiness_codec::status_from_wire(&status)?;
+            let context = self.readiness_context(&Command {
+                change_id: id.to_owned(),
+                assessment_id: assessment.id.clone(),
+                policy: status.policy,
+            })?;
+            if !readiness::authorized(&context, &status) {
                 return Err(CleanStoreError::InvalidTransition);
             }
             self.verify_assessment_files(&assessment)?;
