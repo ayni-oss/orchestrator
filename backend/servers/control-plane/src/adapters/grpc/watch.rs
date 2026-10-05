@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) fn repository_watch(
     state: AppState,
-    mut shutdown: watch::Receiver<bool>,
+    mut shutdown: shutdown_watch::Receiver<bool>,
     request: v1::WatchRepositoriesRequest,
     request_id: String,
 ) -> impl Stream<Item = Result<v1::WatchRepositoriesResponse, Status>> + Send {
@@ -55,7 +55,7 @@ pub(super) fn repository_watch(
 
 pub(super) fn profile_watch(
     state: AppState,
-    mut shutdown: watch::Receiver<bool>,
+    mut shutdown: shutdown_watch::Receiver<bool>,
     request: v1::WatchRuntimeProfilesRequest,
     request_id: String,
 ) -> impl Stream<Item = Result<v1::WatchRuntimeProfilesResponse, Status>> + Send {
@@ -108,7 +108,7 @@ pub(super) fn profile_watch(
 
 pub(super) fn development_watch(
     state: AppState,
-    mut shutdown: watch::Receiver<bool>,
+    mut shutdown: shutdown_watch::Receiver<bool>,
     request: v1::WatchDevelopmentTaskRequest,
     request_id: String,
 ) -> impl Stream<Item = Result<v1::WatchDevelopmentTaskResponse, Status>> + Send {
@@ -159,7 +159,7 @@ pub(super) fn development_watch(
 
 pub(super) fn review_watch(
     state: AppState,
-    mut shutdown: watch::Receiver<bool>,
+    mut shutdown: shutdown_watch::Receiver<bool>,
     request: v1::WatchReviewsRequest,
     request_id: String,
 ) -> impl Stream<Item = Result<v1::WatchReviewsResponse, Status>> + Send {

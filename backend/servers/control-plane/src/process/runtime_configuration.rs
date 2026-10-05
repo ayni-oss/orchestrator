@@ -241,5 +241,4 @@ fn github_component(value: &str) -> bool {
 }
 
 #[cfg(test)]
-#[path = "runtime_configuration_tests.rs"]
 mod tests;

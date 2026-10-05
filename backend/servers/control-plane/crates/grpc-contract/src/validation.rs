@@ -514,9 +514,8 @@ fn lower_hex(value: &str, length: usize) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-#[path = "validation_projects.rs"]
-mod validation_projects;
-pub use validation_projects::*;
+mod projects;
+pub use projects::*;
 
 #[cfg(test)]
 mod tests {

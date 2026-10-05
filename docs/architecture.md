@@ -126,7 +126,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, runtime selection/activation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, runtime selection/activation/observation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -201,6 +201,12 @@ adds no events. SQLite checks the observed profile version before persisting and
 atomic artifact/profile events and existing payloads. Managed report conversion,
 frozen report authority, candidate policy changes and provider conclusion interpretation
 belong to the control-plane Ayni profile; the coordinator gathers facts and runs adapters.
+
+Runtime observation decisions and bounded retry backoff also live in the application
+crate. Changed source/configuration discards pending execution before build or verification
+handling. Lost or failed build acknowledgements trigger registry observation rather than
+another build. Verification preserves its existing deadline and retained-build recovery
+rules. Coordinators execute the decisions through adapters and persist the existing cursor.
 
 Coding reconciliation uses application-owned attempt states and decisions. A
 missing queued execution may start; a missing running execution is a failure and

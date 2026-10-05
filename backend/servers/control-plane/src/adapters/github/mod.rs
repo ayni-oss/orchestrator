@@ -292,8 +292,7 @@ impl SourceClient {
     }
 }
 
-#[path = "review.rs"]
-mod runtime_source_review;
+mod review;
 
 async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str> {
     bounded_operation(request, GithubOperation::Read)
@@ -519,8 +518,7 @@ fn sanitize_diagnostic(value: &str) -> Option<String> {
     Some(value.to_owned())
 }
 
-#[path = "onboarding.rs"]
-mod runtime_source_onboarding;
+mod onboarding;
 
 #[cfg(test)]
 mod github_error_tests {

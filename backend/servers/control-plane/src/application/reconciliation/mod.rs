@@ -6,7 +6,11 @@ use crate::{
 };
 use ayni_orchestrator_api::v1;
 use ayni_orchestrator_application::execution::ExecutionBackend;
-use ayni_orchestrator_application::execution::{ExecutionState, Observation};
+use ayni_orchestrator_application::execution::Observation;
+use ayni_orchestrator_application::runtime_reconciliation::{
+    BuildAction, PendingPhase, SourceIdentity, VerificationAction, build_action, pending_phase,
+    retry_delay, verification_action,
+};
 use ayni_orchestrator_kubernetes::execution::{RuntimeKubernetes, operation_name};
 use ayni_orchestrator_profile_ayni::{
     managed_runtime::RuntimeExpectation, runtime_execution::ExecutionRequest,
@@ -272,7 +276,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                             cursor.failures = cursor.failures.saturating_add(1);
                             cursor.status.insert("reason-code".into(), reason.into());
                             cursor.next_at =
-                                now().unwrap_or(0) + backoff(interval, cursor.failures);
+                                now().unwrap_or(0) + retry_delay(interval, cursor.failures);
                             let _ = store.save_runtime_cursor(&profile, &cursor);
                         }
                         Ok(())
@@ -387,7 +391,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let source_digest = observation.source_digest.as_str();
 
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        if pending.request.revision != head || pending.source_digest != source_digest {
+        let phase = pending_phase(
+            SourceIdentity {
+                revision: &pending.request.revision,
+                configuration_digest: &pending.source_digest,
+            },
+            SourceIdentity {
+                revision: head,
+                configuration_digest: source_digest,
+            },
+            pending.build_name.is_some() && !pending.build_observed,
+        );
+        if phase == PendingPhase::DiscardStale {
             self.kubernetes.cleanup(&pending.name).await?;
             if let Some(name) = &pending.build_name {
                 self.kubernetes.cleanup(name).await?;
@@ -397,14 +412,19 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Err("runtime_source_changed");
         }
         if let Some(build_name) = &pending.build_name
-            && !pending.build_observed
+            && phase == PendingPhase::ObserveBuild
         {
             self.observe_build(observation, cursor, &pending, build_name)
                 .await?;
             return Ok(());
         }
-        match self.kubernetes.observe(&pending.name).await? {
-            Observation::Missing => {
+        let observation_result = self.kubernetes.observe(&pending.name).await?;
+        match verification_action(
+            &observation_result,
+            time.saturating_sub(pending.started_at),
+            pending.build_name.is_some(),
+        ) {
+            VerificationAction::Start => {
                 self.kubernetes
                     .start(
                         &pending.name,
@@ -414,16 +434,19 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     )
                     .await?;
             }
-            Observation::Running => {
-                if time.saturating_sub(pending.started_at) > 1900 {
-                    self.kubernetes.cleanup(&pending.name).await?;
-                    cursor.pending = None;
-                    self.save(id, cursor).await?;
-                    return Err("runtime_verification_timeout");
-                }
+            VerificationAction::Wait => {}
+            VerificationAction::Timeout => {
+                self.kubernetes.cleanup(&pending.name).await?;
+                cursor.pending = None;
+                self.save(id, cursor).await?;
+                return Err("runtime_verification_timeout");
             }
-            Observation::Failed(reason) => {
-                if pending.build_name.is_some() {
+            action @ (VerificationAction::RetainFailedBuildIntent
+            | VerificationAction::CleanupFailure) => {
+                let Observation::Failed(reason) = observation_result else {
+                    return Err("runtime_result_invalid");
+                };
+                if action == VerificationAction::RetainFailedBuildIntent {
                     return Err(reason);
                 }
                 self.kubernetes.cleanup(&pending.name).await?;
@@ -434,7 +457,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 self.save(id, cursor).await?;
                 return Err(reason);
             }
-            Observation::Completed { digest, report } => {
+            VerificationAction::Accept => {
+                let Observation::Completed { digest, report } = observation_result else {
+                    return Err("runtime_result_invalid");
+                };
                 let report = serde_json::from_str(&report).map_err(|_| "runtime_result_invalid")?;
                 self.accept(observation, cursor, digest, &report).await?;
             }
@@ -453,8 +479,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let runtime = observation.runtime;
         let token = observation.token.as_str();
         let time = observation.time;
-        match self.kubernetes.coding_state(build_name).await? {
-            ExecutionState::Missing if !pending.build_started => {
+        match build_action(
+            self.kubernetes.coding_state(build_name).await?,
+            pending.build_started,
+        ) {
+            BuildAction::Start => {
                 let build_name = build_name.to_owned();
                 let request = pending.request.clone();
                 cursor
@@ -467,11 +496,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .start_build(&build_name, &runtime.execution_runtime(), &request, token)
                     .await?;
             }
-            ExecutionState::Running => {}
-            // Even a failed build may have published before its acknowledgement
-            // was lost. Observe the registry through a fresh verifier before
-            // deciding the result; never automatically rebuild this revision.
-            _ => {
+            BuildAction::Wait => {}
+            BuildAction::ObserveRegistry => {
                 cursor
                     .pending
                     .as_mut()
@@ -667,21 +693,15 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 }
 
-#[path = "publication.rs"]
-mod runtime_publication;
-#[path = "coding.rs"]
-mod runtime_reconciler_coding;
-#[path = "reviews.rs"]
-mod runtime_reviews;
+mod coding;
+mod publication;
+mod reviews;
 
 fn now() -> Result<u64, &'static str> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|v| v.as_secs())
         .map_err(|_| "clock_invalid")
-}
-fn backoff(interval: u64, failures: u32) -> u64 {
-    interval.saturating_mul(1_u64 << failures.min(6)).min(3600)
 }
 
 impl RuntimeReconciler<RuntimeKubernetes> {
@@ -704,15 +724,5 @@ impl RuntimeReconciler<RuntimeKubernetes> {
             publication_next: Mutex::new(0),
             coding_pass: Mutex::new(()),
         })))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn retry_backoff_is_bounded() {
-        assert_eq!(backoff(60, 1), 120);
-        assert_eq!(backoff(60, u32::MAX), 3600);
     }
 }

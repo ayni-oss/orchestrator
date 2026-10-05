@@ -317,5 +317,4 @@ fn valid_run(run: &RunIdentity) -> bool {
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

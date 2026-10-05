@@ -46,7 +46,7 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?;
     drop(listener);
-    let (shutdown_sender, shutdown) = watch::channel(false);
+    let (shutdown_sender, shutdown) = shutdown_watch::channel(false);
     let server = tokio::spawn(serve(address, state, shutdown));
     let endpoint = format!("http://{address}");
     let channel = tokio::time::timeout(std::time::Duration::from_secs(2), async {
@@ -125,7 +125,7 @@ pub(super) async fn server_validates_bounds_before_durable_resource_operations()
 
     let directory = tempfile::tempdir()?;
     let state = AppState::open(directory.path().join("orchestrator.sqlite"), 3)?;
-    let (_shutdown_sender, shutdown) = watch::channel(false);
+    let (_shutdown_sender, shutdown) = shutdown_watch::channel(false);
     let api = GrpcApi::new(state, shutdown);
     let Err(status) = api
         .create_repository_connection(Request::new(v1::CreateRepositoryConnectionRequest {
@@ -154,7 +154,7 @@ pub(super) async fn unknown_request_enums_fail_closed_with_a_stable_reason()
 
     let directory = tempfile::tempdir()?;
     let state = AppState::open(directory.path().join("orchestrator.sqlite"), 3)?;
-    let (_shutdown_sender, shutdown) = watch::channel(false);
+    let (_shutdown_sender, shutdown) = shutdown_watch::channel(false);
     let api = GrpcApi::new(state, shutdown);
     let Err(status) = api
         .list_repository_connections(Request::new(v1::ListRepositoryConnectionsRequest {
@@ -181,7 +181,7 @@ pub(super) async fn clean_v1_repository_operations_are_durable_and_idempotent()
     let directory = tempfile::tempdir()?;
     let database = directory.path().join("orchestrator.sqlite");
     let state = AppState::open(&database, 3)?;
-    let (_shutdown_sender, shutdown) = watch::channel(false);
+    let (_shutdown_sender, shutdown) = shutdown_watch::channel(false);
     let api = GrpcApi::new(state, shutdown);
     let request = v1::CreateRepositoryConnectionRequest {
         idempotency_key: "repository:create:1".to_owned(),
@@ -215,7 +215,7 @@ pub(super) async fn clean_v1_repository_operations_are_durable_and_idempotent()
     drop(api);
 
     let reopened = AppState::open(database, 3)?;
-    let (_shutdown_sender, shutdown) = watch::channel(false);
+    let (_shutdown_sender, shutdown) = shutdown_watch::channel(false);
     let api = GrpcApi::new(reopened, shutdown);
     let listed = api
         .list_repository_connections(Request::new(v1::ListRepositoryConnectionsRequest {
@@ -236,7 +236,7 @@ pub(super) async fn custom_runtime_is_explicitly_unsupported_in_the_ayni_first_r
 
     let directory = tempfile::tempdir()?;
     let state = AppState::open(directory.path().join("orchestrator.sqlite"), 3)?;
-    let (_shutdown_sender, shutdown) = watch::channel(false);
+    let (_shutdown_sender, shutdown) = shutdown_watch::channel(false);
     let api = GrpcApi::new(state, shutdown);
     let Err(status) = api
         .create_runtime_profile(Request::new(v1::CreateRuntimeProfileRequest {
@@ -271,7 +271,7 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
     use v1::repository_service_server::RepositoryService;
     let directory = tempfile::tempdir()?;
     let state = AppState::open(directory.path().join("projects.sqlite"), 3)?;
-    let (_sender, shutdown) = watch::channel(false);
+    let (_sender, shutdown) = shutdown_watch::channel(false);
     let api = GrpcApi::new(state, shutdown);
     let invalid = api
         .create_project(Request::new(v1::CreateProjectRequest {

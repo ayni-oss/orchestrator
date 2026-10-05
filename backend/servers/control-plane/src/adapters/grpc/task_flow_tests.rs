@@ -4,7 +4,7 @@
 use super::{AppState, Code, RichStatus, Status, serve, v1};
 use prost::Message;
 use std::{path::Path, time::Duration};
-use tokio::{sync::watch, task::JoinHandle};
+use tokio::{sync::watch as shutdown_watch, task::JoinHandle};
 use tonic::{Streaming, transport::Channel};
 use v1::{
     development_task_service_client::DevelopmentTaskServiceClient,
@@ -20,7 +20,7 @@ const IMAGE: &str = "ghcr.io/test-org/repository-ayni";
 
 struct Server {
     state: AppState,
-    shutdown: watch::Sender<bool>,
+    shutdown: shutdown_watch::Sender<bool>,
     task: Option<JoinHandle<Result<(), std::io::Error>>>,
 }
 
@@ -30,7 +30,7 @@ impl Server {
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let address = listener.local_addr()?;
         drop(listener);
-        let (shutdown, receiver) = watch::channel(false);
+        let (shutdown, receiver) = shutdown_watch::channel(false);
         let task = tokio::spawn(serve(address, state.clone(), receiver));
         let server = Self {
             state,

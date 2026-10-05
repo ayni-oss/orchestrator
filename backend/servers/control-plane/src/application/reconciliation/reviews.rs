@@ -517,8 +517,7 @@ pub(super) fn unpack_assessment(archive: &[u8]) -> Result<EvidenceBundle, &'stat
     Ok((manifest, files))
 }
 
-#[path = "readiness.rs"]
-mod runtime_readiness;
+mod readiness;
 
 #[cfg(test)]
 mod review_archive_tests {

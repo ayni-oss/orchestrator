@@ -244,8 +244,7 @@ fn inspect_lock(bytes: &[u8], result: &mut v1::InspectAyniRepositoryResponse) {
     .into();
 }
 
-#[path = "setup.rs"]
-mod onboarding_setup;
+mod setup;
 
 #[cfg(test)]
 mod tests {

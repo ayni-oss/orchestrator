@@ -18,7 +18,7 @@ use prost::Message;
 use prost_types::{Any, Timestamp};
 use sha2::{Digest as _, Sha256};
 use std::{io, net::SocketAddr, pin::Pin, str::FromStr, time::Instant};
-use tokio::sync::watch;
+use tokio::sync::watch as shutdown_watch;
 use tokio_stream::Stream;
 use tonic::{
     Code, Request, Response, Status,
@@ -37,12 +37,12 @@ type BoxGrpcStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>;
 pub struct GrpcApi {
     state: AppState,
     custom_clients: Option<CustomClientGuard>,
-    shutdown: watch::Receiver<bool>,
+    shutdown: shutdown_watch::Receiver<bool>,
 }
 
 impl GrpcApi {
     #[must_use]
-    pub(crate) const fn new(state: AppState, shutdown: watch::Receiver<bool>) -> Self {
+    pub(crate) const fn new(state: AppState, shutdown: shutdown_watch::Receiver<bool>) -> Self {
         Self {
             state,
             custom_clients: None,
@@ -53,7 +53,7 @@ impl GrpcApi {
     const fn new_custom(
         state: AppState,
         custom_clients: CustomClientGuard,
-        shutdown: watch::Receiver<bool>,
+        shutdown: shutdown_watch::Receiver<bool>,
     ) -> Self {
         Self {
             state,
@@ -84,7 +84,7 @@ impl GrpcApi {
 pub async fn serve(
     address: SocketAddr,
     state: AppState,
-    mut shutdown: watch::Receiver<bool>,
+    mut shutdown: shutdown_watch::Receiver<bool>,
 ) -> Result<(), io::Error> {
     let api = GrpcApi::new(state, shutdown.clone());
     let (health_reporter, health) = tonic_health::server::health_reporter();
@@ -139,7 +139,7 @@ pub async fn serve(
 pub async fn serve_custom(
     address: SocketAddr,
     state: AppState,
-    mut shutdown: watch::Receiver<bool>,
+    mut shutdown: shutdown_watch::Receiver<bool>,
     access: CustomClientAccess,
 ) -> Result<(), io::Error> {
     let api = GrpcApi::new_custom(state, access.guard(), shutdown.clone());
@@ -435,20 +435,17 @@ mod task_mapping;
 pub use task_mapping::{cancel_command, task_command};
 mod providers_tasks;
 mod repositories_profiles;
-#[path = "watch.rs"]
-mod watch_streams;
+mod watch;
 
-use watch_streams::{
+use watch::{
     RichStatus, development_watch, elapsed_millis, page_response, profile_watch, repository_watch,
     review_watch, valid_request_id, validate_id, validate_optional_id,
 };
 
-#[path = "reviews.rs"]
-mod grpc_review;
+mod reviews;
 
 #[cfg(test)]
-#[path = "tests.rs"]
-mod grpc_tests;
+mod tests;
 
 #[cfg(test)]
 mod task_flow_tests;
