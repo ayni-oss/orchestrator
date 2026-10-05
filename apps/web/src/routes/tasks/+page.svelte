@@ -19,7 +19,9 @@
 
   let { data, form }: PageProps = $props();
   let submitting = $state(false);
-  let selectedRepository=$state(page.url.searchParams.get("repository") ?? "");
+  let projectChoice=$state<string | undefined>();
+  const selectedProject=$derived(projectChoice ?? page.url.searchParams.get("project") ?? data.projects.find(p=>p.repositoryConnectionIds.includes(page.url.searchParams.get("repository") ?? ""))?.id ?? "");
+  const selectedRepository=$derived(data.projects.find(p=>p.id===selectedProject)?.repositoryConnectionIds[0] ?? "");
   let selectedProfile=$state(page.url.searchParams.get("profile") ?? "");
   const repositoryProfiles=$derived(data.runtimeProfiles.filter(p=>p.repositoryConnectionId===selectedRepository));
   const readyProfiles = $derived(repositoryProfiles.filter((profile) => profile.state === "ready" && profile.support === "operational"));
@@ -44,7 +46,7 @@
       {#if readyProfiles.length === 0 || data.models.length === 0}<Feedback kind="warning" title="Submission unavailable" message={readyProfiles.length === 0 ? "No runtime profile is ready." : "No provider model is available."} />{/if}
       <form method="POST" action="?/create" class="mt-4 space-y-4" use:enhance={() => { submitting = true; return async ({ update }) => { submitting = false; await update(); }; }}>
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="provider" value={data.provider ?? ""} />
-        <div class="space-y-2"><Label for="repository">Repository connection</Label><select id="repository" name="repositoryConnectionId" bind:value={selectedRepository} onchange={()=>selectedProfile=""} required class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a connection</option>{#each data.repositoryConnections as item (item.id)}<option value={item.id}>{item.displayName}</option>{/each}</select></div>
+        <div class="space-y-2"><Label for="project">Project</Label><select id="project" name="projectId" value={selectedProject} onchange={(event)=>{projectChoice=event.currentTarget.value;selectedProfile="";}} required class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a project</option>{#each data.projects as item (item.id)}<option value={item.id}>{item.displayName}</option>{/each}</select></div>
         <div class="space-y-2"><Label for="profile">Runtime profile</Label><select id="profile" name="runtimeProfileId" bind:value={selectedProfile} required disabled={readyProfiles.length === 0} class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a ready profile</option>{#each readyProfiles as profile (profile.id)}<option value={profile.id}>{words(profile.kind)} · {profile.id}</option>{/each}</select></div>
         <div class="space-y-2"><Label for="model">Model</Label><select id="model" name="model" required class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a model</option>{#each data.models as model (model.id)}<option value={model.id}>{model.name ?? model.id}</option>{/each}</select></div>
         <p class="text-xs text-muted-foreground">The selected profile’s verified repository revision and image digest are frozen at submission. Later builds do not change this request.</p>

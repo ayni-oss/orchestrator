@@ -8,13 +8,13 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await expect(page.getByRole("heading", { name: "Development control plane" })).toBeVisible();
   await expect(page.locator("[data-bff-status]")).toHaveAttribute("data-bff-status", "connected");
 
-  await page.getByRole("link", { name: "Repositories" }).click();
+  await page.goto("/repositories");
   await page.getByRole("link", { name: "Profiles and identity" }).click();
   await expect(page.getByRole("heading", { name: "Runtime profiles" })).toBeVisible();
   await expect(page.getByText("Ready", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Tasks" }).click();
-  await page.getByLabel("Repository connection").selectOption("repository:1");
+  await page.getByLabel("Project", {exact:true}).selectOption("project:1");
   await page.getByLabel("Runtime profile").selectOption("profile:1");
   await page.getByLabel("Model").selectOption("gpt-5");
   await page.getByLabel("Request").fill("Document the bounded retry behavior");
@@ -60,4 +60,27 @@ test("every managed profile state explains the next step",async({page,request})=
   await expect(page.getByText(states[index]!,{exact:false}).first()).toBeVisible();
   if(index!==3) await expect(page.getByRole("link",{name:"New request",exact:true})).toHaveCount(0);
  } } finally { await request.post("http://127.0.0.1:50062/profile-state?value=4"); }
+});
+
+test("projects retain identity through rename and archive", async ({ page }) => {
+  await page.goto("/projects");
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+  await page.getByLabel("Project name", { exact: true }).fill("Payments");
+  await page.getByLabel("Repository", { exact: true }).selectOption("repository:1");
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Payments", exact: true })).toBeVisible();
+  await page.getByLabel("Project name", { exact: true }).fill("Ledger");
+  await page.getByRole("button", { name: "Save name", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Ledger", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Archive project", exact: true }).click();
+  await expect(page.getByText("New tasks and retries are disabled for this archived project.", {exact:true})).toBeVisible();
+  await expect(page.getByRole("link", { name: "New task", exact: true })).toHaveCount(0);
+  await page.screenshot({path:"/tmp/orchestrator-project-ui.png",fullPage:true});
+  // Restore the shared browser fixture for later scenarios; real lifecycle is tested natively.
+  await page.goto("/projects");
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+  await page.getByLabel("Project name", { exact: true }).fill("Sandbox");
+  await page.getByLabel("Repository", { exact: true }).selectOption("repository:1");
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Sandbox", exact: true })).toBeVisible();
 });

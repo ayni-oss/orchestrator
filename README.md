@@ -19,6 +19,12 @@ This repository remains private; Ayni is independently useful as a local CLI in 
 
 ## Target product
 
+The project foundation now provides named, single-repository projects with
+project-owned tasks, immutable repository membership, archive history, and
+admission checks. Connector management, project readiness, internal environment
+production, and internal candidate assessment remain follow-up work tracked by
+[the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
+
 Connectors manage access. Projects own repository readiness and environments.
 Tasks develop and verify work. Both runtime profiles share admission, attempts,
 candidates, cancellation, evidence binding, publication and reconciliation.
@@ -36,7 +42,7 @@ and execution. GitHub Actions are not the target assessment authority.
 
 | Document | Purpose |
 | --- | --- |
-| [Connectors, projects and internal assessments](docs/decisions/0009-connectors-projects-and-internal-assessments.md) | Accepted product journey and trust boundaries |
+| [Connectors, projects and internal assessments](docs/decisions/0009-connectors-projects-and-internal-assessments.md) | Accepted product journey, ownership, credential and assessment boundaries |
 | [Clean-v1 runtime-profile decision](docs/decisions/0007-clean-v1-runtime-profiles.md) | Normative names, ownership, identity, lifecycle, trust, recovery, and issue map |
 | [Architecture](docs/architecture.md) | Interface ownership, shared orchestration, runtime profiles, and implementation boundaries |
 | [Interface boundaries](docs/decisions/0010-orchestration-interface-boundaries.md) | Dependency direction and incremental application extraction |

@@ -7,6 +7,12 @@ defines the agreed product; [Decision 0010](decisions/0010-orchestration-interfa
 defines the code boundaries. These decisions describe the target, not a claim
 that every product flow is implemented.
 
+The project foundation provides named, single-repository projects with
+project-owned tasks, immutable repository membership, and archive history. The
+remaining connector, project-readiness, environment-production, and internal
+assessment flows are target behavior; current implementation ownership and gaps
+are tracked in [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
+
 ## Three interfaces, different responsibilities
 
 | Interface | Direction and contract | Owns |
@@ -142,8 +148,9 @@ assessment collection. Its assessment contract requires a PR and workflow/run
 identity; it must not be reused as the pre-publication internal verifier
 contract. The connector, project readiness, internal environment production and
 repair flows above remain tracked by [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
-[Project foundation PR #97](https://github.com/ayni-oss/orchestrator/pull/97)
-is a separate change. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
+The project foundation is implemented with single-repository membership and
+project-owned tasks; connector management and project readiness remain follow-up
+work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
 Application logic still reads generated protobuf resources, stores protobuf

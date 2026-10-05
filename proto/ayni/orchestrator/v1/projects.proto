@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package ayni.orchestrator.v1;
+
+import "ayni/orchestrator/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Projects are user-facing workspaces. This release admits one repository each.
+service ProjectService {
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse);
+  rpc ArchiveProject(ArchiveProjectRequest) returns (ArchiveProjectResponse);
+}
+
+// Lifecycle is separate from the readiness of the project's execution profile.
+enum ProjectState {
+  PROJECT_STATE_UNSPECIFIED = 0;
+  PROJECT_STATE_ACTIVE = 1;
+  PROJECT_STATE_ARCHIVED = 2;
+}
+
+message Project {
+  string id = 1;
+  string display_name = 2;
+  ProjectState state = 3;
+  // Exactly one immutable membership in this release; history survives archive.
+  repeated string repository_connection_ids = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  uint64 resource_version = 7;
+}
+
+message CreateProjectRequest {
+  string idempotency_key = 1;
+  // A nonblank display name of at most 256 UTF-8 bytes, without control characters.
+  string display_name = 2;
+  string repository_connection_id = 3;
+}
+message CreateProjectResponse {
+  Project project = 1;
+}
+message ListProjectsRequest {
+  PageRequest page = 1;
+  optional ProjectState state = 2;
+}
+message ListProjectsResponse {
+  repeated Project projects = 1;
+  PageResponse page = 2;
+}
+message GetProjectRequest {
+  string project_id = 1;
+}
+message GetProjectResponse {
+  Project project = 1;
+}
+message UpdateProjectRequest {
+  string idempotency_key = 1;
+  string project_id = 2;
+  uint64 expected_resource_version = 3;
+  string display_name = 4;
+}
+message UpdateProjectResponse {
+  Project project = 1;
+}
+message ArchiveProjectRequest {
+  string idempotency_key = 1;
+  string project_id = 2;
+  uint64 expected_resource_version = 3;
+}
+message ArchiveProjectResponse {
+  Project project = 1;
+}

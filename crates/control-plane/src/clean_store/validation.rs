@@ -24,6 +24,7 @@ fn valid_version_and_cursor(version: u64, indexed_version: i64, cursor: i64) -> 
 }
 
 fn validate_resource_tables(connection: &Connection) -> Result<(), CleanStoreError> {
+    validate_projects(connection)?;
     validate_indexed_rows::<v1::RepositoryConnection, _>(
         connection,
         "SELECT payload,id,status,resource_version,event_cursor FROM repository_connections",
@@ -131,13 +132,15 @@ fn validate_resource_tables(connection: &Connection) -> Result<(), CleanStoreErr
     validate_indexed_rows::<v1::DevelopmentTask, _>(
         connection,
         "SELECT payload,id,state,active_attempt_id,deadline_at_seconds,deadline_at_nanos,
-                resource_version,event_cursor FROM development_tasks",
+                resource_version,event_cursor,project_id FROM development_tasks",
         |row, value| {
             let deadline = value
                 .snapshot
                 .as_ref()
                 .and_then(|snapshot| snapshot.deadline_at.as_ref());
             Ok(!value.id.is_empty()
+                && !value.project_id.is_empty()
+                && value.project_id == row.get::<_, String>(8)?
                 && value.snapshot.is_some()
                 && value.attempt_count > 0
                 && value.state != v1::DevelopmentTaskState::Unspecified as i32
@@ -288,6 +291,9 @@ fn validate_durable_actions(connection: &Connection) -> Result<(), CleanStoreErr
 
 fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
     match operation {
+        "CreateProject" => v1::CreateProjectRequest::decode(payload).is_ok_and(|v| api_validation::create_project(&v).is_ok()),
+        "UpdateProject" => v1::UpdateProjectRequest::decode(payload).is_ok_and(|v| api_validation::project_mutation(&v.idempotency_key, &v.project_id, v.expected_resource_version).is_ok() && api_validation::project_name(&v.display_name).is_ok()),
+        "ArchiveProject" => v1::ArchiveProjectRequest::decode(payload).is_ok_and(|v| api_validation::project_mutation(&v.idempotency_key, &v.project_id, v.expected_resource_version).is_ok()),
         "CreateRepositoryConnection" => v1::CreateRepositoryConnectionRequest::decode(payload)
             .is_ok_and(|value| api_validation::create_repository_connection(&value).is_ok()),
         "CreateRuntimeProfile" => v1::CreateRuntimeProfileRequest::decode(payload)
@@ -370,6 +376,7 @@ fn valid_resource_event(
     version: i64,
 ) -> Result<bool, CleanStoreError> {
     match (service, resource_type) {
+        (PROJECT_SERVICE, "project") => Ok(v1::Project::decode(payload).is_ok_and(|v| valid_project(&v) && v.id == resource_id && i64::try_from(v.resource_version) == Ok(version))),
         (REPOSITORY_SERVICE, "repository_connection") => {
             valid_repository_connection_event(payload, resource_id, version)
         }

@@ -138,6 +138,7 @@ export interface AgentSelectionDto {
 }
 
 export interface DevelopmentTaskInputDto {
+  projectId: string;
   repositoryConnectionId: string;
   repositoryRevision: string;
   runtimeProfileId: string;
@@ -181,6 +182,7 @@ export type DevelopmentTaskStateDto =
   | "cancelled" | "deadline_exceeded" | "unsupported" | "unknown";
 
 export interface DevelopmentTaskDto {
+  projectId: string;
   id: string;
   snapshot: DevelopmentSnapshotDto;
   state: DevelopmentTaskStateDto;
@@ -258,4 +260,12 @@ export interface RequestContext {
   requestId: string;
   signal?: AbortSignal;
   deadlineMs?: number;
+}
+
+export interface ProjectDto {
+  id: string;
+  displayName: string;
+  state: "active" | "archived";
+  repositoryConnectionIds: string[];
+  resourceVersion: string;
 }

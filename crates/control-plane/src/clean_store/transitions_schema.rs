@@ -217,38 +217,14 @@ fn initialize_schema(connection: &Connection) -> Result<(), CleanStoreError> {
         return Err(CleanStoreError::RetiredPilotSchema);
     }
     if has_marker {
-        if tables
-            != CLEAN_TABLES
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-        {
-            return Err(CleanStoreError::RetiredPilotSchema);
-        }
         let version: i64 = connection
-            .query_row(
-                "SELECT version FROM clean_schema WHERE component='control_plane'",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT version FROM clean_schema WHERE component='control_plane'", [], |row| row.get(0))
             .map_err(CleanStoreError::Database)?;
-        if version == 1 {
-            // Clean-v1 expansion: human-authored PRs have no agent candidate.
-            // This does not admit or migrate the retired pilot schema.
-            connection.execute_batch("PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE;
-                CREATE TABLE change_requests_next(
-                    id TEXT PRIMARY KEY,
-                    repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
-                    candidate_id TEXT REFERENCES candidates(id), state INTEGER NOT NULL,
-                    head_revision TEXT NOT NULL, payload BLOB NOT NULL,
-                    resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE);
-                INSERT INTO change_requests_next SELECT * FROM change_requests;
-                DROP TABLE change_requests;
-                ALTER TABLE change_requests_next RENAME TO change_requests;
-                UPDATE clean_schema SET version=2 WHERE component='control_plane';
-                COMMIT; PRAGMA foreign_keys=ON;").map_err(CleanStoreError::Database)?;
-        } else if version != SCHEMA_VERSION {
+        if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
+        }
+        if tables != CLEAN_TABLES.iter().map(ToString::to_string).collect::<Vec<_>>() {
+            return Err(CleanStoreError::CorruptState);
         }
         return Ok(());
     }
@@ -280,13 +256,24 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',2,unixepoch());
+VALUES ('control_plane',3,unixepoch());
 
 CREATE TABLE repository_connections(
     id TEXT PRIMARY KEY, status INTEGER NOT NULL, provider_key TEXT NOT NULL UNIQUE,
     payload BLOB NOT NULL, resource_version INTEGER NOT NULL CHECK(resource_version > 0),
     event_cursor INTEGER NOT NULL UNIQUE
 );
+CREATE TABLE projects(
+    id TEXT PRIMARY KEY, state INTEGER NOT NULL CHECK(state IN (1,2)),
+    payload BLOB NOT NULL, resource_version INTEGER NOT NULL CHECK(resource_version > 0),
+    event_cursor INTEGER NOT NULL UNIQUE
+);
+CREATE TABLE project_repositories(
+    project_id TEXT PRIMARY KEY REFERENCES projects(id),
+    repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
+    active INTEGER NOT NULL CHECK(active IN (0,1))
+);
+CREATE UNIQUE INDEX active_project_repository ON project_repositories(repository_connection_id) WHERE active=1;
 CREATE TABLE repository_snapshots(
     id TEXT PRIMARY KEY,
     repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
@@ -325,6 +312,7 @@ CREATE TABLE automation_installations(
     resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE
 );
 CREATE TABLE development_tasks(
+    project_id TEXT NOT NULL REFERENCES projects(id),
     id TEXT PRIMARY KEY,
     repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
     runtime_profile_id TEXT NOT NULL REFERENCES runtime_profiles(id),

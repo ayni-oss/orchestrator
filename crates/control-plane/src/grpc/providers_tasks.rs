@@ -74,6 +74,8 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
     ) -> Result<Response<v1::ListDevelopmentTasksResponse>, Status> {
         let context = self.context(&request, "ListDevelopmentTasks")?;
         let value = request.get_ref();
+        validate_optional_id(value.project_id.as_deref(), "project_id")
+            .map_err(|e| context.validation(&e))?;
         validate_optional_id(
             value.repository_connection_id.as_deref(),
             "repository_connection_id",
@@ -102,6 +104,7 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         let message = request.into_inner();
         let page = with_store(&self.state, |store| {
             store.list_development_tasks(
+                message.project_id.as_deref(),
                 message.repository_connection_id.as_deref(),
                 message.runtime_profile_id.as_deref(),
                 message.state,

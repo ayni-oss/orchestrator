@@ -19,6 +19,7 @@ fn page_items_decode(method: &str, items: &[Vec<u8>]) -> bool {
     match method {
         "ListRepositoryConnections" => all_decode!(v1::RepositoryConnection),
         "ListRepositorySnapshots" => all_decode!(v1::RepositorySnapshot),
+        "ListProjects" => all_decode!(v1::Project),
         "ListRuntimeProfiles" => all_decode!(v1::RuntimeProfile),
         "ListRuntimeProfileRevisions" => all_decode!(v1::RuntimeProfileRevision),
         "ListRuntimeArtifacts" => all_decode!(v1::RuntimeArtifact),

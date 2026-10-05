@@ -427,14 +427,18 @@ const REVIEWS_WRITE: &[Capability] = &[Capability::ReviewsWrite];
 
 fn operation(rpc: &'static str) -> Option<Operation> {
     let (required, deadline) = match rpc {
-        "ListRepositoryConnections"
+        "ListProjects"
+        | "GetProject"
+        | "ListRepositoryConnections"
         | "GetRepositoryConnection"
         | "ListRepositorySnapshots"
         | "GetRepositorySnapshot" => (REPOSITORIES_READ, MAX_UNARY_DEADLINE),
         "WatchRepositories" => (REPOSITORIES_READ, MAX_WATCH_DEADLINE),
-        "CreateRepositoryConnection" | "ConnectGithubRepository" => {
-            (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE)
-        }
+        "CreateProject"
+        | "UpdateProject"
+        | "ArchiveProject"
+        | "CreateRepositoryConnection"
+        | "ConnectGithubRepository" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
         "ListRuntimeProfiles"
         | "GetRuntimeProfile"
         | "ListRuntimeProfileRevisions"
@@ -683,6 +687,11 @@ mod tests {
             ("GetRepositorySnapshot", Capability::RepositoriesRead),
             ("WatchRepositories", Capability::RepositoriesRead),
             ("CreateRepositoryConnection", Capability::RepositoriesWrite),
+            ("CreateProject", Capability::RepositoriesWrite),
+            ("UpdateProject", Capability::RepositoriesWrite),
+            ("ArchiveProject", Capability::RepositoriesWrite),
+            ("ListProjects", Capability::RepositoriesRead),
+            ("GetProject", Capability::RepositoriesRead),
             ("ListRuntimeProfiles", Capability::ProfilesRead),
             ("GetRuntimeProfile", Capability::ProfilesRead),
             ("ListRuntimeProfileRevisions", Capability::ProfilesRead),

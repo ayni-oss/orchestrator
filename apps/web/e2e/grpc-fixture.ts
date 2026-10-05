@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { Server, ServerCredentials, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
+  ProjectServiceService, ProjectState,
   DevelopmentAttemptState,
   ReviewServiceService,
   AutomationInstallationState,
@@ -37,6 +38,7 @@ let repository: any = {
   resourceVersion: "1",
 };
 
+let project: any = {id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
 const profile: any = {
   id: profileId,
   repositoryConnectionId: repositoryId,
@@ -74,6 +76,7 @@ function snapshot(request = "Correct the bounded retry formula", sourceRevision 
 function task(id = taskId, state = DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, request?: string): any {
   return {
     id,
+    projectId:"project:1",
     snapshot: snapshot(request),
     state,
     activeAttemptId: `attempt:${id}`,
@@ -173,6 +176,13 @@ const taskService: UntypedServiceImplementation = {
 
 const grpc = new Server();
 grpc.addService(ReviewServiceService, {listChangeRequests(_call:any,callback:any){callback(null,{changeRequests:[{id:"review:1",resourceVersion:"1",candidateId:"candidate:1",repositoryConnectionId:repositoryId,headRevision:"d".repeat(40),baseRevision:revision,state:ChangeRequestState.CHANGE_REQUEST_STATE_DRAFT,provider:{provider:{$case:"github",github:{repositoryId:"123",pullRequestNumber:"9",htmlUrl:"https://github.com/ayni-oss/sandbox/pull/9"}}}}],page});}});
+grpc.addService(ProjectServiceService, {
+  listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
+  getProject(_call:any,callback:any){callback(null,{project});},
+  createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
+  updateProject(call:any,callback:any){project={...project,displayName:call.request.displayName,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+  archiveProject(_call:any,callback:any){project={...project,state:ProjectState.PROJECT_STATE_ARCHIVED,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+});
 grpc.addService(RepositoryServiceService, repositoryService);
 grpc.addService(RuntimeProfileServiceService, runtimeProfileService);
 grpc.addService(ProviderServiceService, providerService);

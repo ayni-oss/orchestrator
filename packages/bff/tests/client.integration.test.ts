@@ -53,6 +53,7 @@ function richStatus(reason = ErrorReason.ERROR_REASON_INVALID_INPUT): Buffer {
 function task() {
   return {
     id: "task:1",
+    projectId: "project:1",
     snapshot: { publishDraft:false, publicationBaseBranch:"main",
       repository: {
         repositoryConnectionId: "repository:1",
@@ -307,7 +308,8 @@ describe("clean-v1 native gRPC BFF integration", () => {
       idempotencyKey: "large-request",
       request: {
         repositoryConnectionId: "repository:1",
-        repositoryRevision: "a".repeat(40),
+        projectId: "project:1",
+      repositoryRevision: "a".repeat(40),
         runtimeProfileId: "profile:1",
         agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },
         request: "x".repeat(1_100_000),
