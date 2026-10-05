@@ -3,3 +3,4 @@
 pub mod coding;
 pub mod integrations;
 pub mod operations;
+pub mod profiles;

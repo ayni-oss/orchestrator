@@ -1,6 +1,6 @@
 use ayni_orchestrator_profile_ayni::runtime_execution::ExecutionRequest;
 use ayni_orchestrator_runtime::{activity::Stage, runtime_execution::read_bounded};
-use ayni_orchestrator_worker::operations::runtime::{checkout, verify};
+use ayni_orchestrator_worker::{operations::runtime::checkout, profiles::ayni::verify};
 use std::{env, fs, io, path::Path, process::ExitCode};
 use tracing::Instrument;
 
@@ -82,7 +82,7 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     match operation.as_str() {
         "build" => {
             activity.record(Stage::Build);
-            ayni_orchestrator_worker::operations::runtime::build(&request, Path::new("/workspace"))
+            ayni_orchestrator_worker::profiles::ayni::build(&request, Path::new("/workspace"))
         }
         "checkout" => {
             activity.record(Stage::Checkout);

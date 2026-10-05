@@ -571,3 +571,5 @@ mod github_error_tests {
 }
 
 pub mod setup;
+
+pub mod publication;

@@ -7,3 +7,5 @@ pub mod execution_settings;
 pub mod readiness;
 
 pub mod publication;
+
+pub mod assessment;

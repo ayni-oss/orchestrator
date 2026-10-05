@@ -173,3 +173,5 @@ fn automatic_request(target: AutomaticTarget) -> Option<AutomaticRequest> {
 
 #[cfg(test)]
 mod tests;
+
+pub mod delivery;

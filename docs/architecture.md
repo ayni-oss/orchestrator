@@ -119,7 +119,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, publication and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, publication, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -132,7 +132,7 @@ library alone does not make code shared.
 | `backend/libs/runtime/contracts` | Neutral execution/coding inputs, activity, candidate reports, OCI/launcher admission and bounded input reading |
 | `backend/libs/runtime/profiles/ayni` | Shared managed expectations/results, identity validation and release metadata |
 | `backend/libs/integrations/github-actions` | Existing Ayni Actions assessment evidence contract shared by controller and worker |
-| `backend/workers/runtime-worker` | Trusted launcher, checkout, coding and managed verification/build invocation; Actions integration operations |
+| `backend/workers/runtime-worker` | Trusted launcher, generic checkout/process helpers and coding; worker `profiles/ayni` owns managed verification/build invocation, and `integrations/github_actions` owns Actions operations |
 | `packages/bff`, `apps/web` | Server-side browser adapter and UI |
 
 The root Cargo workspace retains one lockfile, toolchain and lint configuration.
@@ -170,7 +170,13 @@ and persistence ports. Identical retries replay before reevaluating candidate
 availability. New intents freeze candidate version and Git identity, and commit
 the change request, provider intent and event atomically. Automatic scheduling
 uses the frozen task publication request and excludes cancelled tasks and active
-attempts. Provider-side publication remains in the integration coordinator.
+attempts. Provider-side recovery uses an application-owned provider port: it observes existing
+reviews before allowing a push/create sequence and rejects mismatched frozen Git
+identities. Uncertain observations stop mutations; an uncertain create response
+is recovered by observing the existing review on retry. GitHub response mapping
+and bounded bundle transport remain in the provider adapter. Bundle preparation
+runs outside async executor threads. The integration coordinator still selects
+durable intents and maps retained wire resources.
 
 Readiness observation, authorization and confirmation are application-owned use
 cases with closed policy/state/source values. They load current durable facts,
@@ -204,7 +210,15 @@ project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
-Outside task admission, cancellation, publication admission/scheduling and readiness decisions, application logic still reads generated protobuf resources,
+Assessment admission also uses an application-owned command and persistence port.
+It replays matching immutable evidence before reevaluating profile membership,
+rejects conflicting manifests and foreign repository profiles, and propagates
+unavailable or corrupt replay state instead of treating it as absence. SQLite
+retains the existing Actions-specific payload codec and commits assessment and
+evidence events together. Profile evidence verification remains separate from
+this persistence admission boundary.
+
+Outside task admission, cancellation, publication admission/scheduling/recovery, assessment admission and readiness decisions, application logic still reads generated protobuf resources,
 stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
 core. Continue extracting real use cases with their commands, results and ports into the
 application crate: reconciliation, connector operations, project

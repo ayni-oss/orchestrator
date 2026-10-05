@@ -115,25 +115,60 @@ impl CleanStore {
         artifacts: &std::collections::BTreeMap<String, Vec<u8>>,
         workflow_url: &str,
     ) -> Result<v1::Assessment, CleanStoreError> {
-        use ayni_orchestrator_actions_contract::{Outcome, sha256};
         let identity = format!(
             "{}:{}:{}",
             manifest.run.repository_id, manifest.run.run_id, manifest.run.attempt
         );
-        let id = format!("assessment:{:x}", Sha256::digest(identity));
-        let manifest_digest = sha256(manifest_bytes);
-        if let Ok(existing) = self.assessment(&id) {
-            if matches!(existing.details.as_ref(), Some(v1::assessment::Details::AyniManaged(d)) if d.manifest_digest == manifest_digest)
-            {
-                return Ok(existing);
+        let command = ayni_orchestrator_application::assessment::ImportAssessment {
+            id: format!("assessment:{:x}", Sha256::digest(identity)),
+            manifest_digest: ayni_orchestrator_domain::digest::sha256(manifest_bytes),
+            repository_id: change.repository_connection_id.clone(),
+            change_id: change.id.clone(),
+            profile_revision_id: manifest.run.profile_revision.clone(),
+            head_revision: manifest.run.head.clone(),
+        };
+        let receipt = ayni_orchestrator_application::assessment::import(
+            &mut AssessmentImport {
+                store: self,
+                input: AssessmentImportData {
+                    change,
+                    manifest,
+                    summary,
+                    manifest_bytes,
+                    artifacts,
+                    workflow_url,
+                },
+            },
+            &command,
+        )
+        .map_err(|error| match error {
+            ayni_orchestrator_application::assessment::ImportError::Storage(error) => error,
+            ayni_orchestrator_application::assessment::ImportError::IdentityConflict => {
+                CleanStoreError::IdempotencyConflict
             }
-            return Err(CleanStoreError::IdempotencyConflict);
-        }
-        let revision = self.runtime_profile_revision(&manifest.run.profile_revision)?;
-        let profile = self.runtime_profile(&revision.runtime_profile_id)?;
-        if profile.repository_connection_id != change.repository_connection_id {
-            return Err(CleanStoreError::ParentMismatch);
-        }
+            ayni_orchestrator_application::assessment::ImportError::ParentMismatch => {
+                CleanStoreError::ParentMismatch
+            }
+        })?;
+        self.assessment(&receipt.id)
+    }
+
+    fn commit_review(
+        &mut self,
+        input: &AssessmentImportData<'_>,
+        command: &ayni_orchestrator_application::assessment::ImportAssessment,
+    ) -> Result<v1::Assessment, CleanStoreError> {
+        use ayni_orchestrator_actions_contract::{Outcome, sha256};
+        let AssessmentImportData {
+            change,
+            manifest,
+            summary,
+            manifest_bytes,
+            artifacts,
+            workflow_url,
+        } = *input;
+        let id = command.id.clone();
+        let manifest_digest = command.manifest_digest.clone();
         let conclusion = match manifest.outcome {
             Outcome::Succeeded => v1::AssessmentConclusion::Succeeded,
             Outcome::QualityFailed => v1::AssessmentConclusion::QualityFailed,
@@ -235,6 +270,68 @@ impl CleanStore {
         }
         transaction.commit().map_err(CleanStoreError::Database)?;
         Ok(assessment)
+    }
+}
+
+struct AssessmentImportData<'a> {
+    change: &'a v1::ChangeRequest,
+    manifest: &'a ayni_orchestrator_actions_contract::Manifest,
+    summary: &'a ayni_orchestrator_actions_contract::Summary,
+    manifest_bytes: &'a [u8],
+    artifacts: &'a std::collections::BTreeMap<String, Vec<u8>>,
+    workflow_url: &'a str,
+}
+
+struct AssessmentImport<'a> {
+    store: &'a mut CleanStore,
+    input: AssessmentImportData<'a>,
+}
+
+impl ayni_orchestrator_application::assessment::Repository for AssessmentImport<'_> {
+    type Error = CleanStoreError;
+    fn replay(
+        &self,
+        id: &str,
+    ) -> Result<Option<ayni_orchestrator_application::assessment::RetainedAssessment>, Self::Error>
+    {
+        use ayni_orchestrator_application::assessment::{Receipt, RetainedAssessment};
+        let assessment = match self.store.assessment(id) {
+            Ok(assessment) => assessment,
+            Err(CleanStoreError::NotFound { .. }) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let Some(v1::assessment::Details::AyniManaged(details)) = assessment.details else {
+            return Err(CleanStoreError::IdempotencyConflict);
+        };
+        Ok(Some(RetainedAssessment {
+            receipt: Receipt {
+                id: assessment.id,
+                head_revision: assessment.head_revision,
+            },
+            manifest_digest: details.manifest_digest,
+        }))
+    }
+    fn facts(
+        &self,
+        command: &ayni_orchestrator_application::assessment::ImportAssessment,
+    ) -> Result<ayni_orchestrator_application::assessment::Facts, Self::Error> {
+        let revision = self
+            .store
+            .runtime_profile_revision(&command.profile_revision_id)?;
+        let profile = self.store.runtime_profile(&revision.runtime_profile_id)?;
+        Ok(ayni_orchestrator_application::assessment::Facts {
+            profile_repository_id: profile.repository_connection_id,
+        })
+    }
+    fn commit(
+        &mut self,
+        command: &ayni_orchestrator_application::assessment::ImportAssessment,
+    ) -> Result<ayni_orchestrator_application::assessment::Receipt, Self::Error> {
+        let assessment = self.store.commit_review(&self.input, command)?;
+        Ok(ayni_orchestrator_application::assessment::Receipt {
+            id: assessment.id,
+            head_revision: assessment.head_revision,
+        })
     }
 }
 

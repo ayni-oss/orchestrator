@@ -2,7 +2,8 @@
 use crate::{
     coding::activity::ActivityLog,
     coding::model_usage::{TrackedModel, UsageTracker},
-    operations::runtime::{command, git, verify},
+    operations::runtime::{command, git},
+    profiles::ayni::verify,
 };
 use ayni_orchestrator_domain::ModelUsageStage;
 use ayni_orchestrator_profile_ayni::coding::CodingRequest;
