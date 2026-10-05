@@ -1,0 +1,404 @@
+//! Kubernetes execution transport. Secret contents are never read back.
+use crate::{
+    configuration::{ExecutionConfiguration, WorkloadRuntime},
+    workload,
+};
+use ayni_orchestrator_runtime::runtime_execution::ExecutionRequest;
+use k8s_openapi::api::{
+    batch::v1::Job,
+    core::v1::{ConfigMap, Pod, Secret},
+};
+use kube::{
+    Api, Client,
+    api::{DeleteParams, ListParams, PostParams},
+};
+use serde::Serialize;
+use serde_json::json;
+use sha2::{Digest, Sha256};
+
+pub struct RuntimeKubernetes {
+    pub(crate) client: Client,
+    pub(crate) configuration: ExecutionConfiguration,
+}
+
+pub use ayni_orchestrator_application::execution::{ExecutionState, Observation};
+
+impl RuntimeKubernetes {
+    /// Creates an executor using only the deployed pod's Kubernetes identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if in-cluster configuration or client setup fails.
+    pub fn new(configuration: ExecutionConfiguration) -> Result<Self, &'static str> {
+        // Runtime execution is a deployed controller feature. Never fall back
+        // to a developer's current kubeconfig context when run on a host.
+        let config = kube::Config::incluster().map_err(|_| "kubernetes_incluster_required")?;
+        let client = Client::try_from(config).map_err(|_| "kubernetes_unavailable")?;
+        Ok(Self {
+            client,
+            configuration,
+        })
+    }
+
+    /// Starts or adopts a verification Job with an immutable execution request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code for invalid requests, Kubernetes failures,
+    /// or a conflicting operation identity.
+    pub async fn start<Profile: Serialize + Sync>(
+        &self,
+        name: &str,
+        runtime: &WorkloadRuntime,
+        request: &ExecutionRequest<Profile>,
+        token: &str,
+    ) -> Result<(), &'static str> {
+        let job = verification_job(name, &self.configuration, runtime)?;
+        self.create(
+            name,
+            std::collections::BTreeMap::from([(
+                "execution.json".into(),
+                serde_json::to_string(request).map_err(|_| "runtime_request_invalid")?,
+            )]),
+            token,
+            &job,
+        )
+        .await
+    }
+
+    pub(crate) async fn create(
+        &self,
+        name: &str,
+        data: std::collections::BTreeMap<String, String>,
+        token: &str,
+        job: &Job,
+    ) -> Result<(), &'static str> {
+        let mut job = job.clone();
+        let identity = format!(
+            "sha256:{:x}",
+            Sha256::digest(serde_json::to_vec(&job.spec).map_err(|_| "runtime_job_invalid")?)
+        );
+        job.metadata
+            .annotations
+            .get_or_insert_default()
+            .insert("ayni.io/spec-digest".into(), identity.clone());
+        let namespace = &self.configuration.namespace;
+        let maps: Api<ConfigMap> = Api::namespaced(self.client.clone(), namespace);
+        let secrets: Api<Secret> = Api::namespaced(self.client.clone(), namespace);
+        let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
+        let map: ConfigMap = serde_json::from_value(json!({"apiVersion":"v1", "kind":"ConfigMap", "metadata":{"name":name,"labels":{"ayni.io/runtime-operation":name}}, "immutable":true, "data":data})).map_err(|_| "runtime_request_invalid")?;
+        match maps.create(&PostParams::default(), &map).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(error)) if error.code == 409 => {
+                let existing = maps.get(name).await.map_err(|_| "kubernetes_unavailable")?;
+                if existing.data != map.data {
+                    return Err("runtime_request_conflict");
+                }
+            }
+            Err(_) => return Err("kubernetes_unavailable"),
+        }
+        let secret: Secret = serde_json::from_value(json!({"apiVersion":"v1", "kind":"Secret", "metadata":{"name":name,"labels":{"ayni.io/runtime-operation":name}},"immutable":true,"stringData":{"token":token}})).map_err(|_| "runtime_request_invalid")?;
+        match secrets.create(&PostParams::default(), &secret).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(error)) if error.code == 409 => {}
+            Err(_) => return Err("runtime_source_credential_unavailable"),
+        }
+        match jobs.create(&PostParams::default(), &job).await {
+            Ok(_) => Ok(()),
+            Err(kube::Error::Api(error)) if error.code == 409 => {
+                let existing = jobs.get(name).await.map_err(|_| "kubernetes_unavailable")?;
+                if existing
+                    .metadata
+                    .annotations
+                    .as_ref()
+                    .and_then(|a| a.get("ayni.io/spec-digest"))
+                    != Some(&identity)
+                {
+                    return Err("runtime_job_conflict");
+                }
+                let actual = existing
+                    .spec
+                    .as_ref()
+                    .and_then(|s| s.template.spec.as_ref());
+                let expected = job.spec.as_ref().and_then(|s| s.template.spec.as_ref());
+                if actual.zip(expected).is_none_or(|(actual, expected)| {
+                    actual
+                        .containers
+                        .iter()
+                        .map(|c| (&c.name, &c.image, &c.args))
+                        .ne(expected
+                            .containers
+                            .iter()
+                            .map(|c| (&c.name, &c.image, &c.args)))
+                }) {
+                    return Err("runtime_job_conflict");
+                }
+                Ok(())
+            }
+            Err(_) => Err("runtime_job_creation_failed"),
+        }
+    }
+
+    /// Reads a verification Job and validates its completed pod identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if Kubernetes is unavailable or the completed
+    /// pod does not contain a valid verification result and image digest.
+    pub async fn observe(&self, name: &str) -> Result<Observation, &'static str> {
+        let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let Some(job) = jobs
+            .get_opt(name)
+            .await
+            .map_err(|_| "kubernetes_unavailable")?
+        else {
+            return Ok(Observation::Missing);
+        };
+        if job.status.as_ref().is_some_and(|s| {
+            s.failed.unwrap_or(0) > 0
+                || s.conditions.as_ref().is_some_and(|conditions| {
+                    conditions
+                        .iter()
+                        .any(|c| c.type_ == "Failed" && c.status == "True")
+                })
+        }) {
+            return Ok(Observation::Failed("runtime_verification_failed"));
+        }
+        if job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0) != 1 {
+            return Ok(Observation::Running);
+        }
+        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let list = pods
+            .list(
+                &ListParams::default()
+                    .labels(&format!("ayni.io/runtime-operation={name}"))
+                    .limit(2),
+            )
+            .await
+            .map_err(|_| "kubernetes_unavailable")?;
+        if list.items.len() != 1 {
+            return Ok(Observation::Failed("runtime_pod_identity_invalid"));
+        }
+        let pod = &list.items[0];
+        let owner_matches = pod
+            .metadata
+            .owner_references
+            .as_ref()
+            .is_some_and(|owners| {
+                owners.iter().any(|owner| {
+                    Some(&owner.uid) == job.metadata.uid.as_ref() && owner.controller == Some(true)
+                })
+            });
+        if !owner_matches {
+            return Ok(Observation::Failed("runtime_pod_identity_invalid"));
+        }
+        let status = pod
+            .status
+            .as_ref()
+            .and_then(|s| s.container_statuses.as_ref())
+            .and_then(|s| s.iter().find(|s| s.name == "verify"))
+            .ok_or("runtime_result_missing")?;
+        let finished = status
+            .state
+            .as_ref()
+            .and_then(|s| s.terminated.as_ref())
+            .filter(|s| s.exit_code == 0)
+            .ok_or("runtime_verification_failed")?;
+        let message = finished
+            .message
+            .as_deref()
+            .filter(|s| s.len() <= 4096)
+            .ok_or("runtime_result_invalid")?;
+        let report = message.to_owned();
+        let digest = status
+            .image_id
+            .rsplit_once("@sha256:")
+            .map(|(_, digest)| format!("sha256:{digest}"))
+            .filter(|value| {
+                value.len() == 71
+                    && value[7..]
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+            })
+            .ok_or("runtime_digest_unavailable")?;
+        Ok(Observation::Completed { digest, report })
+    }
+
+    /// Reports whether every pod belonging to a coding Job has terminated.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if the Job's pods cannot be inspected.
+    pub async fn coding_stopped(&self, name: &str) -> Result<bool, &'static str> {
+        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let pods = pods
+            .list(&ListParams::default().labels(&format!("job-name={name}")))
+            .await
+            .map_err(|_| "kubernetes_unavailable")?;
+        Ok(pods.items.iter().all(|pod| {
+            pod.status
+                .as_ref()
+                .and_then(|s| s.phase.as_deref())
+                .is_some_and(|phase| matches!(phase, "Succeeded" | "Failed"))
+        }))
+    }
+
+    /// Removes an operation's Job, immutable request, and source credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded error code if any Kubernetes deletion fails.
+    pub async fn cleanup(&self, name: &str) -> Result<(), &'static str> {
+        let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let maps: Api<ConfigMap> =
+            Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let secrets: Api<Secret> =
+            Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        for result in [
+            jobs.delete(name, &DeleteParams::background())
+                .await
+                .map(|_| ()),
+            maps.delete(name, &DeleteParams::default())
+                .await
+                .map(|_| ()),
+            secrets
+                .delete(name, &DeleteParams::default())
+                .await
+                .map(|_| ()),
+        ] {
+            match result {
+                Ok(()) => {}
+                Err(kube::Error::Api(error)) if error.code == 404 => {}
+                Err(_) => return Err("runtime_cleanup_failed"),
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Derives a deterministic Kubernetes operation name from a profile sequence.
+#[must_use]
+pub fn operation_name(profile: &str, sequence: u64) -> String {
+    format!(
+        "runtime-{:x}",
+        Sha256::digest(format!("{profile}:{sequence}"))
+    )[..48]
+        .to_owned()
+}
+
+/// Renders a verification Job with source credentials confined to checkout.
+///
+/// # Errors
+///
+/// Returns a bounded error code if the Job representation cannot be decoded.
+pub fn verification_job(
+    name: &str,
+    configuration: &ExecutionConfiguration,
+    runtime: &WorkloadRuntime,
+) -> Result<Job, &'static str> {
+    let container =
+        workload::worker_container("verify", &runtime.image, &workload::runtime_environment());
+    serde_json::from_value(workload::source_job(
+        name,
+        configuration,
+        runtime,
+        &runtime.service_account,
+        &container,
+    ))
+    .map_err(|_| "runtime_job_invalid")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn verification_preserves_entrypoint_and_limits_credentials_to_checkout()
+    -> Result<(), &'static str> {
+        let configuration = ExecutionConfiguration {
+            namespace: "test".into(),
+            worker_image: "worker".into(),
+            output_claim: "output".into(),
+            model_secret: "model".into(),
+            allow_emulation: false,
+        };
+        let runtime = WorkloadRuntime {
+            image: "registry/runtime:lock".into(),
+            platform: "linux/amd64".into(),
+            service_account: "runtime".into(),
+            pull_secret: None,
+            build: None,
+        };
+        let job = verification_job("verify-test", &configuration, &runtime)?;
+        let pod = job
+            .spec
+            .and_then(|s| s.template.spec)
+            .ok_or("pod_missing")?;
+        for container in pod
+            .containers
+            .iter()
+            .chain(pod.init_containers.iter().flatten())
+        {
+            for mount in container
+                .volume_mounts
+                .iter()
+                .flatten()
+                .filter(|m| m.name == "request")
+            {
+                assert_eq!(mount.mount_path, "/request/execution.json");
+                assert_eq!(mount.sub_path.as_deref(), Some("execution.json"));
+                assert_eq!(mount.read_only, Some(true));
+            }
+        }
+        assert_eq!(pod.automount_service_account_token, Some(false));
+        assert!(pod.containers[0].env.iter().flatten().any(|variable| {
+            variable.name == "XDG_CACHE_HOME" && variable.value.as_deref() == Some("/scratch/cache")
+        }));
+        assert!(pod.containers[0].command.is_none());
+        assert!(
+            pod.containers[0]
+                .env
+                .as_ref()
+                .is_some_and(|env| env.iter().all(|e| e.value_from.is_none()))
+        );
+        assert_eq!(pod.service_account_name.as_deref(), Some("runtime"));
+        assert_eq!(
+            pod.node_selector
+                .as_ref()
+                .and_then(|selectors| selectors.get("kubernetes.io/arch"))
+                .map(String::as_str),
+            Some("amd64")
+        );
+        assert!(
+            pod.volumes
+                .ok_or("volumes_missing")?
+                .iter()
+                .all(|v| v.host_path.is_none())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn local_emulation_omits_only_the_platform_node_selector() -> Result<(), &'static str> {
+        let configuration = ExecutionConfiguration {
+            namespace: "test".into(),
+            worker_image: "worker".into(),
+            output_claim: "output".into(),
+            model_secret: "model".into(),
+            allow_emulation: true,
+        };
+        let runtime = WorkloadRuntime {
+            image: "registry/runtime:lock".into(),
+            platform: "linux/amd64".into(),
+            service_account: "runtime".into(),
+            pull_secret: None,
+            build: None,
+        };
+        let job = verification_job("verify-test", &configuration, &runtime)?;
+        let pod = job
+            .spec
+            .and_then(|s| s.template.spec)
+            .ok_or("pod_missing")?;
+        assert_eq!(pod.node_selector, Some(std::collections::BTreeMap::new()));
+        Ok(())
+    }
+}

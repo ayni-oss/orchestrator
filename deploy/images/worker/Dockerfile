@@ -2,7 +2,7 @@
 FROM rust:1.94.0-bookworm AS builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
-COPY crates ./crates
+COPY backend ./backend
 RUN --mount=type=cache,id=ayni-orchestrator-worker-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-worker-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-worker-target,target=/workspace/target \

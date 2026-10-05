@@ -1,13 +1,15 @@
 [workspace]
 members = [
-    "crates/api",
-    "crates/domain",
-    "crates/observability",
-    "crates/control-plane",
-    "crates/worker",
-    "crates/runtime",
-    "crates/profile-ayni",
-    "crates/kubernetes",
+    "backend/servers/control-plane/crates/application",
+    "backend/libs/integrations/github-actions",
+    "backend/servers/control-plane/crates/grpc-contract",
+    "backend/libs/domain",
+    "backend/libs/observability",
+    "backend/servers/control-plane",
+    "backend/workers/runtime-worker",
+    "backend/libs/runtime/contracts",
+    "backend/libs/runtime/profiles/ayni",
+    "backend/servers/control-plane/crates/kubernetes",
 ]
 resolver = "3"
 

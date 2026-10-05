@@ -111,29 +111,51 @@ nor signing/push credentials.
 
 ## Code structure
 
+`backend/servers/control-plane` owns the server lifecycle and its private Rust
+library crates. `backend/workers/runtime-worker` owns executable work. Only
+contracts and behavior needed by both belong under `backend/libs`; being a Rust
+library alone does not make code shared.
+
 | Location | Current ownership |
 | --- | --- |
-| `proto/`, `crates/api`, `clients/typescript` | Public gRPC schema, generated bindings and request syntax validation |
-| `crates/domain` | Shared change constraints, scope bounds and usage values |
-| `crates/runtime` | Profile-neutral typed execution/coding contracts, activity, candidate reports, OCI/launcher admission and bounded input reading |
-| `crates/profile-ayni` | Explicit managed execution types, Ayni expectation/result validation, release pin, and the existing Actions assessment contract |
-| `crates/kubernetes` | Execution-only deployment/workload configuration, neutral Job construction, submission, observation and cleanup |
-| `crates/control-plane/src/application.rs` | Shared application state and durable reconciliation entry point |
-| `crates/control-plane/src/configuration.rs` | Server process/listener configuration |
-| `crates/control-plane/src/runtime_configuration.rs` | Runtime JSON admission, reconciliation scheduling, managed image derivation and publication policy; explicit mapping to Kubernetes inputs |
-| `crates/control-plane/src/http.rs`, `http/` | Operational router and health JSON using only projected model availability |
-| `crates/control-plane/src/grpc*` | Native user-facing transport, access enforcement and response mapping |
-| `crates/control-plane/src/clean_store*`, `runtime_reconciler*` | Existing durable lifecycle and reconciliation, still coupled to protobuf resource types |
-| `crates/control-plane/src/runtime_source*`, `onboarding*` | Existing GitHub integration and managed onboarding |
-| `crates/worker` | Executable launcher, checkout, agent and explicit managed verification/build operations |
+| `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission commands, immutable bindings and atomic persistence port; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
+| `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
+| `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
+| `backend/servers/control-plane/src/adapters/sqlite` | Database schema, explicit protobuf persistence codec, transactional resources/actions/events; remaining lifecycle methods awaiting extraction |
+| `backend/servers/control-plane/src/adapters/github`, `adapters/models.rs` | Provider communication and model discovery |
+| `backend/servers/control-plane/src/application` | Shared server state, onboarding and reconciliation coordinators; remaining protobuf/provider coupling is explicit |
+| `backend/servers/control-plane/src/process` | Listener/runtime configuration, metrics and tracked background work with bounded shutdown |
+| `backend/servers/control-plane/src/profiles/ayni` | Managed environment and repository preparation policy |
+| `backend/libs/domain` | Shared change constraints, scope bounds, usage values and content digests |
+| `backend/libs/runtime/contracts` | Neutral execution/coding inputs, activity, candidate reports, OCI/launcher admission and bounded input reading |
+| `backend/libs/runtime/profiles/ayni` | Shared managed expectations/results, identity validation and release metadata |
+| `backend/libs/integrations/github-actions` | Existing Ayni Actions assessment evidence contract shared by controller and worker |
+| `backend/workers/runtime-worker` | Trusted launcher, checkout, coding and managed verification/build invocation; Actions integration operations |
 | `packages/bff`, `apps/web` | Server-side browser adapter and UI |
 
-Dependencies point from adapters toward the contracts they implement. The
-runtime crate cannot depend on Ayni, Kubernetes, gRPC or executables. The Ayni
-profile can depend on shared runtime contracts; Kubernetes can depend on both
-when rendering managed workloads. Neither the worker nor Kubernetes depends on
-the public API. The control-plane executable composes those pieces. The
-repository's Ayni dependency policy enforces these crate boundaries.
+The root Cargo workspace retains one lockfile, toolchain and lint configuration.
+Normal Rust module trees match the control-plane directories. Dependencies point
+from concrete adapters to the contracts they implement: application cannot
+import gRPC, SQLite, Kubernetes or executable packages. Kubernetes implements the
+application execution port and cannot import Ayni profile policy or the public
+API. Shared runtime contracts cannot import Ayni, Kubernetes, gRPC or executables.
+The worker cannot import controller application code or the public API. The Ayni
+dependency policy enforces crate direction.
+
+Task admission replays its persisted request identity before reevaluating current
+readiness. New admissions freeze source/runtime bindings through neutral values,
+then atomically persist the task, initial attempt, idempotency record and both
+events. The wire adapter and persistence codec preserve the existing protobuf
+representation and action-hash format. Deadline durations and absolute timestamps
+are distinct application types.
+
+Kubernetes completion supplies bounded raw output; managed evidence interpretation
+remains with the controller. Server reconciliation loops and finite model warmup
+are tracked. Unexpected task failure stops the server; shutdown signals periodic
+loops, allows in-flight work to finish and aborts work exceeding the bounded grace
+period. Durable intents remain responsible for recovering uncertain external work.
 
 Managed requests instantiate the generic execution/coding contract with a
 required `RuntimeExpectation`. This preserves the serialized managed request
@@ -153,11 +175,11 @@ project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
-Application logic still reads generated protobuf resources, stores protobuf
-payloads and calls concrete providers. Do not describe this as a fully isolated
-core. Extract real use cases with their commands, results and ports into an
-application crate as they are changed: connector operations, project inspection,
-environment resolution, task admission, then assessment/publication. Keep wire
+Outside task admission, application logic still reads generated protobuf resources,
+stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
+core. Continue extracting real use cases with their commands, results and ports into the
+application crate: cancellation, reconciliation, connector operations, project
+inspection, environment resolution and assessment/publication. Keep wire
 conversion at gRPC and explicit persistence codec boundaries. Move managed
 evidence rules out of generic storage while preserving shared identity and
 digest checks. Introduce explicit profile dispatch before admitting custom

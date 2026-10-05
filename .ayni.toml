@@ -35,13 +35,16 @@ fn_cyclomatic = { warn = 10, fail = 31 }
 fn_cognitive = { warn = 20, fail = 29 }
 
 [rust.deps.forbidden]
-"crates/api" = ["crates/domain", "crates/observability", "crates/runtime", "crates/profile-ayni", "crates/kubernetes", "crates/control-plane", "crates/worker"]
-"crates/domain" = ["crates/api", "crates/observability", "crates/runtime", "crates/profile-ayni", "crates/kubernetes", "crates/control-plane", "crates/worker"]
-"crates/runtime" = ["crates/api", "crates/observability", "crates/profile-ayni", "crates/kubernetes", "crates/control-plane", "crates/worker"]
-"crates/profile-ayni" = ["crates/api", "crates/observability", "crates/kubernetes", "crates/control-plane", "crates/worker"]
-"crates/kubernetes" = ["crates/api", "crates/control-plane", "crates/worker"]
-"crates/control-plane" = ["crates/worker"]
-"crates/worker" = ["crates/api", "crates/kubernetes", "crates/control-plane"]
+"backend/servers/control-plane/crates/application" = ["backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/*", "backend/libs/runtime/profiles/ayni", "backend/libs/integrations/github-actions", "backend/libs/observability"]
+"backend/servers/control-plane/crates/grpc-contract" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/runtime/contracts", "backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
+"backend/libs/domain" = ["backend/servers/control-plane/crates/grpc-contract", "backend/libs/observability", "backend/libs/runtime/contracts", "backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
+"backend/libs/runtime/contracts" = ["backend/servers/control-plane/crates/grpc-contract", "backend/libs/observability", "backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
+"backend/libs/runtime/profiles/ayni" = ["backend/servers/control-plane/crates/grpc-contract", "backend/libs/observability", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
+"backend/servers/control-plane/crates/kubernetes" = ["backend/libs/runtime/profiles/ayni", "backend/libs/integrations/github-actions", "backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane", "backend/workers/runtime-worker"]
+"backend/servers/control-plane" = ["backend/workers/runtime-worker"]
+"backend/workers/runtime-worker" = ["backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane"]
+
+"backend/libs/integrations/github-actions" = ["backend/servers/*", "backend/workers/*", "backend/libs/observability"]
 
 # Package roots keep generated protobuf bindings out of source-quality budgets.
 # Their TypeScript compilation remains part of the frontend compatibility check.
