@@ -117,11 +117,7 @@ grep -q 'grafana/grafana:12.1.1@sha256:a1701c2180249361737a99a01bc770db39381640e
 grep -q 'orchestrator.ayni.dev/stack: observability' "$scratch/local.yaml"
 grep -q 'sizeLimit: 1Gi' "$scratch/local.yaml"
 grep -q 'sizeLimit: 64Mi' "$scratch/local.yaml"
-grep -q '^      initContainers:$' "$scratch/hot-reload.yaml"
-grep -q '^        - name: control-plane-workspace$' "$scratch/hot-reload.yaml"
-grep -q '^        - name: web-workspace$' "$scratch/hot-reload.yaml"
-grep -q 'sizeLimit: 4Gi' "$scratch/hot-reload.yaml"
-grep -q 'sizeLimit: 2Gi' "$scratch/hot-reload.yaml"
+grep -q 'readOnlyRootFilesystem: false' "$scratch/hot-reload.yaml"
 grep -q 'local/ayni-orchestrator-control-plane-dev:test' "$scratch/hot-reload.yaml"
 grep -q 'local/ayni-orchestrator-web-dev:test' "$scratch/hot-reload.yaml"
 if grep -q '@sha256:sha256:' "$scratch/local.yaml"; then

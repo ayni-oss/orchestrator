@@ -31,6 +31,9 @@ dev/ctl hot-reload
 This first synchronizes Secrets and deploys the normal Helm release with local
 development images. It then attaches Tilt to the existing `control-plane` Pod;
 Helm remains the resource owner. The Pod continues to contain both sidecars.
+Only these development images have a writable root filesystem, allowing Tilt to
+synchronize source beside their development dependencies; normal images remain
+read-only.
 
 - Changes under `backend/` or `proto/` are copied into the control-plane
   container, compiled there, and restart only that container.

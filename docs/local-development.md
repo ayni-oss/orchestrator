@@ -18,10 +18,11 @@ The reusable production chart remains opt-in.
 
 For server and web iteration, `dev/ctl hot-reload` retains the same Helm
 release and single-Pod topology but selects development-only images and opens a
-Tilt session. Source is synced into writable `emptyDir` workspaces; the
-production containers and reusable-release default have no source mount. Rust
-changes are compiled in the control-plane container and restart that container
-only. Vite serves the web sidecar and applies its normal browser refresh path.
+Tilt session. Source is synced into writable development-image filesystems;
+production containers and the reusable-release default retain their read-only
+root filesystem. Rust changes are compiled in the control-plane container and
+restart that container only. Vite serves the web sidecar and applies its normal
+browser refresh path.
 Changes to dependencies, generated bindings, values, templates, or credentials
 are intentionally deployment inputs: stop Tilt and rerun `dev/ctl hot-reload`.
 

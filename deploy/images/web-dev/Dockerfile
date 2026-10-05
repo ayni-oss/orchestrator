@@ -19,6 +19,5 @@ COPY --chown=10002:10002 clients/typescript clients/typescript
 COPY --chown=10002:10002 packages/bff packages/bff
 COPY --chown=10002:10002 apps/web apps/web
 
-WORKDIR /workspace
 EXPOSE 3000
-CMD ["pnpm", "--filter", "@ayni-orchestrator/web", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["pnpm", "--filter", "@ayni-orchestrator/web", "dev", "--host", "0.0.0.0", "--port", "3000"]

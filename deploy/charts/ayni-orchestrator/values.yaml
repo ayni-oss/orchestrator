@@ -31,8 +31,6 @@ images:
 development:
   hotReload:
     enabled: false
-    controlPlaneWorkspaceSize: 4Gi
-    webWorkspaceSize: 2Gi
 
 controlPlane:
   maxAttempts: 3
