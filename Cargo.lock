@@ -180,6 +180,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ayni-orchestrator-actions-contract"
+version = "0.1.0"
+dependencies = [
+ "ayni-orchestrator-domain",
+ "ayni-orchestrator-profile-ayni",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ayni-orchestrator-api"
 version = "0.1.0"
 dependencies = [
@@ -193,12 +203,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ayni-orchestrator-application"
+version = "0.1.0"
+dependencies = [
+ "ayni-orchestrator-domain",
+ "ayni-orchestrator-runtime",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "ayni-orchestrator-control-plane"
 version = "0.1.0"
 dependencies = [
  "async-stream",
  "axum",
+ "ayni-orchestrator-actions-contract",
  "ayni-orchestrator-api",
+ "ayni-orchestrator-application",
  "ayni-orchestrator-domain",
  "ayni-orchestrator-kubernetes",
  "ayni-orchestrator-observability",
@@ -236,6 +258,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
 ]
 
@@ -243,7 +266,7 @@ dependencies = [
 name = "ayni-orchestrator-kubernetes"
 version = "0.1.0"
 dependencies = [
- "ayni-orchestrator-profile-ayni",
+ "ayni-orchestrator-application",
  "ayni-orchestrator-runtime",
  "k8s-openapi",
  "kube",
@@ -287,6 +310,7 @@ dependencies = [
 name = "ayni-orchestrator-worker"
 version = "0.1.0"
 dependencies = [
+ "ayni-orchestrator-actions-contract",
  "ayni-orchestrator-domain",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
@@ -294,6 +318,7 @@ dependencies = [
  "base64 0.22.1",
  "rig-agent",
  "rig-core",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",

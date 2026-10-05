@@ -1,0 +1,32 @@
+[package]
+name = "ayni-orchestrator-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ayni-orchestrator-actions-contract = { path = "../../libs/integrations/github-actions" }
+ayni-orchestrator-observability = { path = "../../libs/observability" }
+tracing.workspace = true
+ayni-orchestrator-runtime = { path = "../../libs/runtime/contracts" }
+ayni-orchestrator-profile-ayni = { path = "../../libs/runtime/profiles/ayni" }
+ayni-orchestrator-domain = { path = "../../libs/domain" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+base64.workspace = true
+thiserror.workspace = true
+rig-agent.workspace = true
+rig-core.workspace = true
+tokio.workspace = true
+
+tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[lints]
+workspace = true

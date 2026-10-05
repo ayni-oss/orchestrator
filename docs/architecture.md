@@ -101,6 +101,13 @@ publication; no changes or no valid candidate produce no PR. Changed owned PR
 heads invalidate earlier assessment authority. Reassessment does not silently
 start another agent repair session.
 
+Publication delivery uses validated full Git revision types for its frozen and
+provider-returned heads. Execution port errors carry typed categories while the
+adapter mapping preserves existing bounded diagnostic codes. Unknown failure
+codes remain explicitly unclassified rather than implying retry authority.
+Coding dispatch matches the closed profile kinds and rejects missing/unknown
+wire values; Custom Runtime remains unsupported by this coordinator.
+
 External mutations have durable intent and deterministic identities before
 execution. After an uncertain response, reconcile existing Job, registry or
 provider state before retrying. Preserve task history and frozen digests across
@@ -111,29 +118,134 @@ nor signing/push credentials.
 
 ## Code structure
 
+`backend/servers/control-plane` owns the server lifecycle and its private Rust
+library crates. `backend/workers/runtime-worker` owns executable work. Only
+contracts and behavior needed by both belong under `backend/libs`; being a Rust
+library alone does not make code shared.
+
 | Location | Current ownership |
 | --- | --- |
-| `proto/`, `crates/api`, `clients/typescript` | Public gRPC schema, generated bindings and request syntax validation |
-| `crates/domain` | Shared change constraints, scope bounds and usage values |
-| `crates/runtime` | Profile-neutral typed execution/coding contracts, activity, candidate reports, OCI/launcher admission and bounded input reading |
-| `crates/profile-ayni` | Explicit managed execution types, Ayni expectation/result validation, release pin, and the existing Actions assessment contract |
-| `crates/kubernetes` | Execution-only deployment/workload configuration, neutral Job construction, submission, observation and cleanup |
-| `crates/control-plane/src/application.rs` | Shared application state and durable reconciliation entry point |
-| `crates/control-plane/src/configuration.rs` | Server process/listener configuration |
-| `crates/control-plane/src/runtime_configuration.rs` | Runtime JSON admission, reconciliation scheduling, managed image derivation and publication policy; explicit mapping to Kubernetes inputs |
-| `crates/control-plane/src/http.rs`, `http/` | Operational router and health JSON using only projected model availability |
-| `crates/control-plane/src/grpc*` | Native user-facing transport, access enforcement and response mapping |
-| `crates/control-plane/src/clean_store*`, `runtime_reconciler*` | Existing durable lifecycle and reconciliation, still coupled to protobuf resource types |
-| `crates/control-plane/src/runtime_source*`, `onboarding*` | Existing GitHub integration and managed onboarding |
-| `crates/worker` | Executable launcher, checkout, agent and explicit managed verification/build operations |
+| `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
+| `backend/servers/control-plane/crates/application` | Transport-independent automation and task admission/cancellation/retry and deadline eligibility, runtime selection/activation/observation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
+| `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
+| `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
+| `backend/servers/control-plane/src/adapters/sqlite` | Database schema, explicit protobuf persistence codec, transactional resources/actions/events; remaining lifecycle methods awaiting extraction |
+| `backend/servers/control-plane/src/adapters/github`, `adapters/models.rs` | Provider communication and model discovery |
+| `backend/servers/control-plane/src/coordinators` | Shared server state, onboarding and reconciliation coordinators; remaining protobuf/provider coupling is explicit |
+| `backend/servers/control-plane/src/process` | Listener/runtime configuration, metrics and tracked background work with bounded shutdown |
+| `backend/servers/control-plane/src/profiles/ayni` | Managed environment and repository preparation policy |
+| `backend/libs/domain` | Shared change constraints, scope bounds, usage values and content digests |
+| `backend/libs/runtime/contracts` | Neutral execution/coding inputs, activity, candidate reports, OCI/launcher admission and bounded input reading |
+| `backend/libs/runtime/profiles/ayni` | Shared managed expectations/results, identity validation and release metadata |
+| `backend/libs/integrations/github-actions` | Existing Ayni Actions assessment evidence contract shared by controller and worker |
+| `backend/workers/runtime-worker` | Trusted launcher, generic checkout/process helpers and coding; worker `profiles/ayni` owns managed verification/build invocation, and `integrations/github_actions` owns Actions operations |
 | `packages/bff`, `apps/web` | Server-side browser adapter and UI |
 
-Dependencies point from adapters toward the contracts they implement. The
-runtime crate cannot depend on Ayni, Kubernetes, gRPC or executables. The Ayni
-profile can depend on shared runtime contracts; Kubernetes can depend on both
-when rendering managed workloads. Neither the worker nor Kubernetes depends on
-the public API. The control-plane executable composes those pieces. The
-repository's Ayni dependency policy enforces these crate boundaries.
+The root Cargo workspace retains one lockfile, toolchain and lint configuration.
+Normal Rust module trees match the control-plane directories. Dependencies point
+from concrete adapters to the contracts they implement: application cannot
+import gRPC, SQLite, Kubernetes or executable packages. Kubernetes implements the
+application execution port and cannot import Ayni profile policy or the public
+API. Shared runtime contracts cannot import Ayni, Kubernetes, gRPC or executables.
+The worker cannot import controller application code or the public API. The Ayni
+dependency policy enforces crate direction.
+
+Task admission and cancellation replay persisted request identities before reevaluating current
+readiness. New admissions freeze source/runtime bindings through neutral values,
+then atomically persist the task, initial attempt, idempotency record and both
+events. The wire adapter and persistence codec preserve the existing protobuf
+representation and action-hash format. Deadline durations and absolute timestamps
+are distinct application types. Cancellation decisions use neutral lifecycle states;
+the persistence adapter commits the action and task/unfinished-attempt changes
+together, retaining completed attempts and their versions.
+
+Explicit task retry is application-owned. Replay precedes current project, lifecycle,
+attempt-limit and deadline checks. The persistence port atomically commits the new
+attempt, frozen snapshot, task update, action receipt and both events. Deadline
+eligibility uses the same application timestamp comparison with nanosecond precision;
+expiration preserves terminal attempts and commits eligible task/attempt events together.
+Onboarding coordination returns typed bounded failures; gRPC alone maps them to status
+codes. Managed lock compatibility and trust-policy observations belong to the controller
+Ayni profile and do not establish certificate verification.
+
+Automation admission replays retained request identities before reevaluating the
+current profile or workflow template. The managed profile validates its setup
+files without credentials or mutations. SQLite checks observed profile/repository
+versions and atomically commits the installation, pending action and event.
+Provider setup work runs later through the onboarding coordinator.
+
+All control-plane persistence, including native gRPC, onboarding and reconciliation,
+uses a bounded 64-request database queue serviced by a dedicated thread that
+exclusively owns the SQLite store. Accepted work finishes even if a caller
+disconnects; retries replay its durable identity. Event notifications are emitted
+after the operation changes the committed event watermark. Watches register
+before reading their cursor, then await notification with a periodic recovery
+poll; notifications never replace durable event authority. Repository onboarding, setup actions, deadlines, retention, runtime execution,
+coding, assessment import, publication and readiness all use this queue.
+Provider and Kubernetes requests execute outside database operations. The server supervises database-thread
+termination and closes the queue during shutdown, draining accepted operations
+within the bounded shutdown period.
+
+Publication admission and automatic scheduling use application-owned commands
+and persistence ports. Identical retries replay before reevaluating candidate
+availability. New intents freeze candidate version and Git identity, and commit
+the change request, provider intent and event atomically. Automatic scheduling
+uses the frozen task publication request and excludes cancelled tasks and active
+attempts. Provider-side recovery uses an application-owned provider port: it observes existing
+reviews before allowing a push/create sequence and rejects mismatched frozen Git
+identities. Uncertain observations stop mutations; an uncertain create response
+is recovered by observing the existing review on retry. GitHub response mapping
+and bounded bundle transport remain in the provider adapter. Bundle preparation
+runs outside async executor threads. The integration coordinator still selects
+durable intents and maps retained wire resources.
+
+Readiness observation, authorization and confirmation are application-owned use
+cases with closed policy/state/source values. They load current durable facts,
+preserve newer status when historical evidence arrives, and observe uncertain
+provider transitions without repeating them. Authorization persists intent before
+provider mutation; confirmation rejects changed heads or assessment identities.
+SQLite maps the existing protobuf representation and atomically persists status,
+actions and events, while provider checks remain in the integration coordinator.
+
+Runtime revision selection and activation use application-owned commands and persistence
+ports. Identical source/policy observations replay the current selection; changes
+and reverts select a new immutable revision. Activation rejects superseded revisions,
+stale source/evidence bindings and conflicting digests. Matching ready-artifact replay
+adds no events. SQLite checks the observed profile version before persisting and retains
+atomic artifact/profile events and existing payloads. Managed report conversion,
+frozen report authority, candidate policy changes and provider conclusion interpretation
+belong to the control-plane Ayni profile; the coordinator gathers facts and runs adapters.
+
+Runtime observation decisions and bounded retry backoff also live in the application
+crate. Changed source/configuration discards pending execution before build or verification
+handling. Lost or failed build acknowledgements trigger registry observation rather than
+another build. Verification preserves its existing deadline and retained-build recovery
+rules. Coordinators execute the decisions through adapters and persist the existing cursor.
+
+Coding reconciliation uses application-owned attempt states and decisions. A
+missing queued execution may start; a missing running execution is a failure and
+cannot silently restart. Interruption cleanup precedes profile handling and late
+success. Completed output is collected before cleanup. Controller output reads,
+bundle hashing and assessment archive unpacking run off async executor threads.
+
+Provider command deadlines cover request writes, response reads and process
+exit. Request and response bytes are bounded, including retained policy input;
+Actions source hashing runs off executor threads. Coding command deadlines also
+bound output collection after the command exits.
+
+Worker subprocesses own Unix process groups. Cancellation, deadlines and normal
+leader exit terminate remaining group members. Verification/build invocation is
+async; finite checkout, Git, candidate freezing and checkpoint work use bounded
+blocking operations. Checkpoint serialization survives caller cancellation until
+the accepted operation completes. Blocking Git drains stdout/stderr concurrently
+and has a command deadline, preserving bounded diagnostics.
+
+Kubernetes completion supplies bounded raw output; managed evidence interpretation
+remains with the controller. Server reconciliation loops and finite model warmup
+are tracked. Unexpected task failure stops the server; shutdown signals periodic
+loops, allows in-flight work to finish and aborts work exceeding the bounded grace
+period. Durable intents remain responsible for recovering uncertain external work.
 
 Managed requests instantiate the generic execution/coding contract with a
 required `RuntimeExpectation`. This preserves the serialized managed request
@@ -153,15 +265,23 @@ project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
-Application logic still reads generated protobuf resources, stores protobuf
-payloads and calls concrete providers. Do not describe this as a fully isolated
-core. Extract real use cases with their commands, results and ports into an
-application crate as they are changed: connector operations, project inspection,
-environment resolution, task admission, then assessment/publication. Keep wire
-conversion at gRPC and explicit persistence codec boundaries. Move managed
-evidence rules out of generic storage while preserving shared identity and
-digest checks. Introduce explicit profile dispatch before admitting custom
-tasks. Coding, build and verification Jobs already share neutral workload
+Assessment admission also uses an application-owned command and persistence port.
+It replays matching immutable evidence before reevaluating profile membership,
+rejects conflicting manifests and foreign repository profiles, and propagates
+unavailable or corrupt replay state instead of treating it as absence. SQLite
+retains the existing Actions-specific payload codec and commits assessment and
+evidence events together. Profile evidence verification remains separate from
+this persistence admission boundary.
+
+The application crate owns the extracted lifecycle decisions and ports. Server
+coordinators gather adapter facts and execute those decisions; they still read
+generated protobuf resources and call concrete providers. SQLite retains the
+explicit protobuf codec and transactional resource operations. These integration
+layers are not a fully isolated domain model. Connector operations, project
+inspection and internal environment/assessment production need their own vertical
+commands and ports as those separately tracked product flows are implemented.
+Closed profile dispatch rejects unsupported custom execution today.
+Coding, build and verification Jobs already share neutral workload
 construction rather than deriving one operation from another's manifest.
 
 The Kubernetes adapter receives only execution settings. Application scheduling,

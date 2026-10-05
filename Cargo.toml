@@ -1,13 +1,15 @@
 [workspace]
 members = [
-    "crates/api",
-    "crates/domain",
-    "crates/observability",
-    "crates/control-plane",
-    "crates/worker",
-    "crates/runtime",
-    "crates/profile-ayni",
-    "crates/kubernetes",
+    "backend/servers/control-plane/crates/application",
+    "backend/libs/integrations/github-actions",
+    "backend/servers/control-plane/crates/grpc-contract",
+    "backend/libs/domain",
+    "backend/libs/observability",
+    "backend/servers/control-plane",
+    "backend/workers/runtime-worker",
+    "backend/libs/runtime/contracts",
+    "backend/libs/runtime/profiles/ayni",
+    "backend/servers/control-plane/crates/kubernetes",
 ]
 resolver = "3"
 
@@ -25,6 +27,7 @@ axum = "0.8.8"
 http-body-util = "0.1.3"
 k8s-openapi = { version = "=0.28.0", features = ["v1_32"] }
 kube = { version = "=4.2.0", default-features = false, features = ["aws-lc-rs", "client", "rustls-tls"] }
+rustix = { version = "=1.1.5", features = ["process"] }
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
 rig-agent = { version = "=0.42.0", default-features = false }
 rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
