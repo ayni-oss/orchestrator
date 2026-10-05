@@ -1,6 +1,6 @@
 use super::Database;
 use crate::adapters::sqlite::{CleanStore, CleanStoreError, v1};
-use std::{error::Error, sync::mpsc, time::Duration};
+use std::{error::Error, io, sync::mpsc, time::Duration};
 
 fn database() -> Result<Database, CleanStoreError> {
     Database::start(CleanStore::in_memory()?)
@@ -113,5 +113,70 @@ async fn notifications_follow_committed_events_and_ignore_rollback() -> Result<(
             .await
             .is_err()
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn shutdown_drains_accepted_writes_and_rejects_new_work() -> Result<(), Box<dyn Error>> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("state.sqlite");
+    let database = Database::start(CleanStore::open(&path, 3)?)?;
+    let (started, ready) = tokio::sync::oneshot::channel();
+    let (release, blocked) = mpsc::channel();
+    database
+        .requests
+        .send(super::Request::Execute(Box::new(move |_| {
+            let _ = started.send(());
+            let _ = blocked.recv_timeout(Duration::from_secs(2));
+        })))
+        .await
+        .map_err(|_| io::Error::other("request rejected"))?;
+    tokio::time::timeout(Duration::from_secs(1), ready).await??;
+    let (written, receipt) = tokio::sync::oneshot::channel();
+    database
+        .requests
+        .send(super::Request::Execute(Box::new(move |store| {
+            let _ =
+                written.send(store.create_repository_connection("create", &repository_request()));
+        })))
+        .await
+        .map_err(|_| io::Error::other("write rejected"))?;
+    let shutdown = database.clone();
+    let mut stopping = tokio::spawn(async move { shutdown.shutdown().await });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(10), &mut stopping)
+            .await
+            .is_err()
+    );
+    release.send(())?;
+    stopping.await??;
+    let resource = receipt.await??;
+    assert!(matches!(
+        database
+            .execute(|store| store.list_repository_connections(None, None))
+            .await,
+        Err(CleanStoreError::StoreUnavailable)
+    ));
+    let reopened = CleanStore::open(&path, 3)?;
+    assert_eq!(reopened.repository_connection(&resource.id)?, resource);
+    database.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn database_failure_is_observed_and_replies_fail_unavailable() -> Result<(), Box<dyn Error>> {
+    let database = database()?;
+    let result = database
+        .execute::<()>(|_| panic!("simulated database thread failure"))
+        .await;
+    assert!(matches!(result, Err(CleanStoreError::StoreUnavailable)));
+    assert!(matches!(
+        database.wait_stopped().await,
+        Err(CleanStoreError::StoreUnavailable)
+    ));
+    assert!(matches!(
+        database.shutdown().await,
+        Err(CleanStoreError::StoreUnavailable)
+    ));
     Ok(())
 }

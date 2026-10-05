@@ -72,6 +72,11 @@ async fn run() -> Result<(), io::Error> {
         shutdown_signal().await;
         let _ = signal_sender.send(true);
     });
+    let database_state = state.clone();
+    let database_monitor = state.clone();
+    background.spawn_required("database", shutdown_receiver.clone(), async move {
+        database_monitor.wait_for_database_exit().await;
+    });
     spawn_background_loops(&mut background, state.clone(), runtimes, &shutdown_receiver);
     let http_shutdown = shutdown_receiver.clone();
     let http = axum::serve(listener, router(state.clone())).with_graceful_shutdown(async move {
@@ -106,7 +111,12 @@ async fn run() -> Result<(), io::Error> {
     let _ = shutdown_sender.send(true);
     background.shutdown(Duration::from_secs(10)).await;
     signal_task.abort();
-    result
+    let database_shutdown =
+        tokio::time::timeout(Duration::from_secs(10), database_state.shutdown_database())
+            .await
+            .map_err(|_| io::Error::other("database shutdown deadline exceeded"))?
+            .map_err(io::Error::other);
+    result.and(database_shutdown)
 }
 
 async fn wait_for_shutdown(mut shutdown: watch::Receiver<bool>) {

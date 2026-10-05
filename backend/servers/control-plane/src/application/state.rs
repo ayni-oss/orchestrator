@@ -57,6 +57,19 @@ impl AppState {
         self.model_catalog.clone()
     }
 
+    /// Observe termination of the database thread, including unexpected failure.
+    pub async fn wait_for_database_exit(&self) {
+        let _ = self.database.wait_stopped().await;
+    }
+
+    /// Close persistence to new requests and finish accepted database operations.
+    ///
+    /// # Errors
+    /// Returns an error if the database thread failed before completing its queue.
+    pub async fn shutdown_database(&self) -> Result<(), CleanStoreError> {
+        self.database.shutdown().await
+    }
+
     /// Reconciles shared, provider-neutral durable deadlines and retention.
     /// Profile-specific external observations are supplied by later adapters.
     ///

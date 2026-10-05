@@ -17,6 +17,24 @@ impl BackgroundTasks {
         });
     }
 
+    /// Track a persistent dependency; its exit is unexpected until shutdown begins.
+    pub fn spawn_required(
+        &mut self,
+        name: &'static str,
+        mut shutdown: watch::Receiver<bool>,
+        operation: impl Future<Output = ()> + Send + 'static,
+    ) {
+        self.tasks.spawn(async move {
+            if !*shutdown.borrow() {
+                tokio::select! {
+                    () = operation => {},
+                    _ = shutdown.changed() => {},
+                }
+            }
+            Some(name)
+        });
+    }
+
     pub fn spawn_periodic<F, Fut>(
         &mut self,
         name: &'static str,
@@ -129,5 +147,22 @@ mod tests {
         );
         let error = tasks.unexpected_exit(receiver).await;
         assert!(error.to_string().contains("background task failed"));
+    }
+    #[tokio::test]
+    async fn persistent_dependency_exit_stops_the_server() -> io::Result<()> {
+        let (_shutdown, receiver) = watch::channel(false);
+        let (finished, dependency) = tokio::sync::oneshot::channel();
+        let mut tasks = BackgroundTasks::default();
+        tasks.spawn_required("database", receiver.clone(), async move {
+            let _ = dependency.await;
+        });
+        finished
+            .send(())
+            .map_err(|()| io::Error::other("dependency missing"))?;
+        let error = tokio::time::timeout(Duration::from_secs(1), tasks.unexpected_exit(receiver))
+            .await
+            .map_err(io::Error::other)?;
+        assert!(error.to_string().contains("database stopped"));
+        Ok(())
     }
 }

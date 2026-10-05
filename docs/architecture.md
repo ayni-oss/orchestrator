@@ -161,7 +161,9 @@ after the operation changes the committed event watermark. Watches register
 before reading their cursor, then await notification with a periodic recovery
 poll; notifications never replace durable event authority. Repository onboarding, setup actions, deadlines, retention, runtime execution,
 coding, assessment import, publication and readiness all use this queue.
-Provider and Kubernetes requests execute outside database operations.
+Provider and Kubernetes requests execute outside database operations. The server supervises database-thread
+termination and closes the queue during shutdown, draining accepted operations
+within the bounded shutdown period.
 
 Readiness observation, authorization and confirmation are application-owned use
 cases with closed policy/state/source values. They load current durable facts,
