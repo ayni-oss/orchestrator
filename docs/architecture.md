@@ -126,7 +126,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, runtime selection/activation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -193,6 +193,15 @@ provider mutation; confirmation rejects changed heads or assessment identities.
 SQLite maps the existing protobuf representation and atomically persists status,
 actions and events, while provider checks remain in the integration coordinator.
 
+Runtime revision selection and activation use application-owned commands and persistence
+ports. Identical source/policy observations replay the current selection; changes
+and reverts select a new immutable revision. Activation rejects superseded revisions,
+stale source/evidence bindings and conflicting digests. Matching ready-artifact replay
+adds no events. SQLite checks the observed profile version before persisting and retains
+atomic artifact/profile events and existing payloads. Managed report conversion,
+frozen report authority, candidate policy changes and provider conclusion interpretation
+belong to the control-plane Ayni profile; the coordinator gathers facts and runs adapters.
+
 Coding reconciliation uses application-owned attempt states and decisions. A
 missing queued execution may start; a missing running execution is a failure and
 cannot silently restart. Interruption cleanup precedes profile handling and late
@@ -243,7 +252,7 @@ retains the existing Actions-specific payload codec and commits assessment and
 evidence events together. Profile evidence verification remains separate from
 this persistence admission boundary.
 
-Outside task admission, cancellation, publication admission/scheduling/recovery, coding observation decisions, assessment admission and readiness decisions, application logic still reads generated protobuf resources,
+Outside task admission, cancellation, publication admission/scheduling/recovery, coding observation decisions, runtime selection/activation, assessment admission and readiness decisions, application logic still reads generated protobuf resources,
 stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
 core. Continue extracting real use cases with their commands, results and ports into the
 application crate: reconciliation, connector operations, project

@@ -45,7 +45,8 @@ fn fresh_source_verification_reuses_digest_but_not_stale_revision() -> Result<()
         "initial",
         &task_request(&store, &repository.id, &profile.id, "initial")?,
     )?;
-    let revision = store.prepare_runtime_revision(
+    let revision = select(
+        &mut store,
         &profile.id,
         SECOND_REVISION,
         &"c".repeat(64),
@@ -57,24 +58,26 @@ fn fresh_source_verification_reuses_digest_but_not_stale_revision() -> Result<()
         v1::RuntimeProfileState::Updating as i32
     );
     assert!(
-        store
-            .activate_runtime(
-                &profile.id,
-                &revision,
-                "registry.test/team/runtime:stable",
-                DIGEST,
-                &report(REVISION)
-            )
-            .is_err()
+        activate(
+            &mut store,
+            &profile.id,
+            &revision,
+            "registry.test/team/runtime:stable",
+            DIGEST,
+            &report(REVISION)
+        )
+        .is_err()
     );
-    store.activate_runtime(
+    activate(
+        &mut store,
         &profile.id,
         &revision,
         "registry.test/team/runtime:stable",
         DIGEST,
         &report(SECOND_REVISION),
     )?;
-    store.activate_runtime(
+    activate(
+        &mut store,
         &profile.id,
         &revision,
         "registry.test/team/runtime:stable",
@@ -86,15 +89,15 @@ fn fresh_source_verification_reuses_digest_but_not_stale_revision() -> Result<()
         v1::RuntimeProfileState::Ready as i32
     );
     assert!(
-        store
-            .activate_runtime(
-                &profile.id,
-                &revision,
-                "registry.test/team/runtime:stable",
-                SECOND_DIGEST,
-                &report(SECOND_REVISION)
-            )
-            .is_err()
+        activate(
+            &mut store,
+            &profile.id,
+            &revision,
+            "registry.test/team/runtime:stable",
+            SECOND_DIGEST,
+            &report(SECOND_REVISION)
+        )
+        .is_err()
     );
     assert_eq!(
         store.development_attempt(&attempt.id)?.snapshot,
@@ -107,7 +110,8 @@ fn fresh_source_verification_reuses_digest_but_not_stale_revision() -> Result<()
 fn source_policy_change_and_revert_create_new_selected_revisions() -> Result<(), CleanStoreError> {
     let mut store = CleanStore::in_memory()?;
     let (_, profile, _) = ready_profile(&mut store)?;
-    let first = store.prepare_runtime_revision(
+    let first = select(
+        &mut store,
         &profile.id,
         REVISION,
         &"c".repeat(64),
@@ -116,7 +120,8 @@ fn source_policy_change_and_revert_create_new_selected_revisions() -> Result<(),
     )?;
     assert_eq!(
         first,
-        store.prepare_runtime_revision(
+        select(
+            &mut store,
             &profile.id,
             REVISION,
             &"c".repeat(64),
@@ -124,14 +129,16 @@ fn source_policy_change_and_revert_create_new_selected_revisions() -> Result<(),
             DIGEST
         )?
     );
-    let second = store.prepare_runtime_revision(
+    let second = select(
+        &mut store,
         &profile.id,
         REVISION,
         &"c".repeat(64),
         "registry.test/team/runtime",
         SECOND_DIGEST,
     )?;
-    let reverted = store.prepare_runtime_revision(
+    let reverted = select(
+        &mut store,
         &profile.id,
         REVISION,
         &"c".repeat(64),
@@ -163,5 +170,92 @@ fn runtime_cursor_and_status_survive_restart() -> Result<(), Box<dyn std::error:
     drop(store);
     let store = CleanStore::open(path, 3)?;
     assert_eq!(store.runtime_cursor(&profile.id)?.metadata(), metadata);
+    Ok(())
+}
+
+fn activate(
+    store: &mut CleanStore,
+    profile: &str,
+    revision: &str,
+    image: &str,
+    digest: &str,
+    report: &VerificationReport,
+) -> Result<(), CleanStoreError> {
+    let command = crate::profiles::ayni::runtime_activation::command(
+        profile, revision, image, digest, report,
+    )
+    .map_err(|_| CleanStoreError::CorruptState)?;
+    ayni_orchestrator_application::runtime_activation::activate(store, &command)
+        .map_err(super::super::runtime_activation::activation_error)
+}
+
+fn select(
+    store: &mut CleanStore,
+    profile: &str,
+    revision: &str,
+    fingerprint: &str,
+    repository: &str,
+    source_digest: &str,
+) -> Result<String, CleanStoreError> {
+    let command = crate::profiles::ayni::runtime_selection::command(
+        profile,
+        revision,
+        fingerprint,
+        repository,
+        source_digest,
+    )
+    .map_err(|_| CleanStoreError::CorruptState)?;
+    ayni_orchestrator_application::runtime_selection::select(store, &command)
+        .map_err(super::super::runtime_selection::selection_error)
+}
+
+#[test]
+fn runtime_activation_stale_commit_preserves_artifacts_and_events()
+-> Result<(), Box<dyn std::error::Error>> {
+    use ayni_orchestrator_application::runtime_activation::{Mutation, Repository};
+    let mut store = CleanStore::in_memory()?;
+    let (_, profile, _) = ready_profile(&mut store)?;
+    let revision = select(
+        &mut store,
+        &profile.id,
+        SECOND_REVISION,
+        &"c".repeat(64),
+        "registry.test/team/runtime",
+        DIGEST,
+    )?;
+    let command = crate::profiles::ayni::runtime_activation::command(
+        &profile.id,
+        &revision,
+        "registry.test/team/runtime:stable",
+        DIGEST,
+        &report(SECOND_REVISION),
+    )?;
+    let facts = Repository::profile(&store, &profile.id)?;
+    store.runtime_failure(&profile.id, "test_failure")?;
+    let before: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert!(matches!(
+        Repository::commit(&mut store, &command, &facts, Mutation::RecordArtifact),
+        Err(CleanStoreError::StaleVersion)
+    ));
+    let after: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert_eq!(before, after);
+    assert!(
+        store
+            .runtime_profile(&profile.id)?
+            .active_runtime_artifact_id
+            .is_none()
+    );
+    assert!(
+        store
+            .list_runtime_artifacts(&profile.id, Some(&revision), None, None)?
+            .items
+            .is_empty()
+    );
     Ok(())
 }

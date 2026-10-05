@@ -503,15 +503,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let token = observation.token.as_str();
         let source_digest = observation.source_digest.as_str();
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        if report.revision != head
-            || report.lock_digest != pending.lock_digest
-            || report.runtime.lock_fingerprint != pending.request.expected.lock_fingerprint
-            || report.runtime.platform != pending.request.expected.platform
-            || report.runtime.ayni_version != pending.request.expected.ayni_version
-            || report.runtime.certificate_key_id == "unsigned"
-        {
-            return Err("runtime_result_mismatch");
-        }
+        crate::profiles::ayni::evidence_policy::admit_runtime(
+            report,
+            &pending.request.expected,
+            head,
+            &pending.lock_digest,
+        )
+        .map_err(crate::profiles::ayni::evidence_policy::EvidenceError::code)?;
         if self
             .source
             .head(
@@ -553,13 +551,17 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .insert("resolved-digest".into(), digest.clone());
         // Retain the immutable binding before activation; retries can only replay it.
         self.save(id, cursor).await?;
-        let activation_id = id.to_owned();
-        let revision = pending.profile_revision.clone();
-        let image = runtime.image.clone();
-        let report = report.clone();
+        let command = crate::profiles::ayni::runtime_activation::command(
+            id,
+            &pending.profile_revision,
+            &runtime.image,
+            &digest,
+            report,
+        )
+        .map_err(|_| "runtime_activation_rejected")?;
         self.with_database(move |store| {
-            store
-                .activate_runtime(&activation_id, &revision, &image, &digest, &report)
+            ayni_orchestrator_application::runtime_activation::activate(store, &command)
+                .map_err(crate::adapters::sqlite::runtime_activation::activation_error)
                 .map_err(|_| "runtime_activation_rejected")
         })
         .await?;
@@ -599,21 +601,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let repository_image =
             ayni_orchestrator_application::execution_settings::image_repository(&runtime.image)
                 .ok_or("runtime_image_invalid")?;
-        let revision_id = id.to_owned();
-        let revision_head = head.to_owned();
-        let fingerprint = identity.fingerprint.clone();
-        let image_repository = repository_image.to_owned();
-        let revision_source = source_digest.to_owned();
+        let command = crate::profiles::ayni::runtime_selection::command(
+            id,
+            head,
+            &identity.fingerprint,
+            repository_image,
+            source_digest,
+        )
+        .map_err(|_| "runtime_revision_failed")?;
         let revision = self
             .with_database(move |store| {
-                store
-                    .prepare_runtime_revision(
-                        &revision_id,
-                        &revision_head,
-                        &fingerprint,
-                        &image_repository,
-                        &revision_source,
-                    )
+                ayni_orchestrator_application::runtime_selection::select(store, &command)
+                    .map_err(crate::adapters::sqlite::runtime_selection::selection_error)
                     .map_err(|_| "runtime_revision_failed")
             })
             .await?;

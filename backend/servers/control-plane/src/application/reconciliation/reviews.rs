@@ -1,4 +1,5 @@
 use super::{BTreeMap, Digest, ExecutionBackend, RuntimeReconciler, Sha256, v1};
+use crate::profiles::ayni::evidence_policy::{ProviderConclusion, observed_outcome};
 use ayni_orchestrator_actions_contract as assessment;
 use ayni_orchestrator_actions_contract::{Admission, Manifest};
 
@@ -228,11 +229,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     token,
                 )
                 .await?;
-            if (head_lock != inputs.1 || head_policy != inputs.0)
-                && declared.outcome != assessment::Outcome::Unsupported
-            {
-                return Err("review_candidate_policy_changed");
-            }
+            crate::profiles::ayni::evidence_policy::admit_candidate_policy(
+                declared.outcome,
+                true,
+                head_lock == inputs.1 && head_policy == inputs.0,
+            )
+            .map_err(crate::profiles::ayni::evidence_policy::EvidenceError::code)?;
         }
         Ok(())
     }
@@ -435,15 +437,17 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 ayni_version: &configuration.ayni_version,
             },
         )?;
-        if run["conclusion"] == "cancelled" {
-            manifest.outcome = assessment::Outcome::Cancelled;
-        }
-        if run["conclusion"] == "timed_out" {
-            manifest.outcome = assessment::Outcome::InfrastructureFailed;
-        }
-        if manifest.run.head == current_head && manifest.run.base != base {
-            manifest.outcome = assessment::Outcome::Stale;
-        }
+        let provider = match run["conclusion"].as_str() {
+            Some("cancelled") => ProviderConclusion::Cancelled,
+            Some("timed_out") => ProviderConclusion::TimedOut,
+            _ => ProviderConclusion::Completed,
+        };
+        manifest.outcome = observed_outcome(
+            manifest.outcome,
+            provider,
+            manifest.run.head == current_head,
+            manifest.run.base == base,
+        );
         let (change, assessment) = self
             .persist_review_import(
                 repository,
