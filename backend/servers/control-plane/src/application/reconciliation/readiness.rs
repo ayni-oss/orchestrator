@@ -25,24 +25,26 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             assessment_id: assessment.id.clone(),
             diagnostic: String::new(),
         };
-        if self.observe_readiness(change, assessment, status.clone(), enabled)? {
+        if self
+            .observe_readiness(change, assessment, status.clone(), enabled)
+            .await?
+        {
             return Ok(());
         }
-        let (candidate, request) = {
-            let store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "review_store_unavailable")?;
-            (
-                store
-                    .candidate(&change.candidate_id)
-                    .map_err(|_| "readiness_candidate_missing")?,
-                store
-                    .publication_request_for(&change.id)
-                    .map_err(|_| "readiness_publication_missing")?,
-            )
-        };
+        let candidate_id = change.candidate_id.clone();
+        let change_id = change.id.clone();
+        let (candidate, request) = self
+            .with_database(move |store| {
+                Ok((
+                    store
+                        .candidate(&candidate_id)
+                        .map_err(|_| "readiness_candidate_missing")?,
+                    store
+                        .publication_request_for(&change_id)
+                        .map_err(|_| "readiness_publication_missing")?,
+                ))
+            })
+            .await?;
         let candidate_head = candidate
             .identity
             .as_ref()
@@ -62,7 +64,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         status.state = "pending".into();
         status.authorized_head = assessment.head_revision.clone();
         status.diagnostic = "awaiting_provider_transition".into();
-        self.persist_readiness(&change.id, status.clone(), true)?;
+        self.persist_readiness(&change.id, status.clone(), true)
+            .await?;
         self.verify_ready_check(github, token, assessment).await?;
         let number = pull["number"].as_u64().ok_or("readiness_pull_invalid")?;
         let current = self
@@ -76,16 +79,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         {
             return Err("readiness_provider_state_changed");
         }
-        {
-            let store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "review_store_unavailable")?;
+        let evidence = assessment.clone();
+        self.with_database(move |store| {
             store
-                .verify_assessment_files(assessment)
-                .map_err(|_| "readiness_evidence_corrupt")?;
-        }
+                .verify_assessment_files(&evidence)
+                .map_err(|_| "readiness_evidence_corrupt")
+        })
+        .await?;
         let node = current["node_id"]
             .as_str()
             .ok_or("readiness_pull_invalid")?;
@@ -93,7 +93,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         self.source.mark_ready(node, &action, token).await?;
         status.state = "completed".into();
         status.diagnostic = "automatic_readiness_confirmed".into();
-        self.persist_readiness(&change.id, status, false)
+        self.persist_readiness(&change.id, status, false).await
     }
 
     pub(super) async fn verify_ready_check(
@@ -141,7 +141,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         Ok(())
     }
 
-    pub(super) fn observe_readiness(
+    pub(super) async fn observe_readiness(
         &self,
         change: &v1::ChangeRequest,
         assessment: &v1::Assessment,
@@ -160,14 +160,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     status.state = "completed".into();
                     status.source = "provider-observed".into();
                     status.diagnostic = "ready_observed_after_uncertain_response".into();
-                    self.persist_readiness(&change.id, status, false)?;
+                    self.persist_readiness(&change.id, status, false).await?;
                     return Ok(true);
                 }
             }
             status.state = "manual".into();
             status.source = "maintainer".into();
             status.diagnostic = "already_ready".into();
-            self.persist_readiness(&change.id, status, false)?;
+            self.persist_readiness(&change.id, status, false).await?;
             return Ok(true);
         }
         let reason = if !enabled {
@@ -189,24 +189,25 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 return Ok(true);
             }
             status.diagnostic = reason.into();
-            self.persist_readiness(&change.id, status, false)?;
+            self.persist_readiness(&change.id, status, false).await?;
             return Ok(true);
         }
         Ok(false)
     }
 
-    pub(super) fn persist_readiness(
+    pub(super) async fn persist_readiness(
         &self,
         change: &str,
         status: v1::ReadinessStatus,
         action: bool,
     ) -> Result<(), &'static str> {
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "review_store_unavailable")?
-            .save_readiness(change, status, action)
-            .map(|_| ())
-            .map_err(|_| "readiness_state_rejected")
+        let change = change.to_owned();
+        self.with_database(move |store| {
+            store
+                .save_readiness(&change, status, action)
+                .map(|_| ())
+                .map_err(|_| "readiness_state_rejected")
+        })
+        .await
     }
 }

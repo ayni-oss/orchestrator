@@ -1,13 +1,9 @@
 use super::Database;
 use crate::adapters::sqlite::{CleanStore, CleanStoreError, v1};
-use std::{
-    error::Error,
-    sync::{Arc, Mutex, mpsc},
-    time::Duration,
-};
+use std::{error::Error, sync::mpsc, time::Duration};
 
 fn database() -> Result<Database, CleanStoreError> {
-    Database::start(Arc::new(Mutex::new(CleanStore::in_memory()?)))
+    Database::start(CleanStore::in_memory()?)
 }
 
 fn repository_request() -> v1::CreateRepositoryConnectionRequest {

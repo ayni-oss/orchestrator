@@ -8,10 +8,8 @@ use crate::{
     adapters::models::ModelCatalog,
     adapters::sqlite::{CleanStore, CleanStoreError, database::Database},
 };
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use thiserror::Error;
-
-type StoreHandle = Arc<Mutex<CleanStore>>;
 
 /// A periodic clean-v1 reconciliation pass could not inspect durable state.
 #[derive(Debug, Error)]
@@ -23,7 +21,6 @@ pub enum ReconciliationError {
 /// Shared clean-v1 API state, deliberately independent from runtime transports.
 #[derive(Clone)]
 pub struct AppState {
-    pub(crate) store: StoreHandle,
     pub(crate) database: Database,
     model_catalog: Option<ModelCatalog>,
     pub(crate) source: Option<Arc<runtime_source::SourceClient>>,
@@ -42,10 +39,8 @@ impl AppState {
     ) -> Result<Self, CleanStoreError> {
         let store = CleanStore::open(database_path, max_attempts)?;
         store.integrity_check()?;
-        let store = Arc::new(Mutex::new(store));
-        let database = Database::start(store.clone())?;
+        let database = Database::start(store)?;
         Ok(Self {
-            store,
             database,
             model_catalog: None,
             source: None,
@@ -81,16 +76,4 @@ pub async fn with_store_async<T: Send + 'static>(
     operation: impl FnOnce(&mut CleanStore) -> Result<T, CleanStoreError> + Send + 'static,
 ) -> Result<T, CleanStoreError> {
     state.database.execute(operation).await
-}
-
-#[cfg(test)]
-pub fn with_store<T>(
-    state: &AppState,
-    operation: impl FnOnce(&mut CleanStore) -> Result<T, CleanStoreError>,
-) -> Result<T, CleanStoreError> {
-    let mut store = state
-        .store
-        .lock()
-        .map_err(|_| CleanStoreError::CorruptState)?;
-    operation(&mut store)
 }

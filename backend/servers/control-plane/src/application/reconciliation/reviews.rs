@@ -4,7 +4,7 @@ use ayni_orchestrator_actions_contract::{Admission, Manifest};
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn review_assessments(&self) -> Result<(), &'static str> {
-        for (profile, runtime) in &self.configured_profiles()? {
+        for (profile, runtime) in &self.configured_profiles().await? {
             let Some(policy) = &runtime.assessment else {
                 continue;
             };
@@ -20,32 +20,29 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         profile_id: &str,
         policy: &crate::process::runtime_configuration::AssessmentConfiguration,
     ) -> Result<(), &'static str> {
-        let (repository, automation) = {
-            let mut store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "review_store_unavailable")?;
-            let profile = store
-                .runtime_profile(profile_id)
-                .map_err(|_| "review_profile_missing")?;
-            let repository = store
-                .repository_connection(&profile.repository_connection_id)
-                .map_err(|_| "review_repository_missing")?;
-            let installations = store
-                .list_automation_installations(profile_id, None)
-                .map_err(|_| "review_automation_missing")?;
-            drop(store);
-            let automation = installations
-                .items
-                .into_iter()
-                .find(|a| {
-                    a.version == crate::profiles::ayni::onboarding_templates::TEMPLATE_VERSION
-                        && a.state == v1::AutomationInstallationState::Installed as i32
-                })
-                .ok_or("review_automation_unverified")?;
-            (repository, automation)
-        };
+        let lookup_id = profile_id.to_owned();
+        let (repository, automation) = self
+            .with_database(move |store| {
+                let profile = store
+                    .runtime_profile(&lookup_id)
+                    .map_err(|_| "review_profile_missing")?;
+                let repository = store
+                    .repository_connection(&profile.repository_connection_id)
+                    .map_err(|_| "review_repository_missing")?;
+                let installations = store
+                    .list_automation_installations(&lookup_id, None)
+                    .map_err(|_| "review_automation_missing")?;
+                let automation = installations
+                    .items
+                    .into_iter()
+                    .find(|a| {
+                        a.version == crate::profiles::ayni::onboarding_templates::TEMPLATE_VERSION
+                            && a.state == v1::AutomationInstallationState::Installed as i32
+                    })
+                    .ok_or("review_automation_unverified")?;
+                Ok((repository, automation))
+            })
+            .await?;
         let Some(v1::repository_provider::Provider::Github(github)) = repository
             .provider
             .as_ref()
@@ -165,45 +162,42 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         Ok(workflow_sha.to_owned())
     }
 
-    pub(super) fn review_runtime(
+    pub(super) async fn review_runtime(
         &self,
         profile_id: &str,
         declared: &Manifest,
     ) -> Result<(v1::RuntimeProfileRevision, v1::RuntimeArtifact), &'static str> {
-        let result = {
-            let mut store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "review_store_unavailable")?;
+        let profile_id = profile_id.to_owned();
+        let revision_id = declared.run.profile_revision.clone();
+        let runtime_digest = declared.runtime_digest.clone();
+        self.with_database(move |store| {
             let revision = store
-                .runtime_profile_revision(&declared.run.profile_revision)
+                .runtime_profile_revision(&revision_id)
                 .map_err(|_| "review_revision_missing")?;
             if revision.runtime_profile_id != profile_id {
                 return Err("review_profile_mismatch");
             }
             let artifacts = store
                 .list_runtime_artifacts(
-                    profile_id,
+                    &profile_id,
                     Some(&revision.id),
                     Some(v1::RuntimeArtifactStatus::Verified as i32),
                     None,
                 )
                 .map_err(|_| "review_runtime_missing")?;
-            drop(store);
             let artifact = artifacts
                 .items
                 .into_iter()
                 .find(|a| {
-                    a.resolved_digest == declared.runtime_digest
+                    a.resolved_digest == runtime_digest
                         && a.platform.as_ref().is_some_and(|p| {
                             p.operating_system == "linux" && p.architecture == "amd64"
                         })
                 })
                 .ok_or("review_runtime_unverified")?;
-            (revision, artifact)
-        };
-        Ok(result)
+            Ok((revision, artifact))
+        })
+        .await
     }
 
     pub(super) async fn verify_review_contract(
@@ -238,52 +232,55 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         Ok(())
     }
 
-    pub(super) fn persist_review_import(
+    pub(super) async fn persist_review_import(
         &self,
         repository: &v1::RepositoryConnection,
         github: &v1::GithubRepository,
         pull: &serde_json::Value,
-        bundle: &EvidenceBundle,
-        manifest: &Manifest,
-        summary: &assessment::Summary,
+        bundle: EvidenceBundle,
+        manifest: Manifest,
+        summary: assessment::Summary,
     ) -> Result<(v1::ChangeRequest, v1::Assessment), &'static str> {
-        let current_head = pull["head"]["sha"].as_str().ok_or("review_head_invalid")?;
-        let base = pull["base"]["sha"].as_str().ok_or("review_base_invalid")?;
+        let current_head = pull["head"]["sha"]
+            .as_str()
+            .ok_or("review_head_invalid")?
+            .to_owned();
+        let base = pull["base"]["sha"]
+            .as_str()
+            .ok_or("review_base_invalid")?
+            .to_owned();
         let (manifest_bytes, artifacts) = bundle;
         let state = provider_review_state(pull);
         let url = format!(
             "https://github.com/{}/{}/actions/runs/{}",
             github.owner, github.name, manifest.run.run_id
         );
-        let (change, assessment) = {
-            let mut store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "review_store_unavailable")?;
+        let repository_id = repository.id.clone();
+        let provider = v1::GithubChangeRequest {
+            repository_id: github.repository_id.clone(),
+            pull_request_number: manifest.run.pull_request,
+            html_url: format!(
+                "https://github.com/{}/{}/pull/{}",
+                github.owner, github.name, manifest.run.pull_request
+            ),
+        };
+        self.with_database(move |store| {
             let change = store
-                .observe_review(
-                    &repository.id,
-                    v1::GithubChangeRequest {
-                        repository_id: github.repository_id.clone(),
-                        pull_request_number: manifest.run.pull_request,
-                        html_url: format!(
-                            "https://github.com/{}/{}/pull/{}",
-                            github.owner, github.name, manifest.run.pull_request
-                        ),
-                    },
-                    current_head,
-                    base,
-                    state,
-                )
+                .observe_review(&repository_id, provider, &current_head, &base, state)
                 .map_err(|_| "review_store_failed")?;
             let assessment = store
-                .import_review(&change, manifest, summary, manifest_bytes, artifacts, &url)
+                .import_review(
+                    &change,
+                    &manifest,
+                    &summary,
+                    &manifest_bytes,
+                    &artifacts,
+                    &url,
+                )
                 .map_err(|_| "review_import_conflict")?;
-            drop(store);
-            (change, assessment)
-        };
-        Ok((change, assessment))
+            Ok((change, assessment))
+        })
+        .await
     }
 
     pub(super) async fn review_contract_inputs(
@@ -338,12 +335,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             Sha256::digest(format!("{}:{run_id}:{attempt}", github.repository_id))
         );
         let retained = self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "review_store_unavailable")?
-            .retained_review_evidence(&assessment_id)
-            .map_err(|_| "review_retained_evidence_corrupt")?;
+            .with_database(move |store| {
+                store
+                    .retained_review_evidence(&assessment_id)
+                    .map_err(|_| "review_retained_evidence_corrupt")
+            })
+            .await?;
         let bundle = if let Some(retained) = retained {
             retained
         } else {
@@ -372,7 +369,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .await?;
         let declared: Manifest =
             serde_json::from_slice(&manifest_bytes).map_err(|_| "review_manifest_invalid")?;
-        let (revision, artifact) = self.review_runtime(profile_id, &declared)?;
+        let (revision, artifact) = self.review_runtime(profile_id, &declared).await?;
         let Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) =
             revision.configuration.as_ref()
         else {
@@ -442,14 +439,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if manifest.run.head == current_head && manifest.run.base != base {
             manifest.outcome = assessment::Outcome::Stale;
         }
-        let (change, assessment) = self.persist_review_import(
-            repository,
-            github,
-            &pull,
-            &(manifest_bytes, artifacts),
-            &manifest,
-            &summary,
-        )?;
+        let (change, assessment) = self
+            .persist_review_import(
+                repository,
+                github,
+                &pull,
+                (manifest_bytes, artifacts),
+                manifest,
+                summary,
+            )
+            .await?;
         self.reconcile_readiness(policy, github, token, &change, &assessment, &pull)
             .await
     }

@@ -3,22 +3,24 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn publish_candidates(&self) -> Result<(), &'static str> {
         use prost::Message;
         let actions = self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .pending_external_actions("PublishCandidate")
-            .map_err(|_| "publication_state_invalid")?;
+            .with_database(|store| {
+                store
+                    .pending_external_actions("PublishCandidate")
+                    .map_err(|_| "publication_state_invalid")
+            })
+            .await?;
         for action in actions.into_iter().take(self.configuration.concurrency) {
             let request = v1::PublishCandidateRequest::decode(action.request_payload.as_slice())
                 .map_err(|_| "publication_request_invalid")?;
-            let (candidate, change, repository, attempt) = self.publication_inputs(
-                &request.candidate_id,
-                action
-                    .target_id
-                    .as_deref()
-                    .ok_or("publication_identity_missing")?,
-            )?;
+            let (candidate, change, repository, attempt) = self
+                .publication_inputs(
+                    &request.candidate_id,
+                    action
+                        .target_id
+                        .as_deref()
+                        .ok_or("publication_identity_missing")?,
+                )
+                .await?;
             let profile = attempt
                 .snapshot
                 .as_ref()
@@ -26,6 +28,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .ok_or("coding_snapshot_missing")?;
             if self
                 .configured_profile(&profile.runtime_profile_id)
+                .await
                 .is_err()
             {
                 continue;
@@ -77,23 +80,23 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 &branch,
                 &request.base_branch,
             )?;
-            self.state
-                .store
-                .lock()
-                .map_err(|_| "runtime_store_unavailable")?
-                .reconcile_change_request(
-                    &action.idempotency_key,
-                    change.resource_version,
-                    provider,
-                    state,
-                    &change.head_revision,
-                    None,
-                )
-                .map_err(|_| "publication_state_changed")?;
+            self.with_database(move |store| {
+                store
+                    .reconcile_change_request(
+                        &action.idempotency_key,
+                        change.resource_version,
+                        provider,
+                        state,
+                        &change.head_revision,
+                        None,
+                    )
+                    .map_err(|_| "publication_state_changed")
+            })
+            .await?;
         }
         Ok(())
     }
-    pub(super) fn publication_inputs(
+    pub(super) async fn publication_inputs(
         &self,
         candidate_id: &str,
         change_id: &str,
@@ -106,28 +109,27 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         ),
         &'static str,
     > {
-        let store = self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?;
-        let candidate = store
-            .candidate(candidate_id)
-            .map_err(|_| "publication_candidate_missing")?;
-        let inputs = (
-            candidate.clone(),
-            store
-                .change_request(change_id)
-                .map_err(|_| "publication_identity_missing")?,
-            store
-                .repository_connection(&candidate.repository_connection_id)
-                .map_err(|_| "repository_missing")?,
-            store
-                .development_attempt(&candidate.development_attempt_id)
-                .map_err(|_| "coding_snapshot_missing")?,
-        );
-        drop(store);
-        Ok(inputs)
+        let candidate_id = candidate_id.to_owned();
+        let change_id = change_id.to_owned();
+        self.with_database(move |store| {
+            let candidate = store
+                .candidate(&candidate_id)
+                .map_err(|_| "publication_candidate_missing")?;
+            let inputs = (
+                candidate.clone(),
+                store
+                    .change_request(&change_id)
+                    .map_err(|_| "publication_identity_missing")?,
+                store
+                    .repository_connection(&candidate.repository_connection_id)
+                    .map_err(|_| "repository_missing")?,
+                store
+                    .development_attempt(&candidate.development_attempt_id)
+                    .map_err(|_| "coding_snapshot_missing")?,
+            );
+            Ok(inputs)
+        })
+        .await
     }
 }
 

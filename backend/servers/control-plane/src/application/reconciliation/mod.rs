@@ -20,7 +20,7 @@ use std::{
 };
 use tokio::{sync::Mutex, task::JoinSet};
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub struct RuntimeCursor {
     sequence: u64,
     next_at: u64,
@@ -115,76 +115,88 @@ pub struct RuntimeReconciler<E = RuntimeKubernetes> {
 }
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
-    fn configured_profiles(&self) -> Result<BTreeMap<String, ProfileRuntime>, &'static str> {
+    async fn with_database<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut crate::adapters::sqlite::CleanStore) -> Result<T, &'static str>
+        + Send
+        + 'static,
+    ) -> Result<T, &'static str> {
+        self.state
+            .database
+            .call(operation)
+            .await
+            .map_err(|_| "runtime_store_unavailable")?
+    }
+
+    async fn configured_profiles(&self) -> Result<BTreeMap<String, ProfileRuntime>, &'static str> {
         let mut profiles = self.configuration.profiles.clone();
         if self.configuration.managed_runtime.is_none() {
             return Ok(profiles);
         }
-        let mut store = self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?;
-        let mut page = v1::PageRequest {
-            page_size: 100,
-            page_token: String::new(),
-        };
-        for _ in 0..100 {
-            let result = store
-                .list_runtime_profiles(
-                    None,
-                    Some(v1::RuntimeProfileKind::AyniManaged as i32),
-                    None,
-                    Some(&page),
-                )
-                .map_err(|_| "runtime_profile_missing")?;
-            for profile in result.items {
-                if profiles.contains_key(&profile.id) {
-                    continue;
+        let configuration = self.configuration.clone();
+        self.with_database(move |store| {
+            let mut page = v1::PageRequest {
+                page_size: 100,
+                page_token: String::new(),
+            };
+            for _ in 0..100 {
+                let result = store
+                    .list_runtime_profiles(
+                        None,
+                        Some(v1::RuntimeProfileKind::AyniManaged as i32),
+                        None,
+                        Some(&page),
+                    )
+                    .map_err(|_| "runtime_profile_missing")?;
+                for profile in result.items {
+                    if profiles.contains_key(&profile.id) {
+                        continue;
+                    }
+                    let repository = store
+                        .repository_connection(&profile.repository_connection_id)
+                        .map_err(|_| "repository_missing")?;
+                    if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
+                        continue;
+                    }
+                    let Some(v1::repository_provider::Provider::Github(github)) =
+                        repository.provider.and_then(|p| p.provider)
+                    else {
+                        continue;
+                    };
+                    let Some(revision_id) = profile.active_revision_id else {
+                        continue;
+                    };
+                    let revision = store
+                        .runtime_profile_revision(&revision_id)
+                        .map_err(|_| "runtime_revision_missing")?;
+                    let Some(v1::runtime_profile_revision::Configuration::AyniManaged(managed)) =
+                        revision.configuration
+                    else {
+                        continue;
+                    };
+                    let Some(runtime) = configuration.managed_runtime(
+                        &github.owner,
+                        &github.name,
+                        &managed.lock_fingerprint,
+                        &managed.oci_repository,
+                    ) else {
+                        continue;
+                    };
+                    profiles.insert(profile.id, runtime);
                 }
-                let repository = store
-                    .repository_connection(&profile.repository_connection_id)
-                    .map_err(|_| "repository_missing")?;
-                if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
-                    continue;
+                page.page_token = result.next_page_token;
+                if page.page_token.is_empty() {
+                    return Ok(profiles);
                 }
-                let Some(v1::repository_provider::Provider::Github(github)) =
-                    repository.provider.and_then(|p| p.provider)
-                else {
-                    continue;
-                };
-                let Some(revision_id) = profile.active_revision_id else {
-                    continue;
-                };
-                let revision = store
-                    .runtime_profile_revision(&revision_id)
-                    .map_err(|_| "runtime_revision_missing")?;
-                let Some(v1::runtime_profile_revision::Configuration::AyniManaged(managed)) =
-                    revision.configuration
-                else {
-                    continue;
-                };
-                let Some(runtime) = self.configuration.managed_runtime(
-                    &github.owner,
-                    &github.name,
-                    &managed.lock_fingerprint,
-                    &managed.oci_repository,
-                ) else {
-                    continue;
-                };
-                profiles.insert(profile.id, runtime);
             }
-            page.page_token = result.next_page_token;
-            if page.page_token.is_empty() {
-                return Ok(profiles);
-            }
-        }
-        drop(store);
-        Err("runtime_profile_limit_exceeded")
+            Err("runtime_profile_limit_exceeded")
+        })
+        .await
     }
 
-    fn configured_profile(&self, id: &str) -> Result<ProfileRuntime, &'static str> {
-        self.configured_profiles()?
+    async fn configured_profile(&self, id: &str) -> Result<ProfileRuntime, &'static str> {
+        self.configured_profiles()
+            .await?
             .remove(id)
             .ok_or("runtime_source_missing")
     }
@@ -193,7 +205,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let Ok(_guard) = self.coding_pass.try_lock() else {
             return;
         };
-        for profile in self.configured_profiles().unwrap_or_default().keys() {
+        for profile in self.configured_profiles().await.unwrap_or_default().keys() {
             let result = tokio::time::timeout(
                 Duration::from_secs(self.configuration.request_timeout_seconds * 8),
                 Box::pin(self.coding(profile)),
@@ -234,7 +246,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return;
         };
         let mut tasks = JoinSet::new();
-        for profile in self.configured_profiles().unwrap_or_default().keys() {
+        for profile in self.configured_profiles().await.unwrap_or_default().keys() {
             while tasks.len() >= self.configuration.concurrency {
                 let _ = tasks.join_next().await;
             }
@@ -252,16 +264,20 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     Err(_) => "runtime_observation_timeout",
                 };
                 tracing::warn!(reason_code = reason, "runtime reconciliation deferred");
-                if let Ok(mut store) = reconciler.state.store.lock() {
-                    let _ = store.runtime_failure(&profile, reason);
-                    if let Ok(mut cursor) = store.runtime_cursor(&profile) {
-                        cursor.failures = cursor.failures.saturating_add(1);
-                        cursor.status.insert("reason-code".into(), reason.into());
-                        cursor.next_at = now().unwrap_or(0)
-                            + backoff(reconciler.configuration.interval_seconds, cursor.failures);
-                        let _ = store.save_runtime_cursor(&profile, &cursor);
-                    }
-                }
+                let interval = reconciler.configuration.interval_seconds;
+                let _ = reconciler
+                    .with_database(move |store| {
+                        let _ = store.runtime_failure(&profile, reason);
+                        if let Ok(mut cursor) = store.runtime_cursor(&profile) {
+                            cursor.failures = cursor.failures.saturating_add(1);
+                            cursor.status.insert("reason-code".into(), reason.into());
+                            cursor.next_at =
+                                now().unwrap_or(0) + backoff(interval, cursor.failures);
+                            let _ = store.save_runtime_cursor(&profile, &cursor);
+                        }
+                        Ok(())
+                    })
+                    .await;
             });
         }
         while tasks.join_next().await.is_some() {}
@@ -269,52 +285,56 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
 
     async fn profile(&self, id: &str) -> Result<(), &'static str> {
         let time = now()?;
-        let (repository, mut cursor) = {
-            let mut store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "runtime_store_unavailable")?;
-            let profile = store
-                .runtime_profile(id)
-                .map_err(|_| "runtime_profile_missing")?;
-            if profile.kind != v1::RuntimeProfileKind::AyniManaged as i32 {
-                return Ok(());
-            }
-            let repository = store
-                .repository_connection(&profile.repository_connection_id)
-                .map_err(|_| "repository_missing")?;
-            let mut cursor = store
-                .runtime_cursor(id)
-                .map_err(|_| "runtime_cursor_invalid")?;
-            let actions = store
-                .pending_external_actions("ReconcileRuntimeProfile")
-                .map_err(|_| "runtime_action_invalid")?;
-            for action in actions {
-                use prost::Message;
-                let request =
-                    v1::ReconcileRuntimeProfileRequest::decode(action.request_payload.as_slice())
-                        .map_err(|_| "runtime_action_invalid")?;
-                if request.runtime_profile_id != id {
-                    continue;
+        let lookup_id = id.to_owned();
+        let Some((repository, mut cursor)) = self
+            .with_database(move |store| {
+                let profile = store
+                    .runtime_profile(&lookup_id)
+                    .map_err(|_| "runtime_profile_missing")?;
+                if profile.kind != v1::RuntimeProfileKind::AyniManaged as i32 {
+                    return Ok(None);
                 }
-                cursor.next_at = 0;
-                // Persist the wake-up before acknowledging the action. Replaying
-                // after a crash is harmless and never resets build intent.
-                store
-                    .save_runtime_cursor(id, &cursor)
+                let repository = store
+                    .repository_connection(&profile.repository_connection_id)
+                    .map_err(|_| "repository_missing")?;
+                let mut cursor = store
+                    .runtime_cursor(&lookup_id)
                     .map_err(|_| "runtime_cursor_invalid")?;
-                store
-                    .complete_external_action("ReconcileRuntimeProfile", &action.idempotency_key)
+                let actions = store
+                    .pending_external_actions("ReconcileRuntimeProfile")
                     .map_err(|_| "runtime_action_invalid")?;
-            }
-            drop(store);
-            (repository, cursor)
+                for action in actions {
+                    use prost::Message;
+                    let request = v1::ReconcileRuntimeProfileRequest::decode(
+                        action.request_payload.as_slice(),
+                    )
+                    .map_err(|_| "runtime_action_invalid")?;
+                    if request.runtime_profile_id != lookup_id {
+                        continue;
+                    }
+                    cursor.next_at = 0;
+                    // Persist the wake-up before acknowledging the action. Replaying
+                    // after a crash is harmless and never resets build intent.
+                    store
+                        .save_runtime_cursor(&lookup_id, &cursor)
+                        .map_err(|_| "runtime_cursor_invalid")?;
+                    store
+                        .complete_external_action(
+                            "ReconcileRuntimeProfile",
+                            &action.idempotency_key,
+                        )
+                        .map_err(|_| "runtime_action_invalid")?;
+                }
+                Ok(Some((repository, cursor)))
+            })
+            .await?
+        else {
+            return Ok(());
         };
         if cursor.next_at > time {
             return Ok(());
         }
-        let runtime = self.configured_profile(id)?;
+        let runtime = self.configured_profile(id).await?;
         let source_digest = format!(
             "sha256:{:x}",
             Sha256::digest(serde_json::to_vec(&runtime).map_err(|_| "runtime_source_invalid")?)
@@ -373,7 +393,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 self.kubernetes.cleanup(name).await?;
             }
             cursor.pending = None;
-            self.save(id, cursor)?;
+            self.save(id, cursor).await?;
             return Err("runtime_source_changed");
         }
         if let Some(build_name) = &pending.build_name
@@ -398,7 +418,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 if time.saturating_sub(pending.started_at) > 1900 {
                     self.kubernetes.cleanup(&pending.name).await?;
                     cursor.pending = None;
-                    self.save(id, cursor)?;
+                    self.save(id, cursor).await?;
                     return Err("runtime_verification_timeout");
                 }
             }
@@ -411,7 +431,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     self.kubernetes.cleanup(name).await?;
                 }
                 cursor.pending = None;
-                self.save(id, cursor)?;
+                self.save(id, cursor).await?;
                 return Err(reason);
             }
             Observation::Completed { digest, report } => {
@@ -442,7 +462,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .as_mut()
                     .ok_or("runtime_cursor_invalid")?
                     .build_started = true;
-                self.save(id, cursor)?;
+                self.save(id, cursor).await?;
                 self.kubernetes
                     .start_build(&build_name, &runtime.execution_runtime(), &request, token)
                     .await?;
@@ -462,7 +482,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .as_mut()
                     .ok_or("runtime_cursor_invalid")?
                     .started_at = time;
-                self.save(id, cursor)?;
+                self.save(id, cursor).await?;
             }
         }
         Ok(())
@@ -532,19 +552,17 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .status
             .insert("resolved-digest".into(), digest.clone());
         // Retain the immutable binding before activation; retries can only replay it.
-        self.save(id, cursor)?;
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .activate_runtime(
-                id,
-                &pending.profile_revision,
-                &runtime.image,
-                &digest,
-                report,
-            )
-            .map_err(|_| "runtime_activation_rejected")?;
+        self.save(id, cursor).await?;
+        let activation_id = id.to_owned();
+        let revision = pending.profile_revision.clone();
+        let image = runtime.image.clone();
+        let report = report.clone();
+        self.with_database(move |store| {
+            store
+                .activate_runtime(&activation_id, &revision, &image, &digest, &report)
+                .map_err(|_| "runtime_activation_rejected")
+        })
+        .await?;
         self.kubernetes.cleanup(&pending.name).await?;
         if let Some(name) = &pending.build_name {
             self.kubernetes.cleanup(name).await?;
@@ -556,7 +574,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let jitter =
             u64::from(Sha256::digest(id)[0]) % (self.configuration.interval_seconds / 5 + 1);
         cursor.next_at = time + self.configuration.interval_seconds + jitter;
-        self.save(id, cursor)?;
+        self.save(id, cursor).await?;
         Ok(())
     }
 
@@ -581,19 +599,24 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let repository_image =
             ayni_orchestrator_application::execution_settings::image_repository(&runtime.image)
                 .ok_or("runtime_image_invalid")?;
+        let revision_id = id.to_owned();
+        let revision_head = head.to_owned();
+        let fingerprint = identity.fingerprint.clone();
+        let image_repository = repository_image.to_owned();
+        let revision_source = source_digest.to_owned();
         let revision = self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .prepare_runtime_revision(
-                id,
-                head,
-                &identity.fingerprint,
-                repository_image,
-                source_digest,
-            )
-            .map_err(|_| "runtime_revision_failed")?;
+            .with_database(move |store| {
+                store
+                    .prepare_runtime_revision(
+                        &revision_id,
+                        &revision_head,
+                        &fingerprint,
+                        &image_repository,
+                        &revision_source,
+                    )
+                    .map_err(|_| "runtime_revision_failed")
+            })
+            .await?;
         cursor.sequence = cursor
             .sequence
             .checked_add(1)
@@ -630,16 +653,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             },
         });
         cursor.update_status(runtime, identity.fingerprint)?;
-        self.save(id, cursor)
+        self.save(id, cursor).await
     }
 
-    fn save(&self, profile: &str, cursor: &RuntimeCursor) -> Result<(), &'static str> {
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .save_runtime_cursor(profile, cursor)
-            .map_err(|_| "runtime_store_failed")
+    async fn save(&self, profile: &str, cursor: &RuntimeCursor) -> Result<(), &'static str> {
+        let profile = profile.to_owned();
+        let cursor = cursor.clone();
+        self.with_database(move |store| {
+            store
+                .save_runtime_cursor(&profile, &cursor)
+                .map_err(|_| "runtime_store_failed")
+        })
+        .await
     }
 }
 

@@ -1,6 +1,6 @@
 //! Bounded execution of synchronous database operations on a dedicated thread.
 use super::{CleanStore, CleanStoreError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::{Notify, mpsc, oneshot};
 
 const REQUEST_CAPACITY: usize = 64;
@@ -16,15 +16,12 @@ pub(crate) struct Database {
 mod tests;
 
 impl Database {
-    pub(crate) fn start(store: Arc<Mutex<CleanStore>>) -> Result<Self, CleanStoreError> {
+    pub(crate) fn start(mut store: CleanStore) -> Result<Self, CleanStoreError> {
         let (requests, mut receiver) = mpsc::channel::<Operation>(REQUEST_CAPACITY);
         std::thread::Builder::new()
             .name("control-plane-database".into())
             .spawn(move || {
                 while let Some(operation) = receiver.blocking_recv() {
-                    let Ok(mut store) = store.lock() else {
-                        break;
-                    };
                     operation(&mut store);
                 }
             })
@@ -38,6 +35,13 @@ impl Database {
     pub(crate) async fn execute<T: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut CleanStore) -> Result<T, CleanStoreError> + Send + 'static,
+    ) -> Result<T, CleanStoreError> {
+        self.call(operation).await?
+    }
+
+    pub(crate) async fn call<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut CleanStore) -> T + Send + 'static,
     ) -> Result<T, CleanStoreError> {
         let (reply, response) = oneshot::channel();
         let committed = self.committed.clone();
@@ -57,7 +61,7 @@ impl Database {
             .map_err(|_| CleanStoreError::StoreUnavailable)?;
         response
             .await
-            .map_err(|_| CleanStoreError::StoreUnavailable)?
+            .map_err(|_| CleanStoreError::StoreUnavailable)
     }
 
     pub(crate) fn notifications(&self) -> Arc<Notify> {

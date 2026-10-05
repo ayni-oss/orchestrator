@@ -4,13 +4,14 @@ use super::{
 };
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn coding(&self, profile_id: &str) -> Result<(), &'static str> {
+        let lookup_profile = profile_id.to_owned();
         let attempts = self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .coding_attempts(profile_id)
-            .map_err(|_| "coding_state_invalid")?;
+            .with_database(move |store| {
+                store
+                    .coding_attempts(&lookup_profile)
+                    .map_err(|_| "coding_state_invalid")
+            })
+            .await?;
         for attempt in attempts.into_iter().take(self.configuration.concurrency) {
             self.reconcile_coding_attempt(attempt, profile_id).await?;
         }
@@ -26,7 +27,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         // Read output after observing Job status, so terminal records are collected
         // before any cleanup. The same path also collects live progress.
         let job_state = self.kubernetes.coding_state(&name).await?;
-        let attempt = self.collect_activity(attempt, &name)?;
+        let attempt = self.collect_activity(attempt, &name).await?;
         let current = v1::DevelopmentAttemptState::try_from(attempt.state)
             .map_err(|_| "coding_state_invalid")?;
         if coding_needs_cleanup(current) {
@@ -40,7 +41,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
         match job_state {
             ExecutionState::Missing if current == v1::DevelopmentAttemptState::Running => {
-                self.coding_failed(&attempt, "coding_job_lost")?;
+                self.coding_failed(&attempt, "coding_job_lost").await?;
             }
             ExecutionState::Missing if current == v1::DevelopmentAttemptState::Queued => {
                 self.start_coding_attempt(&attempt, profile_id, &name)
@@ -51,43 +52,41 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     || "Coding worker failed before activity was retained. Inspect init containers, scheduling, and image pulls.".to_owned(),
                     |event| format!("Coding worker failed. Last activity: {}.", event.message),
                 );
-                self.coding_failed(&attempt, &reason)?;
+                self.coding_failed(&attempt, &reason).await?;
             }
             ExecutionState::Succeeded => {
-                self.finish_coding_attempt(&attempt, &name)?;
+                self.finish_coding_attempt(&attempt, &name).await?;
                 let fresh = self
-                    .state
-                    .store
-                    .lock()
-                    .map_err(|_| "runtime_store_unavailable")?
-                    .development_attempt(&attempt.id)
-                    .map_err(|_| "coding_state_invalid")?;
+                    .with_database(move |store| {
+                        store
+                            .development_attempt(&attempt.id)
+                            .map_err(|_| "coding_state_invalid")
+                    })
+                    .await?;
                 self.cleanup_coding_attempt(&fresh, &name).await?;
             }
             ExecutionState::Missing => {
-                let mut store = self
-                    .state
-                    .store
-                    .lock()
-                    .map_err(|_| "runtime_store_unavailable")?;
-                if store
-                    .coding_candidate_exists(&attempt.id)
-                    .map_err(|_| "coding_state_invalid")?
-                {
-                    store
-                        .coding_cleanup_complete(&attempt.id)
-                        .map_err(|_| "coding_state_invalid")?;
-                } else {
-                    return Err("coding_completed_job_missing");
-                }
-                drop(store);
+                self.with_database(move |store| {
+                    if store
+                        .coding_candidate_exists(&attempt.id)
+                        .map_err(|_| "coding_state_invalid")?
+                    {
+                        store
+                            .coding_cleanup_complete(&attempt.id)
+                            .map_err(|_| "coding_state_invalid")?;
+                    } else {
+                        return Err("coding_completed_job_missing");
+                    }
+                    Ok(())
+                })
+                .await?;
             }
             ExecutionState::Running => {}
         }
         Ok(())
     }
 
-    pub(super) fn collect_activity(
+    pub(super) async fn collect_activity(
         &self,
         attempt: v1::DevelopmentAttempt,
         name: &str,
@@ -121,12 +120,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 failed: event.failed,
             })
             .collect();
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .coding_activity(&attempt.id, activity)
-            .map_err(|_| "coding_state_invalid")
+        self.with_database(move |store| {
+            store
+                .coding_activity(&attempt.id, activity)
+                .map_err(|_| "coding_state_invalid")
+        })
+        .await
     }
 
     pub(super) async fn cleanup_coding_attempt(
@@ -135,15 +134,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         name: &str,
     ) -> Result<(), &'static str> {
         use std::path::Path;
+        let attempt = attempt.clone();
         // Preserve whatever accounting was durably emitted before a
         // cancellation or failure; absent counters remain unavailable.
+        let details_id = attempt.id.clone();
+        let requested_input = attempt.requested_input.clone();
         if let Ok(usage) = collect_coding_usage(&Path::new("/runtime-outputs").join(name)) {
-            self.state
-                .store
-                .lock()
-                .map_err(|_| "runtime_store_unavailable")?
-                .coding_details(&attempt.id, attempt.requested_input.clone(), usage)
-                .map_err(|_| "coding_state_invalid")?;
+            self.with_database(move |store| {
+                store
+                    .coding_details(&details_id, requested_input, usage)
+                    .map_err(|_| "coding_state_invalid")
+            })
+            .await?;
         }
         self.kubernetes.cleanup(name).await?;
         if !self.kubernetes.coding_stopped(name).await? {
@@ -156,32 +158,33 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         ]
         .contains(&attempt.state)
         {
-            self.recover_coding_checkpoint(attempt, name)?;
+            self.recover_coding_checkpoint(&attempt, name).await?;
         }
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .coding_cleanup_complete(&attempt.id)
-            .map_err(|_| "coding_state_invalid")?;
+        self.with_database(move |store| {
+            store
+                .coding_cleanup_complete(&attempt.id)
+                .map_err(|_| "coding_state_invalid")
+        })
+        .await?;
 
         Ok(())
     }
 
-    pub(super) fn recover_coding_checkpoint(
+    pub(super) async fn recover_coding_checkpoint(
         &self,
         attempt: &v1::DevelopmentAttempt,
         name: &str,
     ) -> Result<(), &'static str> {
         use ayni_orchestrator_runtime::runtime_execution::read_bounded;
         // Once publication owns a candidate, retries must not replace its bundle.
+        let lookup_id = attempt.id.clone();
         if self
-            .state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .coding_candidate_exists(&attempt.id)
-            .map_err(|_| "coding_state_invalid")?
+            .with_database(move |store| {
+                store
+                    .coding_candidate_exists(&lookup_id)
+                    .map_err(|_| "coding_state_invalid")
+            })
+            .await?
         {
             return Ok(());
         }
@@ -205,25 +208,26 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_ref()
             .and_then(|s| s.repository.as_ref())
             .ok_or("coding_snapshot_missing")?;
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .record_candidate(v1::Candidate {
-                development_attempt_id: attempt.id.clone(),
-                repository_connection_id: source.repository_connection_id.clone(),
-                base_revision: source.revision.clone(),
-                identity: Some(v1::CandidateIdentity {
-                    identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
-                        commit_sha: sha.into(),
-                    })),
-                }),
-                state: v1::CandidateState::Available as i32,
-                changed_paths: report.changed_paths,
-                coding_advisory: Some(report.advisory),
-                ..Default::default()
-            })
-            .map_err(|_| "coding_candidate_rejected")?;
+        let candidate = v1::Candidate {
+            development_attempt_id: attempt.id.clone(),
+            repository_connection_id: source.repository_connection_id.clone(),
+            base_revision: source.revision.clone(),
+            identity: Some(v1::CandidateIdentity {
+                identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
+                    commit_sha: sha.into(),
+                })),
+            }),
+            state: v1::CandidateState::Available as i32,
+            changed_paths: report.changed_paths,
+            coding_advisory: Some(report.advisory),
+            ..Default::default()
+        };
+        self.with_database(move |store| {
+            store
+                .record_candidate(candidate)
+                .map_err(|_| "coding_candidate_rejected")
+        })
+        .await?;
         Ok(())
     }
 
@@ -240,22 +244,21 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_ref()
             .ok_or("coding_snapshot_missing")?;
         let frozen = snapshot.runtime.as_ref().ok_or("coding_snapshot_missing")?;
-        let runtime = self.configured_profile(profile_id)?;
-        let (repository, revision) = {
-            let store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "runtime_store_unavailable")?;
-            (
-                store
-                    .repository_connection(&source.repository_connection_id)
-                    .map_err(|_| "repository_missing")?,
-                store
-                    .runtime_profile_revision(&frozen.runtime_profile_revision_id)
-                    .map_err(|_| "runtime_revision_missing")?,
-            )
-        };
+        let runtime = self.configured_profile(profile_id).await?;
+        let repository_id = source.repository_connection_id.clone();
+        let revision_id = frozen.runtime_profile_revision_id.clone();
+        let (repository, revision) = self
+            .with_database(move |store| {
+                Ok((
+                    store
+                        .repository_connection(&repository_id)
+                        .map_err(|_| "repository_missing")?,
+                    store
+                        .runtime_profile_revision(&revision_id)
+                        .map_err(|_| "runtime_revision_missing")?,
+                ))
+            })
+            .await?;
         let Some(v1::repository_provider::Provider::Github(github)) =
             repository.provider.and_then(|p| p.provider)
         else {
@@ -268,7 +271,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         };
         let agent = snapshot.agent.as_ref().ok_or("coding_agent_missing")?;
         if agent.provider != "openai" {
-            self.coding_failed(attempt, "coding_provider_unsupported")?;
+            self.coding_failed(attempt, "coding_provider_unsupported")
+                .await?;
             return Ok(());
         }
         let platform = frozen.platform.as_ref().ok_or("coding_platform_missing")?;
@@ -317,21 +321,23 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 u32::try_from(remaining.min(86400)).map_err(|_| "coding_deadline_invalid")?,
             )
             .await?;
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .transition_attempt(
-                &attempt.id,
-                attempt.resource_version,
-                v1::DevelopmentAttemptState::Running,
-                None,
-            )
-            .map_err(|_| "coding_state_changed")?;
+        let attempt_id = attempt.id.clone();
+        let attempt_version = attempt.resource_version;
+        self.with_database(move |store| {
+            store
+                .transition_attempt(
+                    &attempt_id,
+                    attempt_version,
+                    v1::DevelopmentAttemptState::Running,
+                    None,
+                )
+                .map_err(|_| "coding_state_changed")
+        })
+        .await?;
         Ok(())
     }
 
-    pub(super) fn finish_coding_attempt(
+    pub(super) async fn finish_coding_attempt(
         &self,
         attempt: &v1::DevelopmentAttempt,
         name: &str,
@@ -346,18 +352,15 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let (report, usage) = match collect_coding_result(&directory) {
             Ok(result) => result,
             Err(reason) => {
-                self.coding_failed(attempt, reason)?;
+                self.coding_failed(attempt, reason).await?;
                 return Ok(());
             }
         };
-        {
-            let mut store = self
-                .state
-                .store
-                .lock()
-                .map_err(|_| "runtime_store_unavailable")?;
+        let source = source.clone();
+        let attempt_id = attempt.id.clone();
+        self.with_database(move |store| {
             let fresh = store
-                .development_attempt(&attempt.id)
+                .development_attempt(&attempt_id)
                 .map_err(|_| "coding_state_invalid")?;
             if !matches!(
                 v1::DevelopmentAttemptState::try_from(fresh.state),
@@ -414,33 +417,39 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     })
                     .map_err(|_| "coding_candidate_rejected")?;
             }
-        }
+            Ok(())
+        })
+        .await?;
         Ok(())
     }
 
-    pub(super) fn coding_failed(
+    pub(super) async fn coding_failed(
         &self,
         attempt: &v1::DevelopmentAttempt,
         reason: &str,
     ) -> Result<(), &'static str> {
-        self.state
-            .store
-            .lock()
-            .map_err(|_| "runtime_store_unavailable")?
-            .transition_attempt(
-                &attempt.id,
-                attempt.resource_version,
-                v1::DevelopmentAttemptState::Failed,
-                Some(v1::ResourceFailure {
-                    reason: v1::ErrorReason::RuntimeArtifactNotVerified as i32,
-                    message: reason.into(),
-                    remediation: Some(
-                        "Inspect the isolated Job, repair the cause, then retry the task.".into(),
-                    ),
-                    observed_at: None,
-                }),
-            )
-            .map_err(|_| "coding_state_changed")?;
+        let id = attempt.id.clone();
+        let version = attempt.resource_version;
+        let reason = reason.to_owned();
+        self.with_database(move |store| {
+            store
+                .transition_attempt(
+                    &id,
+                    version,
+                    v1::DevelopmentAttemptState::Failed,
+                    Some(v1::ResourceFailure {
+                        reason: v1::ErrorReason::RuntimeArtifactNotVerified as i32,
+                        message: reason,
+                        remediation: Some(
+                            "Inspect the isolated Job, repair the cause, then retry the task."
+                                .into(),
+                        ),
+                        observed_at: None,
+                    }),
+                )
+                .map_err(|_| "coding_state_changed")
+        })
+        .await?;
         Ok(())
     }
 }

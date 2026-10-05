@@ -112,9 +112,11 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
         .project
         .ok_or("project missing")?;
     // The source observer normally records this immutable provider observation.
-    let snapshot = with_store(&server.state, |store| {
-        store.observe_repository_snapshot(&repository.id, SOURCE)
-    })?;
+    let repository_id = repository.id.clone();
+    let snapshot = with_store(&server.state, move |store| {
+        store.observe_repository_snapshot(&repository_id, SOURCE)
+    })
+    .await?;
     let created = RuntimeProfileServiceClient::new(channel)
         .create_runtime_profile(v1::CreateRuntimeProfileRequest {
             idempotency_key: "profile".into(),
@@ -146,20 +148,23 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
     })
 }
 
-fn observe_verified_runtime(
+async fn observe_verified_runtime(
     server: &Server,
     profile: &RuntimeFixture,
     digest: &str,
 ) -> TestResult<v1::RuntimeArtifact> {
     // Inject the trusted verifier's observation at the durable boundary; the
     // test does not execute Ayni or establish real registry/certificate trust.
-    Ok(with_store(&server.state, |store| {
+    let profile_id = profile.profile.id.clone();
+    let revision_id = profile.revision.id.clone();
+    let digest = digest.to_owned();
+    Ok(with_store(&server.state, move |store| {
         store.record_runtime_artifact(
-            &profile.profile.id,
+            &profile_id,
             v1::RuntimeArtifact {
-                runtime_profile_revision_id: profile.revision.id.clone(),
+                runtime_profile_revision_id: revision_id,
                 oci_repository: IMAGE.into(),
-                resolved_digest: digest.into(),
+                resolved_digest: digest,
                 platform: Some(v1::OciPlatform {
                     operating_system: "linux".into(),
                     architecture: "amd64".into(),
@@ -169,7 +174,8 @@ fn observe_verified_runtime(
                 ..Default::default()
             },
         )
-    })?)
+    })
+    .await?)
 }
 
 fn task_request(profile: &RuntimeFixture, key: &str) -> v1::CreateDevelopmentTaskRequest {
@@ -278,4 +284,4 @@ fn assert_frozen_inputs(
 
 mod lifecycle;
 
-use crate::with_store;
+use crate::application::with_store_async as with_store;

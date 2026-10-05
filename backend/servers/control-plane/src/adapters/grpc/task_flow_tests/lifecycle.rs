@@ -14,7 +14,7 @@ async fn task_admission_requires_ready_matching_source_and_freezes_inputs() -> T
         v1::ErrorReason::ProfileNotReady,
     )?;
     let artifact =
-        observe_verified_runtime(&server, &profile, &format!("sha256:{}", "a".repeat(64)))?;
+        observe_verified_runtime(&server, &profile, &format!("sha256:{}", "a".repeat(64))).await?;
     let ready = RuntimeProfileServiceClient::new(channel)
         .get_runtime_profile(v1::GetRuntimeProfileRequest {
             runtime_profile_id: profile.profile.id.clone(),
@@ -55,9 +55,11 @@ async fn task_admission_requires_ready_matching_source_and_freezes_inputs() -> T
         Code::AlreadyExists,
         v1::ErrorReason::IdempotencyKeyReused,
     )?;
-    with_store(&server.state, |store| {
-        store.observe_repository_snapshot(&profile.repository.id, &"b".repeat(40))
-    })?;
+    let repository_id = profile.repository.id.clone();
+    with_store(&server.state, move |store| {
+        store.observe_repository_snapshot(&repository_id, &"b".repeat(40))
+    })
+    .await?;
     let mut stale = request;
     stale.idempotency_key = "stale-source".into();
     stale
@@ -79,7 +81,7 @@ async fn cancellation_and_resumable_watch_survive_server_restart() -> TestResult
     let path = directory.path().join("state.sqlite");
     let (server, channel) = Server::start(&path).await?;
     let profile = create_profile(&server, channel.clone()).await?;
-    observe_verified_runtime(&server, &profile, &format!("sha256:{}", "a".repeat(64)))?;
+    observe_verified_runtime(&server, &profile, &format!("sha256:{}", "a".repeat(64))).await?;
     let mut client = TaskClient::new(channel);
     let created = client
         .create_development_task(task_request(&profile, "task"))
@@ -161,37 +163,39 @@ async fn cancellation_and_resumable_watch_survive_server_restart() -> TestResult
     server.stop().await
 }
 
-fn observe_failure_and_new_profile(
+async fn observe_failure_and_new_profile(
     server: &Server,
     profile: &RuntimeFixture,
     attempt: &v1::DevelopmentAttempt,
 ) -> TestResult {
     // These are observations the worker collector and repository reconciler
     // would deliver. All user mutations still go through the gRPC listener.
-    with_store(&server.state, |store| {
+    let attempt_id = attempt.id.clone();
+    let attempt_version = attempt.resource_version;
+    let repository_id = profile.repository.id.clone();
+    let profile_id = profile.profile.id.clone();
+    let configuration = profile.revision.configuration.clone();
+    with_store(&server.state, move |store| {
         let running = store.transition_attempt(
-            &attempt.id,
-            attempt.resource_version,
+            &attempt_id,
+            attempt_version,
             v1::DevelopmentAttemptState::Running,
             None,
         )?;
         store.transition_attempt(
-            &attempt.id,
+            &attempt_id,
             running.resource_version,
             v1::DevelopmentAttemptState::Failed,
             None,
         )?;
-        let source = store.observe_repository_snapshot(&profile.repository.id, &"b".repeat(40))?;
+        let source = store.observe_repository_snapshot(&repository_id, &"b".repeat(40))?;
         store.record_runtime_profile_revision(
-            &profile.profile.id,
+            &profile_id,
             &source.id,
-            profile
-                .revision
-                .configuration
-                .clone()
-                .ok_or(crate::adapters::sqlite::CleanStoreError::CorruptState)?,
+            configuration.ok_or(crate::adapters::sqlite::CleanStoreError::CorruptState)?,
         )
-    })?;
+    })
+    .await?;
     Ok(())
 }
 
@@ -202,7 +206,7 @@ async fn retry_replays_once_and_keeps_frozen_inputs_after_profile_change_and_res
     let path = directory.path().join("state.sqlite");
     let (server, channel) = Server::start(&path).await?;
     let profile = create_profile(&server, channel.clone()).await?;
-    observe_verified_runtime(&server, &profile, &format!("sha256:{}", "a".repeat(64)))?;
+    observe_verified_runtime(&server, &profile, &format!("sha256:{}", "a".repeat(64))).await?;
     let mut client = TaskClient::new(channel);
     let create = task_request(&profile, "task");
     let created = client
@@ -211,10 +215,12 @@ async fn retry_replays_once_and_keeps_frozen_inputs_after_profile_change_and_res
         .into_inner();
     let task = created.development_task.ok_or("task missing")?;
     let initial = created.initial_attempt.ok_or("attempt missing")?;
-    observe_failure_and_new_profile(&server, &profile, &initial)?;
-    let current_profile = with_store(&server.state, |store| {
-        store.runtime_profile(&profile.profile.id)
-    })?;
+    observe_failure_and_new_profile(&server, &profile, &initial).await?;
+    let profile_id = profile.profile.id.clone();
+    let current_profile = with_store(&server.state, move |store| {
+        store.runtime_profile(&profile_id)
+    })
+    .await?;
     assert_ne!(
         current_profile.active_revision_id.as_deref(),
         Some(profile.revision.id.as_str())

@@ -9,8 +9,6 @@ pub use adapters::grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc}
 pub use adapters::http::router;
 pub use adapters::models::{AvailableModel, ModelCatalog, ModelCatalogError};
 pub use application::reconciliation::RuntimeReconciler;
-#[cfg(test)]
-pub(crate) use application::with_store;
 pub use application::{AppState, ReconciliationError};
 pub use ayni_orchestrator_application::execution::ExecutionBackend;
 pub use process::configuration::{Configuration, ConfigurationError, CustomGrpcConfiguration};
