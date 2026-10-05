@@ -191,3 +191,8 @@ port-forward`; no Ingress, NodePort, public image publication, or public hosting
 is authorized. The SvelteKit BFF is server-only and not a second API. See
 [protocol](../proto/README.md), [architecture](architecture.md), and
 [operations](operations.md) for the target resource and recovery contract.
+
+The local Grafana chart bounds Go scheduler concurrency with `GOMAXPROCS=1`
+under its existing sub-core CPU quota. This prevents excess scheduler parallelism
+from starving health probes on Docker Desktop; CPU and memory limits remain
+explicit in the local chart.
