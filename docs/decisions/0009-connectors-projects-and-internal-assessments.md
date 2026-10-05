@@ -1,6 +1,7 @@
 # Decision 0009: connectors, projects, and internal assessments
 
-- Status: accepted
+- Status: accepted; membership, initialization, and registry configuration amended
+  by [Decision 0011](0011-project-centered-ui-and-onboarding.md)
 - Date: 2026-10-04
 - Supersedes: the repository-first product journey and Actions-authoritative
   assessment model in Decision 0007, and the default producer selection in

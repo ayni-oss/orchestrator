@@ -30,7 +30,12 @@ impl Repository for CleanStore {
     }
     fn retry_facts(&self, task_id: &str) -> Result<RetryFacts, Self::Error> {
         let task = self.development_task(task_id)?;
-        self.active_project_repository(&task.project_id)?;
+        let repository = task
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.repository.as_ref())
+            .ok_or(CleanStoreError::CorruptState)?;
+        self.project_member(&task.project_id, &repository.repository_connection_id)?;
         Ok(RetryFacts {
             version: task.resource_version,
             state: super::task_cancellation::task_state(task.state)?,

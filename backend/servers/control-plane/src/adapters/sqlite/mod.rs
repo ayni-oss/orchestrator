@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 3;
+pub(crate) const SCHEMA_VERSION: i64 = 4;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -313,6 +313,7 @@ mod tests {
                 idempotency_key: "project".into(),
                 display_name: "Sandbox".into(),
                 repository_connection_id: repository.id.clone(),
+                repository_connection_ids: vec![],
             },
         )?;
         let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;

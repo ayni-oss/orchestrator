@@ -1,35 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 const bff = vi.hoisted(() => ({
-  listRepositoryConnections: vi.fn(async () => ({ repositoryConnections: [], page: { nextPageToken: "", snapshotCursor: "1" } })),
-  listRuntimeProfiles: vi.fn(async () => ({ runtimeProfiles: [], page: { nextPageToken: "", snapshotCursor: "1" } })),
-  listProviderModels: vi.fn(async () => ({ provider: "openai", models: [], observedAt: "2026-01-01T00:00:00.000Z", page: { nextPageToken: "", snapshotCursor: "1" } })),
-  listDevelopmentTasks: vi.fn(async () => ({ developmentTasks: [], page: { nextPageToken: "", snapshotCursor: "1" } })),
+ listProjects:vi.fn(), listRepositoryConnections:vi.fn(), listRuntimeProfiles:vi.fn(), listDevelopmentTasks:vi.fn(), createProject:vi.fn(),
 }));
-vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
-import { load } from "../routes/+page.server.js";
-
-describe("overview server boundary", () => {
-  const requestSignal = new AbortController().signal;
-  beforeEach(() => vi.clearAllMocks());
-
-  it("loads clean-v1 resources only through the server BFF and disables caching", async () => {
-    const setHeaders = vi.fn();
-    const result = await load({ locals: { requestId: "page-request", requestSignal }, request: new Request("http://127.0.0.1/"), setHeaders } as never);
-    expect(result).toMatchObject({ backend: "connected", provider: "openai", requestId: "page-request" });
-    expect(setHeaders).toHaveBeenCalledWith({ "cache-control": "no-store" });
-    expect(bff.listRepositoryConnections).toHaveBeenCalledOnce();
-    expect(bff.listRuntimeProfiles).toHaveBeenCalledOnce();
-    expect(bff.listProviderModels).toHaveBeenCalledOnce();
-    expect(bff.listDevelopmentTasks).toHaveBeenCalledOnce();
-  });
-
-  it("renders a disconnected state without leaking an unexpected backend error", async () => {
-    for (const method of [bff.listRepositoryConnections, bff.listRuntimeProfiles, bff.listProviderModels, bff.listDevelopmentTasks]) {
-      method.mockRejectedValueOnce(new Error("private backend detail"));
-    }
-    const result = await load({ locals: { requestId: "failed-request", requestSignal }, setHeaders: vi.fn() } as never);
-    expect(result).toMatchObject({ backend: "disconnected", error: { reason: "internal", requestId: "failed-request" } });
-    expect(JSON.stringify(result)).not.toContain("private backend detail");
-  });
+vi.mock("$lib/server/bff.js", () => ({getBff:()=>bff}));
+import { load, actions } from "../routes/projects/+page.server.js";
+import { load as home } from "../routes/+page.server.js";
+const locals={requestId:"request",requestSignal:new AbortController().signal};
+const page={nextPageToken:"",snapshotCursor:"1"};
+beforeEach(()=>{
+ vi.clearAllMocks();
+ bff.listProjects.mockResolvedValue({projects:[],page});
+ bff.listRepositoryConnections.mockResolvedValue({repositoryConnections:[],page});
+ bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[],page});
+ bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page});
+});
+describe("project page server boundary",()=>{
+ it("redirects home to projects",()=>{expect(()=>home({} as never)).toThrow(expect.objectContaining({status:307,location:"/projects"}));});
+ it("loads project state through the BFF with no caching",async()=>{
+  const setHeaders=vi.fn();
+  const result=await load({locals,setHeaders,url:new URL("http://localhost/projects")} as never);
+  expect(result).toMatchObject({projects:[],repositories:[],tasksComplete:true,profilesComplete:true});
+  expect(setHeaders).toHaveBeenCalledWith({"cache-control":"no-store"});
+ });
+ it("retains partial results and sanitizes backend failures",async()=>{
+  bff.listRuntimeProfiles.mockRejectedValueOnce(new Error("private backend detail"));
+  const result=await load({locals,setHeaders:vi.fn(),url:new URL("http://localhost/projects")} as never);
+  expect(result).toMatchObject({profilesComplete:false,error:{reason:"internal"}});
+  expect(JSON.stringify(result)).not.toContain("private backend detail");
+ });
+ it("does not treat partial task history as an authoritative latest task",async()=>{
+  bff.listDevelopmentTasks.mockResolvedValueOnce({developmentTasks:[],page:{...page,nextPageToken:"next"}});
+  expect(await load({locals,setHeaders:vi.fn(),url:new URL("http://localhost/projects")} as never)).toMatchObject({tasksComplete:false});
+ });
+ it("rejects an empty or duplicate membership before dispatch",async()=>{
+  for(const repositories of [[],["repository:1","repository:1"]]) {
+   const body=new FormData();body.set("idempotencyKey","00000000-0000-4000-8000-000000000099");body.set("displayName","Payments");
+   for(const id of repositories) body.append("repositoryConnectionIds",id);
+   expect(await actions.create!({locals,request:new Request("http://localhost/projects?/create",{method:"POST",body})} as never)).toMatchObject({status:400});
+  }
+  expect(bff.createProject).not.toHaveBeenCalled();
+ });
+ it("dispatches the complete selected membership",async()=>{
+  bff.createProject.mockResolvedValueOnce({id:"project:1"});
+  const body=new FormData();body.set("idempotencyKey","00000000-0000-4000-8000-000000000099");body.set("displayName","Payments");body.append("repositoryConnectionIds","repository:1");body.append("repositoryConnectionIds","repository:2");
+  await expect(actions.create!({locals,request:new Request("http://localhost/projects?/create",{method:"POST",body})} as never)).rejects.toMatchObject({status:303,location:"/projects/project%3A1"});
+  expect(bff.createProject).toHaveBeenCalledWith(expect.objectContaining({repositoryConnectionIds:["repository:1","repository:2"]}),expect.anything());
+ });
 });

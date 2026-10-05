@@ -9,10 +9,7 @@ impl CleanStore {
         &self,
         request: &v1::DevelopmentTaskRequest,
     ) -> Result<v1::RepositoryConnection, CleanStoreError> {
-        let id = self.active_project_repository(&request.project_id)?;
-        if !request.repository_connection_id.is_empty() && request.repository_connection_id != id {
-            return Err(CleanStoreError::ParentMismatch);
-        }
+        let id = self.project_member(&request.project_id, &request.repository_connection_id)?;
         self.repository_connection(&id)
     }
 
@@ -25,16 +22,27 @@ impl CleanStore {
         )
     }
 
-    pub(crate) fn active_project_repository(&self, id: &str) -> Result<String, CleanStoreError> {
+    pub(crate) fn project_member(
+        &self,
+        id: &str,
+        repository: &str,
+    ) -> Result<String, CleanStoreError> {
         let project = self.project(id)?;
         if project.state != v1::ProjectState::Active as i32 {
             return Err(CleanStoreError::ProjectArchived);
         }
-        project
+        // Legacy callers may omit the repository only for an unambiguous project.
+        if repository.is_empty() && project.repository_connection_ids.len() == 1 {
+            return Ok(project.repository_connection_ids[0].clone());
+        }
+        if !project
             .repository_connection_ids
-            .into_iter()
-            .next()
-            .ok_or(CleanStoreError::CorruptState)
+            .iter()
+            .any(|member| member == repository)
+        {
+            return Err(CleanStoreError::ParentMismatch);
+        }
+        Ok(repository.to_owned())
     }
 
     pub(super) fn replay_project(
@@ -62,20 +70,24 @@ impl CleanStore {
         if let Some(project) = self.replay_project("CreateProject", key, &digest)? {
             return Ok(project);
         }
-        self.repository_connection(&request.repository_connection_id)?;
-        let assigned: bool = self.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM project_repositories WHERE repository_connection_id=?1 AND active=1)",
-            [&request.repository_connection_id], |row| row.get(0),
-        ).map_err(CleanStoreError::Database)?;
-        if assigned {
-            return Err(CleanStoreError::RepositoryAlreadyAssigned);
+        let repositories = if request.repository_connection_ids.is_empty() {
+            vec![request.repository_connection_id.clone()]
+        } else {
+            if !request.repository_connection_id.is_empty() {
+                return Err(CleanStoreError::ParentMismatch);
+            }
+            request.repository_connection_ids.clone()
+        };
+        api_validation_members(&repositories)?;
+        for repository in &repositories {
+            self.repository_connection(repository)?;
         }
         let now = unix_seconds()?;
         let project = v1::Project {
             id: resource_id("project"),
             display_name: request.display_name.clone(),
             state: v1::ProjectState::Active as i32,
-            repository_connection_ids: vec![request.repository_connection_id.clone()],
+            repository_connection_ids: repositories,
             created_at: Some(timestamp(now)),
             updated_at: Some(timestamp(now)),
             resource_version: 1,
@@ -96,6 +108,15 @@ impl CleanStore {
         let mut project =
             self.editable_project(&request.project_id, request.expected_resource_version)?;
         project.display_name.clone_from(&request.display_name);
+        if !request.repository_connection_ids.is_empty() {
+            api_validation_members(&request.repository_connection_ids)?;
+            for repository in &request.repository_connection_ids {
+                self.repository_connection(repository)?;
+            }
+            project
+                .repository_connection_ids
+                .clone_from(&request.repository_connection_ids);
+        }
         self.save_project("UpdateProject", key, request, &project, false)?;
         Ok(project)
     }
@@ -170,8 +191,6 @@ impl CleanStore {
         if create {
             transaction.execute("INSERT INTO projects(id,state,payload,resource_version,event_cursor) VALUES (?1,?2,?3,?4,?5)",
                 params![project.id, project.state, project.encode_to_vec(), version, cursor]).map_err(CleanStoreError::Database)?;
-            transaction.execute("INSERT INTO project_repositories(project_id,repository_connection_id,active) VALUES (?1,?2,1)",
-                params![project.id, repository]).map_err(CleanStoreError::Database)?;
         } else {
             let changed = transaction.execute("UPDATE projects SET state=?2,payload=?3,resource_version=?4,event_cursor=?5 WHERE id=?1 AND resource_version=?6",
                 params![project.id, project.state, project.encode_to_vec(), version, cursor, version-1]).map_err(CleanStoreError::Database)?;
@@ -181,12 +200,13 @@ impl CleanStore {
             transaction
                 .execute(
                     "UPDATE project_repositories SET active=?2 WHERE project_id=?1",
-                    params![
-                        project.id,
-                        i32::from(project.state == v1::ProjectState::Active as i32)
-                    ],
+                    params![project.id, 0],
                 )
                 .map_err(CleanStoreError::Database)?;
+        }
+        for member in &project.repository_connection_ids {
+            transaction.execute("INSERT INTO project_repositories(project_id,repository_connection_id,active) VALUES (?1,?2,?3) ON CONFLICT(project_id,repository_connection_id) DO UPDATE SET active=excluded.active",
+                params![project.id, member, i32::from(project.state == v1::ProjectState::Active as i32)]).map_err(CleanStoreError::Database)?;
         }
         transaction.execute("INSERT INTO durable_actions(operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at) VALUES (?1,?2,?3,?4,'completed','project',?5,?6,?6)",
             params![operation,key,digest,request.encode_to_vec(),project.id,now]).map_err(CleanStoreError::Database)?;
@@ -217,4 +237,9 @@ impl CleanStore {
             PROJECT_SERVICE,
         )
     }
+}
+
+fn api_validation_members(repositories: &[String]) -> Result<(), CleanStoreError> {
+    super::api_validation::project_members(repositories)
+        .map_err(|_| CleanStoreError::ParentMismatch)
 }

@@ -56,7 +56,7 @@ never receives them, controller credentials, or model credentials.
 
 ## Fresh project-schema installations
 
-The project baseline is schema version 3. Versions 1 and 2 are rejected without
+The project baseline is schema version 4. Versions 1, 2 and 3 are rejected without
 migration. Deploy into an isolated namespace with new storage; preserve existing
 state. The guarded purge procedure below is destructive and requires a separate
 explicit decision when retained data exists.
@@ -78,7 +78,7 @@ it never upgrades or reads that state. Before the first clean-v1 deployment:
 3. Recreate scoped Secrets with `dev/ctl secrets`, then install a fresh baseline
    with `dev/ctl deploy`. Do not copy the pilot SQLite file, preparation
    directories, checkpoints, archives, or manifests into the new volume.
-4. Run `dev/ctl check --expect-empty`. The readiness response must report `clean_schema_version: 3`;
+4. Run `dev/ctl check --expect-empty`. The readiness response must report `clean_schema_version: 4`;
    initial resource lists must be empty, and logs must not report a retired
    schema or corrupt protobuf payload.
 

@@ -278,6 +278,7 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
             idempotency_key: "project".into(),
             display_name: "   ".into(),
             repository_connection_id: "repository:1".into(),
+            repository_connection_ids: vec![],
         }))
         .await;
     assert_eq!(
@@ -310,6 +311,7 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
             idempotency_key: "project".into(),
             display_name: "Sandbox".into(),
             repository_connection_id: repo.id,
+            repository_connection_ids: vec![],
         }))
         .await?
         .into_inner()
@@ -321,6 +323,7 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
             project_id: project.id.clone(),
             display_name: "Renamed".into(),
             expected_resource_version: 2,
+            repository_connection_ids: vec![],
         }))
         .await;
     assert_eq!(

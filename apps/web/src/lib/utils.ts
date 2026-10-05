@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]): string {
 
 export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null };
 export type WithChild<T> = T & { children?: Snippet };
-export type WithoutChild<T> = Omit<T, "children">;
+export type WithoutChild<T> = Omit<T, "child">;
 export type WithoutChildren<T> = Omit<T, "children">;
 export type WithoutChildrenOrChild<T> = Omit<T, "children" | "child">;
 export type WithChildren<T> = T & { children?: Snippet };
