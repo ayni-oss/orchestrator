@@ -40,7 +40,6 @@ helm lint --strict "$local_chart" --set ayni-orchestrator.runtime.enabled=false
 helm template reusable "$application_chart" --set runtime.enabled=false \
   --namespace reusable-install \
   --set-string images.controlPlane=registry.example/control-plane:test \
-  --set-string images.worker=registry.example/worker:test \
   --set-string images.web=registry.example/web:test \
   >"$scratch/application.yaml"
 helm template runtime "$application_chart" --namespace runtime-test \
@@ -75,7 +74,6 @@ grep -q 'mountPath: /runtime-outputs' "$scratch/runtime.yaml"
 helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
   --namespace ayni-orchestrator-dev \
   --set-string ayni-orchestrator.images.controlPlane=local/ayni-orchestrator-control-plane:test \
-  --set-string ayni-orchestrator.images.worker=local/ayni-orchestrator-worker:test \
   --set-string ayni-orchestrator.images.web=local/ayni-orchestrator-web:test \
   >"$scratch/local.yaml"
 helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
@@ -87,8 +85,8 @@ helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.e
   --set observability.enabled=false \
   >"$scratch/no-observability.yaml"
 
-# The reusable chart must render independently and remain namespace-neutral.
-grep -q '^  ORCHESTRATOR_KUBERNETES_NAMESPACE: "reusable-install"$' "$scratch/application.yaml"
+# The reusable chart must render independently; runtime placement follows its namespace.
+grep -Fq '\"namespace\":\"runtime-test\"' "$scratch/runtime.yaml"
 grep -q 'registry.example/control-plane:test' "$scratch/application.yaml"
 grep -q '^  name: control-plane$' "$scratch/application.yaml"
 grep -q '^  name: web$' "$scratch/application.yaml"
@@ -102,7 +100,6 @@ grep -q '# Source: ayni-orchestrator-local/charts/ayni-orchestrator/' "$scratch/
 grep -q '# Source: ayni-orchestrator-local/charts/prometheus/' "$scratch/local.yaml"
 grep -q '# Source: ayni-orchestrator-local/charts/kube-state-metrics/' "$scratch/local.yaml"
 grep -q '# Source: ayni-orchestrator-local/charts/grafana/' "$scratch/local.yaml"
-grep -q '^  ORCHESTRATOR_KUBERNETES_NAMESPACE: "ayni-orchestrator-dev"$' "$scratch/local.yaml"
 grep -q '^  name: prometheus$' "$scratch/local.yaml"
 grep -q '^  name: grafana$' "$scratch/local.yaml"
 grep -q '^  name: grafana-dashboard$' "$scratch/local.yaml"

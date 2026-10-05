@@ -14,7 +14,8 @@ fn initializes_exact_clean_schema_and_reopens() -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-fn rejects_retired_pilot_schema_without_mutating_it() -> Result<(), Box<dyn std::error::Error>> {
+#[test]
+fn rejects_unrecognized_schema_without_mutating_it() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempdir()?;
     let path = directory.path().join("orchestrator.sqlite");
     let connection = Connection::open(&path)?;
@@ -34,48 +35,7 @@ fn rejects_retired_pilot_schema_without_mutating_it() -> Result<(), Box<dyn std:
     Ok(())
 }
 
-fn guarded_reset_of_retired_volume_produces_exact_clean_baseline()
--> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let path = directory.path().join("orchestrator.sqlite");
-    let connection = Connection::open(&path)?;
-    connection.execute_batch(
-        "CREATE TABLE tasks(id TEXT PRIMARY KEY); CREATE TABLE preparation_records(id TEXT);",
-    )?;
-    drop(connection);
-    assert!(matches!(
-        CleanStore::open(&path, 3),
-        Err(CleanStoreError::RetiredPilotSchema)
-    ));
-
-    fs::remove_file(&path)?;
-    let store = CleanStore::open(path, 3)?;
-    assert_eq!(
-        existing_tables(&store.connection)?,
-        [
-            "assessments",
-            "automation_installations",
-            "candidates",
-            "change_requests",
-            "clean_schema",
-            "development_attempts",
-            "development_tasks",
-            "durable_actions",
-            "event_watermarks",
-            "evidence_references",
-            "page_snapshots",
-            "reconciliation_cursors",
-            "repository_connections",
-            "repository_snapshots",
-            "resource_events",
-            "runtime_artifacts",
-            "runtime_profile_revisions",
-            "runtime_profiles",
-        ]
-        .map(str::to_owned)
-    );
-    Ok(())
-}
+#[test]
 fn idempotent_create_replays_and_conflicting_content_fails() -> Result<(), CleanStoreError> {
     let mut store = CleanStore::in_memory()?;
     let request = repository_request("public-key", "123");

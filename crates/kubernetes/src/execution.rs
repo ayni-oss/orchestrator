@@ -1,5 +1,8 @@
 //! Kubernetes execution transport. Secret contents are never read back.
-use crate::configuration::{ProfileRuntime, RuntimeConfiguration};
+use crate::{
+    configuration::{ExecutionConfiguration, WorkloadRuntime},
+    workload,
+};
 use ayni_orchestrator_profile_ayni::runtime_execution::{ExecutionRequest, VerificationReport};
 use k8s_openapi::api::{
     batch::v1::Job,
@@ -14,7 +17,7 @@ use sha2::{Digest, Sha256};
 
 pub struct RuntimeKubernetes {
     pub(crate) client: Client,
-    pub(crate) configuration: RuntimeConfiguration,
+    pub(crate) configuration: ExecutionConfiguration,
 }
 
 pub enum Observation {
@@ -33,7 +36,7 @@ impl RuntimeKubernetes {
     /// # Errors
     ///
     /// Returns a bounded error code if in-cluster configuration or client setup fails.
-    pub fn new(configuration: RuntimeConfiguration) -> Result<Self, &'static str> {
+    pub fn new(configuration: ExecutionConfiguration) -> Result<Self, &'static str> {
         // Runtime execution is a deployed controller feature. Never fall back
         // to a developer's current kubeconfig context when run on a host.
         let config = kube::Config::incluster().map_err(|_| "kubernetes_incluster_required")?;
@@ -53,7 +56,7 @@ impl RuntimeKubernetes {
     pub async fn start(
         &self,
         name: &str,
-        runtime: &ProfileRuntime,
+        runtime: &WorkloadRuntime,
         request: &ExecutionRequest,
         token: &str,
     ) -> Result<(), &'static str> {
@@ -297,48 +300,19 @@ pub fn operation_name(profile: &str, sequence: u64) -> String {
 /// Returns a bounded error code if the Job representation cannot be decoded.
 pub fn verification_job(
     name: &str,
-    configuration: &RuntimeConfiguration,
-    runtime: &ProfileRuntime,
+    configuration: &ExecutionConfiguration,
+    runtime: &WorkloadRuntime,
 ) -> Result<Job, &'static str> {
-    let security = json!({"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"readOnlyRootFilesystem":true,"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}});
-    let resources = json!({"requests":{"cpu":"500m","memory":"1Gi"}, "limits":{"cpu":"2","memory":"4Gi","ephemeral-storage":"8Gi"}});
-    let workspace = json!({"name":"workspace","mountPath":"/workspace"});
-    let scratch = json!({"name":"scratch","mountPath":"/scratch"});
-    // Mount the immutable key as a regular file: the worker rejects symlinks.
-    let request = json!({"name":"request","mountPath":"/request/execution.json","subPath":"execution.json","readOnly":true});
-    let pulls: Vec<_> = runtime
-        .pull_secret
-        .iter()
-        .map(|name| json!({"name":name}))
-        .collect();
-    let node_selector = if configuration.allow_emulation {
-        json!({})
-    } else {
-        json!({"kubernetes.io/os":"linux","kubernetes.io/arch":runtime.platform.split('/').nth(1)})
-    };
-    serde_json::from_value(json!({"apiVersion":"batch/v1","kind":"Job","metadata":{"name":name,"namespace":configuration.namespace,"labels":{"ayni.io/runtime-operation":name}},
-        "spec":{"backoffLimit":0,"activeDeadlineSeconds":1800,"template":{"metadata":{"labels":{"ayni.io/runtime-operation":name}},"spec":{
-            "restartPolicy":"Never","serviceAccountName":runtime.service_account,"automountServiceAccountToken":false,"imagePullSecrets":pulls,
-            "nodeSelector":node_selector,
-            "securityContext":{"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
-            "initContainers":[
-                {"name":"launcher","image":configuration.worker_image,"args":["install"],"securityContext":security,"resources":resources,"volumeMounts":[{"name":"launcher","mountPath":"/launcher"}]},
-                {"name":"checkout","image":configuration.worker_image,"args":["checkout"],"workingDir":"/workspace","securityContext":security,"resources":resources,
-                 "env":[{"name":"SOURCE_TOKEN","valueFrom":{"secretKeyRef":{"name":name,"key":"token"}}}],"volumeMounts":[workspace,scratch,request]}
-            ],
-            "containers":[{"name":"verify","image":runtime.image,"imagePullPolicy":"Always","args":["/launcher/runtime-worker","verify"],"workingDir":"/workspace","securityContext":security,"resources":resources,"env":runtime_environment(),
-                "terminationMessagePolicy":"File","volumeMounts":[workspace,scratch,request,{"name":"launcher","mountPath":"/launcher","readOnly":true}]}],
-            "volumes":[{"name":"workspace","emptyDir":{"sizeLimit":"4Gi"}},{"name":"scratch","emptyDir":{"sizeLimit":"4Gi"}},{"name":"launcher","emptyDir":{"sizeLimit":"128Mi"}},{"name":"request","configMap":{"name":name}}]
-        }}}})).map_err(|_| "runtime_job_invalid")
-}
-
-pub(crate) fn runtime_environment() -> serde_json::Value {
-    json!([
-        {"name":"HOME","value":"/scratch"}, {"name":"TMPDIR","value":"/scratch"},
-        {"name":"XDG_CACHE_HOME","value":"/scratch/cache"},
-        {"name":"CARGO_HOME","value":"/scratch/cargo"},
-        {"name":"MISE_CACHE_DIR","value":"/scratch/mise-cache"}, {"name":"MISE_STATE_DIR","value":"/scratch/mise-state"}
-    ])
+    let container =
+        workload::worker_container("verify", &runtime.image, &workload::runtime_environment());
+    serde_json::from_value(workload::source_job(
+        name,
+        configuration,
+        runtime,
+        &runtime.service_account,
+        &container,
+    ))
+    .map_err(|_| "runtime_job_invalid")
 }
 
 #[cfg(test)]
@@ -347,20 +321,14 @@ mod tests {
     #[test]
     fn verification_preserves_entrypoint_and_limits_credentials_to_checkout()
     -> Result<(), &'static str> {
-        let configuration = RuntimeConfiguration {
+        let configuration = ExecutionConfiguration {
             namespace: "test".into(),
             worker_image: "worker".into(),
             output_claim: "output".into(),
             model_secret: "model".into(),
-            interval_seconds: 60,
-            request_timeout_seconds: 30,
-            concurrency: 4,
             allow_emulation: false,
-            profiles: std::collections::BTreeMap::default(),
-            managed_runtime: None,
         };
-        let runtime = ProfileRuntime {
-            assessment: None,
+        let runtime = WorkloadRuntime {
             image: "registry/runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime".into(),
@@ -418,20 +386,14 @@ mod tests {
 
     #[test]
     fn local_emulation_omits_only_the_platform_node_selector() -> Result<(), &'static str> {
-        let configuration = RuntimeConfiguration {
+        let configuration = ExecutionConfiguration {
             namespace: "test".into(),
             worker_image: "worker".into(),
             output_claim: "output".into(),
             model_secret: "model".into(),
-            interval_seconds: 60,
-            request_timeout_seconds: 30,
-            concurrency: 4,
             allow_emulation: true,
-            profiles: std::collections::BTreeMap::default(),
-            managed_runtime: None,
         };
-        let runtime = ProfileRuntime {
-            assessment: None,
+        let runtime = WorkloadRuntime {
             image: "registry/runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime".into(),

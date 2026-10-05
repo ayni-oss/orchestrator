@@ -1,8 +1,10 @@
 //! Trusted launch operations for a mounted checkout and an admitted runtime.
 
-use crate::managed_runtime;
-pub use ayni_orchestrator_profile_ayni::runtime_execution::{ExecutionRequest, VerificationReport};
-pub use ayni_orchestrator_runtime::runtime_execution::read_bounded;
+use ayni_orchestrator_profile_ayni::{
+    managed_runtime,
+    runtime_execution::{ExecutionRequest, VerificationReport},
+};
+use ayni_orchestrator_runtime::runtime_execution::read_bounded;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use std::{
@@ -355,7 +357,7 @@ fn git_failure(operation: &str, bytes: &[u8]) -> ayni_orchestrator_runtime::acti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::managed_runtime::RuntimeExpectation;
+    use ayni_orchestrator_profile_ayni::managed_runtime::RuntimeExpectation;
 
     #[test]
     fn git_failure_retains_safe_operation_without_raw_diagnostics() -> io::Result<()> {

@@ -12,6 +12,7 @@ pub(crate) mod managed_environment;
 mod model_catalog;
 mod onboarding;
 pub(crate) mod onboarding_templates;
+mod runtime_configuration;
 mod runtime_reconciler;
 mod runtime_source;
 

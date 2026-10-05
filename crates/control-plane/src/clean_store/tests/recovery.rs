@@ -268,7 +268,6 @@ fn transition_tables_reject_every_terminal_source() {
 #[test]
 fn resource_transition_tables_match_only_supported_edges() {
     use v1::{
-        AutomationInstallationState as Automation, CandidateState as Candidate,
         RepositoryConnectionStatus as Repository, RuntimeArtifactStatus as Artifact,
         RuntimeProfileState as Profile,
     };
@@ -381,64 +380,6 @@ fn resource_transition_tables_match_only_supported_edges() {
             assert_eq!(valid_artifact_transition(current, next), expected);
         }
     }
-
-    let automation_states = [
-        Automation::SetupRequired,
-        Automation::SetupPrOpen,
-        Automation::Installed,
-        Automation::Updating,
-        Automation::Degraded,
-        Automation::Failed,
-    ];
-    for current in automation_states {
-        for next in automation_states {
-            let expected = match current {
-                Automation::SetupRequired => matches!(
-                    next,
-                    Automation::SetupPrOpen
-                        | Automation::Installed
-                        | Automation::Degraded
-                        | Automation::Failed
-                ),
-                Automation::SetupPrOpen => matches!(
-                    next,
-                    Automation::SetupRequired
-                        | Automation::Installed
-                        | Automation::Updating
-                        | Automation::Degraded
-                        | Automation::Failed
-                ),
-                Automation::Installed => {
-                    matches!(next, Automation::Updating | Automation::Degraded)
-                }
-                Automation::Updating => matches!(
-                    next,
-                    Automation::Installed | Automation::Degraded | Automation::Failed
-                ),
-                Automation::Degraded => matches!(
-                    next,
-                    Automation::SetupRequired
-                        | Automation::Updating
-                        | Automation::Installed
-                        | Automation::Failed
-                ),
-                Automation::Failed | Automation::Unspecified => false,
-            };
-            assert_eq!(valid_automation_transition(current, next), expected);
-        }
-    }
-    assert!(valid_candidate_transition(
-        Candidate::Available,
-        Candidate::Rejected
-    ));
-    assert!(!valid_candidate_transition(
-        Candidate::Rejected,
-        Candidate::Available
-    ));
-    assert!(!valid_candidate_transition(
-        Candidate::Available,
-        Candidate::Available
-    ));
 }
 
 #[test]

@@ -549,6 +549,7 @@ impl CleanStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn record_runtime_profile_revision(
         &mut self,
         profile_id: &str,
@@ -832,6 +833,7 @@ impl CleanStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn transition_runtime_artifact(
         &mut self,
         id: &str,

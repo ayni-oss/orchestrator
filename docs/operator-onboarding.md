@@ -7,9 +7,9 @@ internet-facing ingress or create a GitHub App. Persistent state and runtime
 outputs must survive Pod restarts. This release uses one control-plane replica.
 
 Build the private control-plane, web, and worker images from the same reviewed
-commit using the repository Dockerfiles. Set `images.controlPlane`, `images.web`,
-and `images.worker` to your private registry images. Runtime execution also needs
-`runtime.workerImage` pinned by digest. This worker is part of Orchestrator; it is
+commit using the repository Dockerfiles. Set `images.controlPlane` and `images.web`
+to your private registry images, and set `runtime.workerImage` to the worker
+image pinned by digest. This worker is part of Orchestrator; it is
 separate from each repository's generated Ayni environment.
 
 Provide the existing `github-app-credentials` and `openai-api` Secrets as described

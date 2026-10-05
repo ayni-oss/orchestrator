@@ -40,10 +40,7 @@ impl CleanStore {
         Ok(store)
     }
 
-    pub(crate) fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
-    }
-
+    #[cfg(test)]
     pub(crate) fn schema_version(&self) -> Result<i64, CleanStoreError> {
         self.connection
             .query_row(
@@ -107,30 +104,30 @@ impl CleanStore {
     ) -> Result<(Vec<StoredEvent>, u64), CleanStoreError> {
         let (sql, parameters): (&str, Vec<Option<&str>>) = match service {
             REPOSITORY_SERVICE => (
-                "SELECT event_cursor,'repository_connection',id,payload FROM repository_connections
+                "SELECT event_cursor,'repository_connection',payload FROM repository_connections
                  WHERE (?1 IS NULL OR id=?1)
                  UNION ALL
-                 SELECT event_cursor,'repository_snapshot',id,payload FROM repository_snapshots
+                 SELECT event_cursor,'repository_snapshot',payload FROM repository_snapshots
                  WHERE (?1 IS NULL OR repository_connection_id=?1)
                  ORDER BY 1",
                 vec![repository_connection_id],
             ),
             PROFILE_SERVICE => (
-                "SELECT event_cursor,'runtime_profile',id,payload FROM runtime_profiles
+                "SELECT event_cursor,'runtime_profile',payload FROM runtime_profiles
                  WHERE (?1 IS NULL OR repository_connection_id=?1)
                    AND (?2 IS NULL OR id=?2)
                  UNION ALL
-                 SELECT r.event_cursor,'runtime_profile_revision',r.id,r.payload
+                 SELECT r.event_cursor,'runtime_profile_revision',r.payload
                  FROM runtime_profile_revisions r JOIN runtime_profiles p ON p.id=r.runtime_profile_id
                  WHERE (?1 IS NULL OR p.repository_connection_id=?1)
                    AND (?2 IS NULL OR p.id=?2)
                  UNION ALL
-                 SELECT a.event_cursor,'runtime_artifact',a.id,a.payload
+                 SELECT a.event_cursor,'runtime_artifact',a.payload
                  FROM runtime_artifacts a JOIN runtime_profiles p ON p.id=a.runtime_profile_id
                  WHERE (?1 IS NULL OR p.repository_connection_id=?1)
                    AND (?2 IS NULL OR p.id=?2)
                  UNION ALL
-                 SELECT i.event_cursor,'automation_installation',i.id,i.payload
+                 SELECT i.event_cursor,'automation_installation',i.payload
                  FROM automation_installations i JOIN runtime_profiles p ON p.id=i.runtime_profile_id
                  WHERE (?1 IS NULL OR p.repository_connection_id=?1)
                    AND (?2 IS NULL OR p.id=?2)
@@ -138,27 +135,27 @@ impl CleanStore {
                 vec![repository_connection_id, parent_id],
             ),
             DEVELOPMENT_SERVICE => (
-                "SELECT event_cursor,'development_task',id,payload FROM development_tasks WHERE id=?1
+                "SELECT event_cursor,'development_task',payload FROM development_tasks WHERE id=?1
                  UNION ALL
-                 SELECT event_cursor,'development_attempt',id,payload FROM development_attempts
+                 SELECT event_cursor,'development_attempt',payload FROM development_attempts
                  WHERE development_task_id=?1
                  UNION ALL
-                 SELECT event_cursor,'candidate',id,payload FROM candidates
+                 SELECT event_cursor,'candidate',payload FROM candidates
                  WHERE development_task_id=?1
                  ORDER BY 1",
                 vec![parent_id],
             ),
             REVIEW_SERVICE => (
-                "SELECT event_cursor,'change_request',id,payload FROM change_requests
+                "SELECT event_cursor,'change_request',payload FROM change_requests
                  WHERE (?1 IS NULL OR repository_connection_id=?1)
                    AND (?2 IS NULL OR id=?2)
                  UNION ALL
-                 SELECT a.event_cursor,'assessment',a.id,a.payload
+                 SELECT a.event_cursor,'assessment',a.payload
                  FROM assessments a JOIN change_requests c ON c.id=a.change_request_id
                  WHERE (?1 IS NULL OR c.repository_connection_id=?1)
                    AND (?2 IS NULL OR c.id=?2)
                  UNION ALL
-                 SELECT e.event_cursor,'evidence_reference',e.id,e.payload
+                 SELECT e.event_cursor,'evidence_reference',e.payload
                  FROM evidence_references e
                  JOIN assessments a ON a.id=e.assessment_id
                  JOIN change_requests c ON c.id=a.change_request_id
@@ -188,8 +185,7 @@ impl CleanStore {
             events.push(StoredEvent {
                 cursor: u64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
                 resource_type: row.get(1).map_err(CleanStoreError::Database)?,
-                resource_id: row.get(2).map_err(CleanStoreError::Database)?,
-                payload: row.get(3).map_err(CleanStoreError::Database)?,
+                payload: row.get(2).map_err(CleanStoreError::Database)?,
             });
         }
         let high_water = self.current_cursor(service)?;
@@ -228,7 +224,7 @@ impl CleanStore {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT cursor, resource_type, resource_id, payload
+                "SELECT cursor, resource_type, payload
                  FROM resource_events
                  WHERE service=?1 AND cursor>?2
                    AND (?3 IS NULL OR repository_connection_id=?3)
@@ -243,19 +239,17 @@ impl CleanStore {
                     Ok((
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, Vec<u8>>(3)?,
+                        row.get::<_, Vec<u8>>(2)?,
                     ))
                 },
             )
             .map_err(CleanStoreError::Database)?
             .map(|row| {
-                let (cursor, resource_type, resource_id, payload) =
+                let (cursor, resource_type, payload) =
                     row.map_err(CleanStoreError::Database)?;
                 Ok(StoredEvent {
                     cursor: u64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
                     resource_type,
-                    resource_id,
                     payload,
                 })
             })
@@ -269,22 +263,20 @@ impl CleanStore {
     ) -> Result<Option<DurableAction>, CleanStoreError> {
         self.connection
             .query_row(
-                "SELECT state, target_type, target_id, request_payload, failure FROM durable_actions
+                "SELECT state, target_id, request_payload FROM durable_actions
                  WHERE operation=?1 AND idempotency_key=?2",
                 params![operation, key],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, Option<String>>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, Vec<u8>>(3)?,
-                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Vec<u8>>(2)?,
                     ))
                 },
             )
             .optional()
             .map_err(CleanStoreError::Database)?
-            .map(|(state, target_type, target_id, request_payload, failure)| {
+            .map(|(state, target_id, request_payload)| {
                 let state = match state.as_str() {
                     "pending" => DurableActionState::Pending,
                     "completed" => DurableActionState::Completed,
@@ -292,13 +284,10 @@ impl CleanStore {
                     _ => return Err(CleanStoreError::CorruptState),
                 };
                 Ok(DurableAction {
-                    operation: operation.to_owned(),
                     idempotency_key: key.to_owned(),
                     state,
-                    target_type,
                     target_id,
                     request_payload,
-                    failure,
                 })
             })
             .transpose()
@@ -311,7 +300,7 @@ impl CleanStore {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT idempotency_key,target_type,target_id,request_payload,failure
+                "SELECT idempotency_key,target_id,request_payload
                  FROM durable_actions WHERE operation=?1 AND state='pending'
                  ORDER BY created_at,idempotency_key LIMIT ?2",
             )
@@ -325,13 +314,10 @@ impl CleanStore {
                 ],
                 |row| {
                     Ok(DurableAction {
-                        operation: operation.to_owned(),
                         idempotency_key: row.get(0)?,
                         state: DurableActionState::Pending,
-                        target_type: row.get(1)?,
-                        target_id: row.get(2)?,
-                        request_payload: row.get(3)?,
-                        failure: row.get(4)?,
+                        target_id: row.get(1)?,
+                        request_payload: row.get(2)?,
                     })
                 },
             )
@@ -354,7 +340,7 @@ impl CleanStore {
             if existing.request_hash != digest {
                 return Err(CleanStoreError::IdempotencyConflict);
             }
-            return Ok(existing.into_action(operation, key));
+            return Ok(existing.into_action(key));
         }
         let now = unix_seconds()?;
         let request_payload = request.encode_to_vec();
@@ -376,13 +362,10 @@ impl CleanStore {
             )
             .map_err(CleanStoreError::Database)?;
         Ok(DurableAction {
-            operation: operation.to_owned(),
             idempotency_key: key.to_owned(),
             state: DurableActionState::Pending,
-            target_type: Some(target_type.to_owned()),
             target_id: Some(target_id.to_owned()),
             request_payload,
-            failure: None,
         })
     }
 
@@ -440,6 +423,7 @@ impl CleanStore {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn fail_external_action(
         &mut self,
         operation: &str,
@@ -458,17 +442,18 @@ impl CleanStore {
         if changed == 1 {
             return Ok(());
         }
-        let action = self.durable_action(operation, key)?;
-        if action.is_some_and(|value| {
-            value.state == DurableActionState::Failed
-                && value.failure.as_deref() == Some(failure.as_str())
-        }) {
+        let recorded_failure: Option<String> = self.connection.query_row(
+            "SELECT failure FROM durable_actions WHERE operation=?1 AND idempotency_key=?2 AND state='failed'",
+            params![operation, key], |row| row.get(0),
+        ).optional().map_err(CleanStoreError::Database)?.flatten();
+        if recorded_failure.as_deref() == Some(failure.as_str()) {
             Ok(())
         } else {
             Err(CleanStoreError::InvalidTransition)
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn requeue_external_action(
         &mut self,
         operation: &str,

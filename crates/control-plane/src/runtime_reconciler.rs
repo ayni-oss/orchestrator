@@ -1,10 +1,11 @@
 //! Periodic, restartable managed runtime verification.
-use crate::{AppState, runtime_source::SourceClient};
-use ayni_orchestrator_api::v1;
-use ayni_orchestrator_kubernetes::{
-    configuration::RuntimeConfiguration,
-    execution::{Observation, RuntimeKubernetes, operation_name},
+use crate::{
+    AppState,
+    runtime_configuration::{ProfileRuntime, RuntimeConfiguration},
+    runtime_source::SourceClient,
 };
+use ayni_orchestrator_api::v1;
+use ayni_orchestrator_kubernetes::execution::{Observation, RuntimeKubernetes, operation_name};
 use ayni_orchestrator_profile_ayni::{
     managed_runtime::RuntimeExpectation, runtime_execution::ExecutionRequest,
 };
@@ -31,7 +32,7 @@ pub struct RuntimeCursor {
 impl RuntimeCursor {
     fn update_status(
         &mut self,
-        runtime: &ayni_orchestrator_kubernetes::configuration::ProfileRuntime,
+        runtime: &ProfileRuntime,
         fingerprint: String,
     ) -> Result<(), &'static str> {
         self.status.insert(
@@ -92,7 +93,7 @@ struct PendingVerification {
 
 struct ProfileObservation<'a> {
     id: &'a str,
-    runtime: &'a ayni_orchestrator_kubernetes::configuration::ProfileRuntime,
+    runtime: &'a ProfileRuntime,
     time: u64,
     github: v1::GithubRepository,
     head: String,
@@ -112,12 +113,7 @@ pub struct RuntimeReconciler {
 }
 
 impl RuntimeReconciler {
-    fn configured_profiles(
-        &self,
-    ) -> Result<
-        BTreeMap<String, ayni_orchestrator_kubernetes::configuration::ProfileRuntime>,
-        &'static str,
-    > {
+    fn configured_profiles(&self) -> Result<BTreeMap<String, ProfileRuntime>, &'static str> {
         let mut profiles = self.configuration.profiles.clone();
         if self.configuration.managed_runtime.is_none() {
             return Ok(profiles);
@@ -185,10 +181,7 @@ impl RuntimeReconciler {
         Err("runtime_profile_limit_exceeded")
     }
 
-    fn configured_profile(
-        &self,
-        id: &str,
-    ) -> Result<ayni_orchestrator_kubernetes::configuration::ProfileRuntime, &'static str> {
+    fn configured_profile(&self, id: &str) -> Result<ProfileRuntime, &'static str> {
         self.configured_profiles()?
             .remove(id)
             .ok_or("runtime_source_missing")
@@ -238,7 +231,7 @@ impl RuntimeReconciler {
             return Ok(None);
         };
         let source = SourceClient::from_environment(configuration.request_timeout_seconds)?;
-        let kubernetes = RuntimeKubernetes::new(configuration.clone())?;
+        let kubernetes = RuntimeKubernetes::new(configuration.execution_configuration())?;
         Ok(Some(Arc::new(Self {
             state,
             configuration,
@@ -408,7 +401,12 @@ impl RuntimeReconciler {
         match self.kubernetes.observe(&pending.name).await? {
             Observation::Missing => {
                 self.kubernetes
-                    .start(&pending.name, runtime, &pending.request, token)
+                    .start(
+                        &pending.name,
+                        &runtime.execution_runtime(),
+                        &pending.request,
+                        token,
+                    )
                     .await?;
             }
             Observation::Running => {
@@ -460,7 +458,7 @@ impl RuntimeReconciler {
                     .build_started = true;
                 self.save(id, cursor)?;
                 self.kubernetes
-                    .start_build(&build_name, runtime, &request, token)
+                    .start_build(&build_name, &runtime.execution_runtime(), &request, token)
                     .await?;
             }
             "running" => {}

@@ -1,4 +1,4 @@
-//! Validated process, listener, and deployment configuration.
+//! Validated process and listener configuration.
 
 use crate::grpc_access::{AccessConfigurationError, CustomClientAccess};
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr};
@@ -11,8 +11,6 @@ pub struct Configuration {
     grpc_bind_address: SocketAddr,
     custom_grpc: Option<CustomGrpcConfiguration>,
     database_path: PathBuf,
-    kubernetes_namespace: String,
-    worker_image: String,
     max_attempts: u32,
 }
 
@@ -53,10 +51,6 @@ impl Configuration {
     pub const DEFAULT_GRPC_BIND_ADDRESS: &'static str = "127.0.0.1:50051";
     /// Persistent task database path inside the control-plane pod.
     pub const DEFAULT_DATABASE_PATH: &'static str = "/data/orchestrator.sqlite";
-    /// Default namespace for attempt-owned Jobs.
-    pub const DEFAULT_KUBERNETES_NAMESPACE: &'static str = "ayni-orchestrator-dev";
-    /// The worker image reference loaded into the selected Kubernetes runtime.
-    pub const DEFAULT_WORKER_IMAGE: &'static str = "local/ayni-orchestrator-worker:replace-me";
     /// Default inclusive cap for attempts created for one task.
     pub const DEFAULT_MAX_ATTEMPTS: u32 = 3;
 
@@ -64,7 +58,7 @@ impl Configuration {
     ///
     /// # Errors
     ///
-    /// Returns [`ConfigurationError`] for invalid socket or namespace values.
+    /// Returns [`ConfigurationError`] for invalid listener, database, or attempt-limit values.
     pub fn from_environment() -> Result<Self, ConfigurationError> {
         let bind_address = env::var("ORCHESTRATOR_BIND_ADDRESS")
             .unwrap_or_else(|_| Self::DEFAULT_BIND_ADDRESS.to_owned());
@@ -72,10 +66,6 @@ impl Configuration {
             .unwrap_or_else(|_| Self::DEFAULT_GRPC_BIND_ADDRESS.to_owned());
         let database_path = env::var("ORCHESTRATOR_DATABASE_PATH")
             .unwrap_or_else(|_| Self::DEFAULT_DATABASE_PATH.to_owned());
-        let kubernetes_namespace = env::var("ORCHESTRATOR_KUBERNETES_NAMESPACE")
-            .unwrap_or_else(|_| Self::DEFAULT_KUBERNETES_NAMESPACE.to_owned());
-        let worker_image = env::var("ORCHESTRATOR_WORKER_IMAGE")
-            .unwrap_or_else(|_| Self::DEFAULT_WORKER_IMAGE.to_owned());
         let max_attempts = env::var("ORCHESTRATOR_MAX_ATTEMPTS")
             .ok()
             .map(|value| value.parse())
@@ -86,8 +76,6 @@ impl Configuration {
             &bind_address,
             &grpc_bind_address,
             PathBuf::from(database_path),
-            kubernetes_namespace,
-            worker_image,
             max_attempts,
         )?;
         configuration.custom_grpc = custom_grpc_from_environment(
@@ -101,13 +89,11 @@ impl Configuration {
     ///
     /// # Errors
     ///
-    /// Returns [`ConfigurationError`] for invalid socket or namespace values.
+    /// Returns [`ConfigurationError`] for invalid listener, database, or attempt-limit values.
     pub fn from_values(
         bind_address: &str,
         grpc_bind_address: &str,
         database_path: PathBuf,
-        kubernetes_namespace: String,
-        worker_image: String,
         max_attempts: u32,
     ) -> Result<Self, ConfigurationError> {
         let bind_address = SocketAddr::from_str(bind_address).map_err(|source| {
@@ -133,20 +119,6 @@ impl Configuration {
         if database_path.as_os_str().is_empty() || !database_path.is_absolute() {
             return Err(ConfigurationError::InvalidDatabasePath(database_path));
         }
-        if kubernetes_namespace.is_empty()
-            || kubernetes_namespace.len() > 63
-            || !kubernetes_namespace.bytes().all(|character| {
-                character.is_ascii_lowercase() || character.is_ascii_digit() || character == b'-'
-            })
-        {
-            return Err(ConfigurationError::InvalidNamespace(kubernetes_namespace));
-        }
-        if worker_image.is_empty()
-            || worker_image.len() > 255
-            || worker_image.contains(char::is_whitespace)
-        {
-            return Err(ConfigurationError::InvalidWorkerImage(worker_image));
-        }
         if !(1..=10).contains(&max_attempts) {
             return Err(ConfigurationError::MaxAttemptsOutOfRange(max_attempts));
         }
@@ -155,8 +127,6 @@ impl Configuration {
             grpc_bind_address,
             custom_grpc: None,
             database_path,
-            kubernetes_namespace,
-            worker_image,
             max_attempts,
         })
     }
@@ -180,16 +150,6 @@ impl Configuration {
     #[must_use]
     pub const fn database_path(&self) -> &PathBuf {
         &self.database_path
-    }
-    /// Returns the namespace where attempt-owned Jobs are reconciled.
-    #[must_use]
-    pub fn kubernetes_namespace(&self) -> &str {
-        &self.kubernetes_namespace
-    }
-    /// Returns the configured attempt worker image reference.
-    #[must_use]
-    pub fn worker_image(&self) -> &str {
-        &self.worker_image
     }
     /// Returns the inclusive attempt limit applied to newly submitted tasks.
     #[must_use]
@@ -308,12 +268,6 @@ pub enum ConfigurationError {
     /// `ORCHESTRATOR_DATABASE_PATH` was not absolute.
     #[error("ORCHESTRATOR_DATABASE_PATH must be absolute, got {0}")]
     InvalidDatabasePath(PathBuf),
-    /// `ORCHESTRATOR_KUBERNETES_NAMESPACE` was not a DNS-label-like namespace.
-    #[error("ORCHESTRATOR_KUBERNETES_NAMESPACE must be a lowercase DNS label, got {0:?}")]
-    InvalidNamespace(String),
-    /// `ORCHESTRATOR_WORKER_IMAGE` was empty or contained whitespace.
-    #[error("ORCHESTRATOR_WORKER_IMAGE must be a non-empty image reference, got {0:?}")]
-    InvalidWorkerImage(String),
     /// `ORCHESTRATOR_MAX_ATTEMPTS` was not an unsigned integer.
     #[error("ORCHESTRATOR_MAX_ATTEMPTS must be an unsigned integer")]
     InvalidMaxAttempts(#[source] std::num::ParseIntError),
@@ -332,8 +286,6 @@ mod tests {
             "127.0.0.1:8080",
             "127.0.0.1:50051",
             PathBuf::from("/data/tasks.sqlite"),
-            "ayni-orchestrator-dev".to_owned(),
-            "local/ayni-orchestrator-worker:test".to_owned(),
             3,
         )?;
         assert_eq!(configuration.bind_address().to_string(), "127.0.0.1:8080");

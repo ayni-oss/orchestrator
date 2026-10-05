@@ -49,7 +49,6 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   --namespace "$namespace" \
   --create-namespace \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
-  --set-string "ayni-orchestrator.images.worker=$worker_image_ref" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
   --set ayni-orchestrator.runtime.enabled=true \
@@ -57,9 +56,8 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   --wait=hookOnly \
   --timeout 5m
 
-# The retained evidence claim is intentionally consumed only by opt-in fixtures.
-# Wait for the actual application stack rather than requiring a WaitForFirstConsumer
-# claim to bind during every normal deployment.
+# Runtime output storage binds when the first worker Job consumes it.
+# Wait for the application stack without requiring that claim to bind yet.
 for deployment in control-plane prometheus kube-state-metrics grafana; do
   kubectl --context "$context" --namespace "$namespace" rollout status \
     "deployment/$deployment" --timeout=5m
@@ -68,7 +66,11 @@ done
 pod=""
 actual_control_plane_image=""
 actual_control_plane_image_id=""
-actual_worker_image=""
+actual_worker_image="$(kubectl --context "$context" --namespace "$namespace" get configmap runtime-config -o jsonpath='{.data.runtime\.json}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["worker_image"])')"
+if [[ "$actual_worker_image" != "$runtime_worker_image" ]]; then
+  echo "runtime configuration does not reference the deployed worker digest" >&2
+  exit 1
+fi
 actual_web_image=""
 actual_web_image_id=""
 for candidate in $(kubectl --context "$context" --namespace "$namespace" get pods \
@@ -76,18 +78,15 @@ for candidate in $(kubectl --context "$context" --namespace "$namespace" get pod
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
   candidate_control_plane_image="$(kubectl --context "$context" --namespace "$namespace" get pod "$candidate" -o jsonpath='{.spec.containers[?(@.name=="control-plane")].image}')"
   candidate_control_plane_image_id="$(kubectl --context "$context" --namespace "$namespace" get pod "$candidate" -o jsonpath='{.status.containerStatuses[?(@.name=="control-plane")].imageID}')"
-  candidate_worker_image="$(kubectl --context "$context" --namespace "$namespace" get pod "$candidate" -o jsonpath='{.spec.containers[?(@.name=="control-plane")].env[?(@.name=="ORCHESTRATOR_WORKER_IMAGE")].value}')"
   candidate_web_image="$(kubectl --context "$context" --namespace "$namespace" get pod "$candidate" -o jsonpath='{.spec.containers[?(@.name=="web")].image}')"
   candidate_web_image_id="$(kubectl --context "$context" --namespace "$namespace" get pod "$candidate" -o jsonpath='{.status.containerStatuses[?(@.name=="web")].imageID}')"
   if [[ "$candidate_control_plane_image" == "$control_plane_image_ref" \
-    && "$candidate_worker_image" == "$worker_image_ref" \
     && "$candidate_web_image" == "$web_image_ref" \
     && -n "$candidate_control_plane_image_id" \
     && -n "$candidate_web_image_id" ]]; then
     pod="$candidate"
     actual_control_plane_image="$candidate_control_plane_image"
     actual_control_plane_image_id="$candidate_control_plane_image_id"
-    actual_worker_image="$candidate_worker_image"
     actual_web_image="$candidate_web_image"
     actual_web_image_id="$candidate_web_image_id"
     break

@@ -105,7 +105,7 @@ fn source_digest(root: &Path, paths: &[String]) -> Result<String, &'static str> 
     let mut hash = Sha256::new();
     let mut total = 0_usize;
     for path in paths {
-        let bytes = crate::runtime_execution::read_bounded(&root.join(path), 16 * 1024 * 1024)
+        let bytes = read_bounded(&root.join(path), 16 * 1024 * 1024)
             .map_err(|_| "source_unavailable")?;
         total += bytes.len();
         if total > 128 * 1024 * 1024 {

@@ -4,12 +4,12 @@ Everything specific to the supported Docker Desktop development environment live
 in this directory. The reusable application chart remains under
 `deploy/charts/ayni-orchestrator`; it has no dependency on this directory. The
 dependency points one way: `dev/charts/ayni-orchestrator-local` composes the reusable chart with local
-monitoring and validation fixtures.
+monitoring.
 
 ## Quick start
 
 Prerequisites are Docker Desktop Kubernetes, the `docker-desktop` context, Helm
-4.1.1, `kubectl`, Docker, Git, `curl`, and `grpcurl`.
+4.1.1, `kubectl`, Docker, Git, Python 3, `curl`, and `grpcurl`.
 
 ```sh
 dev/ctl init
@@ -57,7 +57,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl status` | Show the release, Pods, and retained claims |
 | `dev/ctl cleanup` | Uninstall the release while preserving Secrets, Jobs, and retained claims |
 | `dev/ctl purge ayni-orchestrator-dev` | Permanently remove the labeled namespace and all local state |
-| `dev/ctl render CP WORKER WEB` | Render the complete Helm composition for inspection |
+| `dev/ctl render CP WORKER_DIGEST WEB` | Render the complete Helm composition for inspection |
 | `dev/ctl dependencies` | Rebuild ignored chart archives from `Chart.lock` |
 
 `purge` is deliberately explicit because it deletes credentials and retained
@@ -79,7 +79,7 @@ reproducible from its commit alone.
   `chmod 600 dev/.env`; tooling never inspects or copies the old credential file.
 - `charts/ayni-orchestrator-local/` is the Docker Desktop umbrella chart and
   local-only configuration.
-- `scripts/` contains the three command implementations behind `dev/ctl`.
+- `scripts/` contains command implementations behind `dev/ctl`.
 - `lib/` contains shared shell functions; neither directory is a public command
   surface.
 - `tests/` contains opt-in local validation drivers, exposed as `dev/ctl test

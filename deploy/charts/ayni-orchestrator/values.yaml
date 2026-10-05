@@ -23,7 +23,6 @@ runtime:
 
 images:
   controlPlane: local/ayni-orchestrator-control-plane:replace-me
-  worker: local/ayni-orchestrator-worker:replace-me
   web: local/ayni-orchestrator-web:replace-me
   pullPolicy: IfNotPresent
 
