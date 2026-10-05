@@ -198,7 +198,7 @@ fn spawn_background_loops(
         move || {
             let state = reconciliation_state.clone();
             async move {
-                if let Err(error) = state.reconcile_once() {
+                if let Err(error) = state.reconcile_once().await {
                     warn!(reason_code = "clean_reconciliation_failed", %error,
                     "clean-v1 reconciliation pass failed");
                 }

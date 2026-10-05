@@ -1,6 +1,7 @@
 //! Existing-App repository onboarding. Provider credentials never enter the BFF.
 use crate::{
-    AppState, adapters::github::SourceClient, profiles::ayni::onboarding_templates, with_store,
+    AppState, adapters::github::SourceClient, application::with_store_async as with_store,
+    profiles::ayni::onboarding_templates,
 };
 use ayni_orchestrator_api::{v1, validation};
 use serde_json::Value;
@@ -109,9 +110,9 @@ impl AppState {
         };
         validation::create_repository_connection(&message)
             .map_err(|_| Status::invalid_argument("repository_identity_invalid"))?;
-        with_store(self, |store| {
+        with_store(self, move |store| {
             let connection =
-                store.create_repository_connection(&request.idempotency_key, &message)?;
+                store.create_repository_connection(&message.idempotency_key, &message)?;
             if connection.status == v1::RepositoryConnectionStatus::Connected as i32 {
                 return Ok(connection);
             }
@@ -122,6 +123,7 @@ impl AppState {
                 None,
             )
         })
+        .await
         .map_err(|_| Status::failed_precondition("repository_connection_conflict"))
     }
 
@@ -129,7 +131,9 @@ impl AppState {
         &self,
         repository_id: &str,
     ) -> Result<v1::InspectAyniRepositoryResponse, Status> {
-        let repository = with_store(self, |s| s.repository_connection(repository_id))
+        let lookup_id = repository_id.to_owned();
+        let repository = with_store(self, move |s| s.repository_connection(&lookup_id))
+            .await
             .map_err(|_| Status::not_found("repository_not_found"))?;
         let github = github(&repository)?;
         let source = self.onboarding_source()?;
@@ -146,9 +150,12 @@ impl AppState {
             )
             .await
             .map_err(provider_error)?;
-        let snapshot = with_store(self, |s| {
-            s.observe_repository_snapshot(repository_id, &head)
+        let snapshot_repository = repository_id.to_owned();
+        let snapshot_head = head.clone();
+        let snapshot = with_store(self, move |s| {
+            s.observe_repository_snapshot(&snapshot_repository, &snapshot_head)
         })
+        .await
         .map_err(|_| Status::internal("repository_snapshot_failed"))?;
         let mut result = v1::InspectAyniRepositoryResponse {
             repository_snapshot_id: snapshot.id,

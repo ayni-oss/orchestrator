@@ -1,9 +1,10 @@
 use super::{AppState, github, onboarding_templates, v1, with_store};
 impl AppState {
     pub(super) async fn reconcile_setup_actions(&self) -> Result<(), &'static str> {
-        let actions = with_store(self, |s| {
+        let actions = with_store(self, move |s| {
             s.pending_external_actions("InstallRepositoryAutomation")
         })
+        .await
         .map_err(|_| "setup_store_unavailable")?;
         // Open PRs retain pending intent. Rotate one action per pass so repositories
         // cannot starve each other or create a provider mutation burst.
@@ -16,14 +17,16 @@ impl AppState {
             if let Err(reason) = self.reconcile_setup_action(action).await {
                 tracing::warn!(reason_code = reason, "setup action deferred");
                 if let Some(id) = &action.target_id {
-                    let _ = with_store(self, |s| {
+                    let id = id.clone();
+                    let _ = with_store(self, move |s| {
                         s.observe_setup(
-                            id,
+                            &id,
                             None,
                             v1::AutomationInstallationState::Degraded,
                             Some(public_setup_failure(reason)),
                         )
-                    });
+                    })
+                    .await;
                 }
             }
         }
@@ -38,12 +41,14 @@ impl AppState {
             .target_id
             .as_deref()
             .ok_or("setup_identity_missing")?;
-        let (installation, profile, repository) = with_store(self, |s| {
-            let installation = s.automation_installation(id)?;
+        let lookup_id = id.to_owned();
+        let (installation, profile, repository) = with_store(self, move |s| {
+            let installation = s.automation_installation(&lookup_id)?;
             let profile = s.runtime_profile(&installation.runtime_profile_id)?;
             let repository = s.repository_connection(&profile.repository_connection_id)?;
             Ok((installation, profile, repository))
         })
+        .await
         .map_err(|_| "setup_store_unavailable")?;
         let github = github(&repository).map_err(|_| "setup_provider_unsupported")?;
         let source = self.source.as_ref().ok_or("github_app_unconfigured")?;
@@ -70,10 +75,13 @@ impl AppState {
         })
         .await?
         {
-            return with_store(self, |s| {
-                s.observe_setup(id, None, v1::AutomationInstallationState::Installed, None)?;
-                s.complete_external_action("InstallRepositoryAutomation", &action.idempotency_key)
+            let id = id.to_owned();
+            let key = action.idempotency_key.clone();
+            return with_store(self, move |s| {
+                s.observe_setup(&id, None, v1::AutomationInstallationState::Installed, None)?;
+                s.complete_external_action("InstallRepositoryAutomation", &key)
             })
+            .await
             .map_err(|_| "setup_store_unavailable");
         }
         let token = source.setup_token(github).await?;
@@ -158,9 +166,11 @@ impl AppState {
         } else if pull["state"] != "open" {
             return Err("setup_pull_closed");
         }
-        with_store(self, |s| {
+        let id = id.to_owned();
+        let key = action.idempotency_key.clone();
+        with_store(self, move |s| {
             s.observe_setup(
-                id,
+                &id,
                 Some(number),
                 if merged {
                     v1::AutomationInstallationState::Installed
@@ -170,10 +180,11 @@ impl AppState {
                 None,
             )?;
             if merged {
-                s.complete_external_action("InstallRepositoryAutomation", &action.idempotency_key)?;
+                s.complete_external_action("InstallRepositoryAutomation", &key)?;
             }
             Ok(())
         })
+        .await
         .map_err(|_| "setup_store_unavailable")
     }
 }

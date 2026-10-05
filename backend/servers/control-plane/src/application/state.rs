@@ -16,8 +16,6 @@ type StoreHandle = Arc<Mutex<CleanStore>>;
 /// A periodic clean-v1 reconciliation pass could not inspect durable state.
 #[derive(Debug, Error)]
 pub enum ReconciliationError {
-    #[error("durable store lock was poisoned")]
-    StoreLockPoisoned,
     #[error("durable clean-v1 reconciliation failed")]
     Store,
 }
@@ -69,14 +67,11 @@ impl AppState {
     ///
     /// # Errors
     ///
-    /// Returns an error when durable state cannot be locked or reconciled safely.
-    pub fn reconcile_once(&self) -> Result<(), ReconciliationError> {
-        let mut store = self
-            .store
-            .lock()
-            .map_err(|_| ReconciliationError::StoreLockPoisoned)?;
-        store
-            .reconcile_once()
+    /// Returns an error when durable state cannot be queued or reconciled safely.
+    pub async fn reconcile_once(&self) -> Result<(), ReconciliationError> {
+        self.database
+            .execute(CleanStore::reconcile_once)
+            .await
             .map_err(|_| ReconciliationError::Store)
     }
 }
@@ -88,6 +83,7 @@ pub async fn with_store_async<T: Send + 'static>(
     state.database.execute(operation).await
 }
 
+#[cfg(test)]
 pub fn with_store<T>(
     state: &AppState,
     operation: impl FnOnce(&mut CleanStore) -> Result<T, CleanStoreError>,

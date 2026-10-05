@@ -158,8 +158,9 @@ queue serviced by a dedicated thread. Accepted work finishes even if a caller
 disconnects; retries replay its durable identity. Event notifications are emitted
 after the operation changes the committed event watermark. Watches register
 before reading their cursor, then await notification with a periodic recovery
-poll; notifications never replace durable event authority. Background onboarding
-and reconciliation still use direct store access during their migration.
+poll; notifications never replace durable event authority. Repository onboarding, setup actions, deadlines and retention also use the
+database queue. Runtime/coding/publication reconciliation still uses direct store
+access during its migration.
 
 Kubernetes completion supplies bounded raw output; managed evidence interpretation
 remains with the controller. Server reconciliation loops and finite model warmup
