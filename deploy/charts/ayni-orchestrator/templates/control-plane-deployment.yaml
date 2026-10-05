@@ -34,7 +34,7 @@ spec:
         - name: control-plane-workspace
           image: {{ .Values.images.controlPlane | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
-          command: ["sh", "-c", "cp -a /opt/source/. /workspace/"]
+          command: ["sh", "-c", "cp -R /opt/source/. /workspace/"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -47,7 +47,7 @@ spec:
         - name: web-workspace
           image: {{ .Values.images.web | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
-          command: ["sh", "-c", "cp -a /opt/source/. /workspace/"]
+          command: ["sh", "-c", "cp -R /opt/source/. /workspace/"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
