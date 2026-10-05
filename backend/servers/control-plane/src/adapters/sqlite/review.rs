@@ -2,11 +2,10 @@
 use super::DurableActionState;
 use super::{
     CleanStore, CleanStoreError, DEVELOPMENT_SERVICE, Message, OptionalExtension, Page,
-    REVIEW_SERVICE, action_row, append_event, bounded_failure, collect_bounded_payloads, decode,
-    encode_filter, equivalent_failure, get_payload, map_constraint, params,
-    persist_change_request_update, query_payloads, request_digest, resource_id,
-    same_candidate_report, timestamp, truncate_utf8, unix_seconds, v1, valid_candidate_report,
-    valid_change_request_transition,
+    REVIEW_SERVICE, append_event, bounded_failure, collect_bounded_payloads, decode, encode_filter,
+    equivalent_failure, get_payload, map_constraint, params, persist_change_request_update,
+    query_payloads, resource_id, same_candidate_report, timestamp, truncate_utf8, unix_seconds, v1,
+    valid_candidate_report, valid_change_request_transition,
 };
 
 impl CleanStore {
@@ -136,87 +135,16 @@ impl CleanStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn publish_candidate(
         &mut self,
         key: &str,
         request: &v1::PublishCandidateRequest,
     ) -> Result<v1::ChangeRequest, CleanStoreError> {
-        let digest = request_digest("PublishCandidate", request);
-        if let Some(existing) = action_row(&self.connection, "PublishCandidate", key)? {
-            if existing.request_hash != digest {
-                return Err(CleanStoreError::IdempotencyConflict);
-            }
-            return self.change_request(&existing.target_id.ok_or(CleanStoreError::CorruptState)?);
-        }
-        let candidate = self.candidate(&request.candidate_id)?;
-        if candidate.state != v1::CandidateState::Available as i32 {
-            return Err(CleanStoreError::InvalidTransition);
-        }
-        let head_revision = match candidate
-            .identity
-            .as_ref()
-            .and_then(|value| value.identity.as_ref())
-        {
-            Some(v1::candidate_identity::Identity::Git(git)) => git.commit_sha.clone(),
-            _ => return Err(CleanStoreError::InvalidTransition),
-        };
-        let now = unix_seconds()?;
-        let id = resource_id("change-request");
-        let change_request = v1::ChangeRequest {
-            readiness: None,
-            id: id.clone(),
-            repository_connection_id: candidate.repository_connection_id.clone(),
-            candidate_id: candidate.id,
-            provider: None,
-            base_revision: candidate.base_revision,
-            head_revision,
-            state: v1::ChangeRequestState::Publishing as i32,
-            failure: None,
-            created_at: Some(timestamp(now)),
-            updated_at: Some(timestamp(now)),
-            resource_version: 1,
-        };
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        transaction
-            .execute(
-                "INSERT INTO durable_actions(
-                    operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at
-                 ) VALUES ('PublishCandidate',?1,?2,?3,'pending','change_request',?4,?5,?5)",
-                params![key, digest, request.encode_to_vec(), id, now],
-            )
-            .map_err(map_constraint)?;
-        let cursor = append_event(
-            &transaction,
-            REVIEW_SERVICE,
-            "change_request",
-            &id,
-            1,
-            Some(&change_request.repository_connection_id),
-            Some(&id),
-            &change_request,
-        )?;
-        transaction
-            .execute(
-                "INSERT INTO change_requests(
-                    id,repository_connection_id,candidate_id,state,head_revision,payload,
-                    resource_version,event_cursor
-                 ) VALUES (?1,?2,?3,?4,?5,?6,1,?7)",
-                params![
-                    id,
-                    change_request.repository_connection_id,
-                    change_request.candidate_id,
-                    change_request.state,
-                    change_request.head_revision,
-                    change_request.encode_to_vec(),
-                    i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?
-                ],
-            )
-            .map_err(map_constraint)?;
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(change_request)
+        let command = super::publication::publication_command(key, request);
+        let id = ayni_orchestrator_application::publication::publish(self, command)
+            .map_err(super::publication::publication_error)?;
+        self.change_request(&id)
     }
 
     pub(crate) fn change_request(&self, id: &str) -> Result<v1::ChangeRequest, CleanStoreError> {

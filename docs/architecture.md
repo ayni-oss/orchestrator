@@ -119,7 +119,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, publication and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -165,6 +165,13 @@ Provider and Kubernetes requests execute outside database operations. The server
 termination and closes the queue during shutdown, draining accepted operations
 within the bounded shutdown period.
 
+Publication admission and automatic scheduling use application-owned commands
+and persistence ports. Identical retries replay before reevaluating candidate
+availability. New intents freeze candidate version and Git identity, and commit
+the change request, provider intent and event atomically. Automatic scheduling
+uses the frozen task publication request and excludes cancelled tasks and active
+attempts. Provider-side publication remains in the integration coordinator.
+
 Readiness observation, authorization and confirmation are application-owned use
 cases with closed policy/state/source values. They load current durable facts,
 preserve newer status when historical evidence arrives, and observe uncertain
@@ -197,7 +204,7 @@ project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
-Outside task admission, cancellation and readiness decisions, application logic still reads generated protobuf resources,
+Outside task admission, cancellation, publication admission/scheduling and readiness decisions, application logic still reads generated protobuf resources,
 stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
 core. Continue extracting real use cases with their commands, results and ports into the
 application crate: reconciliation, connector operations, project

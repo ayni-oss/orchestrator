@@ -1,6 +1,6 @@
 use super::{
-    CleanStore, CleanStoreError, Message, PROFILE_SERVICE, append_event, collect_bounded_payloads,
-    decode, params, timestamp, unix_seconds, v1,
+    CleanStore, CleanStoreError, Message, PROFILE_SERVICE, append_event, params, timestamp,
+    unix_seconds, v1,
 };
 
 impl CleanStore {
@@ -102,37 +102,7 @@ impl CleanStore {
     }
 
     pub(super) fn schedule_requested_publications(&mut self) -> Result<(), CleanStoreError> {
-        let candidates = {
-            let mut statement = self.connection.prepare("SELECT c.payload FROM candidates c LEFT JOIN change_requests r ON r.candidate_id=c.id WHERE r.id IS NULL AND c.state=1 LIMIT 10001").map_err(CleanStoreError::Database)?;
-            let mut rows = statement.query([]).map_err(CleanStoreError::Database)?;
-            collect_bounded_payloads(&mut rows)?
-        };
-        for bytes in candidates {
-            let candidate: v1::Candidate = decode(&bytes)?;
-            let attempt = self.development_attempt(&candidate.development_attempt_id)?;
-            let task = self.development_task(&attempt.development_task_id)?;
-            if ![
-                v1::DevelopmentAttemptState::Succeeded as i32,
-                v1::DevelopmentAttemptState::Failed as i32,
-                v1::DevelopmentAttemptState::DeadlineExceeded as i32,
-                v1::DevelopmentAttemptState::WaitingForInput as i32,
-            ]
-            .contains(&attempt.state)
-                || task.state == v1::DevelopmentTaskState::Cancelled as i32
-            {
-                continue;
-            }
-            let Some(snapshot) = task.snapshot.filter(|s| s.publish_draft) else {
-                continue;
-            };
-            let key = format!("auto-publish:{}", candidate.id);
-            self.publish_candidate(&key, &v1::PublishCandidateRequest {
-                idempotency_key: key.clone(), candidate_id: candidate.id,
-                title: "feat: implement requested change".into(),
-                body: "Requested through the operator application. Review this draft before merging.".into(),
-                base_branch: snapshot.publication_base_branch, draft: true,
-            })?;
-        }
-        Ok(())
+        ayni_orchestrator_application::publication::schedule(self)
+            .map_err(super::publication::publication_error)
     }
 }

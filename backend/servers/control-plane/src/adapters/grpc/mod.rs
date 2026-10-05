@@ -454,3 +454,6 @@ mod grpc_tests;
 mod task_flow_tests;
 
 pub mod access;
+
+pub use publication_mapping::publication_command;
+mod publication_mapping;

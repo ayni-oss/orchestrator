@@ -75,8 +75,11 @@ impl v1::review_service_server::ReviewService for GrpcApi {
             .map_err(|error| context.validation(&error))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
+        let command = super::publication_command(&key, &message);
         let resource = with_store(&self.state, move |store| {
-            store.publish_candidate(&key, &message)
+            let id = ayni_orchestrator_application::publication::publish(store, command)
+                .map_err(crate::adapters::sqlite::publication::publication_error)?;
+            store.change_request(&id)
         })
         .await
         .map_err(|error| context.store_error(&error))?;
