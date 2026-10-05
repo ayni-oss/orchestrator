@@ -361,6 +361,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 &token,
             )
             .await?;
+        // A source change that produces a new lock never reuses the previous
+        // mutable tag. The repository portion is deployment controlled; the
+        // fingerprint is the immutable image identity used for resolve-or-build.
+        let lock = self
+            .source
+            .lock(&github.owner, &github.name, &head, &token)
+            .await?;
+        let lock_identity = crate::profiles::ayni::environment::parse_lock(&lock)
+            .map_err(|_| "repository_lock_invalid")?;
+        let runtime = runtime.for_lock_fingerprint(&lock_identity.fingerprint)?;
         let observation = ProfileObservation {
             id,
             runtime: &runtime,

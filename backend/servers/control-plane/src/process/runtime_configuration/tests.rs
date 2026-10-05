@@ -28,8 +28,7 @@ fn rejects_unbounded_scheduling_and_credential_values() {
 }
 
 #[test]
-fn managed_discovery_requires_policy_and_matching_repository_namespace() -> Result<(), &'static str>
-{
+fn managed_discovery_uses_the_operator_registry_endpoint() -> Result<(), &'static str> {
     let mut configuration = configuration();
     let owner = "Example";
     let repository = "Sandbox";
@@ -41,9 +40,11 @@ fn managed_discovery_requires_policy_and_matching_repository_namespace() -> Resu
             .is_none()
     );
     configuration.managed_runtime = Some(ManagedRuntime {
+        registry_prefix: "registry.test/runtimes".into(),
         platform: "linux/amd64".into(),
         service_account: "runtime-coding".into(),
         pull_secret: Some("runtime-pull".into()),
+        build: None,
         assessment: None,
     });
     assert!(configuration.validate().is_ok());
@@ -53,17 +54,10 @@ fn managed_discovery_requires_policy_and_matching_repository_namespace() -> Resu
     assert_eq!(runtime.pull_secret.as_deref(), Some("runtime-pull"));
     assert_eq!(
         runtime.image,
-        format!("ghcr.io/example/sandbox-ayni:lock-{}", "a".repeat(64))
-    );
-    assert!(
-        configuration
-            .managed_runtime(
-                owner,
-                repository,
-                &lock_fingerprint,
-                "ghcr.io/another/repository-ayni"
-            )
-            .is_none()
+        format!(
+            "registry.test/runtimes/example/sandbox-ayni:lock-{}",
+            "a".repeat(64)
+        )
     );
     assert!(
         configuration
@@ -76,9 +70,11 @@ fn managed_discovery_requires_policy_and_matching_repository_namespace() -> Resu
 #[test]
 fn derives_managed_image_from_connected_repository_and_lock() -> Result<(), &'static str> {
     let runtime = ManagedRuntime {
+        registry_prefix: "ghcr.io".into(),
         platform: "linux/amd64".into(),
         service_account: "runtime-coding".into(),
         pull_secret: Some("environment-pull".into()),
+        build: None,
         assessment: None,
     };
     let profile = runtime.profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))?;
@@ -117,7 +113,7 @@ fn operator_document() -> serde_json::Value {
             }
         },
         "managed_runtime": {
-            "platform": "linux/amd64", "service_account": "managed", "pull_secret": "pull",
+            "registry_prefix": "ghcr.io", "platform": "linux/amd64", "service_account": "managed", "pull_secret": "pull", "build": null,
             "assessment": {
                 "producer_image": format!("registry.test/collector@sha256:{}", "c".repeat(64)),
                 "publication_policy": "DRAFT_ONLY"

@@ -1,7 +1,6 @@
 //! Existing-App repository onboarding. Provider credentials never enter the BFF.
 use crate::{
     AppState, adapters::github::SourceClient, coordinators::with_store_async as with_store,
-    profiles::ayni::onboarding_templates,
 };
 use ayni_orchestrator_api::{v1, validation};
 use std::sync::Arc;
@@ -110,7 +109,7 @@ impl AppState {
         };
         validation::create_repository_connection(&message)
             .map_err(|_| OnboardingError::invalid_argument("repository_identity_invalid"))?;
-        with_store(self, move |store| {
+        let connection = with_store(self, move |store| {
             let connection =
                 store.create_repository_connection(&message.idempotency_key, &message)?;
             if connection.status == v1::RepositoryConnectionStatus::Connected as i32 {
@@ -124,7 +123,73 @@ impl AppState {
             )
         })
         .await
-        .map_err(|_| OnboardingError::failed_precondition("repository_connection_conflict"))
+        .map_err(|_| OnboardingError::failed_precondition("repository_connection_conflict"))?;
+
+        // Connection is deliberately a read-only repository operation.  As soon as
+        // it succeeds, freeze the default-branch observation and create the managed
+        // profile for a supported committed Ayni configuration.  The runtime
+        // reconciler owns resolve-or-build; no workflow or pull request is installed
+        // in the connected repository.
+        self.enrol_connected_repository(&connection).await;
+        Ok(connection)
+    }
+
+    async fn enrol_connected_repository(&self, connection: &v1::RepositoryConnection) {
+        let Ok(inspection) = self.inspect_ayni(&connection.id).await else {
+            tracing::warn!(
+                repository_connection_id = connection.id,
+                "automatic repository inspection deferred"
+            );
+            return;
+        };
+        if !inspection.policy_present || !inspection.lock_compatible {
+            tracing::info!(
+                repository_connection_id = connection.id,
+                reason = inspection.reason,
+                "repository is not an Ayni-managed runtime candidate"
+            );
+            return;
+        }
+        let request = v1::CreateRuntimeProfileRequest {
+            idempotency_key: format!("connect:{}:{}", connection.id, inspection.lock_fingerprint),
+            repository_connection_id: connection.id.clone(),
+            repository_snapshot_id: inspection.repository_snapshot_id,
+            configuration: Some(v1::RuntimeProfileConfiguration {
+                configuration: Some(
+                    v1::runtime_profile_configuration::Configuration::AyniManaged(
+                        v1::AyniManagedProfileRevision {
+                            lock_fingerprint: inspection.lock_fingerprint,
+                            ayni_version: inspection.ayni_version,
+                            // Kept for wire compatibility; the producer is an internal
+                            // Kubernetes Job, never a repository workflow.
+                            workflow_template_version: "internal-build-v1".into(),
+                            oci_repository: inspection.oci_repository,
+                            runtime_source_digest: None,
+                        },
+                    ),
+                ),
+            }),
+        };
+        let _ = with_store(self, move |store| {
+            if !store
+                .list_runtime_profiles(Some(&request.repository_connection_id), None, None, None)?
+                .items
+                .is_empty()
+            {
+                return Ok(());
+            }
+            store
+                .create_runtime_profile(&request.idempotency_key, &request)
+                .map(|_| ())
+        })
+        .await
+        .map_err(|error| {
+            tracing::warn!(
+                repository_connection_id = connection.id,
+                ?error,
+                "automatic runtime profile enrollment deferred"
+            )
+        });
     }
 
     pub(crate) async fn inspect_ayni(
@@ -161,23 +226,12 @@ impl AppState {
             repository_snapshot_id: snapshot.id,
             repository_revision: head.clone(),
             ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
-            workflow_template_version: onboarding_templates::TEMPLATE_VERSION.into(),
+            workflow_template_version: "internal-build-v1".into(),
             oci_repository: format!(
                 "ghcr.io/{}-ayni",
                 format!("{}/{}", github.owner, github.name).to_lowercase()
             ),
-            workflows: onboarding_templates::render(
-                onboarding_templates::TEMPLATE_VERSION,
-                &repository.default_branch,
-            )
-            .map_err(|_| OnboardingError::internal("template_invalid"))?
-            .files
-            .into_iter()
-            .map(|(path, contents)| v1::WorkflowProposal {
-                path: path.into(),
-                contents,
-            })
-            .collect(),
+            workflows: vec![],
             ..Default::default()
         };
         let policy = source
@@ -208,15 +262,8 @@ impl AppState {
         Ok(result)
     }
 
-    /// Resumes setup operations independently from browser sessions.
-    pub async fn reconcile_onboarding(&self) {
-        if self.source.is_none() {
-            return;
-        }
-        if let Err(reason) = self.reconcile_setup_actions().await {
-            tracing::warn!(reason_code = reason, "setup reconciliation deferred");
-        }
-    }
+    /// Repository connections are inspected at creation time and runtime
+    /// reconciliation owns all later registry/build work. It never mutates a
+    /// connected repository.
+    pub async fn reconcile_onboarding(&self) {}
 }
-
-mod setup;

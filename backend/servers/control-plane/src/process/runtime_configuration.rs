@@ -50,11 +50,18 @@ pub struct ProfileRuntime {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManagedRuntime {
+    /// Operator-controlled registry endpoint and namespace prefix. Repository
+    /// source never chooses where a runtime image is published.
+    #[serde(default = "managed_registry_prefix")]
+    pub registry_prefix: String,
     pub platform: String,
     #[serde(default = "runtime_account")]
     pub service_account: String,
     #[serde(default)]
     pub pull_secret: Option<String>,
+    /// Build-only authority remains in the internal Job's ServiceAccount.
+    #[serde(default)]
+    pub build: Option<BuildRuntime>,
     #[serde(default)]
     pub assessment: Option<AssessmentConfiguration>,
 }
@@ -81,6 +88,9 @@ const fn interval() -> u64 {
 }
 fn runtime_account() -> String {
     "runtime-coding".into()
+}
+fn managed_registry_prefix() -> String {
+    "ghcr.io".into()
 }
 const fn timeout() -> u64 {
     30
@@ -119,14 +129,14 @@ impl RuntimeConfiguration {
         owner: &str,
         repository: &str,
         lock_fingerprint: &str,
-        oci_repository: &str,
+        _oci_repository: &str,
     ) -> Option<ProfileRuntime> {
         let runtime = self
             .managed_runtime
             .as_ref()?
             .profile_runtime(owner, repository, lock_fingerprint)
             .ok()?;
-        (image_repository(&runtime.image) == Some(oci_repository)).then_some(runtime)
+        Some(runtime)
     }
 
     /// Supplies only deployment fields needed to create execution resources.
@@ -170,6 +180,20 @@ impl ProfileRuntime {
             build: self.build.clone(),
         }
     }
+
+    /// Rebinds a managed runtime's mutable lookup tag to the lock observed from
+    /// the repository. The repository portion remains operator-configured, while
+    /// each lock fingerprint receives its own image identity.
+    pub(crate) fn for_lock_fingerprint(&self, fingerprint: &str) -> Result<Self, &'static str> {
+        if fingerprint.len() != 64 || !fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err("runtime_lock_fingerprint_invalid");
+        }
+        let repository = image_repository(&self.image).ok_or("runtime_image_invalid")?;
+        let mut runtime = self.clone();
+        runtime.image = format!("{repository}:lock-{}", fingerprint.to_lowercase());
+        runtime.execution_runtime().validate()?;
+        Ok(runtime)
+    }
 }
 
 impl ManagedRuntime {
@@ -196,7 +220,8 @@ impl ManagedRuntime {
         }
         let runtime = ProfileRuntime {
             image: format!(
-                "ghcr.io/{}/{}-ayni:lock-{}",
+                "{}/{}/{}-ayni:lock-{}",
+                self.registry_prefix.trim_end_matches('/'),
                 owner.to_lowercase(),
                 repository.to_lowercase(),
                 lock_fingerprint.to_lowercase()
@@ -204,7 +229,7 @@ impl ManagedRuntime {
             platform: self.platform.clone(),
             service_account: self.service_account.clone(),
             pull_secret: self.pull_secret.clone(),
-            build: None,
+            build: self.build.clone(),
             assessment: self.assessment.clone(),
         };
         validate_profile("managed", &runtime)?;
@@ -212,6 +237,16 @@ impl ManagedRuntime {
     }
 
     fn validate(&self) -> Result<(), &'static str> {
+        if self.registry_prefix.is_empty()
+            || self.registry_prefix.len() > 256
+            || !self.registry_prefix.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'.' | b'/' | b'-' | b'_')
+            })
+        {
+            return Err("runtime_registry_prefix_invalid");
+        }
         self.profile_runtime("owner", "repository", &"a".repeat(64))
             .map(|_| ())
     }
