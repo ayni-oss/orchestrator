@@ -28,3 +28,21 @@ test("repository and runtime onboarding meet accessibility checks",async({page})
  }
  await page.screenshot({path:"/tmp/orchestrator-profile-ui.png",fullPage:true});
 });
+
+test("project creation supports keyboard selection and accessible validation", async ({page})=>{
+ await page.goto("/projects");
+ await page.getByRole("button",{name:"Create project",exact:true}).click();
+ await expectAccessible(page);
+ await page.getByLabel("Project name",{exact:true}).fill("Keyboard project");
+ await page.getByRole("button",{name:"Repositories",exact:true}).click();
+ await page.getByRole("textbox",{name:"Search repositories",exact:true}).fill("sandbox");
+ await expectAccessible(page);
+ await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).press("Space");
+
+ await expect(page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true})).toBeChecked();
+ await page.keyboard.press("Escape");
+ await expect(page.getByRole("textbox",{name:"Search repositories",exact:true})).toBeHidden();
+ await page.keyboard.press("Escape");
+ await expect(page.getByRole("dialog")).toBeHidden();
+ await expect(page.getByRole("button",{name:"Create project",exact:true})).toBeFocused();
+});

@@ -89,15 +89,22 @@ it does not change the default listener or authorize public hosting. See
 ## Project ownership
 
 `ProjectService` exposes create/list/get/update/archive. Projects have a separate
-one-repository membership and active/archived lifecycle. Only one active project
-may claim a provider repository; archiving retains membership and history.
+shared, editable repository membership and active/archived lifecycle.
+Repositories may belong to several projects; archiving retains history.
 Create, update and archive require idempotency keys; updates/archive also require
 `expected_resource_version`. Reads use `repositories.read`, mutations use
 `repositories.write` on custom-client endpoints.
 
-`DevelopmentTaskRequest.project_id` is required. The server resolves its member
-repository; `repository_connection_id`, when present, asserts that membership.
+`DevelopmentTaskRequest.project_id` is required. The server verifies the selected
+`repository_connection_id` is a current member. Omission is allowed only for a
+single-member project. Removed members cannot admit new tasks or retries.
 The selected runtime profile must belong to the resolved repository. Task
 responses include `project_id`, and list requests may filter by it. Archived
 projects reject new tasks and retries; completed idempotent replays remain
-readable. Schema version 3 is a fresh-install boundary, not a data migration.
+readable. Schema version 4 is a fresh-install boundary, not a data migration.
+
+`CreateProjectRequest.repository_connection_ids` accepts 1–100 unique connections.
+Legacy `repository_connection_id` accepts one connection and cannot be combined
+with the repeated field. `UpdateProjectRequest.repository_connection_ids` replaces
+membership when nonempty, or preserves it when empty. Updates still require the
+observed resource version. Repository readiness is shared between projects.

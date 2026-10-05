@@ -141,7 +141,7 @@ function pageDto(value: { nextPageToken: string; snapshotCursor: string } | unde
 }
 
 function mapProject(value: Project): ProjectDto {
-  if (value.repositoryConnectionIds.length !== 1 || ![ProjectState.PROJECT_STATE_ACTIVE, ProjectState.PROJECT_STATE_ARCHIVED].includes(value.state)) throw new BffMappingError();
+  if (value.repositoryConnectionIds.length < 1 || value.repositoryConnectionIds.length > 100 || new Set(value.repositoryConnectionIds).size !== value.repositoryConnectionIds.length || ![ProjectState.PROJECT_STATE_ACTIVE, ProjectState.PROJECT_STATE_ARCHIVED].includes(value.state)) throw new BffMappingError();
   return {id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion};
 }
 
@@ -177,12 +177,12 @@ export class OrchestratorBff {
     const response = await this.#unary<GetProjectResponse>(context,(m,o,c)=>this.#projects.getProject({projectId},m,o,c));
     return mapProject(required(response.project));
   }
-  async createProject(input:{idempotencyKey:string;displayName:string;repositoryConnectionId:string}, context:RequestContext):Promise<ProjectDto> {
-    const response = await this.#unary<CreateProjectResponse>(context,(m,o,c)=>this.#projects.createProject(input,m,o,c));
+  async createProject(input:{idempotencyKey:string;displayName:string;repositoryConnectionIds:string[]}, context:RequestContext):Promise<ProjectDto> {
+    const response = await this.#unary<CreateProjectResponse>(context,(m,o,c)=>this.#projects.createProject({...input,repositoryConnectionId:""},m,o,c));
     return mapProject(required(response.project));
   }
-  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string}, context:RequestContext):Promise<ProjectDto> {
-    const response = await this.#unary<UpdateProjectResponse>(context,(m,o,c)=>this.#projects.updateProject(input,m,o,c));
+  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string;repositoryConnectionIds?:string[]}, context:RequestContext):Promise<ProjectDto> {
+    const response = await this.#unary<UpdateProjectResponse>(context,(m,o,c)=>this.#projects.updateProject({...input,repositoryConnectionIds:input.repositoryConnectionIds ?? []},m,o,c));
     return mapProject(required(response.project));
   }
   async archiveProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string}, context:RequestContext):Promise<ProjectDto> {

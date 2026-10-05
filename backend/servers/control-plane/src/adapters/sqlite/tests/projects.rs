@@ -5,6 +5,7 @@ fn project_request(repository: &str, key: &str) -> v1::CreateProjectRequest {
         idempotency_key: key.into(),
         display_name: "Payments".into(),
         repository_connection_id: repository.into(),
+        repository_connection_ids: vec![],
     }
 }
 
@@ -18,10 +19,8 @@ fn project_membership_archive_and_reonboarding_preserve_history() -> Result<(), 
     let request = project_request(&repository.id, "create");
     let project = store.create_project("create", &request)?;
     assert_eq!(store.create_project("create", &request)?.id, project.id);
-    assert!(matches!(
-        store.create_project("other", &project_request(&repository.id, "other")),
-        Err(CleanStoreError::RepositoryAlreadyAssigned)
-    ));
+    let shared = store.create_project("other", &project_request(&repository.id, "other"))?;
+    assert_ne!(shared.id, project.id);
     let mut conflicting = request.clone();
     conflicting.display_name = "Other".into();
     assert!(matches!(
@@ -33,6 +32,7 @@ fn project_membership_archive_and_reonboarding_preserve_history() -> Result<(), 
         project_id: project.id.clone(),
         expected_resource_version: 1,
         display_name: "Ledger".into(),
+        repository_connection_ids: vec![],
     };
     let renamed = store.update_project("rename", &rename)?;
     assert_eq!(renamed.display_name, "Ledger");
@@ -53,7 +53,7 @@ fn project_membership_archive_and_reonboarding_preserve_history() -> Result<(), 
         3
     );
     assert!(matches!(
-        store.active_project_repository(&project.id),
+        store.project_member(&project.id, ""),
         Err(CleanStoreError::ProjectArchived)
     ));
     let next = store.create_project("next", &project_request(&repository.id, "next"))?;
@@ -65,7 +65,11 @@ fn project_membership_archive_and_reonboarding_preserve_history() -> Result<(), 
         store
             .list_projects(Some(v1::ProjectState::Active as i32), None)?
             .items,
-        vec![next]
+        {
+            let mut values = vec![next, shared];
+            values.sort_by(|a, b| a.id.cmp(&b.id));
+            values
+        }
     );
     assert_eq!(
         store
@@ -184,7 +188,7 @@ fn project_pages_are_stable_and_bound_to_the_filter() -> Result<(), CleanStoreEr
 #[test]
 fn old_schema_is_rejected_without_migration() -> Result<(), CleanStoreError> {
     let directory = tempdir().map_err(CleanStoreError::CreateDirectory)?;
-    for version in [1, 2] {
+    for version in [1, 2, 3] {
         let path = directory.path().join(format!("old-{version}.sqlite"));
         let connection = Connection::open(&path).map_err(CleanStoreError::Database)?;
         connection.execute_batch("CREATE TABLE clean_schema(component TEXT, version INTEGER); CREATE TABLE retained_data(value TEXT); INSERT INTO retained_data VALUES ('preserve');").map_err(CleanStoreError::Database)?;
@@ -206,5 +210,141 @@ fn old_schema_is_rejected_without_migration() -> Result<(), CleanStoreError> {
             vec!["clean_schema", "retained_data"]
         );
     }
+    Ok(())
+}
+
+#[test]
+fn shared_membership_edits_preserve_task_history_and_block_removed_retries()
+-> Result<(), CleanStoreError> {
+    let directory = tempdir().map_err(CleanStoreError::CreateDirectory)?;
+    let path = directory.path().join("shared.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let other = store.create_repository_connection("other", &repository_request("other", "456"))?;
+    let mut request = task_request(&store, &repository.id, &profile.id, "task")?;
+    let task_project = request
+        .request
+        .as_ref()
+        .ok_or(CleanStoreError::CorruptState)?
+        .project_id
+        .clone();
+    let shared = store.create_project(
+        "shared",
+        &v1::CreateProjectRequest {
+            idempotency_key: "shared".into(),
+            display_name: "Shared".into(),
+            repository_connection_id: String::new(),
+            repository_connection_ids: vec![repository.id.clone(), other.id.clone()],
+        },
+    )?;
+    assert_eq!(
+        store.project_member(&shared.id, &repository.id)?,
+        repository.id
+    );
+    assert!(matches!(
+        store.project_member(&shared.id, ""),
+        Err(CleanStoreError::ParentMismatch)
+    ));
+    request
+        .request
+        .as_mut()
+        .ok_or(CleanStoreError::CorruptState)?
+        .project_id = shared.id.clone();
+    let (task, attempt) = store.create_development_task("task", &request)?;
+    store.transition_attempt(&attempt.id, 1, v1::DevelopmentAttemptState::Running, None)?;
+    store.transition_attempt(&attempt.id, 2, v1::DevelopmentAttemptState::Failed, None)?;
+    let edit = v1::UpdateProjectRequest {
+        idempotency_key: "remove".into(),
+        project_id: shared.id.clone(),
+        expected_resource_version: 1,
+        display_name: "Shared".into(),
+        repository_connection_ids: vec![other.id.clone()],
+    };
+    let updated = store.update_project("remove", &edit)?;
+    assert_eq!(updated.repository_connection_ids, vec![other.id.clone()]);
+    assert_eq!(store.update_project("remove", &edit)?.resource_version, 2);
+    assert!(matches!(
+        store.update_project("stale", &edit),
+        Err(CleanStoreError::StaleVersion)
+    ));
+    assert!(matches!(
+        store.create_development_task("new", &request),
+        Err(CleanStoreError::ParentMismatch)
+    ));
+    assert!(matches!(
+        store.retry_development_task(
+            "retry",
+            &v1::RetryDevelopmentTaskRequest {
+                idempotency_key: "retry".into(),
+                development_task_id: task.id.clone(),
+            }
+        ),
+        Err(CleanStoreError::ParentMismatch)
+    ));
+    // A different project sharing the same repository is unaffected.
+    assert_eq!(
+        store.project_member(&task_project, &repository.id)?,
+        repository.id
+    );
+    drop(store);
+    let mut store = CleanStore::open(&path, 3)?;
+    assert_eq!(store.development_task(&task.id)?.project_id, shared.id);
+    assert_eq!(
+        store
+            .list_development_tasks(Some(&shared.id), None, None, None, None)?
+            .items
+            .len(),
+        1
+    );
+    assert!(
+        store
+            .list_development_tasks(Some(&task_project), None, None, None, None)?
+            .items
+            .is_empty()
+    );
+    // Re-adding a member reactivates its retained membership without duplicating it.
+    store.update_project(
+        "add",
+        &v1::UpdateProjectRequest {
+            idempotency_key: "add".into(),
+            project_id: shared.id.clone(),
+            expected_resource_version: 2,
+            display_name: "Shared".into(),
+            repository_connection_ids: vec![other.id, repository.id.clone()],
+        },
+    )?;
+    store.retry_development_task(
+        "restored",
+        &v1::RetryDevelopmentTaskRequest {
+            idempotency_key: "restored".into(),
+            development_task_id: task.id,
+        },
+    )?;
+    drop(store);
+    let store = CleanStore::open(&path, 3)?;
+    assert_eq!(
+        store.project_member(&shared.id, &repository.id)?,
+        repository.id
+    );
+    Ok(())
+}
+
+#[test]
+fn project_membership_validation_rejects_duplicates_and_missing_connections()
+-> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let repository =
+        store.create_repository_connection("repo", &repository_request("repo", "123"))?;
+    let mut request = v1::CreateProjectRequest {
+        idempotency_key: "project".into(),
+        display_name: "Project".into(),
+        repository_connection_id: String::new(),
+        repository_connection_ids: vec![repository.id.clone(), repository.id.clone()],
+    };
+    assert!(api_validation::create_project(&request).is_err());
+    assert!(store.create_project("duplicate", &request).is_err());
+    request.repository_connection_ids = vec![repository.id, "repository:missing".into()];
+    assert!(store.create_project("missing", &request).is_err());
+    assert!(store.list_projects(None, None)?.items.is_empty());
     Ok(())
 }

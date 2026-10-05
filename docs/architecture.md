@@ -7,8 +7,8 @@ defines the agreed product; [Decision 0010](decisions/0010-orchestration-interfa
 defines the code boundaries. These decisions describe the target, not a claim
 that every product flow is implemented.
 
-The project foundation provides named, single-repository projects with
-project-owned tasks, immutable repository membership, and archive history. The
+The project foundation provides named projects with shared editable repository membership,
+project-owned tasks targeting one member, and archive history. The
 remaining connector, project-readiness, environment-production, and internal
 assessment flows are target behavior; current implementation ownership and gaps
 are tracked in [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
@@ -40,7 +40,7 @@ design does not require product CRDs or expose Kubernetes objects through gRPC.
 The core owns connector/project identity, repository membership, immutable
 profile revisions, task admission, attempts, deadlines, budgets, cancellation,
 candidates, evidence binding, publication and reconciliation. A project has
-exactly one repository in this release. A connector can serve many projects.
+one or more repository connections, shared with other projects. A connector can serve many projects.
 
 Both profiles use the same task and candidate lifecycle, persistence,
 Kubernetes execution adapter and provider publication path. A profile adds
@@ -260,7 +260,7 @@ assessment collection. Its assessment contract requires a PR and workflow/run
 identity; it must not be reused as the pre-publication internal verifier
 contract. The connector, project readiness, internal environment production and
 repair flows above remain tracked by [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
-The project foundation is implemented with single-repository membership and
+The project foundation is implemented with shared editable multi-repository membership and
 project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
@@ -295,3 +295,20 @@ access and one controller replica. This structural change does not alter the
 protobuf contract, persisted schema, managed JSON format or rendered workload
 isolation. Durable architecture belongs here; acceptance and delivery status
 belong in the linked issues.
+
+## Project-centered UI
+
+[Decision 0011](decisions/0011-project-centered-ui-and-onboarding.md) amends the
+membership, initialization and registry portions of Decision 0009. The UI uses a
+responsive shadcn-svelte sidebar with Projects and Configuration. Project creation
+uses Formsnap/Superforms validation and a searchable checkbox picker. Membership
+rows retain removed repositories to validate historical task ownership; only the
+project's current members can admit new work or retries. Readiness/profile resources
+remain shared at the repository connection boundary. Schema version 4 rejects
+older storage without modifying it.
+
+Automatic inspection, approved bootstrap initialization, user-managed registry
+credentials and sequential multi-profile tasks remain delivery targets. Current
+runtime selection is still one operational, ready profile per task. Unavailable
+summary data is presented explicitly; partial lists do not imply authoritative
+latest-task results or complete readiness.

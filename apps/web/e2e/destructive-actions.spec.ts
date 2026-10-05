@@ -17,5 +17,9 @@ test("shell remains operable at a narrow viewport with reduced motion", async ({
   await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
   await page.getByRole("button", { name: "Toggle color theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/u);
-  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  await page.getByRole("button",{name:"Toggle Sidebar",exact:true}).first().click();
+  await expect(page.getByRole("link",{name:"Configuration",exact:true})).toBeVisible();
+  await page.getByRole("link",{name:"Configuration",exact:true}).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button",{name:"Toggle color theme",exact:true}).click();
 });

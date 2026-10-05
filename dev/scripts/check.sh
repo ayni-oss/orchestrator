@@ -58,7 +58,7 @@ dev_check_observability() (
       ayni-orchestrator-kubelet-volumes; do
       query_has_result "up{job=\"$job\"} == 1" || return 1
     done
-    query_has_result 'orchestrator_clean_v1_schema_info{version="3"} == 1' || return 1
+    query_has_result 'orchestrator_clean_v1_schema_info{version="4"} == 1' || return 1
     query_has_result "kube_pod_info{namespace=\"$namespace\"}" || return 1
     query_has_result "container_cpu_usage_seconds_total{namespace=\"$namespace\"}" || return 1
     query_has_result "kubelet_volume_stats_used_bytes{namespace=\"$namespace\"} or container_fs_usage_bytes{job=\"ayni-orchestrator-node-storage\",id=\"/\"}" || return 1
@@ -138,9 +138,9 @@ check_once() {
     "http://127.0.0.1:$operations_port/readyz" 2>/dev/null)" || return 1
   grep -qi '^x-request-id: local-readiness-check' "$response_headers" || return 1
   grep -q '"clean_v1_contract":true' <<<"$readiness" || return 1
-  grep -q '"clean_schema_version":3' <<<"$readiness" || return 1
+  grep -q '"clean_schema_version":4' <<<"$readiness" || return 1
   metrics="$(curl_local "http://127.0.0.1:$operations_port/metrics")" || return 1
-  grep -q 'orchestrator_clean_v1_schema_info{version="3"} 1' <<<"$metrics" || return 1
+  grep -q 'orchestrator_clean_v1_schema_info{version="4"} 1' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_admissions_total' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_completions_total' <<<"$metrics" || return 1
 

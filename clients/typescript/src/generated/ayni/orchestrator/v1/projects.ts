@@ -65,7 +65,7 @@ export interface Project {
   id: string;
   displayName: string;
   state: ProjectState;
-  /** Exactly one immutable membership in this release; history survives archive. */
+  /** Current members; repositories may be shared by multiple projects. */
   repositoryConnectionIds: string[];
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
@@ -76,7 +76,10 @@ export interface CreateProjectRequest {
   idempotencyKey: string;
   /** A nonblank display name of at most 256 UTF-8 bytes, without control characters. */
   displayName: string;
+  /** Legacy single-member creation; cannot be combined with the repeated field. */
   repositoryConnectionId: string;
+  /** Between 1 and 100 unique repository connections. */
+  repositoryConnectionIds: string[];
 }
 
 export interface CreateProjectResponse {
@@ -106,6 +109,8 @@ export interface UpdateProjectRequest {
   projectId: string;
   expectedResourceVersion: string;
   displayName: string;
+  /** A nonempty list replaces current membership; empty preserves membership. */
+  repositoryConnectionIds: string[];
 }
 
 export interface UpdateProjectResponse {
@@ -316,7 +321,7 @@ export const Project: MessageFns<Project> = {
 };
 
 function createBaseCreateProjectRequest(): CreateProjectRequest {
-  return { idempotencyKey: "", displayName: "", repositoryConnectionId: "" };
+  return { idempotencyKey: "", displayName: "", repositoryConnectionId: "", repositoryConnectionIds: [] };
 }
 
 export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
@@ -329,6 +334,9 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     }
     if (message.repositoryConnectionId !== "") {
       writer.uint32(26).string(message.repositoryConnectionId);
+    }
+    for (const v of message.repositoryConnectionIds) {
+      writer.uint32(34).string(v!);
     }
     return writer;
   },
@@ -370,6 +378,14 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
             message.repositoryConnectionId = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.repositoryConnectionIds.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -399,6 +415,11 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
         : isSet(object.repository_connection_id)
         ? globalThis.String(object.repository_connection_id)
         : "",
+      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
+        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.repository_connection_ids)
+        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -413,6 +434,9 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     if (message.repositoryConnectionId !== "") {
       obj.repositoryConnectionId = message.repositoryConnectionId;
     }
+    if (message.repositoryConnectionIds?.length) {
+      obj.repositoryConnectionIds = message.repositoryConnectionIds;
+    }
     return obj;
   },
 
@@ -424,6 +448,7 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     message.idempotencyKey = object.idempotencyKey ?? "";
     message.displayName = object.displayName ?? "";
     message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
     return message;
   },
 };
@@ -814,7 +839,13 @@ export const GetProjectResponse: MessageFns<GetProjectResponse> = {
 };
 
 function createBaseUpdateProjectRequest(): UpdateProjectRequest {
-  return { idempotencyKey: "", projectId: "", expectedResourceVersion: "0", displayName: "" };
+  return {
+    idempotencyKey: "",
+    projectId: "",
+    expectedResourceVersion: "0",
+    displayName: "",
+    repositoryConnectionIds: [],
+  };
 }
 
 export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
@@ -830,6 +861,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     }
     if (message.displayName !== "") {
       writer.uint32(34).string(message.displayName);
+    }
+    for (const v of message.repositoryConnectionIds) {
+      writer.uint32(42).string(v!);
     }
     return writer;
   },
@@ -879,6 +913,14 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
             message.displayName = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.repositoryConnectionIds.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -913,6 +955,11 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
         : isSet(object.display_name)
         ? globalThis.String(object.display_name)
         : "",
+      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
+        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.repository_connection_ids)
+        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -930,6 +977,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     if (message.displayName !== "") {
       obj.displayName = message.displayName;
     }
+    if (message.repositoryConnectionIds?.length) {
+      obj.repositoryConnectionIds = message.repositoryConnectionIds;
+    }
     return obj;
   },
 
@@ -942,6 +992,7 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     message.projectId = object.projectId ?? "";
     message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
     message.displayName = object.displayName ?? "";
+    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
     return message;
   },
 };
@@ -1197,7 +1248,7 @@ export const ArchiveProjectResponse: MessageFns<ArchiveProjectResponse> = {
   },
 };
 
-/** Projects are user-facing workspaces. This release admits one repository each. */
+/** Projects are user-facing workspaces with shared, editable repository membership. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
   createProject: {

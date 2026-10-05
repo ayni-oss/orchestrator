@@ -20,7 +20,17 @@ pub fn project_name(value: &str) -> Result<(), ValidationError> {
 pub fn create_project(value: &v1::CreateProjectRequest) -> Result<(), ValidationError> {
     idempotency_key(&value.idempotency_key)?;
     project_name(&value.display_name)?;
-    resource_id(&value.repository_connection_id, "repository_connection_id")
+    if value.repository_connection_ids.is_empty() {
+        resource_id(&value.repository_connection_id, "repository_connection_id")
+    } else {
+        if !value.repository_connection_id.is_empty() {
+            return Err(ValidationError::new(
+                v1::ErrorReason::InvalidInput,
+                "repository_connection_ids",
+            ));
+        }
+        project_members(&value.repository_connection_ids)
+    }
 }
 
 /// Validates project mutation identity and optimistic concurrency.
@@ -35,6 +45,30 @@ pub fn project_mutation(key: &str, id: &str, version: u64) -> Result<(), Validat
             v1::ErrorReason::InvalidInput,
             "expected_resource_version",
         ));
+    }
+    Ok(())
+}
+
+/// Validates a nonempty set of shared repository members.
+///
+/// # Errors
+/// Returns invalid input for duplicates, invalid identities or an excessive list.
+pub fn project_members(values: &[String]) -> Result<(), ValidationError> {
+    if values.is_empty()
+        || values.len() > 100
+        || values
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != values.len()
+    {
+        return Err(ValidationError::new(
+            v1::ErrorReason::InvalidInput,
+            "repository_connection_ids",
+        ));
+    }
+    for value in values {
+        resource_id(value, "repository_connection_ids")?;
     }
     Ok(())
 }

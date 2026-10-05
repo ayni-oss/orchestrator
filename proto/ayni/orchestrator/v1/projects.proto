@@ -5,7 +5,7 @@ package ayni.orchestrator.v1;
 import "ayni/orchestrator/v1/common.proto";
 import "google/protobuf/timestamp.proto";
 
-// Projects are user-facing workspaces. This release admits one repository each.
+// Projects are user-facing workspaces with shared, editable repository membership.
 service ProjectService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
@@ -25,7 +25,7 @@ message Project {
   string id = 1;
   string display_name = 2;
   ProjectState state = 3;
-  // Exactly one immutable membership in this release; history survives archive.
+  // Current members; repositories may be shared by multiple projects.
   repeated string repository_connection_ids = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
@@ -36,7 +36,10 @@ message CreateProjectRequest {
   string idempotency_key = 1;
   // A nonblank display name of at most 256 UTF-8 bytes, without control characters.
   string display_name = 2;
+  // Legacy single-member creation; cannot be combined with the repeated field.
   string repository_connection_id = 3;
+  // Between 1 and 100 unique repository connections.
+  repeated string repository_connection_ids = 4;
 }
 message CreateProjectResponse {
   Project project = 1;
@@ -60,6 +63,8 @@ message UpdateProjectRequest {
   string project_id = 2;
   uint64 expected_resource_version = 3;
   string display_name = 4;
+  // A nonempty list replaces current membership; empty preserves membership.
+  repeated string repository_connection_ids = 5;
 }
 message UpdateProjectResponse {
   Project project = 1;

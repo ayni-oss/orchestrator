@@ -256,7 +256,7 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',3,unixepoch());
+VALUES ('control_plane',4,unixepoch());
 
 CREATE TABLE repository_connections(
     id TEXT PRIMARY KEY, status INTEGER NOT NULL, provider_key TEXT NOT NULL UNIQUE,
@@ -269,11 +269,12 @@ CREATE TABLE projects(
     event_cursor INTEGER NOT NULL UNIQUE
 );
 CREATE TABLE project_repositories(
-    project_id TEXT PRIMARY KEY REFERENCES projects(id),
+    project_id TEXT NOT NULL REFERENCES projects(id),
     repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
-    active INTEGER NOT NULL CHECK(active IN (0,1))
+    active INTEGER NOT NULL CHECK(active IN (0,1)),
+    PRIMARY KEY(project_id,repository_connection_id)
 );
-CREATE UNIQUE INDEX active_project_repository ON project_repositories(repository_connection_id) WHERE active=1;
+CREATE INDEX active_project_repository ON project_repositories(repository_connection_id) WHERE active=1;
 CREATE TABLE repository_snapshots(
     id TEXT PRIMARY KEY,
     repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),

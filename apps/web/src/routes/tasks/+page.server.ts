@@ -68,11 +68,11 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   };
 };
 
-async function taskSelection(projectId: string, runtimeProfileId: string, context: RequestContext) {
+async function taskSelection(projectId: string, repositoryConnectionId: string, runtimeProfileId: string, context: RequestContext) {
   const bff = getBff();
   const project = await bff.getProject(projectId, context);
   if (project.state !== "active") return undefined;
-  const repositoryConnectionId = project.repositoryConnectionIds[0]!;
+  if (!project.repositoryConnectionIds.includes(repositoryConnectionId)) return undefined;
   const profile = await bff.getRuntimeProfile(runtimeProfileId, context);
   if (profile.repositoryConnectionId !== repositoryConnectionId || profile.state !== "ready" || profile.support !== "operational" || !profile.activeRevisionId || !profile.activeRuntimeArtifactId) return undefined;
   const revision = await bff.getRuntimeRevision(profile.activeRevisionId, context);
@@ -84,6 +84,7 @@ export const actions: Actions = {
     const form = await request.formData();
     const idempotencyKey = text(form, "idempotencyKey", 36);
     const projectId = text(form, "projectId", 128);
+    const repositoryConnectionId = text(form, "repositoryConnectionId", 128);
     const runtimeProfileId = text(form, "runtimeProfileId", 128);
     const provider = text(form, "provider", 128);
     const model = text(form, "model", 128);
@@ -99,6 +100,7 @@ export const actions: Actions = {
     if (
       idempotencyKey === undefined || !isCanonicalIdentifier(idempotencyKey)
       || projectId === undefined || !RESOURCE_ID.test(projectId)
+      || repositoryConnectionId === undefined || !RESOURCE_ID.test(repositoryConnectionId)
       || runtimeProfileId === undefined || !RESOURCE_ID.test(runtimeProfileId)
       || provider === undefined || model === undefined
       || taskRequest === undefined || criteria === undefined || !pathsValid
@@ -109,9 +111,9 @@ export const actions: Actions = {
     let task: DevelopmentTaskDto;
     try {
       const context=requestContext(locals);
-      const selection = await taskSelection(projectId, runtimeProfileId, context);
+      const selection = await taskSelection(projectId, repositoryConnectionId, runtimeProfileId, context);
       if (!selection) return fail(409,{action:"create",error:{requestId:locals.requestId,message:"Select an active project with a ready runtime."}});
-      const {repositoryConnectionId, repositoryRevision} = selection;
+      const {repositoryRevision} = selection;
       task = await getBff().createDevelopmentTask({
         idempotencyKey,
         request: {

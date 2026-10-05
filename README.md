@@ -19,9 +19,11 @@ This repository remains private; Ayni is independently useful as a local CLI in 
 
 ## Target product
 
-The project foundation now provides named, single-repository projects with
-project-owned tasks, immutable repository membership, archive history, and
-admission checks. Connector management, project readiness, internal environment
+The project foundation provides named projects with shared, editable repository
+membership, project-owned tasks targeting one selected repository, archive
+history, and admission checks. Projects is the landing page; Configuration owns
+connector setup. [Decision 0011](docs/decisions/0011-project-centered-ui-and-onboarding.md)
+defines the updated onboarding and UI direction. Connector management, project readiness, internal environment
 production, and internal candidate assessment remain follow-up work tracked by
 [the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
 

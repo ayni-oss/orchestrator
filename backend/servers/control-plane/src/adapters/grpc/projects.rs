@@ -76,6 +76,13 @@ impl v1::project_service_server::ProjectService for GrpcApi {
             value.expected_resource_version,
         )
         .and_then(|()| api_validation::project_name(&value.display_name))
+        .and_then(|()| {
+            if value.repository_connection_ids.is_empty() {
+                Ok(())
+            } else {
+                api_validation::project_members(&value.repository_connection_ids)
+            }
+        })
         .map_err(|e| context.validation(&e))?;
         let key = context.idempotency_key(&value.idempotency_key)?;
         let message = request.into_inner();

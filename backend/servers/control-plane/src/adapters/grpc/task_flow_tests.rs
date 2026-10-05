@@ -106,6 +106,7 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
             idempotency_key: "project".into(),
             display_name: "Task flow project".into(),
             repository_connection_id: repository.id.clone(),
+            repository_connection_ids: vec![],
         })
         .await?
         .into_inner()

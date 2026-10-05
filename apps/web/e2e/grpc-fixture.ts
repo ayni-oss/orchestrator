@@ -38,6 +38,7 @@ let repository: any = {
   resourceVersion: "1",
 };
 
+const secondRepository = {...repository,id:"repository:2",displayName:"ayni-oss/library",provider:{provider:{$case:"github",github:{...repository.provider.provider.github,repositoryId:"456",name:"library",htmlUrl:"https://github.com/ayni-oss/library"}}}};
 let project: any = {id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
 const profile: any = {
   id: profileId,
@@ -97,8 +98,8 @@ const repositoryService: UntypedServiceImplementation = {
   listGithubInstallationRepositories(_call, callback) { callback(null, { repositories: [{ repositoryId: "123", owner: "ayni-oss", name: "sandbox", defaultBranch: "main" }] }); },
   connectGithubRepository(_call,callback){callback(null,{repositoryConnection:repository});},
 
-  listRepositoryConnections(_call, callback) { callback(null, { repositoryConnections: [repository], page }); },
-  getRepositoryConnection(_call, callback) { callback(null, { repositoryConnection: repository }); },
+  listRepositoryConnections(_call, callback) { callback(null, { repositoryConnections: [repository,secondRepository], page }); },
+  getRepositoryConnection(call, callback) { callback(null, { repositoryConnection: call.request.repositoryConnectionId === secondRepository.id ? secondRepository : repository }); },
   createRepositoryConnection(call, callback) {
     repository = { ...repository, provider: call.request.provider, displayName: call.request.displayName, defaultBranch: call.request.defaultBranch, updatedAt: new Date(), resourceVersion: String(version++) };
     callback(null, { repositoryConnection: repository });
@@ -135,7 +136,7 @@ const taskService: UntypedServiceImplementation = {
   listDevelopmentAttempts(_call,callback) { callback(null,{attempts:[],page}); },
   listCandidates(call,callback) { const t=tasks.get(call.request.developmentTaskId); callback(null,{candidates:t?.snapshot.publishDraft ? [{id:"candidate:1",repositoryConnectionId:repositoryId,resourceVersion:"1",changedPaths:[],developmentAttemptId:"attempt:1",state:CandidateState.CANDIDATE_STATE_AVAILABLE,baseRevision:revision,identity:{identity:{$case:"git",git:{commitSha:"d".repeat(40)}}},codingAdvisory:"Coding-time checks are advisory."}] : [],page}); },
 
-  listDevelopmentTasks(_call, callback) { callback(null, { developmentTasks: [...tasks.values()], page }); },
+  listDevelopmentTasks(call, callback) { callback(null, { developmentTasks: [...tasks.values()].filter(task=>!call.request.projectId || task.projectId===call.request.projectId), page }); },
   getDevelopmentTask(call, callback) { callback(null, { developmentTask: tasks.get(call.request.developmentTaskId) ?? tasks.get(taskId) }); },
   createDevelopmentTask(call, callback) {
     const id = "00000000-0000-4000-8000-000000000040";
@@ -179,8 +180,8 @@ grpc.addService(ReviewServiceService, {listChangeRequests(_call:any,callback:any
 grpc.addService(ProjectServiceService, {
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
   getProject(_call:any,callback:any){callback(null,{project});},
-  createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
-  updateProject(call:any,callback:any){project={...project,displayName:call.request.displayName,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+  createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
+  updateProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
   archiveProject(_call:any,callback:any){project={...project,state:ProjectState.PROJECT_STATE_ARCHIVED,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
 });
 grpc.addService(RepositoryServiceService, repositoryService);
