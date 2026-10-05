@@ -1,18 +1,5 @@
 use super::*;
 
-pub(super) fn is_terminal_task(state: i32) -> bool {
-    matches!(
-        v1::DevelopmentTaskState::try_from(state).ok(),
-        Some(
-            v1::DevelopmentTaskState::Succeeded
-                | v1::DevelopmentTaskState::Failed
-                | v1::DevelopmentTaskState::Cancelled
-                | v1::DevelopmentTaskState::DeadlineExceeded
-                | v1::DevelopmentTaskState::Unsupported
-        )
-    )
-}
-
 pub(super) fn is_terminal_attempt(state: i32) -> bool {
     matches!(
         v1::DevelopmentAttemptState::try_from(state).ok(),

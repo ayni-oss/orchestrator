@@ -119,7 +119,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission commands, immutable bindings and atomic persistence port; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -144,12 +144,14 @@ API. Shared runtime contracts cannot import Ayni, Kubernetes, gRPC or executable
 The worker cannot import controller application code or the public API. The Ayni
 dependency policy enforces crate direction.
 
-Task admission replays its persisted request identity before reevaluating current
+Task admission and cancellation replay persisted request identities before reevaluating current
 readiness. New admissions freeze source/runtime bindings through neutral values,
 then atomically persist the task, initial attempt, idempotency record and both
 events. The wire adapter and persistence codec preserve the existing protobuf
 representation and action-hash format. Deadline durations and absolute timestamps
-are distinct application types.
+are distinct application types. Cancellation decisions use neutral lifecycle states;
+the persistence adapter commits the action and task/unfinished-attempt changes
+together, retaining completed attempts and their versions.
 
 Kubernetes completion supplies bounded raw output; managed evidence interpretation
 remains with the controller. Server reconciliation loops and finite model warmup
@@ -175,10 +177,10 @@ project-owned tasks; connector management and project readiness remain follow-up
 work. [Custom Runtime #66](https://github.com/ayni-oss/orchestrator/issues/66)
 remains unimplemented end to end.
 
-Outside task admission, application logic still reads generated protobuf resources,
+Outside task admission and cancellation, application logic still reads generated protobuf resources,
 stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
 core. Continue extracting real use cases with their commands, results and ports into the
-application crate: cancellation, reconciliation, connector operations, project
+application crate: reconciliation, connector operations, project
 inspection, environment resolution and assessment/publication. Keep wire
 conversion at gRPC and explicit persistence codec boundaries. Move managed
 evidence rules out of generic storage while preserving shared identity and

@@ -186,10 +186,10 @@ use validation::{
 };
 mod transitions_schema;
 use transitions_schema::{
-    action_row, decode, initialize_schema, is_terminal_attempt, is_terminal_task, map_constraint,
-    resource_id, task_state_for_attempt, timestamp, timestamp_at_or_before, unix_seconds,
-    unix_timestamp, valid_attempt_transition, valid_change_request_transition,
-    valid_profile_transition, valid_repository_transition,
+    action_row, decode, initialize_schema, is_terminal_attempt, map_constraint, resource_id,
+    task_state_for_attempt, timestamp, timestamp_at_or_before, unix_seconds, unix_timestamp,
+    valid_attempt_transition, valid_change_request_transition, valid_profile_transition,
+    valid_repository_transition,
 };
 mod payloads;
 use payloads::{
@@ -399,3 +399,5 @@ use project_validation::{valid_project, validate_projects};
 #[cfg(test)]
 use transitions_schema::add_duration;
 pub(crate) use transitions_schema::request_digest;
+
+pub(crate) mod task_cancellation;

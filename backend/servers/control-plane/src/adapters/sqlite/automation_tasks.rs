@@ -2,9 +2,9 @@ use super::{
     CleanStore, CleanStoreError, DEVELOPMENT_SERVICE, MAX_RECONCILE_BATCH, Message,
     PROFILE_SERVICE, Page, Timestamp, action_row, append_event, bounded_failure,
     collect_bounded_payloads, decode, encode_filter, equivalent_failure, get_payload,
-    is_terminal_attempt, is_terminal_task, map_constraint, params, persist_attempt_update,
-    persist_task_update, query_payloads, request_digest, resource_id, task_state_for_attempt,
-    timestamp, timestamp_at_or_before, unix_seconds, unix_timestamp, v1, valid_attempt_transition,
+    is_terminal_attempt, map_constraint, params, persist_attempt_update, persist_task_update,
+    query_payloads, request_digest, resource_id, task_state_for_attempt, timestamp,
+    timestamp_at_or_before, unix_seconds, unix_timestamp, v1, valid_attempt_transition,
 };
 
 use crate::{adapters::github::setup as github_setup, profiles::ayni::onboarding_templates};
@@ -269,76 +269,16 @@ impl CleanStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn cancel_development_task(
         &mut self,
         key: &str,
         request: &v1::CancelDevelopmentTaskRequest,
     ) -> Result<v1::DevelopmentTask, CleanStoreError> {
-        let digest = request_digest("CancelDevelopmentTask", request);
-        if let Some(existing) = action_row(&self.connection, "CancelDevelopmentTask", key)? {
-            if existing.request_hash != digest {
-                return Err(CleanStoreError::IdempotencyConflict);
-            }
-            return self
-                .development_task(&existing.target_id.ok_or(CleanStoreError::CorruptState)?);
-        }
-        let mut task = self.development_task(&request.development_task_id)?;
-        if is_terminal_task(task.state) {
-            if task.state == v1::DevelopmentTaskState::Cancelled as i32 {
-                self.record_completed_action(
-                    "CancelDevelopmentTask",
-                    key,
-                    request,
-                    "development_task",
-                    &task.id,
-                )?;
-                return Ok(task);
-            }
-            return Err(CleanStoreError::TaskNotActionable);
-        }
-        let now = unix_seconds()?;
-        task.state = v1::DevelopmentTaskState::Cancelled as i32;
-        task.failure = None;
-        task.updated_at = Some(timestamp(now));
-        let previous_version = task.resource_version;
-        task.resource_version = previous_version.saturating_add(1);
-        let mut attempt = task
-            .active_attempt_id
-            .as_deref()
-            .map(|id| self.development_attempt(id))
-            .transpose()?;
-        if let Some(value) = attempt.as_mut()
-            && !is_terminal_attempt(value.state)
-        {
-            value.state = v1::DevelopmentAttemptState::Cancelled as i32;
-            value.updated_at = Some(timestamp(now));
-            value.completed_at = Some(timestamp(now));
-            value.failure = None;
-            value.resource_version = value.resource_version.saturating_add(1);
-        }
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        transaction
-            .execute(
-                "INSERT INTO durable_actions(
-                    operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at
-                 ) VALUES ('CancelDevelopmentTask',?1,?2,?3,'completed','development_task',?4,?5,?5)",
-                params![key, digest, request.encode_to_vec(), task.id, now],
-            )
-            .map_err(map_constraint)?;
-        persist_task_update(&transaction, &task, previous_version)?;
-        if let Some(value) = attempt {
-            persist_attempt_update(
-                &transaction,
-                &value,
-                value.resource_version.saturating_sub(1),
-                &task,
-            )?;
-        }
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(task)
+        let command = crate::adapters::grpc::cancel_command(key, request);
+        let id = ayni_orchestrator_application::tasks::cancellation::cancel(self, command)
+            .map_err(super::task_cancellation::cancellation_error)?;
+        self.development_task(&id)
     }
 
     pub(crate) fn retry_development_task(

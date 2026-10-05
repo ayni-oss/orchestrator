@@ -147,7 +147,8 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
             .map_err(|error| context.validation(&error))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
-        let command = task_command(&key, &message).map_err(|error| context.store_error(&error))?;
+        let command = task_mapping::task_command(&key, &message)
+            .map_err(|error| context.store_error(&error))?;
         let (task, attempt) = with_store(&self.state, |store| {
             task_mapping::admit_task(store, command)
         })
@@ -170,8 +171,9 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         )
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
+        let command = task_mapping::cancel_command(&key, &message);
         let task = with_store(&self.state, |store| {
-            store.cancel_development_task(&key, &message)
+            task_mapping::cancel_task(store, command)
         })
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::CancelDevelopmentTaskResponse {

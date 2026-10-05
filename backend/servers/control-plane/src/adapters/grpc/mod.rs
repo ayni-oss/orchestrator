@@ -427,7 +427,8 @@ impl RequestContext {
 
 mod projects;
 mod task_mapping;
-pub use task_mapping::task_command;
+#[cfg(test)]
+pub use task_mapping::{cancel_command, task_command};
 mod providers_tasks;
 mod repositories_profiles;
 #[path = "watch.rs"]

@@ -57,3 +57,26 @@ pub(super) fn admit_task(
         store.development_attempt(&receipt.attempt_id)?,
     ))
 }
+
+pub fn cancel_command(
+    key: &str,
+    request: &v1::CancelDevelopmentTaskRequest,
+) -> ayni_orchestrator_application::tasks::cancellation::CancelTask {
+    ayni_orchestrator_application::tasks::cancellation::CancelTask {
+        identity: RequestIdentity {
+            key: key.into(),
+            digest: crate::adapters::sqlite::request_digest("CancelDevelopmentTask", request),
+            payload: request.encode_to_vec(),
+        },
+        task_id: request.development_task_id.clone(),
+    }
+}
+
+pub(super) fn cancel_task(
+    store: &mut crate::adapters::sqlite::CleanStore,
+    command: ayni_orchestrator_application::tasks::cancellation::CancelTask,
+) -> Result<v1::DevelopmentTask, CleanStoreError> {
+    let id = ayni_orchestrator_application::tasks::cancellation::cancel(store, command)
+        .map_err(crate::adapters::sqlite::task_cancellation::cancellation_error)?;
+    store.development_task(&id)
+}

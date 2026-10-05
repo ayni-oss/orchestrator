@@ -370,35 +370,6 @@ impl CleanStore {
         })
     }
 
-    pub(super) fn record_completed_action<M: Message>(
-        &mut self,
-        operation: &str,
-        key: &str,
-        request: &M,
-        target_type: &str,
-        target_id: &str,
-    ) -> Result<(), CleanStoreError> {
-        let now = unix_seconds()?;
-        self.connection
-            .execute(
-                "INSERT INTO durable_actions(
-                    operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,
-                    created_at,updated_at
-                 ) VALUES (?1,?2,?3,?4,'completed',?5,?6,?7,?7)",
-                params![
-                    operation,
-                    key,
-                    request_digest(operation, request),
-                    request.encode_to_vec(),
-                    target_type,
-                    target_id,
-                    now
-                ],
-            )
-            .map_err(map_constraint)?;
-        Ok(())
-    }
-
     pub(crate) fn complete_external_action(
         &mut self,
         operation: &str,
