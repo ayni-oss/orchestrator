@@ -367,7 +367,7 @@ mod tests {
             .err()
             .ok_or_else(|| io::Error::other("expected failure"))?;
         assert!(matches!(
-            crate::activity::io_failure(&error),
+            crate::coding::activity::io_failure(&error),
             ayni_orchestrator_runtime::activity::Failure::GitIndex
         ));
         assert!(!error.to_string().contains("private-missing-revision"));

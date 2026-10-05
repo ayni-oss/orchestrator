@@ -404,13 +404,10 @@ fn string(value: &Value, key: &str) -> Result<String, &'static str> {
         .ok_or("provider_response_invalid")
 }
 
-#[path = "io.rs"]
-mod assessment_actions_io;
-use assessment_actions_io::{api, capture, checkout, command, source_digest, tracked_paths};
-#[path = "projection.rs"]
-mod assessment_actions_projection;
-use assessment_actions_projection::project;
+mod process_io;
+use process_io::{api, capture, checkout, command, source_digest, tracked_paths};
+mod projection;
+use projection::project;
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

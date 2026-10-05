@@ -1,4 +1,4 @@
-use super::assessment_actions_projection::replace_summary_block;
+use super::projection::replace_summary_block;
 use super::*;
 
 #[test]

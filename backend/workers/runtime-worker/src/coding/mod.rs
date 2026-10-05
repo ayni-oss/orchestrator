@@ -1,8 +1,8 @@
 //! Bounded coding in an already verified runtime. Outputs are advisory, not assessments.
 use crate::{
-    activity::ActivityLog,
-    model_usage::{TrackedModel, UsageTracker},
-    runtime_execution::{command, git, verify},
+    coding::activity::ActivityLog,
+    coding::model_usage::{TrackedModel, UsageTracker},
+    operations::runtime::{command, git, verify},
 };
 use ayni_orchestrator_domain::ModelUsageStage;
 use ayni_orchestrator_profile_ayni::coding::CodingRequest;
@@ -49,7 +49,7 @@ impl Tool for RunCommand {
         // Serialize commands and checkpointing so parallel tool calls cannot race Git.
         let _guard = self.serial.lock().await;
         let result = run_command(args).await;
-        crate::coding_checkpoint::retain(
+        crate::coding::checkpoint::retain(
             &self.request,
             Path::new("/workspace"),
             &self.output,
@@ -163,10 +163,10 @@ pub async fn run(
         .max_turns(24)
         .await;
     // Finalize recovery output even when the provider or turn budget failed.
-    crate::coding_checkpoint::retain(request, workspace, output, activity);
+    crate::coding::checkpoint::retain(request, workspace, output, activity);
     if let Err(error) = &response {
         activity.record(Stage::ModelExecution);
-        activity.fail(crate::activity::prompt_failure(error));
+        activity.fail(crate::coding::activity::prompt_failure(error));
         usage.fail_pending(None)?;
     }
     let response = response?;
@@ -484,10 +484,10 @@ mod tests {
         workspace: &Path,
         output: &Path,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        crate::coding_checkpoint::save(request, workspace, output)?;
+        crate::coding::checkpoint::save(request, workspace, output)?;
         let first = fs::read_to_string(output.join("checkpoint"))?;
         fs::write(workspace.join("file.txt"), "latest edit")?;
-        crate::coding_checkpoint::save(request, workspace, output)?;
+        crate::coding::checkpoint::save(request, workspace, output)?;
         let latest = fs::read_to_string(output.join("checkpoint"))?;
         assert_ne!(first, latest);
         let saved = output.join("checkpoints").join(&latest);
@@ -506,8 +506,12 @@ mod tests {
         )?;
         let mut protected = request.clone();
         protected.constraints.protected_paths = vec!["file.txt".into()];
-        assert!(crate::coding_checkpoint::save(&protected, workspace, output).is_err());
+        assert!(crate::coding::checkpoint::save(&protected, workspace, output).is_err());
         assert_eq!(fs::read_to_string(output.join("checkpoint"))?, latest);
         Ok(())
     }
 }
+
+pub mod activity;
+mod checkpoint;
+pub mod model_usage;

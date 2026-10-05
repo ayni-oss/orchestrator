@@ -152,7 +152,7 @@ pub fn io_failure(error: &std::io::Error) -> Failure {
     use std::io::ErrorKind;
     if let Some(failure) = error
         .get_ref()
-        .and_then(|value| value.downcast_ref::<crate::runtime_execution::GitFailure>())
+        .and_then(|value| value.downcast_ref::<crate::operations::runtime::GitFailure>())
     {
         return failure.0;
     }

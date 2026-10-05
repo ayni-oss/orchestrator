@@ -1,5 +1,5 @@
 //! Atomic recovery snapshots, independent of model completion and Ayni success.
-use crate::{activity::ActivityLog, coding::freeze_with_advisory};
+use super::{activity::ActivityLog, freeze_with_advisory};
 use ayni_orchestrator_profile_ayni::coding::CodingRequest;
 use ayni_orchestrator_runtime::activity::Stage;
 use std::{fs, io, path::Path};
@@ -9,7 +9,7 @@ pub fn retain(request: &CodingRequest, workspace: &Path, output: &Path, activity
     if let Err(error) = save(request, workspace, output) {
         // No source changes is normal for inspection tools. Keep the last valid
         // checkpoint when a later edit violates constraints or saving fails.
-        tracing::warn!(failure = ?crate::activity::io_failure(&error), "recovery checkpoint not updated");
+        tracing::warn!(failure = ?crate::coding::activity::io_failure(&error), "recovery checkpoint not updated");
     }
 }
 

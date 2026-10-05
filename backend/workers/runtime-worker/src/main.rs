@@ -1,13 +1,13 @@
 use ayni_orchestrator_profile_ayni::runtime_execution::ExecutionRequest;
 use ayni_orchestrator_runtime::{activity::Stage, runtime_execution::read_bounded};
-use ayni_orchestrator_worker::runtime_execution::{checkout, verify};
+use ayni_orchestrator_worker::operations::runtime::{checkout, verify};
 use std::{env, fs, io, path::Path, process::ExitCode};
 use tracing::Instrument;
 
 #[tokio::main]
 async fn main() -> ExitCode {
     ayni_orchestrator_observability::init("runtime-worker");
-    let activity = ayni_orchestrator_worker::activity::ActivityLog::new(
+    let activity = ayni_orchestrator_worker::coding::activity::ActivityLog::new(
         (env::args().nth(1).as_deref() == Some("code"))
             .then(|| Path::new("/output/activity.json").to_path_buf()),
     );
@@ -19,7 +19,9 @@ async fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(error) => {
-                activity.fail(ayni_orchestrator_worker::activity::io_failure(&error));
+                activity.fail(ayni_orchestrator_worker::coding::activity::io_failure(
+                    &error,
+                ));
                 tracing::error!(error_kind = ?error.kind(), "runtime_worker_failed");
                 ExitCode::FAILURE
             }
@@ -31,7 +33,7 @@ async fn main() -> ExitCode {
     .await
 }
 
-async fn run(activity: &ayni_orchestrator_worker::activity::ActivityLog) -> io::Result<()> {
+async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog) -> io::Result<()> {
     let operation = env::args()
         .nth(1)
         .ok_or_else(|| io::Error::other("missing operation"))?;
@@ -42,7 +44,7 @@ async fn run(activity: &ayni_orchestrator_worker::activity::ActivityLog) -> io::
     }
     if operation == "assess-actions" {
         activity.record(Stage::Assessment);
-        return ayni_orchestrator_worker::assessment_actions::run().await;
+        return ayni_orchestrator_worker::integrations::github_actions::run().await;
     }
     if operation == "prepare-output" {
         activity.record(Stage::OutputPreparation);
@@ -80,7 +82,7 @@ async fn run(activity: &ayni_orchestrator_worker::activity::ActivityLog) -> io::
     match operation.as_str() {
         "build" => {
             activity.record(Stage::Build);
-            ayni_orchestrator_worker::runtime_execution::build(&request, Path::new("/workspace"))
+            ayni_orchestrator_worker::operations::runtime::build(&request, Path::new("/workspace"))
         }
         "checkout" => {
             activity.record(Stage::Checkout);
