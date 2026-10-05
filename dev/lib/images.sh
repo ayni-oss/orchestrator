@@ -5,8 +5,8 @@ dev_build_image() {
   local component="${1:?component is required}"
   local requested_image_ref="${2:-}"
   case "$component" in
-    control-plane | worker | web) ;;
-    *) echo "component must be control-plane, worker, or web" >&2; return 2 ;;
+    control-plane | control-plane-dev | worker | web | web-dev) ;;
+    *) echo "component must be control-plane, control-plane-dev, worker, web, or web-dev" >&2; return 2 ;;
   esac
 
   local dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/$component/Dockerfile"

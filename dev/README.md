@@ -19,6 +19,31 @@ dev/ctl deploy
 dev/ctl check
 ```
 
+## Hot reload
+
+Install [Tilt](https://docs.tilt.dev/install.html) once, then start the
+development-only live-update environment with:
+
+```sh
+dev/ctl hot-reload
+```
+
+This first synchronizes Secrets and deploys the normal Helm release with local
+development images. It then attaches Tilt to the existing `control-plane` Pod;
+Helm remains the resource owner. The Pod continues to contain both sidecars.
+
+- Changes under `backend/` or `proto/` are copied into the control-plane
+  container, compiled there, and restart only that container.
+- Changes under `apps/web/`, `packages/bff/`, or `clients/typescript/` are
+  copied into the web container; Vite refreshes the browser without a Pod
+  rollout. The web application is available at http://127.0.0.1:18080.
+- `Cargo.lock`, package manifests, generated bindings, chart values, Secrets,
+  or Helm templates are deployment inputs. Stop Tilt and run `dev/ctl
+  hot-reload` again after changing them.
+
+Use `dev/ctl cleanup` to uninstall the Helm release when finished. `tilt down`
+only stops live updates and deliberately leaves Helm-owned resources intact.
+
 `deploy` and its `redeploy` alias safely re-run in place: they reconcile the
 selected private env file into Kubernetes Secrets, rebuild all three project
 images, load them into Docker Desktop Kubernetes, and run `helm upgrade
@@ -53,6 +78,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | --- | --- |
 | `dev/ctl secrets` | Parse the private env file and update local Kubernetes Secrets |
 | `dev/ctl deploy` | Sync Secrets, build, and install or redeploy the complete stack in place |
+| `dev/ctl hot-reload` | Deploy development images once and keep server and web source synchronized with the running Pod |
 | `dev/ctl check` | Check application, gRPC, browser, metrics, and dashboards |
 | `dev/ctl status` | Show the release, Pods, and retained claims |
 | `dev/ctl cleanup` | Uninstall the release while preserving Secrets, Jobs, and retained claims |

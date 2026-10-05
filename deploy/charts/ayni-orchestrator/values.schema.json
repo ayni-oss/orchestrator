@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["enabled", "images", "controlPlane", "web", "persistence", "customClients"],
+  "required": ["enabled", "images", "development", "controlPlane", "web", "persistence", "customClients"],
   "properties": {
     "runtime": {
       "type": "object",
@@ -46,6 +46,23 @@
         "controlPlane": { "$ref": "#/definitions/image" },
         "web": { "$ref": "#/definitions/image" },
         "pullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] }
+      }
+    },
+    "development": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hotReload"],
+      "properties": {
+        "hotReload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "controlPlaneWorkspaceSize", "webWorkspaceSize"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "controlPlaneWorkspaceSize": { "$ref": "#/definitions/quantity" },
+            "webWorkspaceSize": { "$ref": "#/definitions/quantity" }
+          }
+        }
       }
     },
     "controlPlane": {

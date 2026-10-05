@@ -16,6 +16,15 @@ Connected repositories inherit the local `runtime-pull` Secret reference; no
 per-repository Helm values are needed. Helm plugins are disabled for this command.
 The reusable production chart remains opt-in.
 
+For server and web iteration, `dev/ctl hot-reload` retains the same Helm
+release and single-Pod topology but selects development-only images and opens a
+Tilt session. Source is synced into writable `emptyDir` workspaces; the
+production containers and reusable-release default have no source mount. Rust
+changes are compiled in the control-plane container and restart that container
+only. Vite serves the web sidecar and applies its normal browser refresh path.
+Changes to dependencies, generated bindings, values, templates, or credentials
+are intentionally deployment inputs: stop Tilt and rerun `dev/ctl hot-reload`.
+
 `dev/ctl` remains the local command boundary. It must never fall back to another
 cluster, reset retained data, or print local credentials.
 

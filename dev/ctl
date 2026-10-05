@@ -18,6 +18,7 @@ Local Docker Desktop development:
   deploy [--env-file PATH]     Sync Secrets, build images, and install or upgrade
   redeploy [--env-file PATH]   Alias for deploy
   up [--env-file PATH]         Alias for deploy
+  hot-reload [--env-file PATH] Deploy development images, then watch server and web source
   check [--expect-empty]       Check the stack and optionally a fresh baseline
   status                       Show the Helm release, pods, and retained claims
   cleanup                      Uninstall stateless resources; preserve local data
@@ -89,6 +90,16 @@ case "$command" in
     parse_env_file "$@"
     "$scripts/configure-development-secrets.sh" --env-file "$env_file"
     "$scripts/deploy.sh"
+    ;;
+  hot-reload)
+    parse_env_file "$@"
+    if ! command -v tilt >/dev/null 2>&1; then
+      echo "Tilt is required for hot reload; install it, then run dev/ctl hot-reload again" >&2
+      exit 1
+    fi
+    "$scripts/configure-development-secrets.sh" --env-file "$env_file"
+    AYNI_ORCHESTRATOR_DEVELOPMENT_MODE=hot-reload "$scripts/deploy.sh"
+    exec tilt up
     ;;
   check)
     if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --expect-empty ) ]]; then

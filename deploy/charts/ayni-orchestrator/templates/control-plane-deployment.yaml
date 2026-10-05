@@ -29,6 +29,35 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      {{- if .Values.development.hotReload.enabled }}
+      initContainers:
+        - name: control-plane-workspace
+          image: {{ .Values.images.controlPlane | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["sh", "-c", "cp -a /opt/source/. /workspace/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: control-plane-workspace
+              mountPath: /workspace
+        - name: web-workspace
+          image: {{ .Values.images.web | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["sh", "-c", "cp -a /opt/source/. /workspace/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: web-workspace
+              mountPath: /workspace
+      {{- end }}
       containers:
         - name: control-plane
           image: {{ .Values.images.controlPlane | quote }}
@@ -104,6 +133,10 @@ spec:
               mountPath: /data
             - name: control-plane-scratch
               mountPath: /tmp
+            {{- if .Values.development.hotReload.enabled }}
+            - name: control-plane-workspace
+              mountPath: /workspace
+            {{- end }}
             - name: openai-api-key
               mountPath: /run/secrets/openai
               readOnly: true
@@ -158,6 +191,10 @@ spec:
           volumeMounts:
             - name: web-scratch
               mountPath: /tmp
+            {{- if .Values.development.hotReload.enabled }}
+            - name: web-workspace
+              mountPath: /workspace
+            {{- end }}
       volumes:
         {{- if .Values.runtime.enabled }}
         - name: runtime-config
@@ -192,6 +229,14 @@ spec:
         - name: web-scratch
           emptyDir:
             sizeLimit: 64Mi
+        {{- if .Values.development.hotReload.enabled }}
+        - name: control-plane-workspace
+          emptyDir:
+            sizeLimit: {{ .Values.development.hotReload.controlPlaneWorkspaceSize }}
+        - name: web-workspace
+          emptyDir:
+            sizeLimit: {{ .Values.development.hotReload.webWorkspaceSize }}
+        {{- end }}
         - name: openai-api-key
           secret:
             secretName: openai-api
