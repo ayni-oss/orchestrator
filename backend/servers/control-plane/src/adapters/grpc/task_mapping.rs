@@ -80,3 +80,25 @@ pub(super) fn cancel_task(
         .map_err(crate::adapters::sqlite::task_cancellation::cancellation_error)?;
     store.development_task(&id)
 }
+
+pub fn retry_command(
+    key: &str,
+    request: &v1::RetryDevelopmentTaskRequest,
+) -> ayni_orchestrator_application::tasks::retry::RetryTask {
+    ayni_orchestrator_application::tasks::retry::RetryTask {
+        task_id: request.development_task_id.clone(),
+        identity: RequestIdentity {
+            key: key.into(),
+            digest: crate::adapters::sqlite::request_digest("RetryDevelopmentTask", request),
+            payload: request.encode_to_vec(),
+        },
+    }
+}
+pub(super) fn retry_task(
+    store: &mut crate::adapters::sqlite::CleanStore,
+    command: &ayni_orchestrator_application::tasks::retry::RetryTask,
+) -> Result<v1::DevelopmentAttempt, CleanStoreError> {
+    let id = ayni_orchestrator_application::tasks::retry::retry(store, command)
+        .map_err(crate::adapters::sqlite::task_retry::retry_error)?;
+    store.development_attempt(&id)
+}

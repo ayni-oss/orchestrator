@@ -191,9 +191,8 @@ use validation::{
 mod transitions_schema;
 use transitions_schema::{
     action_row, decode, initialize_schema, is_terminal_attempt, map_constraint, resource_id,
-    task_state_for_attempt, timestamp, timestamp_at_or_before, unix_seconds, unix_timestamp,
-    valid_attempt_transition, valid_change_request_transition, valid_profile_transition,
-    valid_repository_transition,
+    task_state_for_attempt, timestamp, unix_seconds, unix_timestamp, valid_attempt_transition,
+    valid_change_request_transition, valid_profile_transition, valid_repository_transition,
 };
 mod payloads;
 use payloads::{
@@ -414,3 +413,5 @@ pub(crate) mod publication;
 pub(crate) mod runtime_activation;
 
 pub(crate) mod runtime_selection;
+
+pub(crate) mod task_retry;

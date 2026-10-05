@@ -198,8 +198,9 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         )
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
+        let command = task_mapping::retry_command(&key, &message);
         let attempt = with_store(&self.state, move |store| {
-            store.retry_development_task(&key, &message)
+            task_mapping::retry_task(store, &command)
         })
         .await
         .map_err(|error| context.store_error(&error))?;

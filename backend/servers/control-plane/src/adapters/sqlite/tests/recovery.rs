@@ -208,14 +208,6 @@ fn fractional_deadlines_preserve_subsecond_precision() -> Result<(), CleanStoreE
             nanos: 100_000_000,
         }
     );
-    assert!(!timestamp_at_or_before(
-        &deadline,
-        &Timestamp {
-            seconds: 11,
-            nanos: 99_999_999,
-        }
-    ));
-    assert!(timestamp_at_or_before(&deadline, &deadline));
     Ok(())
 }
 
@@ -621,5 +613,57 @@ fn matching_workflows_complete_setup_without_a_pull_request() -> Result<(), Clea
         store.runtime_profile(&profile.id)?.state,
         v1::RuntimeProfileState::AwaitingEnvironment as i32
     );
+    Ok(())
+}
+
+#[test]
+fn deadline_index_and_atomic_events_respect_the_exact_frozen_timestamp()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (task, attempt) = store.create_development_task(
+        "precise-expiry",
+        &task_request(&store, &repository.id, &profile.id, "precise-expiry")?,
+    )?;
+    let deadline = task
+        .snapshot
+        .as_ref()
+        .and_then(|s| s.deadline_at.as_ref())
+        .ok_or("deadline")?;
+    let just_before = if deadline.nanos == 0 {
+        Timestamp {
+            seconds: deadline.seconds - 1,
+            nanos: 999_999_999,
+        }
+    } else {
+        Timestamp {
+            seconds: deadline.seconds,
+            nanos: deadline.nanos - 1,
+        }
+    };
+    let before: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert_eq!(store.expire_deadlines(&just_before)?, 0);
+    assert_eq!(store.expire_deadlines(deadline)?, 1);
+    let after: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert_eq!(after, before + 2);
+    let completed = store.development_attempt(&attempt.id)?;
+    assert_eq!(
+        completed.state,
+        v1::DevelopmentAttemptState::DeadlineExceeded as i32
+    );
+    assert_eq!(completed.completed_at.as_ref(), Some(deadline));
+    assert_eq!(store.expire_deadlines(deadline)?, 0);
+    assert_eq!(store.development_attempt(&attempt.id)?, completed);
+    let replay: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert_eq!(replay, after);
     Ok(())
 }

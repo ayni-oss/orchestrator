@@ -215,3 +215,6 @@ fn deadline(now: TimePoint, duration: DeadlineDuration) -> Result<TimePoint, ()>
 
 #[cfg(test)]
 mod tests;
+
+pub mod deadline;
+pub mod retry;

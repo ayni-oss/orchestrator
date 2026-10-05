@@ -432,7 +432,7 @@ impl RequestContext {
 mod projects;
 mod task_mapping;
 #[cfg(test)]
-pub use task_mapping::{cancel_command, task_command};
+pub use task_mapping::{cancel_command, retry_command, task_command};
 mod providers_tasks;
 mod repositories_profiles;
 mod watch;
@@ -454,3 +454,5 @@ pub mod access;
 
 pub use publication_mapping::publication_command;
 mod publication_mapping;
+
+mod onboarding_error;

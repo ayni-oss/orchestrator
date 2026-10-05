@@ -4,11 +4,11 @@ use crate::{
     profiles::ayni::onboarding_templates,
 };
 use ayni_orchestrator_api::{v1, validation};
-use serde_json::Value;
 use std::sync::Arc;
-use tonic::Status;
+mod error;
+pub use error::{FailureKind, OnboardingError};
 
-pub fn provider_error(reason: &'static str) -> Status {
+pub fn provider_error(reason: &'static str) -> OnboardingError {
     tracing::warn!(
         provider = "github",
         reason_code = reason,
@@ -22,17 +22,17 @@ pub fn provider_error(reason: &'static str) -> Status {
         "github_rate_limited" | "github_unavailable" => "provider_temporarily_unavailable",
         _ => "repository_provider_failed",
     };
-    Status::failed_precondition(public_reason)
+    OnboardingError::failed_precondition(public_reason)
 }
 
-fn github(repository: &v1::RepositoryConnection) -> Result<&v1::GithubRepository, Status> {
+fn github(repository: &v1::RepositoryConnection) -> Result<&v1::GithubRepository, OnboardingError> {
     match repository
         .provider
         .as_ref()
         .and_then(|p| p.provider.as_ref())
     {
         Some(v1::repository_provider::Provider::Github(value)) => Ok(value),
-        _ => Err(Status::failed_precondition(
+        _ => Err(OnboardingError::failed_precondition(
             "repository_provider_unsupported",
         )),
     }
@@ -51,17 +51,17 @@ impl AppState {
         self
     }
 
-    pub(crate) fn onboarding_source(&self) -> Result<&SourceClient, Status> {
+    pub(crate) fn onboarding_source(&self) -> Result<&SourceClient, OnboardingError> {
         self.source.as_deref().ok_or_else(|| {
-            let status = provider_error("github_app_unconfigured");
-            Status::unavailable(status.message().to_owned())
+            let error = provider_error("github_app_unconfigured");
+            OnboardingError::unavailable(error.reason())
         })
     }
 
     pub(crate) async fn connect_github(
         &self,
         request: &v1::ConnectGithubRepositoryRequest,
-    ) -> Result<v1::RepositoryConnection, Status> {
+    ) -> Result<v1::RepositoryConnection, OnboardingError> {
         let valid_name = |value: &str| {
             !value.is_empty()
                 && value.len() <= 100
@@ -70,7 +70,7 @@ impl AppState {
                     .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
         };
         if !valid_name(&request.owner) || !valid_name(&request.name) {
-            return Err(Status::invalid_argument("repository_name_invalid"));
+            return Err(OnboardingError::invalid_argument("repository_name_invalid"));
         }
         let observed = self
             .onboarding_source()?
@@ -109,7 +109,7 @@ impl AppState {
             default_branch: field("default_branch")?,
         };
         validation::create_repository_connection(&message)
-            .map_err(|_| Status::invalid_argument("repository_identity_invalid"))?;
+            .map_err(|_| OnboardingError::invalid_argument("repository_identity_invalid"))?;
         with_store(self, move |store| {
             let connection =
                 store.create_repository_connection(&message.idempotency_key, &message)?;
@@ -124,17 +124,17 @@ impl AppState {
             )
         })
         .await
-        .map_err(|_| Status::failed_precondition("repository_connection_conflict"))
+        .map_err(|_| OnboardingError::failed_precondition("repository_connection_conflict"))
     }
 
     pub(crate) async fn inspect_ayni(
         &self,
         repository_id: &str,
-    ) -> Result<v1::InspectAyniRepositoryResponse, Status> {
+    ) -> Result<v1::InspectAyniRepositoryResponse, OnboardingError> {
         let lookup_id = repository_id.to_owned();
         let repository = with_store(self, move |s| s.repository_connection(&lookup_id))
             .await
-            .map_err(|_| Status::not_found("repository_not_found"))?;
+            .map_err(|_| OnboardingError::not_found("repository_not_found"))?;
         let github = github(&repository)?;
         let source = self.onboarding_source()?;
         let token = source
@@ -156,7 +156,7 @@ impl AppState {
             s.observe_repository_snapshot(&snapshot_repository, &snapshot_head)
         })
         .await
-        .map_err(|_| Status::internal("repository_snapshot_failed"))?;
+        .map_err(|_| OnboardingError::internal("repository_snapshot_failed"))?;
         let mut result = v1::InspectAyniRepositoryResponse {
             repository_snapshot_id: snapshot.id,
             repository_revision: head.clone(),
@@ -170,7 +170,7 @@ impl AppState {
                 onboarding_templates::TEMPLATE_VERSION,
                 &repository.default_branch,
             )
-            .map_err(|_| Status::internal("template_invalid"))?
+            .map_err(|_| OnboardingError::internal("template_invalid"))?
             .files
             .into_iter()
             .map(|(path, contents)| v1::WorkflowProposal {
@@ -199,7 +199,12 @@ impl AppState {
             }
             Err(reason) => return Err(provider_error(reason)),
         };
-        inspect_lock(&lock, &mut result);
+        let inspection =
+            crate::profiles::ayni::inspection::inspect_lock(&lock, result.policy_present);
+        result.lock_compatible = inspection.lock_compatible;
+        result.lock_fingerprint = inspection.lock_fingerprint;
+        result.trust_policy_pinned = inspection.trust_policy_pinned;
+        result.reason = inspection.reason.into();
         Ok(result)
     }
 
@@ -214,57 +219,4 @@ impl AppState {
     }
 }
 
-fn inspect_lock(bytes: &[u8], result: &mut v1::InspectAyniRepositoryResponse) {
-    use ayni_orchestrator_domain::digest as assessment;
-    use ayni_orchestrator_profile_ayni::ayni_release;
-    let Ok(lock) = serde_json::from_slice::<Value>(bytes) else {
-        result.reason = "lock_invalid".into();
-        return;
-    };
-    let fingerprint = lock["fingerprint"].as_str().unwrap_or("");
-    result.lock_compatible = assessment::digest(fingerprint)
-        && lock["ayni_version"] == ayni_release::CLI_VERSION
-        && lock["schema_version"] == "0.9.0";
-    if result.lock_compatible {
-        result.lock_fingerprint = fingerprint.trim_start_matches("sha256:").into();
-    }
-    // This is a pinned-policy observation, never certificate verification.
-    result.trust_policy_pinned = lock["certificate_trust_policy"]["fingerprint"]
-        .as_str()
-        .is_some_and(|p| assessment::digest(p) && p != assessment::sha256(b"{}"));
-    result.reason = if !result.policy_present {
-        "policy_missing"
-    } else if !result.lock_compatible {
-        "lock_incompatible"
-    } else if !result.trust_policy_pinned {
-        "trust_policy_missing"
-    } else {
-        "signing_configuration_requires_operator"
-    }
-    .into();
-}
-
 mod setup;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn inspection_distinguishes_compatibility_from_certificate_verification()
-    -> Result<(), serde_json::Error> {
-        let mut inspection = v1::InspectAyniRepositoryResponse {
-            policy_present: true,
-            ..Default::default()
-        };
-        let mut lock = serde_json::json!({"schema_version":"0.9.0","ayni_version":ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION,"fingerprint":format!("sha256:{}","a".repeat(64)),"certificate_trust_policy":{"fingerprint":ayni_orchestrator_domain::digest::sha256(b"{}")}});
-        inspect_lock(&serde_json::to_vec(&lock)?, &mut inspection);
-        assert!(inspection.lock_compatible);
-        assert!(!inspection.trust_policy_pinned);
-        assert_eq!(inspection.reason, "trust_policy_missing");
-        lock["ayni_version"] = "unsupported".into();
-        inspect_lock(&serde_json::to_vec(&lock)?, &mut inspection);
-        assert!(!inspection.lock_compatible);
-        assert_eq!(inspection.reason, "lock_incompatible");
-        Ok(())
-    }
-}

@@ -427,10 +427,6 @@ pub(super) fn add_duration(
     })
 }
 
-pub(super) const fn timestamp_at_or_before(value: &Timestamp, other: &Timestamp) -> bool {
-    value.seconds < other.seconds || (value.seconds == other.seconds && value.nanos <= other.nanos)
-}
-
 pub(super) const fn timestamp(seconds: i64) -> Timestamp {
     Timestamp { seconds, nanos: 0 }
 }

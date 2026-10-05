@@ -126,7 +126,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, runtime selection/activation/observation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation/retry and deadline eligibility, runtime selection/activation/observation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -159,6 +159,15 @@ representation and action-hash format. Deadline durations and absolute timestamp
 are distinct application types. Cancellation decisions use neutral lifecycle states;
 the persistence adapter commits the action and task/unfinished-attempt changes
 together, retaining completed attempts and their versions.
+
+Explicit task retry is application-owned. Replay precedes current project, lifecycle,
+attempt-limit and deadline checks. The persistence port atomically commits the new
+attempt, frozen snapshot, task update, action receipt and both events. Deadline
+eligibility uses the same application timestamp comparison with nanosecond precision;
+expiration preserves terminal attempts and commits eligible task/attempt events together.
+Onboarding coordination returns typed bounded failures; gRPC alone maps them to status
+codes. Managed lock compatibility and trust-policy observations belong to the controller
+Ayni profile and do not establish certificate verification.
 
 All control-plane persistence, including native gRPC, onboarding and reconciliation,
 uses a bounded 64-request database queue serviced by a dedicated thread that

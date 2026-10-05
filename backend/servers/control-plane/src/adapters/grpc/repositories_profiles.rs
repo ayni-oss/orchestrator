@@ -1,8 +1,8 @@
+use super::onboarding_error::{provider_error, status as onboarding_error};
 use super::{
     BoxGrpcStream, GrpcApi, Request, Response, Status, api_validation, page_response,
     profile_watch, repository_watch, v1, validate_id, validate_optional_id, with_store,
 };
-use crate::application::onboarding::provider_error;
 
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for GrpcApi {
@@ -13,7 +13,8 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         let context = self.context(&request, "ListGithubInstallations")?;
         let value = self
             .state
-            .onboarding_source()?
+            .onboarding_source()
+            .map_err(onboarding_error)?
             .github_installations()
             .await
             .map_err(provider_error)?;
@@ -56,7 +57,8 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
             .ok_or_else(|| Status::invalid_argument("provider_installation_invalid"))?;
         let value = self
             .state
-            .onboarding_source()?
+            .onboarding_source()
+            .map_err(onboarding_error)?
             .installation_repositories(id)
             .await
             .map_err(provider_error)?;
@@ -94,7 +96,11 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
     ) -> Result<Response<v1::ConnectGithubRepositoryResponse>, Status> {
         let context = self.context(&request, "ConnectGithubRepository")?;
         context.idempotency_key(&request.get_ref().idempotency_key)?;
-        let repository = self.state.connect_github(request.get_ref()).await?;
+        let repository = self
+            .state
+            .connect_github(request.get_ref())
+            .await
+            .map_err(onboarding_error)?;
         Ok(context.response(v1::ConnectGithubRepositoryResponse {
             repository_connection: Some(repository),
         }))
@@ -251,7 +257,8 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
         Ok(context.response(
             self.state
                 .inspect_ayni(&request.get_ref().repository_connection_id)
-                .await?,
+                .await
+                .map_err(onboarding_error)?,
         ))
     }
 

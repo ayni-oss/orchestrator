@@ -3,8 +3,8 @@ use super::{
     PROFILE_SERVICE, Page, Timestamp, action_row, append_event, bounded_failure,
     collect_bounded_payloads, decode, encode_filter, equivalent_failure, get_payload,
     is_terminal_attempt, map_constraint, params, persist_attempt_update, persist_task_update,
-    query_payloads, request_digest, resource_id, task_state_for_attempt, timestamp,
-    timestamp_at_or_before, unix_seconds, unix_timestamp, v1, valid_attempt_transition,
+    query_payloads, request_digest, resource_id, task_state_for_attempt, timestamp, unix_seconds,
+    unix_timestamp, v1, valid_attempt_transition,
 };
 
 use crate::{adapters::github::setup as github_setup, profiles::ayni::onboarding_templates};
@@ -281,111 +281,16 @@ impl CleanStore {
         self.development_task(&id)
     }
 
+    #[cfg(test)]
     pub(crate) fn retry_development_task(
         &mut self,
         key: &str,
         request: &v1::RetryDevelopmentTaskRequest,
     ) -> Result<v1::DevelopmentAttempt, CleanStoreError> {
-        let digest = request_digest("RetryDevelopmentTask", request);
-        if let Some(existing) = action_row(&self.connection, "RetryDevelopmentTask", key)? {
-            if existing.request_hash != digest {
-                return Err(CleanStoreError::IdempotencyConflict);
-            }
-            return self
-                .development_attempt(&existing.target_id.ok_or(CleanStoreError::CorruptState)?);
-        }
-        let mut task = self.development_task(&request.development_task_id)?;
-        self.active_project_repository(&task.project_id)?;
-        if !matches!(
-            v1::DevelopmentTaskState::try_from(task.state).ok(),
-            Some(v1::DevelopmentTaskState::Failed | v1::DevelopmentTaskState::DeadlineExceeded)
-        ) || task.attempt_count >= self.max_attempts
-        {
-            return Err(CleanStoreError::TaskNotActionable);
-        }
-        let now_timestamp = unix_timestamp()?;
-        let now = now_timestamp.seconds;
-        if task
-            .snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.deadline_at.as_ref())
-            .is_some_and(|deadline| timestamp_at_or_before(deadline, &now_timestamp))
-        {
-            return Err(CleanStoreError::DeadlineExpired);
-        }
-        let attempt_number = task.attempt_count.saturating_add(1);
-        let attempt_id = resource_id("attempt");
-        let attempt = v1::DevelopmentAttempt {
-            agent_activity: vec![],
-            id: attempt_id.clone(),
-            development_task_id: task.id.clone(),
-            attempt_number,
-            snapshot: task.snapshot.clone(),
-            state: v1::DevelopmentAttemptState::Queued as i32,
-            requested_input: None,
-            failure: None,
-            model_usage: Some(v1::AttemptModelUsage {
-                collection_status: v1::ModelUsageCollectionStatus::Unavailable as i32,
-                ..v1::AttemptModelUsage::default()
-            }),
-            created_at: Some(timestamp(now)),
-            updated_at: Some(timestamp(now)),
-            completed_at: None,
-            resource_version: 1,
-        };
-        let previous_version = task.resource_version;
-        task.state = v1::DevelopmentTaskState::Queued as i32;
-        task.active_attempt_id = Some(attempt_id.clone());
-        task.attempt_count = attempt_number;
-        task.failure = None;
-        task.updated_at = Some(timestamp(now));
-        task.resource_version = previous_version.saturating_add(1);
-        let repository_id = task
-            .snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.repository.as_ref())
-            .map(|repository| repository.repository_connection_id.clone())
-            .ok_or(CleanStoreError::CorruptState)?;
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        transaction
-            .execute(
-                "INSERT INTO durable_actions(
-                    operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at
-                 ) VALUES ('RetryDevelopmentTask',?1,?2,?3,'completed','development_attempt',?4,?5,?5)",
-                params![key, digest, request.encode_to_vec(), attempt_id, now],
-            )
-            .map_err(map_constraint)?;
-        persist_task_update(&transaction, &task, previous_version)?;
-        let cursor = append_event(
-            &transaction,
-            DEVELOPMENT_SERVICE,
-            "development_attempt",
-            &attempt.id,
-            1,
-            Some(&repository_id),
-            Some(&task.id),
-            &attempt,
-        )?;
-        transaction
-            .execute(
-                "INSERT INTO development_attempts(
-                    id,development_task_id,attempt_number,state,payload,resource_version,event_cursor
-                 ) VALUES (?1,?2,?3,?4,?5,1,?6)",
-                params![
-                    attempt.id,
-                    task.id,
-                    attempt.attempt_number,
-                    attempt.state,
-                    attempt.encode_to_vec(),
-                    i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?
-                ],
-            )
-            .map_err(map_constraint)?;
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(attempt)
+        let command = crate::adapters::grpc::retry_command(key, request);
+        let id = ayni_orchestrator_application::tasks::retry::retry(self, &command)
+            .map_err(super::task_retry::retry_error)?;
+        self.development_attempt(&id)
     }
 
     pub(crate) fn reconcile_once(&mut self) -> Result<(), CleanStoreError> {
@@ -422,14 +327,32 @@ impl CleanStore {
         let mut expired = 0_usize;
         for payload in tasks {
             let mut task: v1::DevelopmentTask = decode(&payload)?;
-            let due = task
-                .snapshot
-                .as_ref()
-                .and_then(|snapshot| snapshot.deadline_at.as_ref())
-                .is_some_and(|deadline| timestamp_at_or_before(deadline, now));
-            if !due {
+            let mut attempt = task
+                .active_attempt_id
+                .as_deref()
+                .map(|id| self.development_attempt(id))
+                .transpose()?;
+            let plan = ayni_orchestrator_application::tasks::deadline::expiration(
+                super::task_cancellation::task_state(task.state)?,
+                task.snapshot
+                    .as_ref()
+                    .and_then(|s| s.deadline_at.as_ref())
+                    .map(|d| ayni_orchestrator_application::tasks::TimePoint {
+                        seconds: d.seconds,
+                        nanos: d.nanos,
+                    }),
+                ayni_orchestrator_application::tasks::TimePoint {
+                    seconds: now.seconds,
+                    nanos: now.nanos,
+                },
+                attempt
+                    .as_ref()
+                    .map(|a| super::task_cancellation::attempt_state(a.state))
+                    .transpose()?,
+            );
+            let Some(plan) = plan else {
                 continue;
-            }
+            };
             let previous_task_version = task.resource_version;
             task.state = v1::DevelopmentTaskState::DeadlineExceeded as i32;
             task.failure = Some(v1::ResourceFailure {
@@ -440,13 +363,8 @@ impl CleanStore {
             });
             task.updated_at = Some(now.to_owned());
             task.resource_version = task.resource_version.saturating_add(1);
-            let mut attempt = task
-                .active_attempt_id
-                .as_deref()
-                .map(|id| self.development_attempt(id))
-                .transpose()?;
             if let Some(value) = attempt.as_mut()
-                && !is_terminal_attempt(value.state)
+                && plan.expire_attempt
             {
                 value.state = v1::DevelopmentAttemptState::DeadlineExceeded as i32;
                 value.failure.clone_from(&task.failure);
@@ -459,7 +377,7 @@ impl CleanStore {
                 .transaction()
                 .map_err(CleanStoreError::Database)?;
             persist_task_update(&transaction, &task, previous_task_version)?;
-            if let Some(value) = attempt {
+            if let Some(value) = attempt.filter(|_| plan.expire_attempt) {
                 persist_attempt_update(
                     &transaction,
                     &value,
