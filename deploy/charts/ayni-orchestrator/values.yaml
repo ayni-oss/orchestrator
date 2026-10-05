@@ -26,6 +26,12 @@ images:
   web: local/ayni-orchestrator-web:replace-me
   pullPolicy: IfNotPresent
 
+# Local development only. The Docker Desktop umbrella chart enables this through
+# its ignored hot-reload overlay; reusable installations retain immutable images.
+development:
+  hotReload:
+    enabled: false
+
 controlPlane:
   maxAttempts: 3
   resources:

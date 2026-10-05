@@ -84,6 +84,13 @@ helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.e
   --namespace ayni-orchestrator-dev \
   --set observability.enabled=false \
   >"$scratch/no-observability.yaml"
+helm template hot-reload "$local_chart" \
+  --namespace ayni-orchestrator-dev \
+  --values "$local_chart/values-hot-reload.yaml" \
+  --set ayni-orchestrator.runtime.enabled=false \
+  --set-string ayni-orchestrator.images.controlPlane=local/ayni-orchestrator-control-plane-dev:test \
+  --set-string ayni-orchestrator.images.web=local/ayni-orchestrator-web-dev:test \
+  >"$scratch/hot-reload.yaml"
 
 # The reusable chart must render independently; runtime placement follows its namespace.
 grep -Fq '\"namespace\":\"runtime-test\"' "$scratch/runtime.yaml"
@@ -110,6 +117,9 @@ grep -q 'grafana/grafana:12.1.1@sha256:a1701c2180249361737a99a01bc770db39381640e
 grep -q 'orchestrator.ayni.dev/stack: observability' "$scratch/local.yaml"
 grep -q 'sizeLimit: 1Gi' "$scratch/local.yaml"
 grep -q 'sizeLimit: 64Mi' "$scratch/local.yaml"
+grep -q 'readOnlyRootFilesystem: false' "$scratch/hot-reload.yaml"
+grep -q 'local/ayni-orchestrator-control-plane-dev:test' "$scratch/hot-reload.yaml"
+grep -q 'local/ayni-orchestrator-web-dev:test' "$scratch/hot-reload.yaml"
 if grep -q '@sha256:sha256:' "$scratch/local.yaml"; then
   echo "local chart rendered a malformed image digest" >&2
   exit 1
@@ -124,6 +134,7 @@ fi
 grep -q '^  name: ayni-orchestrator-dev-prometheus$' "$scratch/local.yaml"
 grep -q -- '--wait=hookOnly' "$repository_root/dev/scripts/deploy.sh"
 grep -q 'rollout status' "$repository_root/dev/scripts/deploy.sh"
+grep -q 'values-hot-reload.yaml' "$repository_root/dev/scripts/deploy.sh"
 [[ "$(grep -c '^kind: ClusterRole$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^kind: ClusterRoleBinding$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 1 ]]

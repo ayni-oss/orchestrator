@@ -1,0 +1,23 @@
+# This overlay is consumed only by `dev/ctl hot-reload`.
+# It selects development images and writable source workspaces while retaining
+# Helm as the release owner and preserving the normal single-pod topology.
+ayni-orchestrator:
+  development:
+    hotReload:
+      enabled: true
+  controlPlane:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 3Gi
+  web:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi

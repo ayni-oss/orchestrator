@@ -23,6 +23,23 @@ fi
 
 context="$(dev_context)"
 namespace="$(dev_namespace)"
+development_mode="${AYNI_ORCHESTRATOR_DEVELOPMENT_MODE:-standard}"
+case "$development_mode" in
+  standard)
+    control_plane_component=control-plane
+    web_component=web
+    hot_reload_values=()
+    ;;
+  hot-reload)
+    control_plane_component=control-plane-dev
+    web_component=web-dev
+    hot_reload_values=(--values "$DEV_DIRECTORY/charts/ayni-orchestrator-local/values-hot-reload.yaml")
+    ;;
+  *)
+    echo "AYNI_ORCHESTRATOR_DEVELOPMENT_MODE must be standard or hot-reload" >&2
+    exit 1
+    ;;
+esac
 deployment_profile="${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}"
 case "$deployment_profile" in
   local) custom_clients=false ;;
@@ -35,9 +52,9 @@ esac
 
 dev_build_chart_dependencies
 dev_check_capacity 12
-control_plane_image_ref="$(dev_build_image control-plane)"
+control_plane_image_ref="$(dev_build_image "$control_plane_component")"
 worker_image_ref="$(dev_build_image worker)"
-web_image_ref="$(dev_build_image web)"
+web_image_ref="$(dev_build_image "$web_component")"
 dev_load_image "$control_plane_image_ref"
 dev_load_image "$worker_image_ref"
 dev_load_image "$web_image_ref"
@@ -48,6 +65,7 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   --kube-context "$context" \
   --namespace "$namespace" \
   --create-namespace \
+  "${hot_reload_values[@]}" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
