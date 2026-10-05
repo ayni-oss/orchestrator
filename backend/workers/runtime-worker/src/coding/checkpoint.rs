@@ -13,6 +13,23 @@ pub fn retain(request: &CodingRequest, workspace: &Path, output: &Path, activity
     }
 }
 
+pub async fn retain_async(
+    request: CodingRequest,
+    workspace: std::path::PathBuf,
+    output: std::path::PathBuf,
+    activity: ActivityLog,
+    guard: Option<tokio::sync::OwnedMutexGuard<()>>,
+) -> io::Result<()> {
+    tokio::task::spawn_blocking(move || {
+        // Hold command serialization until the accepted checkpoint completes,
+        // including when the async tool caller is cancelled.
+        let _guard = guard;
+        retain(&request, &workspace, &output, &activity);
+    })
+    .await
+    .map_err(io::Error::other)
+}
+
 pub fn save(request: &CodingRequest, workspace: &Path, output: &Path) -> io::Result<()> {
     let root = output.join("checkpoints");
     fs::create_dir_all(&root)?;

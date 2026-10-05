@@ -6,9 +6,10 @@ use super::{
 use ayni_orchestrator_application::tasks::{
     RequestIdentity,
     cancellation::{
-        AttemptState, AttemptTarget, CancellationError, CancellationPlan, CancellationRepository,
-        CancellationTarget, TaskState,
+        AttemptTarget, CancellationError, CancellationPlan, CancellationRepository,
+        CancellationTarget,
     },
+    lifecycle::{AttemptState, TaskState},
 };
 
 pub(crate) fn cancellation_error(error: CancellationError<CleanStoreError>) -> CleanStoreError {

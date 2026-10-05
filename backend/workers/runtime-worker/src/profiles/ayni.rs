@@ -1,21 +1,56 @@
 //! Ayni verification and build invocation inside authorized worker Jobs.
-use crate::operations::runtime::{command, git, success, validate_source};
+use crate::operations::runtime::{command, git, validate_source};
 use ayni_orchestrator_profile_ayni::{
     managed_runtime,
     runtime_execution::{ExecutionRequest, VerificationReport},
 };
-use ayni_orchestrator_runtime::runtime_execution::read_bounded;
+use ayni_orchestrator_runtime::runtime_execution::{EXECUTION_DEADLINE_SECONDS, read_bounded};
 use sha2::{Digest, Sha256};
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    process::ExitStatus,
+    time::Duration,
+};
 
 /// Run Ayni verification in the signed runtime before coding. Old signals are
 /// removed, lock/policy changes are rejected, and Ayni owns cryptographic checks.
 ///
 /// # Errors
 /// Returns an error when source, certificate, or freshly emitted provenance differs.
-pub fn verify(request: &ExecutionRequest, workspace: &Path) -> io::Result<VerificationReport> {
-    validate_source(request)?;
-    if git(workspace, &["rev-parse", "HEAD"])? != request.revision {
+pub async fn verify(
+    request: &ExecutionRequest,
+    workspace: &Path,
+) -> io::Result<VerificationReport> {
+    let request = request.clone();
+    let workspace = workspace.to_owned();
+    let inputs = tokio::task::spawn_blocking(move || prepare(request, workspace))
+        .await
+        .map_err(io::Error::other)??;
+    let mut check = command("/usr/local/bin/ayni", &inputs.workspace);
+    check.arg("check");
+    let status = crate::operations::process::status(
+        &mut tokio::process::Command::from(check),
+        Duration::from_secs(EXECUTION_DEADLINE_SECONDS),
+    )
+    .await?;
+    tokio::task::spawn_blocking(move || finish(inputs, status))
+        .await
+        .map_err(io::Error::other)?
+}
+
+struct VerificationInputs {
+    request: ExecutionRequest,
+    workspace: PathBuf,
+    lock: Vec<u8>,
+    policy: Vec<u8>,
+    metadata: Vec<u8>,
+    signals: PathBuf,
+}
+
+fn prepare(request: ExecutionRequest, workspace: PathBuf) -> io::Result<VerificationInputs> {
+    validate_source(&request)?;
+    if git(&workspace, &["rev-parse", "HEAD"])? != request.revision {
         return Err(io::Error::other("source revision mismatch"));
     }
     let lock_path = workspace.join(".ayni.lock");
@@ -39,22 +74,40 @@ pub fn verify(request: &ExecutionRequest, workspace: &Path) -> io::Result<Verifi
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    let status = command("/usr/local/bin/ayni", workspace)
-        .arg("check")
-        .status()?;
+    Ok(VerificationInputs {
+        request,
+        workspace,
+        lock,
+        policy,
+        metadata,
+        signals,
+    })
+}
+
+fn finish(inputs: VerificationInputs, status: ExitStatus) -> io::Result<VerificationReport> {
+    let VerificationInputs {
+        request,
+        workspace,
+        lock,
+        policy,
+        metadata,
+        signals,
+    } = inputs;
+    let lock_path = workspace.join(".ayni.lock");
+    let policy_path = workspace.join(".ayni.toml");
     let bytes = read_bounded(&signals, managed_runtime::MAX_SIGNALS_BYTES)?;
     let runtime = managed_runtime::verified_result(&metadata, &bytes, &request.expected)
         .map_err(io::Error::other)?;
     if read_bounded(&lock_path, managed_runtime::MAX_METADATA_BYTES)? != lock
         || read_bounded(&policy_path, managed_runtime::MAX_METADATA_BYTES)? != policy
-        || git(workspace, &["rev-parse", "HEAD"])? != request.revision
+        || git(&workspace, &["rev-parse", "HEAD"])? != request.revision
     {
         return Err(io::Error::other(
             "verification changed protected source inputs",
         ));
     }
     Ok(VerificationReport {
-        revision: request.revision.clone(),
+        revision: request.revision,
         lock_digest: format!("sha256:{:x}", Sha256::digest(lock)),
         runtime,
         check_exit_code: status.code().unwrap_or(-1),
@@ -66,11 +119,18 @@ pub fn verify(request: &ExecutionRequest, workspace: &Path) -> io::Result<Verifi
 ///
 /// # Errors
 /// Rejects missing signing material, source mismatch, or failed build/publication.
-pub fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
+pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
     validate_source(request)?;
-    if git(workspace, &["rev-parse", "HEAD"])? != request.revision {
-        return Err(io::Error::other("build source mismatch"));
-    }
+    let source = request.revision.clone();
+    let directory = workspace.to_owned();
+    tokio::task::spawn_blocking(move || {
+        if git(&directory, &["rev-parse", "HEAD"])? != source {
+            return Err(io::Error::other("build source mismatch"));
+        }
+        Ok(())
+    })
+    .await
+    .map_err(io::Error::other)??;
     let image = std::env::var("BUILD_IMAGE").map_err(io::Error::other)?;
     if image.is_empty() || image.starts_with('-') || image.contains('@') || image.len() > 512 {
         return Err(io::Error::other("invalid build target"));
@@ -99,7 +159,7 @@ pub fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
         .envs(values.iter().map(|(k, v)| (*k, v)))
         .env("AYNI_OCI_RUNTIME", "docker")
         .args(["env", "build", "--tag", &image]);
-    success(&mut build)?;
+    success(build).await?;
     let mut push = command("docker", workspace);
     push.envs(
         values
@@ -108,5 +168,19 @@ pub fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
             .map(|(k, v)| (*k, v)),
     )
     .args(["push", &image]);
-    success(&mut push)
+    success(push).await
+}
+
+async fn success(command: std::process::Command) -> io::Result<()> {
+    if crate::operations::process::status(
+        &mut tokio::process::Command::from(command),
+        Duration::from_secs(EXECUTION_DEADLINE_SECONDS),
+    )
+    .await?
+    .success()
+    {
+        Ok(())
+    } else {
+        Err(io::Error::other("runtime command failed"))
+    }
 }

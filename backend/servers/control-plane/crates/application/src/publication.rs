@@ -97,8 +97,8 @@ pub fn publish<R: Repository>(
 
 pub struct AutomaticTarget {
     pub candidate_id: String,
-    pub attempt_state: crate::tasks::cancellation::AttemptState,
-    pub task_state: crate::tasks::cancellation::TaskState,
+    pub attempt_state: crate::tasks::lifecycle::AttemptState,
+    pub task_state: crate::tasks::lifecycle::TaskState,
     pub publication_base_branch: Option<String>,
 }
 
@@ -149,7 +149,7 @@ pub fn schedule<R: AutomaticRepository>(
 }
 
 fn automatic_request(target: AutomaticTarget) -> Option<AutomaticRequest> {
-    use crate::tasks::cancellation::{AttemptState, TaskState};
+    use crate::tasks::lifecycle::{AttemptState, TaskState};
     if target.task_state == TaskState::Cancelled
         || !matches!(
             target.attempt_state,

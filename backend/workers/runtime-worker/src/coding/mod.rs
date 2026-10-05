@@ -48,14 +48,16 @@ impl Tool for RunCommand {
     }
     async fn call(&self, _: &mut ToolContext, args: CommandArgs) -> io::Result<String> {
         // Serialize commands and checkpointing so parallel tool calls cannot race Git.
-        let _guard = self.serial.lock().await;
+        let guard = self.serial.clone().lock_owned().await;
         let result = run_command(args).await;
-        crate::coding::checkpoint::retain(
-            &self.request,
-            Path::new("/workspace"),
-            &self.output,
-            &self.activity,
-        );
+        crate::coding::checkpoint::retain_async(
+            self.request.as_ref().clone(),
+            Path::new("/workspace").to_owned(),
+            self.output.clone(),
+            self.activity.clone(),
+            Some(guard),
+        )
+        .await?;
         result
     }
 }
@@ -66,12 +68,12 @@ async fn run_command(args: CommandArgs) -> io::Result<String> {
     }
     let mut process =
         tokio::process::Command::from(command("/usr/bin/timeout", Path::new("/workspace")));
-    let mut child = process
+    process
         .args(["--kill-after=5", "180", "/bin/sh", "-c", &args.command])
         .kill_on_drop(true)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
+    let mut child = crate::operations::process::spawn(&mut process)?;
     let stdout = child
         .stdout
         .take()
@@ -130,7 +132,7 @@ pub async fn run(
     let workspace = Path::new("/workspace");
     // This runs before the model gets any tools. A quality failure is still advisory.
     activity.record(Stage::RuntimeVerification);
-    verify(&request.execution, workspace)?;
+    verify(&request.execution, workspace).await?;
     activity.record(Stage::OutputPreparation);
     fs::create_dir_all(output)?;
     let usage = UsageTracker::new(
@@ -164,7 +166,14 @@ pub async fn run(
         .max_turns(24)
         .await;
     // Finalize recovery output even when the provider or turn budget failed.
-    crate::coding::checkpoint::retain(request, workspace, output, activity);
+    crate::coding::checkpoint::retain_async(
+        request.clone(),
+        workspace.to_owned(),
+        output.to_owned(),
+        activity.clone(),
+        None,
+    )
+    .await?;
     if let Err(error) = &response {
         activity.record(Stage::ModelExecution);
         activity.fail(crate::coding::activity::prompt_failure(error));
@@ -184,7 +193,7 @@ pub async fn run(
         }
     } else {
         activity.record(Stage::CandidateFreeze);
-        freeze(request, workspace, output)?
+        freeze(request, workspace, output).await?
     };
     activity.record(Stage::ReportWrite);
     let bytes = serde_json::to_vec(&report)?;
@@ -210,14 +219,26 @@ const fn advisory_outcome(exit: Option<i32>) -> &'static str {
     }
 }
 
-fn freeze(request: &CodingRequest, workspace: &Path, output: &Path) -> io::Result<CodingReport> {
+async fn freeze(
+    request: &CodingRequest,
+    workspace: &Path,
+    output: &Path,
+) -> io::Result<CodingReport> {
     // Always do our own final advisory invocation: model prose is not a passing check.
     let advisory = advisory_outcome(
         verify(&request.execution, workspace)
+            .await
             .ok()
             .map(|report| report.check_exit_code),
     );
-    freeze_with_advisory(request, workspace, output, advisory)
+    let request = request.clone();
+    let workspace = workspace.to_owned();
+    let output = output.to_owned();
+    tokio::task::spawn_blocking(move || {
+        freeze_with_advisory(&request, &workspace, &output, advisory)
+    })
+    .await
+    .map_err(io::Error::other)?
 }
 
 pub(crate) fn freeze_with_advisory(
@@ -387,8 +408,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn freezes_bundle_without_importing_agent_evidence() -> Result<(), Box<dyn std::error::Error>> {
+    #[tokio::test]
+    async fn freezes_bundle_without_importing_agent_evidence()
+    -> Result<(), Box<dyn std::error::Error>> {
         let root = tempfile::tempdir()?;
         let output = tempfile::tempdir()?;
         let workspace = root.path();
@@ -398,7 +420,7 @@ mod tests {
         assert_checkpoint_recovery(&request, workspace, output.path())?;
 
         // Finalization after a checkpoint still emits a complete candidate.
-        let report = freeze(&request, workspace, output.path())?;
+        let report = freeze(&request, workspace, output.path()).await?;
         assert_eq!(report.changed_paths, ["file.txt"]);
         assert!(report.advisory.contains("unavailable"));
         assert!(report.bundle_digest.is_some());

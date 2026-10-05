@@ -91,7 +91,7 @@ pub fn source_job(
     json!({
         "apiVersion":"batch/v1", "kind":"Job",
         "metadata":{"name":name,"namespace":configuration.namespace,"labels":{"ayni.io/runtime-operation":name}},
-        "spec":{"backoffLimit":0,"activeDeadlineSeconds":1800,
+        "spec":{"backoffLimit":0,"activeDeadlineSeconds":ayni_orchestrator_runtime::runtime_execution::EXECUTION_DEADLINE_SECONDS,
             "template":{"metadata":{"labels":{"ayni.io/runtime-operation":name}},"spec":{
                 "restartPolicy":"Never", "serviceAccountName":service_account,
                 "automountServiceAccountToken":false, "imagePullSecrets":pulls,

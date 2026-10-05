@@ -131,7 +131,10 @@ pub(crate) fn command(program: &str, workspace: &Path) -> Command {
 }
 
 pub(crate) fn success(command: &mut Command) -> io::Result<()> {
-    if command.status()?.success() {
+    if crate::operations::process::spawn_sync(command)?
+        .wait(std::time::Duration::from_secs(180))?
+        .success()
+    {
         Ok(())
     } else {
         Err(io::Error::other("runtime command failed"))
@@ -139,11 +142,12 @@ pub(crate) fn success(command: &mut Command) -> io::Result<()> {
 }
 
 pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
-    let mut child = command("git", workspace)
+    let mut git_process = command("git", workspace);
+    git_process
         .args(arguments)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
+    let mut child = crate::operations::process::spawn_sync(&mut git_process)?;
     let stderr = child
         .stderr
         .take()
@@ -151,19 +155,22 @@ pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
     std::thread::scope(|scope| {
         // Drain both pipes concurrently; retain only a bounded diagnostic prefix.
         let diagnostic = scope.spawn(|| bounded_diagnostic(stderr));
-        let mut bytes = Vec::new();
-        let read = child
+        let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| io::Error::other("git stdout missing"))?
-            .take(1_048_577)
-            .read_to_end(&mut bytes);
-        if read.is_err() || bytes.len() > 1_048_576 {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(io::Error::other("git output oversized or unreadable"));
-        }
-        let status = child.wait()?;
+            .ok_or_else(|| io::Error::other("git stdout missing"))?;
+        let output = scope.spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.take(1_048_577).read_to_end(&mut bytes)?;
+            if bytes.len() > 1_048_576 {
+                return Err(io::Error::other("git output oversized"));
+            }
+            Ok(bytes)
+        });
+        let status = child.wait(std::time::Duration::from_secs(180))?;
+        let bytes = output
+            .join()
+            .map_err(|_| io::Error::other("git reader failed"))??;
         let diagnostic = diagnostic.join().unwrap_or_default();
         if !status.success() {
             let operation = arguments

@@ -119,7 +119,7 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, publication, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
@@ -186,6 +186,19 @@ provider mutation; confirmation rejects changed heads or assessment identities.
 SQLite maps the existing protobuf representation and atomically persists status,
 actions and events, while provider checks remain in the integration coordinator.
 
+Coding reconciliation uses application-owned attempt states and decisions. A
+missing queued execution may start; a missing running execution is a failure and
+cannot silently restart. Interruption cleanup precedes profile handling and late
+success. Completed output is collected before cleanup. Controller output reads,
+bundle hashing and assessment archive unpacking run off async executor threads.
+
+Worker subprocesses own Unix process groups. Cancellation, deadlines and normal
+leader exit terminate remaining group members. Verification/build invocation is
+async; finite checkout, Git, candidate freezing and checkpoint work use bounded
+blocking operations. Checkpoint serialization survives caller cancellation until
+the accepted operation completes. Blocking Git drains stdout/stderr concurrently
+and has a command deadline, preserving bounded diagnostics.
+
 Kubernetes completion supplies bounded raw output; managed evidence interpretation
 remains with the controller. Server reconciliation loops and finite model warmup
 are tracked. Unexpected task failure stops the server; shutdown signals periodic
@@ -218,7 +231,7 @@ retains the existing Actions-specific payload codec and commits assessment and
 evidence events together. Profile evidence verification remains separate from
 this persistence admission boundary.
 
-Outside task admission, cancellation, publication admission/scheduling/recovery, assessment admission and readiness decisions, application logic still reads generated protobuf resources,
+Outside task admission, cancellation, publication admission/scheduling/recovery, coding observation decisions, assessment admission and readiness decisions, application logic still reads generated protobuf resources,
 stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
 core. Continue extracting real use cases with their commands, results and ports into the
 application crate: reconciliation, connector operations, project

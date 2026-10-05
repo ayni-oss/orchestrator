@@ -116,10 +116,15 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 token,
             )
             .await?;
-        if item["digest"].as_str() != Some(&assessment::sha256(&archive)) {
-            return Err("review_archive_digest_mismatch");
-        }
-        unpack_assessment(&archive)
+        let digest = item["digest"].as_str().map(str::to_owned);
+        tokio::task::spawn_blocking(move || {
+            if digest.as_deref() != Some(&assessment::sha256(&archive)) {
+                return Err("review_archive_digest_mismatch");
+            }
+            unpack_assessment(&archive)
+        })
+        .await
+        .map_err(|_| "review_archive_unavailable")?
     }
 
     pub(super) async fn verify_review_workflow(

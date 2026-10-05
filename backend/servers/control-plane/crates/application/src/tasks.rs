@@ -3,6 +3,7 @@ use ayni_orchestrator_domain::ChangeConstraints;
 use thiserror::Error;
 
 pub mod cancellation;
+pub mod lifecycle;
 
 /// Canonical persistence identity. Payload bytes are interpreted only by codecs.
 pub struct RequestIdentity {

@@ -5,6 +5,9 @@ use std::{
     path::Path,
 };
 
+/// Deadline shared by source checkout, verification and build workload Jobs.
+pub const EXECUTION_DEADLINE_SECONDS: u64 = 1800;
+
 /// Frozen, credential-free execution request mounted read-only by Kubernetes.
 ///
 /// A profile supplies its explicit admission expectations. The shared request

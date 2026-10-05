@@ -25,5 +25,8 @@ tokio.workspace = true
 
 tempfile.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
 [lints]
 workspace = true

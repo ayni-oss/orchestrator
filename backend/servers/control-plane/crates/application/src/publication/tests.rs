@@ -139,7 +139,7 @@ fn conflicting_retry_preserves_the_original_publication() -> io::Result<()> {
 
 #[test]
 fn cancelled_or_active_attempts_do_not_schedule_automatic_publication() {
-    use crate::tasks::cancellation::{AttemptState, TaskState};
+    use crate::tasks::lifecycle::{AttemptState, TaskState};
     for (task, attempt) in [
         (TaskState::Cancelled, AttemptState::Failed),
         (TaskState::Running, AttemptState::Running),
@@ -160,7 +160,7 @@ fn cancelled_or_active_attempts_do_not_schedule_automatic_publication() {
 
 #[test]
 fn saved_failed_work_uses_the_frozen_publication_request() -> io::Result<()> {
-    use crate::tasks::cancellation::{AttemptState, TaskState};
+    use crate::tasks::lifecycle::{AttemptState, TaskState};
     let request = super::automatic_request(super::AutomaticTarget {
         candidate_id: "saved".into(),
         task_state: TaskState::Failed,

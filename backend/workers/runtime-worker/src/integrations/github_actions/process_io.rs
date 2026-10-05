@@ -140,7 +140,8 @@ pub(super) async fn api(endpoint: &str, body: Option<&Value>) -> Result<Value, &
             .stdin(Stdio::piped());
         let input = serde_json::to_vec(body).map_err(|_| "provider_request_invalid")?;
         command.stdout(Stdio::piped());
-        let mut child = command.spawn().map_err(|_| "provider_unavailable")?;
+        let mut child =
+            crate::operations::process::spawn(&mut command).map_err(|_| "provider_unavailable")?;
         child
             .stdin
             .take()
@@ -220,7 +221,8 @@ pub(super) async fn collect(
     mut command: Command,
     limit: usize,
 ) -> Result<(i32, Vec<u8>), &'static str> {
-    let mut child = command.spawn().map_err(|_| "launcher_unavailable")?;
+    let mut child =
+        crate::operations::process::spawn(&mut command).map_err(|_| "launcher_unavailable")?;
     let mut stdout = child
         .stdout
         .take()

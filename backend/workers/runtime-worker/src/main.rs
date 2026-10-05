@@ -82,19 +82,23 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     match operation.as_str() {
         "build" => {
             activity.record(Stage::Build);
-            ayni_orchestrator_worker::profiles::ayni::build(&request, Path::new("/workspace"))
+            ayni_orchestrator_worker::profiles::ayni::build(&request, Path::new("/workspace")).await
         }
         "checkout" => {
             activity.record(Stage::Checkout);
-            checkout(
-                &request,
-                Path::new("/workspace"),
-                env::var("SOURCE_TOKEN").ok().as_deref(),
-            )
+            tokio::task::spawn_blocking(move || {
+                checkout(
+                    &request,
+                    Path::new("/workspace"),
+                    env::var("SOURCE_TOKEN").ok().as_deref(),
+                )
+            })
+            .await
+            .map_err(io::Error::other)?
         }
         "verify" => {
             activity.record(Stage::RuntimeVerification);
-            let report = verify(&request, Path::new("/workspace"))?;
+            let report = verify(&request, Path::new("/workspace")).await?;
             let bytes = serde_json::to_vec(&report).map_err(io::Error::other)?;
             if bytes.len() > 4096 {
                 return Err(io::Error::other("runtime report oversized"));

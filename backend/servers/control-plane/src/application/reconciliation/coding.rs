@@ -1,6 +1,10 @@
 use super::{
-    Digest, ExecutionBackend, ExecutionRequest, ExecutionState, RuntimeExpectation,
-    RuntimeReconciler, Sha256, now, operation_name, v1,
+    Digest, ExecutionBackend, ExecutionRequest, RuntimeExpectation, RuntimeReconciler, Sha256, now,
+    operation_name, v1,
+};
+use ayni_orchestrator_application::{
+    reconciliation::{CodingAction, coding_action},
+    tasks::lifecycle::AttemptState,
 };
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn coding(&self, profile_id: &str) -> Result<(), &'static str> {
@@ -28,9 +32,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         // before any cleanup. The same path also collects live progress.
         let job_state = self.kubernetes.coding_state(&name).await?;
         let attempt = self.collect_activity(attempt, &name).await?;
-        let current = v1::DevelopmentAttemptState::try_from(attempt.state)
-            .map_err(|_| "coding_state_invalid")?;
-        if coding_needs_cleanup(current) {
+        let current = attempt_state(attempt.state)?;
+        let action = coding_action(current, job_state);
+        if action == CodingAction::Cleanup {
             self.cleanup_coding_attempt(&attempt, &name).await?;
             return Ok(());
         }
@@ -39,22 +43,22 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if frozen.profile_kind != v1::RuntimeProfileKind::AyniManaged as i32 {
             return Ok(());
         }
-        match job_state {
-            ExecutionState::Missing if current == v1::DevelopmentAttemptState::Running => {
+        match action {
+            CodingAction::LostExecution => {
                 self.coding_failed(&attempt, "coding_job_lost").await?;
             }
-            ExecutionState::Missing if current == v1::DevelopmentAttemptState::Queued => {
+            CodingAction::Start => {
                 self.start_coding_attempt(&attempt, profile_id, &name)
                     .await?;
             }
-            ExecutionState::Failed => {
+            CodingAction::WorkerFailed => {
                 let reason = attempt.agent_activity.last().map_or_else(
                     || "Coding worker failed before activity was retained. Inspect init containers, scheduling, and image pulls.".to_owned(),
                     |event| format!("Coding worker failed. Last activity: {}.", event.message),
                 );
                 self.coding_failed(&attempt, &reason).await?;
             }
-            ExecutionState::Succeeded => {
+            CodingAction::CollectAndCleanup => {
                 self.finish_coding_attempt(&attempt, &name).await?;
                 let fresh = self
                     .with_database(move |store| {
@@ -65,7 +69,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .await?;
                 self.cleanup_coding_attempt(&fresh, &name).await?;
             }
-            ExecutionState::Missing => {
+            CodingAction::ConfirmRetainedCandidate => {
                 self.with_database(move |store| {
                     if store
                         .coding_candidate_exists(&attempt.id)
@@ -81,7 +85,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 })
                 .await?;
             }
-            ExecutionState::Running => {}
+            CodingAction::Wait | CodingAction::Cleanup => {}
         }
         Ok(())
     }
@@ -98,10 +102,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let path = std::path::Path::new("/runtime-outputs")
             .join(name)
             .join("activity.json");
-        let events = read_bounded(&path, 65536)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<Vec<Activity>>(&bytes).ok())
-            .filter(|events| valid(events));
+        let events = tokio::task::spawn_blocking(move || {
+            read_bounded(&path, 65536)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Vec<Activity>>(&bytes).ok())
+                .filter(|events| valid(events))
+        })
+        .await
+        .map_err(|_| "coding_output_unavailable")?;
         let Some(events) = events else {
             return Ok(attempt);
         };
@@ -139,7 +147,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         // cancellation or failure; absent counters remain unavailable.
         let details_id = attempt.id.clone();
         let requested_input = attempt.requested_input.clone();
-        if let Ok(usage) = collect_coding_usage(&Path::new("/runtime-outputs").join(name)) {
+        let directory = Path::new("/runtime-outputs").join(name);
+        let usage = tokio::task::spawn_blocking(move || collect_coding_usage(&directory))
+            .await
+            .map_err(|_| "coding_output_unavailable")?;
+        if let Ok(usage) = usage {
             self.with_database(move |store| {
                 store
                     .coding_details(&details_id, requested_input, usage)
@@ -189,20 +201,28 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Ok(());
         }
         let directory = std::path::Path::new("/runtime-outputs").join(name);
-        let pointer = match read_bounded(&directory.join("checkpoint"), 40) {
-            Ok(pointer) => pointer,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(_) => return Err("coding_checkpoint_unavailable"),
+        let checkpoint = tokio::task::spawn_blocking(move || {
+            let pointer = match read_bounded(&directory.join("checkpoint"), 40) {
+                Ok(pointer) => pointer,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(_) => return Err("coding_checkpoint_unavailable"),
+            };
+            let sha = std::str::from_utf8(&pointer).map_err(|_| "coding_checkpoint_invalid")?;
+            if sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err("coding_checkpoint_invalid");
+            }
+            let checkpoint = directory.join("checkpoints").join(sha);
+            let (report, _) = collect_coding_result(&checkpoint)?;
+            if report.commit.as_deref() != Some(sha) {
+                return Err("coding_checkpoint_invalid");
+            }
+            Ok(Some((sha.to_owned(), report)))
+        })
+        .await
+        .map_err(|_| "coding_output_unavailable")??;
+        let Some((sha, report)) = checkpoint else {
+            return Ok(());
         };
-        let sha = std::str::from_utf8(&pointer).map_err(|_| "coding_checkpoint_invalid")?;
-        if sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err("coding_checkpoint_invalid");
-        }
-        let checkpoint = directory.join("checkpoints").join(sha);
-        let (report, _) = collect_coding_result(&checkpoint)?;
-        if report.commit.as_deref() != Some(sha) {
-            return Err("coding_checkpoint_invalid");
-        }
         let source = attempt
             .snapshot
             .as_ref()
@@ -214,7 +234,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             base_revision: source.revision.clone(),
             identity: Some(v1::CandidateIdentity {
                 identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
-                    commit_sha: sha.into(),
+                    commit_sha: sha,
                 })),
             }),
             state: v1::CandidateState::Available as i32,
@@ -349,7 +369,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_ref()
             .ok_or("coding_snapshot_missing")?;
         let directory = Path::new("/runtime-outputs").join(name);
-        let (report, usage) = match collect_coding_result(&directory) {
+        let result = tokio::task::spawn_blocking(move || collect_coding_result(&directory))
+            .await
+            .map_err(|_| "coding_output_unavailable")?;
+        let (report, usage) = match result {
             Ok(result) => result,
             Err(reason) => {
                 self.coding_failed(attempt, reason).await?;
@@ -567,13 +590,19 @@ pub(super) fn coding_seconds_remaining(snapshot: &v1::DevelopmentSnapshot) -> u6
     })
 }
 
-pub(super) const fn coding_needs_cleanup(state: v1::DevelopmentAttemptState) -> bool {
-    matches!(
-        state,
-        v1::DevelopmentAttemptState::Cancelled
-            | v1::DevelopmentAttemptState::DeadlineExceeded
-            | v1::DevelopmentAttemptState::Failed
-            | v1::DevelopmentAttemptState::Unsupported
-            | v1::DevelopmentAttemptState::WaitingForInput
+fn attempt_state(value: i32) -> Result<AttemptState, &'static str> {
+    use v1::DevelopmentAttemptState as Wire;
+    Ok(
+        match Wire::try_from(value).map_err(|_| "coding_state_invalid")? {
+            Wire::Queued => AttemptState::Queued,
+            Wire::Running => AttemptState::Running,
+            Wire::WaitingForInput => AttemptState::WaitingForInput,
+            Wire::Succeeded => AttemptState::Succeeded,
+            Wire::Failed => AttemptState::Failed,
+            Wire::Cancelled => AttemptState::Cancelled,
+            Wire::DeadlineExceeded => AttemptState::DeadlineExceeded,
+            Wire::Unsupported => AttemptState::Unsupported,
+            Wire::Unspecified => return Err("coding_state_invalid"),
+        },
     )
 }

@@ -318,6 +318,7 @@ dependencies = [
  "base64 0.22.1",
  "rig-agent",
  "rig-core",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
