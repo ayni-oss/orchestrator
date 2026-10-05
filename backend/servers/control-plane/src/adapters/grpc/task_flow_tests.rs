@@ -284,4 +284,4 @@ fn assert_frozen_inputs(
 
 mod lifecycle;
 
-use crate::application::with_store_async as with_store;
+use crate::coordinators::with_store_async as with_store;

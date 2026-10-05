@@ -9,3 +9,5 @@ pub mod runtime_selection;
 pub mod evidence_policy;
 
 pub mod inspection;
+
+pub mod automation;

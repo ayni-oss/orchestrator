@@ -1,113 +1,26 @@
 use super::{
-    CleanStore, CleanStoreError, DEVELOPMENT_SERVICE, MAX_RECONCILE_BATCH, Message,
-    PROFILE_SERVICE, Page, Timestamp, action_row, append_event, bounded_failure,
-    collect_bounded_payloads, decode, encode_filter, equivalent_failure, get_payload,
-    is_terminal_attempt, map_constraint, params, persist_attempt_update, persist_task_update,
-    query_payloads, request_digest, resource_id, task_state_for_attempt, timestamp, unix_seconds,
+    CleanStore, CleanStoreError, DEVELOPMENT_SERVICE, MAX_RECONCILE_BATCH, PROFILE_SERVICE, Page,
+    Timestamp, bounded_failure, collect_bounded_payloads, decode, encode_filter,
+    equivalent_failure, get_payload, is_terminal_attempt, params, persist_attempt_update,
+    persist_task_update, query_payloads, task_state_for_attempt, timestamp, unix_seconds,
     unix_timestamp, v1, valid_attempt_transition,
 };
 
-use crate::{adapters::github::setup as github_setup, profiles::ayni::onboarding_templates};
-
 impl CleanStore {
+    #[cfg(test)]
     pub(crate) fn install_repository_automation(
         &mut self,
         key: &str,
         request: &v1::InstallRepositoryAutomationRequest,
     ) -> Result<v1::AutomationInstallation, CleanStoreError> {
-        let digest = request_digest("InstallRepositoryAutomation", request);
-        if let Some(existing) = action_row(&self.connection, "InstallRepositoryAutomation", key)? {
-            if existing.request_hash != digest {
-                return Err(CleanStoreError::IdempotencyConflict);
-            }
-            return self.automation_installation(
-                &existing.target_id.ok_or(CleanStoreError::CorruptState)?,
-            );
-        }
-        let profile = self.runtime_profile(&request.runtime_profile_id)?;
-        let repository = self.repository_connection(&profile.repository_connection_id)?;
-        let github = repository
-            .provider
-            .and_then(|provider| provider.provider)
-            .map(|provider| match provider {
-                v1::repository_provider::Provider::Github(value) => value,
-            })
-            .ok_or(CleanStoreError::CorruptState)?;
-        let revision_id = profile
-            .active_revision_id
-            .ok_or(CleanStoreError::CorruptState)?;
-        let revision = self.runtime_profile_revision(&revision_id)?;
-        let version = match revision.configuration {
-            Some(v1::runtime_profile_revision::Configuration::AyniManaged(value)) => {
-                value.workflow_template_version
-            }
-            _ => return Err(CleanStoreError::InvalidTransition),
-        };
-        let workflows = onboarding_templates::render(&version, &repository.default_branch)
-            .map_err(|_| CleanStoreError::UnsupportedWorkflowTemplate(version.clone()))?;
-        github_setup::setup_pull_request(&profile.id, &repository.default_branch, workflows)
-            .map_err(|_| CleanStoreError::CorruptState)?;
-        let now = unix_seconds()?;
-        let id = resource_id("automation");
-        let installation = v1::AutomationInstallation {
-            id: id.clone(),
-            runtime_profile_id: profile.id.clone(),
-            version: version.clone(),
-            state: v1::AutomationInstallationState::SetupRequired as i32,
-            provider: Some(v1::automation_installation::Provider::Github(
-                v1::GithubAutomationInstallation {
-                    installation_id: github.installation_id,
-                    setup_pull_request_number: None,
-                    environment_workflow_path: onboarding_templates::ENVIRONMENT_WORKFLOW_PATH
-                        .into(),
-                    assessment_workflow_path: onboarding_templates::ASSESSMENT_WORKFLOW_PATH
-                        .to_owned(),
-                },
-            )),
-            failure: None,
-            created_at: Some(timestamp(now)),
-            updated_at: Some(timestamp(now)),
-            resource_version: 1,
-        };
-        let transaction = self
-            .connection
-            .transaction()
-            .map_err(CleanStoreError::Database)?;
-        transaction
-            .execute(
-                "INSERT INTO durable_actions(
-                    operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at
-                 ) VALUES ('InstallRepositoryAutomation',?1,?2,?3,'pending','automation_installation',?4,?5,?5)",
-                params![key, digest, request.encode_to_vec(), id, now],
-            )
-            .map_err(map_constraint)?;
-        let cursor = append_event(
-            &transaction,
-            PROFILE_SERVICE,
-            "automation_installation",
-            &id,
-            1,
-            Some(&profile.repository_connection_id),
-            Some(&profile.id),
-            &installation,
-        )?;
-        transaction
-            .execute(
-                "INSERT INTO automation_installations(
-                    id,runtime_profile_id,state,version,payload,resource_version,event_cursor
-                 ) VALUES (?1,?2,?3,?4,?5,1,?6)",
-                params![
-                    id,
-                    profile.id,
-                    installation.state,
-                    version,
-                    installation.encode_to_vec(),
-                    i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?
-                ],
-            )
-            .map_err(map_constraint)?;
-        transaction.commit().map_err(CleanStoreError::Database)?;
-        Ok(installation)
+        let command = crate::adapters::grpc::automation_command(key, request);
+        let id = ayni_orchestrator_application::automation::install(
+            self,
+            &crate::profiles::ayni::automation::ManagedAutomation,
+            &command,
+        )
+        .map_err(super::automation_admission::admission_error)?;
+        self.automation_installation(&id)
     }
 
     pub(crate) fn automation_installation(

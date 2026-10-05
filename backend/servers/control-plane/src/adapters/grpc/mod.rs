@@ -10,7 +10,7 @@ use crate::{
         CleanStoreError, DEVELOPMENT_SERVICE, PROFILE_SERVICE, REPOSITORY_SERVICE, REVIEW_SERVICE,
         StoredEvent,
     },
-    application::with_store_async as with_store,
+    coordinators::with_store_async as with_store,
     process::metrics::record_grpc_completion,
 };
 use ayni_orchestrator_api::{FILE_DESCRIPTOR_SET, v1, validation as api_validation};
@@ -432,7 +432,7 @@ impl RequestContext {
 mod projects;
 mod task_mapping;
 #[cfg(test)]
-pub use task_mapping::{cancel_command, retry_command, task_command};
+pub use task_mapping::{automation_command, cancel_command, retry_command, task_command};
 mod providers_tasks;
 mod repositories_profiles;
 mod watch;

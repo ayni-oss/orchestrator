@@ -667,3 +667,37 @@ fn deadline_index_and_atomic_events_respect_the_exact_frozen_timestamp()
     assert_eq!(replay, after);
     Ok(())
 }
+
+#[test]
+fn expiry_preserves_a_terminal_active_attempt_and_only_appends_the_task_event()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (task, mut attempt) = store.create_development_task(
+        "terminal-expiry",
+        &task_request(&store, &repository.id, &profile.id, "terminal-expiry")?,
+    )?;
+    // Retained terminal evidence may precede the task's deadline reconciliation.
+    attempt.state = v1::DevelopmentAttemptState::Succeeded as i32;
+    attempt.completed_at = Some(timestamp(1));
+    store.connection.execute(
+        "UPDATE development_attempts SET state=?1,payload=?2 WHERE id=?3",
+        params![attempt.state, attempt.encode_to_vec(), attempt.id],
+    )?;
+    let before: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert_eq!(store.expire_deadlines(&timestamp(i64::MAX / 2))?, 1);
+    assert_eq!(
+        store.development_task(&task.id)?.state,
+        v1::DevelopmentTaskState::DeadlineExceeded as i32
+    );
+    assert_eq!(store.development_attempt(&attempt.id)?, attempt);
+    let after: i64 =
+        store
+            .connection
+            .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
+    assert_eq!(after, before + 1);
+    Ok(())
+}

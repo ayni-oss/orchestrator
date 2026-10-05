@@ -1,6 +1,6 @@
 //! Existing-App repository onboarding. Provider credentials never enter the BFF.
 use crate::{
-    AppState, adapters::github::SourceClient, application::with_store_async as with_store,
+    AppState, adapters::github::SourceClient, coordinators::with_store_async as with_store,
     profiles::ayni::onboarding_templates,
 };
 use ayni_orchestrator_api::{v1, validation};

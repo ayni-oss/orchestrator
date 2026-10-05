@@ -19,3 +19,5 @@ pub mod runtime_activation;
 pub mod runtime_selection;
 
 pub mod runtime_reconciliation;
+
+pub mod automation;

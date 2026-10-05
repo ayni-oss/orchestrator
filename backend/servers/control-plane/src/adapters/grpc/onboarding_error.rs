@@ -1,5 +1,5 @@
 //! Public transport mapping of bounded onboarding failures.
-use crate::application::onboarding::{FailureKind, OnboardingError};
+use crate::coordinators::onboarding::{FailureKind, OnboardingError};
 use tonic::Status;
 pub(super) fn status(error: OnboardingError) -> Status {
     match error.kind {
@@ -11,7 +11,7 @@ pub(super) fn status(error: OnboardingError) -> Status {
     }
 }
 pub(super) fn provider_error(reason: &'static str) -> Status {
-    status(crate::application::onboarding::provider_error(reason))
+    status(crate::coordinators::onboarding::provider_error(reason))
 }
 #[cfg(test)]
 mod tests {

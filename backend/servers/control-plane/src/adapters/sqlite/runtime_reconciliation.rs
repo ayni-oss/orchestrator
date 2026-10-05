@@ -7,7 +7,7 @@ impl CleanStore {
     pub(crate) fn runtime_cursor(
         &self,
         profile_id: &str,
-    ) -> Result<crate::application::reconciliation::RuntimeCursor, CleanStoreError> {
+    ) -> Result<crate::coordinators::reconciliation::RuntimeCursor, CleanStoreError> {
         let value: Option<String> = self
             .connection
             .query_row(
@@ -26,7 +26,7 @@ impl CleanStore {
     pub(crate) fn save_runtime_cursor(
         &mut self,
         profile_id: &str,
-        cursor: &crate::application::reconciliation::RuntimeCursor,
+        cursor: &crate::coordinators::reconciliation::RuntimeCursor,
     ) -> Result<(), CleanStoreError> {
         let value = serde_json::to_string(cursor).map_err(|_| CleanStoreError::CorruptState)?;
         if value.len() > 65_536 {

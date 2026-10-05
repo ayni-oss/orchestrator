@@ -415,3 +415,5 @@ pub(crate) mod runtime_activation;
 pub(crate) mod runtime_selection;
 
 pub(crate) mod task_retry;
+
+pub(crate) mod automation_admission;

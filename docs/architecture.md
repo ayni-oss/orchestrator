@@ -126,13 +126,13 @@ library alone does not make code shared.
 | Location | Current ownership |
 | --- | --- |
 | `proto/`, `backend/servers/control-plane/crates/grpc-contract`, `clients/typescript` | Public gRPC schema, generated bindings and wire syntax validation |
-| `backend/servers/control-plane/crates/application` | Transport-independent task admission/cancellation/retry and deadline eligibility, runtime selection/activation/observation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
+| `backend/servers/control-plane/crates/application` | Transport-independent automation and task admission/cancellation/retry and deadline eligibility, runtime selection/activation/observation, publication, coding reconciliation, assessment admission and readiness commands, lifecycle states, immutable bindings and atomic persistence ports; execution trait and neutral workload observations/settings |
 | `backend/servers/control-plane/crates/kubernetes` | Implements execution operations with deterministic isolated Jobs, submission/adoption, observation and cleanup |
 | `backend/servers/control-plane/src/adapters/grpc` | User-facing transport, capability enforcement, conversions, pagination and durable watch delivery |
 | `backend/servers/control-plane/src/adapters/http` | Operational HTTP and projected health |
 | `backend/servers/control-plane/src/adapters/sqlite` | Database schema, explicit protobuf persistence codec, transactional resources/actions/events; remaining lifecycle methods awaiting extraction |
 | `backend/servers/control-plane/src/adapters/github`, `adapters/models.rs` | Provider communication and model discovery |
-| `backend/servers/control-plane/src/application` | Shared server state, onboarding and reconciliation coordinators; remaining protobuf/provider coupling is explicit |
+| `backend/servers/control-plane/src/coordinators` | Shared server state, onboarding and reconciliation coordinators; remaining protobuf/provider coupling is explicit |
 | `backend/servers/control-plane/src/process` | Listener/runtime configuration, metrics and tracked background work with bounded shutdown |
 | `backend/servers/control-plane/src/profiles/ayni` | Managed environment and repository preparation policy |
 | `backend/libs/domain` | Shared change constraints, scope bounds, usage values and content digests |
@@ -168,6 +168,12 @@ expiration preserves terminal attempts and commits eligible task/attempt events 
 Onboarding coordination returns typed bounded failures; gRPC alone maps them to status
 codes. Managed lock compatibility and trust-policy observations belong to the controller
 Ayni profile and do not establish certificate verification.
+
+Automation admission replays retained request identities before reevaluating the
+current profile or workflow template. The managed profile validates its setup
+files without credentials or mutations. SQLite checks observed profile/repository
+versions and atomically commits the installation, pending action and event.
+Provider setup work runs later through the onboarding coordinator.
 
 All control-plane persistence, including native gRPC, onboarding and reconciliation,
 uses a bounded 64-request database queue serviced by a dedicated thread that
@@ -267,15 +273,15 @@ retains the existing Actions-specific payload codec and commits assessment and
 evidence events together. Profile evidence verification remains separate from
 this persistence admission boundary.
 
-Outside task admission, cancellation, publication admission/scheduling/recovery, coding observation decisions, runtime selection/activation, assessment admission and readiness decisions, application logic still reads generated protobuf resources,
-stores protobuf payloads and calls concrete providers. Do not describe this as a fully isolated
-core. Continue extracting real use cases with their commands, results and ports into the
-application crate: reconciliation, connector operations, project
-inspection, environment resolution and assessment/publication. Keep wire
-conversion at gRPC and explicit persistence codec boundaries. Move managed
-evidence rules out of generic storage while preserving shared identity and
-digest checks. Introduce explicit profile dispatch before admitting custom
-tasks. Coding, build and verification Jobs already share neutral workload
+The application crate owns the extracted lifecycle decisions and ports. Server
+coordinators gather adapter facts and execute those decisions; they still read
+generated protobuf resources and call concrete providers. SQLite retains the
+explicit protobuf codec and transactional resource operations. These integration
+layers are not a fully isolated domain model. Connector operations, project
+inspection and internal environment/assessment production need their own vertical
+commands and ports as those separately tracked product flows are implemented.
+Closed profile dispatch rejects unsupported custom execution today.
+Coding, build and verification Jobs already share neutral workload
 construction rather than deriving one operation from another's manifest.
 
 The Kubernetes adapter receives only execution settings. Application scheduling,
