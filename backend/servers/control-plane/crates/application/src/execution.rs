@@ -4,7 +4,10 @@ use ayni_orchestrator_runtime::{coding::CodingRequest, runtime_execution::Execut
 use serde::Serialize;
 use std::future::Future;
 
-pub type ExecutionResult<T> = Result<T, &'static str>;
+pub type ExecutionResult<T> = Result<T, ExecutionError>;
+
+pub use error::{ExecutionError, ExecutionErrorKind};
+mod error;
 
 /// Application execution boundary. Profile inputs are opaque serialized data.
 pub trait ExecutionBackend: Send + Sync + 'static {

@@ -1,12 +1,13 @@
 //! Provider publication recovery observes existing work before making new mutations.
+use crate::identity::GitRevision;
 use std::future::Future;
 use thiserror::Error;
 
 pub struct Delivery {
     pub branch: String,
     pub base_branch: String,
-    pub base_revision: String,
-    pub head_revision: String,
+    pub base_revision: GitRevision,
+    pub head_revision: GitRevision,
     pub title: String,
     pub body: String,
 }
@@ -23,7 +24,7 @@ pub struct Published {
     pub number: u64,
     pub url: String,
     pub state: ReviewState,
-    pub head_revision: String,
+    pub head_revision: GitRevision,
     pub branch: String,
     pub base_branch: String,
 }

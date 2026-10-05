@@ -101,6 +101,13 @@ publication; no changes or no valid candidate produce no PR. Changed owned PR
 heads invalidate earlier assessment authority. Reassessment does not silently
 start another agent repair session.
 
+Publication delivery uses validated full Git revision types for its frozen and
+provider-returned heads. Execution port errors carry typed categories while the
+adapter mapping preserves existing bounded diagnostic codes. Unknown failure
+codes remain explicitly unclassified rather than implying retry authority.
+Coding dispatch matches the closed profile kinds and rejects missing/unknown
+wire values; Custom Runtime remains unsupported by this coordinator.
+
 External mutations have durable intent and deterministic identities before
 execution. After an uncertain response, reconcile existing Job, registry or
 provider state before retrying. Preserve task history and frozen digests across
@@ -191,6 +198,11 @@ missing queued execution may start; a missing running execution is a failure and
 cannot silently restart. Interruption cleanup precedes profile handling and late
 success. Completed output is collected before cleanup. Controller output reads,
 bundle hashing and assessment archive unpacking run off async executor threads.
+
+Provider command deadlines cover request writes, response reads and process
+exit. Request and response bytes are bounded, including retained policy input;
+Actions source hashing runs off executor threads. Coding command deadlines also
+bound output collection after the command exits.
 
 Worker subprocesses own Unix process groups. Cancellation, deadlines and normal
 leader exit terminate remaining group members. Verification/build invocation is

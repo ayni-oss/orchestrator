@@ -50,8 +50,8 @@ impl Provider for GithubPublisher<'_> {
                 "https://github.com/{}/{}.git",
                 self.repository.owner, self.repository.name
             ),
-            &delivery.base_revision,
-            &delivery.head_revision,
+            delivery.base_revision.as_str(),
+            delivery.head_revision.as_str(),
             &delivery.branch,
             self.token,
         )
@@ -93,7 +93,12 @@ fn published(pull: &serde_json::Value) -> Result<Published, PublicationFailure> 
         } else {
             ReviewState::Open
         },
-        head_revision: string(&pull["head"]["sha"])?,
+        head_revision: ayni_orchestrator_application::identity::GitRevision::parse(&string(
+            &pull["head"]["sha"],
+        )?)
+        .map_err(|_| PublicationFailure {
+            code: "publication_response_invalid",
+        })?,
         branch: string(&pull["head"]["ref"])?,
         base_branch: string(&pull["base"]["ref"])?,
     })

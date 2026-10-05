@@ -40,8 +40,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
         let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
         let frozen = snapshot.runtime.as_ref().ok_or("coding_snapshot_missing")?;
-        if frozen.profile_kind != v1::RuntimeProfileKind::AyniManaged as i32 {
-            return Ok(());
+        match profile_kind(frozen.profile_kind)? {
+            ayni_orchestrator_application::tasks::ProfileKind::AyniManaged => {}
+            ayni_orchestrator_application::tasks::ProfileKind::CustomRuntime => return Ok(()),
         }
         match action {
             CodingAction::LostExecution => {
@@ -605,4 +606,15 @@ fn attempt_state(value: i32) -> Result<AttemptState, &'static str> {
             Wire::Unspecified => return Err("coding_state_invalid"),
         },
     )
+}
+
+fn profile_kind(
+    value: i32,
+) -> Result<ayni_orchestrator_application::tasks::ProfileKind, &'static str> {
+    use ayni_orchestrator_application::tasks::ProfileKind;
+    match v1::RuntimeProfileKind::try_from(value).map_err(|_| "coding_snapshot_invalid")? {
+        v1::RuntimeProfileKind::AyniManaged => Ok(ProfileKind::AyniManaged),
+        v1::RuntimeProfileKind::CustomRuntime => Ok(ProfileKind::CustomRuntime),
+        v1::RuntimeProfileKind::Unspecified => Err("coding_snapshot_invalid"),
+    }
 }

@@ -53,20 +53,20 @@ fn comment_replacement_preserves_human_text_and_is_idempotent()
     Ok(())
 }
 
-#[test]
-fn source_measurement_detects_changes_and_rejects_symlinks()
+#[tokio::test]
+async fn source_measurement_detects_changes_and_rejects_symlinks()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     fs::write(directory.path().join("source.rs"), b"original")?;
     let paths = vec!["source.rs".into()];
-    let before = source_digest(directory.path(), &paths)?;
+    let before = source_digest(directory.path(), &paths).await?;
     fs::write(directory.path().join("source.rs"), b"changed")?;
-    assert_ne!(before, source_digest(directory.path(), &paths)?);
+    assert_ne!(before, source_digest(directory.path(), &paths).await?);
     #[cfg(unix)]
     {
         fs::remove_file(directory.path().join("source.rs"))?;
         std::os::unix::fs::symlink("/etc/passwd", directory.path().join("source.rs"))?;
-        assert!(source_digest(directory.path(), &paths).is_err());
+        assert!(source_digest(directory.path(), &paths).await.is_err());
     }
     Ok(())
 }

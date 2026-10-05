@@ -101,7 +101,15 @@ pub(super) async fn tracked_paths(root: &Path) -> Result<Vec<String>, &'static s
     Ok(paths)
 }
 
-pub(super) fn source_digest(root: &Path, paths: &[String]) -> Result<String, &'static str> {
+pub(super) async fn source_digest(root: &Path, paths: &[String]) -> Result<String, &'static str> {
+    let root = root.to_owned();
+    let paths = paths.to_vec();
+    tokio::task::spawn_blocking(move || source_digest_blocking(&root, &paths))
+        .await
+        .map_err(|_| "source_unavailable")?
+}
+
+fn source_digest_blocking(root: &Path, paths: &[String]) -> Result<String, &'static str> {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
     let mut total = 0_usize;
@@ -139,9 +147,29 @@ pub(super) async fn api(endpoint: &str, body: Option<&Value>) -> Result<Value, &
             ])
             .stdin(Stdio::piped());
         let input = serde_json::to_vec(body).map_err(|_| "provider_request_invalid")?;
-        command.stdout(Stdio::piped());
-        let mut child =
-            crate::operations::process::spawn(&mut command).map_err(|_| "provider_unavailable")?;
+        return api_body(command, input, Duration::from_secs(60)).await;
+    }
+    let (exit, bytes) = tokio::time::timeout(Duration::from_secs(60), collect(command, 2_097_152))
+        .await
+        .map_err(|_| "provider_timeout")??;
+    if exit != 0 {
+        return Err("provider_unavailable");
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "provider_response_invalid")
+}
+
+async fn api_body(
+    mut command: Command,
+    input: Vec<u8>,
+    deadline: Duration,
+) -> Result<Value, &'static str> {
+    if input.len() > 2_097_152 {
+        return Err("provider_request_oversized");
+    }
+    command.stdout(Stdio::piped());
+    let mut child =
+        crate::operations::process::spawn(&mut command).map_err(|_| "provider_unavailable")?;
+    tokio::time::timeout(deadline, async {
         child
             .stdin
             .take()
@@ -150,14 +178,13 @@ pub(super) async fn api(endpoint: &str, body: Option<&Value>) -> Result<Value, &
             .await
             .map_err(|_| "provider_unavailable")?;
         let mut bytes = Vec::new();
-        let mut stdout = child
+        child
             .stdout
             .take()
             .ok_or("provider_unavailable")?
-            .take(2_097_153);
-        tokio::time::timeout(Duration::from_secs(60), stdout.read_to_end(&mut bytes))
+            .take(2_097_153)
+            .read_to_end(&mut bytes)
             .await
-            .map_err(|_| "provider_timeout")?
             .map_err(|_| "provider_unavailable")?;
         if bytes.len() > 2_097_152
             || !child
@@ -168,13 +195,35 @@ pub(super) async fn api(endpoint: &str, body: Option<&Value>) -> Result<Value, &
         {
             return Err("provider_unavailable");
         }
-        return serde_json::from_slice(&bytes).map_err(|_| "provider_response_invalid");
+        serde_json::from_slice(&bytes).map_err(|_| "provider_response_invalid")
+    })
+    .await
+    .map_err(|_| "provider_timeout")?
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn provider_deadline_includes_exit_after_stdout_closes() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", "printf '{}'; exec 1>&-; sleep 1"])
+            .stdin(Stdio::piped());
+        assert_eq!(
+            api_body(command, vec![], Duration::from_millis(50)).await,
+            Err("provider_timeout")
+        );
     }
-    let (exit, bytes) = collect(command, 2_097_152).await?;
-    if exit != 0 {
-        return Err("provider_unavailable");
+    #[tokio::test]
+    async fn provider_deadline_includes_blocked_request_input() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "sleep 1"]).stdin(Stdio::piped());
+        assert_eq!(
+            api_body(command, vec![b'x'; 1_048_576], Duration::from_millis(50)).await,
+            Err("provider_timeout")
+        );
     }
-    serde_json::from_slice(&bytes).map_err(|_| "provider_response_invalid")
 }
 
 pub(super) fn base_command(program: &str, directory: Option<&Path>) -> Command {

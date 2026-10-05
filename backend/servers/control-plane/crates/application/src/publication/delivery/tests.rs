@@ -1,4 +1,5 @@
 use super::{Delivery, DeliveryError, Provider, Published, ReviewState, deliver};
+use crate::identity::GitRevision;
 use std::{
     future::Future,
     io,
@@ -34,10 +35,10 @@ impl Provider for Fake {
         if self.failure == Failure::Find {
             return Err(io::Error::other("uncertain observation"));
         }
-        Ok(self
-            .found
+        self.found
             .load(Ordering::Relaxed)
-            .then(|| published(self.mismatch)))
+            .then(|| published(self.mismatch))
+            .transpose()
     }
     async fn push(&self, _: &Delivery) -> io::Result<()> {
         self.calls
@@ -58,28 +59,33 @@ impl Provider for Fake {
         if self.failure == Failure::Create {
             return Err(io::Error::other("uncertain create response"));
         }
-        Ok(published(false))
+        published(false)
     }
 }
-fn published(mismatch: bool) -> Published {
-    Published {
+fn published(mismatch: bool) -> io::Result<Published> {
+    Ok(Published {
         number: 7,
         url: "https://provider/review/7".into(),
         state: ReviewState::Draft,
-        head_revision: if mismatch { "other" } else { "head" }.into(),
+        head_revision: GitRevision::parse(&if mismatch {
+            "b".repeat(40)
+        } else {
+            "a".repeat(40)
+        })
+        .map_err(io::Error::other)?,
         branch: "branch".into(),
         base_branch: "main".into(),
-    }
+    })
 }
-fn request() -> Delivery {
-    Delivery {
+fn request() -> io::Result<Delivery> {
+    Ok(Delivery {
         branch: "branch".into(),
         base_branch: "main".into(),
-        base_revision: "base".into(),
-        head_revision: "head".into(),
+        base_revision: GitRevision::parse(&"c".repeat(40)).map_err(io::Error::other)?,
+        head_revision: GitRevision::parse(&"a".repeat(40)).map_err(io::Error::other)?,
         title: "title".into(),
         body: "body".into(),
-    }
+    })
 }
 struct NoWake;
 impl Wake for NoWake {
@@ -101,7 +107,7 @@ fn existing_publication_is_observed_without_new_writes() -> io::Result<()> {
         failure: Failure::None,
     };
     assert_eq!(
-        ready(deliver(&provider, &request()))?
+        ready(deliver(&provider, &request()?))?
             .map_err(io::Error::other)?
             .number,
         7
@@ -123,7 +129,7 @@ fn new_publication_pushes_only_after_confirmed_absence() -> io::Result<()> {
         mismatch: false,
         failure: Failure::None,
     };
-    ready(deliver(&provider, &request()))?.map_err(io::Error::other)?;
+    ready(deliver(&provider, &request()?))?.map_err(io::Error::other)?;
     assert_eq!(
         *provider
             .calls
@@ -142,7 +148,7 @@ fn uncertain_observation_never_authorizes_new_mutations() -> io::Result<()> {
         failure: Failure::Find,
     };
     assert!(matches!(
-        ready(deliver(&provider, &request()))?,
+        ready(deliver(&provider, &request()?))?,
         Err(DeliveryError::Provider(_))
     ));
     assert_eq!(
@@ -163,7 +169,7 @@ fn mismatched_existing_identity_cannot_complete_publication() -> io::Result<()> 
         failure: Failure::None,
     };
     assert!(matches!(
-        ready(deliver(&provider, &request()))?,
+        ready(deliver(&provider, &request()?))?,
         Err(DeliveryError::IdentityConflict)
     ));
     assert_eq!(
@@ -185,7 +191,7 @@ fn failed_push_does_not_create_a_review() -> io::Result<()> {
         failure: Failure::Push,
     };
     assert!(matches!(
-        ready(deliver(&provider, &request()))?,
+        ready(deliver(&provider, &request()?))?,
         Err(DeliveryError::Provider(_))
     ));
     assert_eq!(
@@ -207,11 +213,11 @@ fn uncertain_create_is_recovered_without_repeating_provider_writes() -> io::Resu
         failure: Failure::Create,
     };
     assert!(matches!(
-        ready(deliver(&provider, &request()))?,
+        ready(deliver(&provider, &request()?))?,
         Err(DeliveryError::Provider(_))
     ));
     assert_eq!(
-        ready(deliver(&provider, &request()))?
+        ready(deliver(&provider, &request()?))?
             .map_err(io::Error::other)?
             .number,
         7

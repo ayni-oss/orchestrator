@@ -83,7 +83,16 @@ async fn run_command(args: CommandArgs) -> io::Result<String> {
         .take()
         .ok_or_else(|| io::Error::other("stderr missing"))?;
     let (status, stdout, stderr) =
-        tokio::join!(child.wait(), bounded_output(stdout), bounded_output(stderr));
+        tokio::time::timeout(std::time::Duration::from_secs(185), async {
+            tokio::join!(child.wait(), bounded_output(stdout), bounded_output(stderr))
+        })
+        .await
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                "worker command output deadline exceeded",
+            )
+        })?;
     Ok(format!(
         "exit={:?}\nstdout:\n{}\nstderr:\n{}",
         status?.code(),

@@ -280,9 +280,10 @@ async fn measure(
             return Err("contract_changed");
         }
     }
-    let lock: Value =
-        serde_json::from_slice(&fs::read(baseline.join(".ayni.lock")).map_err(|_| "lock_missing")?)
-            .map_err(|_| "lock_invalid")?;
+    let lock: Value = serde_json::from_slice(
+        &read_bounded(&baseline.join(".ayni.lock"), 1024 * 1024).map_err(|_| "lock_missing")?,
+    )
+    .map_err(|_| "lock_invalid")?;
     if lock["fingerprint"] != manifest.lock_fingerprint
         || lock["ayni_version"] != ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION
         || lock["schema_version"] != "0.9.0"
@@ -292,7 +293,7 @@ async fn measure(
     }
     let image = resolve_image(manifest).await?;
     let paths = tracked_paths(&workspace).await?;
-    manifest.source_before = source_digest(&workspace, &paths)?;
+    manifest.source_before = source_digest(&workspace, &paths).await?;
     let args = launch_arguments(&workspace, &paths, image, manifest.run.run_id);
     command(
         "chmod",
@@ -333,7 +334,7 @@ async fn collect_result(
             };
             return Ok(artifacts);
         }
-        manifest.source_after = source_digest(workspace, paths)?;
+        manifest.source_after = source_digest(workspace, paths).await?;
         for directory in [workspace.join(".ayni"), workspace.join(".ayni/last")] {
             if !fs::symlink_metadata(directory)
                 .map_err(|_| "signals_missing")?

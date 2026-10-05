@@ -1,4 +1,5 @@
 use super::{Digest, ExecutionBackend, RuntimeReconciler, Sha256, operation_name, v1};
+use ayni_orchestrator_application::identity::GitRevision;
 use ayni_orchestrator_application::publication::delivery::{
     self, Delivery, DeliveryError, ReviewState,
 };
@@ -67,8 +68,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let delivery = Delivery {
             branch,
             base_branch: request.base_branch,
-            base_revision: candidate.base_revision,
-            head_revision: change.head_revision.clone(),
+            base_revision: GitRevision::parse(&candidate.base_revision)
+                .map_err(|_| "publication_base_invalid")?,
+            head_revision: GitRevision::parse(&change.head_revision)
+                .map_err(|_| "publication_head_invalid")?,
             title: request.title,
             body: format!(
                 "{}\n\n{}\n\n<!-- orchestrator-candidate:{} -->",
