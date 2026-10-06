@@ -97,6 +97,8 @@ struct PendingVerification {
     build_name: Option<String>,
     build_observed: bool,
     build_started: bool,
+    #[serde(default)]
+    force_rebuild: bool,
 }
 
 struct ProfileObservation<'a> {
@@ -574,10 +576,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 source_digest, runtime.platform, report.runtime.lock_fingerprint
             ))
         );
-        if cursor
-            .bindings
-            .get(&key)
-            .is_some_and(|bound| bound != &digest)
+        if !pending.force_rebuild
+            && cursor
+                .bindings
+                .get(&key)
+                .is_some_and(|bound| bound != &digest)
         {
             return Err("runtime_tag_drift");
         }
@@ -681,6 +684,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             },
             build_observed: false,
             build_started: false,
+            force_rebuild: cursor.force_rebuild,
             request: ExecutionRequest {
                 repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
                 revision: head.to_owned(),
