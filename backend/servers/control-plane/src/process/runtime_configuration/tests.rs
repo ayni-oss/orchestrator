@@ -7,6 +7,7 @@ fn configuration() -> RuntimeConfiguration {
         worker_image: format!("registry.test/worker@sha256:{}", "a".repeat(64)),
         interval_seconds: 60,
         request_timeout_seconds: 30,
+        coding_turns: 24,
         concurrency: 4,
         allow_emulation: false,
         profiles: BTreeMap::new(),
@@ -18,6 +19,11 @@ fn configuration() -> RuntimeConfiguration {
 fn rejects_unbounded_scheduling_and_credential_values() {
     let mut configuration = configuration();
     assert!(configuration.validate().is_ok());
+    configuration.coding_turns = 0;
+    assert!(configuration.validate().is_err());
+    configuration.coding_turns = 129;
+    assert!(configuration.validate().is_err());
+    configuration.coding_turns = 24;
     configuration.concurrency = 0;
     assert!(configuration.validate().is_err());
     configuration.concurrency = 4;
@@ -95,7 +101,7 @@ fn operator_document() -> serde_json::Value {
         "namespace": "runtime-test",
         "worker_image": format!("registry.test/worker@sha256:{}", "a".repeat(64)),
         "output_claim": "outputs", "model_secret": "model", "allow_emulation": true,
-        "interval_seconds": 42, "request_timeout_seconds": 12, "concurrency": 3,
+        "interval_seconds": 42, "request_timeout_seconds": 12, "coding_turns": 17, "concurrency": 3,
         "profiles": {
             "project-profile": {
                 "image": "registry.test/environment:lock", "platform": "linux/arm64",
@@ -195,6 +201,7 @@ fn operator_json_preserves_scheduling_and_workload_defaults()
     configuration.validate()?;
     assert_eq!(configuration.interval_seconds, 60);
     assert_eq!(configuration.request_timeout_seconds, 30);
+    assert_eq!(configuration.coding_turns, 24);
     assert_eq!(configuration.concurrency, 4);
     assert!(!configuration.allow_emulation);
     assert!(configuration.managed_runtime.is_none());

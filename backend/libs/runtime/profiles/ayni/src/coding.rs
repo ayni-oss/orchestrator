@@ -25,7 +25,8 @@ mod tests {
             "request": "Update the documentation",
             "acceptance_criteria": ["Examples describe the current behavior"],
             "constraints": {"protected_paths": ["policy"], "allow_test_edits": false},
-            "model": "configured-model"
+            "model": "configured-model",
+            "max_turns": 24
         })
     }
 

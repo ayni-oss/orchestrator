@@ -17,6 +17,7 @@ runtime:
   workerImage: registry.internal/orchestrator/worker@sha256:<worker-manifest-digest>
   intervalSeconds: 300
   requestTimeoutSeconds: 30
+  codingTurns: 24 # maximum model/tool turns per coding attempt
   concurrency: 4
   outputClaim: runtime-outputs
   modelSecret: openai-api

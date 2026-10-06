@@ -290,7 +290,7 @@ pub async fn run(
             serde_json::to_string(&request.acceptance_criteria)?,
             serde_json::to_string(&request.constraints)?
         ))
-        .max_turns(24)
+        .max_turns(usize::from(request.max_turns))
         .await;
     if let Err(error) = &response {
         activity.record(Stage::ModelExecution);
@@ -624,6 +624,7 @@ mod tests {
                 allow_test_edits: true,
             },
             model: "test".into(),
+            max_turns: 24,
         }
     }
 

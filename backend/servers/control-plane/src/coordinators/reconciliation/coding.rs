@@ -317,6 +317,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             request: snapshot.request.clone(),
             acceptance_criteria: snapshot.acceptance_criteria.clone(),
             model: agent.model.clone(),
+            max_turns: self.configuration.coding_turns,
             constraints: ayni_orchestrator_domain::ChangeConstraints {
                 protected_paths: constraints.protected_paths.clone(),
                 allow_test_edits: constraints.allow_test_edits,

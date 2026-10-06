@@ -43,6 +43,8 @@ pub struct CodingRequest<Profile> {
     pub acceptance_criteria: Vec<String>,
     pub constraints: ChangeConstraints,
     pub model: String,
+    /// Operator-selected cap on model and tool turns for this mounted attempt.
+    pub max_turns: u16,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -84,7 +86,8 @@ mod tests {
             "request": "Update the documentation",
             "acceptance_criteria": ["Examples describe the current behavior"],
             "constraints": {"protected_paths": ["policy"], "allow_test_edits": false},
-            "model": "configured-model"
+            "model": "configured-model",
+            "max_turns": 24
         });
         let request: CodingRequest<ContainerExpectation> =
             serde_json::from_value(mounted_request.clone())?;
