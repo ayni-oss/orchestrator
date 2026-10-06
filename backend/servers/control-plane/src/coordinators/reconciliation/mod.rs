@@ -33,6 +33,8 @@ pub struct RuntimeCursor {
     pending: Option<PendingVerification>,
     bindings: BTreeMap<String, String>,
     status: BTreeMap<String, String>,
+    #[serde(default)]
+    force_rebuild: bool,
 }
 
 impl RuntimeCursor {
@@ -95,6 +97,8 @@ struct PendingVerification {
     build_name: Option<String>,
     build_observed: bool,
     build_started: bool,
+    #[serde(default)]
+    force_rebuild: bool,
 }
 
 struct ProfileObservation<'a> {
@@ -317,6 +321,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         continue;
                     }
                     cursor.next_at = 0;
+                    cursor.force_rebuild |= request.force_rebuild;
                     // Persist the wake-up before acknowledging the action. Replaying
                     // after a crash is harmless and never resets build intent.
                     store
@@ -361,6 +366,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 &token,
             )
             .await?;
+        // A source change that produces a new lock never reuses the previous
+        // mutable tag. The repository portion is deployment controlled; the
+        // fingerprint is the immutable image identity used for resolve-or-build.
+        let lock = self
+            .source
+            .lock(&github.owner, &github.name, &head, &token)
+            .await?;
+        let lock_identity = crate::profiles::ayni::environment::parse_lock(&lock)
+            .map_err(|_| "repository_lock_invalid")?;
+        let runtime = runtime.for_lock_fingerprint(&lock_identity.fingerprint)?;
         let observation = ProfileObservation {
             id,
             runtime: &runtime,
@@ -561,10 +576,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 source_digest, runtime.platform, report.runtime.lock_fingerprint
             ))
         );
-        if cursor
-            .bindings
-            .get(&key)
-            .is_some_and(|bound| bound != &digest)
+        if !pending.force_rebuild
+            && cursor
+                .bindings
+                .get(&key)
+                .is_some_and(|bound| bound != &digest)
         {
             return Err("runtime_tag_drift");
         }
@@ -654,19 +670,21 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             source_digest: source_digest.to_owned(),
             lock_digest: format!("sha256:{:x}", Sha256::digest(&bytes)),
             build_name: if runtime.build.is_some()
-                && !cursor.bindings.contains_key(&format!(
-                    "{:x}",
-                    Sha256::digest(format!(
-                        "{}:{}:sha256:{}",
-                        source_digest, runtime.platform, identity.fingerprint
-                    ))
-                )) {
+                && (cursor.force_rebuild
+                    || !cursor.bindings.contains_key(&format!(
+                        "{:x}",
+                        Sha256::digest(format!(
+                            "{}:{}:sha256:{}",
+                            source_digest, runtime.platform, identity.fingerprint
+                        ))
+                    ))) {
                 Some(operation_name(&format!("build:{revision}"), 0))
             } else {
                 None
             },
             build_observed: false,
             build_started: false,
+            force_rebuild: cursor.force_rebuild,
             request: ExecutionRequest {
                 repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
                 revision: head.to_owned(),
@@ -678,6 +696,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             },
         });
         cursor.update_status(runtime, identity.fingerprint)?;
+        cursor.force_rebuild = false;
         self.save(id, cursor).await
     }
 

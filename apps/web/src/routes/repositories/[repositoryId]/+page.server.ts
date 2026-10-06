@@ -1,14 +1,14 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
-import { actionKey, text, requestContext, safeError } from "$lib/server/page.js";
+import { actionKey, requestContext, safeError, text } from "$lib/server/page.js";
 
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 
 export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
   setHeaders({ "cache-control": "no-store" });
   if (!RESOURCE_ID.test(params.repositoryId)) {
-    return { repositoryConnection: undefined, runtimeProfiles: [], requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };
+    return { repositoryConnection: undefined, runtimeProfiles: [], runtimeKeys: {}, requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };
   }
   const context = requestContext(locals);
   const [repository, profiles] = await Promise.allSettled([
@@ -19,39 +19,28 @@ export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
   return {
     repositoryConnection: repository.status === "fulfilled" ? repository.value : undefined,
     runtimeProfiles: profiles.status === "fulfilled" ? profiles.value.runtimeProfiles : [],
-    idempotencyKey: actionKey(),
+    runtimeKeys: profiles.status === "fulfilled" ? Object.fromEntries(profiles.value.runtimeProfiles.map((profile) => [profile.id, actionKey()])) : {},
     requestId: locals.requestId,
     ...(failure === undefined ? {} : { error: safeError(failure, locals.requestId) }),
   };
 };
 
+async function reconcile(event: Parameters<Actions[string]>[0], action: "sync" | "rebuild") {
+  const form = await event.request.formData();
+  const profileId = text(form, "profileId", 128);
+  const idempotencyKey = text(form, "idempotencyKey", 36);
+  if (!profileId || !idempotencyKey || !/^[0-9a-f-]{36}$/u.test(idempotencyKey)) return fail(400, { error: { message: "Refresh and try again." } });
+  try {
+    const forceRebuild = action === "rebuild";
+    await getBff().reconcileProfile(profileId, idempotencyKey, requestContext(event.locals), forceRebuild);
+    return { success: forceRebuild ? "Runtime rebuild requested. Orchestrator will create a fresh internal build Job for the current lock." : "Runtime sync requested." };
+  } catch (error) {
+    const mapped = safeError(error, event.locals.requestId);
+    return fail(mapped.status, { error: mapped });
+  }
+}
+
 export const actions: Actions = {
-  inspect: async ({locals,params}) => {
-    try { return { inspection: await getBff().inspectAyniRepository(params.repositoryId,requestContext(locals)) }; }
-    catch(error) { const mapped=safeError(error,locals.requestId); return fail(mapped.status,{error:mapped}); }
-  },
-  onboard: async ({locals,params,request}) => {
-    const form=await request.formData();
-    const key=text(form,"idempotencyKey",36);
-    if (!key || !/^[0-9a-f-]{36}$/u.test(key)) return fail(400,{error:{message:"Refresh and try again."}});
-    let profile;
-    try {
-      const context=requestContext(locals);
-      const inspection=await getBff().inspectAyniRepository(params.repositoryId,context);
-      if (!inspection.policyPresent || !inspection.lockCompatible) return fail(409,{error:{message:"Commit a supported Ayni policy and generated lock on the default branch, then inspect again."}});
-      const existing=await getBff().listRuntimeProfiles(params.repositoryId,{pageSize:100},context);
-      const managedProfiles=existing.runtimeProfiles.filter((candidate)=>candidate.kind==="ayni_managed" && candidate.activeRevisionId);
-      const revisions=await Promise.all(managedProfiles.map(async (candidate)=>({
-        profile:candidate,
-        revision:await getBff().getRuntimeRevision(candidate.activeRevisionId!,context),
-      })));
-      profile=revisions.find(({revision})=>revision.managed?.fingerprint===inspection.fingerprint)?.profile;
-      if (!profile) {
-        profile=await getBff().createRuntimeProfile({idempotencyKey:key,repositoryConnectionId:params.repositoryId,repositorySnapshotId:inspection.snapshotId,configuration:{kind:"ayni_managed",lockFingerprint:inspection.fingerprint,ayniVersion:inspection.version,workflowTemplateVersion:inspection.template,ociRepository:inspection.repository}},context);
-      }
-      const automation=await getBff().listAutomation(profile.id,context);
-      if (!automation.installations.length) await getBff().installAutomation(profile.id,key,context);
-    } catch(error) { const mapped=safeError(error,locals.requestId); return fail(mapped.status,{error:mapped}); }
-    redirect(303,`/profiles/${encodeURIComponent(profile.id)}`);
-  },
+  sync: (event) => reconcile(event, "sync"),
+  rebuild: (event) => reconcile(event, "rebuild"),
 };

@@ -521,19 +521,8 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
         request: Request<v1::InstallRepositoryAutomationRequest>,
     ) -> Result<Response<v1::InstallRepositoryAutomationResponse>, Status> {
         let context = self.context(&request, "InstallRepositoryAutomation")?;
-        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
-        validate_id(&request.get_ref().runtime_profile_id, "runtime_profile_id")
-            .map_err(|error| context.validation(&error))?;
-        let message = request.into_inner();
-        let command = super::task_mapping::automation_command(&key, &message);
-        let resource = with_store(&self.state, move |store| {
-            super::task_mapping::install_automation(store, &command)
-        })
-        .await
-        .map_err(|error| context.store_error(&error))?;
-        Ok(context.response(v1::InstallRepositoryAutomationResponse {
-            automation_installation: Some(resource),
-        }))
+        let _ = request;
+        Err(context.unsupported_profile())
     }
 
     async fn reconcile_runtime_profile(

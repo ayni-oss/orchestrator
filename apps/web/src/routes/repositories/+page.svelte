@@ -19,7 +19,7 @@
 
 <svelte:head><title>Repository connections · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
-  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect provider repositories independently from runtime-profile onboarding and readiness.">
+  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect a repository and Orchestrator immediately inspects its default revision and resolves a verified runtime image.">
     {#snippet actions()}<Button href="/setup/github" variant="outline"><PlugZap aria-hidden="true" /> Configure GitHub App</Button><Button href="#connect"><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
   </PageHeader>
   {#if data.error}<Feedback kind="error" title="Connections unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
@@ -27,11 +27,13 @@
 
   <section class="space-y-4">
     {#if data.repositoryConnections.length === 0}
-      <EmptyState title="No repository connections" description="Connect an approved provider repository before creating a runtime profile." />
+      <EmptyState title="No repository connections" description="Connect an approved provider repository to inspect its committed Ayni configuration and runtime image." />
     {:else}
       <div class="grid gap-4 lg:grid-cols-2">
         {#each data.repositoryConnections as item (item.id)}
-          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div><StatusBadge status={item.status} tone={statusTone(item.status)} /></div></Card.Header><Card.Content class="text-sm"><p>GitHub repository ID <code>{item.provider.repositoryId}</code></p><p class="text-muted-foreground">Installation {item.provider.installationId}</p></Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Profiles and identity <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
+          {@const profiles = data.runtimeProfiles[item.id] ?? []}
+          {@const runtime = profiles.find((profile) => profile.state === "ready") ?? profiles[0]}
+          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div>{#if runtime}<StatusBadge status={runtime.state} tone={statusTone(runtime.state)} />{:else}<span class="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">Inspection pending</span>{/if}</div></Card.Header><Card.Content class="text-sm">{#if runtime}<p>Runtime: <span class="text-muted-foreground">{runtime.state === "ready" ? "Verified and ready" : runtime.state.replaceAll("_", " ")}</span></p>{:else}<p class="text-muted-foreground">No runtime profile yet. Orchestrator is inspecting the committed Ayni configuration.</p>{/if}</Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Runtime status <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
         {/each}
       </div>
       {#if nextPageHref}<div class="flex justify-end"><Button href={nextPageHref} variant="outline">Next page</Button></div>{/if}

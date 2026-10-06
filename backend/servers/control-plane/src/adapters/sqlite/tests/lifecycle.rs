@@ -144,6 +144,7 @@ fn external_action_recovers_at_every_durable_boundary() -> Result<(), Box<dyn st
     let request = v1::ReconcileRuntimeProfileRequest {
         idempotency_key: "reconcile".to_owned(),
         runtime_profile_id: "profile:missing".to_owned(),
+        force_rebuild: false,
     };
 
     let mut store = CleanStore::open(&path, 3)?;

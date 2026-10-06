@@ -300,6 +300,8 @@ message InstallRepositoryAutomationResponse {
 message ReconcileRuntimeProfileRequest {
   string idempotency_key = 1;
   string runtime_profile_id = 2;
+  // Creates a fresh internal build intent rather than only waking reconciliation.
+  bool force_rebuild = 3;
 }
 
 message ReconcileRuntimeProfileResponse {

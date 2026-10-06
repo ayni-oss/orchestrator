@@ -228,8 +228,8 @@ export class OrchestratorBff {
     const response=await this.#unary<InstallRepositoryAutomationResponse>(context,(m,o,c)=>this.#profiles.installRepositoryAutomation({runtimeProfileId,idempotencyKey},m,o,c));
     return mapAutomation(required(response.automationInstallation));
   }
-  async reconcileProfile(runtimeProfileId:string, idempotencyKey:string, context:RequestContext) {
-    const response=await this.#unary<ReconcileRuntimeProfileResponse>(context,(m,o,c)=>this.#profiles.reconcileRuntimeProfile({runtimeProfileId,idempotencyKey},m,o,c));
+  async reconcileProfile(runtimeProfileId:string, idempotencyKey:string, context:RequestContext, forceRebuild=false) {
+    const response=await this.#unary<ReconcileRuntimeProfileResponse>(context,(m,o,c)=>this.#profiles.reconcileRuntimeProfile({runtimeProfileId,idempotencyKey,forceRebuild},m,o,c));
     return mapRuntimeProfile(required(response.runtimeProfile));
   }
   async taskProgress(developmentTaskId:string, context:RequestContext) {
