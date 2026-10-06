@@ -539,6 +539,8 @@ export interface InstallRepositoryAutomationResponse {
 export interface ReconcileRuntimeProfileRequest {
   idempotencyKey: string;
   runtimeProfileId: string;
+  /** Creates a fresh internal build intent rather than only waking reconciliation. */
+  forceRebuild: boolean;
 }
 
 export interface ReconcileRuntimeProfileResponse {
@@ -4274,7 +4276,7 @@ export const InstallRepositoryAutomationResponse: MessageFns<InstallRepositoryAu
 };
 
 function createBaseReconcileRuntimeProfileRequest(): ReconcileRuntimeProfileRequest {
-  return { idempotencyKey: "", runtimeProfileId: "" };
+  return { idempotencyKey: "", runtimeProfileId: "", forceRebuild: false };
 }
 
 export const ReconcileRuntimeProfileRequest: MessageFns<ReconcileRuntimeProfileRequest> = {
@@ -4284,6 +4286,9 @@ export const ReconcileRuntimeProfileRequest: MessageFns<ReconcileRuntimeProfileR
     }
     if (message.runtimeProfileId !== "") {
       writer.uint32(18).string(message.runtimeProfileId);
+    }
+    if (message.forceRebuild !== false) {
+      writer.uint32(24).bool(message.forceRebuild);
     }
     return writer;
   },
@@ -4317,6 +4322,14 @@ export const ReconcileRuntimeProfileRequest: MessageFns<ReconcileRuntimeProfileR
             message.runtimeProfileId = reader.string();
             continue;
           }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.forceRebuild = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4341,6 +4354,11 @@ export const ReconcileRuntimeProfileRequest: MessageFns<ReconcileRuntimeProfileR
         : isSet(object.runtime_profile_id)
         ? globalThis.String(object.runtime_profile_id)
         : "",
+      forceRebuild: isSet(object.forceRebuild)
+        ? globalThis.Boolean(object.forceRebuild)
+        : isSet(object.force_rebuild)
+        ? globalThis.Boolean(object.force_rebuild)
+        : false,
     };
   },
 
@@ -4352,6 +4370,9 @@ export const ReconcileRuntimeProfileRequest: MessageFns<ReconcileRuntimeProfileR
     if (message.runtimeProfileId !== "") {
       obj.runtimeProfileId = message.runtimeProfileId;
     }
+    if (message.forceRebuild !== false) {
+      obj.forceRebuild = message.forceRebuild;
+    }
     return obj;
   },
 
@@ -4362,6 +4383,7 @@ export const ReconcileRuntimeProfileRequest: MessageFns<ReconcileRuntimeProfileR
     const message = createBaseReconcileRuntimeProfileRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
     message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.forceRebuild = object.forceRebuild ?? false;
     return message;
   },
 };

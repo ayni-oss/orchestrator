@@ -31,8 +31,9 @@ async function reconcile(event: Parameters<Actions[string]>[0], action: "sync" |
   const idempotencyKey = text(form, "idempotencyKey", 36);
   if (!profileId || !idempotencyKey || !/^[0-9a-f-]{36}$/u.test(idempotencyKey)) return fail(400, { error: { message: "Refresh and try again." } });
   try {
-    await getBff().reconcileProfile(profileId, idempotencyKey, requestContext(event.locals));
-    return { success: action === "sync" ? "Runtime sync requested." : "Runtime rebuild requested. Orchestrator will verify the matching image before building when required." };
+    const forceRebuild = action === "rebuild";
+    await getBff().reconcileProfile(profileId, idempotencyKey, requestContext(event.locals), forceRebuild);
+    return { success: forceRebuild ? "Runtime rebuild requested. Orchestrator will create a fresh internal build Job for the current lock." : "Runtime sync requested." };
   } catch (error) {
     const mapped = safeError(error, event.locals.requestId);
     return fail(mapped.status, { error: mapped });
