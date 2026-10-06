@@ -1,5 +1,6 @@
 use super::*;
 use ayni_orchestrator_profile_ayni::managed_runtime::VerifiedRuntime;
+use ayni_orchestrator_runtime::coding::{ValidationOutcome, ValidationResult};
 
 #[test]
 fn runtime_observation_requires_all_frozen_bindings_but_quality_is_advisory()
@@ -13,6 +14,15 @@ fn runtime_observation_requires_all_frozen_bindings_but_quality_is_advisory()
         revision: "source".into(),
         lock_digest: "sha256:input".into(),
         check_exit_code: 1,
+        validation: ValidationResult {
+            outcome: ValidationOutcome::Failed,
+            signals_digest: None,
+            completed_targets: 0,
+            skipped_targets: 0,
+            warning_offenders: 0,
+            failing_offenders: 0,
+            rows: vec![],
+        },
         runtime: VerifiedRuntime {
             lock_fingerprint: expected.lock_fingerprint.clone(),
             platform: expected.platform.clone(),

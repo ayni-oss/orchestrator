@@ -76,10 +76,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             body: format!(
                 "{}\n\n{}\n\n<!-- orchestrator-candidate:{} -->",
                 request.body,
-                candidate
-                    .coding_advisory
-                    .as_deref()
-                    .unwrap_or("Coding-time checks are advisory; no assessment is available."),
+                validation_block(candidate.validation.as_ref(), &change.head_revision),
                 candidate.id
             ),
         };
@@ -154,4 +151,40 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         })
         .await
     }
+}
+
+fn validation_block(validation: Option<&v1::ValidationSummary>, head: &str) -> String {
+    let marker = "<!-- orchestrator-validation:v1 -->";
+    let end_marker = "<!-- /orchestrator-validation:v1 -->";
+    let Some(validation) = validation else {
+        return format!(
+            "{marker}\n### Ayni task validation\n\nResult unavailable for `{head}`.\n{end_marker}"
+        );
+    };
+    let outcome = v1::validation_summary::Outcome::try_from(validation.outcome)
+        .ok()
+        .map(|outcome| format!("{outcome:?}").to_lowercase())
+        .unwrap_or_else(|| "unavailable".into());
+    let mut body = format!(
+        "{marker}\n### Ayni task validation: {outcome}\n\nCandidate: `{head}`\n\nTargets: {} completed, {} skipped. Warnings: {}. Failures: {}.\n",
+        validation.completed_targets,
+        validation.skipped_targets,
+        validation.warning_offenders,
+        validation.failing_offenders,
+    );
+    if !validation.rows.is_empty() {
+        body.push_str("\n| Signal | Result |\n| --- | --- |\n");
+        for row in validation.rows.iter().take(32) {
+            let _ = std::fmt::Write::write_fmt(
+                &mut body,
+                format_args!(
+                    "| {} | {} |\n",
+                    row.kind,
+                    if row.passed { "pass" } else { "fail" }
+                ),
+            );
+        }
+    }
+    body.push_str(end_marker);
+    body
 }

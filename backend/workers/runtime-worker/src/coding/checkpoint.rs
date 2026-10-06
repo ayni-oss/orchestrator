@@ -1,5 +1,5 @@
 //! Atomic recovery snapshots, independent of model completion and Ayni success.
-use super::{activity::ActivityLog, freeze_with_advisory};
+use super::{activity::ActivityLog, freeze_with_validation, missing_validation};
 use ayni_orchestrator_profile_ayni::coding::CodingRequest;
 use ayni_orchestrator_runtime::activity::Stage;
 use std::{fs, io, path::Path};
@@ -36,12 +36,7 @@ pub fn save(request: &CodingRequest, workspace: &Path, output: &Path) -> io::Res
     let pending = tempfile::Builder::new()
         .prefix("pending-")
         .tempdir_in(&root)?;
-    let report = freeze_with_advisory(
-        request,
-        workspace,
-        pending.path(),
-        "Recovered partial work from an interrupted coding attempt. Ayni completion is not verified; review and managed PR assessment are required.",
-    )?;
+    let report = freeze_with_validation(request, workspace, pending.path(), missing_validation())?;
     fs::write(
         pending.path().join("report.json"),
         serde_json::to_vec(&report)?,

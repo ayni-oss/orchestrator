@@ -134,7 +134,7 @@ const providerService: UntypedServiceImplementation = {
 
 const taskService: UntypedServiceImplementation = {
   listDevelopmentAttempts(_call,callback) { callback(null,{attempts:[],page}); },
-  listCandidates(call,callback) { const t=tasks.get(call.request.developmentTaskId); callback(null,{candidates:t?.snapshot.publishDraft ? [{id:"candidate:1",repositoryConnectionId:repositoryId,resourceVersion:"1",changedPaths:[],developmentAttemptId:"attempt:1",state:CandidateState.CANDIDATE_STATE_AVAILABLE,baseRevision:revision,identity:{identity:{$case:"git",git:{commitSha:"d".repeat(40)}}},codingAdvisory:"Coding-time checks are advisory."}] : [],page}); },
+  listCandidates(call,callback) { const t=tasks.get(call.request.developmentTaskId); callback(null,{candidates:t?.snapshot.publishDraft ? [{id:"candidate:1",repositoryConnectionId:repositoryId,resourceVersion:"1",changedPaths:[],developmentAttemptId:"attempt:1",state:CandidateState.CANDIDATE_STATE_AVAILABLE,baseRevision:revision,identity:{identity:{$case:"git",git:{commitSha:"d".repeat(40)}}},validation:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[]}}] : [],page}); },
 
   listDevelopmentTasks(call, callback) { callback(null, { developmentTasks: [...tasks.values()].filter(task=>!call.request.projectId || task.projectId===call.request.projectId), page }); },
   getDevelopmentTask(call, callback) { callback(null, { developmentTask: tasks.get(call.request.developmentTaskId) ?? tasks.get(taskId) }); },

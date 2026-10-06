@@ -3,12 +3,14 @@ use crate::{
     coding::activity::ActivityLog,
     coding::model_usage::{TrackedModel, UsageTracker},
     operations::runtime::{command, git},
-    profiles::ayni::verify,
+    profiles::ayni::{preflight, verify},
 };
 use ayni_orchestrator_domain::ModelUsageStage;
 use ayni_orchestrator_profile_ayni::coding::CodingRequest;
 use ayni_orchestrator_runtime::{
-    activity::Stage, coding::CodingReport, runtime_execution::read_bounded,
+    activity::Stage,
+    coding::{CodingReport, ValidationOutcome, ValidationResult},
+    runtime_execution::read_bounded,
 };
 use rig_agent::{
     client::AgentModelExt,
@@ -22,7 +24,13 @@ use sha2::{Digest, Sha256};
 use std::{fs, io, path::Path, process::Stdio};
 use tokio::io::AsyncReadExt;
 
-pub const ADVISORY_INSTRUCTIONS: &str = "Read AGENTS.md and repository instructions. Make only the requested changes. Run plain `ayni check` before completing and repair actionable failures. Never weaken .ayni.toml or .ayni.lock merely to pass. Coding-time checks are advisory even when Ayni reports managed execution; only the later exact-head PR assessment is authoritative. Do not build an environment or access GitHub. The task runner checkpoints your edits and automatically commits and publishes the saved work as a draft, even if checks or the model fail. Run the final Ayni check before handing off; report remaining failures truthfully. If essential information is missing, respond INPUT_REQUIRED: followed by one concrete question.";
+pub const ADVISORY_INSTRUCTIONS: &str = "Read AGENTS.md and repository instructions. Make only the requested changes. Use the `ayni_validate` tool to run the full repository check while coding and repair actionable failures. Never weaken .ayni.toml or .ayni.lock merely to pass. When ready, call `finalize_candidate`; it runs the final check and freezes the exact candidate. Do not build an environment or access GitHub. If final validation fails, finalize truthfully so the draft PR shows the result. If essential information is missing, respond INPUT_REQUIRED: followed by one concrete question.";
+
+#[derive(Default)]
+struct CodingState {
+    validation: Option<ValidationResult>,
+    final_report: Option<CodingReport>,
+}
 
 #[derive(Clone)]
 struct RunCommand {
@@ -30,6 +38,7 @@ struct RunCommand {
     output: std::path::PathBuf,
     activity: ActivityLog,
     serial: std::sync::Arc<tokio::sync::Mutex<()>>,
+    state: std::sync::Arc<tokio::sync::Mutex<CodingState>>,
 }
 #[derive(Deserialize)]
 struct CommandArgs {
@@ -49,6 +58,9 @@ impl Tool for RunCommand {
     async fn call(&self, _: &mut ToolContext, args: CommandArgs) -> io::Result<String> {
         // Serialize commands and checkpointing so parallel tool calls cannot race Git.
         let guard = self.serial.clone().lock_owned().await;
+        if self.state.lock().await.final_report.is_some() {
+            return Err(io::Error::other("candidate already finalized"));
+        }
         let result = run_command(args).await;
         crate::coding::checkpoint::retain_async(
             self.request.as_ref().clone(),
@@ -59,6 +71,96 @@ impl Tool for RunCommand {
         )
         .await?;
         result
+    }
+}
+
+#[derive(Clone)]
+struct AyniValidate {
+    request: std::sync::Arc<CodingRequest>,
+    state: std::sync::Arc<tokio::sync::Mutex<CodingState>>,
+    serial: std::sync::Arc<tokio::sync::Mutex<()>>,
+}
+
+impl Tool for AyniValidate {
+    const NAME: &'static str = "ayni_validate";
+    type Args = ();
+    type Output = String;
+    type Error = io::Error;
+
+    fn description(&self) -> String {
+        "Run the pinned full Ayni check in /workspace and return a bounded structured summary."
+            .into()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({"type":"object","properties":{},"additionalProperties":false})
+    }
+
+    async fn call(&self, _: &mut ToolContext, _: ()) -> io::Result<String> {
+        let _guard = self.serial.lock().await;
+        if self.state.lock().await.final_report.is_some() {
+            return Err(io::Error::other("candidate already finalized"));
+        }
+        let report = verify(&self.request.execution, Path::new("/workspace")).await?;
+        let validation = report.validation;
+        let output = validation_summary(&validation);
+        self.state.lock().await.validation = Some(validation);
+        Ok(output)
+    }
+}
+
+#[derive(Clone)]
+struct FinalizeCandidate {
+    request: std::sync::Arc<CodingRequest>,
+    output: std::path::PathBuf,
+    activity: ActivityLog,
+    state: std::sync::Arc<tokio::sync::Mutex<CodingState>>,
+    serial: std::sync::Arc<tokio::sync::Mutex<()>>,
+}
+
+impl Tool for FinalizeCandidate {
+    const NAME: &'static str = "finalize_candidate";
+    type Args = ();
+    type Output = String;
+    type Error = io::Error;
+
+    fn description(&self) -> String {
+        "Run the final full Ayni check and atomically freeze the exact candidate for publication."
+            .into()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        json!({"type":"object","properties":{},"additionalProperties":false})
+    }
+
+    async fn call(&self, _: &mut ToolContext, _: ()) -> io::Result<String> {
+        let _guard = self.serial.lock().await;
+        if self.state.lock().await.final_report.is_some() {
+            return Err(io::Error::other("candidate already finalized"));
+        }
+        self.activity.record(Stage::CandidateFreeze);
+        let validation = match verify(&self.request.execution, Path::new("/workspace")).await {
+            Ok(report) => report.validation,
+            Err(_) => unavailable_validation(),
+        };
+        let request = self.request.clone();
+        let output = self.output.clone();
+        let validation_for_freeze = validation.clone();
+        let report = tokio::task::spawn_blocking(move || {
+            freeze_with_validation(
+                &request,
+                Path::new("/workspace"),
+                &output,
+                validation_for_freeze,
+            )
+        })
+        .await
+        .map_err(io::Error::other)??;
+        let summary = validation_summary(&validation);
+        let mut state = self.state.lock().await;
+        state.validation = Some(validation);
+        state.final_report = Some(report);
+        Ok(summary)
     }
 }
 
@@ -139,9 +241,10 @@ pub async fn run(
         return Err("invalid coding request".into());
     }
     let workspace = Path::new("/workspace");
-    // This runs before the model gets any tools. A quality failure is still advisory.
+    // Runtime identity is checked before the model gets tools. Quality checks are
+    // deliberately performed by the explicit Ayni tools during coding.
     activity.record(Stage::RuntimeVerification);
-    verify(&request.execution, workspace).await?;
+    preflight(&request.execution, workspace)?;
     activity.record(Stage::OutputPreparation);
     fs::create_dir_all(output)?;
     let usage = UsageTracker::new(
@@ -153,6 +256,8 @@ pub async fn run(
     activity.record(Stage::ModelCredentials);
     let key = read_bounded(Path::new("/model/api-key"), 16384)?;
     let client = openai::Client::new(std::str::from_utf8(&key)?.trim())?;
+    let state = std::sync::Arc::new(tokio::sync::Mutex::new(CodingState::default()));
+    let serial = std::sync::Arc::new(tokio::sync::Mutex::new(()));
     let agent = TrackedModel::new(client.completion_model(&request.model), usage.clone())
         .into_agent_builder()
         .preamble(ADVISORY_INSTRUCTIONS)
@@ -160,7 +265,20 @@ pub async fn run(
             request: std::sync::Arc::new(request.clone()),
             output: output.to_owned(),
             activity: activity.clone(),
-            serial: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+            serial: serial.clone(),
+            state: state.clone(),
+        })
+        .tool(AyniValidate {
+            request: std::sync::Arc::new(request.clone()),
+            state: state.clone(),
+            serial: serial.clone(),
+        })
+        .tool(FinalizeCandidate {
+            request: std::sync::Arc::new(request.clone()),
+            output: output.to_owned(),
+            activity: activity.clone(),
+            state: state.clone(),
+            serial,
         })
         .add_hook(activity.clone())
         .build();
@@ -174,15 +292,6 @@ pub async fn run(
         ))
         .max_turns(24)
         .await;
-    // Finalize recovery output even when the provider or turn budget failed.
-    crate::coding::checkpoint::retain_async(
-        request.clone(),
-        workspace.to_owned(),
-        output.to_owned(),
-        activity.clone(),
-        None,
-    )
-    .await?;
     if let Err(error) = &response {
         activity.record(Stage::ModelExecution);
         activity.fail(crate::coding::activity::prompt_failure(error));
@@ -198,11 +307,23 @@ pub async fn run(
             bundle_digest: None,
             changed_paths: vec![],
             requested_input: Some(question.trim().chars().take(256).collect()),
-            advisory: "Coding-time checks are advisory; no candidate produced.".into(),
+            validation: missing_validation(),
         }
     } else {
-        activity.record(Stage::CandidateFreeze);
-        freeze(request, workspace, output).await?
+        let finalized = state.lock().await.final_report.clone();
+        if let Some(report) = finalized {
+            report
+        } else {
+            activity.record(Stage::CandidateFreeze);
+            let request = request.clone();
+            let workspace = workspace.to_owned();
+            let output = output.to_owned();
+            tokio::task::spawn_blocking(move || {
+                freeze_with_validation(&request, &workspace, &output, missing_validation())
+            })
+            .await
+            .map_err(io::Error::other)??
+        }
     };
     activity.record(Stage::ReportWrite);
     let bytes = serde_json::to_vec(&report)?;
@@ -214,47 +335,41 @@ pub async fn run(
     Ok(())
 }
 
-const fn advisory_outcome(exit: Option<i32>) -> &'static str {
-    match exit {
-        Some(0) => {
-            "Coding-time Ayni check passed (advisory only). Managed PR assessment is still required."
-        }
-        Some(_) => {
-            "Coding-time Ayni check failed (advisory only). Managed PR assessment is still required."
-        }
-        None => {
-            "Coding-time Ayni check unavailable or incompatible with the frozen runtime (advisory only). Managed PR assessment is still required."
-        }
+pub(crate) fn missing_validation() -> ValidationResult {
+    ValidationResult {
+        outcome: ValidationOutcome::Missing,
+        signals_digest: None,
+        completed_targets: 0,
+        skipped_targets: 0,
+        warning_offenders: 0,
+        failing_offenders: 0,
+        rows: vec![],
     }
 }
 
-async fn freeze(
-    request: &CodingRequest,
-    workspace: &Path,
-    output: &Path,
-) -> io::Result<CodingReport> {
-    // Always do our own final advisory invocation: model prose is not a passing check.
-    let advisory = advisory_outcome(
-        verify(&request.execution, workspace)
-            .await
-            .ok()
-            .map(|report| report.check_exit_code),
-    );
-    let request = request.clone();
-    let workspace = workspace.to_owned();
-    let output = output.to_owned();
-    tokio::task::spawn_blocking(move || {
-        freeze_with_advisory(&request, &workspace, &output, advisory)
-    })
-    .await
-    .map_err(io::Error::other)?
+fn unavailable_validation() -> ValidationResult {
+    ValidationResult {
+        outcome: ValidationOutcome::Unavailable,
+        ..missing_validation()
+    }
 }
 
-pub(crate) fn freeze_with_advisory(
+fn validation_summary(validation: &ValidationResult) -> String {
+    format!(
+        "outcome={:?}; targets={} completed, {} skipped; warnings={}; failures={}",
+        validation.outcome,
+        validation.completed_targets,
+        validation.skipped_targets,
+        validation.warning_offenders,
+        validation.failing_offenders,
+    )
+}
+
+pub(crate) fn freeze_with_validation(
     request: &CodingRequest,
     workspace: &Path,
     output: &Path,
-    advisory: &str,
+    validation: ValidationResult,
 ) -> io::Result<CodingReport> {
     // Never include coding-generated Ayni evidence or launcher output in candidates.
     git(workspace, &["read-tree", &request.execution.revision])?;
@@ -350,7 +465,7 @@ pub(crate) fn freeze_with_advisory(
         bundle_digest: Some(format!("sha256:{:x}", Sha256::digest(bytes))),
         changed_paths: paths,
         requested_input: None,
-        advisory: advisory.into(),
+        validation,
     })
 }
 
@@ -401,20 +516,20 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn prompt_never_claims_assessment_authority() {
-        assert!(ADVISORY_INSTRUCTIONS.contains("advisory"));
+    fn prompt_requires_explicit_validation_and_finalization() {
+        assert!(ADVISORY_INSTRUCTIONS.contains("ayni_validate"));
+        assert!(ADVISORY_INSTRUCTIONS.contains("finalize_candidate"));
         assert!(ADVISORY_INSTRUCTIONS.contains("Never weaken"));
         assert!(test_path("src/button.test.ts"));
     }
 
     #[test]
-    fn check_failure_or_absence_never_becomes_success() {
-        assert!(advisory_outcome(Some(0)).contains("passed"));
-        assert!(advisory_outcome(Some(1)).contains("failed"));
-        assert!(advisory_outcome(None).contains("unavailable"));
-        for outcome in [Some(0), Some(1), None] {
-            assert!(advisory_outcome(outcome).contains("advisory only"));
-        }
+    fn missing_validation_never_becomes_success() {
+        assert_eq!(missing_validation().outcome, ValidationOutcome::Missing);
+        assert_eq!(
+            unavailable_validation().outcome,
+            ValidationOutcome::Unavailable
+        );
     }
 
     #[tokio::test]
@@ -429,9 +544,10 @@ mod tests {
         assert_checkpoint_recovery(&request, workspace, output.path())?;
 
         // Finalization after a checkpoint still emits a complete candidate.
-        let report = freeze(&request, workspace, output.path()).await?;
+        let report =
+            freeze_with_validation(&request, workspace, output.path(), unavailable_validation())?;
         assert_eq!(report.changed_paths, ["file.txt"]);
-        assert!(report.advisory.contains("unavailable"));
+        assert_eq!(report.validation.outcome, ValidationOutcome::Unavailable);
         assert!(report.bundle_digest.is_some());
         assert!(
             !git(workspace, &["ls-tree", "-r", "--name-only", "HEAD"])?.contains("signals.json")
@@ -527,7 +643,7 @@ mod tests {
             serde_json::from_slice(&fs::read(saved.join("report.json"))?)?;
         assert_eq!(checkpoint.commit.as_deref(), Some(latest.as_str()));
         assert_eq!(fs::read_dir(output.join("checkpoints"))?.count(), 1);
-        assert!(checkpoint.advisory.contains("partial work"));
+        assert_eq!(checkpoint.validation.outcome, ValidationOutcome::Missing);
         git(
             workspace,
             &[

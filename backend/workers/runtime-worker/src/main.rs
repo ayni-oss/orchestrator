@@ -42,10 +42,6 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
         fs::copy(env::current_exe()?, "/launcher/runtime-worker")?;
         return Ok(());
     }
-    if operation == "assess-actions" {
-        activity.record(Stage::Assessment);
-        return ayni_orchestrator_worker::integrations::github_actions::run().await;
-    }
     if operation == "prepare-output" {
         activity.record(Stage::OutputPreparation);
         let name = env::args()

@@ -68,9 +68,9 @@ pub(super) fn valid_candidate_report(candidate: &v1::Candidate) -> bool {
         && valid_git_revision(&candidate.base_revision)
         && identity_valid
         && candidate
-            .coding_advisory
+            .validation
             .as_ref()
-            .is_none_or(|text| text.len() <= 512)
+            .is_none_or(valid_validation_summary)
 }
 
 pub(super) fn valid_artifact_report(artifact: &v1::RuntimeArtifact) -> bool {
@@ -187,8 +187,22 @@ pub(super) fn same_candidate_report(existing: &v1::Candidate, incoming: &v1::Can
         && existing.identity == incoming.identity
         && existing.state == incoming.state
         && existing.changed_paths == incoming.changed_paths
-        && existing.coding_advisory == incoming.coding_advisory
+        && existing.validation == incoming.validation
         && equivalent_failure(existing.failure.as_ref(), incoming.failure.as_ref())
+}
+
+fn valid_validation_summary(summary: &v1::ValidationSummary) -> bool {
+    summary.outcome != v1::validation_summary::Outcome::Unspecified as i32
+        && v1::validation_summary::Outcome::try_from(summary.outcome).is_ok()
+        && summary
+            .signals_digest
+            .as_ref()
+            .is_none_or(|digest| valid_digest(digest))
+        && summary.rows.len() <= 32
+        && summary
+            .rows
+            .iter()
+            .all(|row| !row.kind.is_empty() && row.kind.len() <= 64)
 }
 
 pub(super) fn same_artifact_report(

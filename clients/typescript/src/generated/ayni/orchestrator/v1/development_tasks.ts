@@ -570,8 +570,77 @@ export interface Candidate {
   failure?: ResourceFailure | undefined;
   createdAt?: Date | undefined;
   resourceVersion: string;
-  /** coding_advisory is bounded to 512 bytes. It is never assessment evidence. */
-  codingAdvisory?: string | undefined;
+  validation?: ValidationSummary | undefined;
+}
+
+/**
+ * Bounded Ayni validation recorded by the coding runtime for this candidate.
+ * It is not independent assessment evidence.
+ */
+export interface ValidationSummary {
+  outcome: ValidationSummary_Outcome;
+  signalsDigest?: string | undefined;
+  completedTargets: number;
+  skippedTargets: number;
+  warningOffenders: number;
+  failingOffenders: number;
+  rows: ValidationRow[];
+}
+
+export enum ValidationSummary_Outcome {
+  OUTCOME_UNSPECIFIED = 0,
+  OUTCOME_PASSED = 1,
+  OUTCOME_FAILED = 2,
+  OUTCOME_UNAVAILABLE = 3,
+  OUTCOME_MISSING = 4,
+  UNRECOGNIZED = -1,
+}
+
+export function validationSummary_OutcomeFromJSON(object: any): ValidationSummary_Outcome {
+  switch (object) {
+    case 0:
+    case "OUTCOME_UNSPECIFIED":
+      return ValidationSummary_Outcome.OUTCOME_UNSPECIFIED;
+    case 1:
+    case "OUTCOME_PASSED":
+      return ValidationSummary_Outcome.OUTCOME_PASSED;
+    case 2:
+    case "OUTCOME_FAILED":
+      return ValidationSummary_Outcome.OUTCOME_FAILED;
+    case 3:
+    case "OUTCOME_UNAVAILABLE":
+      return ValidationSummary_Outcome.OUTCOME_UNAVAILABLE;
+    case 4:
+    case "OUTCOME_MISSING":
+      return ValidationSummary_Outcome.OUTCOME_MISSING;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ValidationSummary_Outcome.UNRECOGNIZED;
+  }
+}
+
+export function validationSummary_OutcomeToJSON(object: ValidationSummary_Outcome): string {
+  switch (object) {
+    case ValidationSummary_Outcome.OUTCOME_UNSPECIFIED:
+      return "OUTCOME_UNSPECIFIED";
+    case ValidationSummary_Outcome.OUTCOME_PASSED:
+      return "OUTCOME_PASSED";
+    case ValidationSummary_Outcome.OUTCOME_FAILED:
+      return "OUTCOME_FAILED";
+    case ValidationSummary_Outcome.OUTCOME_UNAVAILABLE:
+      return "OUTCOME_UNAVAILABLE";
+    case ValidationSummary_Outcome.OUTCOME_MISSING:
+      return "OUTCOME_MISSING";
+    case ValidationSummary_Outcome.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export interface ValidationRow {
+  kind: string;
+  passed: boolean;
 }
 
 export interface ListDevelopmentTasksRequest {
@@ -3704,7 +3773,7 @@ function createBaseCandidate(): Candidate {
     failure: undefined,
     createdAt: undefined,
     resourceVersion: "0",
-    codingAdvisory: undefined,
+    validation: undefined,
   };
 }
 
@@ -3740,8 +3809,8 @@ export const Candidate: MessageFns<Candidate> = {
     if (message.resourceVersion !== "0") {
       writer.uint32(80).uint64(message.resourceVersion);
     }
-    if (message.codingAdvisory !== undefined) {
-      writer.uint32(90).string(message.codingAdvisory);
+    if (message.validation !== undefined) {
+      ValidationSummary.encode(message.validation, writer.uint32(90).fork()).join();
     }
     return writer;
   },
@@ -3844,7 +3913,7 @@ export const Candidate: MessageFns<Candidate> = {
               break;
             }
 
-            message.codingAdvisory = reader.string();
+            message.validation = ValidationSummary.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -3895,11 +3964,7 @@ export const Candidate: MessageFns<Candidate> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
-      codingAdvisory: isSet(object.codingAdvisory)
-        ? globalThis.String(object.codingAdvisory)
-        : isSet(object.coding_advisory)
-        ? globalThis.String(object.coding_advisory)
-        : undefined,
+      validation: isSet(object.validation) ? ValidationSummary.fromJSON(object.validation) : undefined,
     };
   },
 
@@ -3935,8 +4000,8 @@ export const Candidate: MessageFns<Candidate> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
-    if (message.codingAdvisory !== undefined) {
-      obj.codingAdvisory = message.codingAdvisory;
+    if (message.validation !== undefined) {
+      obj.validation = ValidationSummary.toJSON(message.validation);
     }
     return obj;
   },
@@ -3960,7 +4025,289 @@ export const Candidate: MessageFns<Candidate> = {
       : undefined;
     message.createdAt = object.createdAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
-    message.codingAdvisory = object.codingAdvisory ?? undefined;
+    message.validation = (object.validation !== undefined && object.validation !== null)
+      ? ValidationSummary.fromPartial(object.validation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseValidationSummary(): ValidationSummary {
+  return {
+    outcome: 0,
+    signalsDigest: undefined,
+    completedTargets: 0,
+    skippedTargets: 0,
+    warningOffenders: 0,
+    failingOffenders: 0,
+    rows: [],
+  };
+}
+
+export const ValidationSummary: MessageFns<ValidationSummary> = {
+  encode(message: ValidationSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.outcome !== 0) {
+      writer.uint32(8).int32(message.outcome);
+    }
+    if (message.signalsDigest !== undefined) {
+      writer.uint32(18).string(message.signalsDigest);
+    }
+    if (message.completedTargets !== 0) {
+      writer.uint32(24).uint32(message.completedTargets);
+    }
+    if (message.skippedTargets !== 0) {
+      writer.uint32(32).uint32(message.skippedTargets);
+    }
+    if (message.warningOffenders !== 0) {
+      writer.uint32(40).uint32(message.warningOffenders);
+    }
+    if (message.failingOffenders !== 0) {
+      writer.uint32(48).uint32(message.failingOffenders);
+    }
+    for (const v of message.rows) {
+      ValidationRow.encode(v!, writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ValidationSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseValidationSummary();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.outcome = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.signalsDigest = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.completedTargets = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.skippedTargets = reader.uint32();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.warningOffenders = reader.uint32();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.failingOffenders = reader.uint32();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.rows.push(ValidationRow.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ValidationSummary {
+    return {
+      outcome: isSet(object.outcome) ? validationSummary_OutcomeFromJSON(object.outcome) : 0,
+      signalsDigest: isSet(object.signalsDigest)
+        ? globalThis.String(object.signalsDigest)
+        : isSet(object.signals_digest)
+        ? globalThis.String(object.signals_digest)
+        : undefined,
+      completedTargets: isSet(object.completedTargets)
+        ? globalThis.Number(object.completedTargets)
+        : isSet(object.completed_targets)
+        ? globalThis.Number(object.completed_targets)
+        : 0,
+      skippedTargets: isSet(object.skippedTargets)
+        ? globalThis.Number(object.skippedTargets)
+        : isSet(object.skipped_targets)
+        ? globalThis.Number(object.skipped_targets)
+        : 0,
+      warningOffenders: isSet(object.warningOffenders)
+        ? globalThis.Number(object.warningOffenders)
+        : isSet(object.warning_offenders)
+        ? globalThis.Number(object.warning_offenders)
+        : 0,
+      failingOffenders: isSet(object.failingOffenders)
+        ? globalThis.Number(object.failingOffenders)
+        : isSet(object.failing_offenders)
+        ? globalThis.Number(object.failing_offenders)
+        : 0,
+      rows: globalThis.Array.isArray(object?.rows)
+        ? object.rows.map((e: any) => ValidationRow.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ValidationSummary): unknown {
+    const obj: any = {};
+    if (message.outcome !== 0) {
+      obj.outcome = validationSummary_OutcomeToJSON(message.outcome);
+    }
+    if (message.signalsDigest !== undefined) {
+      obj.signalsDigest = message.signalsDigest;
+    }
+    if (message.completedTargets !== 0) {
+      obj.completedTargets = Math.round(message.completedTargets);
+    }
+    if (message.skippedTargets !== 0) {
+      obj.skippedTargets = Math.round(message.skippedTargets);
+    }
+    if (message.warningOffenders !== 0) {
+      obj.warningOffenders = Math.round(message.warningOffenders);
+    }
+    if (message.failingOffenders !== 0) {
+      obj.failingOffenders = Math.round(message.failingOffenders);
+    }
+    if (message.rows?.length) {
+      obj.rows = message.rows.map((e) => ValidationRow.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ValidationSummary>): ValidationSummary {
+    return ValidationSummary.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ValidationSummary>): ValidationSummary {
+    const message = createBaseValidationSummary();
+    message.outcome = object.outcome ?? 0;
+    message.signalsDigest = object.signalsDigest ?? undefined;
+    message.completedTargets = object.completedTargets ?? 0;
+    message.skippedTargets = object.skippedTargets ?? 0;
+    message.warningOffenders = object.warningOffenders ?? 0;
+    message.failingOffenders = object.failingOffenders ?? 0;
+    message.rows = object.rows?.map((e) => ValidationRow.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseValidationRow(): ValidationRow {
+  return { kind: "", passed: false };
+}
+
+export const ValidationRow: MessageFns<ValidationRow> = {
+  encode(message: ValidationRow, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.kind !== "") {
+      writer.uint32(10).string(message.kind);
+    }
+    if (message.passed !== false) {
+      writer.uint32(16).bool(message.passed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ValidationRow {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseValidationRow();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.kind = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.passed = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ValidationRow {
+    return {
+      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
+      passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+    };
+  },
+
+  toJSON(message: ValidationRow): unknown {
+    const obj: any = {};
+    if (message.kind !== "") {
+      obj.kind = message.kind;
+    }
+    if (message.passed !== false) {
+      obj.passed = message.passed;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ValidationRow>): ValidationRow {
+    return ValidationRow.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ValidationRow>): ValidationRow {
+    const message = createBaseValidationRow();
+    message.kind = object.kind ?? "";
+    message.passed = object.passed ?? false;
     return message;
   },
 };

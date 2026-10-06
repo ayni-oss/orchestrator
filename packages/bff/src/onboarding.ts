@@ -25,7 +25,7 @@ export function mapInspection(v: InspectAyniRepositoryResponse) {
 export function mapCandidate(v: Candidate) {
   const identity=v.identity?.identity;
   return { id:v.id, state:candidateStateToJSON(v.state).replace("CANDIDATE_STATE_", "").toLowerCase(), head:identity?.$case === "git" ? identity.git.commitSha : undefined,
-    advisory:v.codingAdvisory ? safeText(v.codingAdvisory,512) : undefined };
+    validation:v.validation ? { outcome:v.validation.outcome, completed:v.validation.completedTargets, skipped:v.validation.skippedTargets, warnings:v.validation.warningOffenders, failures:v.validation.failingOffenders } : undefined };
 }
 export function mapAttemptUsage(v: DevelopmentAttempt) {
   const t=v.modelUsage?.total;
