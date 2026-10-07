@@ -60,6 +60,14 @@ dev_load_image "$worker_image_ref"
 dev_load_image "$web_image_ref"
 runtime_worker_image="$(dev_pin_worker_image "$worker_image_ref")"
 connection_test_image="$(dev_pin_worker_image "$control_plane_image_ref")"
+# Register only the explicitly provisioned local signing Secret. Request names,
+# never credential values; an installation without it starts with UI setup.
+admin_certificates='[]'
+signing_secret_name="$(kubectl --context "$context" --namespace "$namespace" \
+  get secret environment-producer --ignore-not-found -o name)"
+if [[ -n "$signing_secret_name" ]]; then
+  admin_certificates='[{"id":"certificate-admin-environment-producer","displayName":"Local environment signing","secretName":"environment-producer"}]'
+fi
 
 echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
@@ -71,6 +79,7 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
   --set-string "ayni-orchestrator.connections.testImage=$connection_test_image" \
   --set-string "ayni-orchestrator.connections.githubAppSecretName=${AYNI_ORCHESTRATOR_GITHUB_APP_SECRET_NAME:-}" \
+  --set-json "ayni-orchestrator.connections.adminCertificates=$admin_certificates" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
   --set ayni-orchestrator.runtime.enabled=true \
   --set-string "ayni-orchestrator.runtime.workerImage=$runtime_worker_image" \

@@ -84,6 +84,13 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
         serde_json::from_slice(&read_bounded(Path::new("/request/execution.json"), 65_536)?)
             .map_err(io::Error::other)?;
     match operation.as_str() {
+        "trust-lock" => {
+            ayni_orchestrator_worker::profiles::ayni::trust_lock::run(
+                &request,
+                Path::new("/workspace"),
+            )
+            .await
+        }
         "build" => {
             activity.record(Stage::Build);
             ayni_orchestrator_worker::profiles::ayni::build(&request, Path::new("/workspace")).await

@@ -25,6 +25,23 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         request: &ExecutionRequest<P>,
         token: &str,
     ) -> impl Future<Output = ExecutionResult<()>> + Send;
+    fn start_trust_lock<P: Serialize + Sync>(
+        &self,
+        _name: &str,
+        _runtime: &WorkloadRuntime,
+        _request: &ExecutionRequest<P>,
+        _token: &str,
+        _key_id: &str,
+        _public_key: &str,
+    ) -> impl Future<Output = ExecutionResult<()>> + Send {
+        async { Err(ExecutionError::from("trust_lock_backend_unavailable")) }
+    }
+    fn trust_lock_result(
+        &self,
+        _name: &str,
+    ) -> impl Future<Output = ExecutionResult<String>> + Send {
+        async { Err(ExecutionError::from("trust_lock_backend_unavailable")) }
+    }
     fn start_coding<P: Serialize + Sync>(
         &self,
         name: &str,

@@ -260,6 +260,13 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
                                 || crate::registry_probe::valid_namespace(&v.image_namespace))))
             })
         }
+        "SetRuntimeCertificate" => {
+            v1::SetRuntimeCertificateRequest::decode(payload).is_ok_and(|v| {
+                api_validation::idempotency_key(&v.idempotency_key).is_ok()
+                    && !v.runtime_profile_id.is_empty()
+                    && v.expected_resource_version > 0
+            })
+        }
         "SetRuntimeRegistry" => v1::SetRuntimeRegistryRequest::decode(payload).is_ok_and(|v| {
             api_validation::idempotency_key(&v.idempotency_key).is_ok()
                 && api_validation::resource_id(&v.runtime_profile_id, "runtime_profile_id").is_ok()

@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { Server, ServerCredentials, status, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
+  CertificateServiceService, Certificate,
   ConnectionServiceService, type Connection,
   ProjectServiceService, ProjectState,
   DevelopmentAttemptState,
@@ -114,7 +115,7 @@ const repositoryService: UntypedServiceImplementation = {
 function profileView() {
   const connection=connections.find(item=>item.id===profile.registry?.registryConnectionId);
   const imageName=connection?.imageNamespace.toLowerCase()==="ayni-oss" ? "sandbox-ayni" : "ayni-oss/sandbox-ayni";
-  return {...profile,desiredImageRepository:connection ? `ghcr.io/${connection.imageNamespace}/${imageName}` : "ghcr.io/ayni-oss/sandbox-ayni"};
+  return {...profile,effectiveCertificate:certificates.find(c=>c.id===profile.certificateId) ?? certificates.find(c=>c.isDefault),desiredImageRepository:connection ? `ghcr.io/${connection.imageNamespace}/${imageName}` : "ghcr.io/ayni-oss/sandbox-ayni"};
 }
 
 let installation:any;
@@ -123,6 +124,11 @@ const runtimeProfileService: UntypedServiceImplementation = {
   inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator",workflows:[{path:".github/workflows/ayni-environment.yml",contents:"name: Build signed environment"}]});},
   createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profileView()});},
   installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
+  setRuntimeCertificate(call,callback){
+    if(call.request.expectedResourceVersion!==profile.resourceVersion) return callback({code:status.ABORTED,message:"Refresh the runtime and try again."});
+    profile.certificateId=call.request.certificateId;profile.resourceVersion=String(Number(profile.resourceVersion)+1);
+    callback(null,{runtimeProfile:profileView()});
+  },
   setRuntimeRegistry(call,callback){
     if(call.request.expectedResourceVersion!==profile.resourceVersion) return callback({code:status.ABORTED,message:"Refresh the runtime and try again."});
     const connection=connections.find(item=>item.id===call.request.registryConnectionId);
@@ -213,6 +219,26 @@ const connectionService:UntypedServiceImplementation={
   deleteConnection(call,callback){connections=connections.filter(c=>c.id!==call.request.id);callback(null,{});},
   completeGithubManifest(_call,callback){callback({code:3,message:"Invalid manifest code"});},
 };
+let certificates:Certificate[]=[];
+function certificate(data:Partial<Certificate>={}):Certificate {return {id:`certificate:${certificates.length+1}`,managementSource:"ui",displayName:"Signing key",keyId:"team-key",publicKey:"b".repeat(64),secretName:"fixture-signing",secretUid:"fixture-uid",revision:"1",enabled:true,isDefault:certificates.length===0,resourceVersion:"1",status:"ready",failureReason:"",sourceSecretName:"",sourceSecretUid:"",sourceRevision:"",retiredSecretRevisions:[],usageCount:"0",...data};}
+function certificateMutation(operation:string):UntypedServiceImplementation[string] {return(call:any,callback:any)=>{
+  if(rejectMutation(callback))return;
+  const c=certificates.find(c=>c.id===call.request.id);
+  if(!c)return callback({code:status.NOT_FOUND,message:"Certificate not found"});
+  if(c.resourceVersion!==call.request.expectedResourceVersion)return callback({code:status.ABORTED,message:"Refresh certificate"});
+  if(operation==="replace"){c.keyId=call.request.keyId;c.revision=String(Number(c.revision)+1);}
+  if(operation==="rename")c.displayName=call.request.displayName;
+  if(operation==="toggle")c.enabled=call.request.enabled;
+  if(operation==="default")certificates.forEach(item=>item.isDefault=item.id===c.id);
+  if(operation==="delete"){certificates=certificates.filter(item=>item.id!==c.id);return callback(null,{});}
+  c.resourceVersion=String(Number(c.resourceVersion)+1);callback(null,{certificate:c});
+};}
+grpc.addService(CertificateServiceService,{
+  listCertificates(_call:any,callback:any){callback(null,{certificates});},
+  getCertificate(call:any,callback:any){callback(null,{certificate:certificates.find(c=>c.id===call.request.id)});},
+  createCertificate(call:any,callback:any){if(rejectMutation(callback))return;const c=certificate({displayName:call.request.displayName,keyId:call.request.keyId});certificates.push(c);callback(null,{certificate:c});},
+  replaceCertificate:certificateMutation("replace"),renameCertificate:certificateMutation("rename"),setCertificateEnabled:certificateMutation("toggle"),setDefaultCertificate:certificateMutation("default"),deleteCertificate:certificateMutation("delete"),
+});
 grpc.addService(ConnectionServiceService,connectionService);
 grpc.addService(ProjectServiceService, {
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
@@ -226,8 +252,14 @@ grpc.addService(RuntimeProfileServiceService, runtimeProfileService);
 grpc.addService(ProviderServiceService, providerService);
 grpc.addService(DevelopmentTaskServiceService, taskService);
 grpc.bindAsync("127.0.0.1:50061", ServerCredentials.createInsecure(), (error) => { if (error) throw error; });
+function certificateFixture(pathname: string): void {
+ if(pathname==="/reset-certificates") {certificates=[];profile.certificateId="";profile.kind=RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED;rejectConnectionMutation=false;}
+ if(pathname==="/admin-certificate") certificates=[certificate({id:"admin:certificate",managementSource:"admin",displayName:"Admin signing",sourceSecretName:"admin-signing"})];
+ if(pathname==="/custom-profile") profile.kind=RuntimeProfileKind.RUNTIME_PROFILE_KIND_CUSTOM_RUNTIME;
+}
 const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
+ if(request.method==="POST") certificateFixture(url.pathname);
  if(request.method==="POST" && url.pathname==="/reset-connections") {connections=[];rejectConnectionMutation=false;}
  if(request.method==="POST" && url.pathname==="/reject-connection-mutation") rejectConnectionMutation=true;
  if(request.method==="POST" && url.pathname==="/connection-state" && connections[0]) {

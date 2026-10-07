@@ -39,6 +39,8 @@ connections:
   testImage: ""
   # Explicit safe metadata only; referenced Secrets remain administrator-owned.
   adminRegistries: []
+  # Explicit signing Secret references, imported as read-only certificates.
+  adminCertificates: []
 
 controlPlane:
   maxAttempts: 3

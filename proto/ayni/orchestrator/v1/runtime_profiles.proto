@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
+import "ayni/orchestrator/v1/certificates.proto";
 import "ayni/orchestrator/v1/common.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -19,6 +20,7 @@ service RuntimeProfileService {
   rpc GetAutomationInstallation(GetAutomationInstallationRequest) returns (GetAutomationInstallationResponse);
   rpc InstallRepositoryAutomation(InstallRepositoryAutomationRequest) returns (InstallRepositoryAutomationResponse);
   rpc ReconcileRuntimeProfile(ReconcileRuntimeProfileRequest) returns (ReconcileRuntimeProfileResponse);
+  rpc SetRuntimeCertificate(SetRuntimeCertificateRequest) returns (SetRuntimeCertificateResponse);
   rpc SetRuntimeRegistry(SetRuntimeRegistryRequest) returns (SetRuntimeRegistryResponse);
   rpc WatchRuntimeProfiles(WatchRuntimeProfilesRequest) returns (stream WatchRuntimeProfilesResponse);
 }
@@ -92,6 +94,10 @@ message RuntimeProfile {
   RuntimeRegistrySelection registry = 13;
   // Server-computed destination for the selected connection; never write authority.
   string desired_image_repository = 14;
+  // Empty selection follows the global enabled default certificate.
+  optional string certificate_id = 15;
+  // Safe server-computed signing identity; never contains private material.
+  Certificate effective_certificate = 16;
 }
 
 // RuntimeProfileRevision is an immutable version of profile configuration.
@@ -362,5 +368,16 @@ message SetRuntimeRegistryRequest {
 }
 
 message SetRuntimeRegistryResponse {
+  RuntimeProfile runtime_profile = 1;
+}
+
+message SetRuntimeCertificateRequest {
+  string idempotency_key = 1;
+  string runtime_profile_id = 2;
+  uint64 expected_resource_version = 3;
+  string certificate_id = 4;
+}
+
+message SetRuntimeCertificateResponse {
   RuntimeProfile runtime_profile = 1;
 }

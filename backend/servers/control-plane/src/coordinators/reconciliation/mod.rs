@@ -35,6 +35,8 @@ pub struct RuntimeCursor {
     status: BTreeMap<String, String>,
     #[serde(default)]
     force_rebuild: bool,
+    #[serde(default)]
+    trust: Option<TrustUpdate>,
 }
 
 impl RuntimeCursor {
@@ -101,6 +103,8 @@ struct PendingVerification {
     build_started: bool,
     #[serde(default)]
     force_rebuild: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    certificate: Option<SigningIdentity>,
 }
 
 struct ProfileObservation<'a> {
@@ -114,6 +118,7 @@ struct ProfileObservation<'a> {
     default_branch: String,
     selected_revision: Option<String>,
     registry: v1::RuntimeRegistrySelection,
+    certificate: Option<SigningIdentity>,
 }
 
 pub struct RuntimeReconciler<E = RuntimeKubernetes> {
@@ -272,8 +277,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     async fn profile(&self, id: &str) -> Result<(), &'static str> {
         let time = now()?;
         let lookup_id = id.to_owned();
-        let Some((repository, mut cursor, registry, selected_revision)) = self
+        let Some((repository, mut cursor, registry, selected_revision, certificate)) = self
             .with_database(move |store| {
+                store
+                    .invalidate_certificate_runtime_profiles()
+                    .map_err(|_| "certificate_selection_invalid")?;
                 let profile = store
                     .normalize_runtime_destination(&lookup_id)
                     .map_err(|_| "runtime_profile_missing")?;
@@ -315,11 +323,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 let registry = store
                     .runtime_registry(&profile)
                     .map_err(|_| "runtime_registry_invalid")?;
+                let certificate = store
+                    .effective_runtime_certificate(&profile)
+                    .map_err(|_| "certificate_selection_invalid")?
+                    .map(SigningIdentity::from);
                 Ok(Some((
                     repository,
                     cursor,
                     registry,
                     profile.active_revision_id,
+                    certificate,
                 )))
             })
             .await?
@@ -333,7 +346,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             self.registry_ready(&registry.registry_connection_id)
                 .await?;
         }
-        let runtime = if let Some(frozen) = cursor
+        let mut runtime = if let Some(frozen) = cursor
             .pending
             .as_ref()
             .and_then(|p| p.frozen_runtime.clone())
@@ -363,6 +376,30 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         // A source change that produces a new lock never reuses the previous
         // mutable tag. The repository portion is deployment controlled; the
         // fingerprint is the immutable image identity used for resolve-or-build.
+        if cursor.pending.is_none() {
+            let certificate = certificate.as_ref().ok_or("certificate_setup_required")?;
+            if !certificate.enabled || certificate.status != "ready" {
+                return Err("certificate_not_ready");
+            }
+            if let Some(build) = &mut runtime.build {
+                build.signing_secret.clone_from(&certificate.secret_name);
+            }
+            if !self
+                .ensure_certificate_trust(
+                    id,
+                    &runtime,
+                    &github,
+                    &repository.default_branch,
+                    &head,
+                    &token,
+                    certificate,
+                    &mut cursor,
+                )
+                .await?
+            {
+                return Ok(());
+            }
+        }
         let lock = self
             .source
             .lock(&github.owner, &github.name, &head, &token)
@@ -371,6 +408,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .map_err(|_| "repository_lock_invalid")?;
         let (runtime, source_digest) =
             normalized_runtime_source(&runtime, &lock_identity.fingerprint)?;
+        let binding = cursor
+            .pending
+            .as_ref()
+            .and_then(|pending| pending.certificate.as_ref())
+            .or(certificate.as_ref());
+        let source_digest = certificate_source_digest(&source_digest, binding)?;
         let observation = ProfileObservation {
             id,
             runtime: &runtime,
@@ -382,6 +425,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             default_branch: repository.default_branch,
             selected_revision,
             registry,
+            certificate,
         };
         if cursor.pending.is_some() {
             self.observe_pending(&observation, &mut cursor).await
@@ -564,6 +608,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let token = observation.token.as_str();
         let source_digest = observation.source_digest.as_str();
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
+        if let Some(certificate) = &pending.certificate {
+            if report.runtime.certificate_key_id != certificate.key_id {
+                return Err("certificate_verification_mismatch");
+            }
+        } else {
+            return Err("certificate_setup_required");
+        }
         crate::profiles::ayni::evidence_policy::admit_runtime(
             report,
             &pending.request.expected,
@@ -673,6 +724,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         .map_err(|_| "runtime_revision_failed")?;
         let expected_revision = observation.selected_revision.clone();
         let expected_registry = observation.registry.clone();
+        let certificate = observation.certificate.clone();
         let next_cursor = cursor.clone();
         let id = id.to_owned();
         let runtime = runtime.clone();
@@ -719,6 +771,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     build_observed: false,
                     build_started: false,
                     force_rebuild: cursor.force_rebuild,
+                    certificate,
                     request: ExecutionRequest {
                         repository_url: format!(
                             "https://github.com/{}/{}.git",
@@ -756,6 +809,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 }
 
+mod trust;
+use trust::{SigningIdentity, TrustUpdate};
 mod coding;
 mod worker_mapping;
 
@@ -888,6 +943,19 @@ fn normalized_runtime_source(
         Sha256::digest(serde_json::to_vec(&runtime).map_err(|_| "runtime_source_invalid")?)
     );
     Ok((runtime, digest))
+}
+
+fn certificate_source_digest(
+    source: &str,
+    certificate: Option<&SigningIdentity>,
+) -> Result<String, &'static str> {
+    Ok(format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&(source, certificate))
+                .map_err(|_| "certificate_identity_invalid")?
+        )
+    ))
 }
 
 #[cfg(test)]

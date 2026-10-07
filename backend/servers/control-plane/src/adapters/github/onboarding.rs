@@ -251,3 +251,90 @@ impl SourceClient {
         Ok(())
     }
 }
+
+impl SourceClient {
+    pub(crate) async fn trust_token(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+    ) -> Result<String, &'static str> {
+        self.scoped_token(
+            github.installation_id,
+            &github.repository_id,
+            json!({"contents":"write","pull_requests":"write"}),
+        )
+        .await
+    }
+    pub(crate) async fn trust_read_token(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+    ) -> Result<String, &'static str> {
+        self.scoped_token(
+            github.installation_id,
+            &github.repository_id,
+            json!({"contents":"read","pull_requests":"read"}),
+        )
+        .await
+    }
+    pub(crate) async fn reopen_trust_pull(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+        number: u64,
+        token: &str,
+    ) -> Result<Value, &'static str> {
+        bounded(
+            self.client
+                .patch(format!(
+                    "https://api.github.com/repos/{}/{}/pulls/{number}",
+                    github.owner, github.name
+                ))
+                .bearer_auth(token)
+                .json(&json!({"state":"open"})),
+        )
+        .await
+    }
+    pub(crate) async fn trust_branch(
+        &self,
+        github: &ayni_orchestrator_api::v1::GithubRepository,
+        branch: &str,
+        head: &str,
+        policy: &str,
+        lock: &str,
+        token: &str,
+    ) -> Result<(), &'static str> {
+        if let Some(existing) = self.setup_reference(github, branch, token).await? {
+            for (path, expected) in [(".ayni.toml", policy), (".ayni.lock", lock)] {
+                if self
+                    .file(&github.owner, &github.name, &existing, path, token)
+                    .await?
+                    != expected.as_bytes()
+                {
+                    return Err("certificate_trust_branch_conflict");
+                }
+            }
+            return Ok(());
+        }
+        let commit = self
+            .setup_api(github, &format!("git/commits/{head}"), token, None)
+            .await?;
+        let tree = self
+            .setup_api(
+                github,
+                "git/trees",
+                token,
+                Some(&json!({"base_tree":commit["tree"]["sha"],"tree":[
+                    {"path":".ayni.toml","mode":"100644","type":"blob","content":policy},
+                    {"path":".ayni.lock","mode":"100644","type":"blob","content":lock}
+                ]})),
+            )
+            .await?;
+        let commit = self.setup_api(github, "git/commits", token, Some(&json!({"message":"feat(ayni): update environment signing trust","tree":tree["sha"],"parents":[head]}))).await?;
+        self.setup_api(
+            github,
+            "git/refs",
+            token,
+            Some(&json!({"ref":format!("refs/heads/{branch}"),"sha":commit["sha"]})),
+        )
+        .await?;
+        Ok(())
+    }
+}

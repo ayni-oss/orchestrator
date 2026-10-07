@@ -20,6 +20,7 @@ pub struct BuildRuntime {
     #[serde(default = "builder_account")]
     pub service_account: String,
     pub registry_secret: String,
+    #[serde(default)]
     pub signing_secret: String,
     pub engine_secret: String,
     pub engine_host: String,
@@ -57,7 +58,7 @@ impl WorkloadRuntime {
             && (RuntimeImage::parse(&build.image).is_err()
                 || !name(&build.service_account)
                 || !name(&build.registry_secret)
-                || !name(&build.signing_secret)
+                || (!build.signing_secret.is_empty() && !name(&build.signing_secret))
                 || !name(&build.engine_secret)
                 || self.image.contains('@')
                 || !build.engine_host.starts_with("tcp://")

@@ -90,7 +90,10 @@ mod tests {
         record_grpc_admission("GetRuntimeProfile", "allow", Code::Ok);
         record_grpc_completion("GetRuntimeProfile", Code::NotFound);
         let rendered = render_clean_metrics();
-        assert!(rendered.contains("orchestrator_clean_v1_schema_info{version=\"6\"} 1"));
+        assert!(rendered.contains(&format!(
+            "orchestrator_clean_v1_schema_info{{version=\"{}\"}} 1",
+            crate::adapters::sqlite::SCHEMA_VERSION
+        )));
         assert!(rendered.contains("rpc=\"GetRuntimeProfile\""));
         assert!(!rendered.contains("repository_id"));
     }

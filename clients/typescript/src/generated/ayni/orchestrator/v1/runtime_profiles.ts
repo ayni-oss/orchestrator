@@ -21,6 +21,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
+import { Certificate } from "./certificates";
 import { OciPlatform, PageRequest, PageResponse, ResourceFailure, VerifiedMetadata } from "./common";
 
 /** RuntimeProfileKind is the closed set of product runtime profiles. */
@@ -328,6 +329,12 @@ export interface RuntimeProfile {
     | undefined;
   /** Server-computed destination for the selected connection; never write authority. */
   desiredImageRepository: string;
+  /** Empty selection follows the global enabled default certificate. */
+  certificateId?:
+    | string
+    | undefined;
+  /** Safe server-computed signing identity; never contains private material. */
+  effectiveCertificate?: Certificate | undefined;
 }
 
 /** RuntimeProfileRevision is an immutable version of profile configuration. */
@@ -601,6 +608,17 @@ export interface SetRuntimeRegistryResponse {
   runtimeProfile?: RuntimeProfile | undefined;
 }
 
+export interface SetRuntimeCertificateRequest {
+  idempotencyKey: string;
+  runtimeProfileId: string;
+  expectedResourceVersion: string;
+  certificateId: string;
+}
+
+export interface SetRuntimeCertificateResponse {
+  runtimeProfile?: RuntimeProfile | undefined;
+}
+
 function createBaseRuntimeProfile(): RuntimeProfile {
   return {
     id: "",
@@ -617,6 +635,8 @@ function createBaseRuntimeProfile(): RuntimeProfile {
     reconciliationMetadata: [],
     registry: undefined,
     desiredImageRepository: "",
+    certificateId: undefined,
+    effectiveCertificate: undefined,
   };
 }
 
@@ -663,6 +683,12 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     }
     if (message.desiredImageRepository !== "") {
       writer.uint32(114).string(message.desiredImageRepository);
+    }
+    if (message.certificateId !== undefined) {
+      writer.uint32(122).string(message.certificateId);
+    }
+    if (message.effectiveCertificate !== undefined) {
+      Certificate.encode(message.effectiveCertificate, writer.uint32(130).fork()).join();
     }
     return writer;
   },
@@ -792,6 +818,22 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
             message.desiredImageRepository = reader.string();
             continue;
           }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.certificateId = reader.string();
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.effectiveCertificate = Certificate.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -852,6 +894,16 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
         : isSet(object.desired_image_repository)
         ? globalThis.String(object.desired_image_repository)
         : "",
+      certificateId: isSet(object.certificateId)
+        ? globalThis.String(object.certificateId)
+        : isSet(object.certificate_id)
+        ? globalThis.String(object.certificate_id)
+        : undefined,
+      effectiveCertificate: isSet(object.effectiveCertificate)
+        ? Certificate.fromJSON(object.effectiveCertificate)
+        : isSet(object.effective_certificate)
+        ? Certificate.fromJSON(object.effective_certificate)
+        : undefined,
     };
   },
 
@@ -899,6 +951,12 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     if (message.desiredImageRepository !== "") {
       obj.desiredImageRepository = message.desiredImageRepository;
     }
+    if (message.certificateId !== undefined) {
+      obj.certificateId = message.certificateId;
+    }
+    if (message.effectiveCertificate !== undefined) {
+      obj.effectiveCertificate = Certificate.toJSON(message.effectiveCertificate);
+    }
     return obj;
   },
 
@@ -925,6 +983,10 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
       ? RuntimeRegistrySelection.fromPartial(object.registry)
       : undefined;
     message.desiredImageRepository = object.desiredImageRepository ?? "";
+    message.certificateId = object.certificateId ?? undefined;
+    message.effectiveCertificate = (object.effectiveCertificate !== undefined && object.effectiveCertificate !== null)
+      ? Certificate.fromPartial(object.effectiveCertificate)
+      : undefined;
     return message;
   },
 };
@@ -5366,6 +5428,214 @@ export const SetRuntimeRegistryResponse: MessageFns<SetRuntimeRegistryResponse> 
   },
 };
 
+function createBaseSetRuntimeCertificateRequest(): SetRuntimeCertificateRequest {
+  return { idempotencyKey: "", runtimeProfileId: "", expectedResourceVersion: "0", certificateId: "" };
+}
+
+export const SetRuntimeCertificateRequest: MessageFns<SetRuntimeCertificateRequest> = {
+  encode(message: SetRuntimeCertificateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.runtimeProfileId !== "") {
+      writer.uint32(18).string(message.runtimeProfileId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    if (message.certificateId !== "") {
+      writer.uint32(34).string(message.certificateId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetRuntimeCertificateRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetRuntimeCertificateRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.certificateId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetRuntimeCertificateRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      certificateId: isSet(object.certificateId)
+        ? globalThis.String(object.certificateId)
+        : isSet(object.certificate_id)
+        ? globalThis.String(object.certificate_id)
+        : "",
+    };
+  },
+
+  toJSON(message: SetRuntimeCertificateRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.runtimeProfileId !== "") {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.certificateId !== "") {
+      obj.certificateId = message.certificateId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetRuntimeCertificateRequest>): SetRuntimeCertificateRequest {
+    return SetRuntimeCertificateRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetRuntimeCertificateRequest>): SetRuntimeCertificateRequest {
+    const message = createBaseSetRuntimeCertificateRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.certificateId = object.certificateId ?? "";
+    return message;
+  },
+};
+
+function createBaseSetRuntimeCertificateResponse(): SetRuntimeCertificateResponse {
+  return { runtimeProfile: undefined };
+}
+
+export const SetRuntimeCertificateResponse: MessageFns<SetRuntimeCertificateResponse> = {
+  encode(message: SetRuntimeCertificateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.runtimeProfile !== undefined) {
+      RuntimeProfile.encode(message.runtimeProfile, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetRuntimeCertificateResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetRuntimeCertificateResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.runtimeProfile = RuntimeProfile.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetRuntimeCertificateResponse {
+    return {
+      runtimeProfile: isSet(object.runtimeProfile)
+        ? RuntimeProfile.fromJSON(object.runtimeProfile)
+        : isSet(object.runtime_profile)
+        ? RuntimeProfile.fromJSON(object.runtime_profile)
+        : undefined,
+    };
+  },
+
+  toJSON(message: SetRuntimeCertificateResponse): unknown {
+    const obj: any = {};
+    if (message.runtimeProfile !== undefined) {
+      obj.runtimeProfile = RuntimeProfile.toJSON(message.runtimeProfile);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetRuntimeCertificateResponse>): SetRuntimeCertificateResponse {
+    return SetRuntimeCertificateResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetRuntimeCertificateResponse>): SetRuntimeCertificateResponse {
+    const message = createBaseSetRuntimeCertificateResponse();
+    message.runtimeProfile = (object.runtimeProfile !== undefined && object.runtimeProfile !== null)
+      ? RuntimeProfile.fromPartial(object.runtimeProfile)
+      : undefined;
+    return message;
+  },
+};
+
 /** RuntimeProfileService manages versioned runtime configuration and its reconciled resources. */
 export type RuntimeProfileServiceService = typeof RuntimeProfileServiceService;
 export const RuntimeProfileServiceService = {
@@ -5512,6 +5782,17 @@ export const RuntimeProfileServiceService = {
     responseDeserialize: (value: Buffer): ReconcileRuntimeProfileResponse =>
       ReconcileRuntimeProfileResponse.decode(value),
   },
+  setRuntimeCertificate: {
+    path: "/ayni.orchestrator.v1.RuntimeProfileService/SetRuntimeCertificate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetRuntimeCertificateRequest): Buffer =>
+      Buffer.from(SetRuntimeCertificateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetRuntimeCertificateRequest => SetRuntimeCertificateRequest.decode(value),
+    responseSerialize: (value: SetRuntimeCertificateResponse): Buffer =>
+      Buffer.from(SetRuntimeCertificateResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetRuntimeCertificateResponse => SetRuntimeCertificateResponse.decode(value),
+  },
   setRuntimeRegistry: {
     path: "/ayni.orchestrator.v1.RuntimeProfileService/SetRuntimeRegistry" as const,
     requestStream: false as const,
@@ -5549,6 +5830,7 @@ export interface RuntimeProfileServiceServer extends UntypedServiceImplementatio
   getAutomationInstallation: handleUnaryCall<GetAutomationInstallationRequest, GetAutomationInstallationResponse>;
   installRepositoryAutomation: handleUnaryCall<InstallRepositoryAutomationRequest, InstallRepositoryAutomationResponse>;
   reconcileRuntimeProfile: handleUnaryCall<ReconcileRuntimeProfileRequest, ReconcileRuntimeProfileResponse>;
+  setRuntimeCertificate: handleUnaryCall<SetRuntimeCertificateRequest, SetRuntimeCertificateResponse>;
   setRuntimeRegistry: handleUnaryCall<SetRuntimeRegistryRequest, SetRuntimeRegistryResponse>;
   watchRuntimeProfiles: handleServerStreamingCall<WatchRuntimeProfilesRequest, WatchRuntimeProfilesResponse>;
 }
@@ -5733,6 +6015,21 @@ export interface RuntimeProfileServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ReconcileRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
+  setRuntimeCertificate(
+    request: SetRuntimeCertificateRequest,
+    callback: (error: ServiceError | null, response: SetRuntimeCertificateResponse) => void,
+  ): ClientUnaryCall;
+  setRuntimeCertificate(
+    request: SetRuntimeCertificateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetRuntimeCertificateResponse) => void,
+  ): ClientUnaryCall;
+  setRuntimeCertificate(
+    request: SetRuntimeCertificateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetRuntimeCertificateResponse) => void,
   ): ClientUnaryCall;
   setRuntimeRegistry(
     request: SetRuntimeRegistryRequest,

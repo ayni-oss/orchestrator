@@ -87,6 +87,7 @@ impl CleanStore {
         profile.desired_image_repository = self
             .desired_runtime_repository(&profile)?
             .unwrap_or_default();
+        profile.effective_certificate = self.effective_runtime_certificate(&profile)?;
         Ok(profile)
     }
 
@@ -104,7 +105,7 @@ impl CleanStore {
         })
     }
 
-    fn registry_replacement_revision(
+    pub(super) fn registry_replacement_revision(
         &self,
         profile: &v1::RuntimeProfile,
         desired: Option<&String>,

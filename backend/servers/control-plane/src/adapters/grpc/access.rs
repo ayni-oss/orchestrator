@@ -445,7 +445,8 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "CreateRuntimeProfile"
         | "InstallRepositoryAutomation"
         | "ReconcileRuntimeProfile"
-        | "SetRuntimeRegistry" => (PROFILES_WRITE, MAX_UNARY_DEADLINE),
+        | "SetRuntimeRegistry"
+        | "SetRuntimeCertificate" => (PROFILES_WRITE, MAX_UNARY_DEADLINE),
         "ListProviderModels" => (PROVIDER_MODELS_READ, MAX_UNARY_DEADLINE),
         "ListDevelopmentTasks"
         | "GetDevelopmentTask"

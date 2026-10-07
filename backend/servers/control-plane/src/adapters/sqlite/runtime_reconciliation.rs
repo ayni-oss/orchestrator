@@ -29,7 +29,7 @@ impl CleanStore {
         cursor: &crate::coordinators::reconciliation::RuntimeCursor,
     ) -> Result<(), CleanStoreError> {
         let value = serde_json::to_string(cursor).map_err(|_| CleanStoreError::CorruptState)?;
-        if value.len() > 65_536 {
+        if value.len() > 3 * 1_048_576 {
             return Err(CleanStoreError::BoundExceeded);
         }
         let mut profile = self.runtime_profile(profile_id)?;

@@ -23,6 +23,6 @@
       <p class="text-sm text-muted-foreground">Default branch <span class="font-medium text-foreground">{repository.defaultBranch}</span></p>
     </header>
     {#if repository.failure}<Feedback kind="warning" title="Repository needs attention" message={repository.failure.message} />{/if}
-    <RuntimeOverview profiles={data.runtimeProfiles} revisions={data.runtimeRevisions} repository={repository} connections={data.registryConnections} keys={data.runtimeKeys} error={form?.error?.message} />
+    <RuntimeOverview profiles={data.runtimeProfiles} revisions={data.runtimeRevisions} repository={repository} connections={data.registryConnections} certificates={data.certificates} keys={data.runtimeKeys} error={form?.error?.message} />
   {/if}
 </div>

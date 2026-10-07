@@ -67,6 +67,12 @@ for account in runtime-coding runtime-builder; do
     exit 1
   fi
 done
+# Log access belongs only to the enabled runtime controller, with get authority.
+awk '/^  name: runtime-controller$/{found=1} found && /resources: \[pods\/log\]/{getline; if ($0 ~ /verbs: \[get\]/) ok=1} /^---$/{found=0} END{exit !ok}' "$scratch/runtime.yaml"
+if grep -q 'resources: \[pods/log\]' "$scratch/application.yaml"; then
+  echo "runtime-disabled control plane rendered pod log authority" >&2
+  exit 1
+fi
 grep -q 'name: registry-pull' "$scratch/runtime.yaml"
 grep -q 'serviceAccountToken:' "$scratch/runtime.yaml"
 grep -q 'verbs: \[create, patch, delete\]' "$scratch/runtime.yaml"
@@ -136,6 +142,13 @@ grep -q '^  name: ayni-orchestrator-dev-prometheus$' "$scratch/local.yaml"
 grep -q -- '--wait=hookOnly' "$repository_root/dev/scripts/deploy.sh"
 grep -q 'rollout status' "$repository_root/dev/scripts/deploy.sh"
 grep -q 'values-hot-reload.yaml' "$repository_root/dev/scripts/deploy.sh"
+grep -Fq 'get secret environment-producer --ignore-not-found -o name' "$repository_root/dev/scripts/deploy.sh"
+grep -Fq 'ayni-orchestrator.connections.adminCertificates=$admin_certificates' "$repository_root/dev/scripts/deploy.sh"
+helm template registered-certificate "$application_chart" --set runtime.enabled=false \
+  --set-json 'connections.adminCertificates=[{"id":"certificate-admin-environment-producer","displayName":"Local environment signing","secretName":"environment-producer"}]' \
+  >"$scratch/registered-certificate.yaml"
+grep -Fq '\"secretName\":\"environment-producer\"' "$scratch/registered-certificate.yaml"
+grep -Fq 'ORCHESTRATOR_ADMIN_CERTIFICATES: "[]"' "$scratch/application.yaml"
 [[ "$(grep -c '^kind: ClusterRole$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^kind: ClusterRoleBinding$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 1 ]]

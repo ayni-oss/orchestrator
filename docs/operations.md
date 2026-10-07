@@ -19,8 +19,12 @@ and terminate old workers before reconnecting projects and repositories. Resolve
 and display the exact application-owned database path and volume, output PVCs,
 Jobs, ConfigMaps and attempt Secrets before deleting anything. Confirm ownership
 from the release and workload references; never use a namespace-wide deletion.
-The current SQLite schema is version 6. Reinitialize application state because
-older schemas are rejected without conversion. Retained-data deletion requires
+The current SQLite schema is version 7. Recognized schema-6 databases migrate
+additively at startup: one transaction creates certificate tables and advances the
+schema marker, preserving existing resources, payloads and retained work. This
+upgrade requires no database reset. Schemas 5 and earlier, unknown versions and
+unrecognized table layouts are rejected; the earlier worker-owned breaking
+cutover still requires reinitialization for those states. Retained-data deletion requires
 explicit approval after displaying the inventory. Preserve administrator-managed
 connection Secrets and external GitHub Apps. Keep source repositories, runtime images, unrelated resources and
 existing GitHub pull requests.
@@ -62,7 +66,8 @@ retired revisions for consumers before deleting UI-managed Secrets. Labels
 identify ownership; Kubernetes RBAC grants Secret access by namespace and
 resource, not by these labels.
 
-Runtime registry selections are additive protobuf metadata within SQLite schema 6;
+Runtime registry selections are additive protobuf metadata retained by the
+schema-7 upgrade;
 this UI refinement requires no database reset. Existing profiles without a runtime
 selection inherit their repository’s legacy default until explicitly edited.
 After every runtime has an explicit selection, that legacy default no longer
@@ -73,10 +78,48 @@ the control plane.
 
 Runtime registry selection now stores only the connection ID. Older duplicated
 namespace protobuf fields are reserved and ignored when existing payloads are
-read; schema 6 remains unchanged. Legacy repository write APIs accept an omitted
+read; the schema-7 certificate migration preserves those payloads. Legacy
+repository write APIs accept an omitted
 namespace as inheritance, reject a supplied different namespace, and store the
 connection's actual namespace as compatibility metadata. Runtime routing never
 uses that legacy field. Reconciliation retires an old duplicated destination
 before observing its frozen pending work; old Jobs finish at their original path
 but cannot reactivate it. Newly admitted work waits for the normalized destination
 to be verified.
+
+
+## Certificate setup and rotation
+
+Use **Certificates** to generate or import an Ed25519 signing key and its key ID.
+The first valid certificate becomes the global default. Choose another enabled
+default before disabling or deleting it; assigned certificates cannot be deleted.
+Ayni runtime Edit dialogs can follow the default or explicitly select another
+certificate. Projects inherit these repository runtime selections. Custom runtimes
+receive no signing material.
+
+Register administrator signing Secrets explicitly through
+`connections.adminCertificates`. Legacy `build.signing_secret` references are
+registered for compatibility and are deprecated for new setup. Updating a referenced
+administrator Secret creates an owned immutable execution snapshot without changing
+the source Secret. The UI displays public details and reports missing or invalid
+sources. It never returns a private signing seed.
+
+Selection changes, default changes and key rotation retire admission readiness and
+propose draft public trust-policy/lock updates only for inspected Ayni repositories.
+Review and merge the linked PR, then wait for image verification before admitting
+new work. Closed PRs and failed lock jobs remain visible; use runtime Rebuild after
+repair to retry. Source changes and stale builds cannot activate a newer selection.
+
+Build the environment builder with `deploy/images/runtime-builder/Dockerfile`.
+It includes Git, CA certificates, Docker CLI and Buildx, plus the pinned mise
+resolver used by the supported Ayni CLI. Trust-lock jobs use this image without
+Docker daemon access or signing and registry-push credentials. The resolver
+version must match the repository lock; mismatches fail instead of silently
+changing immutable provisioning inputs.
+
+Retain previous immutable signing Secret revisions while pending or frozen build
+references need them. Already admitted tasks retain their frozen runtime image;
+rotation does not rewrite their snapshots. Never delete administrator-owned source
+Secrets as certificate cleanup. The supported schema-6 to schema-7 upgrade keeps
+existing connections and retained execution state; back up the private database
+before upgrading and preserve Secret ownership references.

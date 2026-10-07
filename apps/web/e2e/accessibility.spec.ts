@@ -21,7 +21,7 @@ test("overview and task workflows meet automated accessibility checks", async ({
 });
 
 test("repository and runtime onboarding meet accessibility checks",async({page})=>{
- for(const path of ["/projects","/projects/project:1","/repositories","/repositories/repository:1","/profiles/profile:1","/source-control","/container-registries"]){
+ for(const path of ["/projects","/projects/project:1","/repositories","/repositories/repository:1","/profiles/profile:1","/source-control","/container-registries","/certificates"]){
   await page.goto(path);
   await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
   await expectAccessible(page);
@@ -55,4 +55,10 @@ test("GHCR connection onboarding dialog has accessible labels and keyboard dismi
   await expectAccessible(page);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
+});
+
+
+test("certificate import dialog supports accessible labels and keyboard dismissal",async({page,request})=>{
+  await request.post("http://127.0.0.1:50062/reset-certificates");await page.goto("/certificates");await page.getByRole("button",{name:"Add certificate",exact:true}).click();
+  await page.getByLabel("Import",{exact:true}).check();await expectAccessible(page);await page.getByLabel("Signing seed",{exact:true}).fill("a".repeat(64));await page.keyboard.press("Escape");await expect(page.getByRole("dialog")).toBeHidden();
 });

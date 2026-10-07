@@ -23,11 +23,15 @@ enabled workloads:
 - Optional administrator GitHub App: set `connections.githubAppSecretName` to a
   Secret containing `app-id` and `private-key.pem`. Leave empty for UI onboarding.
 - `openai-api`: optional `api-key`
-- For dedicated Kubernetes environment builds, the Secret referenced by
-  `runtime.profiles.<profile>.build.signing_secret`: `signing-key` and `key-id`.
-  The build Job references it directly; the chart does not mount it into the
-  control-plane or web containers. The local development bootstrap can create
-  `environment-producer` when the Ayni signing values are present in `dev/.env`.
+- Signing certificates can be imported or generated through the Certificates UI.
+  To reference administrator-managed keys, set `connections.adminCertificates`
+  to safe metadata `{id, displayName, secretName}`; the referenced Secret must
+  contain `signing-key` (64 lowercase hexadecimal characters) and `key-id`.
+  The controller snapshots immutable owned execution revisions; source Secrets
+  remain administrator-owned. Signing material goes only to environment builds.
+  Legacy `runtime.profiles.<profile>.build.signing_secret` and managed-runtime
+  signing references are registered as read-only certificates for compatibility.
+  Leave these fields empty for UI onboarding.
 
 The chart deliberately does not create or accept credential values. Set
 `images.pullPolicy` for the target registry and size

@@ -6,6 +6,7 @@
   type RuntimeProfileDto = PageData["runtimeProfiles"][number];
   type RepositoryConnectionDto = NonNullable<PageData["repositoryConnection"]>;
   import type { ConnectionView } from "$lib/connection.js";
+  import type { CertificateView } from "$lib/certificate.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
@@ -17,15 +18,16 @@
   import { statusTone, words } from "$lib/presentation.js";
 
   type Revision = { managed?: {fingerprint:string;repository:string} | undefined };
-  let { profiles, revisions, repository, connections, keys, error }: {
+  let { profiles, revisions, repository, connections, certificates, keys, error }: {
     profiles:RuntimeProfileDto[]; revisions:Record<string,Revision | undefined>;
-    repository:RepositoryConnectionDto; connections:ConnectionView[]; keys:Record<string,string>; error?:string | undefined;
+    repository:RepositoryConnectionDto; connections:ConnectionView[]; certificates:CertificateView[]; keys:Record<string,string>; error?:string | undefined;
   } = $props();
   let selectedId=$state("");
   let editVersion=$state("");
   let open=$state(false);
   let busy=$state(false);
   let showError=$state(false);
+  let certificateId=$state("");
   let registryId=$state("");
   let notification=$state("");
   let notificationKind=$state<"success"|"warning">("success");
@@ -36,12 +38,13 @@
   function edit(profile:RuntimeProfileDto) {
     selectedId=profile.id;
     editVersion=profile.resourceVersion;
+    certificateId=profile.certificateId ?? "";
     registryId=selection(profile).registryConnectionId;
     showError=false;
     open=true;
   }
   const submit:SubmitFunction=({action})=>{
-    const registrySave=action.searchParams.has("/registry");
+    const registrySave=(action.searchParams.has("/registry") || action.searchParams.has("/certificate"));
     busy=true;showError=false;
     return async({result,update})=>{
       busy=false;showError=result.type==="failure";
@@ -71,8 +74,11 @@
       <div class="flex items-center justify-between gap-3"><a class="font-semibold hover:underline" href={`/profiles/${encodeURIComponent(profile.id)}`}>{words(profile.kind)}</a><div class="flex items-center gap-2"><StatusBadge status={profile.state} tone={statusTone(profile.state)} /><Button variant="outline" size="sm" onclick={()=>edit(profile)}>{profile.support==="operational" ? "Edit" : "Details"}</Button></div></div>
       <dl class="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
         {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Ayni lock</dt><dd class="break-all font-mono text-xs">{revision?.managed?.fingerprint ?? "Not available yet"}</dd>{/if}
+        {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Certificate</dt><dd>{profile.effectiveCertificate ? `${profile.effectiveCertificate.displayName} · revision ${profile.effectiveCertificate.revision}${profile.certificateId ? "" : " (default)"}` : "Not configured"}</dd>{/if}
         <dt class="text-muted-foreground">Image destination</dt><dd class="break-all">{profile.desiredImageRepository || revision?.managed?.repository || "Not configured"}</dd>
       </dl>
+      {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
+      {#each profile.reconciliation.filter(entry=>entry.key==="certificate-trust-pr") as entry (entry.key)}<a href={entry.value} target="_blank" rel="noreferrer" class="text-sm underline">Review certificate trust update</a>{/each}
       {#if profile.failure}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
     </article>
@@ -87,6 +93,13 @@
       <StatusBadge status={selected.state} tone={statusTone(selected.state)} />
       {#if selected.failure}<Feedback kind="warning" title="Runtime needs attention" message={failureMessage(selected.failure.message)} />{/if}
       {#if selected.kind==="ayni_managed"}
+      <form method="POST" action="?/certificate" use:enhance={submit} class="space-y-4">
+        <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={`${keys[selected.id]}-certificate-${editVersion}`}/><input type="hidden" name="resourceVersion" value={editVersion}/>
+        <div class="space-y-2"><Label for="runtime-certificate">Signing certificate</Label><ThemedSelect id="runtime-certificate" name="certificateId" bind:value={certificateId} options={[{value:"",label:certificates.find(c=>c.isDefault) ? `Global default (${certificates.find(c=>c.isDefault)!.displayName})` : "Global default (not configured)"},...certificates.map(c=>({value:c.id,label:c.displayName}))]} /></div>
+        {#if selected.effectiveCertificate}<p class="text-xs text-muted-foreground">Effective key: {selected.effectiveCertificate.keyId} · revision {selected.effectiveCertificate.revision}</p>{/if}
+        {#if !certificates.length}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
+        <Button type="submit" disabled={busy || !certificates.length}>Save certificate</Button>
+      </form>
       <form method="POST" action="?/registry" use:enhance={submit} class="space-y-4">
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><input type="hidden" name="resourceVersion" value={editVersion}/>
         <div class="space-y-2"><Label for="runtime-registry">GHCR connection</Label><ThemedSelect id="runtime-registry" name="registryConnectionId" bind:value={registryId} options={connections.map(connection=>({value:connection.id,label:connection.displayName}))} required /></div>

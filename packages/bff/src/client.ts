@@ -1,3 +1,4 @@
+import { mapCertificate } from "./certificates.js";
 import {
   credentials,
   Metadata,
@@ -7,6 +8,7 @@ import {
   type ServiceError,
 } from "@grpc/grpc-js";
 import {
+  CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
   ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
   ProjectServiceClient, ProjectState,
   type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
@@ -142,6 +144,7 @@ function mapProject(value: Project): ProjectDto {
 }
 
 export class OrchestratorBff {
+  readonly #certificates: CertificateServiceClient;
   readonly #connections: ConnectionServiceClient;
   readonly #projects: ProjectServiceClient;
   readonly #repositories: RepositoryServiceClient;
@@ -157,12 +160,43 @@ export class OrchestratorBff {
       "grpc.max_send_message_length": MAX_REQUEST_BYTES,
     };
     const channelCredentials = credentials.createInsecure();
+    this.#certificates = new CertificateServiceClient(address, channelCredentials, options);
     this.#connections = new ConnectionServiceClient(address, channelCredentials, options);
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
     this.#tasks = new DevelopmentTaskServiceClient(address, channelCredentials, options);
+  }
+
+  async listCertificates(context: RequestContext) {
+    const result = await this.#unary<{certificates:Certificate[]}>(context,(m,o,c)=>this.#certificates.listCertificates({},m,o,c));
+    return result.certificates.map(mapCertificate);
+  }
+  async getCertificate(id: string, context: RequestContext) {
+    return mapCertificate(required((await this.#unary<{certificate?:Certificate | undefined}>(context,(m,o,c)=>this.#certificates.getCertificate({id},m,o,c))).certificate));
+  }
+  async createCertificate(input: CreateCertificateRequest, context: RequestContext) {
+    return mapCertificate(required((await this.#unary<{certificate?:Certificate | undefined}>(context,(m,o,c)=>this.#certificates.createCertificate(input,m,o,c))).certificate));
+  }
+  async replaceCertificate(input: ReplaceCertificateRequest, context: RequestContext) {
+    return mapCertificate(required((await this.#unary<{certificate?:Certificate | undefined}>(context,(m,o,c)=>this.#certificates.replaceCertificate(input,m,o,c))).certificate));
+  }
+  async renameCertificate(input: RenameCertificateRequest, context: RequestContext) {
+    return mapCertificate(required((await this.#unary<{certificate?:Certificate | undefined}>(context,(m,o,c)=>this.#certificates.renameCertificate(input,m,o,c))).certificate));
+  }
+  async setCertificateEnabled(input: SetCertificateEnabledRequest, context: RequestContext) {
+    return mapCertificate(required((await this.#unary<{certificate?:Certificate | undefined}>(context,(m,o,c)=>this.#certificates.setCertificateEnabled(input,m,o,c))).certificate));
+  }
+  async setDefaultCertificate(input: SetDefaultCertificateRequest, context: RequestContext) {
+    return mapCertificate(required((await this.#unary<{certificate?:Certificate | undefined}>(context,(m,o,c)=>this.#certificates.setDefaultCertificate(input,m,o,c))).certificate));
+  }
+  async deleteCertificate(input: DeleteCertificateRequest, context: RequestContext): Promise<void> {
+    await this.#unary(context,(m,o,c)=>this.#certificates.deleteCertificate(input,m,o,c));
+  }
+  async setRuntimeCertificate(input:{idempotencyKey:string;runtimeProfileId:string;expectedResourceVersion:string;certificateId:string},context:RequestContext):Promise<RuntimeProfileDto> {
+    const response=await this.#unary<SetRuntimeCertificateResponse>(context,(m,o,c)=>this.#profiles.setRuntimeCertificate(input,m,o,c));
+    return mapRuntimeProfile(required(response.runtimeProfile));
   }
 
   async listConnections(context: RequestContext): Promise<Connection[]> {
@@ -210,6 +244,7 @@ export class OrchestratorBff {
   }
 
   close(): void {
+    this.#certificates.close();
     this.#connections.close();
     this.#projects.close();
     this.#repositories.close();
