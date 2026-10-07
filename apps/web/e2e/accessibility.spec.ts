@@ -46,3 +46,13 @@ test("project creation supports keyboard selection and accessible validation", a
  await expect(page.getByRole("dialog")).toBeHidden();
  await expect(page.getByRole("button",{name:"Create project",exact:true})).toBeFocused();
 });
+
+test("GHCR connection onboarding dialog has accessible labels and keyboard dismissal", async ({page,request}) => {
+  await request.post("http://127.0.0.1:50062/reset-connections");
+  await page.goto("/container-registries/github");
+  await page.getByRole("button", {name:"Add connection",exact:true}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+});

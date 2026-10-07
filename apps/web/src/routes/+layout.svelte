@@ -10,7 +10,7 @@
   const sourceControl = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
   const registries = $derived(page.url.pathname.startsWith("/container-registries"));
   const repositories = $derived(page.url.pathname.startsWith("/repositories") || page.url.pathname.startsWith("/profiles"));
-  const current = $derived(page.url.pathname.startsWith("/tasks") ? "Task" : page.url.pathname.startsWith("/profiles") ? "Runtime" : page.url.pathname.startsWith("/repositories/") ? "Repository" : page.url.pathname.startsWith("/setup/github/complete") ? "GitHub App" : page.url.pathname.startsWith("/setup/github") ? "GitHub" : page.url.pathname.startsWith("/container-registries/github") ? "GitHub" : page.url.pathname.startsWith("/projects/") ? "Project" : "");
+  const current = $derived(page.url.pathname.startsWith("/tasks") ? "Task" : page.url.pathname.startsWith("/profiles") ? "Runtime" : page.url.pathname.startsWith("/repositories/") ? "Repository" : (page.url.pathname.startsWith("/setup/github/complete") || page.url.pathname.startsWith("/source-control/github/complete")) ? "GitHub App" : (page.url.pathname.startsWith("/setup/github") || page.url.pathname.startsWith("/source-control/github")) ? "GitHub" : page.url.pathname.startsWith("/container-registries/github") ? "GitHub" : page.url.pathname.startsWith("/projects/") ? "Project" : "");
   onMount(() => { document.documentElement.dataset.hydrated = "true"; });
 </script>
 <a href="#main-content" class="fixed left-3 top-3 z-50 -translate-y-20 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:translate-y-0">Skip to content</a>

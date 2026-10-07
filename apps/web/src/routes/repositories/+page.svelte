@@ -117,7 +117,7 @@
         </form>
       {:else if !loadingOptions && !options.error}
         <p class="text-sm text-muted-foreground">No GitHub App installations are available. Set up GitHub in Source control first.</p>
-        <Button href="/source-control" variant="outline">Go to Source control</Button>
+        <Button href="/source-control/github" variant="outline">Set up GitHub</Button>
       {/if}
     </Dialog.Content>
   </Dialog.Root>

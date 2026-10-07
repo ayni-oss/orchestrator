@@ -45,3 +45,5 @@ attempt.
 Before a breaking deployment, follow the exact-resource inventory and state
 reset procedure in [operations](operations.md). Existing source repositories,
 runtime images and GitHub pull requests are retained.
+
+Manage the GitHub App at `/source-control/github`. Use **Add GitHub App** to create an App in your organization or personal account, or import an existing App ID and private key. The compact connection card opens an **Edit** dialog for key rotation, testing, disablement, and deletion; administrator-managed Apps expose read-only **Details**. App installation stays in GitHub. Legacy `/setup/github` links redirect here, and existing Apps using `/setup/github/complete` retain callback compatibility.

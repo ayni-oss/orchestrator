@@ -1,3 +1,2 @@
-import { connectionLoad, connectionActions } from "$lib/server/connections.js";
-export const load = connectionLoad("github_app");
-export const actions = connectionActions("github_app");
+import { redirect } from "@sveltejs/kit";
+export const load = () => redirect(303, "/source-control/github");
