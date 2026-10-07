@@ -22,6 +22,7 @@ retained final work without another coding session.
 
 ## Documentation
 
+- [Ayni product flow and object relationships](docs/ayni-product-flow.md)
 - [Architecture](docs/architecture.md)
 - [Protocol contract](proto/README.md)
 - [Runtime worker](docs/runtime-runner.md)
