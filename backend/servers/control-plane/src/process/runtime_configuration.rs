@@ -250,6 +250,34 @@ fn validate_profile(profile: &str, runtime: &ProfileRuntime) -> Result<(), &'sta
     runtime.execution_runtime().validate()
 }
 
+/// Connection-owned GHCR destination. Preserve foreign-owner routing while
+/// avoiding a repeated namespace when the source repository has the same owner.
+///
+/// # Errors
+///
+/// Returns a bounded error code for an invalid namespace or repository identity.
+pub fn connection_image_repository(
+    namespace: &str,
+    owner: &str,
+    repository: &str,
+) -> Result<String, &'static str> {
+    if !crate::registry_probe::valid_namespace(namespace)
+        || !github_component(owner)
+        || !github_component(repository)
+    {
+        return Err("runtime_repository_identity_invalid");
+    }
+    let namespace = namespace.to_ascii_lowercase();
+    let owner = owner.to_ascii_lowercase();
+    let repository = repository.to_ascii_lowercase();
+    let path = if namespace == owner {
+        format!("{repository}-ayni")
+    } else {
+        format!("{owner}/{repository}-ayni")
+    };
+    Ok(format!("ghcr.io/{namespace}/{path}"))
+}
+
 fn github_component(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 100

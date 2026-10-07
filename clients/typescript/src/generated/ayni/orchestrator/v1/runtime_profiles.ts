@@ -323,7 +323,11 @@ export interface RuntimeProfile {
    * Absent only for profiles stored before runtime-owned registry selection.
    * Present with empty values selects deployment infrastructure defaults.
    */
-  registry?: RuntimeRegistrySelection | undefined;
+  registry?:
+    | RuntimeRegistrySelection
+    | undefined;
+  /** Server-computed destination for the selected connection; never write authority. */
+  desiredImageRepository: string;
 }
 
 /** RuntimeProfileRevision is an immutable version of profile configuration. */
@@ -584,7 +588,6 @@ export interface WorkflowProposal {
 /** RuntimeRegistrySelection survives source revisions and rebuilds of its profile. */
 export interface RuntimeRegistrySelection {
   registryConnectionId: string;
-  imageNamespace: string;
 }
 
 export interface SetRuntimeRegistryRequest {
@@ -592,7 +595,6 @@ export interface SetRuntimeRegistryRequest {
   runtimeProfileId: string;
   expectedResourceVersion: string;
   registryConnectionId: string;
-  imageNamespace: string;
 }
 
 export interface SetRuntimeRegistryResponse {
@@ -614,6 +616,7 @@ function createBaseRuntimeProfile(): RuntimeProfile {
     resourceVersion: "0",
     reconciliationMetadata: [],
     registry: undefined,
+    desiredImageRepository: "",
   };
 }
 
@@ -657,6 +660,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     }
     if (message.registry !== undefined) {
       RuntimeRegistrySelection.encode(message.registry, writer.uint32(106).fork()).join();
+    }
+    if (message.desiredImageRepository !== "") {
+      writer.uint32(114).string(message.desiredImageRepository);
     }
     return writer;
   },
@@ -778,6 +784,14 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
             message.registry = RuntimeRegistrySelection.decode(reader, reader.uint32());
             continue;
           }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.desiredImageRepository = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -833,6 +847,11 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
         ? object.reconciliation_metadata.map((e: any) => VerifiedMetadata.fromJSON(e))
         : [],
       registry: isSet(object.registry) ? RuntimeRegistrySelection.fromJSON(object.registry) : undefined,
+      desiredImageRepository: isSet(object.desiredImageRepository)
+        ? globalThis.String(object.desiredImageRepository)
+        : isSet(object.desired_image_repository)
+        ? globalThis.String(object.desired_image_repository)
+        : "",
     };
   },
 
@@ -877,6 +896,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     if (message.registry !== undefined) {
       obj.registry = RuntimeRegistrySelection.toJSON(message.registry);
     }
+    if (message.desiredImageRepository !== "") {
+      obj.desiredImageRepository = message.desiredImageRepository;
+    }
     return obj;
   },
 
@@ -902,6 +924,7 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     message.registry = (object.registry !== undefined && object.registry !== null)
       ? RuntimeRegistrySelection.fromPartial(object.registry)
       : undefined;
+    message.desiredImageRepository = object.desiredImageRepository ?? "";
     return message;
   },
 };
@@ -5063,16 +5086,13 @@ export const WorkflowProposal: MessageFns<WorkflowProposal> = {
 };
 
 function createBaseRuntimeRegistrySelection(): RuntimeRegistrySelection {
-  return { registryConnectionId: "", imageNamespace: "" };
+  return { registryConnectionId: "" };
 }
 
 export const RuntimeRegistrySelection: MessageFns<RuntimeRegistrySelection> = {
   encode(message: RuntimeRegistrySelection, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.registryConnectionId !== "") {
       writer.uint32(10).string(message.registryConnectionId);
-    }
-    if (message.imageNamespace !== "") {
-      writer.uint32(18).string(message.imageNamespace);
     }
     return writer;
   },
@@ -5098,14 +5118,6 @@ export const RuntimeRegistrySelection: MessageFns<RuntimeRegistrySelection> = {
             message.registryConnectionId = reader.string();
             continue;
           }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.imageNamespace = reader.string();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5125,11 +5137,6 @@ export const RuntimeRegistrySelection: MessageFns<RuntimeRegistrySelection> = {
         : isSet(object.registry_connection_id)
         ? globalThis.String(object.registry_connection_id)
         : "",
-      imageNamespace: isSet(object.imageNamespace)
-        ? globalThis.String(object.imageNamespace)
-        : isSet(object.image_namespace)
-        ? globalThis.String(object.image_namespace)
-        : "",
     };
   },
 
@@ -5137,9 +5144,6 @@ export const RuntimeRegistrySelection: MessageFns<RuntimeRegistrySelection> = {
     const obj: any = {};
     if (message.registryConnectionId !== "") {
       obj.registryConnectionId = message.registryConnectionId;
-    }
-    if (message.imageNamespace !== "") {
-      obj.imageNamespace = message.imageNamespace;
     }
     return obj;
   },
@@ -5150,19 +5154,12 @@ export const RuntimeRegistrySelection: MessageFns<RuntimeRegistrySelection> = {
   fromPartial(object: DeepPartial<RuntimeRegistrySelection>): RuntimeRegistrySelection {
     const message = createBaseRuntimeRegistrySelection();
     message.registryConnectionId = object.registryConnectionId ?? "";
-    message.imageNamespace = object.imageNamespace ?? "";
     return message;
   },
 };
 
 function createBaseSetRuntimeRegistryRequest(): SetRuntimeRegistryRequest {
-  return {
-    idempotencyKey: "",
-    runtimeProfileId: "",
-    expectedResourceVersion: "0",
-    registryConnectionId: "",
-    imageNamespace: "",
-  };
+  return { idempotencyKey: "", runtimeProfileId: "", expectedResourceVersion: "0", registryConnectionId: "" };
 }
 
 export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = {
@@ -5178,9 +5175,6 @@ export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = 
     }
     if (message.registryConnectionId !== "") {
       writer.uint32(34).string(message.registryConnectionId);
-    }
-    if (message.imageNamespace !== "") {
-      writer.uint32(42).string(message.imageNamespace);
     }
     return writer;
   },
@@ -5230,14 +5224,6 @@ export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = 
             message.registryConnectionId = reader.string();
             continue;
           }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.imageNamespace = reader.string();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5272,11 +5258,6 @@ export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = 
         : isSet(object.registry_connection_id)
         ? globalThis.String(object.registry_connection_id)
         : "",
-      imageNamespace: isSet(object.imageNamespace)
-        ? globalThis.String(object.imageNamespace)
-        : isSet(object.image_namespace)
-        ? globalThis.String(object.image_namespace)
-        : "",
     };
   },
 
@@ -5294,9 +5275,6 @@ export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = 
     if (message.registryConnectionId !== "") {
       obj.registryConnectionId = message.registryConnectionId;
     }
-    if (message.imageNamespace !== "") {
-      obj.imageNamespace = message.imageNamespace;
-    }
     return obj;
   },
 
@@ -5309,7 +5287,6 @@ export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = 
     message.runtimeProfileId = object.runtimeProfileId ?? "";
     message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
     message.registryConnectionId = object.registryConnectionId ?? "";
-    message.imageNamespace = object.imageNamespace ?? "";
     return message;
   },
 };

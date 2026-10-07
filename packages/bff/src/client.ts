@@ -219,15 +219,15 @@ export class OrchestratorBff {
   }
 
 
-  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string;imageNamespace?:string }, context: RequestContext) {
-    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:input.imageNamespace ?? ""},m,o,c));
+  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string }, context: RequestContext) {
+    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:""},m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
   }
   async setRepositoryRegistry(input:{idempotencyKey:string;repositoryConnectionId:string;expectedResourceVersion:string;registryConnectionId:string;imageNamespace:string},context:RequestContext):Promise<RepositoryConnectionDto> {
     const response=await this.#unary<SetRepositoryRegistryResponse>(context,(m,o,c)=>this.#repositories.setRepositoryRegistry(input,m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
   }
-  async setRuntimeRegistry(input:{idempotencyKey:string;runtimeProfileId:string;expectedResourceVersion:string;registryConnectionId:string;imageNamespace:string},context:RequestContext):Promise<RuntimeProfileDto> {
+  async setRuntimeRegistry(input:{idempotencyKey:string;runtimeProfileId:string;expectedResourceVersion:string;registryConnectionId:string},context:RequestContext):Promise<RuntimeProfileDto> {
     const response=await this.#unary<SetRuntimeRegistryResponse>(context,(m,o,c)=>this.#profiles.setRuntimeRegistry(input,m,o,c));
     return mapRuntimeProfile(required(response.runtimeProfile));
   }

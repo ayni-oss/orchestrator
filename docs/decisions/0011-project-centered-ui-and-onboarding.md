@@ -91,8 +91,9 @@ branch. Each runtime owns its lock information, image destination, readiness and
 configuration dialog. Inspection events use transient notifications; ongoing
 progress and failures remain visible on the affected runtime.
 
-Registry connection and approved image namespace selections now belong to the
-logical runtime profile and survive source updates and rebuilds. This refines the
+Registry connection selection now belongs to the logical runtime profile and
+survives source updates and rebuilds. The connection alone defines the image
+namespace; runtime configuration never duplicates or overrides it. This refines the
 repository-owned destination described above; it remains shared across projects
 using that runtime. Existing schema-6 profiles without a runtime selection inherit
 the legacy repository default until edited. The additive metadata requires no

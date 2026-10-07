@@ -275,7 +275,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let Some((repository, mut cursor, registry, selected_revision)) = self
             .with_database(move |store| {
                 let profile = store
-                    .runtime_profile(&lookup_id)
+                    .normalize_runtime_destination(&lookup_id)
                     .map_err(|_| "runtime_profile_missing")?;
                 if profile.kind != v1::RuntimeProfileKind::AyniManaged as i32 {
                     return Ok(None);
@@ -842,7 +842,7 @@ fn selected_registry_runtime(
     let connection = store
         .get_connection(&registry.registry_connection_id)
         .map_err(|_| "registry_connection_missing")?;
-    if connection.kind != "ghcr" || connection.image_namespace != registry.image_namespace {
+    if connection.kind != "ghcr" {
         return Ok(None);
     }
     let mut managed_runtime = configuration
@@ -855,9 +855,18 @@ fn selected_registry_runtime(
     if let Some(build) = &mut managed_runtime.build {
         build.registry_secret = connection.secret_name;
     }
-    managed_runtime
-        .profile_runtime(&github.owner, &github.name, &managed.lock_fingerprint)
-        .map(Some)
+    let destination = crate::process::runtime_configuration::connection_image_repository(
+        &connection.image_namespace,
+        &github.owner,
+        &github.name,
+    )?;
+    let mut runtime =
+        managed_runtime.profile_runtime(&github.owner, &github.name, &managed.lock_fingerprint)?;
+    runtime.image = format!(
+        "{destination}:lock-{}",
+        managed.lock_fingerprint.to_ascii_lowercase()
+    );
+    Ok(Some(runtime))
 }
 
 fn normalized_runtime_source(

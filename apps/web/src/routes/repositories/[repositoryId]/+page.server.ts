@@ -55,7 +55,7 @@ export const actions: Actions = {
       const profileId=text(f,"profileId",128) ?? "";
       const profile=await getBff().getRuntimeProfile(profileId,requestContext(locals));
       if(profile.repositoryConnectionId!==params.repositoryId) return fail(400,{error:{message:"Choose a runtime belonging to this repository."}});
-      await getBff().setRuntimeRegistry({runtimeProfileId:profileId,idempotencyKey:text(f,"idempotencyKey",36) ?? "",expectedResourceVersion:text(f,"resourceVersion",24) ?? "",registryConnectionId:text(f,"registryConnectionId",128) ?? "",imageNamespace:text(f,"imageNamespace",128) ?? ""},requestContext(locals));
+      await getBff().setRuntimeRegistry({runtimeProfileId:profileId,idempotencyKey:text(f,"idempotencyKey",36) ?? "",expectedResourceVersion:text(f,"resourceVersion",24) ?? "",registryConnectionId:text(f,"registryConnectionId",128) ?? ""},requestContext(locals));
       return {success:"Runtime image destination updated."};
     }catch(error){const mapped=safeError(error,locals.requestId);return fail(mapped.status,{error:{...mapped,...(mapped.status===409 ? {message:"This runtime changed. Close and reopen the dialog before saving again."} : {})}});}
   },

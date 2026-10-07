@@ -62,7 +62,6 @@ impl CleanStore {
             } {
             v1::RuntimeRegistrySelection {
                 registry_connection_id: repository.registry_connection_id.clone(),
-                image_namespace: repository.image_namespace.clone(),
             }
         } else {
             v1::RuntimeRegistrySelection::default()
@@ -74,6 +73,7 @@ impl CleanStore {
         let profile = v1::RuntimeProfile {
             reconciliation_metadata: vec![],
             registry: Some(registry),
+            desired_image_repository: String::new(),
             id: profile_id.clone(),
             repository_connection_id: repository.id.clone(),
             kind: kind as i32,

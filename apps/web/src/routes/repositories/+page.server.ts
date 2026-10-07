@@ -61,8 +61,7 @@ export const actions: Actions = {
         return fail(400, { action: "connect", error: { status:400, reason:"invalid_selection", message:"Choose a repository the selected GitHub App installation can access.", requestId:locals.requestId, retryable:false } });
       }
       const registryConnectionId=text(form,"registryConnectionId",128) ?? "";
-      const imageNamespace=text(form,"imageNamespace",128) ?? "";
-      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository,registryConnectionId,imageNamespace}, context);
+      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository,registryConnectionId}, context);
       return { action: "connect", success: `Connected ${connection.displayName}.` };
     } catch (error) {
       const mapped = safeError(error, locals.requestId);

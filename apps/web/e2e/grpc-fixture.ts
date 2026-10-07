@@ -111,29 +111,36 @@ const repositoryService: UntypedServiceImplementation = {
   watchRepositories(call) { call.write({ cursor: "10", update: { $case: "repositoryConnection", repositoryConnection: repository } }); call.end(); },
 };
 
+function profileView() {
+  const connection=connections.find(item=>item.id===profile.registry?.registryConnectionId);
+  const imageName=connection?.imageNamespace.toLowerCase()==="ayni-oss" ? "sandbox-ayni" : "ayni-oss/sandbox-ayni";
+  return {...profile,desiredImageRepository:connection ? `ghcr.io/${connection.imageNamespace}/${imageName}` : "ghcr.io/ayni-oss/sandbox-ayni"};
+}
+
 let installation:any;
 let profileEnrolled = true;
 const runtimeProfileService: UntypedServiceImplementation = {
   inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator",workflows:[{path:".github/workflows/ayni-environment.yml",contents:"name: Build signed environment"}]});},
-  createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profile});},
+  createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profileView()});},
   installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
   setRuntimeRegistry(call,callback){
     if(call.request.expectedResourceVersion!==profile.resourceVersion) return callback({code:status.ABORTED,message:"Refresh the runtime and try again."});
-    if(call.request.imageNamespace!=="admin-team") return callback({code:status.INVALID_ARGUMENT,message:"Choose the connection's approved namespace."});
-    profile.registry={registryConnectionId:call.request.registryConnectionId,imageNamespace:call.request.imageNamespace};
+    const connection=connections.find(item=>item.id===call.request.registryConnectionId);
+    if(!connection || connection.kind!=="ghcr" || !connection.enabled || connection.status!=="ready") return callback({code:status.FAILED_PRECONDITION,message:"Choose a ready GHCR connection."});
+    profile.registry={registryConnectionId:connection.id};
     profile.resourceVersion=String(Number(profile.resourceVersion)+1);
-    callback(null,{runtimeProfile:profile});
+    callback(null,{runtimeProfile:profileView()});
   },
-  reconcileRuntimeProfile(_call,callback){profile.resourceVersion=String(Number(profile.resourceVersion)+1);profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profile});},
+  reconcileRuntimeProfile(_call,callback){profile.resourceVersion=String(Number(profile.resourceVersion)+1);profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profileView()});},
 
   getRuntimeProfileRevision(_call,callback) { callback(null,{revision:{id:"profile-revision:1",runtimeProfileId:profileId,repositoryRevision:revision,repositorySnapshotId:"snapshot:1",revisionNumber:"1",resourceVersion:"1",configuration:{$case:"ayniManaged",ayniManaged:{lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni"}}}}); },
   listAutomationInstallations(_call,callback) { callback(null,{automationInstallations:installation ? [installation] : [],page}); },
 
   listRuntimeProfiles(call, callback) {
-    const profiles = profileEnrolled && (call.request.repositoryConnectionId === undefined || call.request.repositoryConnectionId === repositoryId) ? [profile] : [];
+    const profiles = profileEnrolled && (call.request.repositoryConnectionId === undefined || call.request.repositoryConnectionId === repositoryId) ? [profileView()] : [];
     callback(null, { runtimeProfiles: profiles, page });
   },
-  getRuntimeProfile(_call, callback) { callback(null, { runtimeProfile: profile }); },
+  getRuntimeProfile(_call, callback) { callback(null, { runtimeProfile: profileView() }); },
   listRuntimeArtifacts(_call, callback) { callback(null, { runtimeArtifacts: [], page }); },
 };
 

@@ -20,6 +20,9 @@ impl CleanStore {
         let profile = self.runtime_profile(&command.profile_id)?;
         if profile.active_revision_id.as_deref() != observed_revision
             || self.runtime_registry(&profile)? != *observed_registry
+            || self
+                .desired_runtime_repository(&profile)?
+                .is_some_and(|desired| desired != command.identity.image_repository)
         {
             return Err(CleanStoreError::StaleVersion);
         }

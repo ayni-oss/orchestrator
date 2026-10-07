@@ -57,7 +57,8 @@ GHCR authentication, push, pull and artifact cleanup run in scoped, digest-pinne
 probe Jobs. Probe results are persisted before Job cleanup. Push credentials go
 only to trusted builders and probes; candidate workloads receive a separate
 pull-only Secret. Probe Jobs receive no Kubernetes API token, model or signing
-credentials. Each logical runtime profile selects an approved connection and image namespace;
+credentials. Each logical runtime profile selects an approved connection. The connection alone
+defines its image namespace;
 runtime admission freezes the destination and credential revision for subsequent
 work and retries. Runtime selections survive source sync and rebuilds. A destination
 change creates a new selected revision and removes active admission authority.
@@ -84,3 +85,10 @@ The coordinator binds and retains final evidence outside the sandbox. Agent and
 repository processes cannot rewrite worker progress, publication intent, final
 evidence or receipts in the retained output directory. The Linux-only Landlock
 dependency belongs to this private worker; it does not change Ayni upstream.
+
+For a connection whose namespace matches the source owner, the computed runtime
+destination is `ghcr.io/<namespace>/<repository>-ayni`. Cross-owner destinations
+retain `ghcr.io/<namespace>/<source-owner>/<repository>-ayni` so repository names
+remain distinct. One backend helper derives build, pull, admission and read-only
+UI destinations. Deployment-only fallback settings retain their existing layout.
+Previously admitted tasks and pending Jobs retain their original frozen paths.

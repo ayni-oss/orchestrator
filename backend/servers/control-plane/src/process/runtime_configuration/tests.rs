@@ -261,3 +261,25 @@ fn quality_repairs_are_bounded() {
     config.quality_repair_limit = 11;
     assert!(config.validate().is_err());
 }
+
+#[test]
+fn connection_destinations_remove_only_a_repeated_source_owner() -> Result<(), &'static str> {
+    assert_eq!(
+        connection_image_repository("ayni-oss", "AYNI-OSS", "Sandbox")?,
+        "ghcr.io/ayni-oss/sandbox-ayni"
+    );
+    assert_eq!(
+        connection_image_repository("runtimes", "ayni-oss", "sandbox")?,
+        "ghcr.io/runtimes/ayni-oss/sandbox-ayni"
+    );
+    assert_eq!(
+        connection_image_repository("ayni-oss/runtime", "ayni-oss", "sandbox")?,
+        "ghcr.io/ayni-oss/runtime/ayni-oss/sandbox-ayni"
+    );
+    assert_ne!(
+        connection_image_repository("runtimes", "a-b", "c")?,
+        connection_image_repository("runtimes", "a", "b-c")?
+    );
+    assert!(connection_image_repository("https://untrusted", "owner", "repo").is_err());
+    Ok(())
+}

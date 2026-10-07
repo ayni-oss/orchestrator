@@ -25,7 +25,6 @@ fn assign(
         runtime_profile_id: profile.id.clone(),
         expected_resource_version: profile.resource_version,
         registry_connection_id: registry.id.clone(),
-        image_namespace: registry.image_namespace.clone(),
     }
 }
 
@@ -70,7 +69,7 @@ fn registry_updates_are_isolated_idempotent_and_invalidate_admission() -> Result
         Err(CleanStoreError::StaleVersion)
     ));
     let mut conflicting = request;
-    conflicting.image_namespace = "elsewhere".into();
+    conflicting.registry_connection_id = "connection-other".into();
     assert!(matches!(
         store.set_runtime_registry("assign-first", &conflicting),
         Err(CleanStoreError::IdempotencyConflict)
@@ -215,6 +214,197 @@ fn stale_source_observation_cannot_overwrite_a_new_runtime_destination()
     assert_eq!(
         store.runtime_cursor(&profile.id)?.metadata(),
         initial_cursor_metadata
+    );
+    Ok(())
+}
+
+#[test]
+fn connection_namespace_cannot_be_overridden_by_runtime_or_legacy_repository_inputs()
+-> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let registry = registry("connection-registry", "ayni-oss");
+    store.save_connection(&registry)?;
+    let request = assign(&profile, &registry, "select");
+    // Removed runtime namespace tags remain reserved: old callers cannot use
+    // those fields to influence a connection-owned destination.
+    let mut wire = request.encode_to_vec();
+    wire.extend_from_slice(b"\x2a\x08attacker");
+    let decoded = v1::SetRuntimeRegistryRequest::decode(wire.as_slice())
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    assert_eq!(decoded, request);
+    let updated = store.set_runtime_registry("select", &decoded)?;
+    assert_eq!(
+        store
+            .describe_runtime_profile(updated.clone())?
+            .desired_image_repository,
+        "ghcr.io/ayni-oss/sandbox-ayni"
+    );
+    assert_eq!(store.registry_namespace(&registry.id, "")?, "ayni-oss");
+    assert!(store.registry_namespace(&registry.id, "attacker").is_err());
+    let legacy = store.set_repository_registry(
+        "legacy",
+        &v1::SetRepositoryRegistryRequest {
+            idempotency_key: "legacy".into(),
+            repository_connection_id: repository.id,
+            expected_resource_version: repository.resource_version,
+            registry_connection_id: registry.id,
+            image_namespace: String::new(),
+        },
+    )?;
+    assert_eq!(legacy.image_namespace, "ayni-oss");
+    assert_eq!(
+        store.runtime_registry(&updated)?.registry_connection_id,
+        legacy.registry_connection_id
+    );
+    Ok(())
+}
+
+#[test]
+fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(), CleanStoreError> {
+    let directory = tempdir().map_err(CleanStoreError::CreateDirectory)?;
+    let path = directory.path().join("normalized.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (repository, mut profile, mut artifact) = ready_profile(&mut store)?;
+    let (_, mut attempt) = store.create_development_task(
+        "admitted",
+        &task_request(&store, &repository.id, &profile.id, "admitted")?,
+    )?;
+    let registry = registry("connection-registry", "ayni-oss");
+    store.save_connection(&registry)?;
+    let old_destination = "ghcr.io/ayni-oss/ayni-oss/sandbox-ayni";
+    profile.registry = Some(v1::RuntimeRegistrySelection {
+        registry_connection_id: registry.id.clone(),
+    });
+    store
+        .connection
+        .execute(
+            "UPDATE runtime_profiles SET payload=?1 WHERE id=?2",
+            params![profile.encode_to_vec(), profile.id],
+        )
+        .map_err(CleanStoreError::Database)?;
+    let old_revision_id = profile
+        .active_revision_id
+        .as_deref()
+        .ok_or(CleanStoreError::CorruptState)?;
+    let mut revision = store.runtime_profile_revision(old_revision_id)?;
+    if let Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) =
+        revision.configuration.as_mut()
+    {
+        configuration.oci_repository = old_destination.into();
+    }
+    store
+        .connection
+        .execute(
+            "UPDATE runtime_profile_revisions SET payload=?1 WHERE id=?2",
+            params![revision.encode_to_vec(), revision.id],
+        )
+        .map_err(CleanStoreError::Database)?;
+    artifact.oci_repository = old_destination.into();
+    store
+        .connection
+        .execute(
+            "UPDATE runtime_artifacts SET payload=?1 WHERE id=?2",
+            params![artifact.encode_to_vec(), artifact.id],
+        )
+        .map_err(CleanStoreError::Database)?;
+    if let Some(runtime) = attempt.snapshot.as_mut().and_then(|s| s.runtime.as_mut()) {
+        runtime.oci_repository = old_destination.into();
+        runtime.registry_connection_id = registry.id.clone();
+        runtime.pull_secret_name = registry.pull_secret_name.clone();
+    }
+    store
+        .connection
+        .execute(
+            "UPDATE development_attempts SET payload=?1 WHERE id=?2",
+            params![attempt.encode_to_vec(), attempt.id],
+        )
+        .map_err(CleanStoreError::Database)?;
+    let pending = serde_json::json!({"name":"verify-old","profile_revision":old_revision_id,
+        "request":{"repository_url":"https://github.com/ayni-oss/sandbox.git","revision":REVISION,
+            "expected":{"lock_fingerprint":format!("sha256:{}","c".repeat(64)),"platform":"linux/arm64","ayni_version":"0.14.5"}},
+        "image":format!("{old_destination}:lock-{}","c".repeat(64)),
+        "frozen_runtime":{"image":format!("{old_destination}:lock-{}","c".repeat(64)),"platform":"linux/arm64","service_account":"runtime-coding","pull_secret":registry.pull_secret_name,"build":null},
+        "started_at":1,"source_digest":DIGEST,"lock_digest":DIGEST,"build_name":"build-old","build_observed":false,"build_started":true,"force_rebuild":false});
+    let mut cursor = serde_json::to_value(store.runtime_cursor(&profile.id)?)
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    cursor["pending"] = pending.clone();
+    cursor["next_at"] = 60.into();
+    store.connection.execute("INSERT INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES(?1,?2,1,1)",params![format!("managed:{}",profile.id),cursor.to_string()]).map_err(CleanStoreError::Database)?;
+    assert!(matches!(
+        store.create_development_task(
+            "blocked",
+            &task_request(&store, &repository.id, &profile.id, "blocked")?
+        ),
+        Err(CleanStoreError::ProfileNotReady)
+    ));
+    let normalized = store.normalize_runtime_destination(&profile.id)?;
+    assert_eq!(normalized.state, v1::RuntimeProfileState::Updating as i32);
+    assert!(normalized.active_runtime_artifact_id.is_none());
+    assert_ne!(normalized.active_revision_id, profile.active_revision_id);
+    assert_eq!(
+        store.normalize_runtime_destination(&profile.id)?,
+        normalized
+    );
+    let current = store.runtime_profile_revision(
+        normalized
+            .active_revision_id
+            .as_deref()
+            .ok_or(CleanStoreError::CorruptState)?,
+    )?;
+    assert!(
+        matches!(current.configuration, Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) if configuration.oci_repository == "ghcr.io/ayni-oss/sandbox-ayni" && configuration.runtime_source_digest.is_none())
+    );
+    let frozen_cursor = serde_json::to_value(store.runtime_cursor(&profile.id)?)
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    assert_eq!(frozen_cursor["pending"], pending);
+    assert_eq!(frozen_cursor["next_at"], 0);
+    assert_eq!(
+        store.development_attempt(&attempt.id)?.snapshot,
+        attempt.snapshot
+    );
+    assert!(store.connection_secret_in_use(&registry.pull_secret_name)?);
+    store.record_runtime_artifact(
+        &profile.id,
+        verified_artifact(old_revision_id, SECOND_DIGEST),
+    )?;
+    assert!(
+        store
+            .runtime_profile(&profile.id)?
+            .active_runtime_artifact_id
+            .is_none()
+    );
+    let new_revision_id = normalized
+        .active_revision_id
+        .as_deref()
+        .ok_or(CleanStoreError::CorruptState)?;
+    let mut new_artifact = verified_artifact(new_revision_id, DIGEST);
+    new_artifact.oci_repository = "ghcr.io/ayni-oss/sandbox-ayni".into();
+    store.record_runtime_artifact(&profile.id, new_artifact)?;
+    let ready = store.runtime_profile(&profile.id)?;
+    let (_, new_attempt) = store.create_development_task(
+        "normalized",
+        &task_request(&store, &repository.id, &profile.id, "normalized")?,
+    )?;
+    assert_eq!(
+        new_attempt
+            .snapshot
+            .as_ref()
+            .and_then(|s| s.runtime.as_ref())
+            .map(|r| r.oci_repository.as_str()),
+        Some("ghcr.io/ayni-oss/sandbox-ayni")
+    );
+    drop(store);
+    let store = CleanStore::open(&path, 3)?;
+    assert_eq!(store.runtime_profile(&profile.id)?, ready);
+    assert_eq!(
+        store.development_attempt(&attempt.id)?.snapshot,
+        attempt.snapshot
+    );
+    assert_eq!(
+        serde_json::to_value(store.runtime_cursor(&profile.id)?)
+            .map_err(|_| CleanStoreError::CorruptState)?["pending"],
+        pending
     );
     Ok(())
 }

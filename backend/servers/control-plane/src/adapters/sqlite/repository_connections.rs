@@ -11,10 +11,8 @@ impl CleanStore {
         key: &str,
         request: &v1::CreateRepositoryConnectionRequest,
     ) -> Result<v1::RepositoryConnection, CleanStoreError> {
-        self.validate_registry_selection(
-            &request.registry_connection_id,
-            &request.image_namespace,
-        )?;
+        let image_namespace =
+            self.registry_namespace(&request.registry_connection_id, &request.image_namespace)?;
         let digest = request_digest("CreateRepositoryConnection", request);
         if let Some(existing) = action_row(&self.connection, "CreateRepositoryConnection", key)? {
             if existing.request_hash != digest {
@@ -41,7 +39,7 @@ impl CleanStore {
             updated_at: Some(timestamp(now)),
             resource_version: 1,
             registry_connection_id: request.registry_connection_id.clone(),
-            image_namespace: request.image_namespace.clone(),
+            image_namespace,
         };
         let transaction = self
             .connection
@@ -283,24 +281,33 @@ impl CleanStore {
 }
 
 impl CleanStore {
+    pub(crate) fn registry_namespace(
+        &self,
+        id: &str,
+        requested_namespace: &str,
+    ) -> Result<String, CleanStoreError> {
+        if id.is_empty() {
+            return if requested_namespace.is_empty() {
+                Ok(String::new())
+            } else {
+                Err(CleanStoreError::InvalidTransition)
+            };
+        }
+        self.validate_runtime_registry(id)?;
+        let connection = self.get_connection(id)?;
+        if !requested_namespace.is_empty() && requested_namespace != connection.image_namespace {
+            return Err(CleanStoreError::InvalidTransition);
+        }
+        Ok(connection.image_namespace)
+    }
+
+    #[cfg(test)]
     pub(crate) fn validate_registry_selection(
         &self,
         id: &str,
         namespace: &str,
     ) -> Result<(), CleanStoreError> {
-        if id.is_empty() && namespace.is_empty() {
-            return Ok(());
-        }
-        let connection = self.get_connection(id)?;
-        if connection.kind != "ghcr"
-            || !connection.enabled
-            || connection.status != "ready"
-            || namespace != connection.image_namespace
-            || !crate::registry_probe::valid_namespace(namespace)
-        {
-            return Err(CleanStoreError::InvalidTransition);
-        }
-        Ok(())
+        self.registry_namespace(id, namespace).map(|_| ())
     }
 
     pub(crate) fn set_repository_registry(
@@ -316,10 +323,8 @@ impl CleanStore {
             return self
                 .repository_connection(&existing.target_id.ok_or(CleanStoreError::CorruptState)?);
         }
-        self.validate_registry_selection(
-            &request.registry_connection_id,
-            &request.image_namespace,
-        )?;
+        let image_namespace =
+            self.registry_namespace(&request.registry_connection_id, &request.image_namespace)?;
         let mut resource = self.repository_connection(&request.repository_connection_id)?;
         if resource.resource_version != request.expected_resource_version {
             return Err(CleanStoreError::StaleVersion);
@@ -327,9 +332,7 @@ impl CleanStore {
         resource
             .registry_connection_id
             .clone_from(&request.registry_connection_id);
-        resource
-            .image_namespace
-            .clone_from(&request.image_namespace);
+        resource.image_namespace = image_namespace;
         resource.resource_version = resource.resource_version.saturating_add(1);
         let now = unix_seconds()?;
         resource.updated_at = Some(timestamp(now));

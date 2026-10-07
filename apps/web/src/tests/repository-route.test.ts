@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bff = vi.hoisted(() => ({
   listRepositoryConnections: vi.fn(),
+  getRuntimeProfile:vi.fn(),
+  setRuntimeRegistry:vi.fn(),
   connectGithubRepository: vi.fn(),
   listGithubInstallations: vi.fn(),
   listGithubInstallationRepositories: vi.fn(),
 }));
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
 import { actions } from "../routes/repositories/+page.server.js";
+import { actions as runtimeActions } from "../routes/repositories/[repositoryId]/+page.server.js";
 
 describe("repository connection route actions", () => {
   const requestSignal = new AbortController().signal;
@@ -64,4 +67,12 @@ describe("repository connection route actions", () => {
       owner:"ayni-oss", name:"sandbox",
     }), expect.objectContaining({ requestId: "repo-save" }));
   });
+  it("runtime selection ignores browser-provided namespace and forwards only the connection",async()=>{
+    bff.getRuntimeProfile.mockResolvedValue({id:"profile:1",repositoryConnectionId:"repository:1"});
+    const body=new URLSearchParams({profileId:"profile:1",idempotencyKey:"00000000-0000-4000-8000-000000000099",resourceVersion:"2",registryConnectionId:"connection:ghcr",imageNamespace:"forged-namespace"});
+    const result=await runtimeActions.registry!({params:{repositoryId:"repository:1"},locals:{requestId:"runtime-save",requestSignal},request:new Request("http://127.0.0.1/repositories/repository:1?/registry",{method:"POST",body})} as never);
+    expect(result).toEqual({success:"Runtime image destination updated."});
+    expect(bff.setRuntimeRegistry).toHaveBeenCalledWith({runtimeProfileId:"profile:1",idempotencyKey:"00000000-0000-4000-8000-000000000099",expectedResourceVersion:"2",registryConnectionId:"connection:ghcr"},expect.objectContaining({requestId:"runtime-save"}));
+  });
+
 });

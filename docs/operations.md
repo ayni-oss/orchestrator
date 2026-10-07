@@ -70,3 +70,13 @@ retains an unused registry connection. Frozen attempts and pending builds contin
 to retain their credential revisions. Changing a runtime destination is a
 version-checked, idempotent mutation and wakes reconciliation without restarting
 the control plane.
+
+Runtime registry selection now stores only the connection ID. Older duplicated
+namespace protobuf fields are reserved and ignored when existing payloads are
+read; schema 6 remains unchanged. Legacy repository write APIs accept an omitted
+namespace as inheritance, reject a supplied different namespace, and store the
+connection's actual namespace as compatibility metadata. Runtime routing never
+uses that legacy field. Reconciliation retires an old duplicated destination
+before observing its frozen pending work; old Jobs finish at their original path
+but cannot reactivate it. Newly admitted work waits for the normalized destination
+to be verified.

@@ -13,8 +13,7 @@ App ownership and installation permissions remain under GitHub administration.
 Under **Container registries → GitHub**, add a GHCR connection with an approved
 image namespace, username, push token and a distinct pull-only token. Check the
 independent authentication, push, pull and cleanup results. A cleanup failure is
-reported separately and can be retried. Select the connection and matching image
-namespace in the runtime’s **Edit** dialog on its repository overview. Repository
+reported separately and can be retried. Select the connection in the runtime’s **Edit** dialog on its repository overview. Repository
 enrollment does not require a registry selection.
 
 Administrator-managed connections show **Managed by your administrator** and
@@ -28,7 +27,8 @@ restart or Tilt restart is required. Connection pages refresh status periodicall
 The repository overview shows connection status and branch once, followed by its
 runtimes. Lock fingerprints and image destinations belong to each runtime.
 Inspection notifications are transient; ongoing progress and actionable failures
-remain visible on the affected runtime. Registry changes invalidate that runtime’s
+remain visible on the affected runtime. The namespace is defined once on the registry connection; runtime dialogs show
+the server-computed image destination without a namespace input. Registry changes invalidate that runtime’s
 readiness until its new destination is verified; other runtimes are unaffected.
 
 Add repository membership to a project. Select a runtime profile and build or

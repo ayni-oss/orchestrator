@@ -5,6 +5,91 @@ use super::{
 };
 
 impl CleanStore {
+    pub(crate) fn normalize_runtime_destination(
+        &mut self,
+        profile_id: &str,
+    ) -> Result<v1::RuntimeProfile, CleanStoreError> {
+        let profile = self.runtime_profile(profile_id)?;
+        let Some(desired) = self.desired_runtime_repository(&profile)? else {
+            return Ok(profile);
+        };
+        let revision = profile
+            .active_revision_id
+            .as_deref()
+            .map(|id| self.runtime_profile_revision(id))
+            .transpose()?;
+        let outdated = matches!(revision.as_ref().and_then(|r|r.configuration.as_ref()),
+            Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration))
+                if configuration.oci_repository != desired);
+        if !outdated {
+            return Ok(profile);
+        }
+        let selection = self.runtime_registry(&profile)?;
+        let key = format!("normalize-{}-{}", profile.id, profile.resource_version);
+        self.set_runtime_registry(
+            &key,
+            &v1::SetRuntimeRegistryRequest {
+                idempotency_key: key.clone(),
+                runtime_profile_id: profile.id,
+                expected_resource_version: profile.resource_version,
+                registry_connection_id: selection.registry_connection_id,
+            },
+        )
+    }
+
+    pub(crate) fn validate_runtime_registry(&self, id: &str) -> Result<(), CleanStoreError> {
+        if id.is_empty() {
+            return Ok(());
+        }
+        let connection = self.get_connection(id)?;
+        if connection.kind != "ghcr"
+            || !connection.enabled
+            || connection.status != "ready"
+            || !crate::registry_probe::valid_namespace(&connection.image_namespace)
+        {
+            return Err(CleanStoreError::InvalidTransition);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn desired_runtime_repository(
+        &self,
+        profile: &v1::RuntimeProfile,
+    ) -> Result<Option<String>, CleanStoreError> {
+        let selection = self.runtime_registry(profile)?;
+        if selection.registry_connection_id.is_empty() {
+            return Ok(None);
+        }
+        let connection = match self.get_connection(&selection.registry_connection_id) {
+            Ok(connection) => connection,
+            Err(CleanStoreError::NotFound { .. }) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let repository = self.repository_connection(&profile.repository_connection_id)?;
+        let Some(v1::repository_provider::Provider::Github(github)) =
+            repository.provider.and_then(|p| p.provider)
+        else {
+            return Ok(None);
+        };
+        crate::process::runtime_configuration::connection_image_repository(
+            &connection.image_namespace,
+            &github.owner,
+            &github.name,
+        )
+        .map(Some)
+        .map_err(|_| CleanStoreError::InvalidTransition)
+    }
+
+    pub(crate) fn describe_runtime_profile(
+        &self,
+        mut profile: v1::RuntimeProfile,
+    ) -> Result<v1::RuntimeProfile, CleanStoreError> {
+        profile.desired_image_repository = self
+            .desired_runtime_repository(&profile)?
+            .unwrap_or_default();
+        Ok(profile)
+    }
+
     pub(crate) fn runtime_registry(
         &self,
         profile: &v1::RuntimeProfile,
@@ -16,7 +101,6 @@ impl CleanStore {
         let repository = self.repository_connection(&profile.repository_connection_id)?;
         Ok(v1::RuntimeRegistrySelection {
             registry_connection_id: repository.registry_connection_id,
-            image_namespace: repository.image_namespace,
         })
     }
 
@@ -39,15 +123,25 @@ impl CleanStore {
         if profile.kind != v1::RuntimeProfileKind::AyniManaged as i32 {
             return Err(CleanStoreError::InvalidTransition);
         }
-        self.validate_registry_selection(
-            &request.registry_connection_id,
-            &request.image_namespace,
-        )?;
+        self.validate_runtime_registry(&request.registry_connection_id)?;
         let selection = v1::RuntimeRegistrySelection {
             registry_connection_id: request.registry_connection_id.clone(),
-            image_namespace: request.image_namespace.clone(),
         };
-        let changed = self.runtime_registry(&profile)? != selection;
+        let old_selection = self.runtime_registry(&profile)?;
+        let selected_revision = profile
+            .active_revision_id
+            .as_deref()
+            .map(|id| self.runtime_profile_revision(id))
+            .transpose()?;
+        let mut next_profile = profile.clone();
+        next_profile.registry = Some(selection.clone());
+        let desired = self.desired_runtime_repository(&next_profile)?;
+        let outdated_destination = desired.as_ref().is_some_and(|desired| {
+            matches!(selected_revision.as_ref().and_then(|r|r.configuration.as_ref()),
+                Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration))
+                    if configuration.oci_repository != *desired)
+        });
+        let changed = old_selection != selection || outdated_destination;
         let now = unix_seconds()?;
         let mut revision = if changed {
             let mut revision = self.runtime_profile_revision(
@@ -63,6 +157,14 @@ impl CleanStore {
             revision.id = resource_id("profile-revision");
             revision.revision_number =
                 u64::try_from(number).map_err(|_| CleanStoreError::CorruptState)?;
+            if let Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) =
+                revision.configuration.as_mut()
+            {
+                if let Some(desired) = &desired {
+                    configuration.oci_repository.clone_from(desired);
+                }
+                configuration.runtime_source_digest = None;
+            }
             revision.created_at = Some(timestamp(now));
             revision.resource_version = 1;
             Some(revision)

@@ -58,6 +58,7 @@ impl TaskRepository for CleanStore {
         let snapshot =
             self.repository_snapshot_for_revision(&repository.id, &command.repository_revision)?;
         let profile = self.runtime_profile(&command.profile_id)?;
+        let expected_destination = self.desired_runtime_repository(&profile)?;
         let mut facts = AdmissionFacts {
             repository_id: repository.id,
             snapshot_id: snapshot.id,
@@ -85,6 +86,10 @@ impl TaskRepository for CleanStore {
         };
         let revision = self.runtime_profile_revision(&revision_id)?;
         let artifact = self.runtime_artifact(&artifact_id)?;
+        if expected_destination.is_some_and(|expected| artifact.oci_repository != expected) {
+            facts.profile_ready = false;
+            return Ok(facts);
+        }
         facts.profile_source_revision = revision.repository_revision;
         facts.artifact_revision_id = artifact.runtime_profile_revision_id;
         facts.artifact_verified = artifact.status == v1::RuntimeArtifactStatus::Verified as i32;
@@ -131,10 +136,7 @@ impl TaskRepository for CleanStore {
         let registry = if selection.registry_connection_id.is_empty() {
             None
         } else {
-            self.validate_registry_selection(
-                &selection.registry_connection_id,
-                &selection.image_namespace,
-            )?;
+            self.validate_runtime_registry(&selection.registry_connection_id)?;
             Some(self.get_connection(&selection.registry_connection_id)?)
         };
         if let Some(registry) = &registry {
@@ -143,12 +145,12 @@ impl TaskRepository for CleanStore {
             else {
                 return Err(CleanStoreError::InvalidTransition);
             };
-            let expected = format!(
-                "ghcr.io/{}/{}/{}-ayni",
-                registry.image_namespace,
-                github.owner.to_lowercase(),
-                github.name.to_lowercase()
-            );
+            let expected = crate::process::runtime_configuration::connection_image_repository(
+                &registry.image_namespace,
+                &github.owner,
+                &github.name,
+            )
+            .map_err(|_| CleanStoreError::InvalidTransition)?;
             if frozen.runtime.oci_repository != expected {
                 return Err(CleanStoreError::InvalidTransition);
             }

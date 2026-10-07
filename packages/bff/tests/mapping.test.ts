@@ -56,6 +56,7 @@ function repository(): RepositoryConnection {
 
 function profile(): RuntimeProfile {
   return {
+    desiredImageRepository:"ghcr.io/team/sandbox-ayni",
     reconciliationMetadata: [],
     id: "profile:1",
     repositoryConnectionId: "repository:1",
@@ -130,8 +131,9 @@ describe("clean-v1 browser DTO mappings", () => {
   });
 
   it("exposes runtime selection but keeps frozen Secret references out of browser DTOs",()=>{
-    expect(mapRuntimeProfile({...profile(),registry:{registryConnectionId:"connection:ghcr",imageNamespace:"team"}}).registry).toEqual({registryConnectionId:"connection:ghcr",imageNamespace:"team"});
+    expect(mapRuntimeProfile({...profile(),registry:{registryConnectionId:"connection:ghcr"}}).registry).toEqual({registryConnectionId:"connection:ghcr"});
     expect(mapRuntimeProfile(profile()).registry).toBeUndefined();
+    expect(mapRuntimeProfile(profile()).desiredImageRepository).toBe("ghcr.io/team/sandbox-ayni");
     expect(JSON.stringify(mapDevelopmentTask(task()))).not.toContain("private-pull");
   });
 

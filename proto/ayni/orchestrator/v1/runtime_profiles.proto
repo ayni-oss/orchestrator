@@ -90,6 +90,8 @@ message RuntimeProfile {
   // Absent only for profiles stored before runtime-owned registry selection.
   // Present with empty values selects deployment infrastructure defaults.
   RuntimeRegistrySelection registry = 13;
+  // Server-computed destination for the selected connection; never write authority.
+  string desired_image_repository = 14;
 }
 
 // RuntimeProfileRevision is an immutable version of profile configuration.
@@ -346,7 +348,8 @@ message WorkflowProposal {
 // RuntimeRegistrySelection survives source revisions and rebuilds of its profile.
 message RuntimeRegistrySelection {
   string registry_connection_id = 1;
-  string image_namespace = 2;
+  reserved 2;
+  reserved "image_namespace";
 }
 
 message SetRuntimeRegistryRequest {
@@ -354,7 +357,8 @@ message SetRuntimeRegistryRequest {
   string runtime_profile_id = 2;
   uint64 expected_resource_version = 3;
   string registry_connection_id = 4;
-  string image_namespace = 5;
+  reserved 5;
+  reserved "image_namespace";
 }
 
 message SetRuntimeRegistryResponse {

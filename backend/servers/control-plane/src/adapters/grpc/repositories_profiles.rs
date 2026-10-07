@@ -294,7 +294,8 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
                 .map_err(|error| context.validation(&error))?;
         }
         let profile = with_store(&self.state, move |store| {
-            store.set_runtime_registry(&key, &message)
+            let profile = store.set_runtime_registry(&key, &message)?;
+            store.describe_runtime_profile(profile)
         })
         .await
         .map_err(|error| context.store_error(&error))?;
@@ -360,12 +361,18 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
         .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
         let page = with_store(&self.state, move |store| {
-            store.list_runtime_profiles(
+            let mut page = store.list_runtime_profiles(
                 message.repository_connection_id.as_deref(),
                 message.kind,
                 message.state,
                 message.page.as_ref(),
-            )
+            )?;
+            page.items = page
+                .items
+                .into_iter()
+                .map(|profile| store.describe_runtime_profile(profile))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(page)
         })
         .await
         .map_err(|error| context.store_error(&error))?;
@@ -384,7 +391,8 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
             .map_err(|error| context.validation(&error))?;
         let message = request.into_inner();
         let resource = with_store(&self.state, move |store| {
-            store.runtime_profile(&message.runtime_profile_id)
+            let profile = store.runtime_profile(&message.runtime_profile_id)?;
+            store.describe_runtime_profile(profile)
         })
         .await
         .map_err(|error| context.store_error(&error))?;
@@ -416,7 +424,8 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
         let (profile, revision) = with_store(&self.state, move |store| {
-            store.create_runtime_profile(&key, &message)
+            let (profile, revision) = store.create_runtime_profile(&key, &message)?;
+            Ok((store.describe_runtime_profile(profile)?, revision))
         })
         .await
         .map_err(|error| context.store_error(&error))?;

@@ -9,7 +9,6 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
-  import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import Feedback from "$lib/components/feedback.svelte";
@@ -28,18 +27,16 @@
   let busy=$state(false);
   let showError=$state(false);
   let registryId=$state("");
-  let namespace=$state("");
   let notification=$state("");
   let notificationKind=$state<"success"|"warning">("success");
   const selected=$derived(profiles.find(profile=>profile.id===selectedId));
   const selectedConnection=$derived(connections.find(connection=>connection.id===registryId));
   const failureMessage=(message:string)=>message==="runtime_verification_failed" ? "Runtime image verification failed. Sync or rebuild to retry." : /^[a-z][a-z0-9_]+$/u.test(message) ? words(message) : message;
-  const selection=(profile:RuntimeProfileDto)=>profile.registry ?? {registryConnectionId:repository.registryConnectionId ?? "",imageNamespace:repository.imageNamespace ?? ""};
+  const selection=(profile:RuntimeProfileDto)=>profile.registry ?? {registryConnectionId:repository.registryConnectionId ?? ""};
   function edit(profile:RuntimeProfileDto) {
     selectedId=profile.id;
     editVersion=profile.resourceVersion;
     registryId=selection(profile).registryConnectionId;
-    namespace=selection(profile).imageNamespace;
     showError=false;
     open=true;
   }
@@ -69,13 +66,12 @@
 <section class="space-y-4">
   <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-lg font-semibold">Runtimes</h2><PollStatus /></div>
   {#each profiles as profile (profile.id)}
-    {@const runtimeRegistry=selection(profile)}
     {@const revision=revisions[profile.id]}
     <article class="space-y-3 rounded-xl border bg-card p-4">
       <div class="flex items-center justify-between gap-3"><a class="font-semibold hover:underline" href={`/profiles/${encodeURIComponent(profile.id)}`}>{words(profile.kind)}</a><div class="flex items-center gap-2"><StatusBadge status={profile.state} tone={statusTone(profile.state)} /><Button variant="outline" size="sm" onclick={()=>edit(profile)}>{profile.support==="operational" ? "Edit" : "Details"}</Button></div></div>
       <dl class="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
         {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Ayni lock</dt><dd class="break-all font-mono text-xs">{revision?.managed?.fingerprint ?? "Not available yet"}</dd>{/if}
-        <dt class="text-muted-foreground">Image destination</dt><dd class="break-all">{runtimeRegistry.registryConnectionId ? `ghcr.io/${runtimeRegistry.imageNamespace}/${repository.provider.owner.toLowerCase()}/${repository.provider.name.toLowerCase()}-ayni` : revision?.managed?.repository ?? "Not configured"}</dd>
+        <dt class="text-muted-foreground">Image destination</dt><dd class="break-all">{profile.desiredImageRepository || revision?.managed?.repository || "Not configured"}</dd>
       </dl>
       {#if profile.failure}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
@@ -93,9 +89,8 @@
       {#if selected.kind==="ayni_managed"}
       <form method="POST" action="?/registry" use:enhance={submit} class="space-y-4">
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><input type="hidden" name="resourceVersion" value={editVersion}/>
-        <div class="space-y-2"><Label for="runtime-registry">GHCR connection</Label><ThemedSelect id="runtime-registry" name="registryConnectionId" bind:value={registryId} options={connections.map(connection=>({value:connection.id,label:connection.displayName}))} required onValueChange={value=>{registryId=value;namespace=connections.find(connection=>connection.id===value)?.imageNamespace ?? "";}} /></div>
-        <div class="space-y-2"><Label for="runtime-namespace">Image namespace</Label><Input id="runtime-namespace" name="imageNamespace" bind:value={namespace} required /></div>
-        {#if selectedConnection}<p class="text-xs text-muted-foreground">Approved namespace: {selectedConnection.imageNamespace}</p>{/if}
+        <div class="space-y-2"><Label for="runtime-registry">GHCR connection</Label><ThemedSelect id="runtime-registry" name="registryConnectionId" bind:value={registryId} options={connections.map(connection=>({value:connection.id,label:connection.displayName}))} required /></div>
+        {#if selectedConnection}<p class="text-xs text-muted-foreground">Namespace: {selectedConnection.imageNamespace}</p>{/if}
         {#if !connections.length}<p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> to configure this runtime.</p>{/if}
         <Button type="submit" disabled={busy || !registryId}>Save image destination</Button>
       </form>

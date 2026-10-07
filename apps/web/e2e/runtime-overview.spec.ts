@@ -20,11 +20,9 @@ test("repository overview keeps identity in its header and configuration on its 
   const dialog=page.getByRole("dialog");
   await dialog.getByLabel("GHCR connection").click();
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
-  await expect(dialog.getByLabel("Image namespace")).toHaveValue("admin-team");
-  await dialog.getByLabel("Image namespace").fill("wrong");
-  await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
-  await expect(dialog.getByRole("alert")).toContainText("submitted request is invalid");
-  await dialog.getByLabel("Image namespace").fill("admin-team");
+  await expect(dialog.getByLabel("Image namespace")).toHaveCount(0);
+  await expect(dialog.locator('input[name="imageNamespace"]')).toHaveCount(0);
+  await expect(dialog.getByText("Namespace: admin-team",{exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/profile-version");
   await page.waitForTimeout(11000);
   await dialog.getByRole("button",{name:"Sync runtime",exact:true}).click();
