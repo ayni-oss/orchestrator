@@ -205,11 +205,11 @@ jobs:
 
       - name: Validate contract and generated bindings
         run: |
-          if ! grep -qx 'clean-v1' proto/BASELINE; then
-            echo 'The current protobuf baseline marker must be exactly clean-v1.' >&2
+          if ! grep -qx 'worker-owned-v2' proto/BASELINE; then
+            echo 'The current protobuf baseline marker must be exactly worker-owned-v2.' >&2
             exit 1
-          elif ! test -f .contract-base/proto/BASELINE; then
-            echo 'Buf breaking comparison reset from the retired pre-clean-v1 baseline.'
+          elif test -f .contract-base/proto/BASELINE && grep -qx 'clean-v1' .contract-base/proto/BASELINE; then
+            echo 'Buf breaking comparison reset from the retired clean-v1 baseline.'
             scripts/ci/check-proto.sh
           elif cmp -s proto/BASELINE .contract-base/proto/BASELINE; then
             scripts/ci/check-proto.sh .contract-base/proto

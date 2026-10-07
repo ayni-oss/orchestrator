@@ -1,7 +1,7 @@
 //! Ayni Managed execution inputs and advisory runtime verification output.
 
 use crate::managed_runtime::{RuntimeExpectation, VerifiedRuntime};
-use ayni_orchestrator_runtime::coding::ValidationResult;
+use ayni_orchestrator_runtime::coding::QualityResult;
 use serde::{Deserialize, Serialize};
 
 /// Frozen managed request. Ayni expectations are mandatory for this profile.
@@ -16,5 +16,5 @@ pub struct VerificationReport {
     pub lock_digest: String,
     pub runtime: VerifiedRuntime,
     pub check_exit_code: i32,
-    pub validation: ValidationResult,
+    pub quality: QualityResult,
 }

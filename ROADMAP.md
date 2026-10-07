@@ -6,12 +6,23 @@ and its linked [issues](https://github.com/ayni-oss/orchestrator/issues). An
 issue is the source of truth for outcome and acceptance criteria; pull requests
 close issues with a closing keyword.
 
-## Current pre-public direction
+## Current direction
 
-The current delivery milestone is [#51](https://github.com/ayni-oss/orchestrator/issues/51):
+The active [architecture](docs/architecture.md) is one worker-owned task flow:
+frozen admission, attestation, coding, mandatory checking and bounded repair,
+then truthful draft delivery. Current requirements and delivery status remain in
+the linked private Project and issues.
+
+## Historical clean-v1 planning
+
+The issue map and sequence below record earlier planning. Task assessment and
+readiness mechanisms in that plan are superseded by worker-owned quality and
+delivery; they do not define active behavior or compatibility requirements.
+
+The earlier delivery milestone was [#51](https://github.com/ayni-oss/orchestrator/issues/51):
 one shared development foundation with **Ayni Managed** as the first complete
-runtime profile and **Custom Runtime** as a later profile. The clean-v1
-architecture is normative in [Decision 0007](docs/decisions/0007-clean-v1-runtime-profiles.md).
+runtime profile and **Custom Runtime** as a later profile. The historical clean-v1
+architecture was recorded in [Decision 0007](docs/decisions/0007-clean-v1-runtime-profiles.md).
 The earlier pilot API, database, preparation lifecycle, and validation model are
 retired rather than current roadmap capabilities.
 
@@ -25,10 +36,10 @@ retired rather than current roadmap capabilities.
 | Operator UI and end-to-end operations | [#65](https://github.com/ayni-oss/orchestrator/issues/65), [#68](https://github.com/ayni-oss/orchestrator/issues/68) |
 | Enabled follow-ups | [#66 Custom Runtime](https://github.com/ayni-oss/orchestrator/issues/66), [#67 artifact retention](https://github.com/ayni-oss/orchestrator/issues/67) |
 
-## Planned implementation sequence
+## Historical implementation sequence
 
-Issue acceptance criteria remain authoritative. The intended reviewable delivery
-sequence is:
+Issue acceptance criteria remain authoritative. The planned reviewable delivery
+sequence was:
 
 1. [#57](https://github.com/ayni-oss/orchestrator/issues/57) (least-privilege GitHub, GHCR, webhook, and certificate-signing boundaries) and [#56](https://github.com/ayni-oss/orchestrator/issues/56) (shared OCI runner) proceed independently.
 2. [#58](https://github.com/ayni-oss/orchestrator/issues/58) installs the reviewed workflow templates after #57 establishes their permissions. [#59](https://github.com/ayni-oss/orchestrator/issues/59) can implement its setup, certified GHCR publication, immutable-digest, and no-op reuse paths in parallel against the released #75 contract.

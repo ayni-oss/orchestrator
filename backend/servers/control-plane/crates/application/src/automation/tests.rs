@@ -64,7 +64,6 @@ impl Policy for Planner {
         Ok(Plan {
             version: "template".into(),
             environment_workflow_path: "producer".into(),
-            assessment_workflow_path: "assessment".into(),
         })
     }
 }

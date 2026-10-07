@@ -53,8 +53,16 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
     listProfileChoices(context),
     listModelChoices(context),
   ]);
+  const phases: Record<string, string> = {};
+  if (tasks.status === "fulfilled") {
+    await Promise.allSettled(tasks.value.developmentTasks.map(async task => {
+      const progress = await getBff().taskProgress(task.id, context);
+      phases[task.id] = progress.attempts.at(-1)?.progress?.phase ?? "unavailable";
+    }));
+  }
   const failures = [tasks, repositories, profiles, models].filter((result): result is PromiseRejectedResult => result.status === "rejected");
   return {
+    phases,
     tasks: tasks.status === "fulfilled" ? tasks.value.developmentTasks : [],
     nextPageToken: tasks.status === "fulfilled" ? tasks.value.page.nextPageToken || undefined : undefined,
     projects: repositories.status === "fulfilled" ? repositories.value : [],
@@ -123,7 +131,6 @@ export const actions: Actions = {
           runtimeProfileId,
           agent: { provider, agent: "coding-agent", model },
           request: taskRequest,
-          publishDraft: true,
           acceptanceCriteria: criteria,
           changeConstraints: { protectedPaths, allowTestEdits: form.get("allowTestEdits") === "on" },
           ...(deadlineSeconds === undefined ? {} : { deadlineSeconds }),

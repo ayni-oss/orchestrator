@@ -5,7 +5,7 @@ fn initializes_exact_clean_schema_and_reopens() -> Result<(), Box<dyn std::error
     let directory = tempdir()?;
     let path = directory.path().join("orchestrator.sqlite");
     let store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 4);
+    assert_eq!(store.schema_version()?, 5);
     assert!(existing_tables(&store.connection)?.contains(&"runtime_profiles".to_owned()));
     assert!(!existing_tables(&store.connection)?.contains(&"repository_bindings".to_owned()));
     drop(store);
@@ -651,5 +651,23 @@ fn activity_survives_restart_and_retry_keeps_separate_logs()
         events
     );
     store.integrity_check()?;
+    Ok(())
+}
+
+#[test]
+fn rejects_previous_task_schema_without_conversion() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("old-task-schema.sqlite");
+    let connection = rusqlite::Connection::open(&path)?;
+    connection.execute_batch("CREATE TABLE clean_schema(component TEXT PRIMARY KEY,version INTEGER,created_at INTEGER); INSERT INTO clean_schema VALUES('control_plane',4,0); CREATE TABLE retained_old_output(value TEXT); INSERT INTO retained_old_output VALUES('preserve');")?;
+    drop(connection);
+    assert!(matches!(
+        CleanStore::open(&path, 3),
+        Err(CleanStoreError::UnsupportedSchemaVersion(4))
+    ));
+    let connection = rusqlite::Connection::open(path)?;
+    let retained: String =
+        connection.query_row("SELECT value FROM retained_old_output", [], |r| r.get(0))?;
+    assert_eq!(retained, "preserve");
     Ok(())
 }

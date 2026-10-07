@@ -174,79 +174,6 @@ pub(super) fn validate_resource_tables(connection: &Connection) -> Result<(), Cl
                 && valid_version_and_cursor(value.resource_version, row.get(5)?, row.get(6)?))
         },
     )?;
-    validate_indexed_rows::<v1::Candidate, _>(
-        connection,
-        "SELECT payload,id,development_attempt_id,repository_connection_id,state,
-                resource_version,event_cursor FROM candidates",
-        |row, value| {
-            Ok(!value.id.is_empty()
-                && !value.development_attempt_id.is_empty()
-                && !value.repository_connection_id.is_empty()
-                && value.identity.is_some()
-                && value.state != v1::CandidateState::Unspecified as i32
-                && v1::CandidateState::try_from(value.state).is_ok()
-                && valid_candidate_report(value)
-                && value.id == row.get::<_, String>(1)?
-                && value.development_attempt_id == row.get::<_, String>(2)?
-                && value.repository_connection_id == row.get::<_, String>(3)?
-                && value.state == row.get::<_, i32>(4)?
-                && valid_version_and_cursor(value.resource_version, row.get(5)?, row.get(6)?))
-        },
-    )?;
-    validate_indexed_rows::<v1::ChangeRequest, _>(
-        connection,
-        "SELECT payload,id,repository_connection_id,candidate_id,state,head_revision,
-                resource_version,event_cursor FROM change_requests",
-        |row, value| {
-            Ok(!value.id.is_empty()
-                && !value.repository_connection_id.is_empty()
-                && !value.head_revision.is_empty()
-                && value.state != v1::ChangeRequestState::Unspecified as i32
-                && v1::ChangeRequestState::try_from(value.state).is_ok()
-                && value.id == row.get::<_, String>(1)?
-                && value.repository_connection_id == row.get::<_, String>(2)?
-                && value.candidate_id == row.get::<_, Option<String>>(3)?.unwrap_or_default()
-                && value.state == row.get::<_, i32>(4)?
-                && value.head_revision == row.get::<_, String>(5)?
-                && valid_version_and_cursor(value.resource_version, row.get(6)?, row.get(7)?))
-        },
-    )?;
-    validate_indexed_rows::<v1::Assessment, _>(
-        connection,
-        "SELECT payload,id,repository_connection_id,change_request_id,head_revision,conclusion,
-                resource_version,event_cursor FROM assessments",
-        |row, value| {
-            Ok(!value.id.is_empty()
-                && !value.repository_connection_id.is_empty()
-                && !value.change_request_id.is_empty()
-                && !value.head_revision.is_empty()
-                && value.producer.is_some()
-                && value.workflow.is_some()
-                && value.conclusion != v1::AssessmentConclusion::Unspecified as i32
-                && v1::AssessmentConclusion::try_from(value.conclusion).is_ok()
-                && valid_assessment_report(value)
-                && value.id == row.get::<_, String>(1)?
-                && value.repository_connection_id == row.get::<_, String>(2)?
-                && value.change_request_id == row.get::<_, String>(3)?
-                && value.head_revision == row.get::<_, String>(4)?
-                && value.conclusion == row.get::<_, i32>(5)?
-                && valid_version_and_cursor(value.resource_version, row.get(6)?, row.get(7)?))
-        },
-    )?;
-    validate_indexed_rows::<v1::EvidenceReference, _>(
-        connection,
-        "SELECT payload,id,assessment_id,resource_version,event_cursor FROM evidence_references",
-        |row, value| {
-            Ok(!value.id.is_empty()
-                && !value.assessment_id.is_empty()
-                && !value.name.is_empty()
-                && !value.digest.is_empty()
-                && valid_evidence_report(value)
-                && value.id == row.get::<_, String>(1)?
-                && value.assessment_id == row.get::<_, String>(2)?
-                && valid_version_and_cursor(value.resource_version, row.get(3)?, row.get(4)?))
-        },
-    )?;
     Ok(())
 }
 
@@ -341,6 +268,8 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
                     .is_ok()
             })
         }
+        "RetryTaskPublication" => v1::RetryTaskPublicationRequest::decode(payload)
+            .is_ok_and(|v| !v.development_task_id.is_empty()),
         "RetryDevelopmentTask" => {
             v1::RetryDevelopmentTaskRequest::decode(payload).is_ok_and(|value| {
                 api_validation::idempotency_key(&value.idempotency_key).is_ok()
@@ -351,14 +280,6 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
                     .is_ok()
             })
         }
-        "PublishCandidate" => v1::PublishCandidateRequest::decode(payload)
-            .is_ok_and(|value| api_validation::publish_candidate(&value).is_ok()),
-        "MarkReady" => v1::ReadinessStatus::decode(payload).is_ok_and(|value| {
-            value.policy == "READY_AFTER_SUCCESSFUL_ASSESSMENT"
-                && value.state == "pending"
-                && valid_git_revision(&value.authorized_head)
-                && !value.assessment_id.is_empty()
-        }),
         _ => false,
     }
 }
@@ -422,14 +343,6 @@ pub(super) fn valid_resource_event(
         }
         (DEVELOPMENT_SERVICE, "development_attempt") => {
             valid_development_attempt_event(payload, resource_id, version)
-        }
-        (DEVELOPMENT_SERVICE, "candidate") => valid_candidate_event(payload, resource_id, version),
-        (REVIEW_SERVICE, "change_request") => {
-            valid_change_request_event(payload, resource_id, version)
-        }
-        (REVIEW_SERVICE, "assessment") => valid_assessment_event(payload, resource_id, version),
-        (REVIEW_SERVICE, "evidence_reference") => {
-            valid_evidence_reference_event(payload, resource_id, version)
         }
         _ => Ok(false),
     }
@@ -544,53 +457,6 @@ pub(super) fn valid_development_attempt_event(
         && value.state != v1::DevelopmentAttemptState::Unspecified as i32
         && v1::DevelopmentAttemptState::try_from(value.state).is_ok()
         && valid_model_usage(value.model_usage.as_ref())
-        && i64::try_from(value.resource_version) == Ok(version))
-}
-
-pub(super) fn valid_candidate_event(
-    payload: &[u8],
-    resource_id: &str,
-    version: i64,
-) -> Result<bool, CleanStoreError> {
-    let value = decode::<v1::Candidate>(payload)?;
-    Ok(value.id == resource_id
-        && valid_candidate_report(&value)
-        && i64::try_from(value.resource_version) == Ok(version))
-}
-
-pub(super) fn valid_change_request_event(
-    payload: &[u8],
-    resource_id: &str,
-    version: i64,
-) -> Result<bool, CleanStoreError> {
-    let value = decode::<v1::ChangeRequest>(payload)?;
-    Ok(value.id == resource_id
-        && !value.repository_connection_id.is_empty()
-        && valid_git_revision(&value.head_revision)
-        && value.state != v1::ChangeRequestState::Unspecified as i32
-        && v1::ChangeRequestState::try_from(value.state).is_ok()
-        && i64::try_from(value.resource_version) == Ok(version))
-}
-
-pub(super) fn valid_assessment_event(
-    payload: &[u8],
-    resource_id: &str,
-    version: i64,
-) -> Result<bool, CleanStoreError> {
-    let value = decode::<v1::Assessment>(payload)?;
-    Ok(value.id == resource_id
-        && valid_assessment_report(&value)
-        && i64::try_from(value.resource_version) == Ok(version))
-}
-
-pub(super) fn valid_evidence_reference_event(
-    payload: &[u8],
-    resource_id: &str,
-    version: i64,
-) -> Result<bool, CleanStoreError> {
-    let value = decode::<v1::EvidenceReference>(payload)?;
-    Ok(value.id == resource_id
-        && valid_evidence_report(&value)
         && i64::try_from(value.resource_version) == Ok(version))
 }
 
@@ -776,44 +642,6 @@ pub(super) fn persist_attempt_update(
                 i64::try_from(attempt.resource_version).map_err(|_| CleanStoreError::CorruptState)?,
                 i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
                 attempt.id,
-                i64::try_from(expected_version).map_err(|_| CleanStoreError::CorruptState)?
-            ],
-        )
-        .map_err(CleanStoreError::Database)?;
-    if changed == 1 {
-        Ok(())
-    } else {
-        Err(CleanStoreError::StaleVersion)
-    }
-}
-
-pub(super) fn persist_change_request_update(
-    transaction: &Transaction<'_>,
-    change_request: &v1::ChangeRequest,
-    expected_version: u64,
-) -> Result<(), CleanStoreError> {
-    let cursor = append_event(
-        transaction,
-        REVIEW_SERVICE,
-        "change_request",
-        &change_request.id,
-        change_request.resource_version,
-        Some(&change_request.repository_connection_id),
-        Some(&change_request.id),
-        change_request,
-    )?;
-    let changed = transaction
-        .execute(
-            "UPDATE change_requests SET state=?1,head_revision=?2,payload=?3,
-                resource_version=?4,event_cursor=?5 WHERE id=?6 AND resource_version=?7",
-            params![
-                change_request.state,
-                change_request.head_revision,
-                change_request.encode_to_vec(),
-                i64::try_from(change_request.resource_version)
-                    .map_err(|_| CleanStoreError::CorruptState)?,
-                i64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
-                change_request.id,
                 i64::try_from(expected_version).map_err(|_| CleanStoreError::CorruptState)?
             ],
         )

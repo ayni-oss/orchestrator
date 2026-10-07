@@ -114,8 +114,8 @@ reproducible from its commit alone.
 - `lib/` contains shared shell functions; neither directory is a public command
   surface.
 - `tests/` contains opt-in local validation drivers, exposed as `dev/ctl test
-  NAME`. Managed runtime and assessment proof is owned by the reviewed Actions
-  workflows, not a local Docker-in-Docker fixture.
+  NAME`. Managed runtime proof comes from the actual environment build; task quality
+  is checked by the worker on the managed topology.
 
 Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/local-development.md`](../docs/local-development.md) and

@@ -37,7 +37,16 @@ impl AppState {
         database_path: impl AsRef<std::path::Path>,
         max_attempts: u32,
     ) -> Result<Self, CleanStoreError> {
-        let store = CleanStore::open(database_path, max_attempts)?;
+        let mut store = CleanStore::open(database_path, max_attempts)?;
+        if let Some(configuration) =
+            crate::process::runtime_configuration::RuntimeConfiguration::from_environment()
+                .map_err(|_| CleanStoreError::CorruptState)?
+        {
+            store.configure_worker_limits(
+                u32::from(configuration.coding_turns),
+                u32::from(configuration.quality_repair_limit),
+            );
+        }
         store.integrity_check()?;
         let database = Database::start(store)?;
         Ok(Self {

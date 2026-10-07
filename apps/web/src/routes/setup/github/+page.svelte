@@ -21,12 +21,8 @@
     redirect_url: callbackOrigin ? `${callbackOrigin}/setup/github/complete` : undefined,
     public: false,
     default_permissions: {
-      actions: "read",
-      checks: "read",
       contents: "write",
-      issues: "write",
       metadata: "read",
-      packages: "read",
       pull_requests: "write",
       workflows: "write",
     },
@@ -104,7 +100,7 @@
       </Card.Header>
       <Card.Content class="space-y-4 text-sm">
         <ol class="list-decimal space-y-2 pl-5 text-muted-foreground">
-          <li>Confirm the App has the exact permissions listed for the creation flow, including read-only Actions, Checks, and Packages access.</li>
+          <li>Confirm the App has Metadata read access and Contents, Pull requests, and Workflows write access. Registry credentials are configured separately.</li>
           <li>Generate or obtain an App private key from the App owner.</li>
           <li>Install the App on the repositories this local control plane may access.</li>
           <li>Use the App ID and private key in the deployment secret configuration below.</li>

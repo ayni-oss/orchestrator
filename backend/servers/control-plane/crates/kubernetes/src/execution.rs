@@ -24,6 +24,24 @@ pub struct RuntimeKubernetes {
 pub use ayni_orchestrator_application::execution::{ExecutionState, Observation};
 
 impl RuntimeKubernetes {
+    /// Refresh projected repository authority without exposing existing Secret values.
+    ///
+    /// # Errors
+    /// Returns a bounded reason when Kubernetes rejects the scoped credential update.
+    pub async fn refresh_credentials(&self, name: &str, token: &str) -> Result<(), &'static str> {
+        let secrets: Api<Secret> =
+            Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        secrets
+            .patch(
+                name,
+                &kube::api::PatchParams::default(),
+                &kube::api::Patch::Merge(json!({"stringData":{"token":token}})),
+            )
+            .await
+            .map_err(|_| "runtime_source_credential_unavailable")?;
+        Ok(())
+    }
+
     /// Creates an executor using only the deployed pod's Kubernetes identity.
     ///
     /// # Errors
@@ -97,7 +115,7 @@ impl RuntimeKubernetes {
             }
             Err(_) => return Err("kubernetes_unavailable"),
         }
-        let secret: Secret = serde_json::from_value(json!({"apiVersion":"v1", "kind":"Secret", "metadata":{"name":name,"labels":{"ayni.io/runtime-operation":name}},"immutable":true,"stringData":{"token":token}})).map_err(|_| "runtime_request_invalid")?;
+        let secret: Secret = serde_json::from_value(json!({"apiVersion":"v1", "kind":"Secret", "metadata":{"name":name,"labels":{"ayni.io/runtime-operation":name}},"stringData":{"token":token}})).map_err(|_| "runtime_request_invalid")?;
         match secrets.create(&PostParams::default(), &secret).await {
             Ok(_) => {}
             Err(kube::Error::Api(error)) if error.code == 409 => {}

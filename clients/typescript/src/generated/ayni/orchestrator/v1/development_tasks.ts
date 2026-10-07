@@ -25,7 +25,7 @@ import { Timestamp } from "../../../google/protobuf/timestamp";
 import { ChangeConstraints, OciPlatform, PageRequest, PageResponse, ResourceFailure } from "./common";
 import { RuntimeProfileKind, runtimeProfileKindFromJSON, runtimeProfileKindToJSON } from "./runtime_profiles";
 
-/** DevelopmentTaskState is task progress, independent of publication and assessment. */
+/** DevelopmentTaskState is task progress, independent of quality and publication. */
 export enum DevelopmentTaskState {
   DEVELOPMENT_TASK_STATE_UNSPECIFIED = 0,
   DEVELOPMENT_TASK_STATE_QUEUED = 1,
@@ -177,51 +177,10 @@ export function developmentAttemptStateToJSON(object: DevelopmentAttemptState): 
   }
 }
 
-/** CandidateState records immutable candidate admission, not review readiness. */
-export enum CandidateState {
-  CANDIDATE_STATE_UNSPECIFIED = 0,
-  CANDIDATE_STATE_AVAILABLE = 1,
-  CANDIDATE_STATE_REJECTED = 2,
-  UNRECOGNIZED = -1,
-}
-
-export function candidateStateFromJSON(object: any): CandidateState {
-  switch (object) {
-    case 0:
-    case "CANDIDATE_STATE_UNSPECIFIED":
-      return CandidateState.CANDIDATE_STATE_UNSPECIFIED;
-    case 1:
-    case "CANDIDATE_STATE_AVAILABLE":
-      return CandidateState.CANDIDATE_STATE_AVAILABLE;
-    case 2:
-    case "CANDIDATE_STATE_REJECTED":
-      return CandidateState.CANDIDATE_STATE_REJECTED;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return CandidateState.UNRECOGNIZED;
-  }
-}
-
-export function candidateStateToJSON(object: CandidateState): string {
-  switch (object) {
-    case CandidateState.CANDIDATE_STATE_UNSPECIFIED:
-      return "CANDIDATE_STATE_UNSPECIFIED";
-    case CandidateState.CANDIDATE_STATE_AVAILABLE:
-      return "CANDIDATE_STATE_AVAILABLE";
-    case CandidateState.CANDIDATE_STATE_REJECTED:
-      return "CANDIDATE_STATE_REJECTED";
-    case CandidateState.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
 /** ModelUsageStage identifies an attempt stage that makes model-provider requests. */
 export enum ModelUsageStage {
   MODEL_USAGE_STAGE_UNSPECIFIED = 0,
   MODEL_USAGE_STAGE_CODING = 1,
-  MODEL_USAGE_STAGE_CHANGE_SUMMARY = 2,
   UNRECOGNIZED = -1,
 }
 
@@ -233,9 +192,6 @@ export function modelUsageStageFromJSON(object: any): ModelUsageStage {
     case 1:
     case "MODEL_USAGE_STAGE_CODING":
       return ModelUsageStage.MODEL_USAGE_STAGE_CODING;
-    case 2:
-    case "MODEL_USAGE_STAGE_CHANGE_SUMMARY":
-      return ModelUsageStage.MODEL_USAGE_STAGE_CHANGE_SUMMARY;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -249,8 +205,6 @@ export function modelUsageStageToJSON(object: ModelUsageStage): string {
       return "MODEL_USAGE_STAGE_UNSPECIFIED";
     case ModelUsageStage.MODEL_USAGE_STAGE_CODING:
       return "MODEL_USAGE_STAGE_CODING";
-    case ModelUsageStage.MODEL_USAGE_STAGE_CHANGE_SUMMARY:
-      return "MODEL_USAGE_STAGE_CHANGE_SUMMARY";
     case ModelUsageStage.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -349,6 +303,264 @@ export function modelUsageCollectionStatusToJSON(object: ModelUsageCollectionSta
   }
 }
 
+export enum WorkerPhase {
+  WORKER_PHASE_UNSPECIFIED = 0,
+  WORKER_PHASE_ADMISSION = 1,
+  WORKER_PHASE_CHECKOUT = 2,
+  WORKER_PHASE_CODING = 3,
+  WORKER_PHASE_CHECKING = 4,
+  WORKER_PHASE_REPAIRING = 5,
+  WORKER_PHASE_FINALIZING = 6,
+  WORKER_PHASE_PUBLISHING = 7,
+  WORKER_PHASE_COMPLETED = 8,
+  UNRECOGNIZED = -1,
+}
+
+export function workerPhaseFromJSON(object: any): WorkerPhase {
+  switch (object) {
+    case 0:
+    case "WORKER_PHASE_UNSPECIFIED":
+      return WorkerPhase.WORKER_PHASE_UNSPECIFIED;
+    case 1:
+    case "WORKER_PHASE_ADMISSION":
+      return WorkerPhase.WORKER_PHASE_ADMISSION;
+    case 2:
+    case "WORKER_PHASE_CHECKOUT":
+      return WorkerPhase.WORKER_PHASE_CHECKOUT;
+    case 3:
+    case "WORKER_PHASE_CODING":
+      return WorkerPhase.WORKER_PHASE_CODING;
+    case 4:
+    case "WORKER_PHASE_CHECKING":
+      return WorkerPhase.WORKER_PHASE_CHECKING;
+    case 5:
+    case "WORKER_PHASE_REPAIRING":
+      return WorkerPhase.WORKER_PHASE_REPAIRING;
+    case 6:
+    case "WORKER_PHASE_FINALIZING":
+      return WorkerPhase.WORKER_PHASE_FINALIZING;
+    case 7:
+    case "WORKER_PHASE_PUBLISHING":
+      return WorkerPhase.WORKER_PHASE_PUBLISHING;
+    case 8:
+    case "WORKER_PHASE_COMPLETED":
+      return WorkerPhase.WORKER_PHASE_COMPLETED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return WorkerPhase.UNRECOGNIZED;
+  }
+}
+
+export function workerPhaseToJSON(object: WorkerPhase): string {
+  switch (object) {
+    case WorkerPhase.WORKER_PHASE_UNSPECIFIED:
+      return "WORKER_PHASE_UNSPECIFIED";
+    case WorkerPhase.WORKER_PHASE_ADMISSION:
+      return "WORKER_PHASE_ADMISSION";
+    case WorkerPhase.WORKER_PHASE_CHECKOUT:
+      return "WORKER_PHASE_CHECKOUT";
+    case WorkerPhase.WORKER_PHASE_CODING:
+      return "WORKER_PHASE_CODING";
+    case WorkerPhase.WORKER_PHASE_CHECKING:
+      return "WORKER_PHASE_CHECKING";
+    case WorkerPhase.WORKER_PHASE_REPAIRING:
+      return "WORKER_PHASE_REPAIRING";
+    case WorkerPhase.WORKER_PHASE_FINALIZING:
+      return "WORKER_PHASE_FINALIZING";
+    case WorkerPhase.WORKER_PHASE_PUBLISHING:
+      return "WORKER_PHASE_PUBLISHING";
+    case WorkerPhase.WORKER_PHASE_COMPLETED:
+      return "WORKER_PHASE_COMPLETED";
+    case WorkerPhase.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export enum ExecutionOutcome {
+  EXECUTION_OUTCOME_UNSPECIFIED = 0,
+  EXECUTION_OUTCOME_SUCCEEDED = 1,
+  EXECUTION_OUTCOME_FAILED = 2,
+  EXECUTION_OUTCOME_CANCELLED = 3,
+  EXECUTION_OUTCOME_DEADLINE_EXCEEDED = 4,
+  EXECUTION_OUTCOME_NO_CHANGES = 5,
+  EXECUTION_OUTCOME_INPUT_REQUIRED = 6,
+  EXECUTION_OUTCOME_ADMISSION_FAILED = 7,
+  EXECUTION_OUTCOME_UNSAFE_CHANGES = 8,
+  UNRECOGNIZED = -1,
+}
+
+export function executionOutcomeFromJSON(object: any): ExecutionOutcome {
+  switch (object) {
+    case 0:
+    case "EXECUTION_OUTCOME_UNSPECIFIED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_UNSPECIFIED;
+    case 1:
+    case "EXECUTION_OUTCOME_SUCCEEDED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_SUCCEEDED;
+    case 2:
+    case "EXECUTION_OUTCOME_FAILED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_FAILED;
+    case 3:
+    case "EXECUTION_OUTCOME_CANCELLED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_CANCELLED;
+    case 4:
+    case "EXECUTION_OUTCOME_DEADLINE_EXCEEDED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_DEADLINE_EXCEEDED;
+    case 5:
+    case "EXECUTION_OUTCOME_NO_CHANGES":
+      return ExecutionOutcome.EXECUTION_OUTCOME_NO_CHANGES;
+    case 6:
+    case "EXECUTION_OUTCOME_INPUT_REQUIRED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_INPUT_REQUIRED;
+    case 7:
+    case "EXECUTION_OUTCOME_ADMISSION_FAILED":
+      return ExecutionOutcome.EXECUTION_OUTCOME_ADMISSION_FAILED;
+    case 8:
+    case "EXECUTION_OUTCOME_UNSAFE_CHANGES":
+      return ExecutionOutcome.EXECUTION_OUTCOME_UNSAFE_CHANGES;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ExecutionOutcome.UNRECOGNIZED;
+  }
+}
+
+export function executionOutcomeToJSON(object: ExecutionOutcome): string {
+  switch (object) {
+    case ExecutionOutcome.EXECUTION_OUTCOME_UNSPECIFIED:
+      return "EXECUTION_OUTCOME_UNSPECIFIED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_SUCCEEDED:
+      return "EXECUTION_OUTCOME_SUCCEEDED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_FAILED:
+      return "EXECUTION_OUTCOME_FAILED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_CANCELLED:
+      return "EXECUTION_OUTCOME_CANCELLED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_DEADLINE_EXCEEDED:
+      return "EXECUTION_OUTCOME_DEADLINE_EXCEEDED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_NO_CHANGES:
+      return "EXECUTION_OUTCOME_NO_CHANGES";
+    case ExecutionOutcome.EXECUTION_OUTCOME_INPUT_REQUIRED:
+      return "EXECUTION_OUTCOME_INPUT_REQUIRED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_ADMISSION_FAILED:
+      return "EXECUTION_OUTCOME_ADMISSION_FAILED";
+    case ExecutionOutcome.EXECUTION_OUTCOME_UNSAFE_CHANGES:
+      return "EXECUTION_OUTCOME_UNSAFE_CHANGES";
+    case ExecutionOutcome.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export enum PublicationOutcome {
+  PUBLICATION_OUTCOME_UNSPECIFIED = 0,
+  PUBLICATION_OUTCOME_PENDING = 1,
+  PUBLICATION_OUTCOME_PUBLISHING = 2,
+  PUBLICATION_OUTCOME_PUBLISHED = 3,
+  PUBLICATION_OUTCOME_FAILED = 4,
+  PUBLICATION_OUTCOME_CONFLICT = 5,
+  PUBLICATION_OUTCOME_NOT_REQUIRED = 6,
+  UNRECOGNIZED = -1,
+}
+
+export function publicationOutcomeFromJSON(object: any): PublicationOutcome {
+  switch (object) {
+    case 0:
+    case "PUBLICATION_OUTCOME_UNSPECIFIED":
+      return PublicationOutcome.PUBLICATION_OUTCOME_UNSPECIFIED;
+    case 1:
+    case "PUBLICATION_OUTCOME_PENDING":
+      return PublicationOutcome.PUBLICATION_OUTCOME_PENDING;
+    case 2:
+    case "PUBLICATION_OUTCOME_PUBLISHING":
+      return PublicationOutcome.PUBLICATION_OUTCOME_PUBLISHING;
+    case 3:
+    case "PUBLICATION_OUTCOME_PUBLISHED":
+      return PublicationOutcome.PUBLICATION_OUTCOME_PUBLISHED;
+    case 4:
+    case "PUBLICATION_OUTCOME_FAILED":
+      return PublicationOutcome.PUBLICATION_OUTCOME_FAILED;
+    case 5:
+    case "PUBLICATION_OUTCOME_CONFLICT":
+      return PublicationOutcome.PUBLICATION_OUTCOME_CONFLICT;
+    case 6:
+    case "PUBLICATION_OUTCOME_NOT_REQUIRED":
+      return PublicationOutcome.PUBLICATION_OUTCOME_NOT_REQUIRED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return PublicationOutcome.UNRECOGNIZED;
+  }
+}
+
+export function publicationOutcomeToJSON(object: PublicationOutcome): string {
+  switch (object) {
+    case PublicationOutcome.PUBLICATION_OUTCOME_UNSPECIFIED:
+      return "PUBLICATION_OUTCOME_UNSPECIFIED";
+    case PublicationOutcome.PUBLICATION_OUTCOME_PENDING:
+      return "PUBLICATION_OUTCOME_PENDING";
+    case PublicationOutcome.PUBLICATION_OUTCOME_PUBLISHING:
+      return "PUBLICATION_OUTCOME_PUBLISHING";
+    case PublicationOutcome.PUBLICATION_OUTCOME_PUBLISHED:
+      return "PUBLICATION_OUTCOME_PUBLISHED";
+    case PublicationOutcome.PUBLICATION_OUTCOME_FAILED:
+      return "PUBLICATION_OUTCOME_FAILED";
+    case PublicationOutcome.PUBLICATION_OUTCOME_CONFLICT:
+      return "PUBLICATION_OUTCOME_CONFLICT";
+    case PublicationOutcome.PUBLICATION_OUTCOME_NOT_REQUIRED:
+      return "PUBLICATION_OUTCOME_NOT_REQUIRED";
+    case PublicationOutcome.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export enum QualityOutcome {
+  QUALITY_OUTCOME_UNSPECIFIED = 0,
+  QUALITY_OUTCOME_PASSED = 1,
+  QUALITY_OUTCOME_FAILED = 2,
+  QUALITY_OUTCOME_UNAVAILABLE = 3,
+  UNRECOGNIZED = -1,
+}
+
+export function qualityOutcomeFromJSON(object: any): QualityOutcome {
+  switch (object) {
+    case 0:
+    case "QUALITY_OUTCOME_UNSPECIFIED":
+      return QualityOutcome.QUALITY_OUTCOME_UNSPECIFIED;
+    case 1:
+    case "QUALITY_OUTCOME_PASSED":
+      return QualityOutcome.QUALITY_OUTCOME_PASSED;
+    case 2:
+    case "QUALITY_OUTCOME_FAILED":
+      return QualityOutcome.QUALITY_OUTCOME_FAILED;
+    case 3:
+    case "QUALITY_OUTCOME_UNAVAILABLE":
+      return QualityOutcome.QUALITY_OUTCOME_UNAVAILABLE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return QualityOutcome.UNRECOGNIZED;
+  }
+}
+
+export function qualityOutcomeToJSON(object: QualityOutcome): string {
+  switch (object) {
+    case QualityOutcome.QUALITY_OUTCOME_UNSPECIFIED:
+      return "QUALITY_OUTCOME_UNSPECIFIED";
+    case QualityOutcome.QUALITY_OUTCOME_PASSED:
+      return "QUALITY_OUTCOME_PASSED";
+    case QualityOutcome.QUALITY_OUTCOME_FAILED:
+      return "QUALITY_OUTCOME_FAILED";
+    case QualityOutcome.QUALITY_OUTCOME_UNAVAILABLE:
+      return "QUALITY_OUTCOME_UNAVAILABLE";
+    case QualityOutcome.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /** AgentSelection freezes the agent and model selected for a task. */
 export interface AgentSelection {
   /** provider, agent, and model are each 1 through 128 safe UTF-8 bytes. */
@@ -379,11 +591,7 @@ export interface DevelopmentTaskRequest {
     | ChangeConstraints
     | undefined;
   /** deadline is 1 second through 24 hours when present. */
-  deadline?:
-    | Duration
-    | undefined;
-  /** Retained for wire compatibility. New tasks always publish saved work as draft. */
-  publishDraft: boolean;
+  deadline?: Duration | undefined;
 }
 
 /** FrozenRepository freezes the source snapshot used by a task or attempt. */
@@ -416,7 +624,9 @@ export interface DevelopmentSnapshot {
   acceptanceCriteria: string[];
   changeConstraints?: ChangeConstraints | undefined;
   deadlineAt?: Date | undefined;
-  publishDraft: boolean;
+  limits?:
+    | WorkerLimits
+    | undefined;
   /** Base branch observed when the publication request is frozen. */
   publicationBaseBranch: string;
 }
@@ -533,114 +743,71 @@ export interface DevelopmentAttempt {
   resourceVersion: string;
   /** At most 256 recent observations, retained after worker cleanup. */
   agentActivity: AgentActivity[];
+  progress?: WorkerProgress | undefined;
+  result?: WorkerResult | undefined;
+  pullRequest?: PullRequestReceipt | undefined;
+  publicationOnly: boolean;
 }
 
-/** CandidateIdentity is the immutable output identity produced by an attempt. */
-export interface CandidateIdentity {
-  identity?: { $case: "git"; git: GitCandidate } | { $case: "bundle"; bundle: BundleCandidate } | undefined;
+/** Frozen operator limits are immutable for the entire attempt. */
+export interface WorkerLimits {
+  codingTurns: number;
+  qualityRepairLimit: number;
+  deadlineAt?: Date | undefined;
 }
 
-/** GitCandidate identifies one exact provider-neutral Git commit. */
-export interface GitCandidate {
-  /** commit_sha is exactly 40 lowercase hexadecimal characters. */
-  commitSha: string;
+export interface QualityEvidence {
+  artifactPath: string;
+  signalsDigest: string;
+  sourceFingerprint: string;
+  commit: string;
 }
 
-/** BundleCandidate identifies immutable candidate bytes when no Git commit exists. */
-export interface BundleCandidate {
-  /** digest is `sha256:` followed by 64 lowercase hexadecimal characters. */
-  digest: string;
-  sizeBytes: string;
-}
-
-/** Candidate is immutable attempt output and is not a change request or assessment. */
-export interface Candidate {
-  id: string;
-  developmentAttemptId: string;
-  repositoryConnectionId: string;
-  /** base_revision is exactly 40 lowercase hexadecimal characters. */
-  baseRevision: string;
-  identity?: CandidateIdentity | undefined;
-  state: CandidateState;
-  /**
-   * changed_paths contains at most 256 normalized repository-relative paths and
-   * at most 32,768 aggregate UTF-8 bytes.
-   */
-  changedPaths: string[];
-  failure?: ResourceFailure | undefined;
-  createdAt?: Date | undefined;
-  resourceVersion: string;
-  validation?: ValidationSummary | undefined;
-}
-
-/**
- * Bounded Ayni validation recorded by the coding runtime for this candidate.
- * It is not independent assessment evidence.
- */
-export interface ValidationSummary {
-  outcome: ValidationSummary_Outcome;
-  signalsDigest?: string | undefined;
-  completedTargets: number;
-  skippedTargets: number;
-  warningOffenders: number;
-  failingOffenders: number;
-  rows: ValidationRow[];
-}
-
-export enum ValidationSummary_Outcome {
-  OUTCOME_UNSPECIFIED = 0,
-  OUTCOME_PASSED = 1,
-  OUTCOME_FAILED = 2,
-  OUTCOME_UNAVAILABLE = 3,
-  OUTCOME_MISSING = 4,
-  UNRECOGNIZED = -1,
-}
-
-export function validationSummary_OutcomeFromJSON(object: any): ValidationSummary_Outcome {
-  switch (object) {
-    case 0:
-    case "OUTCOME_UNSPECIFIED":
-      return ValidationSummary_Outcome.OUTCOME_UNSPECIFIED;
-    case 1:
-    case "OUTCOME_PASSED":
-      return ValidationSummary_Outcome.OUTCOME_PASSED;
-    case 2:
-    case "OUTCOME_FAILED":
-      return ValidationSummary_Outcome.OUTCOME_FAILED;
-    case 3:
-    case "OUTCOME_UNAVAILABLE":
-      return ValidationSummary_Outcome.OUTCOME_UNAVAILABLE;
-    case 4:
-    case "OUTCOME_MISSING":
-      return ValidationSummary_Outcome.OUTCOME_MISSING;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return ValidationSummary_Outcome.UNRECOGNIZED;
-  }
-}
-
-export function validationSummary_OutcomeToJSON(object: ValidationSummary_Outcome): string {
-  switch (object) {
-    case ValidationSummary_Outcome.OUTCOME_UNSPECIFIED:
-      return "OUTCOME_UNSPECIFIED";
-    case ValidationSummary_Outcome.OUTCOME_PASSED:
-      return "OUTCOME_PASSED";
-    case ValidationSummary_Outcome.OUTCOME_FAILED:
-      return "OUTCOME_FAILED";
-    case ValidationSummary_Outcome.OUTCOME_UNAVAILABLE:
-      return "OUTCOME_UNAVAILABLE";
-    case ValidationSummary_Outcome.OUTCOME_MISSING:
-      return "OUTCOME_MISSING";
-    case ValidationSummary_Outcome.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
-export interface ValidationRow {
+export interface QualityRow {
   kind: string;
   passed: boolean;
+}
+
+export interface QualityResult {
+  outcome: QualityOutcome;
+  evidence?: QualityEvidence | undefined;
+  completedTargets?: number | undefined;
+  skippedTargets?: number | undefined;
+  warningOffenders?: number | undefined;
+  failingOffenders?: number | undefined;
+  rows: QualityRow[];
+  findings: string[];
+}
+
+export interface PullRequestReceipt {
+  repository: string;
+  number: string;
+  url: string;
+  branch: string;
+  baseBranch: string;
+  headCommit: string;
+  draft: boolean;
+}
+
+export interface WorkerProgress {
+  phase: WorkerPhase;
+  codingTurnsConsumed: number;
+  qualityRound: number;
+  latestFullCheck?: QualityResult | undefined;
+  publication: PublicationOutcome;
+}
+
+export interface WorkerResult {
+  execution: ExecutionOutcome;
+  commit?: string | undefined;
+  changedPaths: string[];
+  quality?: QualityResult | undefined;
+  modelUsage?: AttemptModelUsage | undefined;
+  requestedInput?: string | undefined;
+  publication: PublicationOutcome;
+  pullRequest?: PullRequestReceipt | undefined;
+  codingTurnsConsumed: number;
+  qualityRound: number;
 }
 
 export interface ListDevelopmentTasksRequest {
@@ -711,23 +878,13 @@ export interface GetDevelopmentAttemptResponse {
   attempt?: DevelopmentAttempt | undefined;
 }
 
-export interface ListCandidatesRequest {
-  developmentTaskId?: string | undefined;
-  developmentAttemptId?: string | undefined;
-  page?: PageRequest | undefined;
+export interface RetryTaskPublicationRequest {
+  idempotencyKey: string;
+  developmentTaskId: string;
 }
 
-export interface ListCandidatesResponse {
-  candidates: Candidate[];
-  page?: PageResponse | undefined;
-}
-
-export interface GetCandidateRequest {
-  candidateId: string;
-}
-
-export interface GetCandidateResponse {
-  candidate?: Candidate | undefined;
+export interface RetryTaskPublicationResponse {
+  attempt?: DevelopmentAttempt | undefined;
 }
 
 export interface WatchDevelopmentTaskRequest {
@@ -737,11 +894,10 @@ export interface WatchDevelopmentTaskRequest {
 
 export interface WatchDevelopmentTaskResponse {
   cursor: string;
-  update?:
-    | { $case: "developmentTask"; developmentTask: DevelopmentTask }
-    | { $case: "attempt"; attempt: DevelopmentAttempt }
-    | { $case: "candidate"; candidate: Candidate }
-    | undefined;
+  update?: { $case: "developmentTask"; developmentTask: DevelopmentTask } | {
+    $case: "attempt";
+    attempt: DevelopmentAttempt;
+  } | undefined;
 }
 
 function createBaseAgentSelection(): AgentSelection {
@@ -856,7 +1012,6 @@ function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
     acceptanceCriteria: [],
     changeConstraints: undefined,
     deadline: undefined,
-    publishDraft: false,
   };
 }
 
@@ -888,9 +1043,6 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     }
     if (message.deadline !== undefined) {
       Duration.encode(message.deadline, writer.uint32(66).fork()).join();
-    }
-    if (message.publishDraft !== false) {
-      writer.uint32(72).bool(message.publishDraft);
     }
     return writer;
   },
@@ -980,14 +1132,6 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
             message.deadline = Duration.decode(reader, reader.uint32());
             continue;
           }
-          case 9: {
-            if (tag !== 72) {
-              break;
-            }
-
-            message.publishDraft = reader.bool();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1035,11 +1179,6 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
         ? ChangeConstraints.fromJSON(object.change_constraints)
         : undefined,
       deadline: isSet(object.deadline) ? Duration.fromJSON(object.deadline) : undefined,
-      publishDraft: isSet(object.publishDraft)
-        ? globalThis.Boolean(object.publishDraft)
-        : isSet(object.publish_draft)
-        ? globalThis.Boolean(object.publish_draft)
-        : false,
     };
   },
 
@@ -1072,9 +1211,6 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     if (message.deadline !== undefined) {
       obj.deadline = Duration.toJSON(message.deadline);
     }
-    if (message.publishDraft !== false) {
-      obj.publishDraft = message.publishDraft;
-    }
     return obj;
   },
 
@@ -1098,7 +1234,6 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     message.deadline = (object.deadline !== undefined && object.deadline !== null)
       ? Duration.fromPartial(object.deadline)
       : undefined;
-    message.publishDraft = object.publishDraft ?? false;
     return message;
   },
 };
@@ -1420,7 +1555,7 @@ function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
     acceptanceCriteria: [],
     changeConstraints: undefined,
     deadlineAt: undefined,
-    publishDraft: false,
+    limits: undefined,
     publicationBaseBranch: "",
   };
 }
@@ -1448,8 +1583,8 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     if (message.deadlineAt !== undefined) {
       Timestamp.encode(toTimestamp(message.deadlineAt), writer.uint32(58).fork()).join();
     }
-    if (message.publishDraft !== false) {
-      writer.uint32(64).bool(message.publishDraft);
+    if (message.limits !== undefined) {
+      WorkerLimits.encode(message.limits, writer.uint32(66).fork()).join();
     }
     if (message.publicationBaseBranch !== "") {
       writer.uint32(74).string(message.publicationBaseBranch);
@@ -1527,11 +1662,11 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
             continue;
           }
           case 8: {
-            if (tag !== 64) {
+            if (tag !== 66) {
               break;
             }
 
-            message.publishDraft = reader.bool();
+            message.limits = WorkerLimits.decode(reader, reader.uint32());
             continue;
           }
           case 9: {
@@ -1575,11 +1710,7 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
         : isSet(object.deadline_at)
         ? fromJsonTimestamp(object.deadline_at)
         : undefined,
-      publishDraft: isSet(object.publishDraft)
-        ? globalThis.Boolean(object.publishDraft)
-        : isSet(object.publish_draft)
-        ? globalThis.Boolean(object.publish_draft)
-        : false,
+      limits: isSet(object.limits) ? WorkerLimits.fromJSON(object.limits) : undefined,
       publicationBaseBranch: isSet(object.publicationBaseBranch)
         ? globalThis.String(object.publicationBaseBranch)
         : isSet(object.publication_base_branch)
@@ -1611,8 +1742,8 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     if (message.deadlineAt !== undefined) {
       obj.deadlineAt = message.deadlineAt.toISOString();
     }
-    if (message.publishDraft !== false) {
-      obj.publishDraft = message.publishDraft;
+    if (message.limits !== undefined) {
+      obj.limits = WorkerLimits.toJSON(message.limits);
     }
     if (message.publicationBaseBranch !== "") {
       obj.publicationBaseBranch = message.publicationBaseBranch;
@@ -1640,7 +1771,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
       ? ChangeConstraints.fromPartial(object.changeConstraints)
       : undefined;
     message.deadlineAt = object.deadlineAt ?? undefined;
-    message.publishDraft = object.publishDraft ?? false;
+    message.limits = (object.limits !== undefined && object.limits !== null)
+      ? WorkerLimits.fromPartial(object.limits)
+      : undefined;
     message.publicationBaseBranch = object.publicationBaseBranch ?? "";
     return message;
   },
@@ -3196,6 +3329,10 @@ function createBaseDevelopmentAttempt(): DevelopmentAttempt {
     completedAt: undefined,
     resourceVersion: "0",
     agentActivity: [],
+    progress: undefined,
+    result: undefined,
+    pullRequest: undefined,
+    publicationOnly: false,
   };
 }
 
@@ -3239,6 +3376,18 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     }
     for (const v of message.agentActivity) {
       AgentActivity.encode(v!, writer.uint32(106).fork()).join();
+    }
+    if (message.progress !== undefined) {
+      WorkerProgress.encode(message.progress, writer.uint32(114).fork()).join();
+    }
+    if (message.result !== undefined) {
+      WorkerResult.encode(message.result, writer.uint32(122).fork()).join();
+    }
+    if (message.pullRequest !== undefined) {
+      PullRequestReceipt.encode(message.pullRequest, writer.uint32(130).fork()).join();
+    }
+    if (message.publicationOnly !== false) {
+      writer.uint32(136).bool(message.publicationOnly);
     }
     return writer;
   },
@@ -3360,6 +3509,38 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
             message.agentActivity.push(AgentActivity.decode(reader, reader.uint32()));
             continue;
           }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.progress = WorkerProgress.decode(reader, reader.uint32());
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.result = WorkerResult.decode(reader, reader.uint32());
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.pullRequest = PullRequestReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+          case 17: {
+            if (tag !== 136) {
+              break;
+            }
+
+            message.publicationOnly = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3423,6 +3604,18 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
         : globalThis.Array.isArray(object?.agent_activity)
         ? object.agent_activity.map((e: any) => AgentActivity.fromJSON(e))
         : [],
+      progress: isSet(object.progress) ? WorkerProgress.fromJSON(object.progress) : undefined,
+      result: isSet(object.result) ? WorkerResult.fromJSON(object.result) : undefined,
+      pullRequest: isSet(object.pullRequest)
+        ? PullRequestReceipt.fromJSON(object.pullRequest)
+        : isSet(object.pull_request)
+        ? PullRequestReceipt.fromJSON(object.pull_request)
+        : undefined,
+      publicationOnly: isSet(object.publicationOnly)
+        ? globalThis.Boolean(object.publicationOnly)
+        : isSet(object.publication_only)
+        ? globalThis.Boolean(object.publication_only)
+        : false,
     };
   },
 
@@ -3467,6 +3660,18 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     if (message.agentActivity?.length) {
       obj.agentActivity = message.agentActivity.map((e) => AgentActivity.toJSON(e));
     }
+    if (message.progress !== undefined) {
+      obj.progress = WorkerProgress.toJSON(message.progress);
+    }
+    if (message.result !== undefined) {
+      obj.result = WorkerResult.toJSON(message.result);
+    }
+    if (message.pullRequest !== undefined) {
+      obj.pullRequest = PullRequestReceipt.toJSON(message.pullRequest);
+    }
+    if (message.publicationOnly !== false) {
+      obj.publicationOnly = message.publicationOnly;
+    }
     return obj;
   },
 
@@ -3494,28 +3699,39 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     message.completedAt = object.completedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
     message.agentActivity = object.agentActivity?.map((e) => AgentActivity.fromPartial(e)) || [];
+    message.progress = (object.progress !== undefined && object.progress !== null)
+      ? WorkerProgress.fromPartial(object.progress)
+      : undefined;
+    message.result = (object.result !== undefined && object.result !== null)
+      ? WorkerResult.fromPartial(object.result)
+      : undefined;
+    message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
+      ? PullRequestReceipt.fromPartial(object.pullRequest)
+      : undefined;
+    message.publicationOnly = object.publicationOnly ?? false;
     return message;
   },
 };
 
-function createBaseCandidateIdentity(): CandidateIdentity {
-  return { identity: undefined };
+function createBaseWorkerLimits(): WorkerLimits {
+  return { codingTurns: 0, qualityRepairLimit: 0, deadlineAt: undefined };
 }
 
-export const CandidateIdentity: MessageFns<CandidateIdentity> = {
-  encode(message: CandidateIdentity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    switch (message.identity?.$case) {
-      case "git":
-        GitCandidate.encode(message.identity.git, writer.uint32(10).fork()).join();
-        break;
-      case "bundle":
-        BundleCandidate.encode(message.identity.bundle, writer.uint32(18).fork()).join();
-        break;
+export const WorkerLimits: MessageFns<WorkerLimits> = {
+  encode(message: WorkerLimits, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.codingTurns !== 0) {
+      writer.uint32(8).uint32(message.codingTurns);
+    }
+    if (message.qualityRepairLimit !== 0) {
+      writer.uint32(16).uint32(message.qualityRepairLimit);
+    }
+    if (message.deadlineAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.deadlineAt), writer.uint32(26).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): CandidateIdentity {
+  decode(input: BinaryReader | Uint8Array, length?: number): WorkerLimits {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3524,188 +3740,16 @@ export const CandidateIdentity: MessageFns<CandidateIdentity> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCandidateIdentity();
+      const message = createBaseWorkerLimits();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
           case 1: {
-            if (tag !== 10) {
+            if (tag !== 8) {
               break;
             }
 
-            message.identity = { $case: "git", git: GitCandidate.decode(reader, reader.uint32()) };
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.identity = { $case: "bundle", bundle: BundleCandidate.decode(reader, reader.uint32()) };
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): CandidateIdentity {
-    return {
-      identity: isSet(object.git)
-        ? { $case: "git", git: GitCandidate.fromJSON(object.git) }
-        : isSet(object.bundle)
-        ? { $case: "bundle", bundle: BundleCandidate.fromJSON(object.bundle) }
-        : undefined,
-    };
-  },
-
-  toJSON(message: CandidateIdentity): unknown {
-    const obj: any = {};
-    if (message.identity?.$case === "git") {
-      obj.git = GitCandidate.toJSON(message.identity.git);
-    } else if (message.identity?.$case === "bundle") {
-      obj.bundle = BundleCandidate.toJSON(message.identity.bundle);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<CandidateIdentity>): CandidateIdentity {
-    return CandidateIdentity.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<CandidateIdentity>): CandidateIdentity {
-    const message = createBaseCandidateIdentity();
-    switch (object.identity?.$case) {
-      case "git": {
-        if (object.identity?.git !== undefined && object.identity?.git !== null) {
-          message.identity = { $case: "git", git: GitCandidate.fromPartial(object.identity.git) };
-        }
-        break;
-      }
-      case "bundle": {
-        if (object.identity?.bundle !== undefined && object.identity?.bundle !== null) {
-          message.identity = { $case: "bundle", bundle: BundleCandidate.fromPartial(object.identity.bundle) };
-        }
-        break;
-      }
-    }
-    return message;
-  },
-};
-
-function createBaseGitCandidate(): GitCandidate {
-  return { commitSha: "" };
-}
-
-export const GitCandidate: MessageFns<GitCandidate> = {
-  encode(message: GitCandidate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.commitSha !== "") {
-      writer.uint32(10).string(message.commitSha);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GitCandidate {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGitCandidate();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.commitSha = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GitCandidate {
-    return {
-      commitSha: isSet(object.commitSha)
-        ? globalThis.String(object.commitSha)
-        : isSet(object.commit_sha)
-        ? globalThis.String(object.commit_sha)
-        : "",
-    };
-  },
-
-  toJSON(message: GitCandidate): unknown {
-    const obj: any = {};
-    if (message.commitSha !== "") {
-      obj.commitSha = message.commitSha;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GitCandidate>): GitCandidate {
-    return GitCandidate.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GitCandidate>): GitCandidate {
-    const message = createBaseGitCandidate();
-    message.commitSha = object.commitSha ?? "";
-    return message;
-  },
-};
-
-function createBaseBundleCandidate(): BundleCandidate {
-  return { digest: "", sizeBytes: "0" };
-}
-
-export const BundleCandidate: MessageFns<BundleCandidate> = {
-  encode(message: BundleCandidate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.digest !== "") {
-      writer.uint32(10).string(message.digest);
-    }
-    if (message.sizeBytes !== "0") {
-      writer.uint32(16).uint64(message.sizeBytes);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): BundleCandidate {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseBundleCandidate();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.digest = reader.string();
+            message.codingTurns = reader.uint32();
             continue;
           }
           case 2: {
@@ -3713,7 +3757,15 @@ export const BundleCandidate: MessageFns<BundleCandidate> = {
               break;
             }
 
-            message.sizeBytes = reader.uint64().toString();
+            message.qualityRepairLimit = reader.uint32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.deadlineAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
         }
@@ -3728,94 +3780,74 @@ export const BundleCandidate: MessageFns<BundleCandidate> = {
     }
   },
 
-  fromJSON(object: any): BundleCandidate {
+  fromJSON(object: any): WorkerLimits {
     return {
-      digest: isSet(object.digest) ? globalThis.String(object.digest) : "",
-      sizeBytes: isSet(object.sizeBytes)
-        ? globalThis.String(object.sizeBytes)
-        : isSet(object.size_bytes)
-        ? globalThis.String(object.size_bytes)
-        : "0",
+      codingTurns: isSet(object.codingTurns)
+        ? globalThis.Number(object.codingTurns)
+        : isSet(object.coding_turns)
+        ? globalThis.Number(object.coding_turns)
+        : 0,
+      qualityRepairLimit: isSet(object.qualityRepairLimit)
+        ? globalThis.Number(object.qualityRepairLimit)
+        : isSet(object.quality_repair_limit)
+        ? globalThis.Number(object.quality_repair_limit)
+        : 0,
+      deadlineAt: isSet(object.deadlineAt)
+        ? fromJsonTimestamp(object.deadlineAt)
+        : isSet(object.deadline_at)
+        ? fromJsonTimestamp(object.deadline_at)
+        : undefined,
     };
   },
 
-  toJSON(message: BundleCandidate): unknown {
+  toJSON(message: WorkerLimits): unknown {
     const obj: any = {};
-    if (message.digest !== "") {
-      obj.digest = message.digest;
+    if (message.codingTurns !== 0) {
+      obj.codingTurns = Math.round(message.codingTurns);
     }
-    if (message.sizeBytes !== "0") {
-      obj.sizeBytes = message.sizeBytes;
+    if (message.qualityRepairLimit !== 0) {
+      obj.qualityRepairLimit = Math.round(message.qualityRepairLimit);
+    }
+    if (message.deadlineAt !== undefined) {
+      obj.deadlineAt = message.deadlineAt.toISOString();
     }
     return obj;
   },
 
-  create(base?: DeepPartial<BundleCandidate>): BundleCandidate {
-    return BundleCandidate.fromPartial(base ?? {});
+  create(base?: DeepPartial<WorkerLimits>): WorkerLimits {
+    return WorkerLimits.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<BundleCandidate>): BundleCandidate {
-    const message = createBaseBundleCandidate();
-    message.digest = object.digest ?? "";
-    message.sizeBytes = object.sizeBytes ?? "0";
+  fromPartial(object: DeepPartial<WorkerLimits>): WorkerLimits {
+    const message = createBaseWorkerLimits();
+    message.codingTurns = object.codingTurns ?? 0;
+    message.qualityRepairLimit = object.qualityRepairLimit ?? 0;
+    message.deadlineAt = object.deadlineAt ?? undefined;
     return message;
   },
 };
 
-function createBaseCandidate(): Candidate {
-  return {
-    id: "",
-    developmentAttemptId: "",
-    repositoryConnectionId: "",
-    baseRevision: "",
-    identity: undefined,
-    state: 0,
-    changedPaths: [],
-    failure: undefined,
-    createdAt: undefined,
-    resourceVersion: "0",
-    validation: undefined,
-  };
+function createBaseQualityEvidence(): QualityEvidence {
+  return { artifactPath: "", signalsDigest: "", sourceFingerprint: "", commit: "" };
 }
 
-export const Candidate: MessageFns<Candidate> = {
-  encode(message: Candidate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
+export const QualityEvidence: MessageFns<QualityEvidence> = {
+  encode(message: QualityEvidence, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.artifactPath !== "") {
+      writer.uint32(10).string(message.artifactPath);
     }
-    if (message.developmentAttemptId !== "") {
-      writer.uint32(18).string(message.developmentAttemptId);
+    if (message.signalsDigest !== "") {
+      writer.uint32(18).string(message.signalsDigest);
     }
-    if (message.repositoryConnectionId !== "") {
-      writer.uint32(26).string(message.repositoryConnectionId);
+    if (message.sourceFingerprint !== "") {
+      writer.uint32(26).string(message.sourceFingerprint);
     }
-    if (message.baseRevision !== "") {
-      writer.uint32(34).string(message.baseRevision);
-    }
-    if (message.identity !== undefined) {
-      CandidateIdentity.encode(message.identity, writer.uint32(42).fork()).join();
-    }
-    if (message.state !== 0) {
-      writer.uint32(48).int32(message.state);
-    }
-    for (const v of message.changedPaths) {
-      writer.uint32(58).string(v!);
-    }
-    if (message.failure !== undefined) {
-      ResourceFailure.encode(message.failure, writer.uint32(66).fork()).join();
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
-    }
-    if (message.resourceVersion !== "0") {
-      writer.uint32(80).uint64(message.resourceVersion);
-    }
-    if (message.validation !== undefined) {
-      ValidationSummary.encode(message.validation, writer.uint32(90).fork()).join();
+    if (message.commit !== "") {
+      writer.uint32(34).string(message.commit);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): Candidate {
+  decode(input: BinaryReader | Uint8Array, length?: number): QualityEvidence {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3824,7 +3856,7 @@ export const Candidate: MessageFns<Candidate> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCandidate();
+      const message = createBaseQualityEvidence();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -3833,7 +3865,7 @@ export const Candidate: MessageFns<Candidate> = {
               break;
             }
 
-            message.id = reader.string();
+            message.artifactPath = reader.string();
             continue;
           }
           case 2: {
@@ -3841,7 +3873,7 @@ export const Candidate: MessageFns<Candidate> = {
               break;
             }
 
-            message.developmentAttemptId = reader.string();
+            message.signalsDigest = reader.string();
             continue;
           }
           case 3: {
@@ -3849,7 +3881,7 @@ export const Candidate: MessageFns<Candidate> = {
               break;
             }
 
-            message.repositoryConnectionId = reader.string();
+            message.sourceFingerprint = reader.string();
             continue;
           }
           case 4: {
@@ -3857,63 +3889,7 @@ export const Candidate: MessageFns<Candidate> = {
               break;
             }
 
-            message.baseRevision = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.identity = CandidateIdentity.decode(reader, reader.uint32());
-            continue;
-          }
-          case 6: {
-            if (tag !== 48) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.changedPaths.push(reader.string());
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.failure = ResourceFailure.decode(reader, reader.uint32());
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 10: {
-            if (tag !== 80) {
-              break;
-            }
-
-            message.resourceVersion = reader.uint64().toString();
-            continue;
-          }
-          case 11: {
-            if (tag !== 90) {
-              break;
-            }
-
-            message.validation = ValidationSummary.decode(reader, reader.uint32());
+            message.commit = reader.string();
             continue;
           }
         }
@@ -3928,149 +3904,73 @@ export const Candidate: MessageFns<Candidate> = {
     }
   },
 
-  fromJSON(object: any): Candidate {
+  fromJSON(object: any): QualityEvidence {
     return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      developmentAttemptId: isSet(object.developmentAttemptId)
-        ? globalThis.String(object.developmentAttemptId)
-        : isSet(object.development_attempt_id)
-        ? globalThis.String(object.development_attempt_id)
+      artifactPath: isSet(object.artifactPath)
+        ? globalThis.String(object.artifactPath)
+        : isSet(object.artifact_path)
+        ? globalThis.String(object.artifact_path)
         : "",
-      repositoryConnectionId: isSet(object.repositoryConnectionId)
-        ? globalThis.String(object.repositoryConnectionId)
-        : isSet(object.repository_connection_id)
-        ? globalThis.String(object.repository_connection_id)
+      signalsDigest: isSet(object.signalsDigest)
+        ? globalThis.String(object.signalsDigest)
+        : isSet(object.signals_digest)
+        ? globalThis.String(object.signals_digest)
         : "",
-      baseRevision: isSet(object.baseRevision)
-        ? globalThis.String(object.baseRevision)
-        : isSet(object.base_revision)
-        ? globalThis.String(object.base_revision)
+      sourceFingerprint: isSet(object.sourceFingerprint)
+        ? globalThis.String(object.sourceFingerprint)
+        : isSet(object.source_fingerprint)
+        ? globalThis.String(object.source_fingerprint)
         : "",
-      identity: isSet(object.identity) ? CandidateIdentity.fromJSON(object.identity) : undefined,
-      state: isSet(object.state) ? candidateStateFromJSON(object.state) : 0,
-      changedPaths: globalThis.Array.isArray(object?.changedPaths)
-        ? object.changedPaths.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.changed_paths)
-        ? object.changed_paths.map((e: any) => globalThis.String(e))
-        : [],
-      failure: isSet(object.failure) ? ResourceFailure.fromJSON(object.failure) : undefined,
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      resourceVersion: isSet(object.resourceVersion)
-        ? globalThis.String(object.resourceVersion)
-        : isSet(object.resource_version)
-        ? globalThis.String(object.resource_version)
-        : "0",
-      validation: isSet(object.validation) ? ValidationSummary.fromJSON(object.validation) : undefined,
+      commit: isSet(object.commit) ? globalThis.String(object.commit) : "",
     };
   },
 
-  toJSON(message: Candidate): unknown {
+  toJSON(message: QualityEvidence): unknown {
     const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
+    if (message.artifactPath !== "") {
+      obj.artifactPath = message.artifactPath;
     }
-    if (message.developmentAttemptId !== "") {
-      obj.developmentAttemptId = message.developmentAttemptId;
+    if (message.signalsDigest !== "") {
+      obj.signalsDigest = message.signalsDigest;
     }
-    if (message.repositoryConnectionId !== "") {
-      obj.repositoryConnectionId = message.repositoryConnectionId;
+    if (message.sourceFingerprint !== "") {
+      obj.sourceFingerprint = message.sourceFingerprint;
     }
-    if (message.baseRevision !== "") {
-      obj.baseRevision = message.baseRevision;
-    }
-    if (message.identity !== undefined) {
-      obj.identity = CandidateIdentity.toJSON(message.identity);
-    }
-    if (message.state !== 0) {
-      obj.state = candidateStateToJSON(message.state);
-    }
-    if (message.changedPaths?.length) {
-      obj.changedPaths = message.changedPaths;
-    }
-    if (message.failure !== undefined) {
-      obj.failure = ResourceFailure.toJSON(message.failure);
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.resourceVersion !== "0") {
-      obj.resourceVersion = message.resourceVersion;
-    }
-    if (message.validation !== undefined) {
-      obj.validation = ValidationSummary.toJSON(message.validation);
+    if (message.commit !== "") {
+      obj.commit = message.commit;
     }
     return obj;
   },
 
-  create(base?: DeepPartial<Candidate>): Candidate {
-    return Candidate.fromPartial(base ?? {});
+  create(base?: DeepPartial<QualityEvidence>): QualityEvidence {
+    return QualityEvidence.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<Candidate>): Candidate {
-    const message = createBaseCandidate();
-    message.id = object.id ?? "";
-    message.developmentAttemptId = object.developmentAttemptId ?? "";
-    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
-    message.baseRevision = object.baseRevision ?? "";
-    message.identity = (object.identity !== undefined && object.identity !== null)
-      ? CandidateIdentity.fromPartial(object.identity)
-      : undefined;
-    message.state = object.state ?? 0;
-    message.changedPaths = object.changedPaths?.map((e) => e) || [];
-    message.failure = (object.failure !== undefined && object.failure !== null)
-      ? ResourceFailure.fromPartial(object.failure)
-      : undefined;
-    message.createdAt = object.createdAt ?? undefined;
-    message.resourceVersion = object.resourceVersion ?? "0";
-    message.validation = (object.validation !== undefined && object.validation !== null)
-      ? ValidationSummary.fromPartial(object.validation)
-      : undefined;
+  fromPartial(object: DeepPartial<QualityEvidence>): QualityEvidence {
+    const message = createBaseQualityEvidence();
+    message.artifactPath = object.artifactPath ?? "";
+    message.signalsDigest = object.signalsDigest ?? "";
+    message.sourceFingerprint = object.sourceFingerprint ?? "";
+    message.commit = object.commit ?? "";
     return message;
   },
 };
 
-function createBaseValidationSummary(): ValidationSummary {
-  return {
-    outcome: 0,
-    signalsDigest: undefined,
-    completedTargets: 0,
-    skippedTargets: 0,
-    warningOffenders: 0,
-    failingOffenders: 0,
-    rows: [],
-  };
+function createBaseQualityRow(): QualityRow {
+  return { kind: "", passed: false };
 }
 
-export const ValidationSummary: MessageFns<ValidationSummary> = {
-  encode(message: ValidationSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.outcome !== 0) {
-      writer.uint32(8).int32(message.outcome);
+export const QualityRow: MessageFns<QualityRow> = {
+  encode(message: QualityRow, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.kind !== "") {
+      writer.uint32(10).string(message.kind);
     }
-    if (message.signalsDigest !== undefined) {
-      writer.uint32(18).string(message.signalsDigest);
-    }
-    if (message.completedTargets !== 0) {
-      writer.uint32(24).uint32(message.completedTargets);
-    }
-    if (message.skippedTargets !== 0) {
-      writer.uint32(32).uint32(message.skippedTargets);
-    }
-    if (message.warningOffenders !== 0) {
-      writer.uint32(40).uint32(message.warningOffenders);
-    }
-    if (message.failingOffenders !== 0) {
-      writer.uint32(48).uint32(message.failingOffenders);
-    }
-    for (const v of message.rows) {
-      ValidationRow.encode(v!, writer.uint32(58).fork()).join();
+    if (message.passed !== false) {
+      writer.uint32(16).bool(message.passed);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ValidationSummary {
+  decode(input: BinaryReader | Uint8Array, length?: number): QualityRow {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4079,7 +3979,119 @@ export const ValidationSummary: MessageFns<ValidationSummary> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseValidationSummary();
+      const message = createBaseQualityRow();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.kind = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.passed = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): QualityRow {
+    return {
+      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
+      passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+    };
+  },
+
+  toJSON(message: QualityRow): unknown {
+    const obj: any = {};
+    if (message.kind !== "") {
+      obj.kind = message.kind;
+    }
+    if (message.passed !== false) {
+      obj.passed = message.passed;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<QualityRow>): QualityRow {
+    return QualityRow.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<QualityRow>): QualityRow {
+    const message = createBaseQualityRow();
+    message.kind = object.kind ?? "";
+    message.passed = object.passed ?? false;
+    return message;
+  },
+};
+
+function createBaseQualityResult(): QualityResult {
+  return {
+    outcome: 0,
+    evidence: undefined,
+    completedTargets: undefined,
+    skippedTargets: undefined,
+    warningOffenders: undefined,
+    failingOffenders: undefined,
+    rows: [],
+    findings: [],
+  };
+}
+
+export const QualityResult: MessageFns<QualityResult> = {
+  encode(message: QualityResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.outcome !== 0) {
+      writer.uint32(8).int32(message.outcome);
+    }
+    if (message.evidence !== undefined) {
+      QualityEvidence.encode(message.evidence, writer.uint32(18).fork()).join();
+    }
+    if (message.completedTargets !== undefined) {
+      writer.uint32(24).uint32(message.completedTargets);
+    }
+    if (message.skippedTargets !== undefined) {
+      writer.uint32(32).uint32(message.skippedTargets);
+    }
+    if (message.warningOffenders !== undefined) {
+      writer.uint32(40).uint32(message.warningOffenders);
+    }
+    if (message.failingOffenders !== undefined) {
+      writer.uint32(48).uint32(message.failingOffenders);
+    }
+    for (const v of message.rows) {
+      QualityRow.encode(v!, writer.uint32(58).fork()).join();
+    }
+    for (const v of message.findings) {
+      writer.uint32(66).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QualityResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseQualityResult();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4096,7 +4108,7 @@ export const ValidationSummary: MessageFns<ValidationSummary> = {
               break;
             }
 
-            message.signalsDigest = reader.string();
+            message.evidence = QualityEvidence.decode(reader, reader.uint32());
             continue;
           }
           case 3: {
@@ -4136,7 +4148,15 @@ export const ValidationSummary: MessageFns<ValidationSummary> = {
               break;
             }
 
-            message.rows.push(ValidationRow.decode(reader, reader.uint32()));
+            message.rows.push(QualityRow.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.findings.push(reader.string());
             continue;
           }
         }
@@ -4151,98 +4171,116 @@ export const ValidationSummary: MessageFns<ValidationSummary> = {
     }
   },
 
-  fromJSON(object: any): ValidationSummary {
+  fromJSON(object: any): QualityResult {
     return {
-      outcome: isSet(object.outcome) ? validationSummary_OutcomeFromJSON(object.outcome) : 0,
-      signalsDigest: isSet(object.signalsDigest)
-        ? globalThis.String(object.signalsDigest)
-        : isSet(object.signals_digest)
-        ? globalThis.String(object.signals_digest)
-        : undefined,
+      outcome: isSet(object.outcome) ? qualityOutcomeFromJSON(object.outcome) : 0,
+      evidence: isSet(object.evidence) ? QualityEvidence.fromJSON(object.evidence) : undefined,
       completedTargets: isSet(object.completedTargets)
         ? globalThis.Number(object.completedTargets)
         : isSet(object.completed_targets)
         ? globalThis.Number(object.completed_targets)
-        : 0,
+        : undefined,
       skippedTargets: isSet(object.skippedTargets)
         ? globalThis.Number(object.skippedTargets)
         : isSet(object.skipped_targets)
         ? globalThis.Number(object.skipped_targets)
-        : 0,
+        : undefined,
       warningOffenders: isSet(object.warningOffenders)
         ? globalThis.Number(object.warningOffenders)
         : isSet(object.warning_offenders)
         ? globalThis.Number(object.warning_offenders)
-        : 0,
+        : undefined,
       failingOffenders: isSet(object.failingOffenders)
         ? globalThis.Number(object.failingOffenders)
         : isSet(object.failing_offenders)
         ? globalThis.Number(object.failing_offenders)
-        : 0,
+        : undefined,
       rows: globalThis.Array.isArray(object?.rows)
-        ? object.rows.map((e: any) => ValidationRow.fromJSON(e))
+        ? object.rows.map((e: any) => QualityRow.fromJSON(e))
         : [],
+      findings: globalThis.Array.isArray(object?.findings) ? object.findings.map((e: any) => globalThis.String(e)) : [],
     };
   },
 
-  toJSON(message: ValidationSummary): unknown {
+  toJSON(message: QualityResult): unknown {
     const obj: any = {};
     if (message.outcome !== 0) {
-      obj.outcome = validationSummary_OutcomeToJSON(message.outcome);
+      obj.outcome = qualityOutcomeToJSON(message.outcome);
     }
-    if (message.signalsDigest !== undefined) {
-      obj.signalsDigest = message.signalsDigest;
+    if (message.evidence !== undefined) {
+      obj.evidence = QualityEvidence.toJSON(message.evidence);
     }
-    if (message.completedTargets !== 0) {
+    if (message.completedTargets !== undefined) {
       obj.completedTargets = Math.round(message.completedTargets);
     }
-    if (message.skippedTargets !== 0) {
+    if (message.skippedTargets !== undefined) {
       obj.skippedTargets = Math.round(message.skippedTargets);
     }
-    if (message.warningOffenders !== 0) {
+    if (message.warningOffenders !== undefined) {
       obj.warningOffenders = Math.round(message.warningOffenders);
     }
-    if (message.failingOffenders !== 0) {
+    if (message.failingOffenders !== undefined) {
       obj.failingOffenders = Math.round(message.failingOffenders);
     }
     if (message.rows?.length) {
-      obj.rows = message.rows.map((e) => ValidationRow.toJSON(e));
+      obj.rows = message.rows.map((e) => QualityRow.toJSON(e));
+    }
+    if (message.findings?.length) {
+      obj.findings = message.findings;
     }
     return obj;
   },
 
-  create(base?: DeepPartial<ValidationSummary>): ValidationSummary {
-    return ValidationSummary.fromPartial(base ?? {});
+  create(base?: DeepPartial<QualityResult>): QualityResult {
+    return QualityResult.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<ValidationSummary>): ValidationSummary {
-    const message = createBaseValidationSummary();
+  fromPartial(object: DeepPartial<QualityResult>): QualityResult {
+    const message = createBaseQualityResult();
     message.outcome = object.outcome ?? 0;
-    message.signalsDigest = object.signalsDigest ?? undefined;
-    message.completedTargets = object.completedTargets ?? 0;
-    message.skippedTargets = object.skippedTargets ?? 0;
-    message.warningOffenders = object.warningOffenders ?? 0;
-    message.failingOffenders = object.failingOffenders ?? 0;
-    message.rows = object.rows?.map((e) => ValidationRow.fromPartial(e)) || [];
+    message.evidence = (object.evidence !== undefined && object.evidence !== null)
+      ? QualityEvidence.fromPartial(object.evidence)
+      : undefined;
+    message.completedTargets = object.completedTargets ?? undefined;
+    message.skippedTargets = object.skippedTargets ?? undefined;
+    message.warningOffenders = object.warningOffenders ?? undefined;
+    message.failingOffenders = object.failingOffenders ?? undefined;
+    message.rows = object.rows?.map((e) => QualityRow.fromPartial(e)) || [];
+    message.findings = object.findings?.map((e) => e) || [];
     return message;
   },
 };
 
-function createBaseValidationRow(): ValidationRow {
-  return { kind: "", passed: false };
+function createBasePullRequestReceipt(): PullRequestReceipt {
+  return { repository: "", number: "0", url: "", branch: "", baseBranch: "", headCommit: "", draft: false };
 }
 
-export const ValidationRow: MessageFns<ValidationRow> = {
-  encode(message: ValidationRow, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.kind !== "") {
-      writer.uint32(10).string(message.kind);
+export const PullRequestReceipt: MessageFns<PullRequestReceipt> = {
+  encode(message: PullRequestReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repository !== "") {
+      writer.uint32(10).string(message.repository);
     }
-    if (message.passed !== false) {
-      writer.uint32(16).bool(message.passed);
+    if (message.number !== "0") {
+      writer.uint32(16).uint64(message.number);
+    }
+    if (message.url !== "") {
+      writer.uint32(26).string(message.url);
+    }
+    if (message.branch !== "") {
+      writer.uint32(34).string(message.branch);
+    }
+    if (message.baseBranch !== "") {
+      writer.uint32(42).string(message.baseBranch);
+    }
+    if (message.headCommit !== "") {
+      writer.uint32(50).string(message.headCommit);
+    }
+    if (message.draft !== false) {
+      writer.uint32(56).bool(message.draft);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ValidationRow {
+  decode(input: BinaryReader | Uint8Array, length?: number): PullRequestReceipt {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4251,7 +4289,7 @@ export const ValidationRow: MessageFns<ValidationRow> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseValidationRow();
+      const message = createBasePullRequestReceipt();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4260,7 +4298,7 @@ export const ValidationRow: MessageFns<ValidationRow> = {
               break;
             }
 
-            message.kind = reader.string();
+            message.repository = reader.string();
             continue;
           }
           case 2: {
@@ -4268,7 +4306,47 @@ export const ValidationRow: MessageFns<ValidationRow> = {
               break;
             }
 
-            message.passed = reader.bool();
+            message.number = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.url = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.branch = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.baseBranch = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.headCommit = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.draft = reader.bool();
             continue;
           }
         }
@@ -4283,31 +4361,465 @@ export const ValidationRow: MessageFns<ValidationRow> = {
     }
   },
 
-  fromJSON(object: any): ValidationRow {
+  fromJSON(object: any): PullRequestReceipt {
     return {
-      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
-      passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+      repository: isSet(object.repository) ? globalThis.String(object.repository) : "",
+      number: isSet(object.number) ? globalThis.String(object.number) : "0",
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      branch: isSet(object.branch) ? globalThis.String(object.branch) : "",
+      baseBranch: isSet(object.baseBranch)
+        ? globalThis.String(object.baseBranch)
+        : isSet(object.base_branch)
+        ? globalThis.String(object.base_branch)
+        : "",
+      headCommit: isSet(object.headCommit)
+        ? globalThis.String(object.headCommit)
+        : isSet(object.head_commit)
+        ? globalThis.String(object.head_commit)
+        : "",
+      draft: isSet(object.draft) ? globalThis.Boolean(object.draft) : false,
     };
   },
 
-  toJSON(message: ValidationRow): unknown {
+  toJSON(message: PullRequestReceipt): unknown {
     const obj: any = {};
-    if (message.kind !== "") {
-      obj.kind = message.kind;
+    if (message.repository !== "") {
+      obj.repository = message.repository;
     }
-    if (message.passed !== false) {
-      obj.passed = message.passed;
+    if (message.number !== "0") {
+      obj.number = message.number;
+    }
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.branch !== "") {
+      obj.branch = message.branch;
+    }
+    if (message.baseBranch !== "") {
+      obj.baseBranch = message.baseBranch;
+    }
+    if (message.headCommit !== "") {
+      obj.headCommit = message.headCommit;
+    }
+    if (message.draft !== false) {
+      obj.draft = message.draft;
     }
     return obj;
   },
 
-  create(base?: DeepPartial<ValidationRow>): ValidationRow {
-    return ValidationRow.fromPartial(base ?? {});
+  create(base?: DeepPartial<PullRequestReceipt>): PullRequestReceipt {
+    return PullRequestReceipt.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<ValidationRow>): ValidationRow {
-    const message = createBaseValidationRow();
-    message.kind = object.kind ?? "";
-    message.passed = object.passed ?? false;
+  fromPartial(object: DeepPartial<PullRequestReceipt>): PullRequestReceipt {
+    const message = createBasePullRequestReceipt();
+    message.repository = object.repository ?? "";
+    message.number = object.number ?? "0";
+    message.url = object.url ?? "";
+    message.branch = object.branch ?? "";
+    message.baseBranch = object.baseBranch ?? "";
+    message.headCommit = object.headCommit ?? "";
+    message.draft = object.draft ?? false;
+    return message;
+  },
+};
+
+function createBaseWorkerProgress(): WorkerProgress {
+  return { phase: 0, codingTurnsConsumed: 0, qualityRound: 0, latestFullCheck: undefined, publication: 0 };
+}
+
+export const WorkerProgress: MessageFns<WorkerProgress> = {
+  encode(message: WorkerProgress, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.phase !== 0) {
+      writer.uint32(8).int32(message.phase);
+    }
+    if (message.codingTurnsConsumed !== 0) {
+      writer.uint32(16).uint32(message.codingTurnsConsumed);
+    }
+    if (message.qualityRound !== 0) {
+      writer.uint32(24).uint32(message.qualityRound);
+    }
+    if (message.latestFullCheck !== undefined) {
+      QualityResult.encode(message.latestFullCheck, writer.uint32(34).fork()).join();
+    }
+    if (message.publication !== 0) {
+      writer.uint32(40).int32(message.publication);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WorkerProgress {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWorkerProgress();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.phase = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.codingTurnsConsumed = reader.uint32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.qualityRound = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.latestFullCheck = QualityResult.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.publication = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WorkerProgress {
+    return {
+      phase: isSet(object.phase) ? workerPhaseFromJSON(object.phase) : 0,
+      codingTurnsConsumed: isSet(object.codingTurnsConsumed)
+        ? globalThis.Number(object.codingTurnsConsumed)
+        : isSet(object.coding_turns_consumed)
+        ? globalThis.Number(object.coding_turns_consumed)
+        : 0,
+      qualityRound: isSet(object.qualityRound)
+        ? globalThis.Number(object.qualityRound)
+        : isSet(object.quality_round)
+        ? globalThis.Number(object.quality_round)
+        : 0,
+      latestFullCheck: isSet(object.latestFullCheck)
+        ? QualityResult.fromJSON(object.latestFullCheck)
+        : isSet(object.latest_full_check)
+        ? QualityResult.fromJSON(object.latest_full_check)
+        : undefined,
+      publication: isSet(object.publication) ? publicationOutcomeFromJSON(object.publication) : 0,
+    };
+  },
+
+  toJSON(message: WorkerProgress): unknown {
+    const obj: any = {};
+    if (message.phase !== 0) {
+      obj.phase = workerPhaseToJSON(message.phase);
+    }
+    if (message.codingTurnsConsumed !== 0) {
+      obj.codingTurnsConsumed = Math.round(message.codingTurnsConsumed);
+    }
+    if (message.qualityRound !== 0) {
+      obj.qualityRound = Math.round(message.qualityRound);
+    }
+    if (message.latestFullCheck !== undefined) {
+      obj.latestFullCheck = QualityResult.toJSON(message.latestFullCheck);
+    }
+    if (message.publication !== 0) {
+      obj.publication = publicationOutcomeToJSON(message.publication);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WorkerProgress>): WorkerProgress {
+    return WorkerProgress.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WorkerProgress>): WorkerProgress {
+    const message = createBaseWorkerProgress();
+    message.phase = object.phase ?? 0;
+    message.codingTurnsConsumed = object.codingTurnsConsumed ?? 0;
+    message.qualityRound = object.qualityRound ?? 0;
+    message.latestFullCheck = (object.latestFullCheck !== undefined && object.latestFullCheck !== null)
+      ? QualityResult.fromPartial(object.latestFullCheck)
+      : undefined;
+    message.publication = object.publication ?? 0;
+    return message;
+  },
+};
+
+function createBaseWorkerResult(): WorkerResult {
+  return {
+    execution: 0,
+    commit: undefined,
+    changedPaths: [],
+    quality: undefined,
+    modelUsage: undefined,
+    requestedInput: undefined,
+    publication: 0,
+    pullRequest: undefined,
+    codingTurnsConsumed: 0,
+    qualityRound: 0,
+  };
+}
+
+export const WorkerResult: MessageFns<WorkerResult> = {
+  encode(message: WorkerResult, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.execution !== 0) {
+      writer.uint32(8).int32(message.execution);
+    }
+    if (message.commit !== undefined) {
+      writer.uint32(18).string(message.commit);
+    }
+    for (const v of message.changedPaths) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.quality !== undefined) {
+      QualityResult.encode(message.quality, writer.uint32(34).fork()).join();
+    }
+    if (message.modelUsage !== undefined) {
+      AttemptModelUsage.encode(message.modelUsage, writer.uint32(42).fork()).join();
+    }
+    if (message.requestedInput !== undefined) {
+      writer.uint32(50).string(message.requestedInput);
+    }
+    if (message.publication !== 0) {
+      writer.uint32(56).int32(message.publication);
+    }
+    if (message.pullRequest !== undefined) {
+      PullRequestReceipt.encode(message.pullRequest, writer.uint32(66).fork()).join();
+    }
+    if (message.codingTurnsConsumed !== 0) {
+      writer.uint32(72).uint32(message.codingTurnsConsumed);
+    }
+    if (message.qualityRound !== 0) {
+      writer.uint32(80).uint32(message.qualityRound);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WorkerResult {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWorkerResult();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.execution = reader.int32() as any;
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.commit = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.changedPaths.push(reader.string());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.quality = QualityResult.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.modelUsage = AttemptModelUsage.decode(reader, reader.uint32());
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.requestedInput = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.publication = reader.int32() as any;
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.pullRequest = PullRequestReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.codingTurnsConsumed = reader.uint32();
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.qualityRound = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WorkerResult {
+    return {
+      execution: isSet(object.execution) ? executionOutcomeFromJSON(object.execution) : 0,
+      commit: isSet(object.commit) ? globalThis.String(object.commit) : undefined,
+      changedPaths: globalThis.Array.isArray(object?.changedPaths)
+        ? object.changedPaths.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.changed_paths)
+        ? object.changed_paths.map((e: any) => globalThis.String(e))
+        : [],
+      quality: isSet(object.quality) ? QualityResult.fromJSON(object.quality) : undefined,
+      modelUsage: isSet(object.modelUsage)
+        ? AttemptModelUsage.fromJSON(object.modelUsage)
+        : isSet(object.model_usage)
+        ? AttemptModelUsage.fromJSON(object.model_usage)
+        : undefined,
+      requestedInput: isSet(object.requestedInput)
+        ? globalThis.String(object.requestedInput)
+        : isSet(object.requested_input)
+        ? globalThis.String(object.requested_input)
+        : undefined,
+      publication: isSet(object.publication) ? publicationOutcomeFromJSON(object.publication) : 0,
+      pullRequest: isSet(object.pullRequest)
+        ? PullRequestReceipt.fromJSON(object.pullRequest)
+        : isSet(object.pull_request)
+        ? PullRequestReceipt.fromJSON(object.pull_request)
+        : undefined,
+      codingTurnsConsumed: isSet(object.codingTurnsConsumed)
+        ? globalThis.Number(object.codingTurnsConsumed)
+        : isSet(object.coding_turns_consumed)
+        ? globalThis.Number(object.coding_turns_consumed)
+        : 0,
+      qualityRound: isSet(object.qualityRound)
+        ? globalThis.Number(object.qualityRound)
+        : isSet(object.quality_round)
+        ? globalThis.Number(object.quality_round)
+        : 0,
+    };
+  },
+
+  toJSON(message: WorkerResult): unknown {
+    const obj: any = {};
+    if (message.execution !== 0) {
+      obj.execution = executionOutcomeToJSON(message.execution);
+    }
+    if (message.commit !== undefined) {
+      obj.commit = message.commit;
+    }
+    if (message.changedPaths?.length) {
+      obj.changedPaths = message.changedPaths;
+    }
+    if (message.quality !== undefined) {
+      obj.quality = QualityResult.toJSON(message.quality);
+    }
+    if (message.modelUsage !== undefined) {
+      obj.modelUsage = AttemptModelUsage.toJSON(message.modelUsage);
+    }
+    if (message.requestedInput !== undefined) {
+      obj.requestedInput = message.requestedInput;
+    }
+    if (message.publication !== 0) {
+      obj.publication = publicationOutcomeToJSON(message.publication);
+    }
+    if (message.pullRequest !== undefined) {
+      obj.pullRequest = PullRequestReceipt.toJSON(message.pullRequest);
+    }
+    if (message.codingTurnsConsumed !== 0) {
+      obj.codingTurnsConsumed = Math.round(message.codingTurnsConsumed);
+    }
+    if (message.qualityRound !== 0) {
+      obj.qualityRound = Math.round(message.qualityRound);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WorkerResult>): WorkerResult {
+    return WorkerResult.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WorkerResult>): WorkerResult {
+    const message = createBaseWorkerResult();
+    message.execution = object.execution ?? 0;
+    message.commit = object.commit ?? undefined;
+    message.changedPaths = object.changedPaths?.map((e) => e) || [];
+    message.quality = (object.quality !== undefined && object.quality !== null)
+      ? QualityResult.fromPartial(object.quality)
+      : undefined;
+    message.modelUsage = (object.modelUsage !== undefined && object.modelUsage !== null)
+      ? AttemptModelUsage.fromPartial(object.modelUsage)
+      : undefined;
+    message.requestedInput = object.requestedInput ?? undefined;
+    message.publication = object.publication ?? 0;
+    message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
+      ? PullRequestReceipt.fromPartial(object.pullRequest)
+      : undefined;
+    message.codingTurnsConsumed = object.codingTurnsConsumed ?? 0;
+    message.qualityRound = object.qualityRound ?? 0;
     return message;
   },
 };
@@ -5544,25 +6056,22 @@ export const GetDevelopmentAttemptResponse: MessageFns<GetDevelopmentAttemptResp
   },
 };
 
-function createBaseListCandidatesRequest(): ListCandidatesRequest {
-  return { developmentTaskId: undefined, developmentAttemptId: undefined, page: undefined };
+function createBaseRetryTaskPublicationRequest(): RetryTaskPublicationRequest {
+  return { idempotencyKey: "", developmentTaskId: "" };
 }
 
-export const ListCandidatesRequest: MessageFns<ListCandidatesRequest> = {
-  encode(message: ListCandidatesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.developmentTaskId !== undefined) {
-      writer.uint32(10).string(message.developmentTaskId);
+export const RetryTaskPublicationRequest: MessageFns<RetryTaskPublicationRequest> = {
+  encode(message: RetryTaskPublicationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
     }
-    if (message.developmentAttemptId !== undefined) {
-      writer.uint32(18).string(message.developmentAttemptId);
-    }
-    if (message.page !== undefined) {
-      PageRequest.encode(message.page, writer.uint32(26).fork()).join();
+    if (message.developmentTaskId !== "") {
+      writer.uint32(18).string(message.developmentTaskId);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ListCandidatesRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): RetryTaskPublicationRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -5571,34 +6080,26 @@ export const ListCandidatesRequest: MessageFns<ListCandidatesRequest> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListCandidatesRequest();
+      const message = createBaseRetryTaskPublicationRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
           case 1: {
             if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
               break;
             }
 
             message.developmentTaskId = reader.string();
             continue;
           }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.developmentAttemptId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.page = PageRequest.decode(reader, reader.uint32());
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -5611,225 +6112,56 @@ export const ListCandidatesRequest: MessageFns<ListCandidatesRequest> = {
     }
   },
 
-  fromJSON(object: any): ListCandidatesRequest {
+  fromJSON(object: any): RetryTaskPublicationRequest {
     return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
       developmentTaskId: isSet(object.developmentTaskId)
         ? globalThis.String(object.developmentTaskId)
         : isSet(object.development_task_id)
         ? globalThis.String(object.development_task_id)
-        : undefined,
-      developmentAttemptId: isSet(object.developmentAttemptId)
-        ? globalThis.String(object.developmentAttemptId)
-        : isSet(object.development_attempt_id)
-        ? globalThis.String(object.development_attempt_id)
-        : undefined,
-      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListCandidatesRequest): unknown {
-    const obj: any = {};
-    if (message.developmentTaskId !== undefined) {
-      obj.developmentTaskId = message.developmentTaskId;
-    }
-    if (message.developmentAttemptId !== undefined) {
-      obj.developmentAttemptId = message.developmentAttemptId;
-    }
-    if (message.page !== undefined) {
-      obj.page = PageRequest.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListCandidatesRequest>): ListCandidatesRequest {
-    return ListCandidatesRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListCandidatesRequest>): ListCandidatesRequest {
-    const message = createBaseListCandidatesRequest();
-    message.developmentTaskId = object.developmentTaskId ?? undefined;
-    message.developmentAttemptId = object.developmentAttemptId ?? undefined;
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageRequest.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseListCandidatesResponse(): ListCandidatesResponse {
-  return { candidates: [], page: undefined };
-}
-
-export const ListCandidatesResponse: MessageFns<ListCandidatesResponse> = {
-  encode(message: ListCandidatesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.candidates) {
-      Candidate.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.page !== undefined) {
-      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListCandidatesResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListCandidatesResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.candidates.push(Candidate.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.page = PageResponse.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListCandidatesResponse {
-    return {
-      candidates: globalThis.Array.isArray(object?.candidates)
-        ? object.candidates.map((e: any) => Candidate.fromJSON(e))
-        : [],
-      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListCandidatesResponse): unknown {
-    const obj: any = {};
-    if (message.candidates?.length) {
-      obj.candidates = message.candidates.map((e) => Candidate.toJSON(e));
-    }
-    if (message.page !== undefined) {
-      obj.page = PageResponse.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListCandidatesResponse>): ListCandidatesResponse {
-    return ListCandidatesResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListCandidatesResponse>): ListCandidatesResponse {
-    const message = createBaseListCandidatesResponse();
-    message.candidates = object.candidates?.map((e) => Candidate.fromPartial(e)) || [];
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageResponse.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseGetCandidateRequest(): GetCandidateRequest {
-  return { candidateId: "" };
-}
-
-export const GetCandidateRequest: MessageFns<GetCandidateRequest> = {
-  encode(message: GetCandidateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.candidateId !== "") {
-      writer.uint32(10).string(message.candidateId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetCandidateRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetCandidateRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.candidateId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetCandidateRequest {
-    return {
-      candidateId: isSet(object.candidateId)
-        ? globalThis.String(object.candidateId)
-        : isSet(object.candidate_id)
-        ? globalThis.String(object.candidate_id)
         : "",
     };
   },
 
-  toJSON(message: GetCandidateRequest): unknown {
+  toJSON(message: RetryTaskPublicationRequest): unknown {
     const obj: any = {};
-    if (message.candidateId !== "") {
-      obj.candidateId = message.candidateId;
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.developmentTaskId !== "") {
+      obj.developmentTaskId = message.developmentTaskId;
     }
     return obj;
   },
 
-  create(base?: DeepPartial<GetCandidateRequest>): GetCandidateRequest {
-    return GetCandidateRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<RetryTaskPublicationRequest>): RetryTaskPublicationRequest {
+    return RetryTaskPublicationRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<GetCandidateRequest>): GetCandidateRequest {
-    const message = createBaseGetCandidateRequest();
-    message.candidateId = object.candidateId ?? "";
+  fromPartial(object: DeepPartial<RetryTaskPublicationRequest>): RetryTaskPublicationRequest {
+    const message = createBaseRetryTaskPublicationRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.developmentTaskId = object.developmentTaskId ?? "";
     return message;
   },
 };
 
-function createBaseGetCandidateResponse(): GetCandidateResponse {
-  return { candidate: undefined };
+function createBaseRetryTaskPublicationResponse(): RetryTaskPublicationResponse {
+  return { attempt: undefined };
 }
 
-export const GetCandidateResponse: MessageFns<GetCandidateResponse> = {
-  encode(message: GetCandidateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.candidate !== undefined) {
-      Candidate.encode(message.candidate, writer.uint32(10).fork()).join();
+export const RetryTaskPublicationResponse: MessageFns<RetryTaskPublicationResponse> = {
+  encode(message: RetryTaskPublicationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attempt !== undefined) {
+      DevelopmentAttempt.encode(message.attempt, writer.uint32(10).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GetCandidateResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): RetryTaskPublicationResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -5838,7 +6170,7 @@ export const GetCandidateResponse: MessageFns<GetCandidateResponse> = {
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetCandidateResponse();
+      const message = createBaseRetryTaskPublicationResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -5847,7 +6179,7 @@ export const GetCandidateResponse: MessageFns<GetCandidateResponse> = {
               break;
             }
 
-            message.candidate = Candidate.decode(reader, reader.uint32());
+            message.attempt = DevelopmentAttempt.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -5862,25 +6194,25 @@ export const GetCandidateResponse: MessageFns<GetCandidateResponse> = {
     }
   },
 
-  fromJSON(object: any): GetCandidateResponse {
-    return { candidate: isSet(object.candidate) ? Candidate.fromJSON(object.candidate) : undefined };
+  fromJSON(object: any): RetryTaskPublicationResponse {
+    return { attempt: isSet(object.attempt) ? DevelopmentAttempt.fromJSON(object.attempt) : undefined };
   },
 
-  toJSON(message: GetCandidateResponse): unknown {
+  toJSON(message: RetryTaskPublicationResponse): unknown {
     const obj: any = {};
-    if (message.candidate !== undefined) {
-      obj.candidate = Candidate.toJSON(message.candidate);
+    if (message.attempt !== undefined) {
+      obj.attempt = DevelopmentAttempt.toJSON(message.attempt);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<GetCandidateResponse>): GetCandidateResponse {
-    return GetCandidateResponse.fromPartial(base ?? {});
+  create(base?: DeepPartial<RetryTaskPublicationResponse>): RetryTaskPublicationResponse {
+    return RetryTaskPublicationResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<GetCandidateResponse>): GetCandidateResponse {
-    const message = createBaseGetCandidateResponse();
-    message.candidate = (object.candidate !== undefined && object.candidate !== null)
-      ? Candidate.fromPartial(object.candidate)
+  fromPartial(object: DeepPartial<RetryTaskPublicationResponse>): RetryTaskPublicationResponse {
+    const message = createBaseRetryTaskPublicationResponse();
+    message.attempt = (object.attempt !== undefined && object.attempt !== null)
+      ? DevelopmentAttempt.fromPartial(object.attempt)
       : undefined;
     return message;
   },
@@ -5995,9 +6327,6 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
       case "attempt":
         DevelopmentAttempt.encode(message.update.attempt, writer.uint32(26).fork()).join();
         break;
-      case "candidate":
-        Candidate.encode(message.update.candidate, writer.uint32(34).fork()).join();
-        break;
     }
     return writer;
   },
@@ -6042,14 +6371,6 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
             message.update = { $case: "attempt", attempt: DevelopmentAttempt.decode(reader, reader.uint32()) };
             continue;
           }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.update = { $case: "candidate", candidate: Candidate.decode(reader, reader.uint32()) };
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6071,8 +6392,6 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
         ? { $case: "developmentTask", developmentTask: DevelopmentTask.fromJSON(object.development_task) }
         : isSet(object.attempt)
         ? { $case: "attempt", attempt: DevelopmentAttempt.fromJSON(object.attempt) }
-        : isSet(object.candidate)
-        ? { $case: "candidate", candidate: Candidate.fromJSON(object.candidate) }
         : undefined,
     };
   },
@@ -6086,8 +6405,6 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
       obj.developmentTask = DevelopmentTask.toJSON(message.update.developmentTask);
     } else if (message.update?.$case === "attempt") {
       obj.attempt = DevelopmentAttempt.toJSON(message.update.attempt);
-    } else if (message.update?.$case === "candidate") {
-      obj.candidate = Candidate.toJSON(message.update.candidate);
     }
     return obj;
   },
@@ -6114,18 +6431,12 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
         }
         break;
       }
-      case "candidate": {
-        if (object.update?.candidate !== undefined && object.update?.candidate !== null) {
-          message.update = { $case: "candidate", candidate: Candidate.fromPartial(object.update.candidate) };
-        }
-        break;
-      }
     }
     return message;
   },
 };
 
-/** DevelopmentTaskService manages frozen requests, attempts, and immutable candidates. */
+/** DevelopmentTaskService manages frozen requests and worker-owned attempts. */
 export type DevelopmentTaskServiceService = typeof DevelopmentTaskServiceService;
 export const DevelopmentTaskServiceService = {
   listDevelopmentTasks: {
@@ -6206,26 +6517,16 @@ export const DevelopmentTaskServiceService = {
       Buffer.from(GetDevelopmentAttemptResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetDevelopmentAttemptResponse => GetDevelopmentAttemptResponse.decode(value),
   },
-  listCandidates: {
-    path: "/ayni.orchestrator.v1.DevelopmentTaskService/ListCandidates" as const,
+  retryTaskPublication: {
+    path: "/ayni.orchestrator.v1.DevelopmentTaskService/RetryTaskPublication" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: ListCandidatesRequest): Buffer =>
-      Buffer.from(ListCandidatesRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListCandidatesRequest => ListCandidatesRequest.decode(value),
-    responseSerialize: (value: ListCandidatesResponse): Buffer =>
-      Buffer.from(ListCandidatesResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListCandidatesResponse => ListCandidatesResponse.decode(value),
-  },
-  getCandidate: {
-    path: "/ayni.orchestrator.v1.DevelopmentTaskService/GetCandidate" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: GetCandidateRequest): Buffer => Buffer.from(GetCandidateRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetCandidateRequest => GetCandidateRequest.decode(value),
-    responseSerialize: (value: GetCandidateResponse): Buffer =>
-      Buffer.from(GetCandidateResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetCandidateResponse => GetCandidateResponse.decode(value),
+    requestSerialize: (value: RetryTaskPublicationRequest): Buffer =>
+      Buffer.from(RetryTaskPublicationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RetryTaskPublicationRequest => RetryTaskPublicationRequest.decode(value),
+    responseSerialize: (value: RetryTaskPublicationResponse): Buffer =>
+      Buffer.from(RetryTaskPublicationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RetryTaskPublicationResponse => RetryTaskPublicationResponse.decode(value),
   },
   watchDevelopmentTask: {
     path: "/ayni.orchestrator.v1.DevelopmentTaskService/WatchDevelopmentTask" as const,
@@ -6248,8 +6549,7 @@ export interface DevelopmentTaskServiceServer extends UntypedServiceImplementati
   retryDevelopmentTask: handleUnaryCall<RetryDevelopmentTaskRequest, RetryDevelopmentTaskResponse>;
   listDevelopmentAttempts: handleUnaryCall<ListDevelopmentAttemptsRequest, ListDevelopmentAttemptsResponse>;
   getDevelopmentAttempt: handleUnaryCall<GetDevelopmentAttemptRequest, GetDevelopmentAttemptResponse>;
-  listCandidates: handleUnaryCall<ListCandidatesRequest, ListCandidatesResponse>;
-  getCandidate: handleUnaryCall<GetCandidateRequest, GetCandidateResponse>;
+  retryTaskPublication: handleUnaryCall<RetryTaskPublicationRequest, RetryTaskPublicationResponse>;
   watchDevelopmentTask: handleServerStreamingCall<WatchDevelopmentTaskRequest, WatchDevelopmentTaskResponse>;
 }
 
@@ -6359,35 +6659,20 @@ export interface DevelopmentTaskServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetDevelopmentAttemptResponse) => void,
   ): ClientUnaryCall;
-  listCandidates(
-    request: ListCandidatesRequest,
-    callback: (error: ServiceError | null, response: ListCandidatesResponse) => void,
+  retryTaskPublication(
+    request: RetryTaskPublicationRequest,
+    callback: (error: ServiceError | null, response: RetryTaskPublicationResponse) => void,
   ): ClientUnaryCall;
-  listCandidates(
-    request: ListCandidatesRequest,
+  retryTaskPublication(
+    request: RetryTaskPublicationRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListCandidatesResponse) => void,
+    callback: (error: ServiceError | null, response: RetryTaskPublicationResponse) => void,
   ): ClientUnaryCall;
-  listCandidates(
-    request: ListCandidatesRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListCandidatesResponse) => void,
-  ): ClientUnaryCall;
-  getCandidate(
-    request: GetCandidateRequest,
-    callback: (error: ServiceError | null, response: GetCandidateResponse) => void,
-  ): ClientUnaryCall;
-  getCandidate(
-    request: GetCandidateRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetCandidateResponse) => void,
-  ): ClientUnaryCall;
-  getCandidate(
-    request: GetCandidateRequest,
+  retryTaskPublication(
+    request: RetryTaskPublicationRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetCandidateResponse) => void,
+    callback: (error: ServiceError | null, response: RetryTaskPublicationResponse) => void,
   ): ClientUnaryCall;
   watchDevelopmentTask(
     request: WatchDevelopmentTaskRequest,

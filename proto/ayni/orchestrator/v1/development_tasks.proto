@@ -7,7 +7,7 @@ import "ayni/orchestrator/v1/runtime_profiles.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-// DevelopmentTaskService manages frozen requests, attempts, and immutable candidates.
+// DevelopmentTaskService manages frozen requests and worker-owned attempts.
 service DevelopmentTaskService {
   rpc ListDevelopmentTasks(ListDevelopmentTasksRequest) returns (ListDevelopmentTasksResponse);
   rpc GetDevelopmentTask(GetDevelopmentTaskRequest) returns (GetDevelopmentTaskResponse);
@@ -16,12 +16,11 @@ service DevelopmentTaskService {
   rpc RetryDevelopmentTask(RetryDevelopmentTaskRequest) returns (RetryDevelopmentTaskResponse);
   rpc ListDevelopmentAttempts(ListDevelopmentAttemptsRequest) returns (ListDevelopmentAttemptsResponse);
   rpc GetDevelopmentAttempt(GetDevelopmentAttemptRequest) returns (GetDevelopmentAttemptResponse);
-  rpc ListCandidates(ListCandidatesRequest) returns (ListCandidatesResponse);
-  rpc GetCandidate(GetCandidateRequest) returns (GetCandidateResponse);
+  rpc RetryTaskPublication(RetryTaskPublicationRequest) returns (RetryTaskPublicationResponse);
   rpc WatchDevelopmentTask(WatchDevelopmentTaskRequest) returns (stream WatchDevelopmentTaskResponse);
 }
 
-// DevelopmentTaskState is task progress, independent of publication and assessment.
+// DevelopmentTaskState is task progress, independent of quality and publication.
 enum DevelopmentTaskState {
   DEVELOPMENT_TASK_STATE_UNSPECIFIED = 0;
   DEVELOPMENT_TASK_STATE_QUEUED = 1;
@@ -47,18 +46,10 @@ enum DevelopmentAttemptState {
   DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED = 8;
 }
 
-// CandidateState records immutable candidate admission, not review readiness.
-enum CandidateState {
-  CANDIDATE_STATE_UNSPECIFIED = 0;
-  CANDIDATE_STATE_AVAILABLE = 1;
-  CANDIDATE_STATE_REJECTED = 2;
-}
-
 // ModelUsageStage identifies an attempt stage that makes model-provider requests.
 enum ModelUsageStage {
   MODEL_USAGE_STAGE_UNSPECIFIED = 0;
   MODEL_USAGE_STAGE_CODING = 1;
-  MODEL_USAGE_STAGE_CHANGE_SUMMARY = 2;
 }
 
 // ModelInteractionOutcome is the terminal state of one provider interaction.
@@ -102,8 +93,6 @@ message DevelopmentTaskRequest {
   ChangeConstraints change_constraints = 7;
   // deadline is 1 second through 24 hours when present.
   optional google.protobuf.Duration deadline = 8;
-  // Retained for wire compatibility. New tasks always publish saved work as draft.
-  bool publish_draft = 9;
 }
 
 // FrozenRepository freezes the source snapshot used by a task or attempt.
@@ -136,7 +125,7 @@ message DevelopmentSnapshot {
   repeated string acceptance_criteria = 5;
   ChangeConstraints change_constraints = 6;
   optional google.protobuf.Timestamp deadline_at = 7;
-  bool publish_draft = 8;
+  WorkerLimits limits = 8;
   // Base branch observed when the publication request is frozen.
   string publication_base_branch = 9;
 }
@@ -251,69 +240,102 @@ message DevelopmentAttempt {
   uint64 resource_version = 12;
   // At most 256 recent observations, retained after worker cleanup.
   repeated AgentActivity agent_activity = 13;
+  WorkerProgress progress = 14;
+  WorkerResult result = 15;
+  PullRequestReceipt pull_request = 16;
+  bool publication_only = 17;
 }
 
-// CandidateIdentity is the immutable output identity produced by an attempt.
-message CandidateIdentity {
-  oneof identity {
-    GitCandidate git = 1;
-    BundleCandidate bundle = 2;
-  }
+// Frozen operator limits are immutable for the entire attempt.
+message WorkerLimits {
+  uint32 coding_turns = 1;
+  uint32 quality_repair_limit = 2;
+  google.protobuf.Timestamp deadline_at = 3;
 }
-
-// GitCandidate identifies one exact provider-neutral Git commit.
-message GitCandidate {
-  // commit_sha is exactly 40 lowercase hexadecimal characters.
-  string commit_sha = 1;
+enum WorkerPhase {
+  WORKER_PHASE_UNSPECIFIED = 0;
+  WORKER_PHASE_ADMISSION = 1;
+  WORKER_PHASE_CHECKOUT = 2;
+  WORKER_PHASE_CODING = 3;
+  WORKER_PHASE_CHECKING = 4;
+  WORKER_PHASE_REPAIRING = 5;
+  WORKER_PHASE_FINALIZING = 6;
+  WORKER_PHASE_PUBLISHING = 7;
+  WORKER_PHASE_COMPLETED = 8;
 }
-
-// BundleCandidate identifies immutable candidate bytes when no Git commit exists.
-message BundleCandidate {
-  // digest is `sha256:` followed by 64 lowercase hexadecimal characters.
-  string digest = 1;
-  uint64 size_bytes = 2;
+enum ExecutionOutcome {
+  EXECUTION_OUTCOME_UNSPECIFIED = 0;
+  EXECUTION_OUTCOME_SUCCEEDED = 1;
+  EXECUTION_OUTCOME_FAILED = 2;
+  EXECUTION_OUTCOME_CANCELLED = 3;
+  EXECUTION_OUTCOME_DEADLINE_EXCEEDED = 4;
+  EXECUTION_OUTCOME_NO_CHANGES = 5;
+  EXECUTION_OUTCOME_INPUT_REQUIRED = 6;
+  EXECUTION_OUTCOME_ADMISSION_FAILED = 7;
+  EXECUTION_OUTCOME_UNSAFE_CHANGES = 8;
 }
-
-// Candidate is immutable attempt output and is not a change request or assessment.
-message Candidate {
-  string id = 1;
-  string development_attempt_id = 2;
-  string repository_connection_id = 3;
-  // base_revision is exactly 40 lowercase hexadecimal characters.
-  string base_revision = 4;
-  CandidateIdentity identity = 5;
-  CandidateState state = 6;
-  // changed_paths contains at most 256 normalized repository-relative paths and
-  // at most 32,768 aggregate UTF-8 bytes.
-  repeated string changed_paths = 7;
-  optional ResourceFailure failure = 8;
-  google.protobuf.Timestamp created_at = 9;
-  uint64 resource_version = 10;
-  ValidationSummary validation = 11;
+enum PublicationOutcome {
+  PUBLICATION_OUTCOME_UNSPECIFIED = 0;
+  PUBLICATION_OUTCOME_PENDING = 1;
+  PUBLICATION_OUTCOME_PUBLISHING = 2;
+  PUBLICATION_OUTCOME_PUBLISHED = 3;
+  PUBLICATION_OUTCOME_FAILED = 4;
+  PUBLICATION_OUTCOME_CONFLICT = 5;
+  PUBLICATION_OUTCOME_NOT_REQUIRED = 6;
 }
-
-// Bounded Ayni validation recorded by the coding runtime for this candidate.
-// It is not independent assessment evidence.
-message ValidationSummary {
-  enum Outcome {
-    OUTCOME_UNSPECIFIED = 0;
-    OUTCOME_PASSED = 1;
-    OUTCOME_FAILED = 2;
-    OUTCOME_UNAVAILABLE = 3;
-    OUTCOME_MISSING = 4;
-  }
-  Outcome outcome = 1;
-  optional string signals_digest = 2;
-  uint32 completed_targets = 3;
-  uint32 skipped_targets = 4;
-  uint32 warning_offenders = 5;
-  uint32 failing_offenders = 6;
-  repeated ValidationRow rows = 7;
+enum QualityOutcome {
+  QUALITY_OUTCOME_UNSPECIFIED = 0;
+  QUALITY_OUTCOME_PASSED = 1;
+  QUALITY_OUTCOME_FAILED = 2;
+  QUALITY_OUTCOME_UNAVAILABLE = 3;
 }
-
-message ValidationRow {
+message QualityEvidence {
+  string artifact_path = 1;
+  string signals_digest = 2;
+  string source_fingerprint = 3;
+  string commit = 4;
+}
+message QualityRow {
   string kind = 1;
   bool passed = 2;
+}
+message QualityResult {
+  QualityOutcome outcome = 1;
+  QualityEvidence evidence = 2;
+  optional uint32 completed_targets = 3;
+  optional uint32 skipped_targets = 4;
+  optional uint32 warning_offenders = 5;
+  optional uint32 failing_offenders = 6;
+  repeated QualityRow rows = 7;
+  repeated string findings = 8;
+}
+message PullRequestReceipt {
+  string repository = 1;
+  uint64 number = 2;
+  string url = 3;
+  string branch = 4;
+  string base_branch = 5;
+  string head_commit = 6;
+  bool draft = 7;
+}
+message WorkerProgress {
+  WorkerPhase phase = 1;
+  uint32 coding_turns_consumed = 2;
+  uint32 quality_round = 3;
+  QualityResult latest_full_check = 4;
+  PublicationOutcome publication = 5;
+}
+message WorkerResult {
+  ExecutionOutcome execution = 1;
+  optional string commit = 2;
+  repeated string changed_paths = 3;
+  QualityResult quality = 4;
+  AttemptModelUsage model_usage = 5;
+  optional string requested_input = 6;
+  PublicationOutcome publication = 7;
+  PullRequestReceipt pull_request = 8;
+  uint32 coding_turns_consumed = 9;
+  uint32 quality_round = 10;
 }
 
 message ListDevelopmentTasksRequest {
@@ -384,23 +406,12 @@ message GetDevelopmentAttemptResponse {
   DevelopmentAttempt attempt = 1;
 }
 
-message ListCandidatesRequest {
-  optional string development_task_id = 1;
-  optional string development_attempt_id = 2;
-  PageRequest page = 3;
+message RetryTaskPublicationRequest {
+  string idempotency_key = 1;
+  string development_task_id = 2;
 }
-
-message ListCandidatesResponse {
-  repeated Candidate candidates = 1;
-  PageResponse page = 2;
-}
-
-message GetCandidateRequest {
-  string candidate_id = 1;
-}
-
-message GetCandidateResponse {
-  Candidate candidate = 1;
+message RetryTaskPublicationResponse {
+  DevelopmentAttempt attempt = 1;
 }
 
 message WatchDevelopmentTaskRequest {
@@ -413,6 +424,5 @@ message WatchDevelopmentTaskResponse {
   oneof update {
     DevelopmentTask development_task = 2;
     DevelopmentAttempt attempt = 3;
-    Candidate candidate = 4;
   }
 }

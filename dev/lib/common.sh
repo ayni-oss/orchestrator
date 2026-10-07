@@ -48,10 +48,20 @@ dev_build_chart_dependencies() (
 # Refuse builds that are likely to strand worker Jobs through disk exhaustion.
 dev_check_capacity() {
   local minimum_gib="${1:-8}"
-  local node_id available_kib required_kib
+  local node_id available_kib required_kib host_path
+  required_kib="$((minimum_gib * 1024 * 1024))"
+  # The VM reports virtual capacity even when its sparse disk cannot grow on
+  # the host. Check both source/build output and Docker Desktop's home volume.
+  for host_path in "$DEV_REPOSITORY_ROOT" "$HOME"; do
+    available_kib="$(df -Pk "$host_path" | awk 'NR==2 {print $4}')"
+    if (( available_kib < required_kib )); then
+      printf 'Host storage has less than %s GiB free; refusing a build/deploy\n' "$minimum_gib" >&2
+      df -h "$host_path" >&2
+      return 1
+    fi
+  done
   node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
   available_kib="$(docker exec "$node_id" df -Pk /var | awk 'NR==2 {print $4}')"
-  required_kib="$((minimum_gib * 1024 * 1024))"
   if (( available_kib < required_kib )); then
     printf 'Docker Desktop has less than %s GiB free; refusing a build/deploy that could strand managed Jobs\n' "$minimum_gib" >&2
     docker exec "$node_id" df -h /var >&2

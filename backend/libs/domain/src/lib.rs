@@ -1,4 +1,4 @@
-//! Shared change constraints, candidate bounds, and model usage contracts.
+//! Shared change constraints, change bounds, and model usage contracts.
 
 pub mod digest;
 mod usage;
@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
-/// Maximum changed paths retained for one bounded development candidate.
+/// Maximum changed paths retained for one bounded development task.
 pub const MAX_CHANGED_PATHS: usize = 256;
-/// Maximum aggregate UTF-8 bytes retained for a candidate's changed paths.
+/// Maximum aggregate UTF-8 bytes retained for a task's changed paths.
 pub const MAX_CHANGED_PATH_BYTES: usize = 65_536;
-/// Maximum scope violations retained for one bounded candidate.
+/// Maximum scope violations retained for one bounded task.
 pub const MAX_SCOPE_VIOLATIONS: usize = MAX_CHANGED_PATHS * 2;
 /// Maximum aggregate UTF-8 bytes retained for scope violations.
 pub const MAX_SCOPE_VIOLATION_BYTES: usize = 524_288;
@@ -34,7 +34,7 @@ pub fn scope_violations_are_bounded(violations: &[String]) -> bool {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChangeConstraints {
-    /// Repository-relative files or directory trees the candidate must not change.
+    /// Repository-relative files or directory trees the task must not change.
     #[serde(default)]
     pub protected_paths: Vec<String>,
     /// Whether changes to dedicated or inline Rust tests are authorized.

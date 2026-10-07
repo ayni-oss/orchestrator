@@ -88,6 +88,10 @@ impl Repository for CleanStore {
             updated_at: Some(timestamp(now)),
             completed_at: None,
             resource_version: 1,
+            progress: None,
+            result: None,
+            pull_request: None,
+            publication_only: false,
         };
         let previous_version = task.resource_version;
         task.state = v1::DevelopmentTaskState::Queued as i32;

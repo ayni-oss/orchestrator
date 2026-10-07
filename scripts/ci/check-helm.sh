@@ -69,8 +69,9 @@ for account in runtime-coding runtime-builder; do
 done
 grep -q 'name: registry-pull' "$scratch/runtime.yaml"
 grep -q 'serviceAccountToken:' "$scratch/runtime.yaml"
-grep -q 'verbs: \[create, delete\]' "$scratch/runtime.yaml"
+grep -q 'verbs: \[create, patch, delete\]' "$scratch/runtime.yaml"
 grep -q 'mountPath: /runtime-outputs' "$scratch/runtime.yaml"
+grep -Fq '\"quality_repair_limit\":3' "$scratch/runtime.yaml"
 helm template ayni-orchestrator "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
   --namespace ayni-orchestrator-dev \
   --set-string ayni-orchestrator.images.controlPlane=local/ayni-orchestrator-control-plane:test \

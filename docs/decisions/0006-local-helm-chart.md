@@ -1,5 +1,6 @@
 # Decision 0006: Reusable application chart and local Helm composition
 
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-09-28
 - Supersedes: [Decision 0001](0001-local-kubernetes-deployment.md)

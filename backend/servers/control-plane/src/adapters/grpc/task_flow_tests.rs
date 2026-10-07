@@ -202,7 +202,6 @@ fn task_request(profile: &RuntimeFixture, key: &str) -> v1::CreateDevelopmentTas
                 seconds: 3_600,
                 nanos: 0,
             }),
-            publish_draft: true,
         }),
     }
 }

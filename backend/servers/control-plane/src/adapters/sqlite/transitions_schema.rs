@@ -124,23 +124,6 @@ pub(super) const fn task_state_for_attempt(
     }
 }
 
-pub(super) const fn valid_change_request_transition(
-    current: v1::ChangeRequestState,
-    next: v1::ChangeRequestState,
-) -> bool {
-    use v1::ChangeRequestState as State;
-    matches!(
-        (current, next),
-        (
-            State::Publishing,
-            State::Draft | State::Open | State::Failed
-        ) | (
-            State::Draft,
-            State::Open | State::Closed | State::Merged | State::Failed
-        ) | (State::Open, State::Closed | State::Merged | State::Failed)
-    )
-}
-
 pub(super) const fn map_constraint(error: rusqlite::Error) -> CleanStoreError {
     CleanStoreError::Database(error)
 }
@@ -256,7 +239,7 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',4,unixepoch());
+VALUES ('control_plane',5,unixepoch());
 
 CREATE TABLE repository_connections(
     id TEXT PRIMARY KEY, status INTEGER NOT NULL, provider_key TEXT NOT NULL UNIQUE,
@@ -331,34 +314,6 @@ CREATE TABLE development_attempts(
     payload BLOB NOT NULL, resource_version INTEGER NOT NULL CHECK(resource_version > 0),
     event_cursor INTEGER NOT NULL UNIQUE,
     UNIQUE(development_task_id,attempt_number)
-);
-CREATE TABLE candidates(
-    id TEXT PRIMARY KEY,
-    development_task_id TEXT NOT NULL REFERENCES development_tasks(id),
-    development_attempt_id TEXT NOT NULL REFERENCES development_attempts(id),
-    repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
-    state INTEGER NOT NULL, payload BLOB NOT NULL,
-    resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE,
-    UNIQUE(development_attempt_id)
-);
-CREATE TABLE change_requests(
-    id TEXT PRIMARY KEY,
-    repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
-    candidate_id TEXT REFERENCES candidates(id), state INTEGER NOT NULL,
-    head_revision TEXT NOT NULL, payload BLOB NOT NULL,
-    resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE
-);
-CREATE TABLE assessments(
-    id TEXT PRIMARY KEY,
-    repository_connection_id TEXT NOT NULL REFERENCES repository_connections(id),
-    change_request_id TEXT NOT NULL REFERENCES change_requests(id),
-    head_revision TEXT NOT NULL, conclusion INTEGER NOT NULL, payload BLOB NOT NULL,
-    resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE
-);
-CREATE TABLE evidence_references(
-    id TEXT PRIMARY KEY,
-    assessment_id TEXT NOT NULL REFERENCES assessments(id), payload BLOB NOT NULL,
-    resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE
 );
 CREATE TABLE durable_actions(
     operation TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash BLOB NOT NULL,

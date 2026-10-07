@@ -1,11 +1,24 @@
 use ayni_orchestrator_profile_ayni::runtime_execution::ExecutionRequest;
 use ayni_orchestrator_runtime::{activity::Stage, runtime_execution::read_bounded};
-use ayni_orchestrator_worker::{operations::runtime::checkout, profiles::ayni::verify};
+use ayni_orchestrator_worker::{operations::runtime::checkout, profiles::ayni::check};
 use std::{env, fs, io, path::Path, process::ExitCode};
 use tracing::Instrument;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    if env::args().nth(1).as_deref() == Some("sandbox") {
+        let arguments = env::args().skip(2).collect::<Vec<_>>();
+        let Some((program, arguments)) = arguments.split_first() else {
+            eprintln!("repository sandbox program missing");
+            return ExitCode::FAILURE;
+        };
+        if let Err(error) =
+            ayni_orchestrator_worker::operations::sandbox::execute(program, arguments)
+        {
+            eprintln!("repository sandbox setup failed: {error}");
+        }
+        return ExitCode::FAILURE;
+    }
     ayni_orchestrator_observability::init("runtime-worker");
     let activity = ayni_orchestrator_worker::coding::activity::ActivityLog::new(
         (env::args().nth(1).as_deref() == Some("code"))
@@ -62,15 +75,10 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     }
     if operation == "code" {
         let request =
-            serde_json::from_slice(&read_bounded(Path::new("/request/coding.json"), 65536)?)
+            serde_json::from_slice(&read_bounded(Path::new("/request/worker.json"), 65536)?)
                 .map_err(io::Error::other)?;
         return ayni_orchestrator_worker::coding::run(&request, Path::new("/output"), activity)
-            .await
-            .map_err(|error| {
-                error
-                    .downcast::<io::Error>()
-                    .map_or_else(|_| io::Error::other("coding failed"), |error| *error)
-            });
+            .await;
     }
     let request: ExecutionRequest =
         serde_json::from_slice(&read_bounded(Path::new("/request/execution.json"), 65_536)?)
@@ -94,7 +102,7 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
         }
         "verify" => {
             activity.record(Stage::RuntimeVerification);
-            let report = verify(&request, Path::new("/workspace")).await?;
+            let report = check(&request, Path::new("/workspace")).await?;
             let bytes = serde_json::to_vec(&report).map_err(io::Error::other)?;
             if bytes.len() > 4096 {
                 return Err(io::Error::other("runtime report oversized"));

@@ -17,7 +17,7 @@ impl CleanStore {
             fs::create_dir_all(parent).map_err(CleanStoreError::CreateDirectory)?;
         }
         let connection = Connection::open(path).map_err(CleanStoreError::Database)?;
-        Self::from_connection(connection, max_attempts, Some(path.to_path_buf()))
+        Self::from_connection(connection, max_attempts)
     }
 
     #[cfg(test)]
@@ -25,14 +25,12 @@ impl CleanStore {
         Self::from_connection(
             Connection::open_in_memory().map_err(CleanStoreError::Database)?,
             3,
-            None,
         )
     }
 
     pub(super) fn from_connection(
         connection: Connection,
         max_attempts: u32,
-        path: Option<PathBuf>,
     ) -> Result<Self, CleanStoreError> {
         if max_attempts == 0 {
             return Err(CleanStoreError::InvalidTransition);
@@ -44,7 +42,8 @@ impl CleanStore {
         let store = Self {
             connection,
             max_attempts,
-            path,
+            coding_turns: 24,
+            quality_repair_limit: 3,
         };
         store.integrity_check()?;
         store.foreign_key_check()?;
@@ -151,30 +150,8 @@ impl CleanStore {
                  UNION ALL
                  SELECT event_cursor,'development_attempt',payload FROM development_attempts
                  WHERE development_task_id=?1
-                 UNION ALL
-                 SELECT event_cursor,'candidate',payload FROM candidates
-                 WHERE development_task_id=?1
                  ORDER BY 1",
                 vec![parent_id],
-            ),
-            REVIEW_SERVICE => (
-                "SELECT event_cursor,'change_request',payload FROM change_requests
-                 WHERE (?1 IS NULL OR repository_connection_id=?1)
-                   AND (?2 IS NULL OR id=?2)
-                 UNION ALL
-                 SELECT a.event_cursor,'assessment',a.payload
-                 FROM assessments a JOIN change_requests c ON c.id=a.change_request_id
-                 WHERE (?1 IS NULL OR c.repository_connection_id=?1)
-                   AND (?2 IS NULL OR c.id=?2)
-                 UNION ALL
-                 SELECT e.event_cursor,'evidence_reference',e.payload
-                 FROM evidence_references e
-                 JOIN assessments a ON a.id=e.assessment_id
-                 JOIN change_requests c ON c.id=a.change_request_id
-                 WHERE (?1 IS NULL OR c.repository_connection_id=?1)
-                   AND (?2 IS NULL OR c.id=?2)
-                 ORDER BY 1",
-                vec![repository_connection_id, parent_id],
             ),
             _ => return Err(CleanStoreError::CorruptState),
         };
@@ -412,7 +389,7 @@ impl CleanStore {
         key: &str,
         failure: &str,
     ) -> Result<(), CleanStoreError> {
-        let failure = truncate_utf8(failure, 512);
+        let failure = super::payloads::truncate_utf8(failure, 512);
         let changed = self
             .connection
             .execute(

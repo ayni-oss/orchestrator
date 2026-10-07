@@ -1,5 +1,4 @@
-//! Trusted launch operations. Build and coding commands run in separate Jobs
-//! with disjoint authority; coding results are never assessment evidence.
+//! Trusted worker-owned execution and environment operations.
 pub mod coding;
 pub mod operations;
 pub mod profiles;

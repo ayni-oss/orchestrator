@@ -27,15 +27,18 @@ while IFS= read -r use; do
   fi
 done < <(grep -RhE --include='*.yml' --include='*.yaml' '^[[:space:]]*uses:' "$workflows")
 
-for permission in actions checks contents issues metadata packages pull_requests workflows; do
+for permission in contents metadata pull_requests workflows; do
   grep -Eq "${permission}: \"(read|write)\"" "$app_setup" \
     || fail "GitHub App manifest is missing $permission permission"
 done
-for read_only in actions checks packages; do
-  grep -Eq "${read_only}: \"read\"" "$app_setup" \
-    || fail "GitHub App manifest must keep $read_only read-only"
+grep -Eq 'metadata: "read"' "$app_setup" \
+  || fail "GitHub App manifest must keep metadata read-only"
+for obsolete_permission in actions checks issues packages; do
+  if grep -Eq "${obsolete_permission}: \"(read|write)\"" "$app_setup"; then
+    fail "GitHub App manifest grants an unused $obsolete_permission permission"
+  fi
 done
-for write_permission in contents issues pull_requests workflows; do
+for write_permission in contents pull_requests workflows; do
   grep -Eq "${write_permission}: \"write\"" "$app_setup" \
     || fail "GitHub App manifest must grant $write_permission write access"
 done

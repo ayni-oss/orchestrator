@@ -40,3 +40,7 @@ the Secret named by `customClients.secretName`; see
 [`docs/custom-client-access.md`](../../../docs/custom-client-access.md). Each
 namespace supports one installation because application resource names are
 stable rather than release-prefixed.
+
+Runtime limits are `codingTurns` (default 24) and `qualityRepairLimit` (default 3,
+range 0–10). Admission freezes them per task. The worker owns checking, repairs
+and draft publication; control-plane collection precedes cleanup.

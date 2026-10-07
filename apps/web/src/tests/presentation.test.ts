@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { statusTone } from "$lib/presentation.js";
 
 describe("clean-v1 status presentation", () => {
-  it("distinguishes repository, profile, task, artifact, and assessment states", () => {
+  it("distinguishes repository, profile, task, artifact and worker states", () => {
     expect(statusTone("connected")).toBe("success");
     expect(statusTone("ready")).toBe("success");
     expect(statusTone("succeeded")).toBe("success");

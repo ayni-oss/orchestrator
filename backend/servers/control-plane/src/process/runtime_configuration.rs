@@ -20,6 +20,8 @@ pub struct RuntimeConfiguration {
     /// Maximum model/tool turns available to one coding attempt.
     #[serde(default = "coding_turns")]
     pub coding_turns: u16,
+    #[serde(default = "quality_repair_limit")]
+    pub quality_repair_limit: u16,
     #[serde(default = "concurrency")]
     pub concurrency: usize,
     /// Local Docker Desktop only; production keeps platform node selection.
@@ -45,8 +47,6 @@ pub struct ProfileRuntime {
     pub pull_secret: Option<String>,
     #[serde(default)]
     pub build: Option<BuildRuntime>,
-    #[serde(default)]
-    pub assessment: Option<AssessmentConfiguration>,
 }
 
 /// Shared Kubernetes execution settings for self-service Ayni Managed profiles.
@@ -62,28 +62,9 @@ pub struct ManagedRuntime {
     pub service_account: String,
     #[serde(default)]
     pub pull_secret: Option<String>,
-    /// Build-only authority remains in the internal Job's ServiceAccount.
+    /// Build-only authority remains in the internal Job's `ServiceAccount`.
     #[serde(default)]
     pub build: Option<BuildRuntime>,
-    #[serde(default)]
-    pub assessment: Option<AssessmentConfiguration>,
-}
-
-/// Only operator configuration can select the trusted collector and readiness policy.
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AssessmentConfiguration {
-    pub producer_image: String,
-    #[serde(default)]
-    pub publication_policy: PublicationPolicy,
-}
-
-#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum PublicationPolicy {
-    #[default]
-    DraftOnly,
-    ReadyAfterSuccessfulAssessment,
 }
 
 const fn interval() -> u64 {
@@ -100,6 +81,9 @@ const fn timeout() -> u64 {
 }
 const fn coding_turns() -> u16 {
     24
+}
+const fn quality_repair_limit() -> u16 {
+    3
 }
 const fn concurrency() -> usize {
     4
@@ -161,6 +145,7 @@ impl RuntimeConfiguration {
         if !(10..=3600).contains(&self.interval_seconds)
             || !(1..=120).contains(&self.request_timeout_seconds)
             || !(1..=128).contains(&self.coding_turns)
+            || self.quality_repair_limit > 10
             || !(1..=16).contains(&self.concurrency)
             || self.profiles.len() > 128
         {
@@ -177,7 +162,7 @@ impl RuntimeConfiguration {
 }
 
 impl ProfileRuntime {
-    /// Supplies only workload fields; assessment and publication remain application policy.
+    /// Supplies the workload fields for the worker-owned execution.
     pub(crate) fn execution_runtime(&self) -> WorkloadRuntime {
         WorkloadRuntime {
             image: self.image.clone(),
@@ -237,7 +222,6 @@ impl ManagedRuntime {
             service_account: self.service_account.clone(),
             pull_secret: self.pull_secret.clone(),
             build: self.build.clone(),
-            assessment: self.assessment.clone(),
         };
         validate_profile("managed", &runtime)?;
         Ok(runtime)
@@ -260,14 +244,6 @@ impl ManagedRuntime {
 }
 
 fn validate_profile(profile: &str, runtime: &ProfileRuntime) -> Result<(), &'static str> {
-    use ayni_orchestrator_runtime::runtime_contract::RuntimeImage;
-    if runtime
-        .assessment
-        .as_ref()
-        .is_some_and(|assessment| RuntimeImage::parse(&assessment.producer_image).is_err())
-    {
-        return Err("assessment_producer_invalid");
-    }
     if profile.is_empty() || profile.len() > 256 {
         return Err("runtime_configuration_invalid");
     }

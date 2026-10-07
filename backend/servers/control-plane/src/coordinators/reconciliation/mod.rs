@@ -118,8 +118,8 @@ pub struct RuntimeReconciler<E = RuntimeKubernetes> {
     source: SourceClient,
     kubernetes: E,
     pass: Mutex<()>,
-    publication_next: Mutex<u64>,
     coding_pass: Mutex<()>,
+    credential_refresh: Mutex<BTreeMap<String, u64>>,
 }
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
@@ -226,21 +226,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
     }
 
-    /// Resumes explicit publication requests without delaying cancellation checks.
-    pub async fn reconcile_publication(&self) {
-        let Ok(mut next) = self.publication_next.try_lock() else {
-            return;
-        };
-        let time = now().unwrap_or(0);
-        if *next > time {
-            return;
-        }
-        *next = time + self.configuration.interval_seconds;
-        if let Err(reason) = self.publish_candidates().await {
-            tracing::warn!(reason_code = reason, "candidate publication deferred");
-        }
-    }
-
     /// Initializes opt-in runtime execution from an operator configuration file.
     ///
     /// # Errors
@@ -341,10 +326,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Ok(());
         }
         let runtime = self.configured_profile(id).await?;
-        let source_digest = format!(
-            "sha256:{:x}",
-            Sha256::digest(serde_json::to_vec(&runtime).map_err(|_| "runtime_source_invalid")?)
-        );
         let Some(v1::repository_provider::Provider::Github(github)) =
             repository.provider.and_then(|p| p.provider)
         else {
@@ -372,7 +353,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .await?;
         let lock_identity = crate::profiles::ayni::environment::parse_lock(&lock)
             .map_err(|_| "repository_lock_invalid")?;
-        let runtime = runtime.for_lock_fingerprint(&lock_identity.fingerprint)?;
+        let (runtime, source_digest) =
+            normalized_runtime_source(&runtime, &lock_identity.fingerprint)?;
         let observation = ProfileObservation {
             id,
             runtime: &runtime,
@@ -710,7 +692,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
 }
 
 mod coding;
-mod publication;
+mod worker_mapping;
 
 fn now() -> Result<u64, &'static str> {
     SystemTime::now()
@@ -736,8 +718,46 @@ impl RuntimeReconciler<RuntimeKubernetes> {
             source,
             kubernetes,
             pass: Mutex::new(()),
-            publication_next: Mutex::new(0),
             coding_pass: Mutex::new(()),
+            credential_refresh: Mutex::new(BTreeMap::new()),
         })))
+    }
+}
+
+// Selecting a revision changes its stored lock; bind the observed lock before
+// hashing configuration so that bookkeeping cannot invalidate pending work.
+fn normalized_runtime_source(
+    runtime: &ProfileRuntime,
+    fingerprint: &str,
+) -> Result<(ProfileRuntime, String), &'static str> {
+    let runtime = runtime.for_lock_fingerprint(fingerprint)?;
+    let digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(serde_json::to_vec(&runtime).map_err(|_| "runtime_source_invalid")?)
+    );
+    Ok((runtime, digest))
+}
+
+#[cfg(test)]
+mod source_identity_tests {
+    use super::*;
+    #[test]
+    fn selecting_the_observed_lock_does_not_invalidate_pending_configuration()
+    -> Result<(), &'static str> {
+        let old = ProfileRuntime {
+            image: format!("registry.test/team/runtime:lock-{}", "a".repeat(64)),
+            platform: "linux/arm64".into(),
+            service_account: "runtime-coding".into(),
+            pull_secret: None,
+            build: None,
+        };
+        let observed = "b".repeat(64);
+        let (selected, initial) = normalized_runtime_source(&old, &observed)?;
+        let (_, next) = normalized_runtime_source(&selected, &observed)?;
+        assert_eq!(initial, next);
+        let mut changed = selected;
+        changed.service_account = "different-account".into();
+        assert_ne!(initial, normalized_runtime_source(&changed, &observed)?.1);
+        Ok(())
     }
 }

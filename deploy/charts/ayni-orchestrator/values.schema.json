@@ -7,7 +7,7 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "workerImage", "outputClaim", "outputSize", "modelSecret", "intervalSeconds", "requestTimeoutSeconds", "codingTurns", "concurrency", "profiles"],
+      "required": ["enabled", "workerImage", "outputClaim", "outputSize", "modelSecret", "intervalSeconds", "requestTimeoutSeconds", "codingTurns", "qualityRepairLimit", "concurrency", "profiles"],
       "properties": {
         "enabled": { "type": "boolean" },
         "workerImage": { "type": "string" },
@@ -17,6 +17,7 @@
         "intervalSeconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
         "requestTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
         "codingTurns": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "qualityRepairLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
         "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
         "allowEmulation": { "type": "boolean" },
         "profiles": { "type": "object", "maxProperties": 128 },
@@ -26,8 +27,7 @@
           "properties": {
             "platform": { "enum": ["linux/amd64", "linux/arm64"] },
             "service_account": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
-            "pull_secret": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
-            "assessment": { "type": "object" }
+            "pull_secret": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 }
           },
           "required": ["platform"]
         }

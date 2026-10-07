@@ -1,110 +1,25 @@
-# Ayni Orchestrator protocol
+# Private worker-owned API
 
-> **Clean-v1 target.** `ayni.orchestrator.v1` is replaced as a pre-public
-> baseline by the model in [Decision 0007](../docs/decisions/0007-clean-v1-runtime-profiles.md).
-> The existing pilot schema, generated bindings, and Buf baseline are removed;
-> this does not introduce a v2 package or compatibility aliases.
+The canonical API is `ayni.orchestrator.v1`. This private breaking replacement
+uses the `worker-owned-v2` baseline recorded in `BASELINE`. Clients must regenerate
+bindings and upgrade with the server; there are no compatibility readers or
+migration adapters for the superseded task pipeline.
 
-Native gRPC remains the only supported product transport. The server-side
-SvelteKit BFF and approved custom clients use the same contract; generated
-transport values never enter browser bundles. HTTP remains limited to liveness,
-readiness, metrics, and documented internal callbacks; it is not REST, JSON
-transcoding, gRPC-Web, or a browser API.
+Connectors, projects, repositories and runtime profiles retain their resource
+behavior. Development tasks freeze source, runtime, model, constraints and
+execution limits at admission. Attempts own worker progress, results, model
+usage and pull request receipts. Execution, quality and publication outcomes are
+independent. Quality counts are optional: absence means unavailable.
 
-## Resource model
+`DevelopmentTaskService` supports task admission, list/get, cancellation,
+ordinary retry, attempt list/get, publication-only retry and resumable updates.
+`RetryTaskPublication` resumes retained final work without coding again. Ordinary
+retry creates a new attempt. There are no standalone candidate or review
+resources and no separate evidence-reference service.
 
-The replacement contract models these independently reconcilable resources:
-
-| Resource | Required immutable bindings |
-| --- | --- |
-| Repository connection/snapshot | Provider repository identity and observed revision |
-| Runtime profile/revision | Closed profile kind (`AYNI_MANAGED` or `CUSTOM_RUNTIME`), repository connection, configuration revision |
-| Runtime artifact | Profile revision, OCI repository/discovery tag where applicable, resolved digest, platform, status, bounded verified metadata |
-| Repository automation/installation | Provider installation and versioned owned automation identity/action |
-| Development task/attempt | Frozen repository/profile revision, OCI digest, model/agent, request, constraints, deadline |
-| Candidate | Attempt and immutable candidate commit/bundle identity |
-| Change request | Candidate and provider PR/MR identity, base and exact head SHA |
-| Assessment | Change request, exact head SHA, producer/version, workflow run/attempt, conclusion, evidence references |
-| Evidence reference | Assessment and content digest with bounded metadata |
-
-Repository connections and shared task/change-request resources do not require
-Ayni locks, signals, preparation IDs, or GitHub-only fields. Ayni Managed carries
-lock/environment/assessment data in its profile-specific fields; Custom Runtime
-carries none. An unsupported profile is explicit rather than inferred from
-missing Ayni data.
-
-Mutations carry caller-generated idempotency keys and create a durable action
-before external effects. Repeating an equivalent request returns the original
-resource; reuse with different canonical content returns `ALREADY_EXISTS` and a
-machine-readable reason. Lists are stable, paginated, and bounded. Resources
-provide monotonic versions for resumable watch/poll; a task completion, change
-request state, assessment conclusion, and profile readiness remain separate
-updates.
-
-## Identity and admission
-
-The protocol validates distinct types for commit SHA, full Ayni lock fingerprint,
-OCI discovery tag, OCI digest, candidate commit, PR/MR head SHA, workflow
-run/attempt, and evidence digest. A task admission accepts only a verified
-platform-specific runtime artifact and stores `image@sha256:...`; mutable tags
-are discovery only. Ayni Managed uses
-`lock-<full-64-hex-lock-fingerprint>` as its GHCR discovery tag, but the tag is
-not a task or evidence identity.
-
-Assessments require the current exact change-request head and digest-verified
-bounded evidence. GitHub checks/comments and coding-time `ayni check --host`
-are projections/advisory feedback, not authoritative assessment fields or
-readiness authorization.
-
-## Compatibility and generation
-
-This pre-public replacement intentionally resets the Buf breaking baseline and
-release state. The `proto/BASELINE` marker makes that one-time reset explicit;
-CI rejects later marker changes and compares subsequent work with the clean-v1
-base. After the reset, `ayni.orchestrator.v1` follows additive protobuf
-rules: never reuse removed numbers/names, preserve field and RPC wire shape,
-add enum values only, and handle unknown enum values safely. No deprecated
-pilot messages, RPCs, aliases, or API compatibility readers remain. Future incompatible
-work uses a new package only after this new baseline has an established release
-contract.
-
-Rust bindings and the descriptor set are generated by `backend/servers/control-plane/crates/grpc-contract`; server-side
-TypeScript bindings are generated under `clients/typescript/src/generated`.
-Do not hand-edit generated output. Validate the delivered contract with:
-
-```sh
-pnpm install --frozen-lockfile
-scripts/ci/check-proto.sh
-cargo test -p ayni-orchestrator-api
-```
-
-## Transport boundary
-
-The default native listener binds pod loopback and is reached through a
-host-loopback Service port-forward. The optional custom-client listener remains
-a distinct TLS/HTTP2, capability-authorized, bounded, ClusterIP-only profile;
-it does not change the default listener or authorize public hosting. See
-[Custom-client gRPC access](../docs/custom-client-access.md).
-
-## Project ownership
-
-`ProjectService` exposes create/list/get/update/archive. Projects have a separate
-shared, editable repository membership and active/archived lifecycle.
-Repositories may belong to several projects; archiving retains history.
-Create, update and archive require idempotency keys; updates/archive also require
-`expected_resource_version`. Reads use `repositories.read`, mutations use
-`repositories.write` on custom-client endpoints.
-
-`DevelopmentTaskRequest.project_id` is required. The server verifies the selected
-`repository_connection_id` is a current member. Omission is allowed only for a
-single-member project. Removed members cannot admit new tasks or retries.
-The selected runtime profile must belong to the resolved repository. Task
-responses include `project_id`, and list requests may filter by it. Archived
-projects reject new tasks and retries; completed idempotent replays remain
-readable. Schema version 4 is a fresh-install boundary, not a data migration.
-
-`CreateProjectRequest.repository_connection_ids` accepts 1–100 unique connections.
-Legacy `repository_connection_id` accepts one connection and cannot be combined
-with the repeated field. `UpdateProjectRequest.repository_connection_ids` replaces
-membership when nonempty, or preserves it when empty. Updates still require the
-observed resource version. Repository readiness is shared between projects.
+Generate all bindings and descriptors with the repository tooling. Validate
+protocol fixtures and the explicit breaking baseline before release. After the
+replacement baseline is established, routine changes must obey the configured
+Buf compatibility checks. Bundles identify an immutable private source revision;
+clients verify checksums and regenerate before upgrading. Bundle creation does
+not publish a public endpoint or package.

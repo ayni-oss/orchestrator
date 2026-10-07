@@ -81,114 +81,6 @@ fn corrupt_event_or_page_snapshot_fails_closed() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
-fn publication_action_retains_intent_and_requeues_after_observation() -> Result<(), CleanStoreError>
-{
-    let mut store = CleanStore::in_memory()?;
-    let (repository, profile, _) = ready_profile(&mut store)?;
-    let (task, attempt) = store.create_development_task(
-        "task-scope",
-        &task_request(&store, &repository.id, &profile.id, "task")?,
-    )?;
-    let running = store.transition_attempt(
-        &attempt.id,
-        attempt.resource_version,
-        v1::DevelopmentAttemptState::Running,
-        None,
-    )?;
-    let succeeded = store.transition_attempt(
-        &attempt.id,
-        running.resource_version,
-        v1::DevelopmentAttemptState::Succeeded,
-        None,
-    )?;
-    let candidate = store.record_candidate(v1::Candidate {
-        development_attempt_id: succeeded.id,
-        repository_connection_id: repository.id,
-        base_revision: REVISION.to_owned(),
-        identity: Some(v1::CandidateIdentity {
-            identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
-                commit_sha: SECOND_REVISION.to_owned(),
-            })),
-        }),
-        state: v1::CandidateState::Available as i32,
-        changed_paths: vec!["src/lib.rs".to_owned()],
-        ..v1::Candidate::default()
-    })?;
-    let mut duplicate_candidate = candidate.clone();
-    duplicate_candidate.id.clear();
-    duplicate_candidate.created_at = None;
-    duplicate_candidate.resource_version = 0;
-    assert_eq!(
-        store.record_candidate(duplicate_candidate)?.id,
-        candidate.id
-    );
-    let request = v1::PublishCandidateRequest {
-        idempotency_key: "publish".to_owned(),
-        candidate_id: candidate.id,
-        title: "feat: bounded change".to_owned(),
-        body: "Body".to_owned(),
-        base_branch: "main".to_owned(),
-        draft: true,
-    };
-    let change_request = store.publish_candidate("publish-scope", &request)?;
-    let action = store
-        .durable_action("PublishCandidate", "publish-scope")?
-        .ok_or(CleanStoreError::CorruptState)?;
-    assert_eq!(action.state, DurableActionState::Pending);
-    assert_eq!(
-        v1::PublishCandidateRequest::decode(action.request_payload.as_slice())
-            .map_err(|_| CleanStoreError::CorruptState)?,
-        request
-    );
-    let provider = v1::ChangeRequestProvider {
-        provider: Some(v1::change_request_provider::Provider::Github(
-            v1::GithubChangeRequest {
-                repository_id: "123".to_owned(),
-                pull_request_number: 7,
-                html_url: "https://github.com/ayni-oss/sandbox/pull/7".to_owned(),
-            },
-        )),
-    };
-    let failure = v1::ResourceFailure {
-        reason: v1::ErrorReason::ProviderUnavailable as i32,
-        message: "provider response was uncertain".to_owned(),
-        remediation: None,
-        observed_at: None,
-    };
-    let failed = store.reconcile_change_request(
-        "publish-scope",
-        change_request.resource_version,
-        provider.clone(),
-        v1::ChangeRequestState::Failed,
-        SECOND_REVISION,
-        Some(failure.clone()),
-    )?;
-    let duplicate = store.reconcile_change_request(
-        "publish-scope",
-        change_request.resource_version,
-        provider,
-        v1::ChangeRequestState::Failed,
-        SECOND_REVISION,
-        Some(failure),
-    )?;
-    assert_eq!(duplicate.resource_version, failed.resource_version);
-    let pending =
-        store.retry_change_request_publication("publish-scope", failed.resource_version)?;
-    assert_eq!(pending.state, v1::ChangeRequestState::Publishing as i32);
-    assert_eq!(
-        store
-            .durable_action("PublishCandidate", "publish-scope")?
-            .map(|value| value.state),
-        Some(DurableActionState::Pending)
-    );
-    assert_eq!(
-        store.development_task(&task.id)?.state,
-        v1::DevelopmentTaskState::Succeeded as i32
-    );
-    Ok(())
-}
-
-#[test]
 fn fractional_deadlines_preserve_subsecond_precision() -> Result<(), CleanStoreError> {
     let base = Timestamp {
         seconds: 10,
@@ -456,76 +348,6 @@ fn service_events_are_monotonic_and_resumable() -> Result<(), CleanStoreError> {
 }
 
 #[test]
-fn saved_work_publication_resumes_once_for_success_failure_and_deadline()
--> Result<(), Box<dyn std::error::Error>> {
-    for state in [
-        v1::DevelopmentAttemptState::Succeeded,
-        v1::DevelopmentAttemptState::Failed,
-        v1::DevelopmentAttemptState::DeadlineExceeded,
-        v1::DevelopmentAttemptState::WaitingForInput,
-    ] {
-        retained_candidate_publishes_after_restart(state)?;
-    }
-    Ok(())
-}
-
-fn retained_candidate_publishes_after_restart(
-    state: v1::DevelopmentAttemptState,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempdir()?;
-    let path = directory.path().join("publication.sqlite");
-    let mut store = CleanStore::open(&path, 3)?;
-    let (repository, profile, _) = ready_profile(&mut store)?;
-    let mut request = task_request(&store, &repository.id, &profile.id, "auto-task")?;
-    request.request.as_mut().ok_or("request")?.publish_draft = false; // Legacy opt-out cannot discard new task work.
-    let (task, attempt) = store.create_development_task("auto-task", &request)?;
-    let frozen = task.snapshot.as_ref().ok_or("snapshot")?;
-    assert!(frozen.publish_draft);
-    assert_eq!(frozen.publication_base_branch, "main");
-    let running = store.transition_attempt(
-        &attempt.id,
-        attempt.resource_version,
-        v1::DevelopmentAttemptState::Running,
-        None,
-    )?;
-    store.transition_attempt(&attempt.id, running.resource_version, state, None)?;
-    let candidate = store.record_candidate(v1::Candidate {
-        development_attempt_id: attempt.id,
-        repository_connection_id: repository.id,
-        base_revision: REVISION.into(),
-        identity: Some(v1::CandidateIdentity {
-            identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
-                commit_sha: SECOND_REVISION.into(),
-            })),
-        }),
-        state: v1::CandidateState::Available as i32,
-        changed_paths: vec!["src/lib.rs".into()],
-        ..Default::default()
-    })?;
-    if state == v1::DevelopmentAttemptState::Failed {
-        store.retry_development_task(
-            "retry-with-checkpoint",
-            &v1::RetryDevelopmentTaskRequest {
-                idempotency_key: "retry-with-checkpoint".into(),
-                development_task_id: task.id.clone(),
-            },
-        )?;
-    }
-    drop(store);
-    let mut store = CleanStore::open(&path, 3)?;
-    store.schedule_requested_publications()?;
-    store.schedule_requested_publications()?;
-    let actions = store.pending_external_actions("PublishCandidate")?;
-    assert_eq!(actions.len(), 1);
-    let publication = v1::PublishCandidateRequest::decode(actions[0].request_payload.as_slice())?;
-    assert_eq!(publication.candidate_id, candidate.id);
-    assert_eq!(publication.base_branch, "main");
-    assert!(publication.draft);
-    assert_eq!(store.development_task(&task.id)?.snapshot, task.snapshot);
-    Ok(())
-}
-
-#[test]
 fn setup_observation_recovers_from_provider_failure() -> Result<(), CleanStoreError> {
     let mut store = CleanStore::in_memory()?;
     let repository = store
@@ -699,5 +521,84 @@ fn expiry_preserves_a_terminal_active_attempt_and_only_appends_the_task_event()
             .connection
             .query_row("SELECT COUNT(*) FROM resource_events", [], |row| row.get(0))?;
     assert_eq!(after, before + 1);
+    Ok(())
+}
+
+#[test]
+fn collects_worker_result_once_and_retries_only_retained_publication() -> Result<(), CleanStoreError>
+{
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (task, attempt) = store.create_development_task(
+        "worker-task",
+        &task_request(&store, &repository.id, &profile.id, "worker-task")?,
+    )?;
+    let result = v1::WorkerResult {
+        execution: v1::ExecutionOutcome::Succeeded as i32,
+        commit: Some(SECOND_REVISION.into()),
+        changed_paths: vec!["README.md".into()],
+        quality: Some(v1::QualityResult {
+            outcome: v1::QualityOutcome::Unavailable as i32,
+            findings: vec!["Check runner unavailable".into()],
+            ..Default::default()
+        }),
+        publication: v1::PublicationOutcome::Failed as i32,
+        coding_turns_consumed: 5,
+        quality_round: 1,
+        ..Default::default()
+    };
+    let collected = store.collect_worker(&attempt.id, None, Some(result.clone()))?;
+    assert_eq!(
+        collected.state,
+        v1::DevelopmentAttemptState::Succeeded as i32
+    );
+    assert_eq!(
+        store
+            .collect_worker(&attempt.id, None, Some(result))?
+            .resource_version,
+        collected.resource_version
+    );
+    let request = v1::RetryTaskPublicationRequest {
+        idempotency_key: "publication-retry".into(),
+        development_task_id: task.id,
+    };
+    let retried = store.retry_task_publication("publication-retry", &request)?;
+    assert!(retried.publication_only);
+    assert_eq!(retried.id, attempt.id);
+    assert_eq!(
+        retried.result.as_ref().and_then(|r| r.commit.as_deref()),
+        Some(SECOND_REVISION)
+    );
+    assert_eq!(
+        store
+            .retry_task_publication("publication-retry", &request)?
+            .resource_version,
+        retried.resource_version
+    );
+    Ok(())
+}
+
+#[test]
+fn passing_quality_requires_bound_full_check_evidence() -> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (_, attempt) = store.create_development_task(
+        "quality-task",
+        &task_request(&store, &repository.id, &profile.id, "quality-task")?,
+    )?;
+    let result = v1::WorkerResult {
+        execution: v1::ExecutionOutcome::Succeeded as i32,
+        commit: Some(SECOND_REVISION.into()),
+        quality: Some(v1::QualityResult {
+            outcome: v1::QualityOutcome::Passed as i32,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert!(matches!(
+        store.collect_worker(&attempt.id, None, Some(result)),
+        Err(CleanStoreError::CorruptState)
+    ));
+    assert!(store.development_attempt(&attempt.id)?.result.is_none());
     Ok(())
 }

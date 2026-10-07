@@ -1,5 +1,7 @@
 import { safeText, safeGithubLink, safeReconciliation } from "./onboarding.js";
 import {
+  QualityOutcome, workerPhaseToJSON, publicationOutcomeToJSON, executionOutcomeToJSON,
+  type QualityResult, type PullRequestReceipt, type WorkerProgress, type WorkerResult,
   DevelopmentAttemptState,
   DevelopmentTaskState,
   ErrorReason,
@@ -22,6 +24,7 @@ import {
   type RuntimeProfileConfiguration,
 } from "@ayni-orchestrator/grpc-bindings/server";
 import type {
+  QualityResultDto, PullRequestReceiptDto, WorkerProgressDto, WorkerResultDto,
   ChangeConstraintsDto,
   CreateRepositoryConnectionInput,
   DevelopmentAttemptDto,
@@ -276,7 +279,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
     },
     agent: { provider: agent.provider, agent: agent.agent, model: agent.model },
     request: value.request,
-    publishDraft: value.publishDraft ?? false,
+    limits: { codingTurns: required(value.limits).codingTurns, qualityRepairLimit: required(value.limits).qualityRepairLimit, deadlineAt: date(value.limits?.deadlineAt) },
     acceptanceCriteria: value.acceptanceCriteria.map(String),
     changeConstraints: mapChangeConstraints(required(value.changeConstraints)),
     ...optional("deadlineAt", date(value.deadlineAt)),
@@ -314,6 +317,10 @@ export function mapAttemptState(value: DevelopmentAttemptState): DevelopmentAtte
 
 export function mapDevelopmentAttempt(value: DevelopmentAttempt): DevelopmentAttemptDto {
   return {
+    progress: value.progress ? mapWorkerProgress(value.progress) : undefined,
+    result: value.result ? mapWorkerResult(value.result) : undefined,
+    pullRequest: value.pullRequest ? mapPullRequest(value.pullRequest) : undefined,
+    publicationOnly: value.publicationOnly,
     agentActivity: (value.agentActivity ?? []).slice(-256).map(event => ({
       sequence: event.sequence, observedAt: date(event.observedAt),
       message: event.message.slice(0, 256), failed: event.failed,
@@ -341,7 +348,6 @@ export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentT
     runtimeProfileId: value.runtimeProfileId,
     agent: { ...value.agent },
     request: value.request,
-    publishDraft: value.publishDraft ?? false,
     acceptanceCriteria: value.acceptanceCriteria.map(String),
     changeConstraints: {
       protectedPaths: value.changeConstraints.protectedPaths.map(String),
@@ -362,4 +368,26 @@ export function mapProviderModel(value: ProviderModel): ProviderModelDto {
     ...optional("contextLength", value.contextLength),
     ...optional("maxOutputTokens", value.maxOutputTokens),
   } as ProviderModelDto;
+}
+
+export function mapQuality(value: QualityResult): QualityResultDto {
+  const evidence = value.evidence;
+  const validEvidence = evidence && /^[a-f0-9]{64}$/u.test(evidence.signalsDigest) && /^[a-f0-9]{64}$/u.test(evidence.sourceFingerprint) && /^[a-f0-9]{40}$/u.test(evidence.commit);
+  const outcome = value.outcome === QualityOutcome.QUALITY_OUTCOME_FAILED ? "failed" : value.outcome === QualityOutcome.QUALITY_OUTCOME_PASSED && validEvidence ? "passed" : "unavailable";
+  return { outcome, completedTargets: value.completedTargets, skippedTargets: value.skippedTargets, warningOffenders: value.warningOffenders, failingOffenders: value.failingOffenders,
+    rows: value.rows.slice(0, 64).map(row => ({ kind: safeText(row.kind, 128), passed: row.passed })), findings: value.findings.slice(0, 32).map(finding => safeText(finding, 1024)),
+    evidence: validEvidence ? { signalsDigest: evidence.signalsDigest, sourceFingerprint: evidence.sourceFingerprint, commit: evidence.commit } : undefined };
+}
+export function mapPullRequest(value: PullRequestReceipt): PullRequestReceiptDto {
+  return { repository: safeText(value.repository, 256), number: value.number, url: safeGithubLink(value.url), branch: safeText(value.branch, 256), baseBranch: safeText(value.baseBranch, 256), headCommit: safeText(value.headCommit, 40), draft: value.draft };
+}
+export function mapWorkerProgress(value: WorkerProgress): WorkerProgressDto {
+  return { phase: workerPhaseToJSON(value.phase).replace("WORKER_PHASE_", "").toLowerCase(), codingTurnsConsumed: value.codingTurnsConsumed, qualityRound: value.qualityRound,
+    latestFullCheck: value.latestFullCheck ? mapQuality(value.latestFullCheck) : undefined, publication: publicationOutcomeToJSON(value.publication).replace("PUBLICATION_OUTCOME_", "").toLowerCase() };
+}
+export function mapWorkerResult(value: WorkerResult): WorkerResultDto {
+  return { execution: executionOutcomeToJSON(value.execution).replace("EXECUTION_OUTCOME_", "").toLowerCase(), commit: value.commit, changedPaths: value.changedPaths.slice(0, 256).map(path => safeText(path, 1024)),
+    quality: value.quality ? mapQuality(value.quality) : undefined, requestedInput: value.requestedInput ? safeText(value.requestedInput, 1024) : undefined,
+    publication: publicationOutcomeToJSON(value.publication).replace("PUBLICATION_OUTCOME_", "").toLowerCase(), pullRequest: value.pullRequest ? mapPullRequest(value.pullRequest) : undefined,
+    codingTurnsConsumed: value.codingTurnsConsumed, qualityRound: value.qualityRound };
 }

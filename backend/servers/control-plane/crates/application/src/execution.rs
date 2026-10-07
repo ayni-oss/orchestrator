@@ -1,6 +1,6 @@
 //! Execution operations do not interpret runtime-profile evidence.
 pub use crate::execution_settings::WorkloadRuntime;
-use ayni_orchestrator_runtime::{coding::CodingRequest, runtime_execution::ExecutionRequest};
+use ayni_orchestrator_runtime::{coding::WorkerSpec, runtime_execution::ExecutionRequest};
 use serde::Serialize;
 use std::future::Future;
 
@@ -29,10 +29,15 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         &self,
         name: &str,
         runtime: &WorkloadRuntime,
-        request: &CodingRequest<P>,
+        request: &WorkerSpec<P>,
         token: &str,
         image: &str,
         deadline: u32,
+    ) -> impl Future<Output = ExecutionResult<()>> + Send;
+    fn refresh_credentials(
+        &self,
+        name: &str,
+        token: &str,
     ) -> impl Future<Output = ExecutionResult<()>> + Send;
     fn observe(&self, name: &str) -> impl Future<Output = ExecutionResult<Observation>> + Send;
     fn coding_state(

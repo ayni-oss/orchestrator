@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "backend/servers/control-plane/crates/application",
-    "backend/libs/integrations/github-actions",
     "backend/servers/control-plane/crates/grpc-contract",
     "backend/libs/domain",
     "backend/libs/observability",

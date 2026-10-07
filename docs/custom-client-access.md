@@ -68,7 +68,7 @@ The identity file has this bounded form (at most 64 clients):
       "id": "automation-client",
       "token_sha256": "<64 lowercase hexadecimal SHA-256 characters>",
       "expires_at_unix": 1798761600,
-      "capabilities": ["repositories.read", "profiles.read", "tasks.read", "reviews.read"]
+      "capabilities": ["repositories.read", "profiles.read", "tasks.read"]
     }
   ]
 }
@@ -141,15 +141,13 @@ collide.
 | `profiles.read` | `ListRuntimeProfiles`, `GetRuntimeProfile`, `ListRuntimeProfileRevisions`, `GetRuntimeProfileRevision`, `ListRuntimeArtifacts`, `GetRuntimeArtifact`, `ListAutomationInstallations`, `GetAutomationInstallation`, `WatchRuntimeProfiles` |
 | `profiles.write` | `CreateRuntimeProfile`, `InstallRepositoryAutomation`, `ReconcileRuntimeProfile` |
 | `provider_models.read` | `ListProviderModels` |
-| `tasks.read` | `ListDevelopmentTasks`, `GetDevelopmentTask`, `ListDevelopmentAttempts`, `GetDevelopmentAttempt`, `ListCandidates`, `GetCandidate`, `WatchDevelopmentTask` |
+| `tasks.read` | `ListDevelopmentTasks`, `GetDevelopmentTask`, `ListDevelopmentAttempts`, `GetDevelopmentAttempt`, `WatchDevelopmentTask` |
 | `tasks.create` | `CreateDevelopmentTask` |
 | `tasks.cancel` | `CancelDevelopmentTask` |
-| `tasks.retry` | `RetryDevelopmentTask` |
-| `reviews.read` | `ListChangeRequests`, `GetChangeRequest`, `ListAssessments`, `GetAssessment`, `ListEvidenceReferences`, `GetEvidenceReference`, `WatchReviews` |
-| `reviews.write` | `PublishCandidate` |
+| `tasks.retry` | `RetryDevelopmentTask`, `RetryTaskPublication` |
 
-Task execution and candidate publication are independently authorized. Creating
-or retrying a task does not implicitly authorize publishing a change request.
+Task creation admits the worker-owned coding, quality and draft-delivery flow.
+Retry publication resumes retained final work using the task retry capability.
 
 Send exactly one ASCII metadata value:
 
@@ -336,13 +334,12 @@ grpc_private -d '{"idempotencyKey":"client-example-cancel-1","developmentTaskId"
   ayni.orchestrator.v1.DevelopmentTaskService/CancelDevelopmentTask
 ```
 
-Evidence is retrieved through review resources rather than from task
-completion. List the digest-bound references for an exact-head assessment:
+Quality summaries, evidence identity and PR receipts are attached to attempts:
 
 ```sh
-grpc_private -d '{"assessmentId":"ASSESSMENT_ID","page":{"pageSize":50}}' \
+grpc_private -d '{"developmentTaskId":"TASK_ID","page":{"pageSize":50}}' \
   "$ORCHESTRATOR_ENDPOINT" \
-  ayni.orchestrator.v1.ReviewService/ListEvidenceReferences
+  ayni.orchestrator.v1.DevelopmentTaskService/ListDevelopmentAttempts
 ```
 
 The private TypeScript bindings also include a minimal TLS, metadata, deadline,

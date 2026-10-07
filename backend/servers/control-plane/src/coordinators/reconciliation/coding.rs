@@ -1,9 +1,9 @@
 use super::{
-    Digest, ExecutionBackend, ExecutionRequest, RuntimeExpectation, RuntimeReconciler, Sha256, now,
-    operation_name, v1,
+    ExecutionBackend, ExecutionRequest, RuntimeExpectation, RuntimeReconciler, now, operation_name,
+    v1,
 };
 use ayni_orchestrator_application::{
-    reconciliation::{CodingAction, coding_action},
+    reconciliation::{CodingAction, can_resume_worker, coding_result_action},
     tasks::lifecycle::AttemptState,
 };
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
@@ -32,8 +32,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         // before any cleanup. The same path also collects live progress.
         let job_state = self.kubernetes.coding_state(&name).await?;
         let attempt = self.collect_activity(attempt, &name).await?;
+        let attempt = self.collect_progress(attempt, &name).await?;
         let current = attempt_state(attempt.state)?;
-        let action = coding_action(current, job_state);
+        let interrupted = worker_interrupted(&name).await?;
+        let action = coding_result_action(current, job_state, interrupted);
         if action == CodingAction::Cleanup {
             self.cleanup_coding_attempt(&attempt, &name).await?;
             return Ok(());
@@ -44,23 +46,40 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             ayni_orchestrator_application::tasks::ProfileKind::AyniManaged => {}
             ayni_orchestrator_application::tasks::ProfileKind::CustomRuntime => return Ok(()),
         }
+        self.apply_coding_action(action, attempt, profile_id, &name)
+            .await
+    }
+
+    async fn apply_coding_action(
+        &self,
+        action: CodingAction,
+        attempt: v1::DevelopmentAttempt,
+        profile_id: &str,
+        name: &str,
+    ) -> Result<(), &'static str> {
         match action {
             CodingAction::LostExecution => {
-                self.coding_failed(&attempt, "coding_job_lost").await?;
+                if !self
+                    .resume_retained_worker(&attempt, profile_id, name)
+                    .await?
+                {
+                    self.coding_failed(&attempt, "coding_job_lost").await?;
+                }
             }
             CodingAction::Start => {
-                self.start_coding_attempt(&attempt, profile_id, &name)
+                self.start_coding_attempt(&attempt, profile_id, name)
                     .await?;
             }
             CodingAction::WorkerFailed => {
-                let reason = attempt.agent_activity.last().map_or_else(
-                    || "Coding worker failed before activity was retained. Inspect init containers, scheduling, and image pulls.".to_owned(),
-                    |event| format!("Coding worker failed. Last activity: {}.", event.message),
-                );
-                self.coding_failed(&attempt, &reason).await?;
+                self.reconcile_failed_worker(&attempt, profile_id, name)
+                    .await?;
+            }
+            CodingAction::WorkerInterrupted => {
+                self.reconcile_interrupted_worker(&attempt, profile_id, name)
+                    .await?;
             }
             CodingAction::CollectAndCleanup => {
-                self.finish_coding_attempt(&attempt, &name).await?;
+                self.finish_coding_attempt(&attempt, name).await?;
                 let fresh = self
                     .with_database(move |store| {
                         store
@@ -68,27 +87,186 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                             .map_err(|_| "coding_state_invalid")
                     })
                     .await?;
-                self.cleanup_coding_attempt(&fresh, &name).await?;
+                self.cleanup_coding_attempt(&fresh, name).await?;
             }
-            CodingAction::ConfirmRetainedCandidate => {
-                self.with_database(move |store| {
-                    if store
-                        .coding_candidate_exists(&attempt.id)
-                        .map_err(|_| "coding_state_invalid")?
-                    {
-                        store
-                            .coding_cleanup_complete(&attempt.id)
-                            .map_err(|_| "coding_state_invalid")?;
-                    } else {
-                        return Err("coding_completed_job_missing");
-                    }
-                    Ok(())
-                })
+            CodingAction::ConfirmRetainedResult => {
+                self.confirm_retained_result(&attempt.id).await?;
+            }
+            CodingAction::Wait => {
+                self.refresh_attempt_credentials(
+                    attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?,
+                    name,
+                )
                 .await?;
             }
-            CodingAction::Wait | CodingAction::Cleanup => {}
+            CodingAction::Cleanup => {}
         }
         Ok(())
+    }
+
+    async fn confirm_retained_result(&self, id: &str) -> Result<(), &'static str> {
+        let id = id.to_owned();
+        self.with_database(move |store| {
+            if !store
+                .coding_result_exists(&id)
+                .map_err(|_| "coding_state_invalid")?
+            {
+                return Err("coding_completed_job_missing");
+            }
+            store
+                .coding_cleanup_complete(&id)
+                .map_err(|_| "coding_state_invalid")
+        })
+        .await
+    }
+
+    async fn reconcile_interrupted_worker(
+        &self,
+        attempt: &v1::DevelopmentAttempt,
+        profile_id: &str,
+        name: &str,
+    ) -> Result<(), &'static str> {
+        if self
+            .resume_retained_worker(attempt, profile_id, name)
+            .await?
+        {
+            return Ok(());
+        }
+        if attempt
+            .snapshot
+            .as_ref()
+            .is_some_and(|s| coding_seconds_remaining(s) == 0)
+        {
+            let id = attempt.id.clone();
+            let version = attempt.resource_version;
+            self.with_database(move |store| {
+                store
+                    .transition_attempt(
+                        &id,
+                        version,
+                        v1::DevelopmentAttemptState::DeadlineExceeded,
+                        None,
+                    )
+                    .map_err(|_| "coding_state_changed")
+            })
+            .await?;
+        } else {
+            self.coding_failed(
+                attempt,
+                "Worker interrupted before a recoverable generation was retained.",
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn reconcile_failed_worker(
+        &self,
+        attempt: &v1::DevelopmentAttempt,
+        profile_id: &str,
+        name: &str,
+    ) -> Result<(), &'static str> {
+        if self.finish_coding_attempt(attempt, name).await.is_ok() {
+            let id = attempt.id.clone();
+            let fresh = self
+                .with_database(move |store| {
+                    store
+                        .development_attempt(&id)
+                        .map_err(|_| "coding_state_invalid")
+                })
+                .await?;
+            self.cleanup_coding_attempt(&fresh, name).await?;
+            return Ok(());
+        }
+        if self
+            .resume_retained_worker(attempt, profile_id, name)
+            .await?
+        {
+            return Ok(());
+        }
+        let reason = attempt.agent_activity.last().map_or_else(
+                    || "Coding worker failed before activity was retained. Inspect init containers, scheduling, and image pulls.".to_owned(),
+                    |event| format!("Coding worker failed. Last activity: {}.", event.message),
+                );
+        self.coding_failed(attempt, &reason).await?;
+
+        Ok(())
+    }
+
+    async fn refresh_attempt_credentials(
+        &self,
+        snapshot: &v1::DevelopmentSnapshot,
+        name: &str,
+    ) -> Result<(), &'static str> {
+        let time = now()?;
+        if self
+            .credential_refresh
+            .lock()
+            .await
+            .get(name)
+            .is_some_and(|next| *next > time)
+        {
+            return Ok(());
+        }
+        let repository_id = snapshot
+            .repository
+            .as_ref()
+            .ok_or("coding_snapshot_missing")?
+            .repository_connection_id
+            .clone();
+        let repository = self
+            .with_database(move |store| {
+                store
+                    .repository_connection(&repository_id)
+                    .map_err(|_| "repository_missing")
+            })
+            .await?;
+        if let Some(v1::repository_provider::Provider::Github(github)) =
+            repository.provider.and_then(|p| p.provider)
+        {
+            let token = self
+                .source
+                .publication_token(github.installation_id, &github.repository_id)
+                .await?;
+            self.kubernetes.refresh_credentials(name, &token).await?;
+            self.credential_refresh
+                .lock()
+                .await
+                .insert(name.to_owned(), time + 1800);
+        }
+        Ok(())
+    }
+
+    async fn collect_progress(
+        &self,
+        attempt: v1::DevelopmentAttempt,
+        name: &str,
+    ) -> Result<v1::DevelopmentAttempt, &'static str> {
+        let directory = std::path::Path::new("/runtime-outputs").join(name);
+        let progress = tokio::task::spawn_blocking(move || {
+            ayni_orchestrator_runtime::runtime_execution::read_bounded(
+                &directory.join("progress.json"),
+                65536,
+            )
+            .ok()
+            .and_then(|bytes| {
+                serde_json::from_slice::<ayni_orchestrator_runtime::coding::WorkerProgress>(&bytes)
+                    .ok()
+            })
+        })
+        .await
+        .map_err(|_| "worker_progress_unavailable")?;
+        if let Some(progress) = progress {
+            let id = attempt.id.clone();
+            self.with_database(move |store| {
+                store
+                    .collect_worker(&id, Some(super::worker_mapping::progress(progress)), None)
+                    .map_err(|_| "worker_progress_invalid")
+            })
+            .await
+        } else {
+            Ok(attempt)
+        }
     }
 
     pub(super) async fn collect_activity(
@@ -161,17 +339,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .await?;
         }
         self.kubernetes.cleanup(name).await?;
+        self.credential_refresh.lock().await.remove(name);
         if !self.kubernetes.coding_stopped(name).await? {
             return Ok(());
-        }
-        if [
-            v1::DevelopmentAttemptState::Failed as i32,
-            v1::DevelopmentAttemptState::DeadlineExceeded as i32,
-            v1::DevelopmentAttemptState::WaitingForInput as i32,
-        ]
-        .contains(&attempt.state)
-        {
-            self.recover_coding_checkpoint(&attempt, name).await?;
         }
         self.with_database(move |store| {
             store
@@ -183,82 +353,17 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         Ok(())
     }
 
-    pub(super) async fn recover_coding_checkpoint(
-        &self,
-        attempt: &v1::DevelopmentAttempt,
-        name: &str,
-    ) -> Result<(), &'static str> {
-        use ayni_orchestrator_runtime::runtime_execution::read_bounded;
-        // Once publication owns a candidate, retries must not replace its bundle.
-        let lookup_id = attempt.id.clone();
-        if self
-            .with_database(move |store| {
-                store
-                    .coding_candidate_exists(&lookup_id)
-                    .map_err(|_| "coding_state_invalid")
-            })
-            .await?
-        {
-            return Ok(());
-        }
-        let directory = std::path::Path::new("/runtime-outputs").join(name);
-        let checkpoint = tokio::task::spawn_blocking(move || {
-            let pointer = match read_bounded(&directory.join("checkpoint"), 40) {
-                Ok(pointer) => pointer,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-                Err(_) => return Err("coding_checkpoint_unavailable"),
-            };
-            let sha = std::str::from_utf8(&pointer).map_err(|_| "coding_checkpoint_invalid")?;
-            if sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-                return Err("coding_checkpoint_invalid");
-            }
-            let checkpoint = directory.join("checkpoints").join(sha);
-            let (report, _) = collect_coding_result(&checkpoint)?;
-            if report.commit.as_deref() != Some(sha) {
-                return Err("coding_checkpoint_invalid");
-            }
-            Ok(Some((sha.to_owned(), report)))
-        })
-        .await
-        .map_err(|_| "coding_output_unavailable")??;
-        let Some((sha, report)) = checkpoint else {
-            return Ok(());
-        };
-        let source = attempt
-            .snapshot
-            .as_ref()
-            .and_then(|s| s.repository.as_ref())
-            .ok_or("coding_snapshot_missing")?;
-        let candidate = v1::Candidate {
-            development_attempt_id: attempt.id.clone(),
-            repository_connection_id: source.repository_connection_id.clone(),
-            base_revision: source.revision.clone(),
-            identity: Some(v1::CandidateIdentity {
-                identity: Some(v1::candidate_identity::Identity::Git(v1::GitCandidate {
-                    commit_sha: sha,
-                })),
-            }),
-            state: v1::CandidateState::Available as i32,
-            changed_paths: report.changed_paths,
-            validation: Some(validation_summary(report.validation)),
-            ..Default::default()
-        };
-        self.with_database(move |store| {
-            store
-                .record_candidate(candidate)
-                .map_err(|_| "coding_candidate_rejected")
-        })
-        .await?;
-        Ok(())
-    }
-
+    #[allow(
+        clippy::too_many_lines,
+        reason = "frozen worker specification construction is kept together for review"
+    )]
     pub(super) async fn start_coding_attempt(
         &self,
         attempt: &v1::DevelopmentAttempt,
         profile_id: &str,
         name: &str,
     ) -> Result<(), &'static str> {
-        use ayni_orchestrator_profile_ayni::coding::CodingRequest;
+        use ayni_orchestrator_profile_ayni::coding::WorkerSpec;
         let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
         let source = snapshot
             .repository
@@ -304,7 +409,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .change_constraints
             .as_ref()
             .ok_or("coding_constraints_missing")?;
-        let request = CodingRequest {
+        let request = WorkerSpec {
             execution: ExecutionRequest {
                 repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
                 revision: source.revision.clone(),
@@ -317,7 +422,39 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             request: snapshot.request.clone(),
             acceptance_criteria: snapshot.acceptance_criteria.clone(),
             model: agent.model.clone(),
-            max_turns: self.configuration.coding_turns,
+            task_id: attempt.development_task_id.clone(),
+            attempt_id: attempt.id.clone(),
+            runtime_digest: frozen.resolved_digest.clone(),
+            limits: ayni_orchestrator_runtime::coding::WorkerLimits {
+                coding_turns: u16::try_from(
+                    snapshot
+                        .limits
+                        .as_ref()
+                        .ok_or("worker_limits_missing")?
+                        .coding_turns,
+                )
+                .map_err(|_| "worker_limits_invalid")?,
+                quality_repair_limit: u8::try_from(
+                    snapshot
+                        .limits
+                        .as_ref()
+                        .ok_or("worker_limits_missing")?
+                        .quality_repair_limit,
+                )
+                .map_err(|_| "worker_limits_invalid")?,
+                deadline_at: snapshot
+                    .limits
+                    .as_ref()
+                    .and_then(|l| l.deadline_at.as_ref())
+                    .ok_or("worker_deadline_missing")?
+                    .seconds,
+            },
+            publication: ayni_orchestrator_runtime::coding::PublicationDestination {
+                repository: format!("{}/{}", github.owner, github.name),
+                base_branch: snapshot.publication_base_branch.clone(),
+                branch: format!("task/{}", attempt.id.replace(':', "-")),
+            },
+            publication_only: attempt.publication_only,
             constraints: ayni_orchestrator_domain::ChangeConstraints {
                 protected_paths: constraints.protected_paths.clone(),
                 allow_test_edits: constraints.allow_test_edits,
@@ -329,7 +466,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
         let token = self
             .source
-            .token(github.installation_id, &github.repository_id)
+            .publication_token(github.installation_id, &github.repository_id)
             .await?;
         // The existing immutable attempt precedes creation. Repeat creation uses
         // the same name and exact request, including after an uncertain response.
@@ -343,6 +480,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 u32::try_from(remaining.min(86400)).map_err(|_| "coding_deadline_invalid")?,
             )
             .await?;
+        if attempt.state == v1::DevelopmentAttemptState::Running as i32 {
+            return Ok(());
+        }
         let attempt_id = attempt.id.clone();
         let attempt_version = attempt.resource_version;
         self.with_database(move |store| {
@@ -364,88 +504,73 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         attempt: &v1::DevelopmentAttempt,
         name: &str,
     ) -> Result<(), &'static str> {
-        use std::path::Path;
-        let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
-        let source = snapshot
-            .repository
-            .as_ref()
-            .ok_or("coding_snapshot_missing")?;
-        let directory = Path::new("/runtime-outputs").join(name);
-        let result = tokio::task::spawn_blocking(move || collect_coding_result(&directory))
-            .await
-            .map_err(|_| "coding_output_unavailable")?;
-        let (report, usage) = match result {
-            Ok(result) => result,
-            Err(reason) => {
-                self.coding_failed(attempt, reason).await?;
-                return Ok(());
-            }
-        };
-        let source = source.clone();
-        let attempt_id = attempt.id.clone();
+        let directory = std::path::Path::new("/runtime-outputs").join(name);
+        let (result, usage) = tokio::task::spawn_blocking(move || {
+            let result = collect_worker_result(&directory)?;
+            Ok::<_, &'static str>((result, collect_coding_usage(&directory)?))
+        })
+        .await
+        .map_err(|_| "coding_output_unavailable")??;
+        let id = attempt.id.clone();
         self.with_database(move |store| {
-            let fresh = store
-                .development_attempt(&attempt_id)
-                .map_err(|_| "coding_state_invalid")?;
-            if !matches!(
-                v1::DevelopmentAttemptState::try_from(fresh.state),
-                Ok(v1::DevelopmentAttemptState::Running
-                    | v1::DevelopmentAttemptState::Queued
-                    | v1::DevelopmentAttemptState::Succeeded)
-            ) {
-                return Ok(());
-            }
-            let next = if report.requested_input.is_some() {
-                v1::DevelopmentAttemptState::WaitingForInput
-            } else {
-                v1::DevelopmentAttemptState::Succeeded
-            };
-            // Creation may have completed before the Running transition was saved.
-            let fresh = if fresh.state == v1::DevelopmentAttemptState::Queued as i32 {
-                store
-                    .transition_attempt(
-                        &fresh.id,
-                        fresh.resource_version,
-                        v1::DevelopmentAttemptState::Running,
-                        None,
-                    )
-                    .map_err(|_| "coding_state_changed")?
-            } else {
-                fresh
-            };
             store
-                .coding_details(&fresh.id, report.requested_input.clone(), usage)
-                .map_err(|_| "coding_result_rejected")?;
-            let fresh = store
-                .development_attempt(&fresh.id)
-                .map_err(|_| "coding_state_invalid")?;
-            store
-                .transition_attempt(&fresh.id, fresh.resource_version, next, None)
-                .map_err(|_| "coding_state_changed")?;
-            if next == v1::DevelopmentAttemptState::Succeeded {
-                store
-                    .record_candidate(v1::Candidate {
-                        development_attempt_id: fresh.id,
-                        repository_connection_id: source.repository_connection_id.clone(),
-                        base_revision: source.revision.clone(),
-                        identity: Some(v1::CandidateIdentity {
-                            identity: Some(v1::candidate_identity::Identity::Git(
-                                v1::GitCandidate {
-                                    commit_sha: report.commit.ok_or("coding_commit_missing")?,
-                                },
-                            )),
-                        }),
-                        state: v1::CandidateState::Available as i32,
-                        changed_paths: report.changed_paths,
-                        validation: Some(validation_summary(report.validation)),
-                        ..Default::default()
-                    })
-                    .map_err(|_| "coding_candidate_rejected")?;
-            }
-            Ok(())
+                .collect_worker(
+                    &id,
+                    None,
+                    Some(super::worker_mapping::result(result, usage)),
+                )
+                .map_err(|_| "worker_result_rejected")
         })
         .await?;
         Ok(())
+    }
+
+    async fn resume_retained_worker(
+        &self,
+        attempt: &v1::DevelopmentAttempt,
+        profile_id: &str,
+        name: &str,
+    ) -> Result<bool, &'static str> {
+        let directory = std::path::Path::new("/runtime-outputs").join(name);
+        let retained = tokio::task::spawn_blocking(move || {
+            let pointer = ayni_orchestrator_runtime::runtime_execution::read_bounded(
+                &directory.join("recovery-current"),
+                128,
+            )
+            .ok()?;
+            let generation = std::str::from_utf8(&pointer).ok()?;
+            if !generation.starts_with("generation-")
+                || !generation
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+            {
+                return None;
+            }
+            let state = directory
+                .join("recovery")
+                .join(generation)
+                .join("state.json");
+            ayni_orchestrator_runtime::runtime_execution::read_bounded(&state, 131_072).ok()?;
+            Some(())
+        })
+        .await
+        .map_err(|_| "worker_recovery_unavailable")?
+        .is_some();
+        let before_deadline = attempt
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| coding_seconds_remaining(snapshot) > 0);
+        if !can_resume_worker(attempt_state(attempt.state)?, retained, before_deadline) {
+            return Ok(false);
+        }
+        // Recreate execution resources only after the prior pod has stopped. The
+        // retained attempt output and immutable specification preserve budgets.
+        self.kubernetes.cleanup(name).await?;
+        if !self.kubernetes.coding_stopped(name).await? {
+            return Ok(true);
+        }
+        self.start_coding_attempt(attempt, profile_id, name).await?;
+        Ok(true)
     }
 
     pub(super) async fn coding_failed(
@@ -479,79 +604,43 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 }
 
-pub(super) fn collect_coding_result(
+pub(super) fn collect_worker_result(
     directory: &std::path::Path,
-) -> Result<
-    (
-        ayni_orchestrator_runtime::coding::CodingReport,
-        v1::AttemptModelUsage,
-    ),
-    &'static str,
-> {
-    use ayni_orchestrator_runtime::{coding::CodingReport, runtime_execution::read_bounded};
-    let report: CodingReport = serde_json::from_slice(
-        &read_bounded(&directory.join("report.json"), 65536)
-            .map_err(|_| "coding_output_unavailable")?,
+) -> Result<ayni_orchestrator_runtime::coding::WorkerResult, &'static str> {
+    use ayni_orchestrator_runtime::coding::{QualityOutcome, WorkerResult};
+    use sha2::{Digest, Sha256};
+    let bytes = ayni_orchestrator_runtime::runtime_execution::read_bounded(
+        &directory.join("result.json"),
+        262_144,
     )
-    .map_err(|_| "coding_output_invalid")?;
-    if report.validation.rows.len() > 32
-        || report
-            .validation
-            .rows
-            .iter()
-            .any(|row| row.kind.is_empty() || row.kind.len() > 64)
-        || report
-            .requested_input
-            .as_ref()
-            .is_some_and(|q| q.len() > 1024)
-        || report.changed_paths.len() > 256
-    {
-        return Err("coding_output_invalid");
-    }
-    if report.requested_input.is_none() {
-        if report
-            .commit
-            .as_ref()
-            .is_none_or(|sha| sha.len() != 40 || !sha.bytes().all(|b| b.is_ascii_hexdigit()))
+    .map_err(|_| "worker_result_unavailable")?;
+    let result: WorkerResult =
+        serde_json::from_slice(&bytes).map_err(|_| "worker_result_invalid")?;
+    if let Some(ref evidence) = result.quality.evidence {
+        if evidence.artifact_path != "evidence/signals.json"
+            || Some(&evidence.commit) != result.commit.as_ref()
         {
-            return Err("coding_commit_missing");
+            return Err("worker_evidence_invalid");
         }
-        let bundle = read_bounded(&directory.join("candidate.bundle"), 64 * 1024 * 1024)
-            .map_err(|_| "coding_bundle_unavailable")?;
-        let digest = format!("sha256:{:x}", Sha256::digest(&bundle));
-        if report.bundle_digest.as_ref() != Some(&digest) {
-            return Err("coding_bundle_mismatch");
+        let artifact = ayni_orchestrator_runtime::runtime_execution::read_bounded(
+            &directory.join("evidence/signals.json"),
+            4 * 1024 * 1024,
+        )
+        .map_err(|_| "worker_evidence_missing")?;
+        let artifact_value: serde_json::Value =
+            serde_json::from_slice(&artifact).map_err(|_| "worker_evidence_invalid")?;
+        if evidence.signals_digest != format!("sha256:{:x}", Sha256::digest(&artifact))
+            || artifact_value["source_fingerprint"].as_str()
+                != Some(evidence.source_fingerprint.as_str())
+            || artifact_value["invocation"]["command"] != "check"
+            || artifact_value["completion"]["scope"] != "repository"
+        {
+            return Err("worker_evidence_invalid");
         }
+    } else if result.quality.outcome == QualityOutcome::Passed {
+        return Err("worker_evidence_missing");
     }
-    Ok((report, collect_coding_usage(directory)?))
-}
-
-fn validation_summary(
-    validation: ayni_orchestrator_runtime::coding::ValidationResult,
-) -> v1::ValidationSummary {
-    use ayni_orchestrator_runtime::coding::ValidationOutcome;
-    let outcome = match validation.outcome {
-        ValidationOutcome::Passed => v1::validation_summary::Outcome::Passed,
-        ValidationOutcome::Failed => v1::validation_summary::Outcome::Failed,
-        ValidationOutcome::Unavailable => v1::validation_summary::Outcome::Unavailable,
-        ValidationOutcome::Missing => v1::validation_summary::Outcome::Missing,
-    };
-    v1::ValidationSummary {
-        outcome: outcome as i32,
-        signals_digest: validation.signals_digest,
-        completed_targets: validation.completed_targets,
-        skipped_targets: validation.skipped_targets,
-        warning_offenders: validation.warning_offenders,
-        failing_offenders: validation.failing_offenders,
-        rows: validation
-            .rows
-            .into_iter()
-            .map(|row| v1::ValidationRow {
-                kind: row.kind,
-                passed: row.passed,
-            })
-            .collect(),
-    }
+    Ok(result)
 }
 
 pub(super) fn collect_coding_usage(
@@ -650,5 +739,74 @@ fn profile_kind(
         v1::RuntimeProfileKind::AyniManaged => Ok(ProfileKind::AyniManaged),
         v1::RuntimeProfileKind::CustomRuntime => Ok(ProfileKind::CustomRuntime),
         v1::RuntimeProfileKind::Unspecified => Err("coding_snapshot_invalid"),
+    }
+}
+
+async fn worker_interrupted(name: &str) -> Result<bool, &'static str> {
+    let directory = std::path::Path::new("/runtime-outputs").join(name);
+    tokio::task::spawn_blocking(move || {
+        ayni_orchestrator_runtime::runtime_execution::read_bounded(
+            &directory.join("result.json"),
+            262_144,
+        )
+        .ok()
+        .and_then(|bytes| {
+            serde_json::from_slice::<ayni_orchestrator_runtime::coding::WorkerResult>(&bytes).ok()
+        })
+        .is_some_and(|result| {
+            result.execution == ayni_orchestrator_runtime::coding::ExecutionOutcome::Cancelled
+        })
+    })
+    .await
+    .map_err(|_| "worker_result_unavailable")
+}
+
+#[cfg(test)]
+mod collection_tests {
+    use super::collect_worker_result;
+    use ayni_orchestrator_runtime::coding::{
+        ExecutionOutcome, PublicationOutcome, QualityEvidence, QualityOutcome, QualityResult,
+        WorkerResult,
+    };
+
+    #[test]
+    fn refuses_missing_or_changed_final_full_check_artifact()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let result = WorkerResult {
+            execution: ExecutionOutcome::Succeeded,
+            commit: Some("a".repeat(40)),
+            changed_paths: vec!["README.md".into()],
+            quality: QualityResult {
+                outcome: QualityOutcome::Passed,
+                evidence: Some(QualityEvidence {
+                    artifact_path: "evidence/signals.json".into(),
+                    signals_digest: format!("sha256:{}", "b".repeat(64)),
+                    source_fingerprint: format!("sha256:{}", "c".repeat(64)),
+                    commit: "a".repeat(40),
+                }),
+                completed_targets: Some(1),
+                skipped_targets: Some(0),
+                warning_offenders: Some(0),
+                failing_offenders: Some(0),
+                rows: vec![],
+                findings: vec![],
+            },
+            model_usage: serde_json::Value::Null,
+            requested_input: None,
+            publication: PublicationOutcome::Pending,
+            pull_request: None,
+            coding_turns_consumed: 1,
+            quality_round: 0,
+        };
+        std::fs::write(
+            directory.path().join("result.json"),
+            serde_json::to_vec(&result)?,
+        )?;
+        assert!(collect_worker_result(directory.path()).is_err());
+        std::fs::create_dir(directory.path().join("evidence"))?;
+        std::fs::write(directory.path().join("evidence/signals.json"), b"{}")?;
+        assert!(collect_worker_result(directory.path()).is_err());
+        Ok(())
     }
 }

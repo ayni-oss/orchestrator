@@ -67,7 +67,6 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
         "ayni.orchestrator.v1.RepositoryService",
         "ayni.orchestrator.v1.RuntimeProfileService",
         "ayni.orchestrator.v1.DevelopmentTaskService",
-        "ayni.orchestrator.v1.ReviewService",
     ] {
         let response = health
             .check(HealthCheckRequest {
@@ -111,7 +110,6 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
         .map(|service| service.name)
         .collect::<std::collections::BTreeSet<_>>();
     assert!(names.contains("ayni.orchestrator.v1.RuntimeProfileService"));
-    assert!(names.contains("ayni.orchestrator.v1.ReviewService"));
 
     shutdown_sender.send(true)?;
     server.await??;

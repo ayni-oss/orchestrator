@@ -100,9 +100,4 @@ impl CleanStore {
         let _ = profile;
         Ok(())
     }
-
-    pub(super) fn schedule_requested_publications(&mut self) -> Result<(), CleanStoreError> {
-        ayni_orchestrator_application::publication::schedule(self)
-            .map_err(super::publication::publication_error)
-    }
 }

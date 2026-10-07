@@ -8,7 +8,7 @@ use crate::{
 use ayni_orchestrator_runtime::runtime_contract::{
     LauncherArguments, RuntimeContract, RuntimeImage, RuntimePlatform, RuntimeUser,
 };
-use ayni_orchestrator_runtime::{coding::CodingRequest, runtime_execution::ExecutionRequest};
+use ayni_orchestrator_runtime::{coding::WorkerSpec, runtime_execution::ExecutionRequest};
 use k8s_openapi::api::batch::v1::Job;
 use kube::Api;
 use serde::Serialize;
@@ -51,7 +51,7 @@ impl RuntimeKubernetes {
         &self,
         name: &str,
         runtime: &WorkloadRuntime,
-        request: &CodingRequest<Profile>,
+        request: &WorkerSpec<Profile>,
         token: &str,
         image: &str,
         deadline: u32,
@@ -63,7 +63,7 @@ impl RuntimeKubernetes {
                 serde_json::to_string(&request.execution).map_err(|_| "coding_request_invalid")?,
             ),
             (
-                "coding.json".into(),
+                "worker.json".into(),
                 serde_json::to_string(request).map_err(|_| "coding_request_invalid")?,
             ),
         ]);
@@ -130,6 +130,9 @@ fn coding_job(
     // Preserve the shared runner's container launch and isolation. Attach only
     // the required trusted checkout/launcher init support and attempt output.
     let mut support = workload::workspace_support(name, &configuration.worker_image);
+    support
+        .init_containers
+        .retain(|container| container["name"] != "checkout");
     manifest["metadata"]["name"] = json!(name);
     manifest["spec"]
         .as_object_mut()
@@ -154,14 +157,16 @@ fn coding_job(
     pod["containers"][0]["env"] = json!(environment);
     pod["containers"][0]["volumeMounts"] = json!([
         {"name":"workspace","mountPath":"/workspace"}, {"name":"scratch","mountPath":"/scratch"},
-        {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request/coding.json","subPath":"coding.json","readOnly":true},
+        {"name":"launcher","mountPath":"/launcher","readOnly":true}, {"name":"request","mountPath":"/request/worker.json","subPath":"worker.json","readOnly":true},
         {"name":"output","mountPath":"/output","subPath":name},
-        {"name":"model","mountPath":"/model/api-key","subPath":"api-key","readOnly":true}
+        {"name":"model","mountPath":"/model/api-key","subPath":"api-key","readOnly":true},
+        {"name":"credentials","mountPath":"/source","readOnly":true}
     ]);
     support.volumes.push(
         json!({"name":"output","persistentVolumeClaim":{"claimName":configuration.output_claim}}),
     );
     support.volumes.push(json!({"name":"model","secret":{"secretName":configuration.model_secret,"items":[{"key":"api-key","path":"api-key"}]}}));
+    support.volumes.push(json!({"name":"credentials","secret":{"secretName":name,"items":[{"key":"token","path":"token"}]}}));
     pod["volumes"] = json!(support.volumes);
     serde_json::from_value(manifest).map_err(|_| "coding_job_invalid")
 }

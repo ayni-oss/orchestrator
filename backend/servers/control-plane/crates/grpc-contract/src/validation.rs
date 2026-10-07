@@ -293,17 +293,15 @@ pub fn create_development_task(
     Ok(())
 }
 
-/// Validates a candidate-publication request.
+/// Validates a publication-only retry without admitting a new coding attempt.
 ///
 /// # Errors
-///
-/// Returns the first violated request constraint.
-pub fn publish_candidate(value: &v1::PublishCandidateRequest) -> Result<(), ValidationError> {
+/// Returns the first invalid identity.
+pub fn retry_task_publication(
+    value: &v1::RetryTaskPublicationRequest,
+) -> Result<(), ValidationError> {
     idempotency_key(&value.idempotency_key)?;
-    resource_id(&value.candidate_id, "candidate_id")?;
-    safe_text(&value.title, 1, 256, "title")?;
-    safe_text(&value.body, 0, 32_768, "body")?;
-    provider_reference(&value.base_branch, "base_branch")
+    resource_id(&value.development_task_id, "development_task_id")
 }
 
 fn provider(value: Option<&v1::RepositoryProvider>) -> Result<(), ValidationError> {
@@ -540,7 +538,6 @@ mod tests {
             idempotency_key: "task:1".to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
                 project_id: "project:test".into(),
-                publish_draft: false,
                 repository_connection_id: "repo:1".to_owned(),
                 repository_revision: "a".repeat(40),
                 runtime_profile_id: "profile:1".to_owned(),
@@ -719,14 +716,10 @@ mod tests {
         };
         assert!(create_repository_connection(&repository).is_ok());
 
-        let publication = v1::PublishCandidateRequest {
+        let publication = v1::RetryTaskPublicationRequest {
             idempotency_key: "publish:1".to_owned(),
-            candidate_id: "candidate:1".to_owned(),
-            title: "feat: bounded contract".to_owned(),
-            body: "Safe summary".to_owned(),
-            base_branch: "main".to_owned(),
-            draft: true,
+            development_task_id: "task:1".to_owned(),
         };
-        assert!(publish_candidate(&publication).is_ok());
+        assert!(retry_task_publication(&publication).is_ok());
     }
 }
