@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { RepositoryOptions } from "$lib/repository-options.js";
   import { enhance } from "$app/forms";
   import { ArrowRight, Plus } from "@lucide/svelte";
   import type { PageProps } from "./$types";
@@ -15,16 +16,41 @@
 
   let { data, form }: PageProps = $props();
   let connecting = $state(false);
-  let connectOpen = $state(data.connectDialogOpen);
+  let connectOpen = $state(false);
+  let options = $state<RepositoryOptions>({ installations: [], selectedAppName: "", selectedInstallationId: "", repositories: [] });
+  let loadingOptions = $state(false);
+  let optionsRequest = 0;
+  async function loadOptions(appName = "", installationId = "") {
+    const sequence = ++optionsRequest;
+    loadingOptions = true;
+    selectedRepository = "";
+    options.error = undefined;
+    try {
+      const query = new URLSearchParams({ appName, installationId });
+      const response = await fetch(`/repositories/options?${query}`);
+      const result = await response.json();
+      if (sequence !== optionsRequest) return;
+      if (response.ok) options = result;
+      else options.error = result.error;
+    } catch {
+      if (sequence === optionsRequest) options.error = { status: 503, reason: "provider_unavailable", message: "GitHub options could not be loaded. Try again.", requestId: data.requestId, retryable: true };
+    } finally {
+      if (sequence === optionsRequest) loadingOptions = false;
+    }
+  }
+  function openConnect() {
+    connectOpen = true;
+    void loadOptions();
+  }
   let selectedRepository = $state("");
-  const selectedOwner = $derived(data.installations.find(item => item.installationId === data.selectedInstallationId)?.owner ?? "");
+  const selectedOwner = $derived(options.installations.find(item => item.installationId === options.selectedInstallationId)?.owner ?? "");
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
 </script>
 
 <svelte:head><title>Repository connections · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
   <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect a repository and Orchestrator immediately inspects its default revision and resolves a verified runtime image.">
-    {#snippet actions()}<Button onclick={() => { connectOpen = true; }}><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
+    {#snippet actions()}<Button onclick={openConnect}><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
   </PageHeader>
   {#if data.error}<Feedback kind="error" title="Connections unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
   {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{:else if form?.success}<Feedback kind="success" title="Repository connected" message={form.success} />{/if}
@@ -51,34 +77,35 @@
         <Dialog.Description>Choose a GitHub App, repository, and container registry destination.</Dialog.Description>
       </Dialog.Header>
       {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
-      {#if data.installations.length}
-        <form method="GET" action="/repositories" class="space-y-5">
-          <input type="hidden" name="connect" value="1" />
+      {#if options.error}<Feedback kind="error" title="GitHub unavailable" message={options.error.message} requestId={options.error.requestId} /><Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
+      {#if loadingOptions}<p class="text-sm text-muted-foreground" role="status">Loading GitHub repositories…</p>{/if}
+      {#if options.installations.length}
+        <div class="space-y-5">
           <div class="space-y-2">
             <Label for="github-app">GitHub App</Label>
-            <select id="github-app" name="appName" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={data.selectedAppName} onchange={event => event.currentTarget.form?.requestSubmit()} required>
-              {#each [...new Set(data.installations.map(item => item.appName))] as appName (appName)}<option value={appName}>{appName}</option>{/each}
+            <select id="github-app" name="appName" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={options.selectedAppName} onchange={event => { void loadOptions(event.currentTarget.value); }} disabled={loadingOptions} required>
+              {#each [...new Set(options.installations.map(item => item.appName))] as appName (appName)}<option value={appName}>{appName}</option>{/each}
             </select>
           </div>
           <div class="grid gap-5 sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="installationId">Owner</Label>
-              <select id="installationId" name="installationId" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={data.selectedInstallationId} onchange={event => event.currentTarget.form?.requestSubmit()} required>
-                {#each data.installations.filter(item => item.appName === data.selectedAppName) as installation (installation.installationId)}<option value={installation.installationId}>{installation.owner}</option>{/each}
+              <select id="installationId" name="installationId" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={options.selectedInstallationId} onchange={event => { void loadOptions(options.selectedAppName, event.currentTarget.value); }} disabled={loadingOptions} required>
+                {#each options.installations.filter(item => item.appName === options.selectedAppName) as installation (installation.installationId)}<option value={installation.installationId}>{installation.owner}</option>{/each}
               </select>
             </div>
             <div class="space-y-2">
               <Label for="repository">Repository</Label>
-              <select id="repository" name="repository" form="connect-repository" bind:value={selectedRepository} class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required disabled={!data.repositories.length}>
+              <select id="repository" name="repository" form="connect-repository" bind:value={selectedRepository} class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required disabled={loadingOptions || !options.repositories.length}>
                 <option value="" disabled>Select a repository</option>
-                {#each data.repositories as repository (`${repository.owner}/${repository.name}`)}<option value={repository.name}>{repository.name}</option>{/each}
+                {#each options.repositories as repository (`${repository.owner}/${repository.name}`)}<option value={repository.name}>{repository.name}</option>{/each}
               </select>
             </div>
           </div>
-        </form>
+        </div>
         <form id="connect-repository" method="POST" action="?/connect" class="space-y-5" use:enhance={() => { connecting = true; return async ({ result, update }) => { connecting = false; await update(); if(result.type === "success") { connectOpen = false; selectedRepository = ""; } }; }}>
           <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-          <input type="hidden" name="installationId" value={data.selectedInstallationId} />
+          <input type="hidden" name="installationId" value={options.selectedInstallationId} />
           <input type="hidden" name="owner" value={selectedOwner} />
           <div class="space-y-2">
             <Label for="registry-destination">Container registry destination</Label>
@@ -89,13 +116,13 @@
             </select>
             <p class="text-xs text-muted-foreground">{#if selectedRepository}Image destination: ghcr.io/{selectedOwner.toLowerCase()}/{selectedRepository.toLowerCase()}-ayni{:else}Select a repository to see its image destination.{/if}</p>
           </div>
-          {#if !data.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
+          {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>
             <Button variant="outline" onclick={() => { connectOpen = false; }}>Cancel</Button>
-            <SubmitButton pending={connecting} pendingLabel="Connecting…" disabled={!selectedRepository}>Connect repository</SubmitButton>
+            <SubmitButton pending={connecting} pendingLabel="Connecting…" disabled={loadingOptions || !selectedRepository}>Connect repository</SubmitButton>
           </Dialog.Footer>
         </form>
-      {:else}
+      {:else if !loadingOptions && !options.error}
         <p class="text-sm text-muted-foreground">No GitHub App installations are available. Set up GitHub in Source control first.</p>
         <Button href="/source-control" variant="outline">Go to Source control</Button>
       {/if}
