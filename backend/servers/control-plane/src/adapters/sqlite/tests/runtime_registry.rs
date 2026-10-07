@@ -260,15 +260,21 @@ fn connection_namespace_cannot_be_overridden_by_runtime_or_legacy_repository_inp
     Ok(())
 }
 
-#[test]
-fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(), CleanStoreError> {
-    let directory = tempdir().map_err(CleanStoreError::CreateDirectory)?;
-    let path = directory.path().join("normalized.sqlite");
-    let mut store = CleanStore::open(&path, 3)?;
-    let (repository, mut profile, mut artifact) = ready_profile(&mut store)?;
+struct LegacyDestinationFixture {
+    repository: v1::RepositoryConnection,
+    profile: v1::RuntimeProfile,
+    registry: v1::Connection,
+    attempt: v1::DevelopmentAttempt,
+    pending: serde_json::Value,
+}
+
+fn legacy_destination_fixture(
+    store: &mut CleanStore,
+) -> Result<LegacyDestinationFixture, CleanStoreError> {
+    let (repository, mut profile, mut artifact) = ready_profile(store)?;
     let (_, mut attempt) = store.create_development_task(
         "admitted",
-        &task_request(&store, &repository.id, &profile.id, "admitted")?,
+        &task_request(store, &repository.id, &profile.id, "admitted")?,
     )?;
     let registry = registry("connection-registry", "ayni-oss");
     store.save_connection(&registry)?;
@@ -331,6 +337,31 @@ fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(),
     cursor["pending"] = pending.clone();
     cursor["next_at"] = 60.into();
     store.connection.execute("INSERT INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES(?1,?2,1,1)",params![format!("managed:{}",profile.id),cursor.to_string()]).map_err(CleanStoreError::Database)?;
+    Ok(LegacyDestinationFixture {
+        repository,
+        profile,
+        registry,
+        attempt,
+        pending,
+    })
+}
+
+#[test]
+fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(), CleanStoreError> {
+    let directory = tempdir().map_err(CleanStoreError::CreateDirectory)?;
+    let path = directory.path().join("normalized.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let LegacyDestinationFixture {
+        repository,
+        profile,
+        registry,
+        attempt,
+        pending,
+    } = legacy_destination_fixture(&mut store)?;
+    let old_revision_id = profile
+        .active_revision_id
+        .as_deref()
+        .ok_or(CleanStoreError::CorruptState)?;
     assert!(matches!(
         store.create_development_task(
             "blocked",

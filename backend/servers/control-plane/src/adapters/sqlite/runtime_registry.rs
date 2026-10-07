@@ -104,6 +104,38 @@ impl CleanStore {
         })
     }
 
+    fn registry_replacement_revision(
+        &self,
+        profile: &v1::RuntimeProfile,
+        desired: Option<&String>,
+        now: i64,
+    ) -> Result<v1::RuntimeProfileRevision, CleanStoreError> {
+        let mut revision = self.runtime_profile_revision(
+            profile
+                .active_revision_id
+                .as_deref()
+                .ok_or(CleanStoreError::CorruptState)?,
+        )?;
+        let number: i64 = self.connection.query_row(
+                "SELECT MAX(revision_number)+1 FROM runtime_profile_revisions WHERE runtime_profile_id=?1",
+                [&profile.id], |row| row.get(0),
+            ).map_err(CleanStoreError::Database)?;
+        revision.id = resource_id("profile-revision");
+        revision.revision_number =
+            u64::try_from(number).map_err(|_| CleanStoreError::CorruptState)?;
+        if let Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) =
+            revision.configuration.as_mut()
+        {
+            if let Some(desired) = desired {
+                configuration.oci_repository.clone_from(desired);
+            }
+            configuration.runtime_source_digest = None;
+        }
+        revision.created_at = Some(timestamp(now));
+        revision.resource_version = 1;
+        Ok(revision)
+    }
+
     pub(crate) fn set_runtime_registry(
         &mut self,
         key: &str,
@@ -144,30 +176,7 @@ impl CleanStore {
         let changed = old_selection != selection || outdated_destination;
         let now = unix_seconds()?;
         let mut revision = if changed {
-            let mut revision = self.runtime_profile_revision(
-                profile
-                    .active_revision_id
-                    .as_deref()
-                    .ok_or(CleanStoreError::CorruptState)?,
-            )?;
-            let number: i64 = self.connection.query_row(
-                "SELECT MAX(revision_number)+1 FROM runtime_profile_revisions WHERE runtime_profile_id=?1",
-                [&profile.id], |row| row.get(0),
-            ).map_err(CleanStoreError::Database)?;
-            revision.id = resource_id("profile-revision");
-            revision.revision_number =
-                u64::try_from(number).map_err(|_| CleanStoreError::CorruptState)?;
-            if let Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) =
-                revision.configuration.as_mut()
-            {
-                if let Some(desired) = &desired {
-                    configuration.oci_repository.clone_from(desired);
-                }
-                configuration.runtime_source_digest = None;
-            }
-            revision.created_at = Some(timestamp(now));
-            revision.resource_version = 1;
-            Some(revision)
+            Some(self.registry_replacement_revision(&profile, desired.as_ref(), now)?)
         } else {
             None
         };

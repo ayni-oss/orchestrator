@@ -390,20 +390,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
     }
 
-    async fn observe_pending(
+    async fn pending_verification_phase(
         &self,
         observation: &ProfileObservation<'_>,
-        cursor: &mut RuntimeCursor,
-    ) -> Result<(), &'static str> {
-        let id = observation.id;
-        let runtime = observation.runtime;
-        let time = observation.time;
-        let head = observation.head.as_str();
-        let token = observation.token.as_str();
-        let source_digest = observation.source_digest.as_str();
-
-        let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        let lookup_id = id.to_owned();
+        pending: &PendingVerification,
+    ) -> Result<PendingPhase, &'static str> {
+        let lookup_id = observation.id.to_owned();
         let pending_revision = pending.profile_revision.clone();
         let selected = self
             .with_database(move |store| {
@@ -422,12 +414,29 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     configuration_digest: &pending.source_digest,
                 },
                 SourceIdentity {
-                    revision: head,
-                    configuration_digest: source_digest,
+                    revision: &observation.head,
+                    configuration_digest: &observation.source_digest,
                 },
                 pending.build_name.is_some() && !pending.build_observed,
             )
         };
+        Ok(phase)
+    }
+
+    async fn observe_pending(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+    ) -> Result<(), &'static str> {
+        let id = observation.id;
+        let runtime = observation.runtime;
+        let time = observation.time;
+        let token = observation.token.as_str();
+
+        let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
+        let phase = self
+            .pending_verification_phase(observation, &pending)
+            .await?;
         if phase == PendingPhase::DiscardStale {
             self.kubernetes.cleanup(&pending.name).await?;
             if let Some(name) = &pending.build_name {
