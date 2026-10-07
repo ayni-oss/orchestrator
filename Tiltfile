@@ -5,13 +5,20 @@ allow_k8s_contexts('docker-desktop')
 
 namespace = os.getenv('AYNI_ORCHESTRATOR_NAMESPACE', 'ayni-orchestrator-dev')
 
-def attach(name, container, deps, live_update, port_forwards=[]):
-    k8s_custom_deploy(
-        name,
-        apply_cmd=[
+def attach(name, container, deps, live_update, port_forwards=[], sync_web=False):
+    if sync_web:
+        apply_cmd = [
+            'bash', '-c',
+            'bash dev/scripts/sync-web-source.sh && exec kubectl --context docker-desktop --namespace "${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}" get deployment/control-plane --output=yaml',
+        ]
+    else:
+        apply_cmd = [
             'kubectl', '--context', 'docker-desktop', '--namespace', namespace,
             'get', 'deployment/control-plane', '--output=yaml',
-        ],
+        ]
+    k8s_custom_deploy(
+        name,
+        apply_cmd=apply_cmd,
         delete_cmd=['echo', 'Skipping delete; Helm manages deployment/control-plane.'],
         deps=deps,
         live_update=live_update,
@@ -38,7 +45,8 @@ attach(
 attach(
     name='web-live',
     container='web',
-    deps=['apps/web', 'packages/bff', 'clients/typescript', 'tsconfig.base.json'],
+    deps=['apps/web', 'packages/bff', 'clients/typescript', 'tsconfig.base.json', 'dev/scripts/sync-web-source.sh'],
+    sync_web=True,
     live_update=[
         sync('apps/web', '/opt/source/apps/web'),
         sync('packages/bff', '/opt/source/packages/bff'),

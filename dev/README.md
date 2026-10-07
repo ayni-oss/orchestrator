@@ -30,7 +30,8 @@ dev/ctl hot-reload
 
 This first synchronizes Secrets and deploys the normal Helm release with local
 development images. It then attaches Tilt to the existing `control-plane` Pod;
-Helm remains the resource owner. The Pod continues to contain both sidecars.
+Helm remains the resource owner. Each new Tilt session first synchronizes the current
+UI source, including edits made before the session started. The Pod continues to contain both sidecars.
 Only these development images have a writable root filesystem, allowing Tilt to
 synchronize source beside their development dependencies; normal images remain
 read-only. The web development container has a 1 GiB memory limit because Vite

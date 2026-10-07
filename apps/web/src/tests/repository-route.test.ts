@@ -28,6 +28,22 @@ describe("repository connection route actions", () => {
     expect(bff.connectGithubRepository).not.toHaveBeenCalled();
   });
 
+  it("rejects unsupported or malformed explicit registry destinations before provider discovery", async () => {
+    const action = actions.connect;
+    if (action === undefined) throw new Error("connect action is absent");
+    for (const destination of ["docker.io", "", "x".repeat(129)]) {
+      const body = new URLSearchParams({
+        idempotencyKey: "00000000-0000-4000-8000-000000000099",
+        installationId: "42", owner: "ayni-oss", repository: "sandbox",
+        registryDestination: destination,
+      });
+      const result = await action({ locals: { requestId: "registry-invalid", requestSignal }, request: new Request("http://127.0.0.1/repositories?/connect", { method: "POST", body }) } as never);
+      expect(result).toMatchObject({ status: 400, data: { error: { reason: "unsupported_registry" } } });
+    }
+    expect(bff.listGithubInstallations).not.toHaveBeenCalled();
+    expect(bff.connectGithubRepository).not.toHaveBeenCalled();
+  });
+
   it("sends a provider-bounded connection with an idempotency key", async () => {
     bff.connectGithubRepository.mockImplementationOnce(async (input) => ({ id: "repository:1", displayName: `${input.owner}/${input.name}` }));
     const action = actions.connect;

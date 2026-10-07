@@ -36,14 +36,14 @@
 </script>
 
 <svelte:head>
-  <title>Connect GitHub · Ayni Orchestrator</title>
+  <title>GitHub source · Ayni Orchestrator</title>
   <meta name="description" content="Create or configure a customer-owned GitHub App for Ayni Orchestrator." />
 </svelte:head>
 
 <div class="space-y-8">
   <div class="max-w-3xl space-y-3">
-    <p class="text-sm font-medium text-primary">GitHub setup</p>
-    <h1 class="text-3xl font-semibold tracking-tight">Connect a customer-owned GitHub App</h1>
+    <p class="text-sm font-medium text-primary">GitHub integration</p>
+    <h1 class="text-3xl font-semibold tracking-tight">GitHub</h1>
     <p class="text-muted-foreground">GitHub Apps and their credentials remain under your account or organization. Ayni reads the App ID and private key only from the local deployment secret; neither is returned by the control plane.</p>
   </div>
 

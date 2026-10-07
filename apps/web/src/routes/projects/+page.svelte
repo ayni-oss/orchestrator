@@ -55,7 +55,7 @@
       <input type="hidden" name="idempotencyKey" value={$values.idempotencyKey} />
       <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={data.repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
-      {#if !data.repositories.length}<p class="text-sm text-muted-foreground">Connect a repository in Configuration before creating a project.</p><Button href="/repositories" variant="outline">Connect repositories</Button>{/if}
+      {#if !data.repositories.length}<p class="text-sm text-muted-foreground">Connect a repository in Repositories before creating a project.</p><Button href="/repositories" variant="outline">Connect repositories</Button>{/if}
       {#if $message}<p class="text-sm text-destructive" role="alert">{$message}</p>{/if}
       <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={$submitting || !data.repositories.length}>{$submitting ? "Creating…" : "Create project"}</Button></Dialog.Footer>
     </form>
