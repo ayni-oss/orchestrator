@@ -41,7 +41,8 @@ export const actions: Actions = {
     const installationId = text(form, "installationId", 24) ?? "";
     const owner = text(form, "owner", 100) ?? "";
     const repository = text(form, "repository", 100) ?? "";
-    const registryDestination = text(form, "registryDestination", 128);
+    // Existing connection clients use the supported GHCR destination implicitly.
+    const registryDestination = form.has("registryDestination") ? text(form, "registryDestination", 128) : "ghcr.io";
     if (registryDestination !== "ghcr.io") {
       return fail(400, { action: "connect", error: { status: 400, reason: "unsupported_registry", message: "Choose GitHub Container Registry as the destination.", requestId: locals.requestId, retryable: false } });
     }

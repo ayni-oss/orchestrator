@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { RepositoryOptions } from "$lib/repository-options.js";
+  import type { RepositoryOptions } from "$lib/server/repository-options.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { enhance } from "$app/forms";
   import { ArrowRight, Plus } from "@lucide/svelte";
@@ -25,7 +25,7 @@
     const sequence = ++optionsRequest;
     loadingOptions = true;
     selectedRepository = "";
-    options.error = undefined;
+    delete options.error;
     try {
       const query = new URLSearchParams({ appName, installationId });
       const response = await fetch(`/repositories/options?${query}`);

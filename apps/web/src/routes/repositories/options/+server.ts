@@ -2,7 +2,7 @@ import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { requestContext, safeError } from "$lib/server/page.js";
-import type { RepositoryOptions } from "$lib/repository-options.js";
+import type { RepositoryOptions } from "$lib/server/repository-options.js";
 
 // Provider discovery is requested by the connection dialog, never by page load.
 export const GET: RequestHandler = async ({ locals, url }) => {
