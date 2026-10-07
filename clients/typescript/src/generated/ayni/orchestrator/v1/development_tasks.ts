@@ -613,6 +613,9 @@ export interface FrozenRuntime {
   /** resolved_digest is `sha256:` followed by 64 lowercase hexadecimal characters. */
   resolvedDigest: string;
   platform?: OciPlatform | undefined;
+  registryConnectionId: string;
+  registryRevision: string;
+  pullSecretName: string;
 }
 
 /** DevelopmentSnapshot is the complete immutable execution input. */
@@ -1356,6 +1359,9 @@ function createBaseFrozenRuntime(): FrozenRuntime {
     ociRepository: "",
     resolvedDigest: "",
     platform: undefined,
+    registryConnectionId: "",
+    registryRevision: "",
+    pullSecretName: "",
   };
 }
 
@@ -1381,6 +1387,15 @@ export const FrozenRuntime: MessageFns<FrozenRuntime> = {
     }
     if (message.platform !== undefined) {
       OciPlatform.encode(message.platform, writer.uint32(58).fork()).join();
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(66).string(message.registryConnectionId);
+    }
+    if (message.registryRevision !== "") {
+      writer.uint32(74).string(message.registryRevision);
+    }
+    if (message.pullSecretName !== "") {
+      writer.uint32(82).string(message.pullSecretName);
     }
     return writer;
   },
@@ -1454,6 +1469,30 @@ export const FrozenRuntime: MessageFns<FrozenRuntime> = {
             message.platform = OciPlatform.decode(reader, reader.uint32());
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.registryRevision = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.pullSecretName = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1499,6 +1538,21 @@ export const FrozenRuntime: MessageFns<FrozenRuntime> = {
         ? globalThis.String(object.resolved_digest)
         : "",
       platform: isSet(object.platform) ? OciPlatform.fromJSON(object.platform) : undefined,
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      registryRevision: isSet(object.registryRevision)
+        ? globalThis.String(object.registryRevision)
+        : isSet(object.registry_revision)
+        ? globalThis.String(object.registry_revision)
+        : "",
+      pullSecretName: isSet(object.pullSecretName)
+        ? globalThis.String(object.pullSecretName)
+        : isSet(object.pull_secret_name)
+        ? globalThis.String(object.pull_secret_name)
+        : "",
     };
   },
 
@@ -1525,6 +1579,15 @@ export const FrozenRuntime: MessageFns<FrozenRuntime> = {
     if (message.platform !== undefined) {
       obj.platform = OciPlatform.toJSON(message.platform);
     }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.registryRevision !== "") {
+      obj.registryRevision = message.registryRevision;
+    }
+    if (message.pullSecretName !== "") {
+      obj.pullSecretName = message.pullSecretName;
+    }
     return obj;
   },
 
@@ -1542,6 +1605,9 @@ export const FrozenRuntime: MessageFns<FrozenRuntime> = {
     message.platform = (object.platform !== undefined && object.platform !== null)
       ? OciPlatform.fromPartial(object.platform)
       : undefined;
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.registryRevision = object.registryRevision ?? "";
+    message.pullSecretName = object.pullSecretName ?? "";
     return message;
   },
 };

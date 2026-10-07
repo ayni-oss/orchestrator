@@ -713,6 +713,8 @@ mod tests {
             provider: Some(github_provider()),
             display_name: "Ayni Orchestrator".to_owned(),
             default_branch: "main".to_owned(),
+            registry_connection_id: String::new(),
+            image_namespace: String::new(),
         };
         assert!(create_repository_connection(&repository).is_ok());
 

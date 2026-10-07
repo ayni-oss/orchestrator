@@ -120,6 +120,8 @@ export function mapRepositoryConnection(value: RepositoryConnection): Repository
       htmlUrl: safeGithubLink(github.htmlUrl) ?? "",
     },
     displayName: safeText(value.displayName),
+    registryConnectionId:value.registryConnectionId,
+    imageNamespace:value.imageNamespace,
     defaultBranch: value.defaultBranch,
     status: mapRepositoryStatus(value.status),
     createdAt: requiredDate(value.createdAt),

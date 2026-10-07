@@ -34,6 +34,8 @@ export interface GithubRepositoryDto {
 }
 
 export interface RepositoryConnectionDto {
+  registryConnectionId?: string;
+  imageNamespace?: string;
   id: string;
   provider: GithubRepositoryDto;
   displayName: string;

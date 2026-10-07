@@ -1,8 +1,11 @@
-import type { Handle } from "@sveltejs/kit";
+import { error, type Handle } from "@sveltejs/kit";
 import { acceptedRequestId } from "$lib/server/request-id.js";
 import { browserRequestSignal } from "$lib/server/request-signal.js";
 
 export const handle: Handle = async ({ event, resolve }) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(event.request.method) && event.request.headers.get("origin") !== event.url.origin) {
+    throw error(403, "A same-origin request is required.");
+  }
   event.locals.requestId = acceptedRequestId(event.request.headers.get("x-request-id"));
   event.locals.requestSignal = browserRequestSignal(event.request);
   const response = await resolve(event);

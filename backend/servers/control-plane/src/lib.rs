@@ -3,6 +3,7 @@ mod adapters;
 mod coordinators;
 mod process;
 mod profiles;
+pub mod registry_probe;
 
 pub use adapters::grpc::access::{AccessConfigurationError, CustomClientAccess};
 pub use adapters::grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc};

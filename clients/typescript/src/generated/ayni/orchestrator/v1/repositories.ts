@@ -144,6 +144,8 @@ export interface RepositoryConnection {
     | undefined;
   /** resource_version increases on every represented durable change. */
   resourceVersion: string;
+  registryConnectionId: string;
+  imageNamespace: string;
 }
 
 /** RepositorySnapshot is an immutable observed repository revision. */
@@ -182,6 +184,8 @@ export interface CreateRepositoryConnectionRequest {
   provider?: RepositoryProvider | undefined;
   displayName: string;
   defaultBranch: string;
+  registryConnectionId: string;
+  imageNamespace: string;
 }
 
 export interface CreateRepositoryConnectionResponse {
@@ -229,9 +233,24 @@ export interface ConnectGithubRepositoryRequest {
   idempotencyKey: string;
   owner: string;
   name: string;
+  registryConnectionId: string;
+  imageNamespace: string;
 }
 
 export interface ConnectGithubRepositoryResponse {
+  repositoryConnection?: RepositoryConnection | undefined;
+}
+
+/** Select a ready GHCR connection and its approved namespace for new runtime work. */
+export interface SetRepositoryRegistryRequest {
+  idempotencyKey: string;
+  repositoryConnectionId: string;
+  expectedResourceVersion: string;
+  registryConnectionId: string;
+  imageNamespace: string;
+}
+
+export interface SetRepositoryRegistryResponse {
   repositoryConnection?: RepositoryConnection | undefined;
 }
 
@@ -976,6 +995,8 @@ function createBaseRepositoryConnection(): RepositoryConnection {
     createdAt: undefined,
     updatedAt: undefined,
     resourceVersion: "0",
+    registryConnectionId: "",
+    imageNamespace: "",
   };
 }
 
@@ -1007,6 +1028,12 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(72).uint64(message.resourceVersion);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(82).string(message.registryConnectionId);
+    }
+    if (message.imageNamespace !== "") {
+      writer.uint32(90).string(message.imageNamespace);
     }
     return writer;
   },
@@ -1096,6 +1123,22 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
             message.resourceVersion = reader.uint64().toString();
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.imageNamespace = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1139,6 +1182,16 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      imageNamespace: isSet(object.imageNamespace)
+        ? globalThis.String(object.imageNamespace)
+        : isSet(object.image_namespace)
+        ? globalThis.String(object.image_namespace)
+        : "",
     };
   },
 
@@ -1171,6 +1224,12 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.imageNamespace !== "") {
+      obj.imageNamespace = message.imageNamespace;
+    }
     return obj;
   },
 
@@ -1192,6 +1251,8 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.imageNamespace = object.imageNamespace ?? "";
     return message;
   },
 };
@@ -1695,7 +1756,14 @@ export const GetRepositoryConnectionResponse: MessageFns<GetRepositoryConnection
 };
 
 function createBaseCreateRepositoryConnectionRequest(): CreateRepositoryConnectionRequest {
-  return { idempotencyKey: "", provider: undefined, displayName: "", defaultBranch: "" };
+  return {
+    idempotencyKey: "",
+    provider: undefined,
+    displayName: "",
+    defaultBranch: "",
+    registryConnectionId: "",
+    imageNamespace: "",
+  };
 }
 
 export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConnectionRequest> = {
@@ -1711,6 +1779,12 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     }
     if (message.defaultBranch !== "") {
       writer.uint32(34).string(message.defaultBranch);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(42).string(message.registryConnectionId);
+    }
+    if (message.imageNamespace !== "") {
+      writer.uint32(50).string(message.imageNamespace);
     }
     return writer;
   },
@@ -1760,6 +1834,22 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
             message.defaultBranch = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.imageNamespace = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1790,6 +1880,16 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
         : isSet(object.default_branch)
         ? globalThis.String(object.default_branch)
         : "",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      imageNamespace: isSet(object.imageNamespace)
+        ? globalThis.String(object.imageNamespace)
+        : isSet(object.image_namespace)
+        ? globalThis.String(object.image_namespace)
+        : "",
     };
   },
 
@@ -1807,6 +1907,12 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     if (message.defaultBranch !== "") {
       obj.defaultBranch = message.defaultBranch;
     }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.imageNamespace !== "") {
+      obj.imageNamespace = message.imageNamespace;
+    }
     return obj;
   },
 
@@ -1821,6 +1927,8 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
       : undefined;
     message.displayName = object.displayName ?? "";
     message.defaultBranch = object.defaultBranch ?? "";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.imageNamespace = object.imageNamespace ?? "";
     return message;
   },
 };
@@ -2463,7 +2571,7 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
 };
 
 function createBaseConnectGithubRepositoryRequest(): ConnectGithubRepositoryRequest {
-  return { idempotencyKey: "", owner: "", name: "" };
+  return { idempotencyKey: "", owner: "", name: "", registryConnectionId: "", imageNamespace: "" };
 }
 
 export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryRequest> = {
@@ -2476,6 +2584,12 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     }
     if (message.name !== "") {
       writer.uint32(26).string(message.name);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(34).string(message.registryConnectionId);
+    }
+    if (message.imageNamespace !== "") {
+      writer.uint32(42).string(message.imageNamespace);
     }
     return writer;
   },
@@ -2517,6 +2631,22 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
             message.name = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.imageNamespace = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2538,6 +2668,16 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
         : "",
       owner: isSet(object.owner) ? globalThis.String(object.owner) : "",
       name: isSet(object.name) ? globalThis.String(object.name) : "",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      imageNamespace: isSet(object.imageNamespace)
+        ? globalThis.String(object.imageNamespace)
+        : isSet(object.image_namespace)
+        ? globalThis.String(object.image_namespace)
+        : "",
     };
   },
 
@@ -2552,6 +2692,12 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     if (message.name !== "") {
       obj.name = message.name;
     }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.imageNamespace !== "") {
+      obj.imageNamespace = message.imageNamespace;
+    }
     return obj;
   },
 
@@ -2563,6 +2709,8 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     message.idempotencyKey = object.idempotencyKey ?? "";
     message.owner = object.owner ?? "";
     message.name = object.name ?? "";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.imageNamespace = object.imageNamespace ?? "";
     return message;
   },
 };
@@ -2635,6 +2783,240 @@ export const ConnectGithubRepositoryResponse: MessageFns<ConnectGithubRepository
   },
   fromPartial(object: DeepPartial<ConnectGithubRepositoryResponse>): ConnectGithubRepositoryResponse {
     const message = createBaseConnectGithubRepositoryResponse();
+    message.repositoryConnection = (object.repositoryConnection !== undefined && object.repositoryConnection !== null)
+      ? RepositoryConnection.fromPartial(object.repositoryConnection)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseSetRepositoryRegistryRequest(): SetRepositoryRegistryRequest {
+  return {
+    idempotencyKey: "",
+    repositoryConnectionId: "",
+    expectedResourceVersion: "0",
+    registryConnectionId: "",
+    imageNamespace: "",
+  };
+}
+
+export const SetRepositoryRegistryRequest: MessageFns<SetRepositoryRegistryRequest> = {
+  encode(message: SetRepositoryRegistryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(18).string(message.repositoryConnectionId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(34).string(message.registryConnectionId);
+    }
+    if (message.imageNamespace !== "") {
+      writer.uint32(42).string(message.imageNamespace);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetRepositoryRegistryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetRepositoryRegistryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.imageNamespace = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetRepositoryRegistryRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      imageNamespace: isSet(object.imageNamespace)
+        ? globalThis.String(object.imageNamespace)
+        : isSet(object.image_namespace)
+        ? globalThis.String(object.image_namespace)
+        : "",
+    };
+  },
+
+  toJSON(message: SetRepositoryRegistryRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.imageNamespace !== "") {
+      obj.imageNamespace = message.imageNamespace;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetRepositoryRegistryRequest>): SetRepositoryRegistryRequest {
+    return SetRepositoryRegistryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetRepositoryRegistryRequest>): SetRepositoryRegistryRequest {
+    const message = createBaseSetRepositoryRegistryRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.imageNamespace = object.imageNamespace ?? "";
+    return message;
+  },
+};
+
+function createBaseSetRepositoryRegistryResponse(): SetRepositoryRegistryResponse {
+  return { repositoryConnection: undefined };
+}
+
+export const SetRepositoryRegistryResponse: MessageFns<SetRepositoryRegistryResponse> = {
+  encode(message: SetRepositoryRegistryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnection !== undefined) {
+      RepositoryConnection.encode(message.repositoryConnection, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetRepositoryRegistryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetRepositoryRegistryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnection = RepositoryConnection.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetRepositoryRegistryResponse {
+    return {
+      repositoryConnection: isSet(object.repositoryConnection)
+        ? RepositoryConnection.fromJSON(object.repositoryConnection)
+        : isSet(object.repository_connection)
+        ? RepositoryConnection.fromJSON(object.repository_connection)
+        : undefined,
+    };
+  },
+
+  toJSON(message: SetRepositoryRegistryResponse): unknown {
+    const obj: any = {};
+    if (message.repositoryConnection !== undefined) {
+      obj.repositoryConnection = RepositoryConnection.toJSON(message.repositoryConnection);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetRepositoryRegistryResponse>): SetRepositoryRegistryResponse {
+    return SetRepositoryRegistryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetRepositoryRegistryResponse>): SetRepositoryRegistryResponse {
+    const message = createBaseSetRepositoryRegistryResponse();
     message.repositoryConnection = (object.repositoryConnection !== undefined && object.repositoryConnection !== null)
       ? RepositoryConnection.fromPartial(object.repositoryConnection)
       : undefined;
@@ -2743,6 +3125,17 @@ export const RepositoryServiceService = {
       Buffer.from(GetRepositorySnapshotResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetRepositorySnapshotResponse => GetRepositorySnapshotResponse.decode(value),
   },
+  setRepositoryRegistry: {
+    path: "/ayni.orchestrator.v1.RepositoryService/SetRepositoryRegistry" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetRepositoryRegistryRequest): Buffer =>
+      Buffer.from(SetRepositoryRegistryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetRepositoryRegistryRequest => SetRepositoryRegistryRequest.decode(value),
+    responseSerialize: (value: SetRepositoryRegistryResponse): Buffer =>
+      Buffer.from(SetRepositoryRegistryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetRepositoryRegistryResponse => SetRepositoryRegistryResponse.decode(value),
+  },
   watchRepositories: {
     path: "/ayni.orchestrator.v1.RepositoryService/WatchRepositories" as const,
     requestStream: false as const,
@@ -2768,6 +3161,7 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
   createRepositoryConnection: handleUnaryCall<CreateRepositoryConnectionRequest, CreateRepositoryConnectionResponse>;
   listRepositorySnapshots: handleUnaryCall<ListRepositorySnapshotsRequest, ListRepositorySnapshotsResponse>;
   getRepositorySnapshot: handleUnaryCall<GetRepositorySnapshotRequest, GetRepositorySnapshotResponse>;
+  setRepositoryRegistry: handleUnaryCall<SetRepositoryRegistryRequest, SetRepositoryRegistryResponse>;
   watchRepositories: handleServerStreamingCall<WatchRepositoriesRequest, WatchRepositoriesResponse>;
 }
 
@@ -2891,6 +3285,21 @@ export interface RepositoryServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetRepositorySnapshotResponse) => void,
+  ): ClientUnaryCall;
+  setRepositoryRegistry(
+    request: SetRepositoryRegistryRequest,
+    callback: (error: ServiceError | null, response: SetRepositoryRegistryResponse) => void,
+  ): ClientUnaryCall;
+  setRepositoryRegistry(
+    request: SetRepositoryRegistryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetRepositoryRegistryResponse) => void,
+  ): ClientUnaryCall;
+  setRepositoryRegistry(
+    request: SetRepositoryRegistryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetRepositoryRegistryResponse) => void,
   ): ClientUnaryCall;
   watchRepositories(
     request: WatchRepositoriesRequest,

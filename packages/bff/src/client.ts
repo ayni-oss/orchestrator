@@ -7,6 +7,7 @@ import {
   type ServiceError,
 } from "@grpc/grpc-js";
 import {
+  ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
   ProjectServiceClient, ProjectState,
   type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
@@ -33,6 +34,7 @@ import {
   type ListGithubInstallationRepositoriesResponse,
   type ListRuntimeArtifactsResponse,
   type ListRuntimeProfilesResponse,
+  type SetRepositoryRegistryResponse,
   type RetryDevelopmentTaskResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
@@ -140,6 +142,7 @@ function mapProject(value: Project): ProjectDto {
 }
 
 export class OrchestratorBff {
+  readonly #connections: ConnectionServiceClient;
   readonly #projects: ProjectServiceClient;
   readonly #repositories: RepositoryServiceClient;
   readonly #profiles: RuntimeProfileServiceClient;
@@ -154,11 +157,35 @@ export class OrchestratorBff {
       "grpc.max_send_message_length": MAX_REQUEST_BYTES,
     };
     const channelCredentials = credentials.createInsecure();
+    this.#connections = new ConnectionServiceClient(address, channelCredentials, options);
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
     this.#tasks = new DevelopmentTaskServiceClient(address, channelCredentials, options);
+  }
+
+  async listConnections(context: RequestContext): Promise<Connection[]> {
+    const result = await this.#unary<{connections:Connection[]}>(context,(m,o,c)=>this.#connections.listConnections({},m,o,c));
+    return result.connections.map(safeConnection);
+  }
+  async createConnection(input: CreateConnectionRequest, context: RequestContext): Promise<Connection> {
+    return safeConnection(required((await this.#unary<{connection?:Connection | undefined}>(context,(m,o,c)=>this.#connections.createConnection(input,m,o,c))).connection));
+  }
+  async replaceConnectionCredentials(input: ReplaceConnectionCredentialsRequest, context: RequestContext): Promise<Connection> {
+    return safeConnection(required((await this.#unary<{connection?:Connection | undefined}>(context,(m,o,c)=>this.#connections.replaceConnectionCredentials(input,m,o,c))).connection));
+  }
+  async testConnection(input: TestConnectionRequest, context: RequestContext): Promise<Connection> {
+    return safeConnection(required((await this.#unary<{connection?:Connection | undefined}>(context,(m,o,c)=>this.#connections.testConnection(input,m,o,c))).connection));
+  }
+  async setConnectionEnabled(input: SetConnectionEnabledRequest, context: RequestContext): Promise<Connection> {
+    return safeConnection(required((await this.#unary<{connection?:Connection | undefined}>(context,(m,o,c)=>this.#connections.setConnectionEnabled(input,m,o,c))).connection));
+  }
+  async deleteConnection(input: DeleteConnectionRequest, context: RequestContext): Promise<void> {
+    await this.#unary(context,(m,o,c)=>this.#connections.deleteConnection(input,m,o,c));
+  }
+  async completeGithubManifest(code:string,idempotencyKey:string,context:RequestContext):Promise<Connection> {
+    return safeConnection(required((await this.#unary<{connection?:Connection | undefined}>(context,(m,o,c)=>this.#connections.completeGithubManifest({code,idempotencyKey},m,o,c))).connection));
   }
 
   async listProjects(selection: PageInput, context: RequestContext, activeOnly = false) {
@@ -183,6 +210,7 @@ export class OrchestratorBff {
   }
 
   close(): void {
+    this.#connections.close();
     this.#projects.close();
     this.#repositories.close();
     this.#profiles.close();
@@ -191,8 +219,12 @@ export class OrchestratorBff {
   }
 
 
-  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string }, context: RequestContext) {
-    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository(input,m,o,c));
+  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string;imageNamespace?:string }, context: RequestContext) {
+    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:input.imageNamespace ?? ""},m,o,c));
+    return mapRepositoryConnection(required(response.repositoryConnection));
+  }
+  async setRepositoryRegistry(input:{idempotencyKey:string;repositoryConnectionId:string;expectedResourceVersion:string;registryConnectionId:string;imageNamespace:string},context:RequestContext):Promise<RepositoryConnectionDto> {
+    const response=await this.#unary<SetRepositoryRegistryResponse>(context,(m,o,c)=>this.#repositories.setRepositoryRegistry(input,m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
   }
   async listGithubInstallations(context: RequestContext): Promise<GithubInstallationOptionDto[]> {
@@ -252,6 +284,7 @@ export class OrchestratorBff {
       this.#repositories.createRepositoryConnection({
         idempotencyKey: input.idempotencyKey,
         provider: toProtoRepositoryProvider(input),
+        registryConnectionId:"",imageNamespace:"",
         displayName: input.displayName,
         defaultBranch: input.defaultBranch,
       }, metadata, options, callback));
@@ -415,4 +448,9 @@ export class OrchestratorBff {
       if (context.signal?.aborted === true) call.cancel();
     });
   }
+}
+
+// Explicit allowlist prevents accidental credential reflection in browser DTOs.
+function safeConnection(v:Connection):Connection {
+  return {id:v.id,kind:v.kind,managementSource:v.managementSource,displayName:v.displayName,appId:v.appId,username:v.username,imageNamespace:v.imageNamespace,secretName:v.secretName,secretUid:v.secretUid,desiredRevision:v.desiredRevision,observedRevision:v.observedRevision,status:v.status,failureReason:v.failureReason,enabled:v.enabled,resourceVersion:v.resourceVersion,pullSecretName:v.pullSecretName,testAuthentication:v.testAuthentication,testPush:v.testPush,testPull:v.testPull,testCleanup:v.testCleanup,testArtifactDigest:v.testArtifactDigest,candidateSecretName:v.candidateSecretName,candidateSecretUid:v.candidateSecretUid,candidatePullSecretName:v.candidatePullSecretName,candidatePullSecretUid:v.candidatePullSecretUid,pullSecretUid:v.pullSecretUid,retiredSecretRevisions:[],testCleanupFailureReason:v.testCleanupFailureReason,testArtifactRepository:v.testArtifactRepository};
 }

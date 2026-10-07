@@ -239,7 +239,10 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',5,unixepoch());
+VALUES ('control_plane',6,unixepoch());
+CREATE TABLE connections(id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload BLOB NOT NULL);
+CREATE UNIQUE INDEX single_github_app ON connections(kind) WHERE kind='github_app';
+CREATE TABLE connection_operations(operation_key TEXT PRIMARY KEY, connection_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL);
 
 CREATE TABLE repository_connections(
     id TEXT PRIMARY KEY, status INTEGER NOT NULL, provider_key TEXT NOT NULL UNIQUE,

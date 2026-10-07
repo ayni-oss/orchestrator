@@ -186,6 +186,23 @@ fn spawn_background_loops(
     runtimes: Option<std::sync::Arc<RuntimeReconciler>>,
     shutdown: &watch::Receiver<bool>,
 ) {
+    let connection_state = state.clone();
+    background.spawn_periodic(
+        "connections",
+        Duration::from_secs(30),
+        shutdown.clone(),
+        move || {
+            let state = connection_state.clone();
+            async move {
+                if state.reconcile_connections().await.is_err() {
+                    warn!(
+                        reason_code = "connection_reconciliation_failed",
+                        "connection reconciliation failed"
+                    );
+                }
+            }
+        },
+    );
     let onboarding_state = state.clone();
     background.spawn_periodic(
         "onboarding",

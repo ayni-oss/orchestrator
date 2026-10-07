@@ -241,6 +241,24 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
         }),
         "CreateRepositoryConnection" => v1::CreateRepositoryConnectionRequest::decode(payload)
             .is_ok_and(|value| api_validation::create_repository_connection(&value).is_ok()),
+        "SetRepositoryRegistry" => {
+            v1::SetRepositoryRegistryRequest::decode(payload).is_ok_and(|v| {
+                api_validation::idempotency_key(&v.idempotency_key).is_ok()
+                    && api_validation::resource_id(
+                        &v.repository_connection_id,
+                        "repository_connection_id",
+                    )
+                    .is_ok()
+                    && v.expected_resource_version > 0
+                    && ((v.registry_connection_id.is_empty() && v.image_namespace.is_empty())
+                        || (api_validation::resource_id(
+                            &v.registry_connection_id,
+                            "registry_connection_id",
+                        )
+                        .is_ok()
+                            && crate::registry_probe::valid_namespace(&v.image_namespace)))
+            })
+        }
         "CreateRuntimeProfile" => v1::CreateRuntimeProfileRequest::decode(payload)
             .is_ok_and(|value| api_validation::create_runtime_profile(&value).is_ok()),
         "InstallRepositoryAutomation" => v1::InstallRepositoryAutomationRequest::decode(payload)

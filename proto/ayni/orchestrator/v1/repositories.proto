@@ -15,6 +15,7 @@ service RepositoryService {
   rpc CreateRepositoryConnection(CreateRepositoryConnectionRequest) returns (CreateRepositoryConnectionResponse);
   rpc ListRepositorySnapshots(ListRepositorySnapshotsRequest) returns (ListRepositorySnapshotsResponse);
   rpc GetRepositorySnapshot(GetRepositorySnapshotRequest) returns (GetRepositorySnapshotResponse);
+  rpc SetRepositoryRegistry(SetRepositoryRegistryRequest) returns (SetRepositoryRegistryResponse);
   rpc WatchRepositories(WatchRepositoriesRequest) returns (stream WatchRepositoriesResponse);
 }
 
@@ -83,6 +84,8 @@ message RepositoryConnection {
   google.protobuf.Timestamp updated_at = 8;
   // resource_version increases on every represented durable change.
   uint64 resource_version = 9;
+  string registry_connection_id = 10;
+  string image_namespace = 11;
 }
 
 // RepositorySnapshot is an immutable observed repository revision.
@@ -121,6 +124,8 @@ message CreateRepositoryConnectionRequest {
   RepositoryProvider provider = 2;
   string display_name = 3;
   string default_branch = 4;
+  string registry_connection_id = 5;
+  string image_namespace = 6;
 }
 
 message CreateRepositoryConnectionResponse {
@@ -166,8 +171,22 @@ message ConnectGithubRepositoryRequest {
   string idempotency_key = 1;
   string owner = 2;
   string name = 3;
+  string registry_connection_id = 4;
+  string image_namespace = 5;
 }
 
 message ConnectGithubRepositoryResponse {
+  RepositoryConnection repository_connection = 1;
+}
+
+// Select a ready GHCR connection and its approved namespace for new runtime work.
+message SetRepositoryRegistryRequest {
+  string idempotency_key = 1;
+  string repository_connection_id = 2;
+  uint64 expected_resource_version = 3;
+  string registry_connection_id = 4;
+  string image_namespace = 5;
+}
+message SetRepositoryRegistryResponse {
   RepositoryConnection repository_connection = 1;
 }

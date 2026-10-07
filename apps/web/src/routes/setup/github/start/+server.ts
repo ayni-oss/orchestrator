@@ -1,10 +1,10 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
-import { randomBytes } from "node:crypto";
+import { beginManifest } from "$lib/server/github-manifest.js";
 
 const stateCookie = "github_app_manifest_state";
 
 export const POST: RequestHandler = ({ cookies }) => {
-  const state = randomBytes(32).toString("base64url");
+  const state = beginManifest();
   cookies.set(stateCookie, state, {
     httpOnly: true,
     maxAge: 10 * 60,

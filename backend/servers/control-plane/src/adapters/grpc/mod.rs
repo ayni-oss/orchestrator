@@ -116,6 +116,11 @@ pub async fn serve(
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
         .add_service(provider_server(api.clone()))
+        .add_service(
+            v1::connection_service_server::ConnectionServiceServer::new(api.clone())
+                .max_decoding_message_size(MAX_REQUEST_BYTES)
+                .max_encoding_message_size(MAX_RESPONSE_BYTES),
+        )
         .add_service(development_server(api))
         .serve_with_shutdown(address, async move {
             if !*shutdown.borrow() {
@@ -439,3 +444,5 @@ mod task_flow_tests;
 pub mod access;
 
 mod onboarding_error;
+
+mod connections;

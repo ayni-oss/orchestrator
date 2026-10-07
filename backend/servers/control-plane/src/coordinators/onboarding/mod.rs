@@ -43,7 +43,7 @@ impl AppState {
     /// Enables the existing GitHub App adapter when deployment credentials are available.
     #[must_use]
     pub fn with_github_onboarding(mut self) -> Self {
-        match SourceClient::from_environment(20) {
+        match SourceClient::unconfigured(20) {
             Ok(source) => self.source = Some(Arc::new(source)),
             Err(reason) => {
                 tracing::warn!(reason_code = reason, "repository onboarding unavailable");
@@ -108,6 +108,8 @@ impl AppState {
             }),
             display_name: format!("{owner}/{name}"),
             default_branch: field("default_branch")?,
+            registry_connection_id: request.registry_connection_id.clone(),
+            image_namespace: request.image_namespace.clone(),
         };
         validation::create_repository_connection(&message)
             .map_err(|_| OnboardingError::invalid_argument("repository_identity_invalid"))?;
