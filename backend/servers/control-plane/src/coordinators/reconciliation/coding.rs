@@ -370,6 +370,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_ref()
             .ok_or("coding_snapshot_missing")?;
         let frozen = snapshot.runtime.as_ref().ok_or("coding_snapshot_missing")?;
+        if !frozen.registry_connection_id.is_empty() {
+            self.registry_ready(&frozen.registry_connection_id).await?;
+        }
         let runtime = self.configured_profile(profile_id).await?;
         let repository_id = source.repository_connection_id.clone();
         let revision_id = frozen.runtime_profile_revision_id.clone();
@@ -404,6 +407,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let platform = frozen.platform.as_ref().ok_or("coding_platform_missing")?;
         let platform = format!("{}/{}", platform.operating_system, platform.architecture);
         let mut runtime = runtime.clone();
+        if !frozen.registry_connection_id.is_empty() {
+            runtime.pull_secret =
+                (!frozen.pull_secret_name.is_empty()).then_some(frozen.pull_secret_name.clone());
+        }
         runtime.platform.clone_from(&platform);
         let constraints = snapshot
             .change_constraints

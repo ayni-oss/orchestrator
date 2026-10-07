@@ -96,6 +96,8 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
                     },
                 )),
             }),
+            registry_connection_id: String::new(),
+            image_namespace: String::new(),
         })
         .await?
         .into_inner()

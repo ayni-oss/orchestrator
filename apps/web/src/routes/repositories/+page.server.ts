@@ -23,6 +23,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
     }));
     return {
       repositoryConnections: result.repositoryConnections,
+      registryConnections:(await bff.listConnections(context)).filter(c=>c.kind==="ghcr" && c.enabled && c.status==="ready"),
       runtimeProfiles: Object.fromEntries(runtimeProfiles) as Record<string, RuntimeProfileDto[]>,
       nextPageToken: result.page.nextPageToken || undefined,
       requestId: locals.requestId,
@@ -30,7 +31,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return {registryConnections:[], repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 
@@ -60,7 +61,9 @@ export const actions: Actions = {
       if (!repositories.some((item) => item.owner.toLowerCase() === owner.toLowerCase() && item.name.toLowerCase() === repository.toLowerCase())) {
         return fail(400, { action: "connect", error: { status:400, reason:"invalid_selection", message:"Choose a repository the selected GitHub App installation can access.", requestId:locals.requestId, retryable:false } });
       }
-      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository}, context);
+      const registryConnectionId=text(form,"registryConnectionId",128) ?? "";
+      const imageNamespace=text(form,"imageNamespace",128) ?? "";
+      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository,registryConnectionId,imageNamespace}, context);
       return { action: "connect", success: `Connected ${connection.displayName}.` };
     } catch (error) {
       const mapped = safeError(error, locals.requestId);

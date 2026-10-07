@@ -102,9 +102,12 @@
           <input type="hidden" name="installationId" value={options.selectedInstallationId} />
           <input type="hidden" name="owner" value={selectedOwner} />
           <div class="space-y-2">
-            <Label for="registry-destination">Container registry destination</Label>
-            <ThemedSelect id="registry-destination" name="registryDestination" value="ghcr.io" options={[{ value: "ghcr.io", label: "GitHub Container Registry" }, { value: "docker.io", label: "Docker Hub — Not available", disabled: true }, { value: "ecr", label: "Amazon ECR — Not available", disabled: true }]} required />
-            <p class="text-xs text-muted-foreground">{#if selectedRepository}Image destination: ghcr.io/{selectedOwner.toLowerCase()}/{selectedRepository.toLowerCase()}-ayni{:else}Select a repository to see its image destination.{/if}</p>
+            <input type="hidden" name="registryDestination" value="ghcr.io"/>
+            <Label for="registry-connection">Container registry connection</Label>
+            <ThemedSelect id="registry-connection" name="registryConnectionId" options={data.registryConnections.map(c=>({value:c.id,label:c.displayName}))} required />
+            <Label for="image-namespace">Image namespace</Label>
+            <input id="image-namespace" name="imageNamespace" required placeholder="organization" class="block w-full rounded border bg-background p-2"/>
+            <p class="text-xs text-muted-foreground">Choose a ready GHCR connection and its approved namespace. <a href="/container-registries/github" class="underline">Manage connections</a></p>
           </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>

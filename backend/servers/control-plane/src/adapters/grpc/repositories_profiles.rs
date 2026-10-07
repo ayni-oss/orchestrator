@@ -107,6 +107,35 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         }))
     }
 
+    async fn set_repository_registry(
+        &self,
+        request: Request<v1::SetRepositoryRegistryRequest>,
+    ) -> Result<Response<v1::SetRepositoryRegistryResponse>, Status> {
+        let context = self.context(&request, "SetRepositoryRegistry")?;
+        context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let message = request.into_inner();
+        validate_id(
+            &message.repository_connection_id,
+            "repository_connection_id",
+        )
+        .map_err(|e| context.validation(&e))?;
+        if message.expected_resource_version == 0 {
+            return Err(Status::invalid_argument("resource_version_required"));
+        }
+        if !message.registry_connection_id.is_empty() {
+            validate_id(&message.registry_connection_id, "registry_connection_id")
+                .map_err(|e| context.validation(&e))?;
+        }
+        let connection = with_store(&self.state, move |store| {
+            store.set_repository_registry(&message.idempotency_key, &message)
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        Ok(context.response(v1::SetRepositoryRegistryResponse {
+            repository_connection: Some(connection),
+        }))
+    }
+
     async fn list_repository_connections(
         &self,
         request: Request<v1::ListRepositoryConnectionsRequest>,

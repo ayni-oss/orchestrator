@@ -11,6 +11,10 @@ impl CleanStore {
         key: &str,
         request: &v1::CreateRepositoryConnectionRequest,
     ) -> Result<v1::RepositoryConnection, CleanStoreError> {
+        self.validate_registry_selection(
+            &request.registry_connection_id,
+            &request.image_namespace,
+        )?;
         let digest = request_digest("CreateRepositoryConnection", request);
         if let Some(existing) = action_row(&self.connection, "CreateRepositoryConnection", key)? {
             if existing.request_hash != digest {
@@ -36,6 +40,8 @@ impl CleanStore {
             created_at: Some(timestamp(now)),
             updated_at: Some(timestamp(now)),
             resource_version: 1,
+            registry_connection_id: request.registry_connection_id.clone(),
+            image_namespace: request.image_namespace.clone(),
         };
         let transaction = self
             .connection
@@ -273,5 +279,174 @@ impl CleanStore {
             },
             REPOSITORY_SERVICE,
         )
+    }
+}
+
+impl CleanStore {
+    pub(crate) fn validate_registry_selection(
+        &self,
+        id: &str,
+        namespace: &str,
+    ) -> Result<(), CleanStoreError> {
+        if id.is_empty() && namespace.is_empty() {
+            return Ok(());
+        }
+        let connection = self.get_connection(id)?;
+        if connection.kind != "ghcr"
+            || !connection.enabled
+            || connection.status != "ready"
+            || namespace != connection.image_namespace
+            || !crate::registry_probe::valid_namespace(namespace)
+        {
+            return Err(CleanStoreError::InvalidTransition);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn set_repository_registry(
+        &mut self,
+        key: &str,
+        request: &v1::SetRepositoryRegistryRequest,
+    ) -> Result<v1::RepositoryConnection, CleanStoreError> {
+        let digest = request_digest("SetRepositoryRegistry", request);
+        if let Some(existing) = action_row(&self.connection, "SetRepositoryRegistry", key)? {
+            if existing.request_hash != digest {
+                return Err(CleanStoreError::IdempotencyConflict);
+            }
+            return self
+                .repository_connection(&existing.target_id.ok_or(CleanStoreError::CorruptState)?);
+        }
+        self.validate_registry_selection(
+            &request.registry_connection_id,
+            &request.image_namespace,
+        )?;
+        let mut resource = self.repository_connection(&request.repository_connection_id)?;
+        if resource.resource_version != request.expected_resource_version {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        resource
+            .registry_connection_id
+            .clone_from(&request.registry_connection_id);
+        resource
+            .image_namespace
+            .clone_from(&request.image_namespace);
+        resource.resource_version = resource.resource_version.saturating_add(1);
+        let now = unix_seconds()?;
+        resource.updated_at = Some(timestamp(now));
+        let tx = self
+            .connection
+            .transaction()
+            .map_err(CleanStoreError::Database)?;
+        let cursor = append_event(
+            &tx,
+            REPOSITORY_SERVICE,
+            "repository_connection",
+            &resource.id,
+            resource.resource_version,
+            Some(&resource.id),
+            None,
+            &resource,
+        )?;
+        let changed = tx.execute("UPDATE repository_connections SET payload=?1,resource_version=?2,event_cursor=?3 WHERE id=?4 AND resource_version=?5",params![resource.encode_to_vec(),i64::try_from(resource.resource_version).map_err(|_|CleanStoreError::CorruptState)?,i64::try_from(cursor).map_err(|_|CleanStoreError::CorruptState)?,resource.id,i64::try_from(request.expected_resource_version).map_err(|_|CleanStoreError::CorruptState)?]).map_err(CleanStoreError::Database)?;
+        if changed != 1 {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        tx.execute("INSERT INTO durable_actions(operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at) VALUES('SetRepositoryRegistry',?1,?2,?3,'completed','repository_connection',?4,?5,?5)",params![key,digest,request.encode_to_vec(),resource.id,now]).map_err(map_constraint)?;
+        tx.commit().map_err(CleanStoreError::Database)?;
+        Ok(resource)
+    }
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+    fn registry() -> v1::Connection {
+        v1::Connection {
+            id: "connection-registry".into(),
+            kind: "ghcr".into(),
+            management_source: "ui".into(),
+            image_namespace: "acme/runtimes".into(),
+            status: "ready".into(),
+            enabled: true,
+            resource_version: 1,
+            secret_name: "push-1".into(),
+            pull_secret_name: "pull-1".into(),
+            ..Default::default()
+        }
+    }
+    fn repository_request() -> v1::CreateRepositoryConnectionRequest {
+        v1::CreateRepositoryConnectionRequest {
+            idempotency_key: "repository-create".into(),
+            display_name: "acme/repo".into(),
+            default_branch: "main".into(),
+            provider: Some(v1::RepositoryProvider {
+                provider: Some(v1::repository_provider::Provider::Github(
+                    v1::GithubRepository {
+                        repository_id: "123".into(),
+                        owner: "acme".into(),
+                        name: "repo".into(),
+                        installation_id: 1,
+                        html_url: "https://github.com/acme/repo".into(),
+                    },
+                )),
+            }),
+            ..Default::default()
+        }
+    }
+    #[test]
+    fn registry_selection_requires_ready_connection_and_approved_namespace()
+    -> Result<(), CleanStoreError> {
+        let mut store = CleanStore::in_memory()?;
+        let mut registry = registry();
+        store.save_connection(&registry)?;
+        assert!(
+            store
+                .validate_registry_selection(&registry.id, "other")
+                .is_err()
+        );
+        assert!(
+            store
+                .validate_registry_selection(&registry.id, &registry.image_namespace)
+                .is_ok()
+        );
+        registry.enabled = false;
+        registry.resource_version += 1;
+        store.save_connection(&registry)?;
+        assert!(
+            store
+                .validate_registry_selection(&registry.id, &registry.image_namespace)
+                .is_err()
+        );
+        Ok(())
+    }
+    #[test]
+    fn repository_registry_mutation_replays_and_rejects_stale_version()
+    -> Result<(), CleanStoreError> {
+        let mut store = CleanStore::in_memory()?;
+        let registry = registry();
+        store.save_connection(&registry)?;
+        let repository = store.create_repository_connection("create", &repository_request())?;
+        let request = v1::SetRepositoryRegistryRequest {
+            idempotency_key: "assign".into(),
+            repository_connection_id: repository.id.clone(),
+            expected_resource_version: repository.resource_version,
+            registry_connection_id: registry.id.clone(),
+            image_namespace: registry.image_namespace.clone(),
+        };
+        let result = store.set_repository_registry("assign", &request)?;
+        assert_eq!(result.registry_connection_id, registry.id);
+        assert_eq!(store.set_repository_registry("assign", &request)?, result);
+        assert!(matches!(
+            store.set_repository_registry("other", &request),
+            Err(CleanStoreError::StaleVersion)
+        ));
+        assert!(store.registry_connection_in_use(&registry.id)?);
+        let mut changed = request;
+        changed.expected_resource_version = result.resource_version;
+        changed.registry_connection_id.clear();
+        changed.image_namespace.clear();
+        store.set_repository_registry("remove", &changed)?;
+        assert!(!store.registry_connection_in_use(&registry.id)?);
+        Ok(())
     }
 }

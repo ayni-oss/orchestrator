@@ -1,6 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-const revision = "a".repeat(40);
+async function choose(page: Page, label: string, option: string): Promise<void> {
+  await page.getByLabel(label, { exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
+
 
 test("operator inspects profile readiness and submits frozen work", async ({ page }) => {
   await page.goto("/");
@@ -13,9 +17,9 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await expect(page.getByText("Ready", { exact: true })).toBeVisible();
 
   await page.goto("/tasks");
-  await page.getByLabel("Project", {exact:true}).selectOption("project:1");
-  await page.getByLabel("Runtime profile").selectOption("profile:1");
-  await page.getByLabel("Model").selectOption("gpt-5");
+  await choose(page, "Project", "Sandbox");
+  await choose(page, "Runtime profile", "Ayni managed");
+  await choose(page, "Model", "GPT-5");
   await page.getByLabel("Request").fill("Document the bounded retry behavior");
   await page.getByLabel("Acceptance criteria").fill("Retry count is explicit\nExisting behavior remains covered");
   await page.getByRole("button", { name: "Submit task" }).click();
@@ -29,7 +33,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 test("connected runtime and truthful worker draft delivery are visible", async ({ page }) => {
  await page.goto("/profiles/profile:1");
  await page.getByRole("link", {name:"New request",exact:true}).click();
- await page.getByLabel("Model").selectOption("gpt-5");
+ await choose(page, "Model", "GPT-5");
  await page.getByLabel("Request", {exact:true}).fill("Add a bounded example");
  await page.getByLabel("Acceptance criteria").fill("The example is covered");
  await page.getByRole("button", {name:"Submit task",exact:true}).click();
@@ -93,12 +97,12 @@ test("projects select several repositories and tasks require one target",async({
  await page.getByRole("dialog").getByRole("button",{name:"Create project",exact:true}).click();
  await expect(page.getByRole("heading",{name:"Shared work",exact:true})).toBeVisible();
  await page.getByRole("button",{name:"New task",exact:true}).click();
- await expect(page.getByLabel("Repository",{exact:true})).toHaveValue("");
- await page.getByLabel("Repository",{exact:true}).selectOption("repository:2");
+ await expect(page.getByLabel("Repository",{exact:true})).toHaveText("Select a repository");
+ await choose(page, "Repository", "ayni-oss/library");
  await expect(page.getByRole("button",{name:"Submit task",exact:true})).toBeDisabled();
- await page.getByLabel("Repository",{exact:true}).selectOption("repository:1");
- await expect(page.getByLabel("Runtime profile",{exact:true})).toHaveValue("profile:1");
- await page.getByLabel("Model",{exact:true}).selectOption("gpt-5");
+ await choose(page, "Repository", "ayni-oss/sandbox");
+ await choose(page, "Runtime profile", "Ayni managed");
+ await choose(page, "Model", "GPT-5");
  await page.getByLabel("Request",{exact:true}).fill("Work only in the selected repository");
  await page.getByLabel("Acceptance criteria",{exact:true}).fill("The other repository is unchanged");
  await page.getByRole("button",{name:"Submit task",exact:true}).click();

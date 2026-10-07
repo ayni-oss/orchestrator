@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { Server, ServerCredentials, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
+  ConnectionServiceService, type Connection,
   ProjectServiceService, ProjectState,
   DevelopmentAttemptState,
   AutomationInstallationState,
@@ -96,6 +97,7 @@ const page = { nextPageToken: "", snapshotCursor: "10" };
 const repositoryService: UntypedServiceImplementation = {
   listGithubInstallations(_call, callback) { callback(null, { installations: [{ installationId: "42", owner: "ayni-oss", appName: "Ayni" }] }); },
   listGithubInstallationRepositories(_call, callback) { callback(null, { repositories: [{ repositoryId: "123", owner: "ayni-oss", name: "sandbox", defaultBranch: "main" }] }); },
+  setRepositoryRegistry(call,callback){repository={...repository,registryConnectionId:call.request.registryConnectionId,imageNamespace:call.request.imageNamespace,resourceVersion:String(version++)};callback(null,{repositoryConnection:repository});},
   connectGithubRepository(_call,callback){callback(null,{repositoryConnection:repository});},
 
   listRepositoryConnections(_call, callback) { callback(null, { repositoryConnections: [repository,secondRepository], page }); },
@@ -180,6 +182,17 @@ const taskService: UntypedServiceImplementation = {
 };
 
 const grpc = new Server();
+let connections:Connection[]=[];
+const connectionService:UntypedServiceImplementation={
+  listConnections(_call,callback){callback(null,{connections});},
+  createConnection(call,callback){const r=call.request;const connection:Connection={id:`connection:${connections.length+1}`,kind:r.kind,managementSource:"ui",displayName:r.displayName,appId:r.appId,username:r.username,imageNamespace:r.imageNamespace,secretName:"safe-reference",secretUid:"safe-uid",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"safe-pull",testAuthentication:"passed",testPush:"passed",testPull:"passed",testCleanup:"passed",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""};connections.push(connection);callback(null,{connection});},
+  replaceConnectionCredentials(call,callback){const connection=connections.find(c=>c.id===call.request.id);if(connection){connection.resourceVersion=String(Number(connection.resourceVersion)+1);callback(null,{connection});}else callback({code:5,message:"Connection not found"});},
+  testConnection(call,callback){callback(null,{connection:connections.find(c=>c.id===call.request.id)});},
+  setConnectionEnabled(call,callback){const connection=connections.find(c=>c.id===call.request.id);if(connection){connection.enabled=call.request.enabled;connection.status=connection.enabled?"ready":"disabled";}callback(null,{connection});},
+  deleteConnection(call,callback){connections=connections.filter(c=>c.id!==call.request.id);callback(null,{});},
+  completeGithubManifest(_call,callback){callback({code:3,message:"Invalid manifest code"});},
+};
+grpc.addService(ConnectionServiceService,connectionService);
 grpc.addService(ProjectServiceService, {
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
   getProject(_call:any,callback:any){callback(null,{project});},
@@ -194,6 +207,8 @@ grpc.addService(DevelopmentTaskServiceService, taskService);
 grpc.bindAsync("127.0.0.1:50061", ServerCredentials.createInsecure(), (error) => { if (error) throw error; });
 const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
+ if(request.method==="POST" && url.pathname==="/reset-connections") connections=[];
+ if(request.method==="POST" && url.pathname==="/admin-connection") connections=[{id:"admin:github",kind:"github_app",managementSource:"admin",displayName:"Admin App",appId:"123",username:"",imageNamespace:"",secretName:"admin-ref",secretUid:"",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"",testAuthentication:"",testPush:"",testPull:"",testCleanup:"",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""}];
  if(request.method==="POST" && url.pathname==="/reset-onboarding") { profileEnrolled=false; installation=undefined; }
  if(request.method==="POST" && url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
  response.writeHead(200, { "content-type": "text/plain" }); response.end("ok"); });

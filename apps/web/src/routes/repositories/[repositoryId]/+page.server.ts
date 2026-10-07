@@ -8,15 +8,18 @@ const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
   setHeaders({ "cache-control": "no-store" });
   if (!RESOURCE_ID.test(params.repositoryId)) {
-    return { repositoryConnection: undefined, runtimeProfiles: [], runtimeKeys: {}, requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };
+    return {registryConnections:[],registryKey:actionKey(), repositoryConnection: undefined, runtimeProfiles: [], runtimeKeys: {}, requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };
   }
   const context = requestContext(locals);
-  const [repository, profiles] = await Promise.allSettled([
+  const [repository, profiles, connections] = await Promise.allSettled([
     getBff().getRepositoryConnection(params.repositoryId, context),
     getBff().listRuntimeProfiles(params.repositoryId, { pageSize: 100 }, context),
+    getBff().listConnections(context),
   ]);
   const failure = repository.status === "rejected" ? repository.reason : profiles.status === "rejected" ? profiles.reason : undefined;
   return {
+    registryKey:actionKey(),
+    registryConnections:connections.status==="fulfilled" ? connections.value.filter(c=>c.kind==="ghcr" && c.status==="ready" && c.enabled):[],
     repositoryConnection: repository.status === "fulfilled" ? repository.value : undefined,
     runtimeProfiles: profiles.status === "fulfilled" ? profiles.value.runtimeProfiles : [],
     runtimeKeys: profiles.status === "fulfilled" ? Object.fromEntries(profiles.value.runtimeProfiles.map((profile) => [profile.id, actionKey()])) : {},
@@ -41,6 +44,13 @@ async function reconcile(event: Parameters<Actions[string]>[0], action: "sync" |
 }
 
 export const actions: Actions = {
+  registry: async ({request,params,locals})=>{
+    const f=await request.formData();
+    try {
+      await getBff().setRepositoryRegistry({repositoryConnectionId:params.repositoryId,idempotencyKey:text(f,"idempotencyKey",36) ?? "",expectedResourceVersion:text(f,"resourceVersion",24) ?? "",registryConnectionId:text(f,"registryConnectionId",128) ?? "",imageNamespace:text(f,"imageNamespace",128) ?? ""},requestContext(locals));
+      return {success:"Registry selection updated. New work uses the selected connection."};
+    }catch(error){const mapped=safeError(error,locals.requestId);return fail(mapped.status,{error:mapped});}
+  },
   sync: (event) => reconcile(event, "sync"),
   rebuild: (event) => reconcile(event, "rebuild"),
 };
