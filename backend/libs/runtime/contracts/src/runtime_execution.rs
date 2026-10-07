@@ -11,7 +11,7 @@ pub const EXECUTION_DEADLINE_SECONDS: u64 = 1800;
 /// Frozen, credential-free execution request mounted read-only by Kubernetes.
 ///
 /// A profile supplies its explicit admission expectations. The shared request
-/// does not require a particular tool, certification policy, or assessment model.
+/// does not require a particular tool, certification policy.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionRequest<Profile> {

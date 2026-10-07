@@ -9,7 +9,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-/// Checkout an exact GitHub commit in an init container. The optional token is
+/// Checkout an exact GitHub commit after worker runtime attestation. The optional token is
 /// used only by Git's fetch process and never persisted in the checkout.
 ///
 /// # Errors
@@ -67,6 +67,151 @@ pub fn checkout<P>(
     Ok(())
 }
 
+/// Checkout a frozen source with one deadline shared by all Git subprocesses.
+/// Dropping this future stops the active subprocess group and its descendants.
+///
+/// # Errors
+/// Rejects invalid source/credentials, expired deadlines, bounded-output violations,
+/// failed Git operations and a checkout that differs from the frozen source SHA.
+pub async fn checkout_with_deadline<P: Sync>(
+    request: &ExecutionRequest<P>,
+    workspace: &Path,
+    token: Option<&str>,
+    deadline: std::time::Duration,
+) -> io::Result<()> {
+    validate_source(request)?;
+    if token.is_some_and(|value| value.is_empty() || value.contains(['\r', '\n'])) {
+        return Err(io::Error::other("invalid source credential"));
+    }
+    let expires = tokio::time::Instant::now()
+        .checked_add(deadline)
+        .ok_or_else(|| io::Error::other("checkout deadline outside clock range"))?;
+    if deadline.is_zero() {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "frozen checkout deadline exhausted",
+        ));
+    }
+    fs::create_dir_all(workspace)?;
+    let mut init = command("git", workspace);
+    init.args(["-c", "core.hooksPath=/dev/null", "init", "--quiet"]);
+    checkout_step(init, expires, "init").await?;
+    let mut fetch = command("git", workspace);
+    fetch.args([
+        "-c",
+        "core.hooksPath=/dev/null",
+        "fetch",
+        "--quiet",
+        "--depth=1",
+        "--no-tags",
+        "--",
+        &request.repository_url,
+        &request.revision,
+    ]);
+    if let Some(token) = token {
+        fetch
+            .env("GIT_CONFIG_COUNT", "2")
+            .env("GIT_CONFIG_KEY_1", "http.https://github.com/.extraheader")
+            .env(
+                "GIT_CONFIG_VALUE_1",
+                format!(
+                    "AUTHORIZATION: basic {}",
+                    STANDARD.encode(format!("x-access-token:{token}"))
+                ),
+            );
+    }
+    checkout_step(fetch, expires, "fetch").await?;
+    let mut detach = command("git", workspace);
+    detach.args([
+        "-c",
+        "core.hooksPath=/dev/null",
+        "checkout",
+        "--quiet",
+        "--detach",
+        "FETCH_HEAD",
+    ]);
+    checkout_step(detach, expires, "checkout").await?;
+    let mut head = command("git", workspace);
+    head.args(["rev-parse", "HEAD"]);
+    let head = checkout_step(head, expires, "rev-parse").await?;
+    if std::str::from_utf8(&head).map_err(io::Error::other)?.trim() != request.revision {
+        return Err(io::Error::other("source revision mismatch"));
+    }
+    Ok(())
+}
+
+async fn checkout_step(
+    mut command: Command,
+    expires: tokio::time::Instant,
+    operation: &'static str,
+) -> io::Result<Vec<u8>> {
+    if tokio::time::Instant::now() >= expires {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "frozen checkout deadline exhausted",
+        ));
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut command = tokio::process::Command::from(command);
+    let mut process = crate::operations::process::spawn(&mut command)?;
+    let stdout = process
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("checkout stdout missing"))?;
+    let stderr = process
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("checkout stderr missing"))?;
+    let (status, stdout, stderr) = tokio::time::timeout_at(expires, async {
+        tokio::join!(
+            process.wait(),
+            drain_checkout_output(stdout),
+            drain_checkout_output(stderr)
+        )
+    })
+    .await
+    .map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::TimedOut,
+            "frozen checkout deadline exhausted",
+        )
+    })?;
+    let stdout = stdout?;
+    // Classify bounded diagnostics without returning provider details or credentials.
+    let diagnostic = stderr?;
+    let status = status?;
+    if !status.success() {
+        let failure = git_failure(operation, &diagnostic);
+        tracing::error!(operation, exit_code = status.code(), failure = ?failure, "source checkout Git operation failed");
+        return Err(io::Error::other(GitFailure(failure)));
+    }
+    Ok(stdout)
+}
+
+async fn drain_checkout_output<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: R,
+) -> io::Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt as _;
+    let mut output = Vec::new();
+    let mut oversized = false;
+    let mut chunk = vec![0; 8192];
+    loop {
+        let count = reader.read(&mut chunk).await?;
+        if count == 0 {
+            break;
+        }
+        if output.len() + count > 1_048_576 {
+            oversized = true;
+        } else if !oversized {
+            output.extend_from_slice(&chunk[..count]);
+        }
+    }
+    if oversized {
+        return Err(io::Error::other("source checkout output exceeds bound"));
+    }
+    Ok(output)
+}
+
 pub(crate) fn validate_source<P>(request: &ExecutionRequest<P>) -> io::Result<()> {
     let path = request
         .repository_url
@@ -119,6 +264,7 @@ pub(crate) fn command(program: &str, workspace: &Path) -> Command {
         .env("TMPDIR", "/scratch")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
         // Kubernetes emptyDir roots are root-owned, even with fsGroup access.
         // Trust only this assigned checkout, including Git invoked by Ayni.
         .env("GIT_CONFIG_COUNT", "1")
@@ -142,6 +288,9 @@ pub(crate) fn success(command: &mut Command) -> io::Result<()> {
 }
 
 pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    let mut git_process = super::sandbox::command("git", workspace)?;
+    #[cfg(any(not(target_os = "linux"), test))]
     let mut git_process = command("git", workspace);
     git_process
         .args(arguments)
@@ -184,7 +333,6 @@ pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
                             | "add"
                             | "diff"
                             | "commit"
-                            | "bundle"
                             | "rev-parse"
                             | "fetch"
                             | "checkout"
@@ -248,7 +396,6 @@ fn git_failure(operation: &str, bytes: &[u8]) -> ayni_orchestrator_runtime::acti
         "add" => Failure::GitStage,
         "diff" => Failure::GitDiff,
         "commit" => Failure::GitCommit,
-        "bundle" => Failure::GitBundle,
         _ => Failure::GitSource,
     }
 }
@@ -313,5 +460,47 @@ mod tests {
         request.repository_url = "https://github.com/team/repo.git".into();
         request.revision = "main".into();
         assert!(validate_source(&request).is_err());
+    }
+}
+
+#[cfg(test)]
+mod checkout_deadline_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn exhausted_checkout_deadline_never_initializes_source() -> io::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let workspace = directory.path().join("checkout");
+        let request = ExecutionRequest {
+            repository_url: "https://github.com/team/repository.git".into(),
+            revision: "a".repeat(40),
+            expected: (),
+        };
+        let error = checkout_with_deadline(&request, &workspace, None, Duration::ZERO)
+            .await
+            .err()
+            .ok_or_else(|| io::Error::other("expected timeout"))?;
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(!workspace.exists());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn checkout_steps_share_one_deadline_instead_of_resetting_it() -> io::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let expires = tokio::time::Instant::now() + Duration::from_millis(500);
+        let mut first = command("/bin/sh", directory.path());
+        first.args(["-c", "sleep 0.35"]);
+        checkout_step(first, expires, "init").await?;
+        let mut second = command("/bin/sh", directory.path());
+        second.args(["-c", "sleep 0.35"]);
+        let error = checkout_step(second, expires, "fetch")
+            .await
+            .err()
+            .ok_or_else(|| io::Error::other("expected cumulative timeout"))?;
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        Ok(())
     }
 }

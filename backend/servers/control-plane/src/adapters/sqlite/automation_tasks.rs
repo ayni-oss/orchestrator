@@ -209,7 +209,6 @@ impl CleanStore {
     pub(crate) fn reconcile_once(&mut self) -> Result<(), CleanStoreError> {
         let _ = self.expire_deadlines(&unix_timestamp()?)?;
         self.prune_page_snapshots()?;
-        self.schedule_requested_publications()?;
         Ok(())
     }
 

@@ -8,6 +8,7 @@ fn configuration() -> RuntimeConfiguration {
         interval_seconds: 60,
         request_timeout_seconds: 30,
         coding_turns: 24,
+        quality_repair_limit: 3,
         concurrency: 4,
         allow_emulation: false,
         profiles: BTreeMap::new(),
@@ -51,7 +52,6 @@ fn managed_discovery_uses_the_operator_registry_endpoint() -> Result<(), &'stati
         service_account: "runtime-coding".into(),
         pull_secret: Some("runtime-pull".into()),
         build: None,
-        assessment: None,
     });
     assert!(configuration.validate().is_ok());
     let runtime = configuration
@@ -81,7 +81,6 @@ fn derives_managed_image_from_connected_repository_and_lock() -> Result<(), &'st
         service_account: "runtime-coding".into(),
         pull_secret: Some("environment-pull".into()),
         build: None,
-        assessment: None,
     };
     let profile = runtime.profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))?;
     assert_eq!(
@@ -101,7 +100,7 @@ fn operator_document() -> serde_json::Value {
         "namespace": "runtime-test",
         "worker_image": format!("registry.test/worker@sha256:{}", "a".repeat(64)),
         "output_claim": "outputs", "model_secret": "model", "allow_emulation": true,
-        "interval_seconds": 42, "request_timeout_seconds": 12, "coding_turns": 17, "concurrency": 3,
+        "interval_seconds": 42, "request_timeout_seconds": 12, "coding_turns": 17, "quality_repair_limit": 3, "concurrency": 3,
         "profiles": {
             "project-profile": {
                 "image": "registry.test/environment:lock", "platform": "linux/arm64",
@@ -111,19 +110,11 @@ fn operator_document() -> serde_json::Value {
                     "service_account": "builder", "registry_secret": "push",
                     "signing_secret": "signing", "engine_secret": "engine",
                     "engine_host": "tcp://engine.test:2376"
-                },
-                "assessment": {
-                    "producer_image": format!("registry.test/collector@sha256:{}", "c".repeat(64)),
-                    "publication_policy": "READY_AFTER_SUCCESSFUL_ASSESSMENT"
                 }
             }
         },
         "managed_runtime": {
-            "registry_prefix": "ghcr.io", "platform": "linux/amd64", "service_account": "managed", "pull_secret": "pull", "build": null,
-            "assessment": {
-                "producer_image": format!("registry.test/collector@sha256:{}", "c".repeat(64)),
-                "publication_policy": "DRAFT_ONLY"
-            }
+            "registry_prefix": "ghcr.io", "platform": "linux/amd64", "service_account": "managed", "pull_secret": "pull", "build": null
         }
     })
 }
@@ -164,9 +155,7 @@ fn operator_json_rejects_unknown_fields_at_every_configuration_boundary()
         "",
         "/profiles/project-profile",
         "/profiles/project-profile/build",
-        "/profiles/project-profile/assessment",
         "/managed_runtime",
-        "/managed_runtime/assessment",
     ] {
         let mut document = operator_document();
         document
@@ -194,14 +183,14 @@ fn operator_json_preserves_scheduling_and_workload_defaults()
                 "image": format!("registry.test/builder@sha256:{}", "b".repeat(64)),
                 "registry_secret": "push", "signing_secret": "signing", "engine_secret": "engine",
                 "engine_host": "tcp://engine.test:2376"
-            },
-            "assessment": {"producer_image": format!("registry.test/collector@sha256:{}", "c".repeat(64))}
+            }
         }}
     }))?;
     configuration.validate()?;
     assert_eq!(configuration.interval_seconds, 60);
     assert_eq!(configuration.request_timeout_seconds, 30);
     assert_eq!(configuration.coding_turns, 24);
+    assert_eq!(configuration.quality_repair_limit, 3);
     assert_eq!(configuration.concurrency, 4);
     assert!(!configuration.allow_emulation);
     assert!(configuration.managed_runtime.is_none());
@@ -211,14 +200,6 @@ fn operator_json_preserves_scheduling_and_workload_defaults()
     assert_eq!(
         profile.build.as_ref().ok_or("build")?.service_account,
         "runtime-builder"
-    );
-    assert!(
-        profile
-            .assessment
-            .as_ref()
-            .ok_or("assessment")?
-            .publication_policy
-            == PublicationPolicy::DraftOnly
     );
     Ok(())
 }
@@ -257,11 +238,6 @@ fn operator_validation_preserves_security_failure_codes() -> Result<(), Box<dyn 
             "private:key",
             "runtime_build_configuration_invalid",
         ),
-        (
-            "/profiles/project-profile/assessment/producer_image",
-            "registry.test/collector:latest",
-            "assessment_producer_invalid",
-        ),
     ] {
         let mut document = operator_document();
         *document.pointer_mut(pointer).ok_or("configuration field")? = serde_json::json!(value);
@@ -273,4 +249,15 @@ fn operator_validation_preserves_security_failure_codes() -> Result<(), Box<dyn 
         );
     }
     Ok(())
+}
+
+#[test]
+fn quality_repairs_are_bounded() {
+    let mut config = configuration();
+    for limit in [0, 3, 10] {
+        config.quality_repair_limit = limit;
+        assert!(config.validate().is_ok());
+    }
+    config.quality_repair_limit = 11;
+    assert!(config.validate().is_err());
 }

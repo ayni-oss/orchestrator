@@ -1,132 +1,19 @@
-# Ayni 0.14 integration contract
+# Ayni integration contract
 
-This document records the released Ayni contract consumed by the Ayni Managed
-profile. It supersedes the exploratory assumptions recorded for #53; it is not
-a replacement implementation of Ayni's lock, certificate, or protected-content
-verification.
+The worker consumes Ayni's supported CLI and artifact contract. Managed runtime
+identity includes the committed lock and pinned image digest; admission verifies
+both before coding.
 
-## Released baseline
+Focused feedback uses `ayni verify <signal>` and its separate artifact at
+`.ayni/verify/last/signals.json`. Mandatory quality uses `ayni check` and the full
+artifact at `.ayni/last/signals.json`. Typed selectors support language, root,
+file, package and name where the adapter allows them; Ayni validates adapter
+capabilities. Process errors and malformed or stale evidence remain explicit
+unavailable outcomes.
 
-| Item | Pinned value |
-| --- | --- |
-| CLI release, archive checksum, executor digest | [`backend/libs/runtime/profiles/ayni/ayni-release.json`](../backend/libs/runtime/profiles/ayni/ayni-release.json) |
-| Supported managed platforms | `linux/amd64`, `linux/arm64` |
-| Repository lock | Ayni-generated committed `.ayni.lock`, schema `0.9.0` and recipe `2` |
-| Discovery tag | `lock-<full-64-hex-lock-fingerprint>` |
-
-The complete lock fingerprint covers the contract and recipe digests, Ayni and
-Mise versions, provisioning base and variant, platforms, runtimes/components,
-signal tools, dependency inputs, capabilities, and resource limits. It is not
-a repository revision or an OCI digest. Source-only edits reuse an unchanged
-lock artifact; changing a covered input requires a new lock and artifact.
-
-## Release ownership and upgrades
-
-Ayni is independently useful for code measurement and tool environments.
-Orchestrator coordinates code changes with or without Ayni. Its task, candidate,
-review and evidence resources remain orchestration concepts; Ayni release and
-artifact compatibility belong to the Ayni integration. GitHub Actions collection
-and GitHub readiness are the current provider implementation, not requirements
-for future VCS providers or custom runtime profiles.
-
-The release manifest is the single editable source for the active Ayni CLI
-version, Linux archive checksum, immutable executor and signals schema. Rust
-builds consume it through the runtime crate; setup workflow rendering and this
-repository's CI consume the same pins. Runtime results must match the persisted
-execution expectation. Do not replace these checks with “latest” or accept a
-candidate-selected version. Custom runtime profiles do not depend on this pin.
-
-To upgrade, update the manifest from the official release, verify adapter
-compatibility and regenerate `.ayni.lock` with that CLI. Rebuild the controller,
-collector and builder images; review the rendered setup workflow update and
-select a fresh admitted profile revision/environment before enabling readiness.
-Existing profile revisions and retained evidence keep their original version
-identities. Generated locks and historical fixtures are records, not additional
-release settings. A new artifact schema can require adapter changes; changing
-only a version string does not establish compatibility.
-
-The runtime-builder recipe receives the manifest's executor explicitly:
-
-```sh
-docker build -f deploy/images/runtime-builder/Dockerfile \
-  --build-arg AYNI_EXECUTOR_IMAGE="$(jq -er .executor_image backend/libs/runtime/profiles/ayni/ayni-release.json)" \
-  --build-arg DOCKER_CLIENT_IMAGE="$DOCKER_CLIENT_IMAGE" \
-  -t local/orchestrator-runtime-builder:development .
-```
-
-`DOCKER_CLIENT_IMAGE` must be an operator-approved immutable image. Building
-locally does not authorize registry publication or signed environment admission.
-
-## Launcher and runtime boundary
-
-`ayni env build` consumes the committed current lock and produces a reusable
-OCI image. It does not publish or launch the image. Platform tooling owns
-registry publication, digest resolution, pull credentials, network policy,
-resource limits, user identity, checkout attachment, and the launcher.
-
-The platform pulls the admitted image by `repository@sha256:<digest>`, attaches
-the writable checkout before startup, preserves the image entrypoint, and
-invokes plain `ayni check` in that checkout. The entrypoint may materialize
-locked dependency seeds and caches, but must not replace sources, refresh native
-locks, or silently delete existing dependency directories. No Docker engine,
-host socket, Kubernetes token, controller state, package-write credential, or
-certificate-signing seed belongs in coding or assessment containers.
-
-When `/etc/ayni/runtime.json` is present, Ayni verifies its runtime metadata,
-the attached checkout lock, platform, protected content, and optional
-certificate before activating locked tooling. Ayni records its verified runtime
-context in `signals.json`; that context proves Ayni compatibility, not launcher
-isolation, trusted build authority, or authoritative PR assessment.
-
-## Certification and admission
-
-An unsigned `ayni env build` establishes only local lock/protected-content
-consistency and is not admitted by the managed runtime reconciler. A trusted producer supplies both
-`AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID` from
-its isolated build environment. Ayni rejects absent pairs, malformed values, or a signing key whose
-public key does not match the lock-pinned trusted key. The controller binds the
-configured source, exact checkout, Kubernetes-observed manifest digest,
-platform, and fresh signed Ayni runtime result before admitting an artifact.
-The trusted Ayni executable performs signature and protected-content verification;
-runtime sourcing does not require a GitHub workflow identity or GHCR tag scheme.
-See [managed runtime execution](managed-runtime-execution.md) for the implemented
-trust model and deployment prerequisites.
-
-Candidate code never receives the reusable signing seed or package-write
-authority. A candidate lock change is unsupported until a separately reviewed,
-isolated candidate trust policy exists; it must fail closed rather than use
-unsigned mode as a bypass.
-
-## Assessment evidence
-
-The workflow—not Ayni or candidate code—owns the assessment manifest. It binds
-independently observed repository, base SHA, exact PR head SHA, profile revision,
-OCI digest, workflow run and attempt, source-integrity result, exit status,
-completion state, and hashes of retained evidence. It retains the original
-`.ayni/last/signals.json`; `execution.json` is retired and must neither be
-required nor synthesized.
-
-Candidate-controlled bytes, including `signals.json`, are inputs to a trusted
-collector. Hashing those bytes in the candidate's process is insufficient. The
-collector runs after candidate code with separate write authority, bounds and
-validates artifact paths and sizes, computes hashes itself, and records the
-workflow identity before the controller imports an assessment. The controller
-rejects missing, malformed, oversized, mismatched, stale-head, or conflicting
-evidence. A GitHub check, comment, agent result, successful unsigned build, or
-`managed` execution-mode value is a projection or compatibility observation—not
-an authoritative assessment.
-
-## Reproducible validation harness
-
-The repository PR workflow verifies the pinned release archive, uses Ayni to
-build the lock-derived image, then uses Docker to attach the exact checked-out
-source at `/workspace` and run plain `ayni check`. It intentionally has only
-`contents: read` and produces ordinary PR feedback; it neither publishes an
-image nor claims certified or authoritative assessment status.
-
-The managed-profile delivery workflows in #58/#59/#62/#63 must additionally
-record bounded timing and resource observations for cold build, warm build,
-registry reuse, clean-node pull/start/check, and all rejection cases. They run
-only with an explicitly authorized sandbox package and the supported Actions
-topology. Docker Desktop validation uses the explicit `docker-desktop` context;
-host-only checks and local image caches are not deployment proof.
+The final full check must cover the final committed source. Completion counts,
+signals, bounded findings, artifact digest, source fingerprint and final commit
+are retained together and disclosed in worker-created drafts. Focused evidence
+cannot satisfy the full gate. The runtime must pin a CLI release that supports
+these commands and provenance checks; runtime-version changes require actual
+managed-topology verification.

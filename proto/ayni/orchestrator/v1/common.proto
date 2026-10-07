@@ -55,24 +55,3 @@ message VerifiedMetadata {
   // value is at most 512 UTF-8 bytes and must not contain credentials.
   string value = 2;
 }
-
-// WorkflowExecution identifies one immutable provider workflow attempt.
-message WorkflowExecution {
-  oneof provider {
-    GithubWorkflowExecution github = 1;
-  }
-}
-
-// GithubWorkflowExecution is the GitHub-specific workflow boundary.
-message GithubWorkflowExecution {
-  uint64 workflow_id = 1;
-  uint64 run_id = 2;
-  // attempt is at least 1.
-  uint32 attempt = 3;
-  // event_name is 1 through 64 safe ASCII bytes.
-  string event_name = 4;
-  // head_sha is exactly 40 lowercase hexadecimal characters.
-  string head_sha = 5;
-  // html_url is an HTTPS URL of at most 2,048 bytes.
-  string html_url = 6;
-}

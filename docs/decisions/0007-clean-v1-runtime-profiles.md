@@ -1,5 +1,6 @@
 # Decision 0007: clean v1 runtime profiles
 
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-09-29
 - Supersedes: the current pilot's preparation, task, validation, and retained-state model

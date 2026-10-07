@@ -28,10 +28,6 @@ pub(super) fn page_items_decode(method: &str, items: &[Vec<u8>]) -> bool {
         "ListAutomationInstallations" => all_decode!(v1::AutomationInstallation),
         "ListDevelopmentTasks" => all_decode!(v1::DevelopmentTask),
         "ListDevelopmentAttempts" => all_decode!(v1::DevelopmentAttempt),
-        "ListCandidates" => all_decode!(v1::Candidate),
-        "ListChangeRequests" => all_decode!(v1::ChangeRequest),
-        "ListAssessments" => all_decode!(v1::Assessment),
-        "ListEvidenceReferences" => all_decode!(v1::EvidenceReference),
         _ => false,
     }
 }

@@ -9,7 +9,6 @@ publish.workspace = true
 
 [dependencies]
 ayni-orchestrator-application = { path = "crates/application" }
-ayni-orchestrator-actions-contract = { path = "../../libs/integrations/github-actions" }
 ayni-orchestrator-domain = { path = "../../libs/domain" }
 async-stream.workspace = true
 axum.workspace = true

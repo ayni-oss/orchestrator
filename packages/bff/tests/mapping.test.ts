@@ -72,7 +72,7 @@ function task(): DevelopmentTask {
   return {
     id: "task:1",
     projectId: "project:1",
-    snapshot: { publishDraft:false, publicationBaseBranch:"main",
+    snapshot: { limits:{codingTurns:24,qualityRepairLimit:3}, publicationBaseBranch:"main",
       repository: {
         repositoryConnectionId: "repository:1",
         repositorySnapshotId: "snapshot:1",

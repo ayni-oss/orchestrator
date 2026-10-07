@@ -160,19 +160,6 @@ impl SourceClient {
         .await
     }
 
-    pub(crate) async fn review_token(
-        &self,
-        installation: u64,
-        repository_id: &str,
-    ) -> Result<String, &'static str> {
-        self.scoped_token(
-            installation,
-            repository_id,
-            json!({"contents":"read","actions":"read","checks":"read","pull_requests":"write"}),
-        )
-        .await
-    }
-
     async fn scoped_token(
         &self,
         installation: u64,
@@ -291,8 +278,6 @@ impl SourceClient {
             .map_err(|_| "repository_lock_invalid")
     }
 }
-
-mod review;
 
 async fn bounded(request: reqwest::RequestBuilder) -> Result<Value, &'static str> {
     bounded_operation(request, GithubOperation::Read)
@@ -569,5 +554,3 @@ mod github_error_tests {
 }
 
 pub mod setup;
-
-pub mod publication;

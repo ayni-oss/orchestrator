@@ -2,21 +2,22 @@ use super::*;
 use ayni_orchestrator_profile_ayni::{
     managed_runtime::VerifiedRuntime, runtime_execution::VerificationReport,
 };
-use ayni_orchestrator_runtime::coding::{ValidationOutcome, ValidationResult};
+use ayni_orchestrator_runtime::coding::{QualityOutcome, QualityResult};
 
 fn report(revision: &str) -> VerificationReport {
     VerificationReport {
         revision: revision.into(),
         lock_digest: DIGEST.into(),
         check_exit_code: 1,
-        validation: ValidationResult {
-            outcome: ValidationOutcome::Failed,
-            signals_digest: None,
-            completed_targets: 0,
-            skipped_targets: 0,
-            warning_offenders: 0,
-            failing_offenders: 0,
+        quality: QualityResult {
+            outcome: QualityOutcome::Failed,
+            evidence: None,
+            completed_targets: None,
+            skipped_targets: None,
+            warning_offenders: None,
+            failing_offenders: None,
             rows: vec![],
+            findings: vec!["Full check failed".into()],
         },
         runtime: VerifiedRuntime {
             lock_fingerprint: format!("sha256:{}", "c".repeat(64)),

@@ -8,10 +8,6 @@ const LOG_TARGETS: &[&str] = &[
     "ayni_orchestrator_control_plane",
     "ayni_orchestrator_observability",
     "ayni_orchestrator_worker",
-    "development_agent",
-    "pr_agent",
-    "prepare_repository",
-    "validate_candidate",
 ];
 
 const SENSITIVE_ENVIRONMENT_KEYS: &[&str] = &[

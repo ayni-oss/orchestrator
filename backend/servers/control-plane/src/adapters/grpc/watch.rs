@@ -157,59 +157,6 @@ pub(super) fn development_watch(
     }
 }
 
-pub(super) fn review_watch(
-    state: AppState,
-    mut shutdown: shutdown_watch::Receiver<bool>,
-    request: v1::WatchReviewsRequest,
-    request_id: String,
-) -> impl Stream<Item = Result<v1::WatchReviewsResponse, Status>> + Send {
-    async_stream::stream! {
-        let mut cursor = request.after_cursor.unwrap_or(0);
-        if request.after_cursor.is_none() {
-            let query = request.clone();
-            match with_store(&state, move |store| store.initial_events(
-                REVIEW_SERVICE, query.repository_connection_id.as_deref(),
-                query.change_request_id.as_deref())).await {
-                Ok((events, high_water)) => {
-                    for event in events {
-                        match review_update(&event) {
-                            Ok(response) => yield Ok(response),
-                            Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
-                        }
-                    }
-                    cursor = high_water;
-                }
-                Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
-            }
-        }
-        loop {
-            let notifications = state.database.notifications();
-            let notified = notifications.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            let query = request.clone();
-            let events = with_store(&state, move |store| store.events_after(
-                REVIEW_SERVICE, cursor, query.repository_connection_id.as_deref(),
-                query.change_request_id.as_deref())).await;
-            match events {
-                Ok(events) => for event in events {
-                    cursor = event.cursor;
-                    match review_update(&event) {
-                        Ok(response) => yield Ok(response),
-                        Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
-                    }
-                },
-                Err(error) => { yield Err(stream_status(&error, &request_id)); return; }
-            }
-            tokio::select! {
-                () = notified => {},
-                () = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
-                changed = shutdown.changed() => if changed.is_err() || *shutdown.borrow() { return; }
-            }
-        }
-    }
-}
-
 pub(super) fn repository_update(
     event: &StoredEvent,
 ) -> Result<v1::WatchRepositoriesResponse, CleanStoreError> {
@@ -264,33 +211,9 @@ pub(super) fn development_update(
         "development_attempt" => {
             v1::watch_development_task_response::Update::Attempt(decode_event(&event.payload)?)
         }
-        "candidate" => {
-            v1::watch_development_task_response::Update::Candidate(decode_event(&event.payload)?)
-        }
         _ => return Err(CleanStoreError::CorruptState),
     };
     Ok(v1::WatchDevelopmentTaskResponse {
-        cursor: event.cursor,
-        update: Some(update),
-    })
-}
-
-pub(super) fn review_update(
-    event: &StoredEvent,
-) -> Result<v1::WatchReviewsResponse, CleanStoreError> {
-    let update = match event.resource_type.as_str() {
-        "change_request" => {
-            v1::watch_reviews_response::Update::ChangeRequest(decode_event(&event.payload)?)
-        }
-        "assessment" => {
-            v1::watch_reviews_response::Update::Assessment(decode_event(&event.payload)?)
-        }
-        "evidence_reference" => {
-            v1::watch_reviews_response::Update::EvidenceReference(decode_event(&event.payload)?)
-        }
-        _ => return Err(CleanStoreError::CorruptState),
-    };
-    Ok(v1::WatchReviewsResponse {
         cursor: event.cursor,
         update: Some(update),
     })

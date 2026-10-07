@@ -16,7 +16,7 @@ kind: ConfigMap
 metadata:
   name: runtime-config
 data:
-  runtime.json: {{ dict "namespace" .Release.Namespace "worker_image" (required "runtime.workerImage must be digest pinned" .Values.runtime.workerImage) "output_claim" .Values.runtime.outputClaim "model_secret" .Values.runtime.modelSecret "interval_seconds" .Values.runtime.intervalSeconds "request_timeout_seconds" .Values.runtime.requestTimeoutSeconds "coding_turns" .Values.runtime.codingTurns "concurrency" .Values.runtime.concurrency "allow_emulation" .Values.runtime.allowEmulation "profiles" .Values.runtime.profiles "managed_runtime" .Values.runtime.managedRuntime | toJson | quote }}
+  runtime.json: {{ dict "namespace" .Release.Namespace "worker_image" (required "runtime.workerImage must be digest pinned" .Values.runtime.workerImage) "output_claim" .Values.runtime.outputClaim "model_secret" .Values.runtime.modelSecret "interval_seconds" .Values.runtime.intervalSeconds "request_timeout_seconds" .Values.runtime.requestTimeoutSeconds "coding_turns" .Values.runtime.codingTurns "quality_repair_limit" .Values.runtime.qualityRepairLimit "concurrency" .Values.runtime.concurrency "allow_emulation" .Values.runtime.allowEmulation "profiles" .Values.runtime.profiles "managed_runtime" .Values.runtime.managedRuntime | toJson | quote }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -44,10 +44,10 @@ rules:
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [get, create, delete]
-  # No read/list/watch/update authority over operator credentials.
+  # Attempt credentials are written and refreshed without reading secret values.
   - apiGroups: [""]
     resources: [secrets]
-    verbs: [create, delete]
+    verbs: [create, patch, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

@@ -1,9 +1,9 @@
 //! Ayni Managed profile contracts and evidence admission.
 //!
 //! The profile consumes the shared container execution contract. Its Ayni
-//! release, certificate, and assessment requirements do not apply to every
+//! release and certificate requirements do not apply to every
 //! container runtime. The Actions evidence importer remains the current
-//! implementation; these modules do not implement internal candidate assessment.
+//! implementation; these modules expose managed admission expectations.
 
 pub mod ayni_release;
 pub mod coding;

@@ -162,20 +162,18 @@ fn spawn_runtime_loops(
     let Some(runtimes) = runtimes else {
         return;
     };
-    for operation in 0..3 {
+    for operation in 0..2 {
         let runtimes = runtimes.clone();
         let name = match operation {
             0 => "runtime-verification",
-            1 => "coding",
-            _ => "publication",
+            _ => "coding",
         };
         background.spawn_periodic(name, Duration::from_secs(5), shutdown.clone(), move || {
             let runtimes = runtimes.clone();
             async move {
                 match operation {
                     0 => runtimes.reconcile().await,
-                    1 => runtimes.reconcile_coding().await,
-                    _ => runtimes.reconcile_publication().await,
+                    _ => runtimes.reconcile_coding().await,
                 }
             }
         });

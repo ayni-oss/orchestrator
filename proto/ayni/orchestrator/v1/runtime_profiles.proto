@@ -119,7 +119,7 @@ message AyniManagedProfileRevision {
   optional string runtime_source_digest = 5;
 }
 
-// CustomRuntimeProfileRevision contains no Ayni lock, workflow, or assessment fields.
+// CustomRuntimeProfileRevision contains no Ayni lock or workflow fields.
 message CustomRuntimeProfileRevision {
   // image_reference is a supported external OCI repository reference of at most 512 ASCII bytes.
   string image_reference = 1;
@@ -149,19 +149,11 @@ message RuntimeArtifact {
 // RuntimeArtifactOrigin identifies how an artifact entered reconciliation.
 message RuntimeArtifactOrigin {
   oneof origin {
-    AutomationArtifactOrigin repository_automation = 1;
     ExternalArtifactOrigin external = 2;
   }
 }
 
-// AutomationArtifactOrigin binds an artifact to trusted repository automation.
-message AutomationArtifactOrigin {
-  string automation_installation_id = 1;
-  WorkflowExecution workflow = 2;
-  string repository_snapshot_id = 3;
-}
-
-// ExternalArtifactOrigin records provider-neutral discovery for Custom Runtime.
+// ExternalArtifactOrigin records provider-neutral OCI runtime discovery.
 message ExternalArtifactOrigin {
   // supplied_reference is the owner-supplied OCI reference, at most 512 ASCII bytes.
   string supplied_reference = 1;
@@ -188,9 +180,8 @@ message GithubAutomationInstallation {
   uint64 installation_id = 1;
   // setup_pull_request_number is present while an owned setup PR exists.
   optional uint64 setup_pull_request_number = 2;
-  // environment_workflow_path and assessment_workflow_path are normalized repository paths.
+  // environment_workflow_path is a normalized repository path.
   string environment_workflow_path = 3;
-  string assessment_workflow_path = 4;
 }
 
 message RuntimeProfileConfiguration {

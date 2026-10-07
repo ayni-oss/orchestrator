@@ -145,7 +145,6 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         request: Request<v1::CreateDevelopmentTaskRequest>,
     ) -> Result<Response<v1::CreateDevelopmentTaskResponse>, Status> {
         let context = self.context(&request, "CreateDevelopmentTask")?;
-        self.context(&request, "PublishCandidate")?;
         api_validation::create_development_task(request.get_ref())
             .map_err(|error| context.validation(&error))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
@@ -253,52 +252,22 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
         }))
     }
 
-    async fn list_candidates(
+    async fn retry_task_publication(
         &self,
-        request: Request<v1::ListCandidatesRequest>,
-    ) -> Result<Response<v1::ListCandidatesResponse>, Status> {
-        let context = self.context(&request, "ListCandidates")?;
-        let value = request.get_ref();
-        validate_optional_id(value.development_task_id.as_deref(), "development_task_id")
-            .and_then(|()| {
-                validate_optional_id(
-                    value.development_attempt_id.as_deref(),
-                    "development_attempt_id",
-                )
-            })
-            .and_then(|()| api_validation::page(value.page.as_ref()))
+        request: Request<v1::RetryTaskPublicationRequest>,
+    ) -> Result<Response<v1::RetryTaskPublicationResponse>, Status> {
+        let context = self.context(&request, "RetryTaskPublication")?;
+        api_validation::retry_task_publication(request.get_ref())
             .map_err(|error| context.validation(&error))?;
+        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
-        let page = with_store(&self.state, move |store| {
-            store.list_candidates(
-                message.development_task_id.as_deref(),
-                message.development_attempt_id.as_deref(),
-                message.page.as_ref(),
-            )
+        let attempt = with_store(&self.state, move |store| {
+            store.retry_task_publication(&key, &message)
         })
         .await
         .map_err(|error| context.store_error(&error))?;
-        Ok(context.response(v1::ListCandidatesResponse {
-            candidates: page.items.clone(),
-            page: Some(page_response(&page)),
-        }))
-    }
-
-    async fn get_candidate(
-        &self,
-        request: Request<v1::GetCandidateRequest>,
-    ) -> Result<Response<v1::GetCandidateResponse>, Status> {
-        let context = self.context(&request, "GetCandidate")?;
-        validate_id(&request.get_ref().candidate_id, "candidate_id")
-            .map_err(|error| context.validation(&error))?;
-        let message = request.into_inner();
-        let resource = with_store(&self.state, move |store| {
-            store.candidate(&message.candidate_id)
-        })
-        .await
-        .map_err(|error| context.store_error(&error))?;
-        Ok(context.response(v1::GetCandidateResponse {
-            candidate: Some(resource),
+        Ok(context.response(v1::RetryTaskPublicationResponse {
+            attempt: Some(attempt),
         }))
     }
 

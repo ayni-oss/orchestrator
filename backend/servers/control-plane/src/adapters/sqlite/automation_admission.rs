@@ -95,7 +95,6 @@ impl Repository for CleanStore {
                     installation_id: facts.installation_id,
                     setup_pull_request_number: None,
                     environment_workflow_path: plan.environment_workflow_path.clone(),
-                    assessment_workflow_path: plan.assessment_workflow_path.clone(),
                 },
             )),
             failure: None,

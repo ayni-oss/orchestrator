@@ -21,7 +21,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
-import { OciPlatform, PageRequest, PageResponse, ResourceFailure, VerifiedMetadata, WorkflowExecution } from "./common";
+import { OciPlatform, PageRequest, PageResponse, ResourceFailure, VerifiedMetadata } from "./common";
 
 /** RuntimeProfileKind is the closed set of product runtime profiles. */
 export enum RuntimeProfileKind {
@@ -356,7 +356,7 @@ export interface AyniManagedProfileRevision {
   runtimeSourceDigest?: string | undefined;
 }
 
-/** CustomRuntimeProfileRevision contains no Ayni lock, workflow, or assessment fields. */
+/** CustomRuntimeProfileRevision contains no Ayni lock or workflow fields. */
 export interface CustomRuntimeProfileRevision {
   /** image_reference is a supported external OCI repository reference of at most 512 ASCII bytes. */
   imageReference: string;
@@ -387,20 +387,10 @@ export interface RuntimeArtifact {
 
 /** RuntimeArtifactOrigin identifies how an artifact entered reconciliation. */
 export interface RuntimeArtifactOrigin {
-  origin?: { $case: "repositoryAutomation"; repositoryAutomation: AutomationArtifactOrigin } | {
-    $case: "external";
-    external: ExternalArtifactOrigin;
-  } | undefined;
+  origin?: { $case: "external"; external: ExternalArtifactOrigin } | undefined;
 }
 
-/** AutomationArtifactOrigin binds an artifact to trusted repository automation. */
-export interface AutomationArtifactOrigin {
-  automationInstallationId: string;
-  workflow?: WorkflowExecution | undefined;
-  repositorySnapshotId: string;
-}
-
-/** ExternalArtifactOrigin records provider-neutral discovery for Custom Runtime. */
+/** ExternalArtifactOrigin records provider-neutral OCI runtime discovery. */
 export interface ExternalArtifactOrigin {
   /** supplied_reference is the owner-supplied OCI reference, at most 512 ASCII bytes. */
   suppliedReference: string;
@@ -427,9 +417,8 @@ export interface GithubAutomationInstallation {
   setupPullRequestNumber?:
     | string
     | undefined;
-  /** environment_workflow_path and assessment_workflow_path are normalized repository paths. */
+  /** environment_workflow_path is a normalized repository path. */
   environmentWorkflowPath: string;
-  assessmentWorkflowPath: string;
 }
 
 export interface RuntimeProfileConfiguration {
@@ -1689,9 +1678,6 @@ function createBaseRuntimeArtifactOrigin(): RuntimeArtifactOrigin {
 export const RuntimeArtifactOrigin: MessageFns<RuntimeArtifactOrigin> = {
   encode(message: RuntimeArtifactOrigin, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     switch (message.origin?.$case) {
-      case "repositoryAutomation":
-        AutomationArtifactOrigin.encode(message.origin.repositoryAutomation, writer.uint32(10).fork()).join();
-        break;
       case "external":
         ExternalArtifactOrigin.encode(message.origin.external, writer.uint32(18).fork()).join();
         break;
@@ -1712,17 +1698,6 @@ export const RuntimeArtifactOrigin: MessageFns<RuntimeArtifactOrigin> = {
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.origin = {
-              $case: "repositoryAutomation",
-              repositoryAutomation: AutomationArtifactOrigin.decode(reader, reader.uint32()),
-            };
-            continue;
-          }
           case 2: {
             if (tag !== 18) {
               break;
@@ -1745,17 +1720,7 @@ export const RuntimeArtifactOrigin: MessageFns<RuntimeArtifactOrigin> = {
 
   fromJSON(object: any): RuntimeArtifactOrigin {
     return {
-      origin: isSet(object.repositoryAutomation)
-        ? {
-          $case: "repositoryAutomation",
-          repositoryAutomation: AutomationArtifactOrigin.fromJSON(object.repositoryAutomation),
-        }
-        : isSet(object.repository_automation)
-        ? {
-          $case: "repositoryAutomation",
-          repositoryAutomation: AutomationArtifactOrigin.fromJSON(object.repository_automation),
-        }
-        : isSet(object.external)
+      origin: isSet(object.external)
         ? { $case: "external", external: ExternalArtifactOrigin.fromJSON(object.external) }
         : undefined,
     };
@@ -1763,9 +1728,7 @@ export const RuntimeArtifactOrigin: MessageFns<RuntimeArtifactOrigin> = {
 
   toJSON(message: RuntimeArtifactOrigin): unknown {
     const obj: any = {};
-    if (message.origin?.$case === "repositoryAutomation") {
-      obj.repositoryAutomation = AutomationArtifactOrigin.toJSON(message.origin.repositoryAutomation);
-    } else if (message.origin?.$case === "external") {
+    if (message.origin?.$case === "external") {
       obj.external = ExternalArtifactOrigin.toJSON(message.origin.external);
     }
     return obj;
@@ -1777,15 +1740,6 @@ export const RuntimeArtifactOrigin: MessageFns<RuntimeArtifactOrigin> = {
   fromPartial(object: DeepPartial<RuntimeArtifactOrigin>): RuntimeArtifactOrigin {
     const message = createBaseRuntimeArtifactOrigin();
     switch (object.origin?.$case) {
-      case "repositoryAutomation": {
-        if (object.origin?.repositoryAutomation !== undefined && object.origin?.repositoryAutomation !== null) {
-          message.origin = {
-            $case: "repositoryAutomation",
-            repositoryAutomation: AutomationArtifactOrigin.fromPartial(object.origin.repositoryAutomation),
-          };
-        }
-        break;
-      }
       case "external": {
         if (object.origin?.external !== undefined && object.origin?.external !== null) {
           message.origin = { $case: "external", external: ExternalArtifactOrigin.fromPartial(object.origin.external) };
@@ -1793,117 +1747,6 @@ export const RuntimeArtifactOrigin: MessageFns<RuntimeArtifactOrigin> = {
         break;
       }
     }
-    return message;
-  },
-};
-
-function createBaseAutomationArtifactOrigin(): AutomationArtifactOrigin {
-  return { automationInstallationId: "", workflow: undefined, repositorySnapshotId: "" };
-}
-
-export const AutomationArtifactOrigin: MessageFns<AutomationArtifactOrigin> = {
-  encode(message: AutomationArtifactOrigin, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.automationInstallationId !== "") {
-      writer.uint32(10).string(message.automationInstallationId);
-    }
-    if (message.workflow !== undefined) {
-      WorkflowExecution.encode(message.workflow, writer.uint32(18).fork()).join();
-    }
-    if (message.repositorySnapshotId !== "") {
-      writer.uint32(26).string(message.repositorySnapshotId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): AutomationArtifactOrigin {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseAutomationArtifactOrigin();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.automationInstallationId = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.workflow = WorkflowExecution.decode(reader, reader.uint32());
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.repositorySnapshotId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): AutomationArtifactOrigin {
-    return {
-      automationInstallationId: isSet(object.automationInstallationId)
-        ? globalThis.String(object.automationInstallationId)
-        : isSet(object.automation_installation_id)
-        ? globalThis.String(object.automation_installation_id)
-        : "",
-      workflow: isSet(object.workflow) ? WorkflowExecution.fromJSON(object.workflow) : undefined,
-      repositorySnapshotId: isSet(object.repositorySnapshotId)
-        ? globalThis.String(object.repositorySnapshotId)
-        : isSet(object.repository_snapshot_id)
-        ? globalThis.String(object.repository_snapshot_id)
-        : "",
-    };
-  },
-
-  toJSON(message: AutomationArtifactOrigin): unknown {
-    const obj: any = {};
-    if (message.automationInstallationId !== "") {
-      obj.automationInstallationId = message.automationInstallationId;
-    }
-    if (message.workflow !== undefined) {
-      obj.workflow = WorkflowExecution.toJSON(message.workflow);
-    }
-    if (message.repositorySnapshotId !== "") {
-      obj.repositorySnapshotId = message.repositorySnapshotId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<AutomationArtifactOrigin>): AutomationArtifactOrigin {
-    return AutomationArtifactOrigin.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<AutomationArtifactOrigin>): AutomationArtifactOrigin {
-    const message = createBaseAutomationArtifactOrigin();
-    message.automationInstallationId = object.automationInstallationId ?? "";
-    message.workflow = (object.workflow !== undefined && object.workflow !== null)
-      ? WorkflowExecution.fromPartial(object.workflow)
-      : undefined;
-    message.repositorySnapshotId = object.repositorySnapshotId ?? "";
     return message;
   },
 };
@@ -2244,12 +2087,7 @@ export const AutomationInstallation: MessageFns<AutomationInstallation> = {
 };
 
 function createBaseGithubAutomationInstallation(): GithubAutomationInstallation {
-  return {
-    installationId: "0",
-    setupPullRequestNumber: undefined,
-    environmentWorkflowPath: "",
-    assessmentWorkflowPath: "",
-  };
+  return { installationId: "0", setupPullRequestNumber: undefined, environmentWorkflowPath: "" };
 }
 
 export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallation> = {
@@ -2262,9 +2100,6 @@ export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallati
     }
     if (message.environmentWorkflowPath !== "") {
       writer.uint32(26).string(message.environmentWorkflowPath);
-    }
-    if (message.assessmentWorkflowPath !== "") {
-      writer.uint32(34).string(message.assessmentWorkflowPath);
     }
     return writer;
   },
@@ -2306,14 +2141,6 @@ export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallati
             message.environmentWorkflowPath = reader.string();
             continue;
           }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.assessmentWorkflowPath = reader.string();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2343,11 +2170,6 @@ export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallati
         : isSet(object.environment_workflow_path)
         ? globalThis.String(object.environment_workflow_path)
         : "",
-      assessmentWorkflowPath: isSet(object.assessmentWorkflowPath)
-        ? globalThis.String(object.assessmentWorkflowPath)
-        : isSet(object.assessment_workflow_path)
-        ? globalThis.String(object.assessment_workflow_path)
-        : "",
     };
   },
 
@@ -2362,9 +2184,6 @@ export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallati
     if (message.environmentWorkflowPath !== "") {
       obj.environmentWorkflowPath = message.environmentWorkflowPath;
     }
-    if (message.assessmentWorkflowPath !== "") {
-      obj.assessmentWorkflowPath = message.assessmentWorkflowPath;
-    }
     return obj;
   },
 
@@ -2376,7 +2195,6 @@ export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallati
     message.installationId = object.installationId ?? "0";
     message.setupPullRequestNumber = object.setupPullRequestNumber ?? undefined;
     message.environmentWorkflowPath = object.environmentWorkflowPath ?? "";
-    message.assessmentWorkflowPath = object.assessmentWorkflowPath ?? "";
     return message;
   },
 };

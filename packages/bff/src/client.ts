@@ -10,16 +10,11 @@ import {
   ProjectServiceClient, ProjectState,
   type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
-  ReviewServiceClient,
   type InspectAyniRepositoryResponse, type GetRuntimeProfileRevisionResponse,
   type ListAutomationInstallationsResponse, type InstallRepositoryAutomationResponse,
-  type ReconcileRuntimeProfileResponse, type ListCandidatesResponse,
-  type ListDevelopmentAttemptsResponse, type PublishCandidateResponse,
+  type ReconcileRuntimeProfileResponse,
+  type ListDevelopmentAttemptsResponse, type RetryTaskPublicationResponse,
 
-  type ListChangeRequestsResponse,
-  type GetChangeRequestResponse,
-  type ListAssessmentsResponse,
-  type ListEvidenceReferencesResponse,
   ProviderServiceClient,
   RepositoryServiceClient,
   RuntimeProfileServiceClient,
@@ -41,8 +36,7 @@ import {
   type RetryDevelopmentTaskResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
-import { mapInspection, mapRevision, mapAutomation, mapCandidate, mapAttemptUsage } from "./onboarding.js";
-import { mapReview, mapAssessment, mapEvidence } from "./reviews.js";
+import { mapInspection, mapRevision, mapAutomation, mapAttemptUsage } from "./onboarding.js";
 import { randomUUID } from "node:crypto";
 import type {
   ProjectDto,
@@ -151,7 +145,6 @@ export class OrchestratorBff {
   readonly #profiles: RuntimeProfileServiceClient;
   readonly #providers: ProviderServiceClient;
   readonly #tasks: DevelopmentTaskServiceClient;
-  readonly #reviews: ReviewServiceClient;
 
   constructor(configuration: BffClientConfiguration = {}) {
     const address = configuration.address ?? "127.0.0.1:50051";
@@ -166,7 +159,6 @@ export class OrchestratorBff {
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
     this.#tasks = new DevelopmentTaskServiceClient(address, channelCredentials, options);
-    this.#reviews = new ReviewServiceClient(address, channelCredentials, options);
   }
 
   async listProjects(selection: PageInput, context: RequestContext, activeOnly = false) {
@@ -196,7 +188,6 @@ export class OrchestratorBff {
     this.#profiles.close();
     this.#providers.close();
     this.#tasks.close();
-    this.#reviews.close();
   }
 
 
@@ -234,34 +225,11 @@ export class OrchestratorBff {
   }
   async taskProgress(developmentTaskId:string, context:RequestContext) {
     const attempts=await this.#unary<ListDevelopmentAttemptsResponse>(context,(m,o,c)=>this.#tasks.listDevelopmentAttempts({developmentTaskId,page:page({pageSize:100})},m,o,c));
-    const candidates=await this.#unary<ListCandidatesResponse>(context,(m,o,c)=>this.#tasks.listCandidates({developmentTaskId,page:page({pageSize:100})},m,o,c));
-    const reviews=await Promise.all(candidates.candidates.map(candidate=>this.#unary<ListChangeRequestsResponse>(context,(m,o,c)=>this.#reviews.listChangeRequests({candidateId:candidate.id,page:page({pageSize:100})},m,o,c))));
-    return {attempts:attempts.attempts.map(a=>({...mapDevelopmentAttempt(a),usage:mapAttemptUsage(a)})), candidates:candidates.candidates.map(mapCandidate), reviews:reviews.flatMap(r=>r.changeRequests.map(mapReview))};
+    return { attempts: attempts.attempts.toSorted((a, b) => a.attemptNumber - b.attemptNumber).map(a => ({ ...mapDevelopmentAttempt(a), usage: mapAttemptUsage(a) })) };
   }
-  async publishCandidate(input: {candidateId:string;idempotencyKey:string;title:string;body:string;baseBranch:string},context:RequestContext) {
-    const response=await this.#unary<PublishCandidateResponse>(context,(m,o,c)=>this.#reviews.publishCandidate({...input,draft:true},m,o,c));
-    return mapReview(required(response.changeRequest));
-  }
-  async getReview(changeRequestId:string,context:RequestContext) {
-    const response=await this.#unary<GetChangeRequestResponse>(context,(m,o,c)=>this.#reviews.getChangeRequest({changeRequestId},m,o,c));
-    return mapReview(required(response.changeRequest));
-  }
-  async listReviews(selection: PageInput, context: RequestContext) {
-    const response = await this.#unary<ListChangeRequestsResponse>(context, (metadata, options, callback) =>
-      this.#reviews.listChangeRequests({ page: page(selection) }, metadata, options, callback));
-    return { reviews: response.changeRequests.map(mapReview), page: pageDto(response.page) };
-  }
-
-  async listAssessments(changeRequestId: string, selection: PageInput, context: RequestContext) {
-    const response = await this.#unary<ListAssessmentsResponse>(context, (metadata, options, callback) =>
-      this.#reviews.listAssessments({ changeRequestId, page: page(selection) }, metadata, options, callback));
-    return { assessments: response.assessments.map(mapAssessment), page: pageDto(response.page) };
-  }
-
-  async listEvidence(assessmentId: string, selection: PageInput, context: RequestContext) {
-    const response = await this.#unary<ListEvidenceReferencesResponse>(context, (metadata, options, callback) =>
-      this.#reviews.listEvidenceReferences({ assessmentId, page: page(selection) }, metadata, options, callback));
-    return { evidence: response.evidenceReferences.map(mapEvidence), page: pageDto(response.page) };
+  async retryTaskPublication(input: TaskActionInput, context: RequestContext): Promise<DevelopmentAttemptDto> {
+    const response = await this.#unary<RetryTaskPublicationResponse>(context, (m, o, c) => this.#tasks.retryTaskPublication(input, m, o, c));
+    return mapDevelopmentAttempt(required(response.attempt));
   }
 
   async listRepositoryConnections(selection: PageInput, context: RequestContext): Promise<RepositoryConnectionPageDto> {
@@ -408,8 +376,6 @@ export class OrchestratorBff {
               return onUpdate({ kind: "development_task", cursor: response.cursor, developmentTask: mapDevelopmentTask(update.developmentTask) });
             case "attempt":
               return onUpdate({ kind: "attempt", cursor: response.cursor, attempt: mapDevelopmentAttempt(update.attempt) });
-            case "candidate":
-              return onUpdate({ kind: "candidate", cursor: response.cursor, candidateId: update.candidate.id });
           }
         }).then(() => stream.resume()).catch((error: unknown) => { stream.cancel(); finish(error); });
       });

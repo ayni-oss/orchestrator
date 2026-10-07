@@ -8,7 +8,7 @@ export const load: PageServerLoad=async({locals,params,setHeaders})=>{
   try {
     const context=requestContext(locals);
     const profile=await getBff().getRuntimeProfile(params.profileId,context);
-    const [repository,revision,artifacts,automation]=await Promise.all([
+    const [repository,revision,artifacts]=await Promise.all([
       getBff().getRepositoryConnection(profile.repositoryConnectionId,context),
       profile.activeRevisionId ? getBff().getRuntimeRevision(profile.activeRevisionId,context) : undefined,
       getBff().listRuntimeArtifacts(profile.id,{pageSize:100},context),

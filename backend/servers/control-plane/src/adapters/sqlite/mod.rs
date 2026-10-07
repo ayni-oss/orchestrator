@@ -24,13 +24,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 4;
+pub(crate) const SCHEMA_VERSION: i64 = 5;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -39,20 +39,15 @@ const MAX_PAGE_SNAPSHOT_ITEMS: usize = 10_000;
 const MAX_PAGE_SNAPSHOT_BYTES: usize = 8 * 1_024 * 1_024;
 const MAX_PAGE_RESPONSE_BYTES: usize = 3 * 1_024 * 1_024;
 const MAX_EVENTS_PER_SERVICE: usize = 4_096;
-const MAX_EVIDENCE_SIZE_BYTES: u64 = 64 * 1_024 * 1_024;
 const MAX_RECONCILE_BATCH: usize = 128;
 const MAX_PENDING_ACTION_BATCH: usize = 256;
 const CLEAN_TABLES: &[&str] = &[
-    "assessments",
     "automation_installations",
-    "candidates",
-    "change_requests",
     "clean_schema",
     "development_attempts",
     "development_tasks",
     "durable_actions",
     "event_watermarks",
-    "evidence_references",
     "page_snapshots",
     "project_repositories",
     "projects",
@@ -70,7 +65,6 @@ pub(crate) const PROJECT_SERVICE: &str = "projects";
 pub(crate) const REPOSITORY_SERVICE: &str = "repositories";
 pub(crate) const PROFILE_SERVICE: &str = "runtime_profiles";
 pub(crate) const DEVELOPMENT_SERVICE: &str = "development_tasks";
-pub(crate) const REVIEW_SERVICE: &str = "reviews";
 
 #[derive(Debug, Error)]
 pub enum CleanStoreError {
@@ -166,39 +160,34 @@ struct PageToken {
 pub(crate) struct CleanStore {
     connection: Connection,
     max_attempts: u32,
-    path: Option<PathBuf>,
+    coding_turns: u32,
+    quality_repair_limit: u32,
 }
 
-mod assessment_import;
 mod automation_tasks;
+mod onboarding;
 mod profile_identity;
 mod projects;
-mod readiness;
 mod repository_connections;
-mod review;
 mod runtime_profiles;
 mod store;
 pub(crate) mod task_admission;
-pub(crate) use readiness::readiness_key;
-mod onboarding;
 mod validation;
 use validation::{
-    collect_bounded_payloads, get_payload, persist_attempt_update, persist_change_request_update,
-    persist_task_update, query_payloads, valid_version_and_cursor, validate_durable_actions,
-    validate_indexed_rows, validate_page_snapshot_rows, validate_resource_events,
-    validate_resource_tables,
+    collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
+    query_payloads, valid_version_and_cursor, validate_durable_actions, validate_indexed_rows,
+    validate_page_snapshot_rows, validate_resource_events, validate_resource_tables,
 };
 mod transitions_schema;
 use transitions_schema::{
     action_row, decode, initialize_schema, is_terminal_attempt, map_constraint, resource_id,
     task_state_for_attempt, timestamp, unix_seconds, unix_timestamp, valid_attempt_transition,
-    valid_change_request_transition, valid_profile_transition, valid_repository_transition,
+    valid_profile_transition, valid_repository_transition,
 };
 mod payloads;
 use payloads::{
     bounded_failure, equivalent_failure, safe_metadata, same_artifact_report,
-    same_candidate_report, truncate_utf8, valid_artifact_report, valid_assessment_report,
-    valid_candidate_report, valid_evidence_report, valid_git_revision, valid_model_usage,
+    valid_artifact_report, valid_git_revision, valid_model_usage,
 };
 mod pagination_events;
 use pagination_events::{
@@ -352,10 +341,6 @@ mod tests {
             github.environment_workflow_path,
             crate::profiles::ayni::onboarding_templates::ENVIRONMENT_WORKFLOW_PATH
         );
-        assert_eq!(
-            github.assessment_workflow_path,
-            ".github/workflows/ayni-managed-assessment.yml"
-        );
         Ok(())
     }
 
@@ -370,7 +355,6 @@ mod tests {
             idempotency_key: key.to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
                 project_id,
-                publish_draft: false,
                 repository_connection_id: repository_id.to_owned(),
                 repository_revision: REVISION.to_owned(),
                 runtime_profile_id: profile_id.to_owned(),
@@ -393,7 +377,6 @@ mod tests {
     mod lifecycle;
     mod projects;
     mod recovery;
-    mod reviews;
     mod runtime;
 }
 
@@ -406,10 +389,6 @@ pub(crate) use transitions_schema::request_digest;
 
 pub(crate) mod database;
 pub(crate) mod task_cancellation;
-
-pub(crate) mod readiness_codec;
-
-pub(crate) mod publication;
 
 pub(crate) mod runtime_activation;
 

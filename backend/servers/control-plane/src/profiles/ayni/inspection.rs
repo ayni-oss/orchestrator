@@ -1,5 +1,5 @@
 //! Managed onboarding observations, distinct from certificate verification.
-use ayni_orchestrator_domain::digest as assessment;
+use ayni_orchestrator_domain::digest;
 use ayni_orchestrator_profile_ayni::ayni_release;
 #[derive(Default)]
 pub struct LockInspection {
@@ -15,7 +15,7 @@ pub fn inspect_lock(bytes: &[u8], policy_present: bool) -> LockInspection {
         return result;
     };
     let fingerprint = lock["fingerprint"].as_str().unwrap_or("");
-    result.lock_compatible = assessment::digest(fingerprint)
+    result.lock_compatible = digest::digest(fingerprint)
         && lock["ayni_version"] == ayni_release::CLI_VERSION
         && lock["schema_version"] == "0.9.0";
     if result.lock_compatible {
@@ -24,7 +24,7 @@ pub fn inspect_lock(bytes: &[u8], policy_present: bool) -> LockInspection {
     // This is a pinned-policy observation, never certificate verification.
     result.trust_policy_pinned = lock["certificate_trust_policy"]["fingerprint"]
         .as_str()
-        .is_some_and(|p| assessment::digest(p) && p != assessment::sha256(b"{}"));
+        .is_some_and(|p| digest::digest(p) && p != digest::sha256(b"{}"));
     result.reason = if !policy_present {
         "policy_missing"
     } else if !result.lock_compatible {

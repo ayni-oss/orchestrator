@@ -14,7 +14,7 @@ dev_check_observability() (
   readonly grafana_port="${AYNI_ORCHESTRATOR_GRAFANA_PORT:-13000}"
   readonly prometheus_log="$(mktemp /tmp/ayni-orchestrator-prometheus-port-forward.XXXXXX)"
   readonly grafana_log="$(mktemp /tmp/ayni-orchestrator-grafana-port-forward.XXXXXX)"
-  readonly curl_options=(--connect-timeout 2 --max-time 5 --fail --silent --show-error)
+  readonly curl_options=(--connect-timeout 2 --max-time 15 --fail --silent --show-error)
 
   kubectl --context "$context" --namespace "$namespace" port-forward \
     service/prometheus "$prometheus_port:9090" \
@@ -38,8 +38,10 @@ dev_check_observability() (
   [[ "$(kubectl --context "$context" auth can-i get secrets --namespace "$namespace" \
     --as="system:serviceaccount:$namespace:prometheus" 2>/dev/null || true)" == "no" ]]
 
+  observability_stage="monitoring readiness"
   query_has_result() {
     local query="$1"
+    observability_stage="Prometheus query: $query"
     local response
     response="$(curl --get "${curl_options[@]}" \
       --data-urlencode "query=$query" \
@@ -48,6 +50,7 @@ dev_check_observability() (
   }
 
   check_once() {
+    observability_stage="Prometheus readiness"
     curl "${curl_options[@]}" \
       "http://127.0.0.1:$prometheus_port/-/ready" >/dev/null || return 1
     for job in \
@@ -58,13 +61,15 @@ dev_check_observability() (
       ayni-orchestrator-kubelet-volumes; do
       query_has_result "up{job=\"$job\"} == 1" || return 1
     done
-    query_has_result 'orchestrator_clean_v1_schema_info{version="4"} == 1' || return 1
+    query_has_result 'orchestrator_clean_v1_schema_info{version="5"} == 1' || return 1
     query_has_result "kube_pod_info{namespace=\"$namespace\"}" || return 1
     query_has_result "container_cpu_usage_seconds_total{namespace=\"$namespace\"}" || return 1
     query_has_result "kubelet_volume_stats_used_bytes{namespace=\"$namespace\"} or container_fs_usage_bytes{job=\"ayni-orchestrator-node-storage\",id=\"/\"}" || return 1
+    observability_stage="Grafana health"
     grafana_health="$(curl "${curl_options[@]}" \
       "http://127.0.0.1:$grafana_port/api/health")" || return 1
     grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"' <<<"$grafana_health" || return 1
+    observability_stage="Grafana provisioned dashboard"
     dashboard="$(curl "${curl_options[@]}" \
       "http://127.0.0.1:$grafana_port/api/dashboards/uid/ayni-orchestrator-tasks-resources")" || return 1
     grep -Fq '"uid":"ayni-orchestrator-tasks-resources"' <<<"$dashboard" || return 1
@@ -78,6 +83,7 @@ dev_check_observability() (
     sleep 2
   done
 
+  printf 'observability smoke check failed at: %s\n' "$observability_stage" >&2
   cat "$prometheus_log" >&2
   cat "$grafana_log" >&2
   exit 1
@@ -131,28 +137,31 @@ curl_local() {
   curl --connect-timeout 2 --max-time 10 --fail --silent --show-error "$@"
 }
 
+check_stage="service readiness"
 check_once() {
+  check_stage="service readiness and schema"
   curl_local "http://127.0.0.1:$operations_port/livez" >/dev/null || return 1
   readiness="$(curl_local --dump-header "$response_headers" \
     -H 'x-request-id: local-readiness-check' \
     "http://127.0.0.1:$operations_port/readyz" 2>/dev/null)" || return 1
   grep -qi '^x-request-id: local-readiness-check' "$response_headers" || return 1
   grep -q '"clean_v1_contract":true' <<<"$readiness" || return 1
-  grep -q '"clean_schema_version":4' <<<"$readiness" || return 1
+  grep -q '"clean_schema_version":5' <<<"$readiness" || return 1
   metrics="$(curl_local "http://127.0.0.1:$operations_port/metrics")" || return 1
-  grep -q 'orchestrator_clean_v1_schema_info{version="4"} 1' <<<"$metrics" || return 1
+  grep -q 'orchestrator_clean_v1_schema_info{version="5"} 1' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_admissions_total' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_completions_total' <<<"$metrics" || return 1
 
+  check_stage="web health and task page"
   curl_local "http://127.0.0.1:$web_port/healthz" | grep -q '"component":"web"' || return 1
   web_html="$(curl_local --dump-header "$response_headers" \
-    -H 'x-request-id: local-web-check' "http://127.0.0.1:$web_port/")" || return 1
+    -H 'x-request-id: local-web-check' "http://127.0.0.1:$web_port/tasks")" || return 1
   grep -qi '^x-request-id: local-web-check' "$response_headers" || return 1
   grep -Eqi '^content-security-policy: .*script-src[^;]*nonce-' "$response_headers" || return 1
   grep -Eq '<script[^>]+nonce=' <<<"$web_html" || return 1
   grep -q 'data-bff-status="connected"' <<<"$web_html" || return 1
-  grep -q 'data-grpc-provider="openai"' <<<"$web_html" || return 1
-  grep -q 'Development control plane' <<<"$web_html" || return 1
+  grep -q 'Development tasks' <<<"$web_html" || return 1
+  check_stage="operations endpoint isolation"
   unsupported_root_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error \
     --output /dev/null --write-out '%{http_code}' \
     "http://127.0.0.1:$operations_port/")" || return 1
@@ -162,6 +171,7 @@ check_once() {
   [[ "$unsupported_root_status" == "404" ]] || return 1
   [[ "$unsupported_product_status" == "404" ]] || return 1
 
+  check_stage="native gRPC services and model catalog"
   grpc_services="$(grpcurl -plaintext -max-time 5 "127.0.0.1:$grpc_port" list)" || return 1
   grep -q '^ayni.orchestrator.v1.RepositoryService$' <<<"$grpc_services" || return 1
   grep -q '^ayni.orchestrator.v1.ProviderService$' <<<"$grpc_services" || return 1
@@ -174,6 +184,7 @@ check_once() {
     "127.0.0.1:$grpc_port" ayni.orchestrator.v1.ProviderService/ListProviderModels)" || return 1
   grep -q '"provider": "openai"' <<<"$grpc_models" || return 1
 
+  check_stage="empty application resources"
   if [[ "$expect_empty" == true ]]; then
     local response
     response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
@@ -185,9 +196,6 @@ check_once() {
     response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
       ayni.orchestrator.v1.DevelopmentTaskService/ListDevelopmentTasks)" || return 1
     ! grep -q 'developmentTasks' <<<"$response" || return 1
-    response="$(grpcurl -plaintext -max-time 5 -d '{}' "127.0.0.1:$grpc_port" \
-      ayni.orchestrator.v1.ReviewService/ListChangeRequests)" || return 1
-    ! grep -q 'changeRequests' <<<"$response" || return 1
     local control_plane_logs
     control_plane_logs="$(kubectl --context "$context" --namespace "$namespace" \
       logs deployment/control-plane --since=10m 2>&1)" || return 1
@@ -207,5 +215,6 @@ for _ in {1..30}; do
   sleep 1
 done
 
+printf 'local smoke check failed at: %s\n' "$check_stage" >&2
 cat "$web_forward_log" "$operations_forward_log" "$grpc_forward_log" >&2
 exit 1

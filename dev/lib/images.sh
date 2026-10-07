@@ -18,9 +18,9 @@ dev_build_image() {
   fi
   build_image_ref="${requested_image_ref:-local/ayni-orchestrator-$component:build-git-${revision}-$$}"
 
-  # The mounted worker executable must match the generated managed runtime.
-  if [[ "$component" == worker ]]; then set -- --platform linux/amd64; else set --; fi
-  docker build "$@" \
+  # The worker launcher must use the node architecture so mandatory kernel
+  # sandbox syscalls execute natively. Managed tools may still be emulated.
+  docker build \
     --file "$dockerfile" \
     --label "org.opencontainers.image.revision=$(git -C "$DEV_REPOSITORY_ROOT" rev-parse HEAD)" \
     --label "org.opencontainers.image.source.dirty=$source_dirty" \
@@ -53,7 +53,7 @@ dev_load_image() {
     return 1
   fi
   # Export the concrete manifest, not an index selected using the node's CPU.
-  # The AMD64 worker intentionally runs under emulation on Apple Silicon.
+  # Managed runtimes may use a different CPU architecture from the native launcher.
   platform="$(docker image inspect "$image_ref" --format '{{.Os}}/{{.Architecture}}')"
   docker save --platform "$platform" "$image_ref" \
     | docker exec -i "$node_id" ctr --namespace k8s.io images import --platform "$platform" - >&2

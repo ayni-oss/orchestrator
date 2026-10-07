@@ -1,63 +1,32 @@
 # Ayni Orchestrator
 
-Ayni Orchestrator is a private development-workflow control plane that produces
-reviewable repository changes on controlled infrastructure. Its pre-public v1
-is being replaced by one shared foundation with **Ayni Managed** and **Custom
-Runtime** runtime profiles. Ayni Managed is the implemented execution path;
-Custom Runtime remains a follow-up. The agreed product journey is
-**Connectors → Projects → Tasks**, defined in
-[Decision 0009](docs/decisions/0009-connectors-projects-and-internal-assessments.md),
-which retains the shared runtime foundations from
-[Decision 0007](docs/decisions/0007-clean-v1-runtime-profiles.md).
+Ayni Orchestrator is a private control plane for worker-owned development tasks.
+Connectors manage access, projects organize repositories, and tasks freeze
+source, runtime digest, model, constraints, coding turns, repair limit and
+deadline. Ayni remains independently useful as a local CLI.
 
-The implementation still includes repository-first onboarding and Actions
-assessment collection. The accepted replacement flows are tracked by
-[the product epic](https://github.com/ayni-oss/orchestrator/issues/90); see the
-[architecture](docs/architecture.md) for current ownership and remaining gaps.
-This repository remains private; Ayni is independently useful as a local CLI in the public
-[`ayni-oss/ayni`](https://github.com/ayni-oss/ayni) repository.
-
-## Target product
-
-The project foundation provides named projects with shared, editable repository
-membership, project-owned tasks targeting one selected repository, archive
-history, and admission checks. Projects is the landing page; Configuration owns
-connector setup. [Decision 0011](docs/decisions/0011-project-centered-ui-and-onboarding.md)
-defines the updated onboarding and UI direction. Connector management, project readiness, internal environment
-production, and internal candidate assessment remain follow-up work tracked by
-[the product epic](https://github.com/ayni-oss/orchestrator/issues/90).
-
-Connectors manage access. Projects own repository readiness and environments.
-Tasks develop and verify work. Both runtime profiles share admission, attempts,
-candidates, cancellation, evidence binding, publication and reconciliation.
-Ayni Managed adds certified environments and Ayni assessment policy; Custom
-Runtime supplies a supported container without mandatory Ayni metadata.
-
-A task freezes repository/source, profile revision, verified OCI digest and
-execution limits. Ayni runs during development as feedback. A separate internal
-Job verifies each final candidate commit before publication, with at most three
-repair cycles. Drafts preserve valid work with its actual assessment outcome.
-Evidence stays outside candidate-writable storage and binds the precise commit
-and execution. GitHub Actions are not the target assessment authority.
+One worker attests its runtime, checks out source, codes and makes coherent
+commits, runs mandatory full quality checks with bounded repairs, freezes final
+evidence and publishes a truthful draft. The control plane admits, schedules,
+supplies credentials, observes progress, collects results and cleans up.
+Execution, quality and publication are separate outcomes. A draft with failed
+quality is completed delivery with failed quality. Publication retry resumes
+retained final work without another coding session.
 
 ## Documentation
 
-| Document | Purpose |
-| --- | --- |
-| [Connectors, projects and internal assessments](docs/decisions/0009-connectors-projects-and-internal-assessments.md) | Accepted product journey, ownership, credential and assessment boundaries |
-| [Clean-v1 runtime-profile decision](docs/decisions/0007-clean-v1-runtime-profiles.md) | Normative names, ownership, identity, lifecycle, trust, recovery, and issue map |
-| [Architecture](docs/architecture.md) | Interface ownership, shared orchestration, runtime profiles, and implementation boundaries |
-| [Interface boundaries](docs/decisions/0010-orchestration-interface-boundaries.md) | Dependency direction and incremental application extraction |
-| [Protocol contract](proto/README.md) | Target clean-v1 gRPC resources and compatibility reset |
-| [Local development](docs/local-development.md) | Target Docker Desktop workflow and validation boundary |
-| [Operator UI and Kubernetes onboarding](docs/operator-onboarding.md) | Existing App, setup PR, signed environment, request and draft PR flow |
-| [Operations](docs/operations.md) | Target readiness, recovery, retention, and evidence operations |
-| [Roadmap](ROADMAP.md) | Linked delivery issues and follow-ups |
-| [Local Helm deployment decision](docs/decisions/0006-local-helm-chart.md) | Existing local chart/deployment boundary; worker details are historical until revised |
-| [Ayni 0.14 integration contract](docs/ayni-0.14-integration.md) | Released launcher, certification, and assessment-evidence boundaries |
-| [Managed runtime execution](docs/managed-runtime-execution.md) | Helm-managed ServiceAccounts, registry/build sources, coding, and publication |
-| [Managed PR assessments](docs/managed-pr-assessments.md) | Trusted Actions collection, immutable assessments, summaries, and readiness policy |
-| [Custom-client gRPC access](docs/custom-client-access.md) | Private endpoint boundary; not public hosting authorization |
+- [Architecture](docs/architecture.md)
+- [Protocol contract](proto/README.md)
+- [Runtime worker](docs/runtime-runner.md)
+- [Managed runtime execution](docs/managed-runtime-execution.md)
+- [Operator onboarding](docs/operator-onboarding.md)
+- [Operations and breaking cutover](docs/operations.md)
+- [Local development](docs/local-development.md)
+- [Ayni integration contract](docs/ayni-0.14-integration.md)
+- [Custom-client access](docs/custom-client-access.md)
+
+Historical decisions remain as provenance. Descriptions of superseded task
+execution in those decisions do not define the active implementation.
 
 ## Planning and delivery
 

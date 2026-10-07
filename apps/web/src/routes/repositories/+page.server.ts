@@ -1,3 +1,4 @@
+import type { RuntimeProfileDto } from "@ayni-orchestrator/bff/server";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
@@ -28,7 +29,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
     const repositories = installation ? await bff.listGithubInstallationRepositories(installation.installationId, context) : [];
     return {
       repositoryConnections: result.repositoryConnections,
-      runtimeProfiles: Object.fromEntries(runtimeProfiles),
+      runtimeProfiles: Object.fromEntries(runtimeProfiles) as Record<string, RuntimeProfileDto[]>,
       nextPageToken: result.page.nextPageToken || undefined,
       installations,
       selectedInstallationId: installation?.installationId ?? "",
@@ -38,7 +39,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { repositoryConnections: [], runtimeProfiles: {}, installations: [], selectedInstallationId: "", repositories: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, installations: [], selectedInstallationId: "", repositories: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 

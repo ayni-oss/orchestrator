@@ -5,6 +5,8 @@ use crate::{
 use ayni_orchestrator_api::{v1, validation};
 use std::sync::Arc;
 mod error;
+mod setup;
+use crate::profiles::ayni::onboarding_templates;
 pub use error::{FailureKind, OnboardingError};
 
 pub fn provider_error(reason: &'static str) -> OnboardingError {
@@ -188,7 +190,7 @@ impl AppState {
                 repository_connection_id = connection.id,
                 ?error,
                 "automatic runtime profile enrollment deferred"
-            )
+            );
         });
     }
 
@@ -265,5 +267,12 @@ impl AppState {
     /// Repository connections are inspected at creation time and runtime
     /// reconciliation owns all later registry/build work. It never mutates a
     /// connected repository.
-    pub async fn reconcile_onboarding(&self) {}
+    pub async fn reconcile_onboarding(&self) {
+        if let Err(reason) = self.reconcile_setup_actions().await {
+            tracing::warn!(
+                reason_code = reason,
+                "repository setup reconciliation deferred"
+            );
+        }
+    }
 }

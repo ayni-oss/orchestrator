@@ -158,8 +158,18 @@ impl TaskRepository for CleanStore {
                 protected_paths: c.protected_paths,
                 allow_test_edits: c.allow_test_edits,
             }),
-            deadline_at: frozen.deadline_at.map(to_wire_time),
-            publish_draft: true,
+            deadline_at: frozen
+                .deadline_at
+                .map(to_wire_time)
+                .or_else(|| Some(timestamp(now + 3600))),
+            limits: Some(v1::WorkerLimits {
+                coding_turns: self.coding_turns,
+                quality_repair_limit: self.quality_repair_limit,
+                deadline_at: frozen
+                    .deadline_at
+                    .map(to_wire_time)
+                    .or_else(|| Some(timestamp(now + 3600))),
+            }),
             publication_base_branch: frozen.base_branch,
         };
         let task_id = resource_id("task");
@@ -193,6 +203,10 @@ impl TaskRepository for CleanStore {
             updated_at: Some(timestamp(now)),
             completed_at: None,
             resource_version: 1,
+            progress: None,
+            result: None,
+            pull_request: None,
+            publication_only: false,
         };
         let transaction = self
             .connection

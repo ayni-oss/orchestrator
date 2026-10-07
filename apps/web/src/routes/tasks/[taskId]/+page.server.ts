@@ -8,7 +8,7 @@ const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 
 export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
   setHeaders({ "cache-control": "no-store" });
-  const actionKeys = { cancel: actionKey(), retry: actionKey() };
+  const actionKeys = { cancel: actionKey(), retry: actionKey(), retryPublication: actionKey() };
   if (!RESOURCE_ID.test(params.taskId)) return { task: undefined, requestId: locals.requestId, actionKeys, error: { status: 400, reason: "invalid_identifier", message: "The task identifier is invalid.", requestId: locals.requestId, retryable: false } };
   try {
     const task = await getBff().getDevelopmentTask(params.taskId, requestContext(locals));
@@ -24,6 +24,18 @@ function validMutation(taskId: string, key: string | undefined): key is string {
 }
 
 export const actions: Actions = {
+  retryPublication: async ({ locals, params, request }) => {
+    const form = await request.formData();
+    const idempotencyKey = text(form, "idempotencyKey", 36);
+    if (!validMutation(params.taskId, idempotencyKey)) return fail(400, { action: "retryPublication", error: { status: 400, reason: "invalid_identifier", message: "The task identifier is invalid.", requestId: locals.requestId, retryable: false } });
+    try {
+      await getBff().retryTaskPublication({ idempotencyKey, developmentTaskId: params.taskId }, requestContext(locals));
+    } catch (error) {
+      const mapped = safeError(error, locals.requestId);
+      return fail(mapped.status, { action: "retryPublication", error: mapped });
+    }
+    redirect(303, `/tasks/${encodeURIComponent(params.taskId)}?notice=publication-retried`);
+  },
   cancel: async ({ locals, params, request }) => {
     const form = await request.formData();
     const idempotencyKey = text(form, "idempotencyKey", 36);

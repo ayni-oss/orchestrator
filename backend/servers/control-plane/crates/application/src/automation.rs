@@ -17,7 +17,6 @@ pub struct Facts {
 pub struct Plan {
     pub version: String,
     pub environment_workflow_path: String,
-    pub assessment_workflow_path: String,
 }
 pub trait Policy {
     type Error: std::error::Error;

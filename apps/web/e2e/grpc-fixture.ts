@@ -3,10 +3,7 @@ import { Server, ServerCredentials, type UntypedServiceImplementation } from "@g
 import {
   ProjectServiceService, ProjectState,
   DevelopmentAttemptState,
-  ReviewServiceService,
   AutomationInstallationState,
-  CandidateState,
-  ChangeRequestState,
   DevelopmentTaskServiceService,
   DevelopmentTaskState,
   ModelUsageCollectionStatus,
@@ -56,6 +53,7 @@ const profile: any = {
 
 function snapshot(request = "Correct the bounded retry formula", sourceRevision = revision, model = "gpt-5"): any {
   return {
+    limits: {codingTurns:24,qualityRepairLimit:3},
     repository: { repositoryConnectionId: repositoryId, repositorySnapshotId: "snapshot:1", revision: sourceRevision },
     runtime: {
       runtimeProfileId: profileId,
@@ -90,6 +88,8 @@ function task(id = taskId, state = DevelopmentTaskState.DEVELOPMENT_TASK_STATE_R
 
 const tasks = new Map<string, any>();
 tasks.set(taskId, task());
+tasks.set("00000000-0000-4000-8000-000000000044", task("00000000-0000-4000-8000-000000000044", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_FAILED, "Retained final work awaiting publication"));
+const publicationRetries = new Set<string>();
 tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
 
 const page = { nextPageToken: "", snapshotCursor: "10" };
@@ -114,7 +114,7 @@ let profileEnrolled = true;
 const runtimeProfileService: UntypedServiceImplementation = {
   inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator",workflows:[{path:".github/workflows/ayni-environment.yml",contents:"name: Build signed environment"}]});},
   createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profile});},
-  installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml",assessmentWorkflowPath:".github/workflows/ayni-managed-assessment.yml",triggerWorkflowPath:".github/workflows/ayni-assessment-request.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
+  installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
   reconcileRuntimeProfile(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profile});},
 
   getRuntimeProfileRevision(_call,callback) { callback(null,{revision:{id:"profile-revision:1",runtimeProfileId:profileId,repositoryRevision:revision,repositorySnapshotId:"snapshot:1",revisionNumber:"1",resourceVersion:"1",configuration:{$case:"ayniManaged",ayniManaged:{lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni"}}}}); },
@@ -133,8 +133,12 @@ const providerService: UntypedServiceImplementation = {
 };
 
 const taskService: UntypedServiceImplementation = {
-  listDevelopmentAttempts(_call,callback) { callback(null,{attempts:[],page}); },
-  listCandidates(call,callback) { const t=tasks.get(call.request.developmentTaskId); callback(null,{candidates:t?.snapshot.publishDraft ? [{id:"candidate:1",repositoryConnectionId:repositoryId,resourceVersion:"1",changedPaths:[],developmentAttemptId:"attempt:1",state:CandidateState.CANDIDATE_STATE_AVAILABLE,baseRevision:revision,identity:{identity:{$case:"git",git:{commitSha:"d".repeat(40)}}},validation:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[]}}] : [],page}); },
+  listDevelopmentAttempts(call, callback) {
+    const t = tasks.get(call.request.developmentTaskId);
+    const publicationFailed = t?.id.endsWith("0044");
+    callback(null, { attempts: t ? [{publicationOnly:publicationRetries.has(t.id), id: `attempt:${t.id}`, developmentTaskId:t.id, attemptNumber:1, snapshot:t.snapshot, state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED, agentActivity:[], progress:{phase:8,codingTurnsConsumed:5,qualityRound:2,publication:3}, result:{execution:1,commit:"d".repeat(40),changedPaths:["src/main.rs"],quality:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[{kind:"test",passed:false}],findings:["Repair the failing test"],evidence:{artifactPath:".ayni/last/signals.json",signalsDigest:"e".repeat(64),sourceFingerprint:"f".repeat(64),commit:"d".repeat(40)}},publication:publicationFailed ? 4 : 3,codingTurnsConsumed:5,qualityRound:2,pullRequest:publicationFailed ? undefined : {repository:"ayni-oss/sandbox",number:"9",url:"https://github.com/ayni-oss/sandbox/pull/9",branch:"task/example",baseBranch:"main",headCommit:"d".repeat(40),draft:true}},createdAt:now,updatedAt:now,resourceVersion:"1"}] : [], page});
+  },
+  retryTaskPublication(call, callback) { const t=tasks.get(call.request.developmentTaskId); publicationRetries.add(t.id); callback(null,{attempt:{id:"publication:retry",developmentTaskId:t.id,attemptNumber:2,snapshot:t.snapshot,state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_QUEUED,agentActivity:[],publicationOnly:true,createdAt:now,updatedAt:now,resourceVersion:"2"}}); },
 
   listDevelopmentTasks(call, callback) { callback(null, { developmentTasks: [...tasks.values()].filter(task=>!call.request.projectId || task.projectId===call.request.projectId), page }); },
   getDevelopmentTask(call, callback) { callback(null, { developmentTask: tasks.get(call.request.developmentTaskId) ?? tasks.get(taskId) }); },
@@ -144,7 +148,7 @@ const taskService: UntypedServiceImplementation = {
     const created = task(id, DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED, request.request);
     created.snapshot = {
       ...snapshot(request.request, request.repositoryRevision, request.agent.model),
-      publishDraft:request.publishDraft,
+      limits:{codingTurns:24,qualityRepairLimit:3},
       publicationBaseBranch:"main",
       agent: request.agent,
       acceptanceCriteria: request.acceptanceCriteria,
@@ -176,7 +180,6 @@ const taskService: UntypedServiceImplementation = {
 };
 
 const grpc = new Server();
-grpc.addService(ReviewServiceService, {listChangeRequests(_call:any,callback:any){callback(null,{changeRequests:[{id:"review:1",resourceVersion:"1",candidateId:"candidate:1",repositoryConnectionId:repositoryId,headRevision:"d".repeat(40),baseRevision:revision,state:ChangeRequestState.CHANGE_REQUEST_STATE_DRAFT,provider:{provider:{$case:"github",github:{repositoryId:"123",pullRequestNumber:"9",htmlUrl:"https://github.com/ayni-oss/sandbox/pull/9"}}}}],page});}});
 grpc.addService(ProjectServiceService, {
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
   getProject(_call:any,callback:any){callback(null,{project});},

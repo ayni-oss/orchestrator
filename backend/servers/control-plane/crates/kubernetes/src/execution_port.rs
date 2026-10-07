@@ -3,7 +3,7 @@ use crate::execution::RuntimeKubernetes;
 use ayni_orchestrator_application::execution::{
     ExecutionBackend, ExecutionError, ExecutionResult, ExecutionState, Observation, WorkloadRuntime,
 };
-use ayni_orchestrator_runtime::{coding::CodingRequest, runtime_execution::ExecutionRequest};
+use ayni_orchestrator_runtime::{coding::WorkerSpec, runtime_execution::ExecutionRequest};
 use serde::Serialize;
 
 impl ExecutionBackend for RuntimeKubernetes {
@@ -33,12 +33,17 @@ impl ExecutionBackend for RuntimeKubernetes {
         &self,
         name: &str,
         runtime: &WorkloadRuntime,
-        request: &CodingRequest<P>,
+        request: &WorkerSpec<P>,
         token: &str,
         image: &str,
         deadline: u32,
     ) -> ExecutionResult<()> {
         self.start_coding(name, runtime, request, token, image, deadline)
+            .await
+            .map_err(ExecutionError::from)
+    }
+    async fn refresh_credentials(&self, name: &str, token: &str) -> ExecutionResult<()> {
+        self.refresh_credentials(name, token)
             .await
             .map_err(ExecutionError::from)
     }

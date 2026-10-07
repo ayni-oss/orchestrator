@@ -1,48 +1,46 @@
-# Shared immutable runtime runner
+# Runtime worker
 
-The shared runner accepts a controller-admitted OCI reference only as
-`repository@sha256:<64 lowercase hex>`. A tag is discovery metadata and is never
-passed to a coding Job. The controller freezes that exact reference with the
-task/attempt snapshot before scheduling; node-local caching does not change its
-identity.
+One worker owns runtime admission, checkout, coding, commits, full quality
+checking, repair, push and draft creation. Kubernetes fixes the image digest,
+resources, output isolation and deadline. Repository-scoped credentials are
+mounted separately for checkout and delivery.
 
-## v1 contract
+`ayni_verify` directly invokes `ayni verify <signal>` with typed supported
+selectors and reads `.ayni/verify/last/signals.json`. `ayni_check` directly invokes
+`ayni check` and reads `.ayni/last/signals.json`. Focused evidence never satisfies
+the full quality gate. The coordinator always runs the full check even if the
+agent calls no verification tool.
 
-A supported runtime has one of `linux/amd64` or `linux/arm64`, an explicit
-bounded launcher argv, a verified non-root effective user, a writable
-`/workspace` checkout, and bounded scratch storage. Kubernetes supplies that
-argv as `args`, never `command`: the image entrypoint is retained and is
-responsible for any required preparation before it invokes the mounted launcher.
-The execution adapter installs the trusted worker from a digest-pinned init
-image onto a read-only launcher volume; the shared renderer also supports a
-ConfigMap launcher. The runtime image need not contain Orchestrator implementation.
-The coding process runs as an unprivileged user with a read-only root filesystem,
-no Kubernetes service-account token, no host socket, no controller database, and
-no other task's volumes. Network policy and resource limits are supplied by the
-job template, not the image.
+Coding turns are counted across initial and repair sessions. Coherent milestones
+use Conventional Commit messages, and remaining permitted changes are committed
+when a session ends. Empty commits are skipped. Repairs retain original context
+and bounded conversation. Operational failures receive bounded retries rather
+than being represented as source findings.
 
-Candidate output is a bounded bundle/commit protocol written at `/output` on an
-attempt-specific retained subdirectory. The model key is a coding-only mount;
-the checkout init alone receives a contents-read GitHub token. Registry pull
-credentials stay with Kubernetes and are not mounted in the coding container.
-Credentials are never image layers, command-line arguments, or retained logs.
-Unsupported platform, mutable image reference, invalid argv,
-or an unavailable launcher is an actionable unsupported-runtime outcome before
-model work begins.
+Before delivery, freeze the full artifact, digest, source fingerprint, summary
+and final commit. A check that modifies publishable files requires another commit
+and full check. Failed or unavailable checks are disclosed truthfully in the
+draft, with completion counts and bounded actionable findings.
 
-The runner renders a deterministic `batch/v1` Job before any Kubernetes mutation:
-its name is derived from the attempt identity, `backoffLimit` is zero, the deadline
-is bounded, a completed Job is retained briefly for diagnosis, and a retry gets a
-new attempt identity. The Job uses `RuntimeDefault` seccomp, drops all capabilities,
-runs as the dedicated agent UID/GID, mounts only workspace/scratch/output volumes,
-and disables service-account token mounting. Its only writable volumes are
-workspace, scratch, and candidate output; the launcher mount is read-only. An
-optional operator-owned pull-secret *name* can be attached directly or through
-the Helm-managed ServiceAccount. The secret material is never read by the
-controller or included in this contract or the rendered diagnostics.
+Atomic recovery preserves workspace changes, local commits, phase and budgets.
+Once publication starts, recovery resumes delivery without recoding. Persisted
+intent identifies the deterministic attempt branch; persisted receipts identify
+the adopted or created draft and precise head.
 
-Ayni lock interpretation, environment building, certification, and managed
-validation are profile concerns. The shared runner deliberately contains none of
-them. A build, when a profile selects one, runs in a dedicated Kubernetes build
-Job and publishes through that Job's scoped registry credentials; a coding or
-assessment Job only pulls its admitted digest.
+## Worker sandbox
+
+The Linux worker requires fully enforced Landlock ABI 6 (kernel 6.12 or newer).
+Both agent shell commands and Ayni quality execution run inside the same
+unprivileged sandbox because repository tests are untrusted code. System and
+toolchain paths are read-only; the workspace and disposable scratch paths are
+writable. Worker output, repository/model credentials, frozen requests and the
+launcher remain outside that authority. Signal and abstract Unix-socket scopes
+prevent sandboxed children from signaling the parent or reaching its abstract
+sockets. Unsupported or partial enforcement fails closed: there is no
+unrestricted fallback. This needs no privileged container, added capabilities,
+or special Docker/Kubernetes privilege.
+
+The coordinator binds and retains final evidence outside the sandbox. Agent and
+repository processes cannot rewrite worker progress, publication intent, final
+evidence or receipts in the retained output directory. The Linux-only Landlock
+dependency belongs to this private worker; it does not change Ayni upstream.

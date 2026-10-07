@@ -1,4 +1,4 @@
-use super::{MAX_EVIDENCE_SIZE_BYTES, timestamp, unix_seconds, v1};
+use super::{timestamp, unix_seconds, v1};
 
 pub(super) fn safe_metadata(
     values: &[v1::VerifiedMetadata],
@@ -39,40 +39,6 @@ pub(super) fn valid_digest(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-pub(super) fn valid_candidate_report(candidate: &v1::Candidate) -> bool {
-    let identity_valid = candidate
-        .identity
-        .as_ref()
-        .and_then(|identity| identity.identity.as_ref())
-        .is_some_and(|identity| match identity {
-            v1::candidate_identity::Identity::Git(value) => valid_git_revision(&value.commit_sha),
-            v1::candidate_identity::Identity::Bundle(value) => {
-                valid_digest(&value.digest) && value.size_bytes <= MAX_EVIDENCE_SIZE_BYTES
-            }
-        });
-    candidate.state != v1::CandidateState::Unspecified as i32
-        && v1::CandidateState::try_from(candidate.state).is_ok()
-        && candidate.changed_paths.len() <= 256
-        && candidate
-            .changed_paths
-            .iter()
-            .map(String::len)
-            .sum::<usize>()
-            <= 32_768
-        && candidate.changed_paths.iter().all(|path| {
-            !path.is_empty()
-                && path.len() <= 4_096
-                && !path.starts_with('/')
-                && !path.split('/').any(|part| part.is_empty() || part == "..")
-        })
-        && valid_git_revision(&candidate.base_revision)
-        && identity_valid
-        && candidate
-            .validation
-            .as_ref()
-            .is_none_or(valid_validation_summary)
-}
-
 pub(super) fn valid_artifact_report(artifact: &v1::RuntimeArtifact) -> bool {
     let platform_valid = artifact.platform.as_ref().is_some_and(|platform| {
         !platform.operating_system.is_empty()
@@ -91,43 +57,6 @@ pub(super) fn valid_artifact_report(artifact: &v1::RuntimeArtifact) -> bool {
         && valid_digest(&artifact.resolved_digest)
         && platform_valid
         && safe_metadata(&artifact.verified_metadata, 32, 8_192)
-}
-
-pub(super) fn valid_assessment_report(assessment: &v1::Assessment) -> bool {
-    let producer_valid = assessment.producer.as_ref().is_some_and(|producer| {
-        producer.kind != v1::AssessmentProducerKind::Unspecified as i32
-            && v1::AssessmentProducerKind::try_from(producer.kind).is_ok()
-            && !producer.name.is_empty()
-            && producer.name.len() <= 128
-            && !producer.version.is_empty()
-            && producer.version.len() <= 128
-    });
-    assessment.conclusion != v1::AssessmentConclusion::Unspecified as i32
-        && v1::AssessmentConclusion::try_from(assessment.conclusion).is_ok()
-        && assessment.evidence_reference_ids.len() <= 32
-        && assessment
-            .evidence_reference_ids
-            .iter()
-            .all(|value| !value.is_empty() && value.len() <= 512)
-        && valid_git_revision(&assessment.head_revision)
-        && producer_valid
-        && assessment.workflow.is_some()
-        && assessment.details.is_some()
-}
-
-pub(super) fn valid_evidence_report(evidence: &v1::EvidenceReference) -> bool {
-    !evidence.name.is_empty()
-        && evidence.name.len() <= 128
-        && !evidence.name.starts_with('/')
-        && !evidence
-            .name
-            .split('/')
-            .any(|part| part.is_empty() || part == "..")
-        && valid_digest(&evidence.digest)
-        && !evidence.media_type.is_empty()
-        && evidence.media_type.len() <= 128
-        && evidence.size_bytes <= MAX_EVIDENCE_SIZE_BYTES
-        && safe_metadata(&evidence.metadata, 16, 4_096)
 }
 
 pub(super) fn valid_usage_summary(summary: Option<&v1::ModelUsageSummary>) -> bool {
@@ -178,31 +107,6 @@ pub(super) fn valid_model_usage(usage: Option<&v1::AttemptModelUsage>) -> bool {
             })
             && valid_usage_summary(usage.total.as_ref())
     })
-}
-
-pub(super) fn same_candidate_report(existing: &v1::Candidate, incoming: &v1::Candidate) -> bool {
-    existing.development_attempt_id == incoming.development_attempt_id
-        && existing.repository_connection_id == incoming.repository_connection_id
-        && existing.base_revision == incoming.base_revision
-        && existing.identity == incoming.identity
-        && existing.state == incoming.state
-        && existing.changed_paths == incoming.changed_paths
-        && existing.validation == incoming.validation
-        && equivalent_failure(existing.failure.as_ref(), incoming.failure.as_ref())
-}
-
-fn valid_validation_summary(summary: &v1::ValidationSummary) -> bool {
-    summary.outcome != v1::validation_summary::Outcome::Unspecified as i32
-        && v1::validation_summary::Outcome::try_from(summary.outcome).is_ok()
-        && summary
-            .signals_digest
-            .as_ref()
-            .is_none_or(|digest| valid_digest(digest))
-        && summary.rows.len() <= 32
-        && summary
-            .rows
-            .iter()
-            .all(|row| !row.kind.is_empty() && row.kind.len() <= 64)
 }
 
 pub(super) fn same_artifact_report(

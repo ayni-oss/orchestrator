@@ -161,9 +161,9 @@ pub fn io_failure(error: &std::io::Error) -> Failure {
         ErrorKind::PermissionDenied => Failure::PermissionDenied,
         ErrorKind::InvalidData | ErrorKind::InvalidInput => Failure::InvalidInput,
         _ => match error.to_string().as_str() {
-            "candidate paths outside bounds" => Failure::NoChanges,
-            "candidate changes a protected path" => Failure::ProtectedPath,
-            "candidate test edits are not authorized" => Failure::TestEdits,
+            "changed paths outside bounds" => Failure::NoChanges,
+            "task changes a protected path" => Failure::ProtectedPath,
+            "task test edits are not authorized" => Failure::TestEdits,
             "source revision mismatch" | "verification changed protected source inputs" => {
                 Failure::RuntimeMismatch
             }

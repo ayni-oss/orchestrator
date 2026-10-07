@@ -1,5 +1,6 @@
 # Decision 0011: project-centered UI and onboarding
 
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-10-05
 - Amends: Decision 0009 membership, initialization, and registry configuration.

@@ -7,8 +7,7 @@ use crate::{
         MAX_CONCURRENT_STREAMS_PER_CONNECTION, MAX_HTTP2_HEADER_LIST_BYTES,
     },
     adapters::sqlite::{
-        CleanStoreError, DEVELOPMENT_SERVICE, PROFILE_SERVICE, REPOSITORY_SERVICE, REVIEW_SERVICE,
-        StoredEvent,
+        CleanStoreError, DEVELOPMENT_SERVICE, PROFILE_SERVICE, REPOSITORY_SERVICE, StoredEvent,
     },
     coordinators::with_store_async as with_store,
     process::metrics::record_grpc_completion,
@@ -101,9 +100,6 @@ pub async fn serve(
         .set_serving::<v1::development_task_service_server::DevelopmentTaskServiceServer<GrpcApi>>()
         .await;
     health_reporter
-        .set_serving::<v1::review_service_server::ReviewServiceServer<GrpcApi>>()
-        .await;
-    health_reporter
         .set_serving::<v1::project_service_server::ProjectServiceServer<GrpcApi>>()
         .await;
     let reflection = tonic_reflection::server::Builder::configure()
@@ -120,8 +116,7 @@ pub async fn serve(
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
         .add_service(provider_server(api.clone()))
-        .add_service(development_server(api.clone()))
-        .add_service(review_server(api))
+        .add_service(development_server(api))
         .serve_with_shutdown(address, async move {
             if !*shutdown.borrow() {
                 let _ = shutdown.changed().await;
@@ -165,8 +160,7 @@ pub async fn serve_custom(
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
         .add_service(provider_server(api.clone()))
-        .add_service(development_server(api.clone()))
-        .add_service(review_server(api))
+        .add_service(development_server(api))
         .serve_with_shutdown(address, async move {
             if !*shutdown.borrow() {
                 let _ = shutdown.changed().await;
@@ -208,12 +202,6 @@ fn development_server(
         .max_decoding_message_size(MAX_REQUEST_BYTES)
         .max_encoding_message_size(MAX_RESPONSE_BYTES)
 }
-fn review_server(api: GrpcApi) -> v1::review_service_server::ReviewServiceServer<GrpcApi> {
-    v1::review_service_server::ReviewServiceServer::new(api)
-        .max_decoding_message_size(MAX_REQUEST_BYTES)
-        .max_encoding_message_size(MAX_RESPONSE_BYTES)
-}
-
 struct RequestContext {
     request_id: String,
     client_id: Option<String>,
@@ -439,10 +427,8 @@ mod watch;
 
 use watch::{
     RichStatus, development_watch, elapsed_millis, page_response, profile_watch, repository_watch,
-    review_watch, valid_request_id, validate_id, validate_optional_id,
+    valid_request_id, validate_id, validate_optional_id,
 };
-
-mod reviews;
 
 #[cfg(test)]
 mod tests;
@@ -451,8 +437,5 @@ mod tests;
 mod task_flow_tests;
 
 pub mod access;
-
-pub use publication_mapping::publication_command;
-mod publication_mapping;
 
 mod onboarding_error;

@@ -25,7 +25,6 @@ impl Policy for ManagedAutomation {
         Ok(Plan {
             version: version.into(),
             environment_workflow_path: onboarding_templates::ENVIRONMENT_WORKFLOW_PATH.into(),
-            assessment_workflow_path: onboarding_templates::ASSESSMENT_WORKFLOW_PATH.into(),
         })
     }
 }

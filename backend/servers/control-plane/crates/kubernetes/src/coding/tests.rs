@@ -39,8 +39,8 @@ fn coding_uses_shared_digest_launch_without_build_authority()
             .iter()
             .flatten()
             .any(|m| m.name == "request"
-                && m.mount_path == "/request/coding.json"
-                && m.sub_path.as_deref() == Some("coding.json")
+                && m.mount_path == "/request/worker.json"
+                && m.sub_path.as_deref() == Some("worker.json")
                 && m.read_only == Some(true))
     );
     assert!(
@@ -126,7 +126,7 @@ fn build_has_separate_service_account_and_secret_references_only()
 }
 
 #[test]
-fn source_tokens_are_confined_to_checkout_for_each_workload()
+fn worker_credentials_are_refreshable_and_build_credentials_remain_in_checkout()
 -> Result<(), Box<dyn std::error::Error>> {
     let (configuration, runtime) = fixture();
     let image = format!("registry.test/team/runtime@sha256:{}", "c".repeat(64));
@@ -160,13 +160,37 @@ fn source_tokens_are_confined_to_checkout_for_each_workload()
             })
             .map(|container| container.name.as_str())
             .collect();
-        assert_eq!(source_users, ["checkout"]);
-        assert!(pod.volumes.iter().flatten().all(|volume| {
-            volume
-                .secret
-                .as_ref()
-                .is_none_or(|secret| secret.secret_name.as_deref() != Some(name))
-        }));
+        if name == "coding-test" {
+            assert!(source_users.is_empty());
+            assert!(
+                pod.init_containers
+                    .iter()
+                    .flatten()
+                    .all(|c| c.name != "checkout")
+            );
+            let credential = pod.containers[0]
+                .volume_mounts
+                .iter()
+                .flatten()
+                .find(|m| m.name == "credentials")
+                .ok_or("credentials")?;
+            assert_eq!(credential.mount_path, "/source");
+            assert!(credential.sub_path.is_none());
+            assert_eq!(credential.read_only, Some(true));
+            assert!(pod.volumes.iter().flatten().any(|v| {
+                v.secret
+                    .as_ref()
+                    .is_some_and(|s| s.secret_name.as_deref() == Some(name))
+            }));
+        } else {
+            assert_eq!(source_users, ["checkout"]);
+            assert!(pod.volumes.iter().flatten().all(|volume| {
+                volume
+                    .secret
+                    .as_ref()
+                    .is_none_or(|secret| secret.secret_name.as_deref() != Some(name))
+            }));
+        }
     }
     Ok(())
 }

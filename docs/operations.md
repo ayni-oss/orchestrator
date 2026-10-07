@@ -1,114 +1,47 @@
-# Local operations
+# Operations
 
-> **Clean-v1 runbook.** The versioned clean-v1 database, durable resources,
-> idempotency, resumable observation, and shared lifecycle reconciliation are
-> implemented. The pilot's preparation lifecycle, retained archives,
-> `pilot_ready`, and additive migration instructions are retired. Provider
-> automation, runtime execution, and managed assessment are delivered by their
-> respective follow-on issues.
+Runtime configuration sets `codingTurns` (default 24) and `qualityRepairLimit`
+(default 3, accepted range 0–10). Admission freezes both limits in the task
+snapshot. All phases share the frozen deadline. Worker admission requires the
+pinned runtime digest and source identity; check failures are distinct from
+unavailable infrastructure or evidence.
 
-The supported topology remains one trusted maintainer team on Docker Desktop
-Kubernetes, explicit `docker-desktop` context, and loopback-only browser/gRPC
-access. It is not a public, multi-tenant, multi-node, or production service.
+Task details display Progress, Quality and Pull request. Missing measurements
+are unavailable. A published draft can have failed quality. Retry publication
+resumes retained final work; retry task starts a new attempt with its frozen
+snapshot. Persisted budgets apply after worker restart. Collection is idempotent
+and resource cleanup follows durable collection.
 
-## Readiness and observability
+## Breaking cutover
 
-Controller health is distinct from a repository profile. Readiness exposes a
-healthy controller even while a profile is `setup_required`, `setup_pr_open`,
-`awaiting_environment`, `updating`, or `degraded`. It must not claim a profile
-is ready merely because a provider catalog, mutable tag, or process-local flag
-is available.
+Use the explicit `docker-desktop` context for local deployment. Stop scheduling
+and terminate old workers before reconnecting projects and repositories. Resolve
+and display the exact application-owned database path and volume, output PVCs,
+Jobs, ConfigMaps and attempt Secrets before deleting anything. Confirm ownership
+from the release and workload references; never use a namespace-wide deletion.
+Reinitialize application state because older schemas are rejected without
+conversion. Keep source repositories, runtime images, unrelated resources and
+existing GitHub pull requests.
 
-Metrics and structured logs use bounded, low-cardinality state/outcome labels
-for profile transitions, reconciliation duration/outcome, GitHub rate limits,
-workflow wait, registry verification/drift, build, image pull, coding, assessment import,
-comment update, and readiness action. They never use repository, commit, digest,
-workflow, task, PR, raw signal, URL, credential, or log text as metric labels.
-Exact identities live only in the bounded API/UI, durable records, and retained
-evidence where authorized.
+Remove orchestrator-installed quality workflows from connected repositories
+through reviewed cleanup pull requests. Preserve environment-building workflows
+and ordinary CI. Runtime credentials remain repository-scoped and are refreshed
+while the worker is active. Never expose credential values in inventory or logs.
 
-## Ayni Managed operation
+Recovery snapshots are private operational state and are never automatically
+published. Preserve final work and its evidence until publication recovery has
+finished. A conflicting remote head requires operator attention and must never
+be overwritten.
 
-1. Confirm the GitHub App installation and repository connection. Missing
-   Contents, Pull requests, Actions, Checks, Packages, or comment capability is
-   reported individually; do not broaden credentials as a workaround.
-2. Create/reconcile the owned pipelines setup PR. A closed/unmerged or drifted
-   PR leaves the profile non-ready. Repair the installation or owned files, then
-   reconcile the durable setup action; never edit the default branch directly.
-3. Resolve the profile's configured registry reference or observe its dedicated
-   build Job. The controller validates the current `.ayni.toml`/`.ayni.lock`,
-   supported platform, source policy, and immutable artifact identity.
-4. The controller resolves the discovery reference and verifies registry policy,
-   OCI digest, platform, Ayni labels/schema, and bounded metadata. Only then
-   can a profile be `ready`.
-5. Coding tasks freeze profile revision and runtime `image@sha256:...`. A
-   digest pull on another node is valid; building in the coding Job is not.
-   Agent host checks are advisory.
-6. A draft PR is assessed only by an exact-head managed workflow. Retain the
-   immutable evidence/manifest and verify declared digests before importing the
-   assessment. GitHub check/comment are projections and cannot authorize
-   readiness by themselves.
+## Worker sandbox
 
-Source-only default-branch changes must verify/reuse the existing valid artifact
-without build/push. A valid lock change creates a new profile revision in
-`updating`; old attempts may finish with their frozen digest, but new tasks wait
-for the replacement. Existing lock tags are never silently moved.
-
-## Recovery matrix
-
-| Symptom | Required safe action |
-| --- | --- |
-| Setup PR drifted, closed, or not merged | Keep onboarding non-ready, reconcile the owned setup action after repair, and do not mutate default branch directly. |
-| Lock missing, stale, malformed, or unsupported | Degrade/update that profile revision and block new task admission until a merged valid lock and verified artifact exist. |
-| Workflow failed, timed out, or reports stale source/head | Retain run/attempt identity, do not import success, and reconcile exact current provider state before an allowed retry. |
-| Registry reference absent, moved, foreign, wrong-platform, or bad metadata | Mark artifact/profile degraded; preserve historical frozen digests; require fresh source verification or build result. |
-| Registry credentials unavailable or revoked | Persist the failed action and bounded remediation, then resume reconciliation after access returns without duplicate mutations. |
-| Candidate PR head changed or evidence is corrupt/oversize | Retain but reject the result as current assessment; do not update readiness or replace trusted evidence. |
-| Controller/pod restart or uncertain GitHub response | Resume durable actions, read provider/registry state before retry, and converge without duplicate PR/comment/action effects. |
-| Coding pull/runtime unsupported | Return an actionable artifact/platform result, clean task-scoped pull credentials, and never fall back to a mutable tag or local build. |
-
-## Data, backup, and cleanup
-
-The clean v1 database retains protobuf resource payloads and indexed identities,
-monotonic versions and event cursors, durable actions, reconciliation cursors,
-and bounded pagination snapshots. Startup validates the clean schema marker and
-all persisted protobuf payloads before serving. It fails closed on an absent or
-unsupported marker in a non-empty database, any retired pilot table, or corrupt
-payload; it does not partially migrate, delete, or serve that state.
-
-For the one-time local reset, stop writers and archive any pilot volume that must
-be retained outside Kubernetes, then run `dev/ctl purge <exact-namespace>`,
-`dev/ctl secrets`, `dev/ctl deploy`, and `dev/ctl check` as specified in
-[local development](local-development.md#one-time-pilot-reset). Purge deletes the
-whole labeled local namespace, including Secrets and retained volumes. Never
-restore a pilot database into v1 or bypass rejection by editing schema metadata.
-
-For clean-v1 backup and restore, quiesce the controller and preserve the database
-and any referenced evidence as one consistency unit. Restore only to the same
-supported clean schema version. After restore, verify readiness and resume
-reconciliation. Durable external actions retain their bounded canonical request
-payload in pending/completed/failed state. Reconcilers enumerate pending intent;
-a failed action is requeued only after reading provider state, so an uncertain
-response cannot cause a duplicate effect.
-
-List continuations use signed opaque snapshot tokens, expire after 15 minutes,
-and are capped by item, byte, response, and concurrent-snapshot limits. Watch
-history is bounded per service. A cursor older than retained history—including
-an explicit zero after pruning—or ahead of the service high-water mark returns
-`OUT_OF_RANGE`/`WATCH_CURSOR_EXPIRED`; callers then take a current snapshot and
-resume from its cursor rather than guessing an offset.
-
-Retained evidence is addressed under its assessment and digest. Backup policy
-must preserve the database and evidence together; a database-only restore that
-loses referenced evidence fails closed rather than synthesizing an assessment.
-#67 defines safe artifact retirement: never delete an active, in-flight,
-open-change-request, assessment/evidence, held, unknown, or shared-digest
-artifact; deletion is explicit and dry-run first.
-
-Keep operational access loopback-only. Kubernetes Secrets, GitHub App keys,
-registry/model credentials, raw workflow logs, and artifact bytes are never
-placed in comments, metrics, API browser DTOs, or retained diagnostic text.
-See the [GitHub security boundary](github-security.md) for required App
-permissions and workflow rules, [Decision 0007](decisions/0007-clean-v1-runtime-profiles.md)
-for the normative trust and identity model, and #68 for the reproducible
-end-to-end gate.
+The Linux worker requires fully enforced Landlock ABI 6 (kernel 6.12 or newer).
+Both agent shell commands and Ayni quality execution run inside the same
+unprivileged sandbox because repository tests are untrusted code. System and
+toolchain paths are read-only; the workspace and disposable scratch paths are
+writable. Worker output, repository/model credentials, frozen requests and the
+launcher remain outside that authority. Signal and abstract Unix-socket scopes
+prevent sandboxed children from signaling the parent or reaching its abstract
+sockets. Unsupported or partial enforcement fails closed: there is no
+unrestricted fallback. This needs no privileged container, added capabilities,
+or special Docker/Kubernetes privilege.

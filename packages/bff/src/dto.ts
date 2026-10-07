@@ -147,7 +147,6 @@ export interface DevelopmentTaskInputDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineSeconds?: number;
-  publishDraft?: boolean;
 }
 
 export interface FrozenRepositoryDto {
@@ -174,7 +173,7 @@ export interface DevelopmentSnapshotDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineAt?: string;
-  publishDraft: boolean;
+  limits: { codingTurns: number; qualityRepairLimit: number; deadlineAt?: string };
 }
 
 export type DevelopmentTaskStateDto =
@@ -211,6 +210,10 @@ export type DevelopmentAttemptStateDto =
   | "unknown";
 
 export interface DevelopmentAttemptDto {
+  progress?: WorkerProgressDto;
+  result?: WorkerResultDto;
+  pullRequest?: PullRequestReceiptDto;
+  publicationOnly: boolean;
   agentActivity: Array<{ sequence: number; observedAt?: string; message: string; failed: boolean }>;
   id: string;
   developmentTaskId: string;
@@ -227,8 +230,7 @@ export interface DevelopmentAttemptDto {
 
 export type DevelopmentTaskUpdateDto =
   | { kind: "development_task"; cursor: string; developmentTask: DevelopmentTaskDto }
-  | { kind: "attempt"; cursor: string; attempt: DevelopmentAttemptDto }
-  | { kind: "candidate"; cursor: string; candidateId: string };
+  | { kind: "attempt"; cursor: string; attempt: DevelopmentAttemptDto };
 
 export interface CreateDevelopmentTaskInput {
   idempotencyKey: string;
@@ -268,4 +270,42 @@ export interface ProjectDto {
   state: "active" | "archived";
   repositoryConnectionIds: string[];
   resourceVersion: string;
+}
+
+export interface QualityResultDto {
+  outcome: "passed" | "failed" | "unavailable";
+  completedTargets?: number | undefined;
+  skippedTargets?: number | undefined;
+  warningOffenders?: number | undefined;
+  failingOffenders?: number | undefined;
+  rows: Array<{ kind: string; passed: boolean }>;
+  findings: string[];
+  evidence?: { signalsDigest: string; sourceFingerprint: string; commit: string } | undefined;
+}
+export interface PullRequestReceiptDto {
+  repository: string;
+  number: string;
+  url?: string | undefined;
+  branch: string;
+  baseBranch: string;
+  headCommit: string;
+  draft: boolean;
+}
+export interface WorkerProgressDto {
+  phase: string;
+  codingTurnsConsumed: number;
+  qualityRound: number;
+  latestFullCheck?: QualityResultDto | undefined;
+  publication: string;
+}
+export interface WorkerResultDto {
+  execution: string;
+  commit?: string | undefined;
+  changedPaths: string[];
+  quality?: QualityResultDto | undefined;
+  requestedInput?: string | undefined;
+  publication: string;
+  pullRequest?: PullRequestReceiptDto | undefined;
+  codingTurnsConsumed: number;
+  qualityRound: number;
 }

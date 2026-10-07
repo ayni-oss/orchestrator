@@ -54,7 +54,7 @@ function task() {
   return {
     id: "task:1",
     projectId: "project:1",
-    snapshot: { publishDraft:false, publicationBaseBranch:"main",
+    snapshot: { limits:{codingTurns:24,qualityRepairLimit:3}, publicationBaseBranch:"main",
       repository: {
         repositoryConnectionId: "repository:1",
         repositorySnapshotId: "snapshot:1",
@@ -117,10 +117,6 @@ describe("clean-v1 native gRPC BFF integration", () => {
       [ErrorReason.ERROR_REASON_AUTOMATION_NOT_READY, "automation_not_ready"],
       [ErrorReason.ERROR_REASON_TASK_NOT_ACTIONABLE, "task_not_actionable"],
       [ErrorReason.ERROR_REASON_TASK_DEADLINE_EXPIRED, "task_deadline_expired"],
-      [ErrorReason.ERROR_REASON_CHANGE_REQUEST_HEAD_STALE, "change_request_head_stale"],
-      [ErrorReason.ERROR_REASON_ASSESSMENT_REJECTED, "assessment_rejected"],
-      [ErrorReason.ERROR_REASON_EVIDENCE_UNAVAILABLE, "evidence_unavailable"],
-      [ErrorReason.ERROR_REASON_EVIDENCE_INVALID, "evidence_invalid"],
       [ErrorReason.ERROR_REASON_BOUND_EXCEEDED, "bound_exceeded"],
       [ErrorReason.ERROR_REASON_WATCH_CURSOR_EXPIRED, "watch_cursor_expired"],
       [ErrorReason.ERROR_REASON_UNKNOWN_ENUM_VALUE, "unknown_enum_value"],

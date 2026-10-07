@@ -14,10 +14,6 @@ use thiserror::Error;
 
 pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v4";
 pub(crate) const ENVIRONMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-environment.yml";
-/// Compatibility-only identity retained in existing automation records. New
-/// onboarding templates no longer install this workflow.
-pub(crate) const ASSESSMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-managed-assessment.yml";
-
 /// Immutable files proposed by an Ayni Managed setup PR.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SetupWorkflowFiles {
@@ -106,10 +102,10 @@ mod tests {
     }
 
     #[test]
-    fn onboarding_does_not_install_external_assessment_workflows() {
+    fn onboarding_contains_the_environment_workflow() {
         let files = render(TEMPLATE_VERSION, "main").unwrap().files;
         assert!(files.contains_key(ENVIRONMENT_WORKFLOW_PATH));
-        assert!(files.keys().all(|path| !path.contains("assessment")));
+        assert_eq!(files.len(), 1);
     }
 
     #[test]

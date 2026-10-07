@@ -367,8 +367,6 @@ enum Capability {
     TasksCreate,
     TasksCancel,
     TasksRetry,
-    ReviewsRead,
-    ReviewsWrite,
 }
 
 impl Capability {
@@ -383,8 +381,6 @@ impl Capability {
             "tasks.create" => Self::TasksCreate,
             "tasks.cancel" => Self::TasksCancel,
             "tasks.retry" => Self::TasksRetry,
-            "reviews.read" => Self::ReviewsRead,
-            "reviews.write" => Self::ReviewsWrite,
             _ => return None,
         })
     }
@@ -400,8 +396,6 @@ impl Capability {
             Self::TasksCreate => "tasks.create",
             Self::TasksCancel => "tasks.cancel",
             Self::TasksRetry => "tasks.retry",
-            Self::ReviewsRead => "reviews.read",
-            Self::ReviewsWrite => "reviews.write",
         }
     }
 }
@@ -422,8 +416,6 @@ const TASKS_READ: &[Capability] = &[Capability::TasksRead];
 const TASKS_CREATE: &[Capability] = &[Capability::TasksCreate];
 const TASKS_CANCEL: &[Capability] = &[Capability::TasksCancel];
 const TASKS_RETRY: &[Capability] = &[Capability::TasksRetry];
-const REVIEWS_READ: &[Capability] = &[Capability::ReviewsRead];
-const REVIEWS_WRITE: &[Capability] = &[Capability::ReviewsWrite];
 
 fn operation(rpc: &'static str) -> Option<Operation> {
     let (required, deadline) = match rpc {
@@ -456,21 +448,11 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         "ListDevelopmentTasks"
         | "GetDevelopmentTask"
         | "ListDevelopmentAttempts"
-        | "GetDevelopmentAttempt"
-        | "ListCandidates"
-        | "GetCandidate" => (TASKS_READ, MAX_UNARY_DEADLINE),
+        | "GetDevelopmentAttempt" => (TASKS_READ, MAX_UNARY_DEADLINE),
         "WatchDevelopmentTask" => (TASKS_READ, MAX_WATCH_DEADLINE),
         "CreateDevelopmentTask" => (TASKS_CREATE, MAX_UNARY_DEADLINE),
         "CancelDevelopmentTask" => (TASKS_CANCEL, MAX_UNARY_DEADLINE),
-        "RetryDevelopmentTask" => (TASKS_RETRY, MAX_UNARY_DEADLINE),
-        "ListChangeRequests"
-        | "GetChangeRequest"
-        | "ListAssessments"
-        | "GetAssessment"
-        | "ListEvidenceReferences"
-        | "GetEvidenceReference" => (REVIEWS_READ, MAX_UNARY_DEADLINE),
-        "WatchReviews" => (REVIEWS_READ, MAX_WATCH_DEADLINE),
-        "PublishCandidate" => (REVIEWS_WRITE, MAX_UNARY_DEADLINE),
+        "RetryDevelopmentTask" | "RetryTaskPublication" => (TASKS_RETRY, MAX_UNARY_DEADLINE),
         _ => return None,
     };
     Some(Operation {
@@ -709,20 +691,10 @@ mod tests {
             ("GetDevelopmentTask", Capability::TasksRead),
             ("ListDevelopmentAttempts", Capability::TasksRead),
             ("GetDevelopmentAttempt", Capability::TasksRead),
-            ("ListCandidates", Capability::TasksRead),
-            ("GetCandidate", Capability::TasksRead),
             ("WatchDevelopmentTask", Capability::TasksRead),
             ("CreateDevelopmentTask", Capability::TasksCreate),
             ("CancelDevelopmentTask", Capability::TasksCancel),
             ("RetryDevelopmentTask", Capability::TasksRetry),
-            ("ListChangeRequests", Capability::ReviewsRead),
-            ("GetChangeRequest", Capability::ReviewsRead),
-            ("ListAssessments", Capability::ReviewsRead),
-            ("GetAssessment", Capability::ReviewsRead),
-            ("ListEvidenceReferences", Capability::ReviewsRead),
-            ("GetEvidenceReference", Capability::ReviewsRead),
-            ("WatchReviews", Capability::ReviewsRead),
-            ("PublishCandidate", Capability::ReviewsWrite),
         ];
         for (rpc, capability) in cases {
             let Some(operation) = operation(rpc) else {
@@ -750,8 +722,6 @@ mod tests {
             "tasks.create",
             "tasks.cancel",
             "tasks.retry",
-            "reviews.read",
-            "reviews.write",
         ];
         assert!(
             CustomClientAccess::from_parts_for_test(
