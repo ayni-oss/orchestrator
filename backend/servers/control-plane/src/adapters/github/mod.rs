@@ -4,15 +4,11 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::{
-    env, fs,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct SourceClient {
     client: reqwest::Client,
-    app_id: String,
-    key: EncodingKey,
+    credentials: std::sync::RwLock<Option<(String, EncodingKey)>>,
     setup_cursor: std::sync::atomic::AtomicUsize,
 }
 
@@ -118,12 +114,7 @@ impl SourceClient {
         .map_err(|error| error.reason())
     }
 
-    pub(crate) fn from_environment(timeout_seconds: u64) -> Result<Self, &'static str> {
-        let app_id = env::var("GITHUB_APP_ID").map_err(|_| "github_app_unconfigured")?;
-        let path =
-            env::var("GITHUB_APP_PRIVATE_KEY_PATH").map_err(|_| "github_app_unconfigured")?;
-        let key = EncodingKey::from_rsa_pem(&fs::read(path).map_err(|_| "github_key_unavailable")?)
-            .map_err(|_| "github_key_invalid")?;
+    pub(crate) fn unconfigured(timeout_seconds: u64) -> Result<Self, &'static str> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(timeout_seconds))
             .redirect(reqwest::redirect::Policy::none())
@@ -131,11 +122,47 @@ impl SourceClient {
             .build()
             .map_err(|_| "github_client_unavailable")?;
         Ok(Self {
-            setup_cursor: std::sync::atomic::AtomicUsize::new(0),
             client,
-            app_id,
-            key,
+            credentials: std::sync::RwLock::new(None),
+            setup_cursor: std::sync::atomic::AtomicUsize::new(0),
         })
+    }
+
+    pub(crate) fn activate(&self, app_id: String, private_key: &[u8]) -> Result<(), &'static str> {
+        let key = EncodingKey::from_rsa_pem(private_key).map_err(|_| "github_key_invalid")?;
+        *self
+            .credentials
+            .write()
+            .map_err(|_| "github_client_unavailable")? = Some((app_id, key));
+        Ok(())
+    }
+
+    pub(crate) fn disable(&self) {
+        if let Ok(mut credentials) = self.credentials.write() {
+            *credentials = None;
+        }
+    }
+
+    pub(crate) async fn validate_app(&self) -> Result<(), &'static str> {
+        let app = bounded(
+            self.client
+                .get("https://api.github.com/app")
+                .bearer_auth(self.app_jwt()?),
+        )
+        .await?;
+        let id = {
+            self.credentials
+                .read()
+                .map_err(|_| "github_client_unavailable")?
+                .as_ref()
+                .ok_or("github_app_unconfigured")?
+                .0
+                .clone()
+        };
+        if app["id"].as_u64().map(|value| value.to_string()).as_ref() != Some(&id) {
+            return Err("github_app_identity_mismatch");
+        }
+        Ok(())
     }
 
     pub(crate) async fn token(
@@ -198,14 +225,21 @@ impl SourceClient {
             .duration_since(UNIX_EPOCH)
             .map_err(|_| "clock_invalid")?
             .as_secs();
+        let (app_id, key) = self
+            .credentials
+            .read()
+            .map_err(|_| "github_client_unavailable")?
+            .as_ref()
+            .ok_or("github_app_unconfigured")?
+            .clone();
         jsonwebtoken::encode(
             &Header::new(Algorithm::RS256),
             &Claims {
                 iat: now.saturating_sub(60),
                 exp: now + 540,
-                iss: &self.app_id,
+                iss: &app_id,
             },
-            &self.key,
+            &key,
         )
         .map_err(|_| "github_authentication_failed")
     }
@@ -554,3 +588,39 @@ mod github_error_tests {
 }
 
 pub mod setup;
+
+#[cfg(test)]
+mod credential_activation_tests {
+    use super::*;
+    #[test]
+    fn failed_key_replacement_preserves_active_credentials() -> Result<(), &'static str> {
+        let source = SourceClient::unconfigured(1)?;
+        // Synthetic encoding material exercises the replacement boundary without a provider key.
+        *source.credentials.write().map_err(|_| "lock_failed")? = Some((
+            "original-app".into(),
+            EncodingKey::from_secret(b"synthetic-test-material"),
+        ));
+        assert_eq!(
+            source.activate("replacement-app".into(), b"invalid-key"),
+            Err("github_key_invalid")
+        );
+        assert_eq!(
+            source
+                .credentials
+                .read()
+                .map_err(|_| "lock_failed")?
+                .as_ref()
+                .map(|value| value.0.as_str()),
+            Some("original-app")
+        );
+        source.disable();
+        assert!(
+            source
+                .credentials
+                .read()
+                .map_err(|_| "lock_failed")?
+                .is_none()
+        );
+        Ok(())
+    }
+}

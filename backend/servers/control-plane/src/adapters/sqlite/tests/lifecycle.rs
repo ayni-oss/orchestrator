@@ -5,7 +5,7 @@ fn initializes_exact_clean_schema_and_reopens() -> Result<(), Box<dyn std::error
     let directory = tempdir()?;
     let path = directory.path().join("orchestrator.sqlite");
     let store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 5);
+    assert_eq!(store.schema_version()?, 6);
     assert!(existing_tables(&store.connection)?.contains(&"runtime_profiles".to_owned()));
     assert!(!existing_tables(&store.connection)?.contains(&"repository_bindings".to_owned()));
     drop(store);

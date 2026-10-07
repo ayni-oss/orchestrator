@@ -60,7 +60,8 @@ export const actions: Actions = {
       if (!repositories.some((item) => item.owner.toLowerCase() === owner.toLowerCase() && item.name.toLowerCase() === repository.toLowerCase())) {
         return fail(400, { action: "connect", error: { status:400, reason:"invalid_selection", message:"Choose a repository the selected GitHub App installation can access.", requestId:locals.requestId, retryable:false } });
       }
-      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository}, context);
+      const registryConnectionId=text(form,"registryConnectionId",128) ?? "";
+      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository,registryConnectionId}, context);
       return { action: "connect", success: `Connected ${connection.displayName}.` };
     } catch (error) {
       const mapped = safeError(error, locals.requestId);

@@ -19,8 +19,10 @@ and terminate old workers before reconnecting projects and repositories. Resolve
 and display the exact application-owned database path and volume, output PVCs,
 Jobs, ConfigMaps and attempt Secrets before deleting anything. Confirm ownership
 from the release and workload references; never use a namespace-wide deletion.
-Reinitialize application state because older schemas are rejected without
-conversion. Keep source repositories, runtime images, unrelated resources and
+The current SQLite schema is version 6. Reinitialize application state because
+older schemas are rejected without conversion. Retained-data deletion requires
+explicit approval after displaying the inventory. Preserve administrator-managed
+connection Secrets and external GitHub Apps. Keep source repositories, runtime images, unrelated resources and
 existing GitHub pull requests.
 
 Remove orchestrator-installed quality workflows from connected repositories
@@ -45,3 +47,36 @@ prevent sandboxed children from signaling the parent or reaching its abstract
 sockets. Unsupported or partial enforcement fails closed: there is no
 unrestricted fallback. This needs no privileged container, added capabilities,
 or special Docker/Kubernetes privilege.
+
+## Connection credential retention
+
+Credential rotation retains previous Secret revisions while unfinished Jobs or
+frozen runtime references still need them. Terminal task snapshots also retain
+their old pull Secret because task and publication retries use the frozen
+snapshot. This deliberately favors retry recovery over immediate credential
+cleanup; do not manually delete those Secrets while retained work can be retried.
+
+Removing an administrator connection from deployment configuration disables it
+without deleting its Secret. Connection deletion checks current, pending and
+retired revisions for consumers before deleting UI-managed Secrets. Labels
+identify ownership; Kubernetes RBAC grants Secret access by namespace and
+resource, not by these labels.
+
+Runtime registry selections are additive protobuf metadata within SQLite schema 6;
+this UI refinement requires no database reset. Existing profiles without a runtime
+selection inherit their repository’s legacy default until explicitly edited.
+After every runtime has an explicit selection, that legacy default no longer
+retains an unused registry connection. Frozen attempts and pending builds continue
+to retain their credential revisions. Changing a runtime destination is a
+version-checked, idempotent mutation and wakes reconciliation without restarting
+the control plane.
+
+Runtime registry selection now stores only the connection ID. Older duplicated
+namespace protobuf fields are reserved and ignored when existing payloads are
+read; schema 6 remains unchanged. Legacy repository write APIs accept an omitted
+namespace as inheritance, reject a supplied different namespace, and store the
+connection's actual namespace as compatibility metadata. Runtime routing never
+uses that legacy field. Reconciliation retires an old duplicated destination
+before observing its frozen pending work; old Jobs finish at their original path
+but cannot reactivate it. Newly admitted work waits for the normalized destination
+to be verified.

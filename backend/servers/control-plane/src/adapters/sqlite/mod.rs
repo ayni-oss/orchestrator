@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 5;
+pub(crate) const SCHEMA_VERSION: i64 = 6;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -44,6 +44,8 @@ const MAX_PENDING_ACTION_BATCH: usize = 256;
 const CLEAN_TABLES: &[&str] = &[
     "automation_installations",
     "clean_schema",
+    "connection_operations",
+    "connections",
     "development_attempts",
     "development_tasks",
     "durable_actions",
@@ -165,11 +167,13 @@ pub(crate) struct CleanStore {
 }
 
 mod automation_tasks;
+mod connection_dependencies;
 mod onboarding;
 mod profile_identity;
 mod projects;
 mod repository_connections;
 mod runtime_profiles;
+mod runtime_registry;
 mod store;
 pub(crate) mod task_admission;
 mod validation;
@@ -226,6 +230,8 @@ mod tests {
             }),
             display_name: "Sandbox".to_owned(),
             default_branch: "main".to_owned(),
+            registry_connection_id: String::new(),
+            image_namespace: String::new(),
         }
     }
 
@@ -378,6 +384,7 @@ mod tests {
     mod projects;
     mod recovery;
     mod runtime;
+    mod runtime_registry;
 }
 
 mod project_validation;
@@ -397,3 +404,5 @@ pub(crate) mod runtime_selection;
 pub(crate) mod task_retry;
 
 pub(crate) mod automation_admission;
+
+mod connections;

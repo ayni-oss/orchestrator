@@ -91,6 +91,8 @@ struct PendingVerification {
     profile_revision: String,
     request: ExecutionRequest,
     image: String,
+    #[serde(default)]
+    frozen_runtime: Option<ProfileRuntime>,
     started_at: u64,
     source_digest: String,
     lock_digest: String,
@@ -110,12 +112,14 @@ struct ProfileObservation<'a> {
     token: String,
     source_digest: String,
     default_branch: String,
+    selected_revision: Option<String>,
+    registry: v1::RuntimeRegistrySelection,
 }
 
 pub struct RuntimeReconciler<E = RuntimeKubernetes> {
     state: AppState,
     configuration: RuntimeConfiguration,
-    source: SourceClient,
+    source: Arc<SourceClient>,
     kubernetes: E,
     pass: Mutex<()>,
     coding_pass: Mutex<()>,
@@ -157,40 +161,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     )
                     .map_err(|_| "runtime_profile_missing")?;
                 for profile in result.items {
-                    if profiles.contains_key(&profile.id) {
-                        continue;
+                    if let Some(runtime) = configured_managed_profile(
+                        store,
+                        &configuration,
+                        &profile,
+                        profiles.contains_key(&profile.id),
+                    )? {
+                        profiles.insert(profile.id, runtime);
                     }
-                    let repository = store
-                        .repository_connection(&profile.repository_connection_id)
-                        .map_err(|_| "repository_missing")?;
-                    if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
-                        continue;
-                    }
-                    let Some(v1::repository_provider::Provider::Github(github)) =
-                        repository.provider.and_then(|p| p.provider)
-                    else {
-                        continue;
-                    };
-                    let Some(revision_id) = profile.active_revision_id else {
-                        continue;
-                    };
-                    let revision = store
-                        .runtime_profile_revision(&revision_id)
-                        .map_err(|_| "runtime_revision_missing")?;
-                    let Some(v1::runtime_profile_revision::Configuration::AyniManaged(managed)) =
-                        revision.configuration
-                    else {
-                        continue;
-                    };
-                    let Some(runtime) = configuration.managed_runtime(
-                        &github.owner,
-                        &github.name,
-                        &managed.lock_fingerprint,
-                        &managed.oci_repository,
-                    ) else {
-                        continue;
-                    };
-                    profiles.insert(profile.id, runtime);
                 }
                 page.page_token = result.next_page_token;
                 if page.page_token.is_empty() {
@@ -198,6 +176,20 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 }
             }
             Err("runtime_profile_limit_exceeded")
+        })
+        .await
+    }
+
+    async fn registry_ready(&self, id: &str) -> Result<(), &'static str> {
+        let id = id.to_owned();
+        self.with_database(move |store| {
+            let connection = store
+                .get_connection(&id)
+                .map_err(|_| "registry_connection_missing")?;
+            if !connection.enabled || connection.status != "ready" {
+                return Err("registry_connection_not_ready");
+            }
+            Ok(())
         })
         .await
     }
@@ -273,13 +265,17 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         while tasks.join_next().await.is_some() {}
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one reconciliation pass binds source observation and frozen registry credentials"
+    )]
     async fn profile(&self, id: &str) -> Result<(), &'static str> {
         let time = now()?;
         let lookup_id = id.to_owned();
-        let Some((repository, mut cursor)) = self
+        let Some((repository, mut cursor, registry, selected_revision)) = self
             .with_database(move |store| {
                 let profile = store
-                    .runtime_profile(&lookup_id)
+                    .normalize_runtime_destination(&lookup_id)
                     .map_err(|_| "runtime_profile_missing")?;
                 if profile.kind != v1::RuntimeProfileKind::AyniManaged as i32 {
                     return Ok(None);
@@ -316,7 +312,15 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         )
                         .map_err(|_| "runtime_action_invalid")?;
                 }
-                Ok(Some((repository, cursor)))
+                let registry = store
+                    .runtime_registry(&profile)
+                    .map_err(|_| "runtime_registry_invalid")?;
+                Ok(Some((
+                    repository,
+                    cursor,
+                    registry,
+                    profile.active_revision_id,
+                )))
             })
             .await?
         else {
@@ -325,7 +329,19 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if cursor.next_at > time {
             return Ok(());
         }
-        let runtime = self.configured_profile(id).await?;
+        if cursor.pending.is_none() && !registry.registry_connection_id.is_empty() {
+            self.registry_ready(&registry.registry_connection_id)
+                .await?;
+        }
+        let runtime = if let Some(frozen) = cursor
+            .pending
+            .as_ref()
+            .and_then(|p| p.frozen_runtime.clone())
+        {
+            frozen
+        } else {
+            self.configured_profile(id).await?
+        };
         let Some(v1::repository_provider::Provider::Github(github)) =
             repository.provider.and_then(|p| p.provider)
         else {
@@ -364,12 +380,47 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             token,
             source_digest,
             default_branch: repository.default_branch,
+            selected_revision,
+            registry,
         };
         if cursor.pending.is_some() {
             self.observe_pending(&observation, &mut cursor).await
         } else {
             self.begin_observation(&observation, &mut cursor).await
         }
+    }
+
+    async fn pending_verification_phase(
+        &self,
+        observation: &ProfileObservation<'_>,
+        pending: &PendingVerification,
+    ) -> Result<PendingPhase, &'static str> {
+        let lookup_id = observation.id.to_owned();
+        let pending_revision = pending.profile_revision.clone();
+        let selected = self
+            .with_database(move |store| {
+                let profile = store
+                    .runtime_profile(&lookup_id)
+                    .map_err(|_| "runtime_profile_missing")?;
+                Ok(profile.active_revision_id.as_deref() == Some(pending_revision.as_str()))
+            })
+            .await?;
+        let phase = if !selected && (pending.build_name.is_none() || pending.build_observed) {
+            PendingPhase::DiscardStale
+        } else {
+            pending_phase(
+                SourceIdentity {
+                    revision: &pending.request.revision,
+                    configuration_digest: &pending.source_digest,
+                },
+                SourceIdentity {
+                    revision: &observation.head,
+                    configuration_digest: &observation.source_digest,
+                },
+                pending.build_name.is_some() && !pending.build_observed,
+            )
+        };
+        Ok(phase)
     }
 
     async fn observe_pending(
@@ -380,22 +431,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let id = observation.id;
         let runtime = observation.runtime;
         let time = observation.time;
-        let head = observation.head.as_str();
         let token = observation.token.as_str();
-        let source_digest = observation.source_digest.as_str();
 
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        let phase = pending_phase(
-            SourceIdentity {
-                revision: &pending.request.revision,
-                configuration_digest: &pending.source_digest,
-            },
-            SourceIdentity {
-                revision: head,
-                configuration_digest: source_digest,
-            },
-            pending.build_name.is_some() && !pending.build_observed,
-        );
+        let phase = self
+            .pending_verification_phase(observation, &pending)
+            .await?;
         if phase == PendingPhase::DiscardStale {
             self.kubernetes.cleanup(&pending.name).await?;
             if let Some(name) = &pending.build_name {
@@ -630,53 +671,77 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             source_digest,
         )
         .map_err(|_| "runtime_revision_failed")?;
-        let revision = self
+        let expected_revision = observation.selected_revision.clone();
+        let expected_registry = observation.registry.clone();
+        let next_cursor = cursor.clone();
+        let id = id.to_owned();
+        let runtime = runtime.clone();
+        let github = github.clone();
+        let head = head.to_owned();
+        let source_digest = source_digest.to_owned();
+        // Keep the guarded selection and durable Job intent in one serialized
+        // database operation; UI writes cannot interleave between these writes.
+        *cursor = self
             .with_database(move |store| {
-                ayni_orchestrator_application::runtime_selection::select(store, &command)
-                    .map_err(crate::adapters::sqlite::runtime_selection::selection_error)
-                    .map_err(|_| "runtime_revision_failed")
+                let revision = store
+                    .select_observed_runtime_revision(
+                        &command,
+                        expected_revision.as_deref(),
+                        &expected_registry,
+                    )
+                    .map_err(|_| "runtime_source_changed")?;
+                let mut cursor = next_cursor;
+                cursor.sequence = cursor
+                    .sequence
+                    .checked_add(1)
+                    .ok_or("runtime_sequence_exhausted")?;
+                cursor.pending = Some(PendingVerification {
+                    name: operation_name(&id, cursor.sequence),
+                    profile_revision: revision.clone(),
+                    image: runtime.image.clone(),
+                    frozen_runtime: Some(runtime.clone()),
+                    started_at: time,
+                    source_digest: source_digest.clone(),
+                    lock_digest: format!("sha256:{:x}", Sha256::digest(&bytes)),
+                    build_name: if runtime.build.is_some()
+                        && (cursor.force_rebuild
+                            || !cursor.bindings.contains_key(&format!(
+                                "{:x}",
+                                Sha256::digest(format!(
+                                    "{}:{}:sha256:{}",
+                                    source_digest, runtime.platform, identity.fingerprint
+                                ))
+                            ))) {
+                        Some(operation_name(&format!("build:{revision}"), 0))
+                    } else {
+                        None
+                    },
+                    build_observed: false,
+                    build_started: false,
+                    force_rebuild: cursor.force_rebuild,
+                    request: ExecutionRequest {
+                        repository_url: format!(
+                            "https://github.com/{}/{}.git",
+                            github.owner, github.name
+                        ),
+                        revision: head.clone(),
+                        expected: RuntimeExpectation {
+                            lock_fingerprint: format!("sha256:{}", identity.fingerprint),
+                            platform: runtime.platform.clone(),
+                            ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION
+                                .into(),
+                        },
+                    },
+                });
+                cursor.update_status(&runtime, identity.fingerprint)?;
+                cursor.force_rebuild = false;
+                store
+                    .save_runtime_cursor(&id, &cursor)
+                    .map_err(|_| "runtime_store_failed")?;
+                Ok(cursor)
             })
             .await?;
-        cursor.sequence = cursor
-            .sequence
-            .checked_add(1)
-            .ok_or("runtime_sequence_exhausted")?;
-        cursor.pending = Some(PendingVerification {
-            name: operation_name(id, cursor.sequence),
-            profile_revision: revision.clone(),
-            image: runtime.image.clone(),
-            started_at: time,
-            source_digest: source_digest.to_owned(),
-            lock_digest: format!("sha256:{:x}", Sha256::digest(&bytes)),
-            build_name: if runtime.build.is_some()
-                && (cursor.force_rebuild
-                    || !cursor.bindings.contains_key(&format!(
-                        "{:x}",
-                        Sha256::digest(format!(
-                            "{}:{}:sha256:{}",
-                            source_digest, runtime.platform, identity.fingerprint
-                        ))
-                    ))) {
-                Some(operation_name(&format!("build:{revision}"), 0))
-            } else {
-                None
-            },
-            build_observed: false,
-            build_started: false,
-            force_rebuild: cursor.force_rebuild,
-            request: ExecutionRequest {
-                repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
-                revision: head.to_owned(),
-                expected: RuntimeExpectation {
-                    lock_fingerprint: format!("sha256:{}", identity.fingerprint),
-                    platform: runtime.platform.clone(),
-                    ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
-                },
-            },
-        });
-        cursor.update_status(runtime, identity.fingerprint)?;
-        cursor.force_rebuild = false;
-        self.save(id, cursor).await
+        Ok(())
     }
 
     async fn save(&self, profile: &str, cursor: &RuntimeCursor) -> Result<(), &'static str> {
@@ -710,7 +775,7 @@ impl RuntimeReconciler<RuntimeKubernetes> {
         let Some(configuration) = RuntimeConfiguration::from_environment()? else {
             return Ok(None);
         };
-        let source = SourceClient::from_environment(configuration.request_timeout_seconds)?;
+        let source = state.source.clone().ok_or("github_client_unavailable")?;
         let kubernetes = RuntimeKubernetes::new(configuration.execution_configuration())?;
         Ok(Some(Arc::new(Self {
             state,
@@ -726,6 +791,93 @@ impl RuntimeReconciler<RuntimeKubernetes> {
 
 // Selecting a revision changes its stored lock; bind the observed lock before
 // hashing configuration so that bookkeeping cannot invalidate pending work.
+fn configured_managed_profile(
+    store: &crate::adapters::sqlite::CleanStore,
+    configuration: &RuntimeConfiguration,
+    profile: &v1::RuntimeProfile,
+    explicitly_configured: bool,
+) -> Result<Option<ProfileRuntime>, &'static str> {
+    let repository = store
+        .repository_connection(&profile.repository_connection_id)
+        .map_err(|_| "repository_missing")?;
+    let registry = store
+        .runtime_registry(profile)
+        .map_err(|_| "runtime_registry_invalid")?;
+    if explicitly_configured && registry.registry_connection_id.is_empty() {
+        return Ok(None);
+    }
+    if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
+        return Ok(None);
+    }
+    let Some(v1::repository_provider::Provider::Github(github)) = repository
+        .provider
+        .as_ref()
+        .and_then(|provider| provider.provider.as_ref())
+    else {
+        return Ok(None);
+    };
+    let Some(revision_id) = &profile.active_revision_id else {
+        return Ok(None);
+    };
+    let revision = store
+        .runtime_profile_revision(revision_id)
+        .map_err(|_| "runtime_revision_missing")?;
+    let Some(v1::runtime_profile_revision::Configuration::AyniManaged(managed)) =
+        revision.configuration
+    else {
+        return Ok(None);
+    };
+    let Some(runtime) = configuration.managed_runtime(
+        &github.owner,
+        &github.name,
+        &managed.lock_fingerprint,
+        &managed.oci_repository,
+    ) else {
+        return Ok(None);
+    };
+    if registry.registry_connection_id.is_empty() {
+        return Ok(Some(runtime));
+    }
+    selected_registry_runtime(store, configuration, &registry, github, &managed)
+}
+
+fn selected_registry_runtime(
+    store: &crate::adapters::sqlite::CleanStore,
+    configuration: &RuntimeConfiguration,
+    registry: &v1::RuntimeRegistrySelection,
+    github: &v1::GithubRepository,
+    managed: &v1::AyniManagedProfileRevision,
+) -> Result<Option<ProfileRuntime>, &'static str> {
+    let connection = store
+        .get_connection(&registry.registry_connection_id)
+        .map_err(|_| "registry_connection_missing")?;
+    if connection.kind != "ghcr" {
+        return Ok(None);
+    }
+    let mut managed_runtime = configuration
+        .managed_runtime
+        .clone()
+        .ok_or("runtime_source_missing")?;
+    managed_runtime.registry_prefix = format!("ghcr.io/{}", connection.image_namespace);
+    managed_runtime.pull_secret =
+        (!connection.pull_secret_name.is_empty()).then_some(connection.pull_secret_name);
+    if let Some(build) = &mut managed_runtime.build {
+        build.registry_secret = connection.secret_name;
+    }
+    let destination = crate::process::runtime_configuration::connection_image_repository(
+        &connection.image_namespace,
+        &github.owner,
+        &github.name,
+    )?;
+    let mut runtime =
+        managed_runtime.profile_runtime(&github.owner, &github.name, &managed.lock_fingerprint)?;
+    runtime.image = format!(
+        "{destination}:lock-{}",
+        managed.lock_fingerprint.to_ascii_lowercase()
+    );
+    Ok(Some(runtime))
+}
+
 fn normalized_runtime_source(
     runtime: &ProfileRuntime,
     fingerprint: &str,

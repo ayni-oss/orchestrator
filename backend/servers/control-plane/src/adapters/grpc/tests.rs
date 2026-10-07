@@ -131,6 +131,8 @@ pub(super) async fn server_validates_bounds_before_durable_resource_operations()
             provider: None,
             display_name: String::new(),
             default_branch: String::new(),
+            registry_connection_id: String::new(),
+            image_namespace: String::new(),
         }))
         .await
     else {
@@ -196,6 +198,8 @@ pub(super) async fn clean_v1_repository_operations_are_durable_and_idempotent()
         }),
         display_name: "Sandbox".to_owned(),
         default_branch: "main".to_owned(),
+        registry_connection_id: String::new(),
+        image_namespace: String::new(),
     };
     let first = api
         .create_repository_connection(Request::new(request.clone()))
@@ -299,6 +303,8 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
                     },
                 )),
             }),
+            registry_connection_id: String::new(),
+            image_namespace: String::new(),
         }))
         .await?
         .into_inner()

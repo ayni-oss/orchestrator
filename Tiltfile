@@ -5,8 +5,13 @@ allow_k8s_contexts('docker-desktop')
 
 namespace = os.getenv('AYNI_ORCHESTRATOR_NAMESPACE', 'ayni-orchestrator-dev')
 
-def attach(name, container, deps, live_update, port_forwards=[], sync_web=False):
-    if sync_web:
+def attach(name, container, deps, live_update, port_forwards=[], sync_web=False, sync_control_plane=False):
+    if sync_control_plane:
+        apply_cmd = [
+            "bash", "-c",
+            'bash dev/scripts/sync-control-plane-source.sh && exec kubectl --context docker-desktop --namespace "${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}" get deployment/control-plane --output=yaml',
+        ]
+    elif sync_web:
         apply_cmd = [
             'bash', '-c',
             'bash dev/scripts/sync-web-source.sh && exec kubectl --context docker-desktop --namespace "${AYNI_ORCHESTRATOR_NAMESPACE:-ayni-orchestrator-dev}" get deployment/control-plane --output=yaml',
@@ -29,15 +34,17 @@ def attach(name, container, deps, live_update, port_forwards=[], sync_web=False)
 attach(
     name='control-plane-live',
     container='control-plane',
-    deps=['backend', 'proto', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'],
+    deps=['backend', 'proto', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'dev/scripts/sync-control-plane-source.sh', 'dev/scripts/restart-control-plane.sh'],
+    sync_control_plane=True,
     live_update=[
         sync('backend', '/opt/source/backend'),
         sync('proto', '/opt/source/proto'),
         sync('Cargo.toml', '/opt/source/Cargo.toml'),
         sync('Cargo.lock', '/opt/source/Cargo.lock'),
         sync('rust-toolchain.toml', '/opt/source/rust-toolchain.toml'),
-        run('cargo build --locked --package ayni-orchestrator-control-plane'),
-        run('kill -TERM 1'),
+        sync('dev/scripts/restart-control-plane.sh', '/opt/source/dev/scripts/restart-control-plane.sh'),
+        run('cargo build --locked --package ayni-orchestrator-control-plane --bins'),
+        run('sh dev/scripts/restart-control-plane.sh'),
     ],
     port_forwards=['18081:8080'],
 )

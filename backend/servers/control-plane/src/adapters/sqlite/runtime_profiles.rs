@@ -54,12 +54,26 @@ impl CleanStore {
         {
             self.ensure_managed_lock_available(&repository.id, &requested.lock_fingerprint)?;
         }
+        let registry = if repository.registry_connection_id.is_empty()
+            || match self.get_connection(&repository.registry_connection_id) {
+                Ok(_) => true,
+                Err(CleanStoreError::NotFound { .. }) => false,
+                Err(error) => return Err(error),
+            } {
+            v1::RuntimeRegistrySelection {
+                registry_connection_id: repository.registry_connection_id.clone(),
+            }
+        } else {
+            v1::RuntimeRegistrySelection::default()
+        };
         let now = unix_seconds()?;
         let profile_id = resource_id("profile");
         let revision_id = resource_id("profile-revision");
         let operational = kind == v1::RuntimeProfileKind::AyniManaged;
         let profile = v1::RuntimeProfile {
             reconciliation_metadata: vec![],
+            registry: Some(registry),
+            desired_image_repository: String::new(),
             id: profile_id.clone(),
             repository_connection_id: repository.id.clone(),
             kind: kind as i32,

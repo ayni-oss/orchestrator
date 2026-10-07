@@ -26,9 +26,47 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite rejects an older schema rather than converting
-it. Connectors, projects, repositories and runtime profiles remain control-plane
-resources. Credentials are separate mounted inputs and are never worker output.
+and pull request receipts. SQLite schema version 6 rejects older state rather than
+converting it. Connectors, projects, repositories and runtime profiles remain
+control-plane resources. Credentials are separate inputs and are never worker output.
+
+## Connection credentials
+
+GitHub App private keys and GHCR tokens live in namespace-scoped Kubernetes
+Secrets. SQLite stores ownership, safe provider metadata, Secret references and
+UIDs, active/candidate revisions and bounded test results. Credential writes are
+never stored as generic idempotency request payloads or returned by read APIs.
+The connection service is exposed only on the trusted internal listener used by
+the operator BFF; the custom-client listener cannot manage credentials.
+
+One configured GitHub App and multiple GHCR connections support two ownership
+modes. Explicit deployment references register administrator-managed connections;
+these remain read-only in the UI. UI-managed connections use labelled Secret
+revisions whose ownership and UID are checked before mutation. Unlabelled Secrets
+are never discovered or adopted automatically. Kubernetes RBAC is namespaced;
+ownership labels do not restrict Secret access.
+
+Connection reconciliation runs independently of runtime execution. The shared
+GitHub credential provider serves both application operations and runtime
+reconciliation, polling referenced revisions every 30 seconds. UI writes queue
+validation and activation; no control-plane restart is required. A failed
+replacement keeps the previous valid revision active and exposes its failure.
+Missing or disabled active credentials block new authenticated operations.
+
+GHCR authentication, push, pull and artifact cleanup run in scoped, digest-pinned
+probe Jobs. Probe results are persisted before Job cleanup. Push credentials go
+only to trusted builders and probes; candidate workloads receive a separate
+pull-only Secret. Probe Jobs receive no Kubernetes API token, model or signing
+credentials. Each logical runtime profile selects an approved connection. The connection alone
+defines its image namespace;
+runtime admission freezes the destination and credential revision for subsequent
+work and retries. Runtime selections survive source sync and rebuilds. A destination
+change creates a new selected revision and removes active admission authority.
+Already admitted work retains its frozen destination and credentials; superseded
+builds can finish but cannot activate the new selection. Secret retention follows
+these frozen references, as described
+in [operations](operations.md).
+
 
 ## Worker sandbox
 
@@ -47,3 +85,10 @@ The coordinator binds and retains final evidence outside the sandbox. Agent and
 repository processes cannot rewrite worker progress, publication intent, final
 evidence or receipts in the retained output directory. The Linux-only Landlock
 dependency belongs to this private worker; it does not change Ayni upstream.
+
+For a connection whose namespace matches the source owner, the computed runtime
+destination is `ghcr.io/<namespace>/<repository>-ayni`. Cross-owner destinations
+retain `ghcr.io/<namespace>/<source-owner>/<repository>-ayni` so repository names
+remain distinct. One backend helper derives build, pull, admission and read-only
+UI destinations. Deployment-only fallback settings retain their existing layout.
+Previously admitted tasks and pending Jobs retain their original frozen paths.

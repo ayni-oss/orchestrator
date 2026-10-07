@@ -31,7 +31,9 @@ dev/ctl hot-reload
 This first synchronizes Secrets and deploys the normal Helm release with local
 development images. It then attaches Tilt to the existing `control-plane` Pod;
 Helm remains the resource owner. Each new Tilt session first synchronizes the current
-UI source, including edits made before the session started. The Pod continues to contain both sidecars.
+control-plane and UI source, including edits made before the session started.
+The control plane is compiled before Tilt attaches, so generated Rust API bindings
+use the current protobuf definitions. The Pod continues to contain both sidecars.
 Only these development images have a writable root filesystem, allowing Tilt to
 synchronize source beside their development dependencies; normal images remain
 read-only. The web development container has a 1 GiB memory limit because Vite
@@ -39,11 +41,14 @@ optimizes the full Svelte dependency graph at startup; this higher allocation
 is confined to the hot-reload overlay.
 
 - Changes under `backend/` or `proto/` are copied into the control-plane
-  container, compiled there, and restart only that container.
+  container and compiled there. A development-only supervisor restarts the
+  control-plane process without restarting its container, retaining synchronized
+  source and the newly compiled binary. Container termination forwards the signal
+  to the child process and exits normally.
 - Changes under `apps/web/`, `packages/bff/`, or `clients/typescript/` are
   copied into the web container; Vite refreshes the browser without a Pod
   rollout. The web application is available at http://127.0.0.1:18080.
-- `Cargo.lock`, package manifests, generated bindings, chart values, Secrets,
+- JavaScript package manifests, chart values, Secrets,
   or Helm templates are deployment inputs. Stop Tilt and run `dev/ctl
   hot-reload` again after changing them.
 
@@ -121,3 +126,24 @@ reproducible from its commit alone.
 Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/local-development.md`](../docs/local-development.md) and
 [`docs/operations.md`](../docs/operations.md).
+
+### Connection onboarding and rotation
+
+Start without GitHub/GHCR credentials and onboard them in Source control and
+Container registries. GitHub installation permissions remain managed in GitHub.
+Private registry images require a separate pull-only token; push credentials are
+reserved for trusted builders and probes. UI credential inputs clear after submission.
+The control plane reconciles Secret changes every 30 seconds; UI writes trigger
+immediate reconciliation and validated activation without a pod restart.
+
+`dev/ctl secrets` optionally creates administrator GitHub and GHCR Secrets and
+labels them as admin-managed; it refuses to overwrite a UI-managed Secret. Register
+an administrator App explicitly with `connections.githubAppSecretName`. Local
+managed runtime defaults to native `linux/arm64` and disables architecture emulation;
+Intel hosts must select `linux/amd64` explicitly. A connection test requires
+`connections.testImage` set to a digest-pinned control-plane image.
+
+Database schema changes reject old state rather than migrate it. Inventory the
+exact retained claims and obtain explicit approval before deleting application
+data; runtime outputs and administrator Secrets are separate retained resources.
+Use an isolated Docker Desktop namespace to validate fresh onboarding safely.

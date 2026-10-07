@@ -114,6 +114,9 @@ message FrozenRuntime {
   // resolved_digest is `sha256:` followed by 64 lowercase hexadecimal characters.
   string resolved_digest = 6;
   OciPlatform platform = 7;
+  string registry_connection_id = 8;
+  string registry_revision = 9;
+  string pull_secret_name = 10;
 }
 
 // DevelopmentSnapshot is the complete immutable execution input.

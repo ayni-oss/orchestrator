@@ -10,6 +10,27 @@ pub(crate) fn selection_error(error: SelectionError<CleanStoreError>) -> CleanSt
         SelectionError::UnsupportedProfile => CleanStoreError::InvalidTransition,
     }
 }
+impl CleanStore {
+    pub(crate) fn select_observed_runtime_revision(
+        &mut self,
+        command: &SelectRuntimeRevision,
+        observed_revision: Option<&str>,
+        observed_registry: &v1::RuntimeRegistrySelection,
+    ) -> Result<String, CleanStoreError> {
+        let profile = self.runtime_profile(&command.profile_id)?;
+        if profile.active_revision_id.as_deref() != observed_revision
+            || self.runtime_registry(&profile)? != *observed_registry
+            || self
+                .desired_runtime_repository(&profile)?
+                .is_some_and(|desired| desired != command.identity.image_repository)
+        {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        ayni_orchestrator_application::runtime_selection::select(self, command)
+            .map_err(selection_error)
+    }
+}
+
 impl Repository for CleanStore {
     type Error = CleanStoreError;
     fn selected(&self, profile_id: &str) -> Result<SelectedRevision, Self::Error> {

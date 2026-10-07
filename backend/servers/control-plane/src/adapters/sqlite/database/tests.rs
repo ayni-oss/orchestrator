@@ -22,6 +22,8 @@ fn repository_request() -> v1::CreateRepositoryConnectionRequest {
                 },
             )),
         }),
+        registry_connection_id: String::new(),
+        image_namespace: String::new(),
     }
 }
 

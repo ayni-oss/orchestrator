@@ -1,0 +1,128 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+// Trusted operator API. Never registered on the custom-client listener.
+service ConnectionService {
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
+  rpc GetConnection(GetConnectionRequest) returns (GetConnectionResponse);
+  rpc CreateConnection(CreateConnectionRequest) returns (CreateConnectionResponse);
+  rpc ReplaceConnectionCredentials(ReplaceConnectionCredentialsRequest) returns (ReplaceConnectionCredentialsResponse);
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
+  rpc SetConnectionEnabled(SetConnectionEnabledRequest) returns (SetConnectionEnabledResponse);
+  rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
+  rpc CompleteGithubManifest(CompleteGithubManifestRequest) returns (CompleteGithubManifestResponse);
+}
+// Safe metadata only. Secret contents are never returned.
+message Connection {
+  string id = 1;
+  string kind = 2; // github_app or ghcr
+  string management_source = 3; // admin or ui
+  string display_name = 4;
+  string app_id = 5;
+  string username = 6;
+  string image_namespace = 7;
+  string secret_name = 8;
+  string secret_uid = 9;
+  string desired_revision = 10;
+  string observed_revision = 11;
+  string status = 12;
+  string failure_reason = 13;
+  bool enabled = 14;
+  uint64 resource_version = 15;
+  string pull_secret_name = 16;
+  string test_authentication = 17;
+  string test_push = 18;
+  string test_pull = 19;
+  string test_cleanup = 20;
+  string test_artifact_digest = 21;
+  string candidate_secret_name = 22;
+  string candidate_secret_uid = 23;
+  string candidate_pull_secret_name = 24;
+  string candidate_pull_secret_uid = 25;
+  string pull_secret_uid = 26;
+  repeated ConnectionSecretRevision retired_secret_revisions = 27;
+  string test_cleanup_failure_reason = 28;
+  string test_artifact_repository = 29;
+}
+message ListConnectionsRequest {}
+message ListConnectionsResponse {
+  repeated Connection connections = 1;
+}
+message GetConnectionRequest {
+  string id = 1;
+}
+// Write-only values. Do not store, log or reflect this message.
+message ConnectionCredentials {
+  string private_key = 1;
+  string token = 2;
+  string pull_token = 3;
+}
+message CreateConnectionRequest {
+  string idempotency_key = 1;
+  string kind = 2;
+  string display_name = 3;
+  string app_id = 4;
+  string username = 5;
+  string image_namespace = 6;
+  ConnectionCredentials credentials = 7;
+}
+message ReplaceConnectionCredentialsRequest {
+  string id = 1;
+  string idempotency_key = 2;
+  uint64 expected_resource_version = 3;
+  ConnectionCredentials credentials = 4;
+}
+message TestConnectionRequest {
+  string id = 1;
+  string idempotency_key = 2;
+  uint64 expected_resource_version = 3;
+}
+message SetConnectionEnabledRequest {
+  string id = 1;
+  string idempotency_key = 2;
+  uint64 expected_resource_version = 3;
+  bool enabled = 4;
+}
+message DeleteConnectionResponse {}
+// The BFF validates and consumes session-bound one-time state before calling.
+message CompleteGithubManifestRequest {
+  string code = 1;
+  string idempotency_key = 2;
+}
+
+message GetConnectionResponse {
+  Connection connection = 1;
+}
+
+message CreateConnectionResponse {
+  Connection connection = 1;
+}
+
+message ReplaceConnectionCredentialsResponse {
+  Connection connection = 1;
+}
+
+message TestConnectionResponse {
+  Connection connection = 1;
+}
+
+message SetConnectionEnabledResponse {
+  Connection connection = 1;
+}
+
+message CompleteGithubManifestResponse {
+  Connection connection = 1;
+}
+
+message DeleteConnectionRequest {
+  string id = 1;
+  string idempotency_key = 2;
+  uint64 expected_resource_version = 3;
+}
+
+message ConnectionSecretRevision {
+  string secret_name = 1;
+  string secret_uid = 2;
+  string pull_secret_name = 3;
+  string pull_secret_uid = 4;
+}

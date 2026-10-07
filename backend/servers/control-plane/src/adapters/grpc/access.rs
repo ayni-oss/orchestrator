@@ -430,7 +430,8 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "UpdateProject"
         | "ArchiveProject"
         | "CreateRepositoryConnection"
-        | "ConnectGithubRepository" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
+        | "ConnectGithubRepository"
+        | "SetRepositoryRegistry" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
         "ListRuntimeProfiles"
         | "GetRuntimeProfile"
         | "ListRuntimeProfileRevisions"
@@ -443,7 +444,8 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         "InspectAyniRepository"
         | "CreateRuntimeProfile"
         | "InstallRepositoryAutomation"
-        | "ReconcileRuntimeProfile" => (PROFILES_WRITE, MAX_UNARY_DEADLINE),
+        | "ReconcileRuntimeProfile"
+        | "SetRuntimeRegistry" => (PROFILES_WRITE, MAX_UNARY_DEADLINE),
         "ListProviderModels" => (PROVIDER_MODELS_READ, MAX_UNARY_DEADLINE),
         "ListDevelopmentTasks"
         | "GetDevelopmentTask"

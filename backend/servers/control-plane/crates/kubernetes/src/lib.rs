@@ -8,6 +8,9 @@ mod coding;
 pub mod configuration;
 pub mod execution;
 pub mod job;
+pub mod registry_probe;
 mod workload;
 
 mod execution_port;
+
+pub mod connections;

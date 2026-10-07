@@ -3,7 +3,7 @@
   import PageHeader from "$lib/components/page-header.svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
-  const providers = [{"name": "GitHub", "logo": "github", "description": "Connect your GitHub App and choose which repositories Ayni can access.", "href": "/setup/github"}, {"name": "GitLab", "logo": "gitlab", "description": "Connect repositories hosted on GitLab.", "href": null}, {"name": "Bitbucket", "logo": "bitbucket", "description": "Connect repositories hosted on Bitbucket.", "href": null}];
+  const providers = [{"name": "GitHub", "logo": "github", "description": "Connect your GitHub App and choose which repositories Ayni can access.", "href": "/source-control/github"}, {"name": "GitLab", "logo": "gitlab", "description": "Connect repositories hosted on GitLab.", "href": null}, {"name": "Bitbucket", "logo": "bitbucket", "description": "Connect repositories hosted on Bitbucket.", "href": null}];
 </script>
 
 <svelte:head><title>Source control · Ayni Orchestrator</title></svelte:head>

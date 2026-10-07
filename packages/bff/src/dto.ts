@@ -34,6 +34,8 @@ export interface GithubRepositoryDto {
 }
 
 export interface RepositoryConnectionDto {
+  registryConnectionId?: string;
+  imageNamespace?: string;
   id: string;
   provider: GithubRepositoryDto;
   displayName: string;
@@ -67,6 +69,8 @@ export type RuntimeProfileStateDto =
   | "updating" | "degraded" | "failed" | "unknown";
 
 export interface RuntimeProfileDto {
+  registry?: { registryConnectionId: string };
+  desiredImageRepository: string;
   id: string;
   repositoryConnectionId: string;
   kind: RuntimeProfileKindDto;

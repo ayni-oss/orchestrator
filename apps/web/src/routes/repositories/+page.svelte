@@ -75,7 +75,7 @@
     <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
       <Dialog.Header>
         <Dialog.Title>Connect repository</Dialog.Title>
-        <Dialog.Description>Choose a GitHub App, repository, and container registry destination.</Dialog.Description>
+        <Dialog.Description>Choose a GitHub App and repository. Configure image destinations on each runtime.</Dialog.Description>
       </Dialog.Header>
       {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
       {#if options.error}<Feedback kind="error" title="GitHub unavailable" message={options.error.message} requestId={options.error.requestId} /><Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
@@ -101,11 +101,6 @@
           <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
           <input type="hidden" name="installationId" value={options.selectedInstallationId} />
           <input type="hidden" name="owner" value={selectedOwner} />
-          <div class="space-y-2">
-            <Label for="registry-destination">Container registry destination</Label>
-            <ThemedSelect id="registry-destination" name="registryDestination" value="ghcr.io" options={[{ value: "ghcr.io", label: "GitHub Container Registry" }, { value: "docker.io", label: "Docker Hub — Not available", disabled: true }, { value: "ecr", label: "Amazon ECR — Not available", disabled: true }]} required />
-            <p class="text-xs text-muted-foreground">{#if selectedRepository}Image destination: ghcr.io/{selectedOwner.toLowerCase()}/{selectedRepository.toLowerCase()}-ayni{:else}Select a repository to see its image destination.{/if}</p>
-          </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>
             <Button variant="outline" onclick={() => { connectOpen = false; }}>Cancel</Button>
@@ -114,7 +109,7 @@
         </form>
       {:else if !loadingOptions && !options.error}
         <p class="text-sm text-muted-foreground">No GitHub App installations are available. Set up GitHub in Source control first.</p>
-        <Button href="/source-control" variant="outline">Go to Source control</Button>
+        <Button href="/source-control/github" variant="outline">Set up GitHub</Button>
       {/if}
     </Dialog.Content>
   </Dialog.Root>

@@ -5,6 +5,13 @@ Connectors manage access, projects organize repositories, and tasks freeze
 source, runtime digest, model, constraints, coding turns, repair limit and
 deadline. Ayni remains independently useful as a local CLI.
 
+The trusted operator UI onboards one GitHub App and multiple GHCR connections.
+Kubernetes Secrets hold credentials; SQLite schema version 6 stores safe metadata
+and references. Administrator-managed connections remain read-only, while
+validated UI replacements activate without restarting the control plane. Registry
+probe Jobs test access, and each runtime profile selects its image destination.
+See [operator onboarding](docs/operator-onboarding.md) for the supported flow.
+
 One worker attests its runtime, checks out source, codes and makes coherent
 commits, runs mandatory full quality checks with bounded repairs, freezes final
 evidence and publishes a truthful draft. The control plane admits, schedules,

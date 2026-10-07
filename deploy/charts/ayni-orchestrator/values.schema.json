@@ -4,6 +4,73 @@
   "additionalProperties": false,
   "required": ["enabled", "images", "development", "controlPlane", "web", "persistence", "customClients"],
   "properties": {
+    "connections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "githubAppSecretName",
+        "testImage"
+      ],
+      "properties": {
+        "githubAppSecretName": {
+          "type": "string",
+          "maxLength": 63,
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "testImage": {
+          "type": "string",
+          "pattern": "^$|^[^ ]+@sha256:[a-f0-9]{64}$"
+        },
+        "adminRegistries": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "displayName",
+              "imageNamespace",
+              "username",
+              "pullSecretName",
+              "pushSecretName"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "imageNamespace": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "username": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "pullSecretName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "pushSecretName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      }
+    },
     "runtime": {
       "type": "object",
       "additionalProperties": false,

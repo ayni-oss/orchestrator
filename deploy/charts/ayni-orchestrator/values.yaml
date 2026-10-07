@@ -34,6 +34,12 @@ development:
   hotReload:
     enabled: false
 
+connections:
+  githubAppSecretName: ""
+  testImage: ""
+  # Explicit safe metadata only; referenced Secrets remain administrator-owned.
+  adminRegistries: []
+
 controlPlane:
   maxAttempts: 3
   resources:

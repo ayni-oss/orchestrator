@@ -6,4 +6,32 @@ metadata:
   labels:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-control-plane
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: connection-controller
+rules:
+  # Kubernetes RBAC cannot restrict Secret access by ownership labels.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, patch, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: connection-controller
+subjects:
+  - kind: ServiceAccount
+    name: control-plane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: connection-controller
 {{- end }}

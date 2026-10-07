@@ -1,5 +1,6 @@
 [package]
 name = "ayni-orchestrator-control-plane"
+default-run = "ayni-orchestrator-control-plane"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -58,6 +58,7 @@ impl TaskRepository for CleanStore {
         let snapshot =
             self.repository_snapshot_for_revision(&repository.id, &command.repository_revision)?;
         let profile = self.runtime_profile(&command.profile_id)?;
+        let expected_destination = self.desired_runtime_repository(&profile)?;
         let mut facts = AdmissionFacts {
             repository_id: repository.id,
             snapshot_id: snapshot.id,
@@ -85,6 +86,10 @@ impl TaskRepository for CleanStore {
         };
         let revision = self.runtime_profile_revision(&revision_id)?;
         let artifact = self.runtime_artifact(&artifact_id)?;
+        if expected_destination.is_some_and(|expected| artifact.oci_repository != expected) {
+            facts.profile_ready = false;
+            return Ok(facts);
+        }
         facts.profile_source_revision = revision.repository_revision;
         facts.artifact_revision_id = artifact.runtime_profile_revision_id;
         facts.artifact_verified = artifact.status == v1::RuntimeArtifactStatus::Verified as i32;
@@ -125,6 +130,31 @@ impl TaskRepository for CleanStore {
         let now = created_at.seconds;
         let repository_id = frozen.repository_id;
         let profile_id = frozen.runtime.profile_id;
+        let repository = self.repository_connection(&repository_id)?;
+        let profile = self.runtime_profile(&profile_id)?;
+        let selection = self.runtime_registry(&profile)?;
+        let registry = if selection.registry_connection_id.is_empty() {
+            None
+        } else {
+            self.validate_runtime_registry(&selection.registry_connection_id)?;
+            Some(self.get_connection(&selection.registry_connection_id)?)
+        };
+        if let Some(registry) = &registry {
+            let Some(v1::repository_provider::Provider::Github(github)) =
+                repository.provider.and_then(|p| p.provider)
+            else {
+                return Err(CleanStoreError::InvalidTransition);
+            };
+            let expected = crate::process::runtime_configuration::connection_image_repository(
+                &registry.image_namespace,
+                &github.owner,
+                &github.name,
+            )
+            .map_err(|_| CleanStoreError::InvalidTransition)?;
+            if frozen.runtime.oci_repository != expected {
+                return Err(CleanStoreError::InvalidTransition);
+            }
+        }
         let snapshot = v1::DevelopmentSnapshot {
             repository: Some(v1::FrozenRepository {
                 repository_connection_id: repository_id.clone(),
@@ -141,6 +171,15 @@ impl TaskRepository for CleanStore {
                 runtime_artifact_id: frozen.runtime.artifact_id,
                 oci_repository: frozen.runtime.oci_repository,
                 resolved_digest: frozen.runtime.digest,
+                registry_connection_id: registry.as_ref().map(|v| v.id.clone()).unwrap_or_default(),
+                registry_revision: registry
+                    .as_ref()
+                    .map(|v| v.observed_revision.clone())
+                    .unwrap_or_default(),
+                pull_secret_name: registry
+                    .as_ref()
+                    .map(|v| v.pull_secret_name.clone())
+                    .unwrap_or_default(),
                 platform: frozen.runtime.platform.map(|p| v1::OciPlatform {
                     operating_system: p.operating_system,
                     architecture: p.architecture,
