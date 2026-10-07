@@ -5,9 +5,9 @@
   import { Button } from "$lib/components/ui/button/index.js";
 </script>
 
-<svelte:head><title>Destinations · Ayni Orchestrator</title></svelte:head>
+<svelte:head><title>Container registries · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8">
-  <PageHeader title="Destinations" description="Choose where your testing environment images are stored." />
+  <PageHeader title="Container registries" description="Choose a registry destination for your testing environment images." />
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     <Card.Root>
       <Card.Header><Github class="mb-3 size-6" aria-hidden="true" /><Card.Title>GitHub</Card.Title><Card.Description>Store repository testing environments in GitHub Container Registry.</Card.Description></Card.Header>
