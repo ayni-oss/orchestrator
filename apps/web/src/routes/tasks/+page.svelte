@@ -1,5 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import ThemedSection from "$lib/components/ui/collapsible/section.svelte";
+  import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
+  import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { enhance } from "$app/forms";
   import { Play } from "@lucide/svelte";
   import type { PageProps } from "./$types";
@@ -48,16 +51,16 @@
       {#if readyProfiles.length === 0 || data.models.length === 0}<Feedback kind="warning" title="Submission unavailable" message={readyProfiles.length === 0 ? "No runtime profile is ready." : "No provider model is available."} />{/if}
       <form method="POST" action="?/create" class="mt-4 space-y-4" use:enhance={() => { submitting = true; return async ({ update }) => { submitting = false; await update(); }; }}>
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="provider" value={data.provider ?? ""} />
-        <div class="space-y-2"><Label for="project">Project</Label><select id="project" name="projectId" value={selectedProject} onchange={(event)=>{projectChoice=event.currentTarget.value;repositoryChoice="";selectedProfile="";}} required class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a project</option>{#each data.projects as item (item.id)}<option value={item.id}>{item.displayName}</option>{/each}</select></div>
-        <div class="space-y-2"><Label for="repository">Repository</Label><select id="repository" name="repositoryConnectionId" value={selectedRepository} onchange={event => {repositoryChoice=event.currentTarget.value;selectedProfile="";}} required class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a repository</option>{#each members as id (id)}<option value={id}>{id}</option>{/each}</select></div>
-        <div class="space-y-2"><Label for="profile">Runtime profile</Label><select id="profile" name="runtimeProfileId" bind:value={selectedProfile} required disabled={readyProfiles.length === 0} class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a ready profile</option>{#each readyProfiles as profile (profile.id)}<option value={profile.id}>{words(profile.kind)}</option>{/each}</select></div>
-        <div class="space-y-2"><Label for="model">Model</Label><select id="model" name="model" required class="h-9 w-full rounded-lg border bg-background px-3 text-sm"><option value="" disabled>Select a model</option>{#each data.models as model (model.id)}<option value={model.id}>{model.name ?? model.id}</option>{/each}</select></div>
+        <div class="space-y-2"><Label for="project">Project</Label><ThemedSelect id="project" name="projectId" required value={selectedProject} onValueChange={value => { projectChoice = value; repositoryChoice = ""; selectedProfile = ""; }} placeholder="Select a project" options={data.projects.map(item => ({ value: item.id, label: item.displayName }))} /></div>
+        <div class="space-y-2"><Label for="repository">Repository</Label><ThemedSelect id="repository" name="repositoryConnectionId" required value={selectedRepository} onValueChange={value => { repositoryChoice = value; selectedProfile = ""; }} placeholder="Select a repository" options={members.map(id => ({ value: id, label: id }))} /></div>
+        <div class="space-y-2"><Label for="profile">Runtime profile</Label><ThemedSelect id="profile" name="runtimeProfileId" required bind:value={selectedProfile} disabled={readyProfiles.length === 0} placeholder="Select a ready profile" options={readyProfiles.map(profile => ({ value: profile.id, label: words(profile.kind) }))} /></div>
+        <div class="space-y-2"><Label for="model">Model</Label><ThemedSelect id="model" name="model" required placeholder="Select a model" options={data.models.map(model => ({ value: model.id, label: model.name ?? model.id }))} /></div>
         <p class="text-xs text-muted-foreground">The selected profile’s verified repository revision and image digest are frozen at submission. Later builds do not change this request.</p>
         {#each repositoryProfiles as profile (profile.id)}{#if profile.state!=="ready"}<p class="text-sm"><a class="underline" href={`/profiles/${encodeURIComponent(profile.id)}`}>{words(profile.kind)}: {words(profile.state)} — view next step</a></p>{/if}{/each}
         <p class="text-sm text-muted-foreground">The worker codes, commits and checks the full repository, then makes bounded quality repairs. Valid changed work is published as a draft with truthful check results.</p>
         <div class="space-y-2"><Label for="request">Request</Label><Textarea id="request" name="request" required maxlength={16384} rows={4} /></div>
         <div class="space-y-2"><Label for="criteria">Acceptance criteria</Label><Textarea id="criteria" name="acceptanceCriteria" required rows={3} placeholder="One criterion per line" /></div>
-        <details class="rounded-lg border p-3"><summary>Constraints and deadline</summary><div class="mt-3 space-y-3"><Textarea name="protectedPaths" rows={2} placeholder="Protected paths, one per line" /><label class="flex gap-2 text-sm"><input type="checkbox" name="allowTestEdits" /> Allow test edits</label><Input name="deadlineSeconds" type="number" min={1} max={86400} placeholder="Deadline seconds" /></div></details>
+        <ThemedSection title="Constraints and deadline"><div class="mt-3 space-y-3"><Textarea name="protectedPaths" rows={2} placeholder="Protected paths, one per line" /><label class="flex gap-2 text-sm"><Checkbox name="allowTestEdits" /> Allow test edits</label><Input name="deadlineSeconds" type="number" min={1} max={86400} placeholder="Deadline seconds" /></div></ThemedSection>
         <SubmitButton class="w-full" pending={submitting} pendingLabel="Submitting…" disabled={readyProfiles.length === 0 || data.models.length === 0}><Play aria-hidden="true" /> Submit task</SubmitButton>
       </form>
     </Card.Content></Card.Root>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { RepositoryOptions } from "$lib/repository-options.js";
+  import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { enhance } from "$app/forms";
   import { ArrowRight, Plus } from "@lucide/svelte";
   import type { PageProps } from "./$types";
@@ -83,23 +84,16 @@
         <div class="space-y-5">
           <div class="space-y-2">
             <Label for="github-app">GitHub App</Label>
-            <select id="github-app" name="appName" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={options.selectedAppName} onchange={event => { void loadOptions(event.currentTarget.value); }} disabled={loadingOptions} required>
-              {#each [...new Set(options.installations.map(item => item.appName))] as appName (appName)}<option value={appName}>{appName}</option>{/each}
-            </select>
+            <ThemedSelect id="github-app" value={options.selectedAppName} options={[...new Set(options.installations.map(item => item.appName))].map(appName => ({ value: appName, label: appName }))} onValueChange={value => { void loadOptions(value); }} disabled={loadingOptions} required />
           </div>
           <div class="grid gap-5 sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="installationId">Owner</Label>
-              <select id="installationId" name="installationId" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={options.selectedInstallationId} onchange={event => { void loadOptions(options.selectedAppName, event.currentTarget.value); }} disabled={loadingOptions} required>
-                {#each options.installations.filter(item => item.appName === options.selectedAppName) as installation (installation.installationId)}<option value={installation.installationId}>{installation.owner}</option>{/each}
-              </select>
+              <ThemedSelect id="installationId" value={options.selectedInstallationId} options={options.installations.filter(item => item.appName === options.selectedAppName).map(item => ({ value: item.installationId, label: item.owner }))} onValueChange={value => { void loadOptions(options.selectedAppName, value); }} disabled={loadingOptions} required />
             </div>
             <div class="space-y-2">
               <Label for="repository">Repository</Label>
-              <select id="repository" name="repository" form="connect-repository" bind:value={selectedRepository} class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required disabled={loadingOptions || !options.repositories.length}>
-                <option value="" disabled>Select a repository</option>
-                {#each options.repositories as repository (`${repository.owner}/${repository.name}`)}<option value={repository.name}>{repository.name}</option>{/each}
-              </select>
+              <ThemedSelect id="repository" name="repository" form="connect-repository" bind:value={selectedRepository} options={options.repositories.map(item => ({ value: item.name, label: item.name }))} placeholder="Select a repository" required disabled={loadingOptions || !options.repositories.length} />
             </div>
           </div>
         </div>
@@ -109,11 +103,7 @@
           <input type="hidden" name="owner" value={selectedOwner} />
           <div class="space-y-2">
             <Label for="registry-destination">Container registry destination</Label>
-            <select id="registry-destination" name="registryDestination" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required>
-              <option value="ghcr.io">GitHub Container Registry</option>
-              <option disabled>Docker Hub — Not available</option>
-              <option disabled>Amazon ECR — Not available</option>
-            </select>
+            <ThemedSelect id="registry-destination" name="registryDestination" value="ghcr.io" options={[{ value: "ghcr.io", label: "GitHub Container Registry" }, { value: "docker.io", label: "Docker Hub — Not available", disabled: true }, { value: "ecr", label: "Amazon ECR — Not available", disabled: true }]} required />
             <p class="text-xs text-muted-foreground">{#if selectedRepository}Image destination: ghcr.io/{selectedOwner.toLowerCase()}/{selectedRepository.toLowerCase()}-ayni{:else}Select a repository to see its image destination.{/if}</p>
           </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
