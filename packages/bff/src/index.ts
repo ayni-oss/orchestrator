@@ -25,3 +25,5 @@ export {
 export type * from "./dto.js";
 
 export type { Connection } from "@ayni-orchestrator/grpc-bindings/server";
+
+export { mapCertificate } from "./certificates.js";

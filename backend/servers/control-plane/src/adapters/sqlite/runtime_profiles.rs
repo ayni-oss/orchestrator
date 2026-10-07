@@ -72,6 +72,8 @@ impl CleanStore {
         let operational = kind == v1::RuntimeProfileKind::AyniManaged;
         let profile = v1::RuntimeProfile {
             reconciliation_metadata: vec![],
+            certificate_id: None,
+            effective_certificate: None,
             registry: Some(registry),
             desired_image_repository: String::new(),
             id: profile_id.clone(),

@@ -29,6 +29,24 @@ impl ExecutionBackend for RuntimeKubernetes {
             .await
             .map_err(ExecutionError::from)
     }
+    async fn start_trust_lock<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        runtime: &WorkloadRuntime,
+        request: &ExecutionRequest<P>,
+        token: &str,
+        key_id: &str,
+        public_key: &str,
+    ) -> ExecutionResult<()> {
+        self.start_trust_lock(name, runtime, request, token, key_id, public_key)
+            .await
+            .map_err(ExecutionError::from)
+    }
+    async fn trust_lock_result(&self, name: &str) -> ExecutionResult<String> {
+        self.trust_lock_result(name)
+            .await
+            .map_err(ExecutionError::from)
+    }
     async fn start_coding<P: Serialize + Sync>(
         &self,
         name: &str,

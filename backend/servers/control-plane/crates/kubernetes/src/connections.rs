@@ -200,6 +200,59 @@ impl ConnectionSecrets {
                 .ok_or("connection_secret_identity_missing")?,
         })
     }
+    /// Reads an explicitly referenced signing Secret. Private material stays inside trusted adapters.
+    ///
+    /// # Errors
+    /// Returns bounded identity, ownership, and format errors.
+    pub async fn signing(
+        &self,
+        name: &str,
+        owner: Option<(&str, &str)>,
+    ) -> Result<SigningCredential, &'static str> {
+        let secret = self
+            .secrets
+            .get(name)
+            .await
+            .map_err(|_| "certificate_secret_unavailable")?;
+        let uid = secret
+            .metadata
+            .uid
+            .ok_or("certificate_secret_identity_missing")?;
+        if let Some((id, expected_uid)) = owner {
+            let labels = secret
+                .metadata
+                .labels
+                .as_ref()
+                .ok_or("certificate_secret_ownership_mismatch")?;
+            if (!expected_uid.is_empty() && expected_uid != uid)
+                || labels.get("ayni.dev/connection-id").map(String::as_str) != Some(id)
+                || labels.get("ayni.dev/management-source").map(String::as_str) != Some("ui")
+                || secret.immutable != Some(true)
+            {
+                return Err("certificate_secret_ownership_mismatch");
+            }
+        }
+        let mut data = secret.data.ok_or("certificate_credentials_invalid")?;
+        Ok(SigningCredential {
+            seed: String::from_utf8(
+                data.remove("signing-key")
+                    .ok_or("certificate_credentials_invalid")?
+                    .0,
+            )
+            .map_err(|_| "certificate_credentials_invalid")?,
+            key_id: String::from_utf8(
+                data.remove("key-id")
+                    .ok_or("certificate_credentials_invalid")?
+                    .0,
+            )
+            .map_err(|_| "certificate_credentials_invalid")?,
+            uid,
+            revision: secret
+                .metadata
+                .resource_version
+                .ok_or("certificate_secret_identity_missing")?,
+        })
+    }
     /// Deletes an owned revision with UID and resource-version preconditions.
     ///
     /// # Errors
@@ -249,4 +302,12 @@ fn references(value: &serde_json::Value, name: &str) -> bool {
         serde_json::Value::Array(values) => values.iter().any(|value| references(value, name)),
         _ => false,
     }
+}
+
+/// Write-only signing material, deliberately without Debug or serialization.
+pub struct SigningCredential {
+    pub seed: String,
+    pub key_id: String,
+    pub uid: String,
+    pub revision: String,
 }

@@ -191,17 +191,29 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
         return Err(CleanStoreError::RetiredPilotSchema);
     }
     if has_marker {
-        let version: i64 = connection
+        let mut version: i64 = connection
             .query_row(
                 "SELECT version FROM clean_schema WHERE component='control_plane'",
                 [],
                 |row| row.get(0),
             )
             .map_err(CleanStoreError::Database)?;
+        if version == 6 && SCHEMA_VERSION == 7 {
+            let expected = CLEAN_TABLES
+                .iter()
+                .filter(|name| !matches!(**name, "certificates" | "certificate_operations"))
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            if tables != expected {
+                return Err(CleanStoreError::CorruptState);
+            }
+            connection.execute_batch("BEGIN IMMEDIATE; CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL); CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1; CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL); UPDATE clean_schema SET version=7 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
+            version = 7;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
-        if tables
+        if existing_tables(connection)?
             != CLEAN_TABLES
                 .iter()
                 .map(ToString::to_string)
@@ -239,7 +251,10 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',6,unixepoch());
+VALUES ('control_plane',7,unixepoch());
+CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL);
+CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1;
+CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL);
 CREATE TABLE connections(id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload BLOB NOT NULL);
 CREATE UNIQUE INDEX single_github_app ON connections(kind) WHERE kind='github_app';
 CREATE TABLE connection_operations(operation_key TEXT PRIMARY KEY, connection_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL);

@@ -194,6 +194,12 @@ fn spawn_background_loops(
         move || {
             let state = connection_state.clone();
             async move {
+                if state.reconcile_certificates().await.is_err() {
+                    warn!(
+                        reason_code = "certificate_reconciliation_failed",
+                        "certificate reconciliation failed"
+                    );
+                }
                 if state.reconcile_connections().await.is_err() {
                     warn!(
                         reason_code = "connection_reconciliation_failed",

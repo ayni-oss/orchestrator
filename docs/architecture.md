@@ -26,8 +26,9 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 6 rejects older state rather than
-converting it. Connectors, projects, repositories and runtime profiles remain
+and pull request receipts. SQLite schema version 7 adds certificate tables and
+migrates recognized schema-6 databases transactionally without rewriting existing resources. Earlier
+and unknown schema versions are rejected. Connectors, projects, repositories and runtime profiles remain
 control-plane resources. Credentials are separate inputs and are never worker output.
 
 ## Connection credentials
@@ -66,6 +67,33 @@ Already admitted work retains its frozen destination and credentials; superseded
 builds can finish but cannot activate the new selection. Secret retention follows
 these frozen references, as described
 in [operations](operations.md).
+
+
+## Signing certificates
+
+Global Ed25519 certificates are trusted-operator resources. The certificate
+service and runtime certificate setter reject custom-client credential management.
+Import requests carry write-only seeds, and generation uses operating-system
+randomness. Private seeds and key IDs live in owned immutable Kubernetes Secret
+revisions; SQLite and browser DTOs hold public keys, references, status and usage.
+Explicit administrator Secret references become read-only certificates with owned
+immutable execution snapshots; arbitrary Secrets are never discovered.
+
+The first valid certificate becomes the enabled default. Ayni runtime profiles
+follow that default unless an explicit certificate is selected. Custom runtimes
+have no certificate selection. Missing or unusable certificates block new signed
+builds while connection setup remains available. Selection, default and key changes
+retire current readiness; pending observations cannot reactivate a superseded
+runtime, and admitted tasks retain their frozen images.
+
+Reconciliation inspects the connected default revision before preparing public
+trust changes. A scoped Kubernetes job validates the existing Ayni configuration
+and regenerates the lock with the pinned CLI while preserving immutable inputs.
+It receives no signing or registry-push material. Durable generation identities
+and repository branches deduplicate draft trust-update PRs. After merge,
+reconciliation checks the committed policy and lock, resolves or rebuilds the
+signed image, and verifies the selected certificate before restoring readiness.
+Only trusted environment builders receive signing seeds.
 
 
 ## Worker sandbox

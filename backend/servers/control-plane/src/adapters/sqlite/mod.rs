@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 6;
+pub(crate) const SCHEMA_VERSION: i64 = 7;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -43,6 +43,8 @@ const MAX_RECONCILE_BATCH: usize = 128;
 const MAX_PENDING_ACTION_BATCH: usize = 256;
 const CLEAN_TABLES: &[&str] = &[
     "automation_installations",
+    "certificate_operations",
+    "certificates",
     "clean_schema",
     "connection_operations",
     "connections",
@@ -172,6 +174,7 @@ mod onboarding;
 mod profile_identity;
 mod projects;
 mod repository_connections;
+mod runtime_certificate;
 mod runtime_profiles;
 mod runtime_registry;
 mod store;
@@ -384,6 +387,7 @@ mod tests {
     mod projects;
     mod recovery;
     mod runtime;
+    mod runtime_certificate;
     mod runtime_registry;
 }
 
@@ -405,4 +409,5 @@ pub(crate) mod task_retry;
 
 pub(crate) mod automation_admission;
 
+mod certificates;
 mod connections;

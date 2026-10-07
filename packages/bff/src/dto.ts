@@ -1,3 +1,9 @@
+export interface CertificateDto {
+  id: string; managementSource: string; displayName: string; keyId: string; publicKey: string;
+  revision: string; enabled: boolean; isDefault: boolean; resourceVersion: string;
+  status: string; failureReason: string; usageCount: string; secretName: string; sourceSecretName: string;
+}
+
 export interface PageDto {
   nextPageToken: string;
   snapshotCursor: string;
@@ -69,6 +75,8 @@ export type RuntimeProfileStateDto =
   | "updating" | "degraded" | "failed" | "unknown";
 
 export interface RuntimeProfileDto {
+  certificateId?: string;
+  effectiveCertificate?: CertificateDto;
   registry?: { registryConnectionId: string };
   desiredImageRepository: string;
   id: string;

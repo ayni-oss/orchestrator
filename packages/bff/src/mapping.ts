@@ -1,3 +1,4 @@
+import { mapCertificate } from "./certificates.js";
 import { safeText, safeGithubLink, safeReconciliation } from "./onboarding.js";
 import {
   QualityOutcome, workerPhaseToJSON, publicationOutcomeToJSON, executionOutcomeToJSON,
@@ -176,6 +177,8 @@ export function mapRuntimeProfile(value: RuntimeProfile): RuntimeProfileDto {
     state: mapRuntimeProfileState(value.state),
     reconciliation: safeReconciliation(value.reconciliationMetadata),
     desiredImageRepository: value.desiredImageRepository,
+    ...optional("certificateId", value.certificateId),
+    ...(value.effectiveCertificate ? { effectiveCertificate: mapCertificate(value.effectiveCertificate) } : {}),
     ...(value.registry === undefined ? {} : { registry: {registryConnectionId:value.registry.registryConnectionId} }),
     createdAt: requiredDate(value.createdAt),
     updatedAt: requiredDate(value.updatedAt),

@@ -14,3 +14,5 @@ mod workload;
 mod execution_port;
 
 pub mod connections;
+
+mod trust_lock;

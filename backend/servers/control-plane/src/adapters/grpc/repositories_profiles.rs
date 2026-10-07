@@ -274,6 +274,37 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
 
 #[tonic::async_trait]
 impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
+    async fn set_runtime_certificate(
+        &self,
+        request: Request<v1::SetRuntimeCertificateRequest>,
+    ) -> Result<Response<v1::SetRuntimeCertificateResponse>, Status> {
+        let context = self.context(&request, "SetRuntimeCertificate")?;
+        if context.client_id.is_some() {
+            return Err(Status::permission_denied("trusted_operator_required"));
+        }
+        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let message = request.into_inner();
+        validate_id(&message.runtime_profile_id, "runtime_profile_id")
+            .map_err(|error| context.validation(&error))?;
+        if message.expected_resource_version == 0 {
+            return Err(Status::invalid_argument("resource_version_required"));
+        }
+        if !message.certificate_id.is_empty() {
+            validate_id(&message.certificate_id, "certificate_id")
+                .map_err(|error| context.validation(&error))?;
+        }
+        let _guard = self.state.connection_lock.lock().await;
+        let profile = with_store(&self.state, move |store| {
+            let profile = store.set_runtime_certificate(&key, &message)?;
+            store.describe_runtime_profile(profile)
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        Ok(context.response(v1::SetRuntimeCertificateResponse {
+            runtime_profile: Some(profile),
+        }))
+    }
+
     async fn set_runtime_registry(
         &self,
         request: Request<v1::SetRuntimeRegistryRequest>,

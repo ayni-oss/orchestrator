@@ -59,12 +59,25 @@ only stops live updates and deliberately leaves Helm-owned resources intact.
 selected private env file into Kubernetes Secrets, rebuild all three project
 images, load them into Docker Desktop Kubernetes, and run `helm upgrade
 --install`. Use `secrets` when only credential values need to be refreshed.
-Set `AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID` in the
-mode-600 `dev/.env` when using the dedicated Kubernetes environment builder.
-`dev/ctl secrets` then provisions the `environment-producer` Secret. Reference
-that name as `build.signing_secret` in the runtime profile configuration; the
-build Job consumes the values without mounting them into the control-plane or
-web containers. These settings are optional when builds use GitHub Actions.
+The **Certificates** sidebar page is the preferred setup for dedicated Kubernetes
+environment builds. Generate an Ed25519 signing key or import a 64-character
+lowercase hexadecimal seed with its key ID. Kubernetes stores private material;
+the UI displays only public trust policy. The first certificate becomes the global
+default. Ayni runtime settings can follow that default or select another certificate;
+projects inherit their repositories’ runtime selections. Custom runtimes do not
+use certificates. Until a usable certificate exists, signed builds require setup.
+
+For administrator-managed certificates, the mode-600 `dev/.env` may still contain
+`AYNI_ENV_CERTIFICATE_SIGNING_KEY` and `AYNI_ENV_CERTIFICATE_KEY_ID`.
+`dev/ctl secrets` provisions the `environment-producer` Secret. The next `deploy`
+or `hot-reload` registers that explicit local Secret through the chart’s
+`connections.adminCertificates` configuration using a name-only existence check.
+When it is absent, deployment leaves certificate setup to the UI. The UI presents
+read-only administrator details and detects replacements. Legacy `build.signing_secret` references
+are deprecated and registered for compatibility. Signing seeds reach only trusted
+builder Jobs. Trust-update jobs and coding workers receive no signing authority.
+Review and merge the draft public trust-policy/lock update proposed for affected
+Ayni repositories before the new certificate’s environment becomes ready.
 
 For private GHCR runtime images, optionally set `GHCR_PULL_USERNAME` and
 `GHCR_PULL_TOKEN` (a classic personal access token with `read:packages`) in the

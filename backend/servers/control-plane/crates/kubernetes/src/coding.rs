@@ -177,6 +177,9 @@ fn build_job(
     runtime: &WorkloadRuntime,
 ) -> Result<Job, &'static str> {
     let build = runtime.build.as_ref().ok_or("runtime_builder_missing")?;
+    if build.signing_secret.is_empty() {
+        return Err("certificate_setup_required");
+    }
     let environment = vec![
         json!({"name":"BUILD_IMAGE","value":runtime.image}),
         json!({"name":"DOCKER_HOST","value":build.engine_host}),

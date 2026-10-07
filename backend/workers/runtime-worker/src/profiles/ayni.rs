@@ -362,3 +362,5 @@ async fn success(command: std::process::Command) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+pub mod trust_lock;

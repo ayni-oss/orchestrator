@@ -23,3 +23,12 @@ replacement baseline is established, routine changes must obey the configured
 Buf compatibility checks. Bundles identify an immutable private source revision;
 clients verify checksums and regenerate before upgrading. Bundle creation does
 not publish a public endpoint or package.
+
+`CertificateService` is available only on the trusted operator listener. Import and
+replacement requests contain write-only signing seeds; responses expose public key,
+revision, ownership, status, usage and safe Secret references. Mutations require
+idempotency keys and, for existing resources, expected resource versions.
+`RuntimeProfileService.SetRuntimeCertificate` selects a certificate for an Ayni
+runtime; an empty ID follows the global default. Profile reads expose the selection
+and effective safe certificate metadata. Custom runtimes reject certificate
+assignment. Signing seeds never appear in runtime profile or frozen task DTOs.

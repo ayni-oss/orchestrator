@@ -6,4 +6,5 @@ pub mod http;
 pub mod models;
 pub mod sqlite;
 
+pub mod certificates;
 pub mod connections;
