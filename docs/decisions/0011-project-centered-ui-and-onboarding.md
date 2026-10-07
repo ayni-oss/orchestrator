@@ -82,3 +82,21 @@ protobuf APIs retain single-member creation for native callers and repeated
 creation/update fields. An empty update membership list preserves membership;
 nonempty replaces it. Use isolated new storage for validation and the exact
 retained-data cutover procedure in [operations](../operations.md).
+
+## Runtime overview refinement (2026-10-07)
+
+The accepted repository detail page now serves as its runtime overview. Its header
+contains repository identity, the GitHub link, connection status and default
+branch. Each runtime owns its lock information, image destination, readiness and
+configuration dialog. Inspection events use transient notifications; ongoing
+progress and failures remain visible on the affected runtime.
+
+Registry connection and approved image namespace selections now belong to the
+logical runtime profile and survive source updates and rebuilds. This refines the
+repository-owned destination described above; it remains shared across projects
+using that runtime. Existing schema-6 profiles without a runtime selection inherit
+the legacy repository default until edited. The additive metadata requires no
+state reset. Destination changes invalidate that runtime's admission authority
+until verified, while already admitted work retains its frozen destination and
+credential revision. See the current [architecture](../architecture.md) and
+[onboarding flow](../operator-onboarding.md).

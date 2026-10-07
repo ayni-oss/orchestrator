@@ -69,6 +69,7 @@ export type RuntimeProfileStateDto =
   | "updating" | "degraded" | "failed" | "unknown";
 
 export interface RuntimeProfileDto {
+  registry?: { registryConnectionId: string; imageNamespace: string };
   id: string;
   repositoryConnectionId: string;
   kind: RuntimeProfileKindDto;

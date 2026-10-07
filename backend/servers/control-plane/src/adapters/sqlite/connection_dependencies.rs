@@ -4,6 +4,7 @@ impl CleanStore {
     fn connection_payloads(&self, table: &str) -> Result<Vec<Vec<u8>>, CleanStoreError> {
         let query = match table {
             "repository_connections" => "SELECT payload FROM repository_connections",
+            "runtime_profiles" => "SELECT payload FROM runtime_profiles",
             "development_attempts" => "SELECT payload FROM development_attempts",
             _ => return Err(CleanStoreError::CorruptState),
         };
@@ -18,10 +19,29 @@ impl CleanStore {
             .map_err(CleanStoreError::Database)
     }
     pub(crate) fn registry_connection_in_use(&self, id: &str) -> Result<bool, CleanStoreError> {
+        let profiles = self
+            .connection_payloads("runtime_profiles")?
+            .into_iter()
+            .map(|payload| {
+                v1::RuntimeProfile::decode(payload.as_slice())
+                    .map_err(|_| CleanStoreError::CorruptState)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for profile in &profiles {
+            if self.runtime_registry(profile)?.registry_connection_id == id {
+                return Ok(true);
+            }
+        }
         for payload in self.connection_payloads("repository_connections")? {
             let repository = v1::RepositoryConnection::decode(payload.as_slice())
                 .map_err(|_| CleanStoreError::CorruptState)?;
-            if repository.registry_connection_id == id {
+            // The legacy repository default only retains credentials while discovery
+            // has no profile. Explicit runtime selections replace that authority.
+            if repository.registry_connection_id == id
+                && !profiles
+                    .iter()
+                    .any(|profile| profile.repository_connection_id == repository.id)
+            {
                 return Ok(true);
             }
         }

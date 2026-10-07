@@ -81,6 +81,7 @@ function task(): DevelopmentTask {
       },
       runtime: {
         runtimeProfileId: "profile:1",
+        registryConnectionId:"connection:ghcr",registryRevision:"7",pullSecretName:"private-pull",
         runtimeProfileRevisionId: "profile-revision:1",
         profileKind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,
         runtimeArtifactId: "artifact:1",
@@ -126,6 +127,12 @@ describe("clean-v1 browser DTO mappings", () => {
         runtime: expect.objectContaining({ resolvedDigest: `sha256:${"b".repeat(64)}` }),
       }),
     }));
+  });
+
+  it("exposes runtime selection but keeps frozen Secret references out of browser DTOs",()=>{
+    expect(mapRuntimeProfile({...profile(),registry:{registryConnectionId:"connection:ghcr",imageNamespace:"team"}}).registry).toEqual({registryConnectionId:"connection:ghcr",imageNamespace:"team"});
+    expect(mapRuntimeProfile(profile()).registry).toBeUndefined();
+    expect(JSON.stringify(mapDevelopmentTask(task()))).not.toContain("private-pull");
   });
 
   it("handles every additive enum boundary as unknown", () => {

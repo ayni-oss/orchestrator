@@ -61,3 +61,12 @@ without deleting its Secret. Connection deletion checks current, pending and
 retired revisions for consumers before deleting UI-managed Secrets. Labels
 identify ownership; Kubernetes RBAC grants Secret access by namespace and
 resource, not by these labels.
+
+Runtime registry selections are additive protobuf metadata within SQLite schema 6;
+this UI refinement requires no database reset. Existing profiles without a runtime
+selection inherit their repository’s legacy default until explicitly edited.
+After every runtime has an explicit selection, that legacy default no longer
+retains an unused registry connection. Frozen attempts and pending builds continue
+to retain their credential revisions. Changing a runtime destination is a
+version-checked, idempotent mutation and wakes reconciliation without restarting
+the control plane.

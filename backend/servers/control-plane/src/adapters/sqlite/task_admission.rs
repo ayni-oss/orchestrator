@@ -126,14 +126,16 @@ impl TaskRepository for CleanStore {
         let repository_id = frozen.repository_id;
         let profile_id = frozen.runtime.profile_id;
         let repository = self.repository_connection(&repository_id)?;
-        let registry = if repository.registry_connection_id.is_empty() {
+        let profile = self.runtime_profile(&profile_id)?;
+        let selection = self.runtime_registry(&profile)?;
+        let registry = if selection.registry_connection_id.is_empty() {
             None
         } else {
             self.validate_registry_selection(
-                &repository.registry_connection_id,
-                &repository.image_namespace,
+                &selection.registry_connection_id,
+                &selection.image_namespace,
             )?;
-            Some(self.get_connection(&repository.registry_connection_id)?)
+            Some(self.get_connection(&selection.registry_connection_id)?)
         };
         if let Some(registry) = &registry {
             let Some(v1::repository_provider::Provider::Github(github)) =

@@ -23,7 +23,6 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
     }));
     return {
       repositoryConnections: result.repositoryConnections,
-      registryConnections:(await bff.listConnections(context)).filter(c=>c.kind==="ghcr" && c.enabled && c.status==="ready"),
       runtimeProfiles: Object.fromEntries(runtimeProfiles) as Record<string, RuntimeProfileDto[]>,
       nextPageToken: result.page.nextPageToken || undefined,
       requestId: locals.requestId,
@@ -31,7 +30,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return {registryConnections:[], repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 

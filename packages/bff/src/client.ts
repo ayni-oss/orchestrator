@@ -34,7 +34,7 @@ import {
   type ListGithubInstallationRepositoriesResponse,
   type ListRuntimeArtifactsResponse,
   type ListRuntimeProfilesResponse,
-  type SetRepositoryRegistryResponse,
+  type SetRepositoryRegistryResponse, type SetRuntimeRegistryResponse,
   type RetryDevelopmentTaskResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
@@ -226,6 +226,10 @@ export class OrchestratorBff {
   async setRepositoryRegistry(input:{idempotencyKey:string;repositoryConnectionId:string;expectedResourceVersion:string;registryConnectionId:string;imageNamespace:string},context:RequestContext):Promise<RepositoryConnectionDto> {
     const response=await this.#unary<SetRepositoryRegistryResponse>(context,(m,o,c)=>this.#repositories.setRepositoryRegistry(input,m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
+  }
+  async setRuntimeRegistry(input:{idempotencyKey:string;runtimeProfileId:string;expectedResourceVersion:string;registryConnectionId:string;imageNamespace:string},context:RequestContext):Promise<RuntimeProfileDto> {
+    const response=await this.#unary<SetRuntimeRegistryResponse>(context,(m,o,c)=>this.#profiles.setRuntimeRegistry(input,m,o,c));
+    return mapRuntimeProfile(required(response.runtimeProfile));
   }
   async listGithubInstallations(context: RequestContext): Promise<GithubInstallationOptionDto[]> {
     const response = await this.#unary<ListGithubInstallationsResponse>(context, (m,o,c)=>this.#repositories.listGithubInstallations({},m,o,c));

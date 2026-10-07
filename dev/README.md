@@ -31,7 +31,9 @@ dev/ctl hot-reload
 This first synchronizes Secrets and deploys the normal Helm release with local
 development images. It then attaches Tilt to the existing `control-plane` Pod;
 Helm remains the resource owner. Each new Tilt session first synchronizes the current
-UI source, including edits made before the session started. The Pod continues to contain both sidecars.
+control-plane and UI source, including edits made before the session started.
+The control plane is compiled before Tilt attaches, so generated Rust API bindings
+use the current protobuf definitions. The Pod continues to contain both sidecars.
 Only these development images have a writable root filesystem, allowing Tilt to
 synchronize source beside their development dependencies; normal images remain
 read-only. The web development container has a 1 GiB memory limit because Vite
@@ -39,11 +41,14 @@ optimizes the full Svelte dependency graph at startup; this higher allocation
 is confined to the hot-reload overlay.
 
 - Changes under `backend/` or `proto/` are copied into the control-plane
-  container, compiled there, and restart only that container.
+  container and compiled there. A development-only supervisor restarts the
+  control-plane process without restarting its container, retaining synchronized
+  source and the newly compiled binary. Container termination forwards the signal
+  to the child process and exits normally.
 - Changes under `apps/web/`, `packages/bff/`, or `clients/typescript/` are
   copied into the web container; Vite refreshes the browser without a Pod
   rollout. The web application is available at http://127.0.0.1:18080.
-- `Cargo.lock`, package manifests, generated bindings, chart values, Secrets,
+- JavaScript package manifests, chart values, Secrets,
   or Helm templates are deployment inputs. Stop Tilt and run `dev/ctl
   hot-reload` again after changing them.
 

@@ -173,6 +173,7 @@ mod profile_identity;
 mod projects;
 mod repository_connections;
 mod runtime_profiles;
+mod runtime_registry;
 mod store;
 pub(crate) mod task_admission;
 mod validation;
@@ -383,6 +384,7 @@ mod tests {
     mod projects;
     mod recovery;
     mod runtime;
+    mod runtime_registry;
 }
 
 mod project_validation;

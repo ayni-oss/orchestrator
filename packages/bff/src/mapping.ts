@@ -175,6 +175,7 @@ export function mapRuntimeProfile(value: RuntimeProfile): RuntimeProfileDto {
     support: mapRuntimeProfileSupport(value.support),
     state: mapRuntimeProfileState(value.state),
     reconciliation: safeReconciliation(value.reconciliationMetadata),
+    ...(value.registry === undefined ? {} : { registry: {registryConnectionId:value.registry.registryConnectionId,imageNamespace:value.registry.imageNamespace} }),
     createdAt: requiredDate(value.createdAt),
     updatedAt: requiredDate(value.updatedAt),
     resourceVersion: value.resourceVersion,

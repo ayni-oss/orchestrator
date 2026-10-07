@@ -319,6 +319,11 @@ export interface RuntimeProfile {
    * These are operational status, not artifact verification evidence.
    */
   reconciliationMetadata: VerifiedMetadata[];
+  /**
+   * Absent only for profiles stored before runtime-owned registry selection.
+   * Present with empty values selects deployment infrastructure defaults.
+   */
+  registry?: RuntimeRegistrySelection | undefined;
 }
 
 /** RuntimeProfileRevision is an immutable version of profile configuration. */
@@ -576,6 +581,24 @@ export interface WorkflowProposal {
   contents: string;
 }
 
+/** RuntimeRegistrySelection survives source revisions and rebuilds of its profile. */
+export interface RuntimeRegistrySelection {
+  registryConnectionId: string;
+  imageNamespace: string;
+}
+
+export interface SetRuntimeRegistryRequest {
+  idempotencyKey: string;
+  runtimeProfileId: string;
+  expectedResourceVersion: string;
+  registryConnectionId: string;
+  imageNamespace: string;
+}
+
+export interface SetRuntimeRegistryResponse {
+  runtimeProfile?: RuntimeProfile | undefined;
+}
+
 function createBaseRuntimeProfile(): RuntimeProfile {
   return {
     id: "",
@@ -590,6 +613,7 @@ function createBaseRuntimeProfile(): RuntimeProfile {
     updatedAt: undefined,
     resourceVersion: "0",
     reconciliationMetadata: [],
+    registry: undefined,
   };
 }
 
@@ -630,6 +654,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     }
     for (const v of message.reconciliationMetadata) {
       VerifiedMetadata.encode(v!, writer.uint32(98).fork()).join();
+    }
+    if (message.registry !== undefined) {
+      RuntimeRegistrySelection.encode(message.registry, writer.uint32(106).fork()).join();
     }
     return writer;
   },
@@ -743,6 +770,14 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
             message.reconciliationMetadata.push(VerifiedMetadata.decode(reader, reader.uint32()));
             continue;
           }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.registry = RuntimeRegistrySelection.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -797,6 +832,7 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
         : globalThis.Array.isArray(object?.reconciliation_metadata)
         ? object.reconciliation_metadata.map((e: any) => VerifiedMetadata.fromJSON(e))
         : [],
+      registry: isSet(object.registry) ? RuntimeRegistrySelection.fromJSON(object.registry) : undefined,
     };
   },
 
@@ -838,6 +874,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     if (message.reconciliationMetadata?.length) {
       obj.reconciliationMetadata = message.reconciliationMetadata.map((e) => VerifiedMetadata.toJSON(e));
     }
+    if (message.registry !== undefined) {
+      obj.registry = RuntimeRegistrySelection.toJSON(message.registry);
+    }
     return obj;
   },
 
@@ -860,6 +899,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     message.updatedAt = object.updatedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
     message.reconciliationMetadata = object.reconciliationMetadata?.map((e) => VerifiedMetadata.fromPartial(e)) || [];
+    message.registry = (object.registry !== undefined && object.registry !== null)
+      ? RuntimeRegistrySelection.fromPartial(object.registry)
+      : undefined;
     return message;
   },
 };
@@ -5020,6 +5062,333 @@ export const WorkflowProposal: MessageFns<WorkflowProposal> = {
   },
 };
 
+function createBaseRuntimeRegistrySelection(): RuntimeRegistrySelection {
+  return { registryConnectionId: "", imageNamespace: "" };
+}
+
+export const RuntimeRegistrySelection: MessageFns<RuntimeRegistrySelection> = {
+  encode(message: RuntimeRegistrySelection, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.registryConnectionId !== "") {
+      writer.uint32(10).string(message.registryConnectionId);
+    }
+    if (message.imageNamespace !== "") {
+      writer.uint32(18).string(message.imageNamespace);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeRegistrySelection {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeRegistrySelection();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.imageNamespace = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeRegistrySelection {
+    return {
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      imageNamespace: isSet(object.imageNamespace)
+        ? globalThis.String(object.imageNamespace)
+        : isSet(object.image_namespace)
+        ? globalThis.String(object.image_namespace)
+        : "",
+    };
+  },
+
+  toJSON(message: RuntimeRegistrySelection): unknown {
+    const obj: any = {};
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.imageNamespace !== "") {
+      obj.imageNamespace = message.imageNamespace;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeRegistrySelection>): RuntimeRegistrySelection {
+    return RuntimeRegistrySelection.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeRegistrySelection>): RuntimeRegistrySelection {
+    const message = createBaseRuntimeRegistrySelection();
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.imageNamespace = object.imageNamespace ?? "";
+    return message;
+  },
+};
+
+function createBaseSetRuntimeRegistryRequest(): SetRuntimeRegistryRequest {
+  return {
+    idempotencyKey: "",
+    runtimeProfileId: "",
+    expectedResourceVersion: "0",
+    registryConnectionId: "",
+    imageNamespace: "",
+  };
+}
+
+export const SetRuntimeRegistryRequest: MessageFns<SetRuntimeRegistryRequest> = {
+  encode(message: SetRuntimeRegistryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.runtimeProfileId !== "") {
+      writer.uint32(18).string(message.runtimeProfileId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    if (message.registryConnectionId !== "") {
+      writer.uint32(34).string(message.registryConnectionId);
+    }
+    if (message.imageNamespace !== "") {
+      writer.uint32(42).string(message.imageNamespace);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetRuntimeRegistryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetRuntimeRegistryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.registryConnectionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.imageNamespace = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetRuntimeRegistryRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      registryConnectionId: isSet(object.registryConnectionId)
+        ? globalThis.String(object.registryConnectionId)
+        : isSet(object.registry_connection_id)
+        ? globalThis.String(object.registry_connection_id)
+        : "",
+      imageNamespace: isSet(object.imageNamespace)
+        ? globalThis.String(object.imageNamespace)
+        : isSet(object.image_namespace)
+        ? globalThis.String(object.image_namespace)
+        : "",
+    };
+  },
+
+  toJSON(message: SetRuntimeRegistryRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.runtimeProfileId !== "") {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.registryConnectionId !== "") {
+      obj.registryConnectionId = message.registryConnectionId;
+    }
+    if (message.imageNamespace !== "") {
+      obj.imageNamespace = message.imageNamespace;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetRuntimeRegistryRequest>): SetRuntimeRegistryRequest {
+    return SetRuntimeRegistryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetRuntimeRegistryRequest>): SetRuntimeRegistryRequest {
+    const message = createBaseSetRuntimeRegistryRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.registryConnectionId = object.registryConnectionId ?? "";
+    message.imageNamespace = object.imageNamespace ?? "";
+    return message;
+  },
+};
+
+function createBaseSetRuntimeRegistryResponse(): SetRuntimeRegistryResponse {
+  return { runtimeProfile: undefined };
+}
+
+export const SetRuntimeRegistryResponse: MessageFns<SetRuntimeRegistryResponse> = {
+  encode(message: SetRuntimeRegistryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.runtimeProfile !== undefined) {
+      RuntimeProfile.encode(message.runtimeProfile, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetRuntimeRegistryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetRuntimeRegistryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.runtimeProfile = RuntimeProfile.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SetRuntimeRegistryResponse {
+    return {
+      runtimeProfile: isSet(object.runtimeProfile)
+        ? RuntimeProfile.fromJSON(object.runtimeProfile)
+        : isSet(object.runtime_profile)
+        ? RuntimeProfile.fromJSON(object.runtime_profile)
+        : undefined,
+    };
+  },
+
+  toJSON(message: SetRuntimeRegistryResponse): unknown {
+    const obj: any = {};
+    if (message.runtimeProfile !== undefined) {
+      obj.runtimeProfile = RuntimeProfile.toJSON(message.runtimeProfile);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SetRuntimeRegistryResponse>): SetRuntimeRegistryResponse {
+    return SetRuntimeRegistryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SetRuntimeRegistryResponse>): SetRuntimeRegistryResponse {
+    const message = createBaseSetRuntimeRegistryResponse();
+    message.runtimeProfile = (object.runtimeProfile !== undefined && object.runtimeProfile !== null)
+      ? RuntimeProfile.fromPartial(object.runtimeProfile)
+      : undefined;
+    return message;
+  },
+};
+
 /** RuntimeProfileService manages versioned runtime configuration and its reconciled resources. */
 export type RuntimeProfileServiceService = typeof RuntimeProfileServiceService;
 export const RuntimeProfileServiceService = {
@@ -5166,6 +5535,17 @@ export const RuntimeProfileServiceService = {
     responseDeserialize: (value: Buffer): ReconcileRuntimeProfileResponse =>
       ReconcileRuntimeProfileResponse.decode(value),
   },
+  setRuntimeRegistry: {
+    path: "/ayni.orchestrator.v1.RuntimeProfileService/SetRuntimeRegistry" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetRuntimeRegistryRequest): Buffer =>
+      Buffer.from(SetRuntimeRegistryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetRuntimeRegistryRequest => SetRuntimeRegistryRequest.decode(value),
+    responseSerialize: (value: SetRuntimeRegistryResponse): Buffer =>
+      Buffer.from(SetRuntimeRegistryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetRuntimeRegistryResponse => SetRuntimeRegistryResponse.decode(value),
+  },
   watchRuntimeProfiles: {
     path: "/ayni.orchestrator.v1.RuntimeProfileService/WatchRuntimeProfiles" as const,
     requestStream: false as const,
@@ -5192,6 +5572,7 @@ export interface RuntimeProfileServiceServer extends UntypedServiceImplementatio
   getAutomationInstallation: handleUnaryCall<GetAutomationInstallationRequest, GetAutomationInstallationResponse>;
   installRepositoryAutomation: handleUnaryCall<InstallRepositoryAutomationRequest, InstallRepositoryAutomationResponse>;
   reconcileRuntimeProfile: handleUnaryCall<ReconcileRuntimeProfileRequest, ReconcileRuntimeProfileResponse>;
+  setRuntimeRegistry: handleUnaryCall<SetRuntimeRegistryRequest, SetRuntimeRegistryResponse>;
   watchRuntimeProfiles: handleServerStreamingCall<WatchRuntimeProfilesRequest, WatchRuntimeProfilesResponse>;
 }
 
@@ -5375,6 +5756,21 @@ export interface RuntimeProfileServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ReconcileRuntimeProfileResponse) => void,
+  ): ClientUnaryCall;
+  setRuntimeRegistry(
+    request: SetRuntimeRegistryRequest,
+    callback: (error: ServiceError | null, response: SetRuntimeRegistryResponse) => void,
+  ): ClientUnaryCall;
+  setRuntimeRegistry(
+    request: SetRuntimeRegistryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetRuntimeRegistryResponse) => void,
+  ): ClientUnaryCall;
+  setRuntimeRegistry(
+    request: SetRuntimeRegistryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetRuntimeRegistryResponse) => void,
   ): ClientUnaryCall;
   watchRuntimeProfiles(
     request: WatchRuntimeProfilesRequest,

@@ -19,6 +19,7 @@ service RuntimeProfileService {
   rpc GetAutomationInstallation(GetAutomationInstallationRequest) returns (GetAutomationInstallationResponse);
   rpc InstallRepositoryAutomation(InstallRepositoryAutomationRequest) returns (InstallRepositoryAutomationResponse);
   rpc ReconcileRuntimeProfile(ReconcileRuntimeProfileRequest) returns (ReconcileRuntimeProfileResponse);
+  rpc SetRuntimeRegistry(SetRuntimeRegistryRequest) returns (SetRuntimeRegistryResponse);
   rpc WatchRuntimeProfiles(WatchRuntimeProfilesRequest) returns (stream WatchRuntimeProfilesResponse);
 }
 
@@ -86,6 +87,9 @@ message RuntimeProfile {
   // reconciliation_metadata contains at most 16 credential-free observations.
   // These are operational status, not artifact verification evidence.
   repeated VerifiedMetadata reconciliation_metadata = 12;
+  // Absent only for profiles stored before runtime-owned registry selection.
+  // Present with empty values selects deployment infrastructure defaults.
+  RuntimeRegistrySelection registry = 13;
 }
 
 // RuntimeProfileRevision is an immutable version of profile configuration.
@@ -337,4 +341,22 @@ message InspectAyniRepositoryResponse {
 message WorkflowProposal {
   string path = 1;
   string contents = 2;
+}
+
+// RuntimeRegistrySelection survives source revisions and rebuilds of its profile.
+message RuntimeRegistrySelection {
+  string registry_connection_id = 1;
+  string image_namespace = 2;
+}
+
+message SetRuntimeRegistryRequest {
+  string idempotency_key = 1;
+  string runtime_profile_id = 2;
+  uint64 expected_resource_version = 3;
+  string registry_connection_id = 4;
+  string image_namespace = 5;
+}
+
+message SetRuntimeRegistryResponse {
+  RuntimeProfile runtime_profile = 1;
 }

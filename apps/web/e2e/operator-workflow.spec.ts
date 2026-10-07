@@ -13,7 +13,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 
   await page.goto("/repositories");
   await page.getByRole("link", { name: "Runtime status" }).first().click();
-  await expect(page.getByRole("heading", { name: "Runtime profiles" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Runtimes" })).toBeVisible();
   await expect(page.getByText("Ready", { exact: true })).toBeVisible();
 
   await page.goto("/tasks");

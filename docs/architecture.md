@@ -57,9 +57,13 @@ GHCR authentication, push, pull and artifact cleanup run in scoped, digest-pinne
 probe Jobs. Probe results are persisted before Job cleanup. Push credentials go
 only to trusted builders and probes; candidate workloads receive a separate
 pull-only Secret. Probe Jobs receive no Kubernetes API token, model or signing
-credentials. Each repository selects an approved connection and image namespace;
+credentials. Each logical runtime profile selects an approved connection and image namespace;
 runtime admission freezes the destination and credential revision for subsequent
-work and retries. Secret retention follows these frozen references, as described
+work and retries. Runtime selections survive source sync and rebuilds. A destination
+change creates a new selected revision and removes active admission authority.
+Already admitted work retains its frozen destination and credentials; superseded
+builds can finish but cannot activate the new selection. Secret retention follows
+these frozen references, as described
 in [operations](operations.md).
 
 

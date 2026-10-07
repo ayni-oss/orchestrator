@@ -44,3 +44,13 @@ home directory as well as inside Docker Desktop. The VM's virtual free space
 does not guarantee that its sparse disk can grow on the host. Builds refuse to
 start below the configured capacity threshold; cleanup remains an explicit
 operator action and never implicitly removes persistent volumes.
+
+The hot-reload control plane runs under a development-only process supervisor.
+Tilt first synchronizes the current Rust source, protobuf definitions and Cargo
+inputs, then compiles the binary. Later edits compile and signal only the child
+process; they never terminate container PID 1. Restarting the container would
+discard synchronized files and the new binary from its writable image layer.
+Production images keep their normal direct entrypoint. To refresh an existing
+supervised development container explicitly, run
+`bash dev/scripts/sync-control-plane-source.sh`. This preserves application data
+and credentials and uses only the `docker-desktop` context.

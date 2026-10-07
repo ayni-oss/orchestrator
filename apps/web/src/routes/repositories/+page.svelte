@@ -75,7 +75,7 @@
     <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
       <Dialog.Header>
         <Dialog.Title>Connect repository</Dialog.Title>
-        <Dialog.Description>Choose a GitHub App, repository, and container registry destination.</Dialog.Description>
+        <Dialog.Description>Choose a GitHub App and repository. Configure image destinations on each runtime.</Dialog.Description>
       </Dialog.Header>
       {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
       {#if options.error}<Feedback kind="error" title="GitHub unavailable" message={options.error.message} requestId={options.error.requestId} /><Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
@@ -101,14 +101,6 @@
           <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
           <input type="hidden" name="installationId" value={options.selectedInstallationId} />
           <input type="hidden" name="owner" value={selectedOwner} />
-          <div class="space-y-2">
-            <input type="hidden" name="registryDestination" value="ghcr.io"/>
-            <Label for="registry-connection">Container registry connection</Label>
-            <ThemedSelect id="registry-connection" name="registryConnectionId" options={data.registryConnections.map(c=>({value:c.id,label:c.displayName}))} required />
-            <Label for="image-namespace">Image namespace</Label>
-            <input id="image-namespace" name="imageNamespace" required placeholder="organization" class="block w-full rounded border bg-background p-2"/>
-            <p class="text-xs text-muted-foreground">Choose a ready GHCR connection and its approved namespace. <a href="/container-registries/github" class="underline">Manage connections</a></p>
-          </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>
             <Button variant="outline" onclick={() => { connectOpen = false; }}>Cancel</Button>

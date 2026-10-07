@@ -14,7 +14,8 @@ Under **Container registries → GitHub**, add a GHCR connection with an approve
 image namespace, username, push token and a distinct pull-only token. Check the
 independent authentication, push, pull and cleanup results. A cleanup failure is
 reported separately and can be retried. Select the connection and matching image
-namespace when connecting a repository or editing its registry selection.
+namespace in the runtime’s **Edit** dialog on its repository overview. Repository
+enrollment does not require a registry selection.
 
 Administrator-managed connections show **Managed by your administrator** and
 cannot be edited or deleted through the UI. Register them explicitly using the
@@ -23,6 +24,12 @@ UI-managed connections support replacement, testing, disabling and deletion when
 unreferenced. Credential inputs clear after submission and read APIs never return
 them. Validated replacements activate automatically; no reload button, deployment
 restart or Tilt restart is required. Connection pages refresh status periodically.
+
+The repository overview shows connection status and branch once, followed by its
+runtimes. Lock fingerprints and image destinations belong to each runtime.
+Inspection notifications are transient; ongoing progress and actionable failures
+remain visible on the affected runtime. Registry changes invalidate that runtime’s
+readiness until its new destination is verified; other runtimes are unaffected.
 
 Add repository membership to a project. Select a runtime profile and build or
 discover its signed environment through the existing runtime setup flow. Keep
