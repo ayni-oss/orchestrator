@@ -59,6 +59,7 @@ dev_load_image "$control_plane_image_ref"
 dev_load_image "$worker_image_ref"
 dev_load_image "$web_image_ref"
 runtime_worker_image="$(dev_pin_worker_image "$worker_image_ref")"
+connection_test_image="$(dev_pin_worker_image "$control_plane_image_ref")"
 
 echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
@@ -68,6 +69,8 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
   "${hot_reload_values[@]}" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
+  --set-string "ayni-orchestrator.connections.testImage=$connection_test_image" \
+  --set-string "ayni-orchestrator.connections.githubAppSecretName=${AYNI_ORCHESTRATOR_GITHUB_APP_SECRET_NAME:-}" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
   --set ayni-orchestrator.runtime.enabled=true \
   --set-string "ayni-orchestrator.runtime.workerImage=$runtime_worker_image" \
@@ -117,4 +120,4 @@ if [[ -z "$pod" ]]; then
 fi
 
 echo "deployed pod=$pod control_plane_image=$actual_control_plane_image control_plane_imageID=$actual_control_plane_image_id worker_image=$actual_worker_image web_image=$actual_web_image web_imageID=$actual_web_image_id"
-dev_prune_images "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref" "$runtime_worker_image"
+dev_prune_images "$control_plane_image_ref" "$worker_image_ref" "$web_image_ref" "$runtime_worker_image" "$connection_test_image"

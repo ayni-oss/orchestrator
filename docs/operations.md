@@ -19,8 +19,10 @@ and terminate old workers before reconnecting projects and repositories. Resolve
 and display the exact application-owned database path and volume, output PVCs,
 Jobs, ConfigMaps and attempt Secrets before deleting anything. Confirm ownership
 from the release and workload references; never use a namespace-wide deletion.
-Reinitialize application state because older schemas are rejected without
-conversion. Keep source repositories, runtime images, unrelated resources and
+The current SQLite schema is version 6. Reinitialize application state because
+older schemas are rejected without conversion. Retained-data deletion requires
+explicit approval after displaying the inventory. Preserve administrator-managed
+connection Secrets and external GitHub Apps. Keep source repositories, runtime images, unrelated resources and
 existing GitHub pull requests.
 
 Remove orchestrator-installed quality workflows from connected repositories
@@ -45,3 +47,17 @@ prevent sandboxed children from signaling the parent or reaching its abstract
 sockets. Unsupported or partial enforcement fails closed: there is no
 unrestricted fallback. This needs no privileged container, added capabilities,
 or special Docker/Kubernetes privilege.
+
+## Connection credential retention
+
+Credential rotation retains previous Secret revisions while unfinished Jobs or
+frozen runtime references still need them. Terminal task snapshots also retain
+their old pull Secret because task and publication retries use the frozen
+snapshot. This deliberately favors retry recovery over immediate credential
+cleanup; do not manually delete those Secrets while retained work can be retried.
+
+Removing an administrator connection from deployment configuration disables it
+without deleting its Secret. Connection deletion checks current, pending and
+retired revisions for consumers before deleting UI-managed Secrets. Labels
+identify ownership; Kubernetes RBAC grants Secret access by namespace and
+resource, not by these labels.

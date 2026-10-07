@@ -150,8 +150,10 @@ if grep -Eq 'DEVELOPMENT_(CHECKPOINT|EVIDENCE|PREPARATION)_ROOT|mountPath: /(che
   echo "clean-v1 controller rendered a retired pilot state reader" >&2
   exit 1
 fi
-if grep -Eq '^kind: Role(Binding)?$|serviceAccountToken:|/var/run/secrets/kubernetes.io/serviceaccount' "$scratch/application.yaml"; then
-  echo "control plane retained Kubernetes API authority or a service-account token without a current need" >&2
+grep -q '^  name: connection-controller$' "$scratch/application.yaml"
+grep -q 'serviceAccountToken:' "$scratch/application.yaml"
+if grep -Eq 'GITHUB_APP_ID|GITHUB_APP_PRIVATE_KEY_PATH|secretName: github-app-credentials' "$scratch/application.yaml"; then
+  echo "GitHub credentials must be optional API references, not startup mounts" >&2
   exit 1
 fi
 if grep -Eq '^kind: Ingress$|^  type: (LoadBalancer|NodePort)$|nodes/proxy' "$scratch/local.yaml"; then

@@ -30,9 +30,16 @@ Ayni configuration, CLI-generated locks, and integrations through setup PRs.
 Repository-owner review establishes producer trust. Never merge automatically.
 After merge, reinspect and build or verify a certified environment.
 
+Credential revisions activate after validation without restarting the control plane.
+Admin references remain read-only in the UI; UI-managed credentials can be replaced,
+tested, disabled or deleted when unreferenced. Labels describe ownership and do not
+restrict Kubernetes RBAC.
+
 Configuration separates source-control Apps from container registry connections.
 Support GitHub App creation/import, installation discovery, rotation and disabling.
-Registry connection forms accept HTTPS endpoint, username and token; store tokens
+GitHub App private keys and registry tokens share the same storage model.
+Support one configured App and multiple GHCR connections. Registry forms accept
+username, push token and a separate pull-only token; store credentials
 in namespace Secrets, with safe references and metadata in the database. Scoped
 workers test authentication, pull and push independently using a temporary
 artifact with observable cleanup. Validate destinations and authentication
@@ -56,13 +63,22 @@ Project summaries show unavailable statistics explicitly rather than zero.
 
 The project foundation implements shared editable membership, task ownership,
 repository selection, the sidebar, project cards, validated creation and
-project-scoped task dialogs. Queued inspection, approval/bootstrap initialization,
-dynamic connector credentials, registry tests, multi-profile execution and summary
-projections are separate delivery work. Existing task admission still freezes one
-ready runtime. Custom Runtime remains unsupported.
+project-scoped task dialogs. Source-control onboarding supports one GitHub App,
+manifest creation/import, validated key rotation and explicit administrator
+references. GHCR connections use namespace Secrets, scoped probe Jobs and
+repository-owned image destinations; credential revisions reconcile without
+restarting the control plane. Credential management is restricted to the trusted
+operator listener. SQLite stores safe metadata and references, not credentials.
 
-Schema version 4 is a fresh-install boundary. Earlier databases are rejected;
-no migration or automatic deletion is performed. The protobuf additions retain
-single-member creation for native callers and add repeated creation/update fields.
-An empty update membership list preserves membership; nonempty replaces it.
-Use isolated new storage for validation.
+Approval/bootstrap initialization, multi-profile execution and summary
+projections remain separate capabilities. Existing task admission freezes one
+ready runtime. Custom Runtime remains unsupported. Historical task-pipeline
+ownership above remains superseded by the worker-owned architecture.
+
+The current fresh-install boundary is schema version 6. Earlier databases are
+rejected; no migration or automatic deletion is performed. Schema version 4 was
+the original project-foundation boundary recorded by this decision. Project
+protobuf APIs retain single-member creation for native callers and repeated
+creation/update fields. An empty update membership list preserves membership;
+nonempty replaces it. Use isolated new storage for validation and the exact
+retained-data cutover procedure in [operations](../operations.md).

@@ -198,3 +198,95 @@ async fn deployment_admin_registration_cannot_adopt_ui_credentials() {
     assert_eq!(connection.failure_reason, "github_admin_identity_conflict");
     assert_eq!(state.connections().await.expect("list").len(), 1);
 }
+
+#[tokio::test]
+async fn failed_retirement_preserves_references_and_does_not_stop_other_connections() {
+    let (_directory, state) = state();
+    let retired = v1::ConnectionSecretRevision {
+        secret_name: "unavailable-retired".into(),
+        secret_uid: "original-uid".into(),
+        ..Default::default()
+    };
+    let first = v1::Connection {
+        id: "first".into(),
+        kind: "ghcr".into(),
+        management_source: "ui".into(),
+        resource_version: 1,
+        enabled: false,
+        status: "disabled".into(),
+        retired_secret_revisions: vec![retired.clone()],
+        ..Default::default()
+    };
+    let second = v1::Connection {
+        id: "second".into(),
+        kind: "ghcr".into(),
+        management_source: "ui".into(),
+        resource_version: 1,
+        enabled: false,
+        status: "disabled".into(),
+        retired_secret_revisions: vec![v1::ConnectionSecretRevision {
+            secret_name: "other-unavailable-retired".into(),
+            secret_uid: "other-original-uid".into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    state.persist_connection(first).await.expect("first record");
+    state
+        .persist_connection(second)
+        .await
+        .expect("second record");
+    state
+        .reconcile_connections()
+        .await
+        .expect("isolated failures");
+    let first = state
+        .connection("first".into())
+        .await
+        .expect("preserved first");
+    let second = state
+        .connection("second".into())
+        .await
+        .expect("processed second");
+    assert_eq!(first.retired_secret_revisions, vec![retired]);
+    assert!(!first.failure_reason.is_empty());
+    assert!(!second.failure_reason.is_empty());
+    assert_eq!(second.retired_secret_revisions.len(), 1);
+    assert_eq!(first.status, "disabled");
+    assert_eq!(second.status, "disabled");
+}
+
+#[tokio::test]
+async fn rejected_admin_registration_does_not_starve_existing_ui_reconciliation() {
+    let (_directory, state) = state();
+    state
+        .persist_connection(v1::Connection {
+            id: "ui".into(),
+            kind: "ghcr".into(),
+            management_source: "ui".into(),
+            resource_version: 1,
+            enabled: false,
+            status: "disabled".into(),
+            retired_secret_revisions: vec![v1::ConnectionSecretRevision {
+                secret_name: "unavailable-retired".into(),
+                secret_uid: "original-uid".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+        .await
+        .expect("record");
+    state
+        .reconcile_existing_connections(Err(Status::failed_precondition(
+            "admin_registry_identity_conflict",
+        )))
+        .await
+        .expect("remaining reconciliation");
+    let connection = state
+        .connection("ui".into())
+        .await
+        .expect("preserved connection");
+    assert!(!connection.failure_reason.is_empty());
+    assert_eq!(connection.management_source, "ui");
+    assert_eq!(connection.retired_secret_revisions.len(), 1);
+}

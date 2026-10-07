@@ -340,24 +340,24 @@ impl AppState {
     /// # Errors
     /// Returns a bounded status when persistence or Kubernetes access is unavailable.
     pub async fn reconcile_connections(&self) -> Result<(), Status> {
-        self.register_admin_connections().await?;
+        let registration = self.register_admin_connections().await;
+        self.reconcile_existing_connections(registration).await
+    }
+    async fn reconcile_existing_connections(
+        &self,
+        registration: Result<(), Status>,
+    ) -> Result<(), Status> {
+        if let Err(error) = registration {
+            tracing::warn!(
+                reason_code = error.message(),
+                "admin connection registration failed"
+            );
+        }
         for snapshot in self.connections().await? {
-            let _github_guard = if snapshot.kind == "github_app" {
-                Some(self.connection_lock.lock().await)
-            } else {
-                None
-            };
-            let mut value = self.connection(snapshot.id).await?;
-            if value.status == "deleting" {
-                self.finish_connection_deletion(&value).await?;
-                continue;
-            }
-            self.cleanup_retired_credentials(&mut value).await?;
-            if value.kind == "github_app" {
-                self.reconcile_github_candidate(&mut value).await?;
-                self.reconcile_github_active(value).await?;
-            } else {
-                self.reconcile_registry(value).await?;
+            let id = snapshot.id.clone();
+            if let Err(error) = self.reconcile_connection(snapshot).await {
+                self.record_connection_reconciliation_failure(&id, &error)
+                    .await;
             }
         }
         Ok(())

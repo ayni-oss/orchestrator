@@ -4,11 +4,13 @@ The supported topology uses Docker Desktop Kubernetes with explicit
 `docker-desktop` context, a trusted maintainer team and loopback access.
 `dev/ctl deploy` builds and digest-pins the worker and installs the local umbrella
 chart at `dev/charts/ayni-orchestrator-local`. Production uses the reusable
-chart with strict platform scheduling; local emulation is explicitly configured.
+chart with strict platform scheduling. Local managed runtime defaults to native
+`linux/arm64` with emulation disabled; Intel hosts select `linux/amd64` explicitly.
 
 `dev/ctl hot-reload` retains the local Helm release and starts Tilt for server
-and web iteration. Dependency, generated-binding, chart and credential changes
-require restarting the deployment inputs. `dev/ctl` never falls back to another
+and web iteration. Dependency, generated-binding and chart changes require
+restarting the deployment inputs. Connection Secret rotation reconciles without
+restarting Tilt or the control plane. `dev/ctl` never falls back to another
 cluster or prints credentials.
 
 Admission freezes runtime/source identities and execution limits. Runtime
@@ -20,8 +22,7 @@ durable collection.
 
 For a breaking deployment, inventory the exact application database volume,
 worker-output PVCs, Jobs, ConfigMaps and attempt Secrets before stopping old
-workers and resetting application state. Older database schemas are rejected
-without conversion. Preserve source repositories, runtime images, unrelated
+workers and resetting application state. SQLite schema version 6 rejects older databases without conversion. Preserve source repositories, runtime images, unrelated
 resources and existing PRs. Follow [operations](operations.md); broad namespace
 purges are not the task-pipeline cutover procedure.
 

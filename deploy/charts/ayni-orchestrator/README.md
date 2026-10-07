@@ -20,7 +20,8 @@ helm upgrade --install ayni-orchestrator deploy/charts/ayni-orchestrator \
 The target namespace must contain operator-managed Secrets required by the
 enabled workloads:
 
-- `github-app-credentials`: `app-id` and `private-key.pem`
+- Optional administrator GitHub App: set `connections.githubAppSecretName` to a
+  Secret containing `app-id` and `private-key.pem`. Leave empty for UI onboarding.
 - `openai-api`: optional `api-key`
 - For dedicated Kubernetes environment builds, the Secret referenced by
   `runtime.profiles.<profile>.build.signing_secret`: `signing-key` and `key-id`.
@@ -44,3 +45,16 @@ stable rather than release-prefixed.
 Runtime limits are `codingTurns` (default 24) and `qualityRepairLimit` (default 3,
 range 0–10). Admission freezes them per task. The worker owns checking, repairs
 and draft publication; control-plane collection precedes cleanup.
+
+Connections work with `runtime.enabled=false`. The control plane receives a
+projected API token and namespaced Secret/Job permissions independently of runtime
+execution. Set `connections.testImage` to the digest-pinned control-plane image
+containing `registry-connection-test` to enable GHCR probes. The chart never accepts
+credential values. UI-managed Secrets survive redeploys and remain separate from
+admin synchronization. Schema upgrades require the documented fresh-state cutover;
+never remove retained claims without explicit approval.
+
+Register administrator GHCR connections explicitly with `connections.adminRegistries`:
+`id`, `displayName`, `imageNamespace`, `username`, `pullSecretName` and
+`pushSecretName`. These are safe metadata and references, never token values.
+Use separate pull and push Secrets; labels cannot substitute for explicit registration.

@@ -53,13 +53,6 @@ spec:
             - name: ORCHESTRATOR_RUNTIME_CONFIG_PATH
               value: /runtime-config/runtime.json
             {{- end }}
-            - name: GITHUB_APP_ID
-              valueFrom:
-                secretKeyRef:
-                  name: github-app-credentials
-                  key: app-id
-            - name: GITHUB_APP_PRIVATE_KEY_PATH
-              value: /run/secrets/github/private-key.pem
             - name: OPENAI_API_KEY_PATH
               value: /run/secrets/openai/api-key
           startupProbe:
@@ -96,19 +89,16 @@ spec:
             - name: runtime-outputs
               mountPath: /runtime-outputs
               readOnly: true
+            {{- end }}
             - name: runtime-api-token
               mountPath: /var/run/secrets/kubernetes.io/serviceaccount
               readOnly: true
-            {{- end }}
             - name: durable-state
               mountPath: /data
             - name: control-plane-scratch
               mountPath: /tmp
             - name: openai-api-key
               mountPath: /run/secrets/openai
-              readOnly: true
-            - name: github-app-key
-              mountPath: /run/secrets/github
               readOnly: true
             {{- if .Values.customClients.enabled }}
             - name: custom-grpc-access
@@ -166,6 +156,7 @@ spec:
         - name: runtime-outputs
           persistentVolumeClaim:
             claimName: {{ .Values.runtime.outputClaim }}
+        {{- end }}
         - name: runtime-api-token
           projected:
             sources:
@@ -182,7 +173,6 @@ spec:
                     - path: namespace
                       fieldRef:
                         fieldPath: metadata.namespace
-        {{- end }}
         - name: durable-state
           persistentVolumeClaim:
             claimName: control-plane-state
@@ -197,10 +187,6 @@ spec:
             secretName: openai-api
             defaultMode: 288
             optional: true
-        - name: github-app-key
-          secret:
-            secretName: github-app-credentials
-            defaultMode: 288
         {{- if .Values.customClients.enabled }}
         - name: custom-grpc-access
           secret:

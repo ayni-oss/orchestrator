@@ -85,6 +85,7 @@ dev_prune_images() (
   local web_image_ref="${3:?web image is required}"
   local node_id temporary_directory keep runtime_ref local_ref image_ref
   local pinned_worker="${4:?pinned runtime worker is required}"
+  local pinned_connection_test="${5:-}"
   node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
   temporary_directory="$(mktemp -d)"
   trap 'rm -rf "$temporary_directory"' EXIT
@@ -95,6 +96,7 @@ dev_prune_images() (
     -o jsonpath='{range .items[*]}{range .spec.initContainers[*]}{.image}{"\n"}{end}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' \
     | sed 's#^docker.io/##' | grep '^local/ayni-orchestrator-' >> "$keep" || true
   printf '%s\n' "${pinned_worker#docker.io/}" >> "$keep"
+  [[ -z "$pinned_connection_test" ]] || printf '%s\n' "${pinned_connection_test#docker.io/}" >> "$keep"
   sort -u "$keep" -o "$keep"
 
   while IFS= read -r runtime_ref; do

@@ -8,8 +8,9 @@ COPY proto ./proto
 RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-control-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-control-target,target=/workspace/target \
-    cargo build --locked --release --package ayni-orchestrator-control-plane \
-    && install --mode=0755 target/release/ayni-orchestrator-control-plane /tmp/ayni-orchestrator-control-plane
+    cargo build --locked --release --package ayni-orchestrator-control-plane --bins \
+    && install --mode=0755 target/release/ayni-orchestrator-control-plane /tmp/ayni-orchestrator-control-plane \
+    && install --mode=0755 target/release/registry-connection-test /tmp/registry-connection-test
 
 FROM debian:bookworm-slim
 
@@ -19,5 +20,6 @@ RUN apt-get update \
 RUN useradd --system --uid 10001 --create-home orchestrator
 USER 10001
 COPY --from=builder /tmp/ayni-orchestrator-control-plane /usr/local/bin/ayni-orchestrator-control-plane
+COPY --from=builder /tmp/registry-connection-test /usr/local/bin/registry-connection-test
 EXPOSE 8080 50051 50052
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]

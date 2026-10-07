@@ -25,35 +25,103 @@ impl AppState {
     pub(super) async fn cleanup_retired_credentials(
         &self,
         value: &mut v1::Connection,
-    ) -> Result<(), Status> {
+    ) -> Result<Option<Status>, Status> {
         if value.management_source != "ui" || value.retired_secret_revisions.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
         let mut retained = Vec::new();
-        for revision in std::mem::take(&mut value.retired_secret_revisions) {
-            if self.credential_revision_in_use(&revision).await? {
-                retained.push(revision);
-                continue;
-            }
-            let adapter = secrets()?;
-            adapter
-                .delete(&revision.secret_name, &value.id, &revision.secret_uid)
-                .await
-                .map_err(Status::failed_precondition)?;
-            if !revision.pull_secret_name.is_empty() {
-                adapter
-                    .delete(
-                        &revision.pull_secret_name,
-                        &value.id,
-                        &revision.pull_secret_uid,
-                    )
-                    .await
-                    .map_err(Status::failed_precondition)?;
+        let mut failure = None;
+        for revision in value.retired_secret_revisions.clone() {
+            match self.cleanup_retired_revision(&value.id, &revision).await {
+                Ok(true) => {}
+                Ok(false) => retained.push(revision),
+                Err(error) => {
+                    retained.push(revision);
+                    tracing::warn!(
+                        reason_code = error.message(),
+                        connection_id = value.id,
+                        "retired credential cleanup failed"
+                    );
+                    failure = Some(error);
+                }
             }
         }
         value.retired_secret_revisions = retained;
         self.persist_connection(value.clone()).await?;
+        Ok(failure)
+    }
+    async fn cleanup_retired_revision(
+        &self,
+        id: &str,
+        revision: &v1::ConnectionSecretRevision,
+    ) -> Result<bool, Status> {
+        if self.credential_revision_in_use(revision).await? {
+            return Ok(false);
+        }
+        let adapter = secrets()?;
+        adapter
+            .delete(&revision.secret_name, id, &revision.secret_uid)
+            .await
+            .map_err(Status::failed_precondition)?;
+        if !revision.pull_secret_name.is_empty() {
+            adapter
+                .delete(&revision.pull_secret_name, id, &revision.pull_secret_uid)
+                .await
+                .map_err(Status::failed_precondition)?;
+        }
+        Ok(true)
+    }
+    pub(super) async fn reconcile_connection(
+        &self,
+        snapshot: v1::Connection,
+    ) -> Result<(), Status> {
+        let github_guard = if snapshot.kind == "github_app" {
+            Some(self.connection_lock.lock().await)
+        } else {
+            None
+        };
+        let mut value = self.connection(snapshot.id).await?;
+        // An explicit administrator declaration cannot take over a UI-owned App.
+        if value.failure_reason == "github_admin_identity_conflict"
+            && std::env::var("ORCHESTRATOR_GITHUB_APP_SECRET_NAME")
+                .is_ok_and(|name| !name.is_empty())
+        {
+            self.disable_github();
+            return Ok(());
+        }
+        if value.status == "deleting" {
+            return self.finish_connection_deletion(&value).await;
+        }
+        let cleanup_failure = self.cleanup_retired_credentials(&mut value).await?;
+        let id = value.id.clone();
+        if value.kind == "github_app" {
+            self.reconcile_github_candidate(&mut value).await?;
+            self.reconcile_github_active(value).await?;
+        } else {
+            self.reconcile_registry(value).await?;
+        }
+        // Drop the GitHub mutation guard before recording an independent cleanup observation.
+        drop(github_guard);
+        if let Some(error) = cleanup_failure {
+            self.record_connection_reconciliation_failure(&id, &error)
+                .await;
+        }
         Ok(())
+    }
+    pub(super) async fn record_connection_reconciliation_failure(&self, id: &str, error: &Status) {
+        let reason = crate::truncate_utf8(error.message(), 128);
+        tracing::warn!(
+            reason_code = reason,
+            connection_id = id,
+            "connection reconciliation failed"
+        );
+        let _guard = self.connection_lock.lock().await;
+        if let Ok(mut current) = self.connection(id.into()).await {
+            if current.failure_reason.is_empty() {
+                current.failure_reason = reason;
+                let _ = self.persist_connection(current).await;
+            }
+        }
     }
     async fn credential_revision_in_use(
         &self,

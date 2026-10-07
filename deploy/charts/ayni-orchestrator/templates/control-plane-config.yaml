@@ -9,6 +9,10 @@ data:
   ORCHESTRATOR_BIND_ADDRESS: 0.0.0.0:8080
   ORCHESTRATOR_GRPC_BIND_ADDRESS: 127.0.0.1:50051
   ORCHESTRATOR_DATABASE_PATH: /data/orchestrator.sqlite
+  ORCHESTRATOR_ADMIN_REGISTRY_CONNECTIONS: {{ .Values.connections.adminRegistries | toJson | quote }}
+  ORCHESTRATOR_CONNECTION_NAMESPACE: {{ .Release.Namespace | quote }}
+  ORCHESTRATOR_GITHUB_APP_SECRET_NAME: {{ .Values.connections.githubAppSecretName | quote }}
+  ORCHESTRATOR_CONNECTION_TEST_IMAGE: {{ .Values.connections.testImage | quote }}
   ORCHESTRATOR_MAX_ATTEMPTS: {{ .Values.controlPlane.maxAttempts | quote }}
   {{- if .Values.customClients.enabled }}
   ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS: 0.0.0.0:50052

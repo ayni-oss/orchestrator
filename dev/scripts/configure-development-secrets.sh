@@ -66,18 +66,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   esac
 done < "$env_file"
 
-for key in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY_B64 OPENAI_API_KEY; do
-  case "$key" in
-    GITHUB_APP_ID) value="$github_app_id" ;;
-    GITHUB_APP_PRIVATE_KEY_B64) value="$github_app_private_key_b64" ;;
-    OPENAI_API_KEY) value="$openai_api_key" ;;
-  esac
-  if [[ -z "$value" ]]; then
-    echo "missing required environment-file key: $key" >&2
-    exit 1
-  fi
-done
-if [[ ! "$github_app_id" =~ ^[1-9][0-9]*$ ]]; then
+configure_github=false
+if [[ -n "$github_app_id" || -n "$github_app_private_key_b64" ]]; then
+  [[ -n "$github_app_id" && -n "$github_app_private_key_b64" ]] || { echo "GitHub admin credentials require both App ID and key" >&2; exit 1; }
+  configure_github=true
+fi
+if [[ "$configure_github" == true && ! "$github_app_id" =~ ^[1-9][0-9]*$ ]]; then
   echo "GitHub App ID must be a positive decimal number" >&2
   exit 1
 fi
@@ -139,6 +133,7 @@ readonly openai_key_file="$temporary_directory/api-key"
 readonly ayni_signing_key_file="$temporary_directory/ayni-signing-key"
 readonly ayni_key_id_file="$temporary_directory/ayni-key-id"
 readonly ghcr_dockerconfig_file="$temporary_directory/ghcr-dockerconfigjson"
+if [[ "$configure_github" == true ]]; then
 printf '%s' "$github_app_id" > "$app_id_file"
 if ! printf '%s' "$github_app_private_key_b64" | decode_base64 > "$private_key_file"; then
   echo "GitHub App private key is not valid base64" >&2
@@ -147,6 +142,7 @@ fi
 if ! grep -q -- '-----BEGIN.*PRIVATE KEY-----' "$private_key_file"; then
   echo "GitHub App private key does not contain a PEM private key" >&2
   exit 1
+fi
 fi
 printf '%s' "$openai_api_key" > "$openai_key_file"
 if [[ "$configure_ayni_environment_signing" == true ]]; then
@@ -175,16 +171,27 @@ EOF
 apply_secret() {
   local name="$1"
   shift
+  local management
+  management="$(kubectl --context "$context" --namespace "$namespace" get secret "$name" --ignore-not-found -o 'jsonpath={.metadata.labels.ayni\.dev/management-source}')"
+  if [[ "$management" == "ui" ]]; then
+    echo "Refusing to overwrite UI-managed Secret: $name" >&2
+    return 1
+  fi
   kubectl --context "$context" --namespace "$namespace" create secret generic "$name" \
     "$@" \
     --dry-run=client --output=yaml \
     | kubectl --context "$context" --namespace "$namespace" apply -f - >/dev/null
 }
 
+if [[ "$configure_github" == true ]]; then
 apply_secret github-app-credentials \
   --from-file=app-id="$app_id_file" \
   --from-file=private-key.pem="$private_key_file"
-apply_secret openai-api --from-file=api-key="$openai_key_file"
+kubectl --context "$context" --namespace "$namespace" label secret github-app-credentials ayni.dev/management-source=admin ayni.dev/connection-kind=github_app --overwrite >/dev/null
+fi
+if [[ -n "$openai_api_key" ]]; then
+  apply_secret openai-api --from-file=api-key="$openai_key_file"
+fi
 if [[ "$configure_ayni_environment_signing" == true ]]; then
   apply_secret environment-producer \
     --from-file=signing-key="$ayni_signing_key_file" \
@@ -194,6 +201,7 @@ if [[ "$configure_ghcr_pull" == true ]]; then
   apply_secret runtime-pull \
     --type=kubernetes.io/dockerconfigjson \
     --from-file=.dockerconfigjson="$ghcr_dockerconfig_file"
+  kubectl --context "$context" --namespace "$namespace" label secret runtime-pull ayni.dev/management-source=admin ayni.dev/connection-kind=ghcr --overwrite >/dev/null
 fi
 
 echo "configured local development Secrets in namespace $namespace"

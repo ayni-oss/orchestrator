@@ -121,3 +121,24 @@ reproducible from its commit alone.
 Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/local-development.md`](../docs/local-development.md) and
 [`docs/operations.md`](../docs/operations.md).
+
+### Connection onboarding and rotation
+
+Start without GitHub/GHCR credentials and onboard them in Source control and
+Container registries. GitHub installation permissions remain managed in GitHub.
+Private registry images require a separate pull-only token; push credentials are
+reserved for trusted builders and probes. UI credential inputs clear after submission.
+The control plane reconciles Secret changes every 30 seconds; UI writes trigger
+immediate reconciliation and validated activation without a pod restart.
+
+`dev/ctl secrets` optionally creates administrator GitHub and GHCR Secrets and
+labels them as admin-managed; it refuses to overwrite a UI-managed Secret. Register
+an administrator App explicitly with `connections.githubAppSecretName`. Local
+managed runtime defaults to native `linux/arm64` and disables architecture emulation;
+Intel hosts must select `linux/amd64` explicitly. A connection test requires
+`connections.testImage` set to a digest-pinned control-plane image.
+
+Database schema changes reject old state rather than migrate it. Inventory the
+exact retained claims and obtain explicit approval before deleting application
+data; runtime outputs and administrator Secrets are separate retained resources.
+Use an isolated Docker Desktop namespace to validate fresh onboarding safely.

@@ -1,11 +1,10 @@
 ayni-orchestrator:
   enabled: true
   runtime:
-    # Docker Desktop on Apple Silicon may emulate the amd64 managed image.
-    # This value is intentionally confined to the local development chart.
-    allowEmulation: true
+    # Native Apple Silicon validation; override explicitly on Intel hosts.
+    allowEmulation: false
     managedRuntime:
-      platform: linux/amd64
+      platform: linux/arm64
       service_account: runtime-coding
       pull_secret: runtime-pull
   images:
