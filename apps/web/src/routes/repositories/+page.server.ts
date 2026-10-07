@@ -9,6 +9,8 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   setHeaders({ "cache-control": "no-store" });
   const requestedPageToken = url.searchParams.get("pageToken");
   const pageToken = requestedPageToken !== null && requestedPageToken.length <= 512 ? requestedPageToken : undefined;
+  const connectDialogOpen = url.searchParams.get("connect") === "1";
+  const requestedAppName = url.searchParams.get("appName");
   const selectedInstallationId = url.searchParams.get("installationId") ?? "";
   try {
     const context = requestContext(locals);
@@ -25,13 +27,17 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
         return [repository.id, []] as const;
       }
     }));
-    const installation = installations.find((item) => item.installationId === selectedInstallationId) ?? installations[0];
+    const selectedAppName = installations.find(item => item.appName === requestedAppName)?.appName ?? installations[0]?.appName ?? "";
+    const appInstallations = installations.filter(item => item.appName === selectedAppName);
+    const installation = appInstallations.find((item) => item.installationId === selectedInstallationId) ?? appInstallations[0];
     const repositories = installation ? await bff.listGithubInstallationRepositories(installation.installationId, context) : [];
     return {
       repositoryConnections: result.repositoryConnections,
       runtimeProfiles: Object.fromEntries(runtimeProfiles) as Record<string, RuntimeProfileDto[]>,
       nextPageToken: result.page.nextPageToken || undefined,
       installations,
+      selectedAppName,
+      connectDialogOpen,
       selectedInstallationId: installation?.installationId ?? "",
       repositories,
       requestId: locals.requestId,
@@ -39,7 +45,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, installations: [], selectedInstallationId: "", repositories: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, installations: [], selectedAppName: "", connectDialogOpen, selectedInstallationId: "", repositories: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 
@@ -50,6 +56,10 @@ export const actions: Actions = {
     const installationId = text(form, "installationId", 24) ?? "";
     const owner = text(form, "owner", 100) ?? "";
     const repository = text(form, "repository", 100) ?? "";
+    const registryDestination = text(form, "registryDestination", 128);
+    if (registryDestination !== "ghcr.io") {
+      return fail(400, { action: "connect", error: { status: 400, reason: "unsupported_registry", message: "Choose GitHub Container Registry as the destination.", requestId: locals.requestId, retryable: false } });
+    }
     if (!idempotencyKey || !isCanonicalIdentifier(idempotencyKey) || !/^\d{1,20}$/u.test(installationId) || !owner || !isOwnerOrRepository(owner) || !repository || !isOwnerOrRepository(repository)) {
       return fail(400, { action: "connect", error: { status:400, reason:"invalid_input", message:"Choose a GitHub owner and repository.", requestId:locals.requestId, retryable:false } });
     }

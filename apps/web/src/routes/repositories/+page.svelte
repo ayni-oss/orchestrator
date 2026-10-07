@@ -1,6 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import { ArrowRight, FolderGit2, Plus, PlugZap } from "@lucide/svelte";
+  import { ArrowRight, Plus } from "@lucide/svelte";
   import type { PageProps } from "./$types";
   import EmptyState from "$lib/components/empty-state.svelte";
   import Feedback from "$lib/components/feedback.svelte";
@@ -8,19 +8,23 @@
   import StatusBadge from "$lib/components/status-badge.svelte";
   import SubmitButton from "$lib/components/submit-button.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
+  import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import { statusTone } from "$lib/presentation.js";
 
   let { data, form }: PageProps = $props();
   let connecting = $state(false);
+  let connectOpen = $state(data.connectDialogOpen);
+  let selectedRepository = $state("");
+  const selectedOwner = $derived(data.installations.find(item => item.installationId === data.selectedInstallationId)?.owner ?? "");
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
 </script>
 
 <svelte:head><title>Repository connections · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
   <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect a repository and Orchestrator immediately inspects its default revision and resolves a verified runtime image.">
-    {#snippet actions()}<Button href="/setup/github" variant="outline"><PlugZap aria-hidden="true" /> Configure GitHub App</Button><Button href="#connect"><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
+    {#snippet actions()}<Button onclick={() => { connectOpen = true; }}><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
   </PageHeader>
   {#if data.error}<Feedback kind="error" title="Connections unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
   {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{:else if form?.success}<Feedback kind="success" title="Repository connected" message={form.success} />{/if}
@@ -40,22 +44,61 @@
     {/if}
   </section>
 
-  <Card.Root id="connect"><Card.Header><div class="flex items-center gap-3"><FolderGit2 class="size-5" /><div><Card.Title>Connect repository</Card.Title><Card.Description>Select the GitHub App installation and repository. Repository identity and branch settings are filled in from GitHub.</Card.Description></div></div></Card.Header><Card.Content class="space-y-5">
-    {#if data.installations?.length}
-    {@const appNames = [...new Set(data.installations.map((item) => item.appName))]}
-    <form method="GET" action="/repositories" class="grid gap-5 sm:grid-cols-2">
-      <div class="space-y-2"><Label for="github-app">GitHub App</Label><select id="github-app" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={appNames[0]} disabled={appNames.length === 1} aria-label="GitHub App">{#each appNames as appName}<option value={appName}>{appName}</option>{/each}</select></div>
-      <div class="space-y-2"><Label for="installationId">GitHub owner</Label><select id="installationId" name="installationId" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={data.selectedInstallationId} onchange={(event) => event.currentTarget.form?.requestSubmit()} required><option value="" disabled>Select an owner</option>{#each data.installations as installation (installation.installationId)}<option value={installation.installationId}>{installation.owner}</option>{/each}</select></div>
-    </form>
-    {#if data.repositories?.length}
-    <form method="POST" action="?/connect" class="grid gap-5 sm:grid-cols-2" use:enhance={() => { connecting = true; return async ({ update }) => { connecting = false; await update(); }; }}>
-      <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-      <input type="hidden" name="installationId" value={data.selectedInstallationId} />
-      <input type="hidden" name="owner" value={data.installations.find((item) => item.installationId === data.selectedInstallationId)?.owner ?? ""} />
-      <div class="space-y-2"><Label for="repository">Repository</Label><select id="repository" name="repository" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required><option value="" disabled selected>Select a repository</option>{#each data.repositories as repository (`${repository.owner}/${repository.name}`)}<option value={repository.name}>{repository.name}</option>{/each}</select></div>
-      <div class="flex items-end"><SubmitButton pending={connecting} pendingLabel="Connecting…">Connect repository</SubmitButton></div>
-    </form>
-    {:else}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
-    {:else if data.backend === "connected"}<p class="text-sm text-muted-foreground">No GitHub App installations are available. Configure the App and grant it access to an owner.</p>{/if}
-  </Card.Content></Card.Root>
+  <Dialog.Root bind:open={connectOpen}>
+    <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <Dialog.Header>
+        <Dialog.Title>Connect repository</Dialog.Title>
+        <Dialog.Description>Choose a GitHub App, repository, and container registry destination.</Dialog.Description>
+      </Dialog.Header>
+      {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
+      {#if data.installations.length}
+        <form method="GET" action="/repositories" class="space-y-5">
+          <input type="hidden" name="connect" value="1" />
+          <div class="space-y-2">
+            <Label for="github-app">GitHub App</Label>
+            <select id="github-app" name="appName" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={data.selectedAppName} onchange={event => event.currentTarget.form?.requestSubmit()} required>
+              {#each [...new Set(data.installations.map(item => item.appName))] as appName (appName)}<option value={appName}>{appName}</option>{/each}
+            </select>
+          </div>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div class="space-y-2">
+              <Label for="installationId">Owner</Label>
+              <select id="installationId" name="installationId" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" value={data.selectedInstallationId} onchange={event => event.currentTarget.form?.requestSubmit()} required>
+                {#each data.installations.filter(item => item.appName === data.selectedAppName) as installation (installation.installationId)}<option value={installation.installationId}>{installation.owner}</option>{/each}
+              </select>
+            </div>
+            <div class="space-y-2">
+              <Label for="repository">Repository</Label>
+              <select id="repository" name="repository" form="connect-repository" bind:value={selectedRepository} class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required disabled={!data.repositories.length}>
+                <option value="" disabled>Select a repository</option>
+                {#each data.repositories as repository (`${repository.owner}/${repository.name}`)}<option value={repository.name}>{repository.name}</option>{/each}
+              </select>
+            </div>
+          </div>
+        </form>
+        <form id="connect-repository" method="POST" action="?/connect" class="space-y-5" use:enhance={() => { connecting = true; return async ({ result, update }) => { connecting = false; await update(); if(result.type === "success") { connectOpen = false; selectedRepository = ""; } }; }}>
+          <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
+          <input type="hidden" name="installationId" value={data.selectedInstallationId} />
+          <input type="hidden" name="owner" value={selectedOwner} />
+          <div class="space-y-2">
+            <Label for="registry-destination">Container registry destination</Label>
+            <select id="registry-destination" name="registryDestination" class="h-9 w-full rounded-lg border bg-background px-3 text-sm" required>
+              <option value="ghcr.io">GitHub Container Registry</option>
+              <option disabled>Docker Hub — Not available</option>
+              <option disabled>Amazon ECR — Not available</option>
+            </select>
+            <p class="text-xs text-muted-foreground">{#if selectedRepository}Image destination: ghcr.io/{selectedOwner.toLowerCase()}/{selectedRepository.toLowerCase()}-ayni{:else}Select a repository to see its image destination.{/if}</p>
+          </div>
+          {#if !data.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
+          <Dialog.Footer>
+            <Button variant="outline" onclick={() => { connectOpen = false; }}>Cancel</Button>
+            <SubmitButton pending={connecting} pendingLabel="Connecting…" disabled={!selectedRepository}>Connect repository</SubmitButton>
+          </Dialog.Footer>
+        </form>
+      {:else}
+        <p class="text-sm text-muted-foreground">No GitHub App installations are available. Set up GitHub in Source control first.</p>
+        <Button href="/source-control" variant="outline">Go to Source control</Button>
+      {/if}
+    </Dialog.Content>
+  </Dialog.Root>
 </div>
