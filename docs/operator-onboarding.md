@@ -27,6 +27,7 @@ reference):
 runtime:
   enabled: true
   workerImage: registry.example/private/worker@sha256:<worker-digest>
+  codingTurns: 24
   managedRuntime:
     platform: linux/amd64
     service_account: runtime-coding

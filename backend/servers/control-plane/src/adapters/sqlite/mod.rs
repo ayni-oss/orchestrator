@@ -256,7 +256,7 @@ mod tests {
                             runtime_source_digest: None,
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: "0.4.0".to_owned(),
-                            workflow_template_version: "ayni-managed-v3".to_owned(),
+                            workflow_template_version: "ayni-managed-v4".to_owned(),
                             oci_repository: "ghcr.io/ayni-oss/sandbox/environment".to_owned(),
                         },
                     ),

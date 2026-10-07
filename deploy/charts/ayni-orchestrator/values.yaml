@@ -9,6 +9,7 @@ runtime:
   modelSecret: openai-api
   intervalSeconds: 300
   requestTimeoutSeconds: 30
+  codingTurns: 24
   concurrency: 4
   # Docker Desktop-only architecture emulation is enabled by the local chart.
   # Production releases retain strict runtime platform scheduling.

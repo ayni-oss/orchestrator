@@ -2,6 +2,38 @@ use crate::runtime_execution::ExecutionRequest;
 use ayni_orchestrator_domain::ChangeConstraints;
 use serde::{Deserialize, Serialize};
 
+/// Bounded Ayni result captured by the coding worker for one candidate.
+///
+/// This is task validation produced in the coding runtime, not independent
+/// assessment evidence.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationOutcome {
+    Passed,
+    Failed,
+    Unavailable,
+    Missing,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ValidationResult {
+    pub outcome: ValidationOutcome,
+    pub signals_digest: Option<String>,
+    pub completed_targets: u32,
+    pub skipped_targets: u32,
+    pub warning_offenders: u32,
+    pub failing_offenders: u32,
+    pub rows: Vec<ValidationRow>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ValidationRow {
+    pub kind: String,
+    pub passed: bool,
+}
+
 /// Shared coding inputs with the selected profile's admission expectations.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -11,16 +43,18 @@ pub struct CodingRequest<Profile> {
     pub acceptance_criteria: Vec<String>,
     pub constraints: ChangeConstraints,
     pub model: String,
+    /// Operator-selected cap on model and tool turns for this mounted attempt.
+    pub max_turns: u16,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodingReport {
     pub commit: Option<String>,
     pub bundle_digest: Option<String>,
     pub changed_paths: Vec<String>,
     pub requested_input: Option<String>,
-    pub advisory: String,
+    pub validation: ValidationResult,
 }
 
 #[cfg(test)]
@@ -52,7 +86,8 @@ mod tests {
             "request": "Update the documentation",
             "acceptance_criteria": ["Examples describe the current behavior"],
             "constraints": {"protected_paths": ["policy"], "allow_test_edits": false},
-            "model": "configured-model"
+            "model": "configured-model",
+            "max_turns": 24
         });
         let request: CodingRequest<ContainerExpectation> =
             serde_json::from_value(mounted_request.clone())?;

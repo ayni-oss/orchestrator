@@ -19,7 +19,7 @@ pub struct SetupPullRequest {
 pub enum SetupRequestError {
     #[error("setup branch identity is empty or exceeds its bound")]
     InvalidProfileIdentity,
-    #[error("setup PR cannot be created without the managed assessment workflow")]
+    #[error("setup PR cannot be created without the managed environment workflow")]
     MissingWorkflow,
 }
 
@@ -35,10 +35,10 @@ pub fn setup_pull_request(
     if profile_id.is_empty() || profile_id.len() > 256 {
         return Err(SetupRequestError::InvalidProfileIdentity);
     }
-    if files.files.len() != 3
+    if files.files.len() != 1
         || !files
             .files
-            .contains_key(crate::profiles::ayni::onboarding_templates::ASSESSMENT_WORKFLOW_PATH)
+            .contains_key(crate::profiles::ayni::onboarding_templates::ENVIRONMENT_WORKFLOW_PATH)
     {
         return Err(SetupRequestError::MissingWorkflow);
     }
@@ -47,7 +47,7 @@ pub fn setup_pull_request(
         branch: format!("setup/runtime-{digest:x}")[..48].to_owned(),
         base_branch: base_branch.to_owned(),
         title: "feat(ayni): install managed environment workflows",
-        body: "This controller-owned setup PR installs the reviewed environment producer and managed assessment workflows. Review and merge it to enable managed assessment.",
+        body: "This controller-owned setup PR installs the reviewed managed environment workflow. Review and merge it to enable the certified runtime.",
         files,
     })
 }
@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(first.branch, second.branch);
         assert_ne!(first.branch, first.base_branch);
         assert!(first.branch.starts_with("setup/runtime-"));
-        assert_eq!(first.files.files.len(), 3);
+        assert_eq!(first.files.files.len(), 1);
     }
     #[tokio::test]
     async fn existing_workflows_need_no_setup_but_observation_errors_fail_closed() {

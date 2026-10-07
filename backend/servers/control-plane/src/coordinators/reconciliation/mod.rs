@@ -239,9 +239,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if let Err(reason) = self.publish_candidates().await {
             tracing::warn!(reason_code = reason, "candidate publication deferred");
         }
-        if let Err(reason) = self.review_assessments().await {
-            tracing::warn!(reason_code = reason, "assessment reconciliation deferred");
-        }
     }
 
     /// Initializes opt-in runtime execution from an operator configuration file.
@@ -714,7 +711,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
 
 mod coding;
 mod publication;
-mod reviews;
 
 fn now() -> Result<u64, &'static str> {
     SystemTime::now()

@@ -12,9 +12,10 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v3";
+pub(crate) const TEMPLATE_VERSION: &str = "ayni-managed-v4";
 pub(crate) const ENVIRONMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-environment.yml";
-pub(crate) const TRIGGER_WORKFLOW_PATH: &str = ".github/workflows/ayni-assessment-request.yml";
+/// Compatibility-only identity retained in existing automation records. New
+/// onboarding templates no longer install this workflow.
 pub(crate) const ASSESSMENT_WORKFLOW_PATH: &str = ".github/workflows/ayni-managed-assessment.yml";
 
 /// Immutable files proposed by an Ayni Managed setup PR.
@@ -57,23 +58,15 @@ pub(crate) fn render(
     }
     Ok(SetupWorkflowFiles {
         version: TEMPLATE_VERSION,
-        files: BTreeMap::from([
-            (
-                ENVIRONMENT_WORKFLOW_PATH,
-                pinned_workflow(include_str!("../../../templates/environment.yml")).replace(
-                    "@@DEFAULT_BRANCH@@",
-                    &serde_json::to_string(default_branch)
-                        .map_err(|_| TemplateError::InvalidDefaultBranch(default_branch.into()))?,
-                ),
+        files: BTreeMap::from([(
+            ENVIRONMENT_WORKFLOW_PATH,
+            pinned_workflow(include_str!("../../../templates/environment.yml")).replace(
+                "@@DEFAULT_BRANCH@@",
+                &serde_json::to_string(default_branch)
+                    .map_err(|_| TemplateError::InvalidDefaultBranch(default_branch.into()))?,
             ),
-            (ASSESSMENT_WORKFLOW_PATH, assessment_workflow()),
-            (TRIGGER_WORKFLOW_PATH, trigger_workflow()),
-        ]),
+        )]),
     })
-}
-
-fn assessment_workflow() -> String {
-    pinned_workflow(include_str!("../../../templates/assessment.yml"))
 }
 
 fn pinned_workflow(template: &str) -> String {
@@ -92,10 +85,6 @@ fn pinned_workflow(template: &str) -> String {
         )
 }
 
-fn trigger_workflow() -> String {
-    include_str!("../../../templates/assessment-trigger.yml").to_owned()
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -105,9 +94,9 @@ mod tests {
     fn renders_deterministic_pinned_workflows() {
         let first = render(TEMPLATE_VERSION, "main").unwrap();
         assert_eq!(first, render(TEMPLATE_VERSION, "main").unwrap());
-        assert_eq!(first.files.len(), 3);
+        assert_eq!(first.files.len(), 1);
         for workflow in first.files.values() {
-            assert!(workflow.contains("ayni-orchestrator-template: ayni-managed-v3"));
+            assert!(workflow.contains("ayni-orchestrator-template: ayni-managed-v4"));
             assert!(workflow.contains("concurrency:"));
             assert!(!workflow.contains("@main"));
             assert!(!workflow.contains("--host"));
@@ -117,21 +106,10 @@ mod tests {
     }
 
     #[test]
-    fn assessment_workflow_never_receives_build_or_registry_credentials() {
+    fn onboarding_does_not_install_external_assessment_workflows() {
         let files = render(TEMPLATE_VERSION, "main").unwrap().files;
-        let assessment = &files[ASSESSMENT_WORKFLOW_PATH];
-        assert!(assessment.contains("workflow_run:"));
-        assert!(!assessment.contains("@@AYNI_"));
-        assert!(assessment.contains(ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION));
-        assert!(
-            assessment
-                .contains(ayni_orchestrator_profile_ayni::ayni_release::LINUX_AMD64_ARCHIVE_SHA256)
-        );
-        assert!(assessment.contains("contents: read"));
-        assert!(!assessment.contains("packages: write"));
-        assert!(!assessment.contains("AYNI_ENV_CERTIFICATE_SIGNING_KEY"));
-        assert!(assessment.contains("packages: read"));
-        assert!(!assessment.contains("docker push"));
+        assert!(files.contains_key(ENVIRONMENT_WORKFLOW_PATH));
+        assert!(files.keys().all(|path| !path.contains("assessment")));
     }
 
     #[test]

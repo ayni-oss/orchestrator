@@ -289,8 +289,31 @@ message Candidate {
   optional ResourceFailure failure = 8;
   google.protobuf.Timestamp created_at = 9;
   uint64 resource_version = 10;
-  // coding_advisory is bounded to 512 bytes. It is never assessment evidence.
-  optional string coding_advisory = 11;
+  ValidationSummary validation = 11;
+}
+
+// Bounded Ayni validation recorded by the coding runtime for this candidate.
+// It is not independent assessment evidence.
+message ValidationSummary {
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_PASSED = 1;
+    OUTCOME_FAILED = 2;
+    OUTCOME_UNAVAILABLE = 3;
+    OUTCOME_MISSING = 4;
+  }
+  Outcome outcome = 1;
+  optional string signals_digest = 2;
+  uint32 completed_targets = 3;
+  uint32 skipped_targets = 4;
+  uint32 warning_offenders = 5;
+  uint32 failing_offenders = 6;
+  repeated ValidationRow rows = 7;
+}
+
+message ValidationRow {
+  string kind = 1;
+  bool passed = 2;
 }
 
 message ListDevelopmentTasksRequest {

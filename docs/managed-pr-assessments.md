@@ -1,4 +1,10 @@
-# Managed PR assessments
+# Retired managed PR assessments
+
+Managed PR assessment workflows are retired. Ayni validation now runs through
+the coding worker's explicit `ayni_validate` and `finalize_candidate` tools;
+the controller projects the final bounded result into the draft PR description.
+The historical workflow contract below is retained only to explain evidence
+records created before this replacement.
 
 Repository automation version `ayni-managed-v3` installs the environment build and two assessment workflows.
 `Ayni assessment request` observes opened, reopened, synchronize, and

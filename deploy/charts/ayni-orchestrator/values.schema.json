@@ -7,7 +7,7 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "workerImage", "outputClaim", "outputSize", "modelSecret", "intervalSeconds", "requestTimeoutSeconds", "concurrency", "profiles"],
+      "required": ["enabled", "workerImage", "outputClaim", "outputSize", "modelSecret", "intervalSeconds", "requestTimeoutSeconds", "codingTurns", "concurrency", "profiles"],
       "properties": {
         "enabled": { "type": "boolean" },
         "workerImage": { "type": "string" },
@@ -16,6 +16,7 @@
         "modelSecret": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
         "intervalSeconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
         "requestTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
+        "codingTurns": { "type": "integer", "minimum": 1, "maximum": 128 },
         "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
         "allowEmulation": { "type": "boolean" },
         "profiles": { "type": "object", "maxProperties": 128 },

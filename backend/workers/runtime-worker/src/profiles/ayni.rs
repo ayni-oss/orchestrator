@@ -4,7 +4,11 @@ use ayni_orchestrator_profile_ayni::{
     managed_runtime,
     runtime_execution::{ExecutionRequest, VerificationReport},
 };
-use ayni_orchestrator_runtime::runtime_execution::{EXECUTION_DEADLINE_SECONDS, read_bounded};
+use ayni_orchestrator_runtime::{
+    coding::{ValidationOutcome, ValidationResult, ValidationRow},
+    runtime_execution::{EXECUTION_DEADLINE_SECONDS, read_bounded},
+};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs, io,
@@ -39,6 +43,29 @@ pub async fn verify(
         .map_err(io::Error::other)?
 }
 
+/// Verify immutable runtime admission before model tools are exposed. Quality
+/// validation is intentionally performed only by the coding tools.
+pub fn preflight(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
+    validate_source(request)?;
+    if git(
+        workspace,
+        &["merge-base", "--is-ancestor", &request.revision, "HEAD"],
+    )
+    .is_err()
+    {
+        return Err(io::Error::other("source revision mismatch"));
+    }
+    let metadata = read_bounded(
+        Path::new("/etc/ayni/runtime.json"),
+        managed_runtime::MAX_METADATA_BYTES,
+    )?;
+    managed_runtime::signed_identity(&metadata, &request.expected).map_err(io::Error::other)?;
+    for path in [workspace.join(".ayni.lock"), workspace.join(".ayni.toml")] {
+        read_bounded(&path, managed_runtime::MAX_METADATA_BYTES)?;
+    }
+    Ok(())
+}
+
 struct VerificationInputs {
     request: ExecutionRequest,
     workspace: PathBuf,
@@ -50,7 +77,12 @@ struct VerificationInputs {
 
 fn prepare(request: ExecutionRequest, workspace: PathBuf) -> io::Result<VerificationInputs> {
     validate_source(&request)?;
-    if git(&workspace, &["rev-parse", "HEAD"])? != request.revision {
+    if git(
+        &workspace,
+        &["merge-base", "--is-ancestor", &request.revision, "HEAD"],
+    )
+    .is_err()
+    {
         return Err(io::Error::other("source revision mismatch"));
     }
     let lock_path = workspace.join(".ayni.lock");
@@ -100,7 +132,11 @@ fn finish(inputs: VerificationInputs, status: ExitStatus) -> io::Result<Verifica
         .map_err(io::Error::other)?;
     if read_bounded(&lock_path, managed_runtime::MAX_METADATA_BYTES)? != lock
         || read_bounded(&policy_path, managed_runtime::MAX_METADATA_BYTES)? != policy
-        || git(&workspace, &["rev-parse", "HEAD"])? != request.revision
+        || git(
+            &workspace,
+            &["merge-base", "--is-ancestor", &request.revision, "HEAD"],
+        )
+        .is_err()
     {
         return Err(io::Error::other(
             "verification changed protected source inputs",
@@ -111,7 +147,47 @@ fn finish(inputs: VerificationInputs, status: ExitStatus) -> io::Result<Verifica
         lock_digest: format!("sha256:{:x}", Sha256::digest(lock)),
         runtime,
         check_exit_code: status.code().unwrap_or(-1),
+        validation: validation(&bytes, status.success()),
     })
+}
+
+fn validation(bytes: &[u8], success: bool) -> ValidationResult {
+    let parsed = serde_json::from_slice::<Value>(bytes).ok();
+    let count = |section: &str, field: &str| {
+        parsed
+            .as_ref()
+            .and_then(|value| value[section][field].as_u64())
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(0)
+    };
+    let rows = parsed
+        .as_ref()
+        .and_then(|value| value["rows"].as_array())
+        .into_iter()
+        .flatten()
+        .take(32)
+        .filter_map(|row| {
+            let kind = row["kind"].as_str()?;
+            let passed = row["pass"].as_bool()?;
+            (kind.len() <= 64).then(|| ValidationRow {
+                kind: kind.into(),
+                passed,
+            })
+        })
+        .collect();
+    ValidationResult {
+        outcome: if success {
+            ValidationOutcome::Passed
+        } else {
+            ValidationOutcome::Failed
+        },
+        signals_digest: Some(format!("sha256:{:x}", Sha256::digest(bytes))),
+        completed_targets: count("completion", "completed_targets"),
+        skipped_targets: count("completion", "skipped_targets"),
+        warning_offenders: count("aggregate", "warning_offenders"),
+        failing_offenders: count("aggregate", "failing_offenders"),
+        rows,
+    }
 }
 
 /// Build-only entrypoint for a separately authorized TLS engine and push Secret.

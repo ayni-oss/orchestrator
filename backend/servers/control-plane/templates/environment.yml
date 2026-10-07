@@ -1,4 +1,4 @@
-# ayni-orchestrator-template: ayni-managed-v3
+# ayni-orchestrator-template: ayni-managed-v4
 name: Ayni environment
 on:
   push:

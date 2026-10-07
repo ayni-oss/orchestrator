@@ -240,7 +240,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             }),
             state: v1::CandidateState::Available as i32,
             changed_paths: report.changed_paths,
-            coding_advisory: Some(report.advisory),
+            validation: Some(validation_summary(report.validation)),
             ..Default::default()
         };
         self.with_database(move |store| {
@@ -317,6 +317,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             request: snapshot.request.clone(),
             acceptance_criteria: snapshot.acceptance_criteria.clone(),
             model: agent.model.clone(),
+            max_turns: self.configuration.coding_turns,
             constraints: ayni_orchestrator_domain::ChangeConstraints {
                 protected_paths: constraints.protected_paths.clone(),
                 allow_test_edits: constraints.allow_test_edits,
@@ -436,7 +437,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         }),
                         state: v1::CandidateState::Available as i32,
                         changed_paths: report.changed_paths,
-                        coding_advisory: Some(report.advisory),
+                        validation: Some(validation_summary(report.validation)),
                         ..Default::default()
                     })
                     .map_err(|_| "coding_candidate_rejected")?;
@@ -493,7 +494,12 @@ pub(super) fn collect_coding_result(
             .map_err(|_| "coding_output_unavailable")?,
     )
     .map_err(|_| "coding_output_invalid")?;
-    if report.advisory.len() > 512
+    if report.validation.rows.len() > 32
+        || report
+            .validation
+            .rows
+            .iter()
+            .any(|row| row.kind.is_empty() || row.kind.len() > 64)
         || report
             .requested_input
             .as_ref()
@@ -518,6 +524,34 @@ pub(super) fn collect_coding_result(
         }
     }
     Ok((report, collect_coding_usage(directory)?))
+}
+
+fn validation_summary(
+    validation: ayni_orchestrator_runtime::coding::ValidationResult,
+) -> v1::ValidationSummary {
+    use ayni_orchestrator_runtime::coding::ValidationOutcome;
+    let outcome = match validation.outcome {
+        ValidationOutcome::Passed => v1::validation_summary::Outcome::Passed,
+        ValidationOutcome::Failed => v1::validation_summary::Outcome::Failed,
+        ValidationOutcome::Unavailable => v1::validation_summary::Outcome::Unavailable,
+        ValidationOutcome::Missing => v1::validation_summary::Outcome::Missing,
+    };
+    v1::ValidationSummary {
+        outcome: outcome as i32,
+        signals_digest: validation.signals_digest,
+        completed_targets: validation.completed_targets,
+        skipped_targets: validation.skipped_targets,
+        warning_offenders: validation.warning_offenders,
+        failing_offenders: validation.failing_offenders,
+        rows: validation
+            .rows
+            .into_iter()
+            .map(|row| v1::ValidationRow {
+                kind: row.kind,
+                passed: row.passed,
+            })
+            .collect(),
+    }
 }
 
 pub(super) fn collect_coding_usage(

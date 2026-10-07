@@ -17,6 +17,9 @@ pub struct RuntimeConfiguration {
     pub interval_seconds: u64,
     #[serde(default = "timeout")]
     pub request_timeout_seconds: u64,
+    /// Maximum model/tool turns available to one coding attempt.
+    #[serde(default = "coding_turns")]
+    pub coding_turns: u16,
     #[serde(default = "concurrency")]
     pub concurrency: usize,
     /// Local Docker Desktop only; production keeps platform node selection.
@@ -95,6 +98,9 @@ fn managed_registry_prefix() -> String {
 const fn timeout() -> u64 {
     30
 }
+const fn coding_turns() -> u16 {
+    24
+}
 const fn concurrency() -> usize {
     4
 }
@@ -154,6 +160,7 @@ impl RuntimeConfiguration {
         self.execution_configuration().validate()?;
         if !(10..=3600).contains(&self.interval_seconds)
             || !(1..=120).contains(&self.request_timeout_seconds)
+            || !(1..=128).contains(&self.coding_turns)
             || !(1..=16).contains(&self.concurrency)
             || self.profiles.len() > 128
         {
