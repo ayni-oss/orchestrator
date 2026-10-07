@@ -1,6 +1,6 @@
 # Operator onboarding
 
-Configure the GitHub App connector in Configuration, connect authorized
+Configure the GitHub App connector under Sources → GitHub, connect authorized
 repositories, and add repository membership to a project. Select a runtime
 profile and build or discover its signed environment through the existing
 runtime setup flow. Keep environment-building workflows and ordinary repository

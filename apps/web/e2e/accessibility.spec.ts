@@ -21,7 +21,7 @@ test("overview and task workflows meet automated accessibility checks", async ({
 });
 
 test("repository and runtime onboarding meet accessibility checks",async({page})=>{
- for(const path of ["/projects","/projects/project:1","/repositories","/repositories/repository:1","/profiles/profile:1"]){
+ for(const path of ["/projects","/projects/project:1","/repositories","/repositories/repository:1","/profiles/profile:1","/source-control","/container-registries"]){
   await page.goto(path);
   await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
   await expectAccessible(page);
