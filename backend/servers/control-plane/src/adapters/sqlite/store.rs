@@ -137,11 +137,6 @@ impl CleanStore {
                  FROM runtime_artifacts a JOIN runtime_profiles p ON p.id=a.runtime_profile_id
                  WHERE (?1 IS NULL OR p.repository_connection_id=?1)
                    AND (?2 IS NULL OR p.id=?2)
-                 UNION ALL
-                 SELECT i.event_cursor,'automation_installation',i.payload
-                 FROM automation_installations i JOIN runtime_profiles p ON p.id=i.runtime_profile_id
-                 WHERE (?1 IS NULL OR p.repository_connection_id=?1)
-                   AND (?2 IS NULL OR p.id=?2)
                  ORDER BY 1",
                 vec![repository_connection_id, parent_id],
             ),
@@ -264,7 +259,7 @@ impl CleanStore {
             )
             .optional()
             .map_err(CleanStoreError::Database)?
-            .map(|(state, target_id, request_payload)| {
+            .map(|(state, _target_id, request_payload)| {
                 let state = match state.as_str() {
                     "pending" => DurableActionState::Pending,
                     "completed" => DurableActionState::Completed,
@@ -274,7 +269,6 @@ impl CleanStore {
                 Ok(DurableAction {
                     idempotency_key: key.to_owned(),
                     state,
-                    target_id,
                     request_payload,
                 })
             })
@@ -304,7 +298,6 @@ impl CleanStore {
                     Ok(DurableAction {
                         idempotency_key: row.get(0)?,
                         state: DurableActionState::Pending,
-                        target_id: row.get(1)?,
                         request_payload: row.get(2)?,
                     })
                 },
@@ -352,7 +345,6 @@ impl CleanStore {
         Ok(DurableAction {
             idempotency_key: key.to_owned(),
             state: DurableActionState::Pending,
-            target_id: Some(target_id.to_owned()),
             request_payload,
         })
     }

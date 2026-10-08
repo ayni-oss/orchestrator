@@ -8,11 +8,15 @@ deadline. Ayni remains independently useful as a local CLI.
 The trusted operator UI onboards one GitHub App, multiple GHCR connections, and
 global Ed25519 signing certificates. Ayni runtimes select a certificate or follow
 the global default; projects inherit their repositories’ runtime selections.
-Kubernetes Secrets hold credentials; SQLite schema version 7 stores safe metadata
-and references, preserving schema-6 state through an additive startup migration.
+Kubernetes Secrets hold credentials; SQLite schema version 8 stores safe metadata
+and references, migrating recognized schema-6/7 state while retiring image automation.
 Administrator-managed connections remain read-only, while
 validated UI replacements activate without restarting the control plane. Registry
 probe Jobs test access, and each runtime profile selects its image destination.
+Repository image preparation automatically builds a missing environment, certifies
+and publishes every successful build, then independently verifies its digest.
+Existing-image mismatches require explicit Rebuild. No environment workflow
+installation or node-local distribution participates in readiness.
 See [operator onboarding](docs/operator-onboarding.md) for the supported flow.
 
 One worker attests its runtime, checks out source, codes and makes coherent

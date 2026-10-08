@@ -138,8 +138,8 @@ collide.
 | --- | --- |
 | `repositories.read` | `ListRepositoryConnections`, `GetRepositoryConnection`, `ListRepositorySnapshots`, `GetRepositorySnapshot`, `WatchRepositories` |
 | `repositories.write` | `CreateRepositoryConnection` |
-| `profiles.read` | `ListRuntimeProfiles`, `GetRuntimeProfile`, `ListRuntimeProfileRevisions`, `GetRuntimeProfileRevision`, `ListRuntimeArtifacts`, `GetRuntimeArtifact`, `ListAutomationInstallations`, `GetAutomationInstallation`, `WatchRuntimeProfiles` |
-| `profiles.write` | `CreateRuntimeProfile`, `InstallRepositoryAutomation`, `ReconcileRuntimeProfile` |
+| `profiles.read` | `ListRuntimeProfiles`, `GetRuntimeProfile`, `ListRuntimeProfileRevisions`, `GetRuntimeProfileRevision`, `ListRuntimeArtifacts`, `GetRuntimeArtifact`, `WatchRuntimeProfiles` |
+| `profiles.write` | `CreateRuntimeProfile`, `ReconcileRuntimeProfile` |
 | `provider_models.read` | `ListProviderModels` |
 | `tasks.read` | `ListDevelopmentTasks`, `GetDevelopmentTask`, `ListDevelopmentAttempts`, `GetDevelopmentAttempt`, `WatchDevelopmentTask` |
 | `tasks.create` | `CreateDevelopmentTask` |
@@ -373,3 +373,11 @@ Alert on sustained `unauthenticated`, `permission_denied`,
 with the safe request ID in logs, not a metric label. Treat unexpected rejected
 calls as a possible credential-distribution or client-configuration incident
 and follow the private security-reporting process.
+
+
+Runtime preparation always publishes successful builds. `ReconcileRuntimeProfile`
+performs Analyze / Sync or explicit Rebuild (`force_rebuild`); it never bypasses
+setup. Read responses include `findings` (code/message/remediation),
+`preparation_phase` and `rebuild_available`. Workflow-installation APIs and metadata
+were removed at `managed-images-v3`; clients must regenerate. There is no publish-only
+or retained-build API. Task publication retry remains a separate coding-work feature.

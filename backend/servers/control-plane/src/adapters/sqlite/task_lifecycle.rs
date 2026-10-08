@@ -1,64 +1,12 @@
 use super::{
-    CleanStore, CleanStoreError, DEVELOPMENT_SERVICE, MAX_RECONCILE_BATCH, PROFILE_SERVICE, Page,
-    Timestamp, bounded_failure, collect_bounded_payloads, decode, encode_filter,
-    equivalent_failure, get_payload, is_terminal_attempt, params, persist_attempt_update,
-    persist_task_update, query_payloads, task_state_for_attempt, timestamp, unix_seconds,
-    unix_timestamp, v1, valid_attempt_transition,
+    CleanStore, CleanStoreError, DEVELOPMENT_SERVICE, MAX_RECONCILE_BATCH, Page, Timestamp,
+    bounded_failure, collect_bounded_payloads, decode, encode_filter, equivalent_failure,
+    get_payload, is_terminal_attempt, params, persist_attempt_update, persist_task_update,
+    query_payloads, task_state_for_attempt, timestamp, unix_seconds, unix_timestamp, v1,
+    valid_attempt_transition,
 };
 
 impl CleanStore {
-    #[cfg(test)]
-    pub(crate) fn install_repository_automation(
-        &mut self,
-        key: &str,
-        request: &v1::InstallRepositoryAutomationRequest,
-    ) -> Result<v1::AutomationInstallation, CleanStoreError> {
-        let command = crate::adapters::grpc::automation_command(key, request);
-        let id = ayni_orchestrator_application::automation::install(
-            self,
-            &crate::profiles::ayni::automation::ManagedAutomation,
-            &command,
-        )
-        .map_err(super::automation_admission::admission_error)?;
-        self.automation_installation(&id)
-    }
-
-    pub(crate) fn automation_installation(
-        &self,
-        id: &str,
-    ) -> Result<v1::AutomationInstallation, CleanStoreError> {
-        get_payload(
-            &self.connection,
-            "SELECT payload FROM automation_installations WHERE id=?1",
-            id,
-            "automation_installation",
-        )
-    }
-
-    pub(crate) fn list_automation_installations(
-        &mut self,
-        profile_id: &str,
-        page: Option<&v1::PageRequest>,
-    ) -> Result<Page<v1::AutomationInstallation>, CleanStoreError> {
-        self.runtime_profile(profile_id)?;
-        let filter = encode_filter(&[profile_id]);
-        self.page_messages(
-            "ListAutomationInstallations",
-            &filter,
-            page,
-            |connection| {
-                query_payloads(
-                    connection,
-                    "automation_installations",
-                    "runtime_profile_id",
-                    None,
-                    Some(profile_id),
-                )
-            },
-            PROFILE_SERVICE,
-        )
-    }
-
     pub(crate) fn reconcile_runtime_profile(
         &mut self,
         key: &str,

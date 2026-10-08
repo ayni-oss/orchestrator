@@ -82,11 +82,15 @@ source passes its checks.
 flowchart TD
     CONNECT["Connect source control and repository"] --> INSPECT["Inspect committed Ayni configuration and lock"]
     INSPECT --> SETUP{"Configuration or trust changes needed?"}
-    SETUP -->|"Yes"| PROPOSE["Prepare setup or trust update PR"]
+    SETUP -->|"Yes"| PROPOSE["Report setup findings or prepare certificate trust PR"]
     PROPOSE --> REVIEW["Repository owner reviews and merges"]
     REVIEW --> INSPECT
-    SETUP -->|"No"| RESOLVE["Reuse a compatible certified image or build and publish one"]
-    RESOLVE --> VERIFY["Verify image, lock, trust and platform"]
+    SETUP -->|"No"| RESOLVE["Discover the expected image"]
+    RESOLVE --> EXISTS{"Image exists?"}
+    EXISTS -->|"No"| BUILD["Build and certify with Ayni"]
+    BUILD --> PUSH["Publish automatically"]
+    PUSH --> VERIFY
+    EXISTS -->|"Yes"| VERIFY["Verify image, lock, trust and platform"]
     VERIFY --> READY["Runtime ready for task admission"]
     READY --> ADMIT["Admit task and freeze source revision and image digest"]
     ADMIT --> WORK["Agent develops inside the runtime image"]
@@ -97,7 +101,7 @@ flowchart TD
 
 This diagram describes the intended product flow. Runtime setup is shared,
 durable preparation; each task owns its development work through publication.
-Setup changes require repository-owner review before the changed environment
+Configuration and trust changes require repository-owner review before the changed environment
 becomes trusted, and pull requests are never merged automatically.
 
 ### Preparation and readiness
@@ -109,6 +113,29 @@ an image. The product shows the missing requirement on the affected runtime.
 Readiness applies to the selected configuration and verified artifact. Changes to
 environment inputs, signing identity, or registry destination require reconciliation
 before admitting new work. Already admitted tasks retain their frozen inputs.
+
+### Image preparation
+
+The runtime remains visible when setup is incomplete. Analysis freezes an exact
+source commit and reports committed policy, lock, CLI compatibility, certificate,
+trust, registry and platform findings. General repository bootstrap is outside
+this milestone; owners commit missing configuration through their own review.
+Certificate trust changes retain the reviewed PR flow.
+
+Progress is durable: **Analyzing → Building → Publishing → Verifying → Ready**.
+A genuinely absent image triggers a build automatically. Access denials, outages
+and malformed responses fail analysis; they never mean absence. An existing
+image must pass independent verification before reuse. A mismatch reports a
+finding and offers **Rebuild**; it is never overwritten automatically.
+Every successful build publishes. There is no publication preference, separate
+publish action, retained unpublished artifact, artifact PVC or node-local import.
+
+**Analyze / Sync** inspects current inputs; **Rebuild** creates a fresh frozen
+intent after prerequisites pass. **Retry analysis** releases a failed observation.
+The failing phase, reason and corrective action remain visible. Three exhausted
+reconciliation failures or publication attempts require an explicit action.
+See [managed runtime execution](managed-runtime-execution.md) for the build,
+publication, verification and recovery boundaries.
 
 ### Task behavior
 

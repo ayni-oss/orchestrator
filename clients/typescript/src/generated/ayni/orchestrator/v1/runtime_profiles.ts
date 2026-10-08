@@ -238,70 +238,6 @@ export function runtimeArtifactStatusToJSON(object: RuntimeArtifactStatus): stri
   }
 }
 
-/** AutomationInstallationState is the durable provider-automation lifecycle. */
-export enum AutomationInstallationState {
-  AUTOMATION_INSTALLATION_STATE_UNSPECIFIED = 0,
-  AUTOMATION_INSTALLATION_STATE_SETUP_REQUIRED = 1,
-  AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN = 2,
-  AUTOMATION_INSTALLATION_STATE_INSTALLED = 3,
-  AUTOMATION_INSTALLATION_STATE_UPDATING = 4,
-  AUTOMATION_INSTALLATION_STATE_DEGRADED = 5,
-  AUTOMATION_INSTALLATION_STATE_FAILED = 6,
-  UNRECOGNIZED = -1,
-}
-
-export function automationInstallationStateFromJSON(object: any): AutomationInstallationState {
-  switch (object) {
-    case 0:
-    case "AUTOMATION_INSTALLATION_STATE_UNSPECIFIED":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_UNSPECIFIED;
-    case 1:
-    case "AUTOMATION_INSTALLATION_STATE_SETUP_REQUIRED":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_REQUIRED;
-    case 2:
-    case "AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN;
-    case 3:
-    case "AUTOMATION_INSTALLATION_STATE_INSTALLED":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_INSTALLED;
-    case 4:
-    case "AUTOMATION_INSTALLATION_STATE_UPDATING":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_UPDATING;
-    case 5:
-    case "AUTOMATION_INSTALLATION_STATE_DEGRADED":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_DEGRADED;
-    case 6:
-    case "AUTOMATION_INSTALLATION_STATE_FAILED":
-      return AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_FAILED;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return AutomationInstallationState.UNRECOGNIZED;
-  }
-}
-
-export function automationInstallationStateToJSON(object: AutomationInstallationState): string {
-  switch (object) {
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_UNSPECIFIED:
-      return "AUTOMATION_INSTALLATION_STATE_UNSPECIFIED";
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_REQUIRED:
-      return "AUTOMATION_INSTALLATION_STATE_SETUP_REQUIRED";
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN:
-      return "AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN";
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_INSTALLED:
-      return "AUTOMATION_INSTALLATION_STATE_INSTALLED";
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_UPDATING:
-      return "AUTOMATION_INSTALLATION_STATE_UPDATING";
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_DEGRADED:
-      return "AUTOMATION_INSTALLATION_STATE_DEGRADED";
-    case AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_FAILED:
-      return "AUTOMATION_INSTALLATION_STATE_FAILED";
-    case AutomationInstallationState.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
 /** RuntimeProfile is one repository's selected closed runtime variant. */
 export interface RuntimeProfile {
   id: string;
@@ -335,6 +271,9 @@ export interface RuntimeProfile {
     | undefined;
   /** Safe server-computed signing identity; never contains private material. */
   effectiveCertificate?: Certificate | undefined;
+  findings: RuntimeFinding[];
+  preparationPhase: string;
+  rebuildAvailable: boolean;
 }
 
 /** RuntimeProfileRevision is an immutable version of profile configuration. */
@@ -355,11 +294,10 @@ export interface RuntimeProfileRevision {
 
 /** AyniManagedProfileRevision contains only Ayni Managed configuration. */
 export interface AyniManagedProfileRevision {
-  /** lock_fingerprint is exactly 64 lowercase hexadecimal characters. */
+  /** lock_fingerprint is 64 lowercase hexadecimal characters, or empty while setup is incomplete. */
   lockFingerprint: string;
-  /** ayni_version and workflow_template_version are 1 through 128 safe version bytes. */
+  /** ayni_version is 1 through 128 safe version bytes. */
   ayniVersion: string;
-  workflowTemplateVersion: string;
   /**
    * oci_repository is a normalized registry/repository name, without tag or digest,
    * of at most 512 ASCII bytes.
@@ -411,30 +349,6 @@ export interface ExternalArtifactOrigin {
   /** supplied_reference is the owner-supplied OCI reference, at most 512 ASCII bytes. */
   suppliedReference: string;
   observedAt?: Date | undefined;
-}
-
-/** AutomationInstallation is versioned repository automation owned by a profile. */
-export interface AutomationInstallation {
-  id: string;
-  runtimeProfileId: string;
-  version: string;
-  state: AutomationInstallationState;
-  provider?: { $case: "github"; github: GithubAutomationInstallation } | undefined;
-  failure?: ResourceFailure | undefined;
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-  resourceVersion: string;
-}
-
-/** GithubAutomationInstallation contains GitHub-only automation identities. */
-export interface GithubAutomationInstallation {
-  installationId: string;
-  /** setup_pull_request_number is present while an owned setup PR exists. */
-  setupPullRequestNumber?:
-    | string
-    | undefined;
-  /** environment_workflow_path is a normalized repository path. */
-  environmentWorkflowPath: string;
 }
 
 export interface RuntimeProfileConfiguration {
@@ -514,33 +428,6 @@ export interface GetRuntimeArtifactResponse {
   runtimeArtifact?: RuntimeArtifact | undefined;
 }
 
-export interface ListAutomationInstallationsRequest {
-  runtimeProfileId: string;
-  page?: PageRequest | undefined;
-}
-
-export interface ListAutomationInstallationsResponse {
-  automationInstallations: AutomationInstallation[];
-  page?: PageResponse | undefined;
-}
-
-export interface GetAutomationInstallationRequest {
-  automationInstallationId: string;
-}
-
-export interface GetAutomationInstallationResponse {
-  automationInstallation?: AutomationInstallation | undefined;
-}
-
-export interface InstallRepositoryAutomationRequest {
-  idempotencyKey: string;
-  runtimeProfileId: string;
-}
-
-export interface InstallRepositoryAutomationResponse {
-  automationInstallation?: AutomationInstallation | undefined;
-}
-
 export interface ReconcileRuntimeProfileRequest {
   idempotencyKey: string;
   runtimeProfileId: string;
@@ -564,7 +451,6 @@ export interface WatchRuntimeProfilesResponse {
     | { $case: "runtimeProfile"; runtimeProfile: RuntimeProfile }
     | { $case: "revision"; revision: RuntimeProfileRevision }
     | { $case: "runtimeArtifact"; runtimeArtifact: RuntimeArtifact }
-    | { $case: "automationInstallation"; automationInstallation: AutomationInstallation }
     | undefined;
 }
 
@@ -578,18 +464,12 @@ export interface InspectAyniRepositoryResponse {
   repositoryRevision: string;
   lockFingerprint: string;
   ayniVersion: string;
-  workflowTemplateVersion: string;
   ociRepository: string;
   policyPresent: boolean;
   lockCompatible: boolean;
   trustPolicyPinned: boolean;
   reason: string;
-  workflows: WorkflowProposal[];
-}
-
-export interface WorkflowProposal {
-  path: string;
-  contents: string;
+  findings: RuntimeFinding[];
 }
 
 /** RuntimeRegistrySelection survives source revisions and rebuilds of its profile. */
@@ -619,6 +499,13 @@ export interface SetRuntimeCertificateResponse {
   runtimeProfile?: RuntimeProfile | undefined;
 }
 
+/** A safe, actionable preparation finding; never a provider response or credential. */
+export interface RuntimeFinding {
+  code: string;
+  message: string;
+  remediation: string;
+}
+
 function createBaseRuntimeProfile(): RuntimeProfile {
   return {
     id: "",
@@ -637,6 +524,9 @@ function createBaseRuntimeProfile(): RuntimeProfile {
     desiredImageRepository: "",
     certificateId: undefined,
     effectiveCertificate: undefined,
+    findings: [],
+    preparationPhase: "",
+    rebuildAvailable: false,
   };
 }
 
@@ -689,6 +579,15 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     }
     if (message.effectiveCertificate !== undefined) {
       Certificate.encode(message.effectiveCertificate, writer.uint32(130).fork()).join();
+    }
+    for (const v of message.findings) {
+      RuntimeFinding.encode(v!, writer.uint32(138).fork()).join();
+    }
+    if (message.preparationPhase !== "") {
+      writer.uint32(146).string(message.preparationPhase);
+    }
+    if (message.rebuildAvailable !== false) {
+      writer.uint32(152).bool(message.rebuildAvailable);
     }
     return writer;
   },
@@ -834,6 +733,30 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
             message.effectiveCertificate = Certificate.decode(reader, reader.uint32());
             continue;
           }
+          case 17: {
+            if (tag !== 138) {
+              break;
+            }
+
+            message.findings.push(RuntimeFinding.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 18: {
+            if (tag !== 146) {
+              break;
+            }
+
+            message.preparationPhase = reader.string();
+            continue;
+          }
+          case 19: {
+            if (tag !== 152) {
+              break;
+            }
+
+            message.rebuildAvailable = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -904,6 +827,19 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
         : isSet(object.effective_certificate)
         ? Certificate.fromJSON(object.effective_certificate)
         : undefined,
+      findings: globalThis.Array.isArray(object?.findings)
+        ? object.findings.map((e: any) => RuntimeFinding.fromJSON(e))
+        : [],
+      preparationPhase: isSet(object.preparationPhase)
+        ? globalThis.String(object.preparationPhase)
+        : isSet(object.preparation_phase)
+        ? globalThis.String(object.preparation_phase)
+        : "",
+      rebuildAvailable: isSet(object.rebuildAvailable)
+        ? globalThis.Boolean(object.rebuildAvailable)
+        : isSet(object.rebuild_available)
+        ? globalThis.Boolean(object.rebuild_available)
+        : false,
     };
   },
 
@@ -957,6 +893,15 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     if (message.effectiveCertificate !== undefined) {
       obj.effectiveCertificate = Certificate.toJSON(message.effectiveCertificate);
     }
+    if (message.findings?.length) {
+      obj.findings = message.findings.map((e) => RuntimeFinding.toJSON(e));
+    }
+    if (message.preparationPhase !== "") {
+      obj.preparationPhase = message.preparationPhase;
+    }
+    if (message.rebuildAvailable !== false) {
+      obj.rebuildAvailable = message.rebuildAvailable;
+    }
     return obj;
   },
 
@@ -987,6 +932,9 @@ export const RuntimeProfile: MessageFns<RuntimeProfile> = {
     message.effectiveCertificate = (object.effectiveCertificate !== undefined && object.effectiveCertificate !== null)
       ? Certificate.fromPartial(object.effectiveCertificate)
       : undefined;
+    message.findings = object.findings?.map((e) => RuntimeFinding.fromPartial(e)) || [];
+    message.preparationPhase = object.preparationPhase ?? "";
+    message.rebuildAvailable = object.rebuildAvailable ?? false;
     return message;
   },
 };
@@ -1254,13 +1202,7 @@ export const RuntimeProfileRevision: MessageFns<RuntimeProfileRevision> = {
 };
 
 function createBaseAyniManagedProfileRevision(): AyniManagedProfileRevision {
-  return {
-    lockFingerprint: "",
-    ayniVersion: "",
-    workflowTemplateVersion: "",
-    ociRepository: "",
-    runtimeSourceDigest: undefined,
-  };
+  return { lockFingerprint: "", ayniVersion: "", ociRepository: "", runtimeSourceDigest: undefined };
 }
 
 export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> = {
@@ -1270,9 +1212,6 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
     }
     if (message.ayniVersion !== "") {
       writer.uint32(18).string(message.ayniVersion);
-    }
-    if (message.workflowTemplateVersion !== "") {
-      writer.uint32(26).string(message.workflowTemplateVersion);
     }
     if (message.ociRepository !== "") {
       writer.uint32(34).string(message.ociRepository);
@@ -1310,14 +1249,6 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
             }
 
             message.ayniVersion = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.workflowTemplateVersion = reader.string();
             continue;
           }
           case 4: {
@@ -1360,11 +1291,6 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
         : isSet(object.ayni_version)
         ? globalThis.String(object.ayni_version)
         : "",
-      workflowTemplateVersion: isSet(object.workflowTemplateVersion)
-        ? globalThis.String(object.workflowTemplateVersion)
-        : isSet(object.workflow_template_version)
-        ? globalThis.String(object.workflow_template_version)
-        : "",
       ociRepository: isSet(object.ociRepository)
         ? globalThis.String(object.ociRepository)
         : isSet(object.oci_repository)
@@ -1386,9 +1312,6 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
     if (message.ayniVersion !== "") {
       obj.ayniVersion = message.ayniVersion;
     }
-    if (message.workflowTemplateVersion !== "") {
-      obj.workflowTemplateVersion = message.workflowTemplateVersion;
-    }
     if (message.ociRepository !== "") {
       obj.ociRepository = message.ociRepository;
     }
@@ -1405,7 +1328,6 @@ export const AyniManagedProfileRevision: MessageFns<AyniManagedProfileRevision> 
     const message = createBaseAyniManagedProfileRevision();
     message.lockFingerprint = object.lockFingerprint ?? "";
     message.ayniVersion = object.ayniVersion ?? "";
-    message.workflowTemplateVersion = object.workflowTemplateVersion ?? "";
     message.ociRepository = object.ociRepository ?? "";
     message.runtimeSourceDigest = object.runtimeSourceDigest ?? undefined;
     return message;
@@ -1967,361 +1889,6 @@ export const ExternalArtifactOrigin: MessageFns<ExternalArtifactOrigin> = {
     const message = createBaseExternalArtifactOrigin();
     message.suppliedReference = object.suppliedReference ?? "";
     message.observedAt = object.observedAt ?? undefined;
-    return message;
-  },
-};
-
-function createBaseAutomationInstallation(): AutomationInstallation {
-  return {
-    id: "",
-    runtimeProfileId: "",
-    version: "",
-    state: 0,
-    provider: undefined,
-    failure: undefined,
-    createdAt: undefined,
-    updatedAt: undefined,
-    resourceVersion: "0",
-  };
-}
-
-export const AutomationInstallation: MessageFns<AutomationInstallation> = {
-  encode(message: AutomationInstallation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.runtimeProfileId !== "") {
-      writer.uint32(18).string(message.runtimeProfileId);
-    }
-    if (message.version !== "") {
-      writer.uint32(26).string(message.version);
-    }
-    if (message.state !== 0) {
-      writer.uint32(32).int32(message.state);
-    }
-    switch (message.provider?.$case) {
-      case "github":
-        GithubAutomationInstallation.encode(message.provider.github, writer.uint32(42).fork()).join();
-        break;
-    }
-    if (message.failure !== undefined) {
-      ResourceFailure.encode(message.failure, writer.uint32(50).fork()).join();
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(58).fork()).join();
-    }
-    if (message.updatedAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
-    }
-    if (message.resourceVersion !== "0") {
-      writer.uint32(72).uint64(message.resourceVersion);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): AutomationInstallation {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseAutomationInstallation();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.runtimeProfileId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.version = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.provider = {
-              $case: "github",
-              github: GithubAutomationInstallation.decode(reader, reader.uint32()),
-            };
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.failure = ResourceFailure.decode(reader, reader.uint32());
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 9: {
-            if (tag !== 72) {
-              break;
-            }
-
-            message.resourceVersion = reader.uint64().toString();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): AutomationInstallation {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      runtimeProfileId: isSet(object.runtimeProfileId)
-        ? globalThis.String(object.runtimeProfileId)
-        : isSet(object.runtime_profile_id)
-        ? globalThis.String(object.runtime_profile_id)
-        : "",
-      version: isSet(object.version) ? globalThis.String(object.version) : "",
-      state: isSet(object.state) ? automationInstallationStateFromJSON(object.state) : 0,
-      provider: isSet(object.github)
-        ? { $case: "github", github: GithubAutomationInstallation.fromJSON(object.github) }
-        : undefined,
-      failure: isSet(object.failure) ? ResourceFailure.fromJSON(object.failure) : undefined,
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      updatedAt: isSet(object.updatedAt)
-        ? fromJsonTimestamp(object.updatedAt)
-        : isSet(object.updated_at)
-        ? fromJsonTimestamp(object.updated_at)
-        : undefined,
-      resourceVersion: isSet(object.resourceVersion)
-        ? globalThis.String(object.resourceVersion)
-        : isSet(object.resource_version)
-        ? globalThis.String(object.resource_version)
-        : "0",
-    };
-  },
-
-  toJSON(message: AutomationInstallation): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.runtimeProfileId !== "") {
-      obj.runtimeProfileId = message.runtimeProfileId;
-    }
-    if (message.version !== "") {
-      obj.version = message.version;
-    }
-    if (message.state !== 0) {
-      obj.state = automationInstallationStateToJSON(message.state);
-    }
-    if (message.provider?.$case === "github") {
-      obj.github = GithubAutomationInstallation.toJSON(message.provider.github);
-    }
-    if (message.failure !== undefined) {
-      obj.failure = ResourceFailure.toJSON(message.failure);
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.updatedAt !== undefined) {
-      obj.updatedAt = message.updatedAt.toISOString();
-    }
-    if (message.resourceVersion !== "0") {
-      obj.resourceVersion = message.resourceVersion;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<AutomationInstallation>): AutomationInstallation {
-    return AutomationInstallation.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<AutomationInstallation>): AutomationInstallation {
-    const message = createBaseAutomationInstallation();
-    message.id = object.id ?? "";
-    message.runtimeProfileId = object.runtimeProfileId ?? "";
-    message.version = object.version ?? "";
-    message.state = object.state ?? 0;
-    switch (object.provider?.$case) {
-      case "github": {
-        if (object.provider?.github !== undefined && object.provider?.github !== null) {
-          message.provider = {
-            $case: "github",
-            github: GithubAutomationInstallation.fromPartial(object.provider.github),
-          };
-        }
-        break;
-      }
-    }
-    message.failure = (object.failure !== undefined && object.failure !== null)
-      ? ResourceFailure.fromPartial(object.failure)
-      : undefined;
-    message.createdAt = object.createdAt ?? undefined;
-    message.updatedAt = object.updatedAt ?? undefined;
-    message.resourceVersion = object.resourceVersion ?? "0";
-    return message;
-  },
-};
-
-function createBaseGithubAutomationInstallation(): GithubAutomationInstallation {
-  return { installationId: "0", setupPullRequestNumber: undefined, environmentWorkflowPath: "" };
-}
-
-export const GithubAutomationInstallation: MessageFns<GithubAutomationInstallation> = {
-  encode(message: GithubAutomationInstallation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.installationId !== "0") {
-      writer.uint32(8).uint64(message.installationId);
-    }
-    if (message.setupPullRequestNumber !== undefined) {
-      writer.uint32(16).uint64(message.setupPullRequestNumber);
-    }
-    if (message.environmentWorkflowPath !== "") {
-      writer.uint32(26).string(message.environmentWorkflowPath);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GithubAutomationInstallation {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGithubAutomationInstallation();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.installationId = reader.uint64().toString();
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.setupPullRequestNumber = reader.uint64().toString();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.environmentWorkflowPath = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GithubAutomationInstallation {
-    return {
-      installationId: isSet(object.installationId)
-        ? globalThis.String(object.installationId)
-        : isSet(object.installation_id)
-        ? globalThis.String(object.installation_id)
-        : "0",
-      setupPullRequestNumber: isSet(object.setupPullRequestNumber)
-        ? globalThis.String(object.setupPullRequestNumber)
-        : isSet(object.setup_pull_request_number)
-        ? globalThis.String(object.setup_pull_request_number)
-        : undefined,
-      environmentWorkflowPath: isSet(object.environmentWorkflowPath)
-        ? globalThis.String(object.environmentWorkflowPath)
-        : isSet(object.environment_workflow_path)
-        ? globalThis.String(object.environment_workflow_path)
-        : "",
-    };
-  },
-
-  toJSON(message: GithubAutomationInstallation): unknown {
-    const obj: any = {};
-    if (message.installationId !== "0") {
-      obj.installationId = message.installationId;
-    }
-    if (message.setupPullRequestNumber !== undefined) {
-      obj.setupPullRequestNumber = message.setupPullRequestNumber;
-    }
-    if (message.environmentWorkflowPath !== "") {
-      obj.environmentWorkflowPath = message.environmentWorkflowPath;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GithubAutomationInstallation>): GithubAutomationInstallation {
-    return GithubAutomationInstallation.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GithubAutomationInstallation>): GithubAutomationInstallation {
-    const message = createBaseGithubAutomationInstallation();
-    message.installationId = object.installationId ?? "0";
-    message.setupPullRequestNumber = object.setupPullRequestNumber ?? undefined;
-    message.environmentWorkflowPath = object.environmentWorkflowPath ?? "";
     return message;
   },
 };
@@ -3719,507 +3286,6 @@ export const GetRuntimeArtifactResponse: MessageFns<GetRuntimeArtifactResponse> 
   },
 };
 
-function createBaseListAutomationInstallationsRequest(): ListAutomationInstallationsRequest {
-  return { runtimeProfileId: "", page: undefined };
-}
-
-export const ListAutomationInstallationsRequest: MessageFns<ListAutomationInstallationsRequest> = {
-  encode(message: ListAutomationInstallationsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.runtimeProfileId !== "") {
-      writer.uint32(10).string(message.runtimeProfileId);
-    }
-    if (message.page !== undefined) {
-      PageRequest.encode(message.page, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListAutomationInstallationsRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListAutomationInstallationsRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.runtimeProfileId = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.page = PageRequest.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListAutomationInstallationsRequest {
-    return {
-      runtimeProfileId: isSet(object.runtimeProfileId)
-        ? globalThis.String(object.runtimeProfileId)
-        : isSet(object.runtime_profile_id)
-        ? globalThis.String(object.runtime_profile_id)
-        : "",
-      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListAutomationInstallationsRequest): unknown {
-    const obj: any = {};
-    if (message.runtimeProfileId !== "") {
-      obj.runtimeProfileId = message.runtimeProfileId;
-    }
-    if (message.page !== undefined) {
-      obj.page = PageRequest.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListAutomationInstallationsRequest>): ListAutomationInstallationsRequest {
-    return ListAutomationInstallationsRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListAutomationInstallationsRequest>): ListAutomationInstallationsRequest {
-    const message = createBaseListAutomationInstallationsRequest();
-    message.runtimeProfileId = object.runtimeProfileId ?? "";
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageRequest.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseListAutomationInstallationsResponse(): ListAutomationInstallationsResponse {
-  return { automationInstallations: [], page: undefined };
-}
-
-export const ListAutomationInstallationsResponse: MessageFns<ListAutomationInstallationsResponse> = {
-  encode(message: ListAutomationInstallationsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.automationInstallations) {
-      AutomationInstallation.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.page !== undefined) {
-      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListAutomationInstallationsResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListAutomationInstallationsResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.automationInstallations.push(AutomationInstallation.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.page = PageResponse.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListAutomationInstallationsResponse {
-    return {
-      automationInstallations: globalThis.Array.isArray(object?.automationInstallations)
-        ? object.automationInstallations.map((e: any) => AutomationInstallation.fromJSON(e))
-        : globalThis.Array.isArray(object?.automation_installations)
-        ? object.automation_installations.map((e: any) => AutomationInstallation.fromJSON(e))
-        : [],
-      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListAutomationInstallationsResponse): unknown {
-    const obj: any = {};
-    if (message.automationInstallations?.length) {
-      obj.automationInstallations = message.automationInstallations.map((e) => AutomationInstallation.toJSON(e));
-    }
-    if (message.page !== undefined) {
-      obj.page = PageResponse.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListAutomationInstallationsResponse>): ListAutomationInstallationsResponse {
-    return ListAutomationInstallationsResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListAutomationInstallationsResponse>): ListAutomationInstallationsResponse {
-    const message = createBaseListAutomationInstallationsResponse();
-    message.automationInstallations =
-      object.automationInstallations?.map((e) => AutomationInstallation.fromPartial(e)) || [];
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageResponse.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseGetAutomationInstallationRequest(): GetAutomationInstallationRequest {
-  return { automationInstallationId: "" };
-}
-
-export const GetAutomationInstallationRequest: MessageFns<GetAutomationInstallationRequest> = {
-  encode(message: GetAutomationInstallationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.automationInstallationId !== "") {
-      writer.uint32(10).string(message.automationInstallationId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetAutomationInstallationRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetAutomationInstallationRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.automationInstallationId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetAutomationInstallationRequest {
-    return {
-      automationInstallationId: isSet(object.automationInstallationId)
-        ? globalThis.String(object.automationInstallationId)
-        : isSet(object.automation_installation_id)
-        ? globalThis.String(object.automation_installation_id)
-        : "",
-    };
-  },
-
-  toJSON(message: GetAutomationInstallationRequest): unknown {
-    const obj: any = {};
-    if (message.automationInstallationId !== "") {
-      obj.automationInstallationId = message.automationInstallationId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetAutomationInstallationRequest>): GetAutomationInstallationRequest {
-    return GetAutomationInstallationRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetAutomationInstallationRequest>): GetAutomationInstallationRequest {
-    const message = createBaseGetAutomationInstallationRequest();
-    message.automationInstallationId = object.automationInstallationId ?? "";
-    return message;
-  },
-};
-
-function createBaseGetAutomationInstallationResponse(): GetAutomationInstallationResponse {
-  return { automationInstallation: undefined };
-}
-
-export const GetAutomationInstallationResponse: MessageFns<GetAutomationInstallationResponse> = {
-  encode(message: GetAutomationInstallationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.automationInstallation !== undefined) {
-      AutomationInstallation.encode(message.automationInstallation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetAutomationInstallationResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetAutomationInstallationResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.automationInstallation = AutomationInstallation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetAutomationInstallationResponse {
-    return {
-      automationInstallation: isSet(object.automationInstallation)
-        ? AutomationInstallation.fromJSON(object.automationInstallation)
-        : isSet(object.automation_installation)
-        ? AutomationInstallation.fromJSON(object.automation_installation)
-        : undefined,
-    };
-  },
-
-  toJSON(message: GetAutomationInstallationResponse): unknown {
-    const obj: any = {};
-    if (message.automationInstallation !== undefined) {
-      obj.automationInstallation = AutomationInstallation.toJSON(message.automationInstallation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetAutomationInstallationResponse>): GetAutomationInstallationResponse {
-    return GetAutomationInstallationResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetAutomationInstallationResponse>): GetAutomationInstallationResponse {
-    const message = createBaseGetAutomationInstallationResponse();
-    message.automationInstallation =
-      (object.automationInstallation !== undefined && object.automationInstallation !== null)
-        ? AutomationInstallation.fromPartial(object.automationInstallation)
-        : undefined;
-    return message;
-  },
-};
-
-function createBaseInstallRepositoryAutomationRequest(): InstallRepositoryAutomationRequest {
-  return { idempotencyKey: "", runtimeProfileId: "" };
-}
-
-export const InstallRepositoryAutomationRequest: MessageFns<InstallRepositoryAutomationRequest> = {
-  encode(message: InstallRepositoryAutomationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.runtimeProfileId !== "") {
-      writer.uint32(18).string(message.runtimeProfileId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): InstallRepositoryAutomationRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseInstallRepositoryAutomationRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.runtimeProfileId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): InstallRepositoryAutomationRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      runtimeProfileId: isSet(object.runtimeProfileId)
-        ? globalThis.String(object.runtimeProfileId)
-        : isSet(object.runtime_profile_id)
-        ? globalThis.String(object.runtime_profile_id)
-        : "",
-    };
-  },
-
-  toJSON(message: InstallRepositoryAutomationRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.runtimeProfileId !== "") {
-      obj.runtimeProfileId = message.runtimeProfileId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<InstallRepositoryAutomationRequest>): InstallRepositoryAutomationRequest {
-    return InstallRepositoryAutomationRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<InstallRepositoryAutomationRequest>): InstallRepositoryAutomationRequest {
-    const message = createBaseInstallRepositoryAutomationRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.runtimeProfileId = object.runtimeProfileId ?? "";
-    return message;
-  },
-};
-
-function createBaseInstallRepositoryAutomationResponse(): InstallRepositoryAutomationResponse {
-  return { automationInstallation: undefined };
-}
-
-export const InstallRepositoryAutomationResponse: MessageFns<InstallRepositoryAutomationResponse> = {
-  encode(message: InstallRepositoryAutomationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.automationInstallation !== undefined) {
-      AutomationInstallation.encode(message.automationInstallation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): InstallRepositoryAutomationResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseInstallRepositoryAutomationResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.automationInstallation = AutomationInstallation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): InstallRepositoryAutomationResponse {
-    return {
-      automationInstallation: isSet(object.automationInstallation)
-        ? AutomationInstallation.fromJSON(object.automationInstallation)
-        : isSet(object.automation_installation)
-        ? AutomationInstallation.fromJSON(object.automation_installation)
-        : undefined,
-    };
-  },
-
-  toJSON(message: InstallRepositoryAutomationResponse): unknown {
-    const obj: any = {};
-    if (message.automationInstallation !== undefined) {
-      obj.automationInstallation = AutomationInstallation.toJSON(message.automationInstallation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<InstallRepositoryAutomationResponse>): InstallRepositoryAutomationResponse {
-    return InstallRepositoryAutomationResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<InstallRepositoryAutomationResponse>): InstallRepositoryAutomationResponse {
-    const message = createBaseInstallRepositoryAutomationResponse();
-    message.automationInstallation =
-      (object.automationInstallation !== undefined && object.automationInstallation !== null)
-        ? AutomationInstallation.fromPartial(object.automationInstallation)
-        : undefined;
-    return message;
-  },
-};
-
 function createBaseReconcileRuntimeProfileRequest(): ReconcileRuntimeProfileRequest {
   return { idempotencyKey: "", runtimeProfileId: "", forceRebuild: false };
 }
@@ -4540,9 +3606,6 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
       case "runtimeArtifact":
         RuntimeArtifact.encode(message.update.runtimeArtifact, writer.uint32(34).fork()).join();
         break;
-      case "automationInstallation":
-        AutomationInstallation.encode(message.update.automationInstallation, writer.uint32(42).fork()).join();
-        break;
     }
     return writer;
   },
@@ -4598,17 +3661,6 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
             };
             continue;
           }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.update = {
-              $case: "automationInstallation",
-              automationInstallation: AutomationInstallation.decode(reader, reader.uint32()),
-            };
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4634,16 +3686,6 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
         ? { $case: "runtimeArtifact", runtimeArtifact: RuntimeArtifact.fromJSON(object.runtimeArtifact) }
         : isSet(object.runtime_artifact)
         ? { $case: "runtimeArtifact", runtimeArtifact: RuntimeArtifact.fromJSON(object.runtime_artifact) }
-        : isSet(object.automationInstallation)
-        ? {
-          $case: "automationInstallation",
-          automationInstallation: AutomationInstallation.fromJSON(object.automationInstallation),
-        }
-        : isSet(object.automation_installation)
-        ? {
-          $case: "automationInstallation",
-          automationInstallation: AutomationInstallation.fromJSON(object.automation_installation),
-        }
         : undefined,
     };
   },
@@ -4659,8 +3701,6 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
       obj.revision = RuntimeProfileRevision.toJSON(message.update.revision);
     } else if (message.update?.$case === "runtimeArtifact") {
       obj.runtimeArtifact = RuntimeArtifact.toJSON(message.update.runtimeArtifact);
-    } else if (message.update?.$case === "automationInstallation") {
-      obj.automationInstallation = AutomationInstallation.toJSON(message.update.automationInstallation);
     }
     return obj;
   },
@@ -4692,15 +3732,6 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
           message.update = {
             $case: "runtimeArtifact",
             runtimeArtifact: RuntimeArtifact.fromPartial(object.update.runtimeArtifact),
-          };
-        }
-        break;
-      }
-      case "automationInstallation": {
-        if (object.update?.automationInstallation !== undefined && object.update?.automationInstallation !== null) {
-          message.update = {
-            $case: "automationInstallation",
-            automationInstallation: AutomationInstallation.fromPartial(object.update.automationInstallation),
           };
         }
         break;
@@ -4789,13 +3820,12 @@ function createBaseInspectAyniRepositoryResponse(): InspectAyniRepositoryRespons
     repositoryRevision: "",
     lockFingerprint: "",
     ayniVersion: "",
-    workflowTemplateVersion: "",
     ociRepository: "",
     policyPresent: false,
     lockCompatible: false,
     trustPolicyPinned: false,
     reason: "",
-    workflows: [],
+    findings: [],
   };
 }
 
@@ -4813,9 +3843,6 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
     if (message.ayniVersion !== "") {
       writer.uint32(34).string(message.ayniVersion);
     }
-    if (message.workflowTemplateVersion !== "") {
-      writer.uint32(42).string(message.workflowTemplateVersion);
-    }
     if (message.ociRepository !== "") {
       writer.uint32(50).string(message.ociRepository);
     }
@@ -4831,8 +3858,8 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
     if (message.reason !== "") {
       writer.uint32(82).string(message.reason);
     }
-    for (const v of message.workflows) {
-      WorkflowProposal.encode(v!, writer.uint32(90).fork()).join();
+    for (const v of message.findings) {
+      RuntimeFinding.encode(v!, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -4882,14 +3909,6 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
             message.ayniVersion = reader.string();
             continue;
           }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.workflowTemplateVersion = reader.string();
-            continue;
-          }
           case 6: {
             if (tag !== 50) {
               break;
@@ -4930,12 +3949,12 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
             message.reason = reader.string();
             continue;
           }
-          case 11: {
-            if (tag !== 90) {
+          case 12: {
+            if (tag !== 98) {
               break;
             }
 
-            message.workflows.push(WorkflowProposal.decode(reader, reader.uint32()));
+            message.findings.push(RuntimeFinding.decode(reader, reader.uint32()));
             continue;
           }
         }
@@ -4972,11 +3991,6 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
         : isSet(object.ayni_version)
         ? globalThis.String(object.ayni_version)
         : "",
-      workflowTemplateVersion: isSet(object.workflowTemplateVersion)
-        ? globalThis.String(object.workflowTemplateVersion)
-        : isSet(object.workflow_template_version)
-        ? globalThis.String(object.workflow_template_version)
-        : "",
       ociRepository: isSet(object.ociRepository)
         ? globalThis.String(object.ociRepository)
         : isSet(object.oci_repository)
@@ -4998,8 +4012,8 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
         ? globalThis.Boolean(object.trust_policy_pinned)
         : false,
       reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
-      workflows: globalThis.Array.isArray(object?.workflows)
-        ? object.workflows.map((e: any) => WorkflowProposal.fromJSON(e))
+      findings: globalThis.Array.isArray(object?.findings)
+        ? object.findings.map((e: any) => RuntimeFinding.fromJSON(e))
         : [],
     };
   },
@@ -5018,9 +4032,6 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
     if (message.ayniVersion !== "") {
       obj.ayniVersion = message.ayniVersion;
     }
-    if (message.workflowTemplateVersion !== "") {
-      obj.workflowTemplateVersion = message.workflowTemplateVersion;
-    }
     if (message.ociRepository !== "") {
       obj.ociRepository = message.ociRepository;
     }
@@ -5036,8 +4047,8 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
     if (message.reason !== "") {
       obj.reason = message.reason;
     }
-    if (message.workflows?.length) {
-      obj.workflows = message.workflows.map((e) => WorkflowProposal.toJSON(e));
+    if (message.findings?.length) {
+      obj.findings = message.findings.map((e) => RuntimeFinding.toJSON(e));
     }
     return obj;
   },
@@ -5051,98 +4062,12 @@ export const InspectAyniRepositoryResponse: MessageFns<InspectAyniRepositoryResp
     message.repositoryRevision = object.repositoryRevision ?? "";
     message.lockFingerprint = object.lockFingerprint ?? "";
     message.ayniVersion = object.ayniVersion ?? "";
-    message.workflowTemplateVersion = object.workflowTemplateVersion ?? "";
     message.ociRepository = object.ociRepository ?? "";
     message.policyPresent = object.policyPresent ?? false;
     message.lockCompatible = object.lockCompatible ?? false;
     message.trustPolicyPinned = object.trustPolicyPinned ?? false;
     message.reason = object.reason ?? "";
-    message.workflows = object.workflows?.map((e) => WorkflowProposal.fromPartial(e)) || [];
-    return message;
-  },
-};
-
-function createBaseWorkflowProposal(): WorkflowProposal {
-  return { path: "", contents: "" };
-}
-
-export const WorkflowProposal: MessageFns<WorkflowProposal> = {
-  encode(message: WorkflowProposal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.path !== "") {
-      writer.uint32(10).string(message.path);
-    }
-    if (message.contents !== "") {
-      writer.uint32(18).string(message.contents);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): WorkflowProposal {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseWorkflowProposal();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.path = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.contents = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): WorkflowProposal {
-    return {
-      path: isSet(object.path) ? globalThis.String(object.path) : "",
-      contents: isSet(object.contents) ? globalThis.String(object.contents) : "",
-    };
-  },
-
-  toJSON(message: WorkflowProposal): unknown {
-    const obj: any = {};
-    if (message.path !== "") {
-      obj.path = message.path;
-    }
-    if (message.contents !== "") {
-      obj.contents = message.contents;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<WorkflowProposal>): WorkflowProposal {
-    return WorkflowProposal.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<WorkflowProposal>): WorkflowProposal {
-    const message = createBaseWorkflowProposal();
-    message.path = object.path ?? "";
-    message.contents = object.contents ?? "";
+    message.findings = object.findings?.map((e) => RuntimeFinding.fromPartial(e)) || [];
     return message;
   },
 };
@@ -5636,6 +4561,107 @@ export const SetRuntimeCertificateResponse: MessageFns<SetRuntimeCertificateResp
   },
 };
 
+function createBaseRuntimeFinding(): RuntimeFinding {
+  return { code: "", message: "", remediation: "" };
+}
+
+export const RuntimeFinding: MessageFns<RuntimeFinding> = {
+  encode(message: RuntimeFinding, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.code !== "") {
+      writer.uint32(10).string(message.code);
+    }
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    if (message.remediation !== "") {
+      writer.uint32(26).string(message.remediation);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeFinding {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeFinding();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.code = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.message = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.remediation = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeFinding {
+    return {
+      code: isSet(object.code) ? globalThis.String(object.code) : "",
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      remediation: isSet(object.remediation) ? globalThis.String(object.remediation) : "",
+    };
+  },
+
+  toJSON(message: RuntimeFinding): unknown {
+    const obj: any = {};
+    if (message.code !== "") {
+      obj.code = message.code;
+    }
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    if (message.remediation !== "") {
+      obj.remediation = message.remediation;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeFinding>): RuntimeFinding {
+    return RuntimeFinding.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeFinding>): RuntimeFinding {
+    const message = createBaseRuntimeFinding();
+    message.code = object.code ?? "";
+    message.message = object.message ?? "";
+    message.remediation = object.remediation ?? "";
+    return message;
+  },
+};
+
 /** RuntimeProfileService manages versioned runtime configuration and its reconciled resources. */
 export type RuntimeProfileServiceService = typeof RuntimeProfileServiceService;
 export const RuntimeProfileServiceService = {
@@ -5731,45 +4757,6 @@ export const RuntimeProfileServiceService = {
       Buffer.from(GetRuntimeArtifactResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetRuntimeArtifactResponse => GetRuntimeArtifactResponse.decode(value),
   },
-  listAutomationInstallations: {
-    path: "/ayni.orchestrator.v1.RuntimeProfileService/ListAutomationInstallations" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ListAutomationInstallationsRequest): Buffer =>
-      Buffer.from(ListAutomationInstallationsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListAutomationInstallationsRequest =>
-      ListAutomationInstallationsRequest.decode(value),
-    responseSerialize: (value: ListAutomationInstallationsResponse): Buffer =>
-      Buffer.from(ListAutomationInstallationsResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListAutomationInstallationsResponse =>
-      ListAutomationInstallationsResponse.decode(value),
-  },
-  getAutomationInstallation: {
-    path: "/ayni.orchestrator.v1.RuntimeProfileService/GetAutomationInstallation" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: GetAutomationInstallationRequest): Buffer =>
-      Buffer.from(GetAutomationInstallationRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetAutomationInstallationRequest =>
-      GetAutomationInstallationRequest.decode(value),
-    responseSerialize: (value: GetAutomationInstallationResponse): Buffer =>
-      Buffer.from(GetAutomationInstallationResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetAutomationInstallationResponse =>
-      GetAutomationInstallationResponse.decode(value),
-  },
-  installRepositoryAutomation: {
-    path: "/ayni.orchestrator.v1.RuntimeProfileService/InstallRepositoryAutomation" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: InstallRepositoryAutomationRequest): Buffer =>
-      Buffer.from(InstallRepositoryAutomationRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): InstallRepositoryAutomationRequest =>
-      InstallRepositoryAutomationRequest.decode(value),
-    responseSerialize: (value: InstallRepositoryAutomationResponse): Buffer =>
-      Buffer.from(InstallRepositoryAutomationResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): InstallRepositoryAutomationResponse =>
-      InstallRepositoryAutomationResponse.decode(value),
-  },
   reconcileRuntimeProfile: {
     path: "/ayni.orchestrator.v1.RuntimeProfileService/ReconcileRuntimeProfile" as const,
     requestStream: false as const,
@@ -5826,9 +4813,6 @@ export interface RuntimeProfileServiceServer extends UntypedServiceImplementatio
   getRuntimeProfileRevision: handleUnaryCall<GetRuntimeProfileRevisionRequest, GetRuntimeProfileRevisionResponse>;
   listRuntimeArtifacts: handleUnaryCall<ListRuntimeArtifactsRequest, ListRuntimeArtifactsResponse>;
   getRuntimeArtifact: handleUnaryCall<GetRuntimeArtifactRequest, GetRuntimeArtifactResponse>;
-  listAutomationInstallations: handleUnaryCall<ListAutomationInstallationsRequest, ListAutomationInstallationsResponse>;
-  getAutomationInstallation: handleUnaryCall<GetAutomationInstallationRequest, GetAutomationInstallationResponse>;
-  installRepositoryAutomation: handleUnaryCall<InstallRepositoryAutomationRequest, InstallRepositoryAutomationResponse>;
   reconcileRuntimeProfile: handleUnaryCall<ReconcileRuntimeProfileRequest, ReconcileRuntimeProfileResponse>;
   setRuntimeCertificate: handleUnaryCall<SetRuntimeCertificateRequest, SetRuntimeCertificateResponse>;
   setRuntimeRegistry: handleUnaryCall<SetRuntimeRegistryRequest, SetRuntimeRegistryResponse>;
@@ -5955,51 +4939,6 @@ export interface RuntimeProfileServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetRuntimeArtifactResponse) => void,
-  ): ClientUnaryCall;
-  listAutomationInstallations(
-    request: ListAutomationInstallationsRequest,
-    callback: (error: ServiceError | null, response: ListAutomationInstallationsResponse) => void,
-  ): ClientUnaryCall;
-  listAutomationInstallations(
-    request: ListAutomationInstallationsRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListAutomationInstallationsResponse) => void,
-  ): ClientUnaryCall;
-  listAutomationInstallations(
-    request: ListAutomationInstallationsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListAutomationInstallationsResponse) => void,
-  ): ClientUnaryCall;
-  getAutomationInstallation(
-    request: GetAutomationInstallationRequest,
-    callback: (error: ServiceError | null, response: GetAutomationInstallationResponse) => void,
-  ): ClientUnaryCall;
-  getAutomationInstallation(
-    request: GetAutomationInstallationRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetAutomationInstallationResponse) => void,
-  ): ClientUnaryCall;
-  getAutomationInstallation(
-    request: GetAutomationInstallationRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetAutomationInstallationResponse) => void,
-  ): ClientUnaryCall;
-  installRepositoryAutomation(
-    request: InstallRepositoryAutomationRequest,
-    callback: (error: ServiceError | null, response: InstallRepositoryAutomationResponse) => void,
-  ): ClientUnaryCall;
-  installRepositoryAutomation(
-    request: InstallRepositoryAutomationRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: InstallRepositoryAutomationResponse) => void,
-  ): ClientUnaryCall;
-  installRepositoryAutomation(
-    request: InstallRepositoryAutomationRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: InstallRepositoryAutomationResponse) => void,
   ): ClientUnaryCall;
   reconcileRuntimeProfile(
     request: ReconcileRuntimeProfileRequest,

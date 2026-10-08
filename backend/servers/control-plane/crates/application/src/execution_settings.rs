@@ -24,6 +24,9 @@ pub struct BuildRuntime {
     pub signing_secret: String,
     pub engine_secret: String,
     pub engine_host: String,
+    /// Operator attestation: this engine is isolated from Kubernetes nodes.
+    #[serde(default)]
+    pub isolated_engine: bool,
 }
 
 fn builder_account() -> String {
@@ -55,7 +58,8 @@ impl WorkloadRuntime {
             return Err("runtime_configuration_invalid");
         }
         if let Some(build) = &self.build
-            && (RuntimeImage::parse(&build.image).is_err()
+            && (!build.isolated_engine
+                || RuntimeImage::parse(&build.image).is_err()
                 || !name(&build.service_account)
                 || !name(&build.registry_secret)
                 || (!build.signing_secret.is_empty() && !name(&build.signing_secret))
@@ -79,10 +83,21 @@ impl WorkloadRuntime {
 pub fn image_repository(image: &str) -> Option<&str> {
     if image.contains('@') {
         RuntimeImage::parse(image).ok()?;
-        return image.split_once('@').map(|(repository, _)| repository);
+        let repository = image.split_once('@')?.0;
+        let (_, path) = repository.split_once('/')?;
+        return (path.len() <= 255).then_some(repository);
     }
     let (repository, tag) = image.rsplit_once(':')?;
-    if tag.is_empty() || tag.len() > 128 || tag.contains('/') || tag.starts_with(['-', '.']) {
+    if tag.is_empty()
+        || tag.len() > 128
+        || tag.starts_with(['-', '.'])
+        || !tag
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+        || repository
+            .split_once('/')
+            .is_none_or(|(_, path)| path.len() > 255)
+    {
         return None;
     }
     RuntimeImage::parse(&format!("{repository}@sha256:{}", "a".repeat(64))).ok()?;

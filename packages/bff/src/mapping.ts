@@ -176,6 +176,9 @@ export function mapRuntimeProfile(value: RuntimeProfile): RuntimeProfileDto {
     support: mapRuntimeProfileSupport(value.support),
     state: mapRuntimeProfileState(value.state),
     reconciliation: safeReconciliation(value.reconciliationMetadata),
+    findings: value.findings.slice(0, 16).map(({ code, message, remediation }) => ({ code: safeText(code,128), message: safeText(message,512), remediation: safeText(remediation,512) })),
+    preparationPhase: value.preparationPhase,
+    rebuildAvailable: value.rebuildAvailable,
     desiredImageRepository: value.desiredImageRepository,
     ...optional("certificateId", value.certificateId),
     ...(value.effectiveCertificate ? { effectiveCertificate: mapCertificate(value.effectiveCertificate) } : {}),
@@ -197,7 +200,6 @@ export function toProtoProfileConfiguration(value: RuntimeProfileConfigurationDt
           ayniManaged: {
             lockFingerprint: value.lockFingerprint,
             ayniVersion: value.ayniVersion,
-            workflowTemplateVersion: value.workflowTemplateVersion,
             ociRepository: value.ociRepository,
           },
         },

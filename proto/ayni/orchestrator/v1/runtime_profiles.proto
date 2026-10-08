@@ -16,9 +16,6 @@ service RuntimeProfileService {
   rpc GetRuntimeProfileRevision(GetRuntimeProfileRevisionRequest) returns (GetRuntimeProfileRevisionResponse);
   rpc ListRuntimeArtifacts(ListRuntimeArtifactsRequest) returns (ListRuntimeArtifactsResponse);
   rpc GetRuntimeArtifact(GetRuntimeArtifactRequest) returns (GetRuntimeArtifactResponse);
-  rpc ListAutomationInstallations(ListAutomationInstallationsRequest) returns (ListAutomationInstallationsResponse);
-  rpc GetAutomationInstallation(GetAutomationInstallationRequest) returns (GetAutomationInstallationResponse);
-  rpc InstallRepositoryAutomation(InstallRepositoryAutomationRequest) returns (InstallRepositoryAutomationResponse);
   rpc ReconcileRuntimeProfile(ReconcileRuntimeProfileRequest) returns (ReconcileRuntimeProfileResponse);
   rpc SetRuntimeCertificate(SetRuntimeCertificateRequest) returns (SetRuntimeCertificateResponse);
   rpc SetRuntimeRegistry(SetRuntimeRegistryRequest) returns (SetRuntimeRegistryResponse);
@@ -62,17 +59,6 @@ enum RuntimeArtifactStatus {
   RUNTIME_ARTIFACT_STATUS_FAILED = 6;
 }
 
-// AutomationInstallationState is the durable provider-automation lifecycle.
-enum AutomationInstallationState {
-  AUTOMATION_INSTALLATION_STATE_UNSPECIFIED = 0;
-  AUTOMATION_INSTALLATION_STATE_SETUP_REQUIRED = 1;
-  AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN = 2;
-  AUTOMATION_INSTALLATION_STATE_INSTALLED = 3;
-  AUTOMATION_INSTALLATION_STATE_UPDATING = 4;
-  AUTOMATION_INSTALLATION_STATE_DEGRADED = 5;
-  AUTOMATION_INSTALLATION_STATE_FAILED = 6;
-}
-
 // RuntimeProfile is one repository's selected closed runtime variant.
 message RuntimeProfile {
   string id = 1;
@@ -98,6 +84,9 @@ message RuntimeProfile {
   optional string certificate_id = 15;
   // Safe server-computed signing identity; never contains private material.
   Certificate effective_certificate = 16;
+  repeated RuntimeFinding findings = 17;
+  string preparation_phase = 18;
+  bool rebuild_available = 19;
 }
 
 // RuntimeProfileRevision is an immutable version of profile configuration.
@@ -118,11 +107,12 @@ message RuntimeProfileRevision {
 
 // AyniManagedProfileRevision contains only Ayni Managed configuration.
 message AyniManagedProfileRevision {
-  // lock_fingerprint is exactly 64 lowercase hexadecimal characters.
+  // lock_fingerprint is 64 lowercase hexadecimal characters, or empty while setup is incomplete.
   string lock_fingerprint = 1;
-  // ayni_version and workflow_template_version are 1 through 128 safe version bytes.
+  // ayni_version is 1 through 128 safe version bytes.
   string ayni_version = 2;
-  string workflow_template_version = 3;
+  reserved 3;
+  reserved "workflow_template_version";
   // oci_repository is a normalized registry/repository name, without tag or digest,
   // of at most 512 ASCII bytes.
   string oci_repository = 4;
@@ -170,30 +160,6 @@ message ExternalArtifactOrigin {
   // supplied_reference is the owner-supplied OCI reference, at most 512 ASCII bytes.
   string supplied_reference = 1;
   google.protobuf.Timestamp observed_at = 2;
-}
-
-// AutomationInstallation is versioned repository automation owned by a profile.
-message AutomationInstallation {
-  string id = 1;
-  string runtime_profile_id = 2;
-  string version = 3;
-  AutomationInstallationState state = 4;
-  oneof provider {
-    GithubAutomationInstallation github = 5;
-  }
-  optional ResourceFailure failure = 6;
-  google.protobuf.Timestamp created_at = 7;
-  google.protobuf.Timestamp updated_at = 8;
-  uint64 resource_version = 9;
-}
-
-// GithubAutomationInstallation contains GitHub-only automation identities.
-message GithubAutomationInstallation {
-  uint64 installation_id = 1;
-  // setup_pull_request_number is present while an owned setup PR exists.
-  optional uint64 setup_pull_request_number = 2;
-  // environment_workflow_path is a normalized repository path.
-  string environment_workflow_path = 3;
 }
 
 message RuntimeProfileConfiguration {
@@ -273,33 +239,6 @@ message GetRuntimeArtifactResponse {
   RuntimeArtifact runtime_artifact = 1;
 }
 
-message ListAutomationInstallationsRequest {
-  string runtime_profile_id = 1;
-  PageRequest page = 2;
-}
-
-message ListAutomationInstallationsResponse {
-  repeated AutomationInstallation automation_installations = 1;
-  PageResponse page = 2;
-}
-
-message GetAutomationInstallationRequest {
-  string automation_installation_id = 1;
-}
-
-message GetAutomationInstallationResponse {
-  AutomationInstallation automation_installation = 1;
-}
-
-message InstallRepositoryAutomationRequest {
-  string idempotency_key = 1;
-  string runtime_profile_id = 2;
-}
-
-message InstallRepositoryAutomationResponse {
-  AutomationInstallation automation_installation = 1;
-}
-
 message ReconcileRuntimeProfileRequest {
   string idempotency_key = 1;
   string runtime_profile_id = 2;
@@ -323,8 +262,9 @@ message WatchRuntimeProfilesResponse {
     RuntimeProfile runtime_profile = 2;
     RuntimeProfileRevision revision = 3;
     RuntimeArtifact runtime_artifact = 4;
-    AutomationInstallation automation_installation = 5;
   }
+  reserved 5;
+  reserved "automation_installation";
 }
 
 message InspectAyniRepositoryRequest {
@@ -337,18 +277,16 @@ message InspectAyniRepositoryResponse {
   string repository_revision = 2;
   string lock_fingerprint = 3;
   string ayni_version = 4;
-  string workflow_template_version = 5;
+  reserved 5;
+  reserved "workflow_template_version";
   string oci_repository = 6;
   bool policy_present = 7;
   bool lock_compatible = 8;
   bool trust_policy_pinned = 9;
   string reason = 10;
-  repeated WorkflowProposal workflows = 11;
-}
-
-message WorkflowProposal {
-  string path = 1;
-  string contents = 2;
+  repeated RuntimeFinding findings = 12;
+  reserved 11;
+  reserved "workflows";
 }
 
 // RuntimeRegistrySelection survives source revisions and rebuilds of its profile.
@@ -380,4 +318,11 @@ message SetRuntimeCertificateRequest {
 
 message SetRuntimeCertificateResponse {
   RuntimeProfile runtime_profile = 1;
+}
+
+// A safe, actionable preparation finding; never a provider response or credential.
+message RuntimeFinding {
+  string code = 1;
+  string message = 2;
+  string remediation = 3;
 }

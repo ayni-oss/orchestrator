@@ -33,3 +33,84 @@ prevent sandboxed children from signaling the parent or reaching its abstract
 sockets. Unsupported or partial enforcement fails closed: there is no
 unrestricted fallback. This needs no privileged container, added capabilities,
 or special Docker/Kubernetes privilege.
+
+
+## Build, certify, publish and verify
+
+Before scheduling, SQLite persists an operation identity and frozen source commit,
+selected runtime revision, complete lock fingerprint/digest, platform, certificate
+revision, destination and immutable credential Secret references. Idempotent Job
+names adopt existing resources after controller restart. Exact source checkout
+uses repository-scoped access confined to the checkout init container.
+
+The build Job invokes the pinned `ayni env build --executor-image <digest> --tag
+<candidate>` contract. Ayni validates committed policy and lock consistency,
+prepares dependencies and certifies protected environment content. The orchestrator
+checks the frozen envelope and resulting local image identity/platform; it does
+not implement Ayni policy evaluation. Certification failure stops publication.
+This phase does not establish editable-source code quality.
+
+A separate trusted publication Job rechecks the discovery tag, rejects a different
+candidate unless an explicit Rebuild authorized replacement, then tags the certified local image ID with the
+frozen destination and pushes it. It executes no repository code and receives
+push access and engine TLS credentials, with neither source nor signing access.
+The builder receives signing and engine authority with pull-only registry access;
+repository dependency execution inside the isolated engine receives neither
+signing nor push credentials. Engine clients run in trusted orchestrator code.
+
+Registry lookup and verification receive pull-only access. Discovery resolves the
+tag, selects the requested platform from an index and validates the manifest
+hash. Verification runs the pinned worker against the immutable digest, validates
+lock, selected certificate, trusted signed runtime metadata and protected content
+using supported Ayni contracts. Quality results are separate and do not gate image
+certification. Activation compares frozen source/configuration and selected revision
+again. Only a matching verified artifact becomes Ready; task admission freezes it.
+
+The only image distribution mechanism is registry push/pull. Kubelet owns normal
+node image caches and garbage collection. No workload receives a Docker/containerd
+node socket or hostPath; no image artifact PVC exists. A task-output PVC retains
+coding work and evidence, independently of image preparation.
+
+## Naming
+
+The centralized destination is `<registry>/<owner>/<repo>:ayni-<arch>-<lock>`.
+`arch` is `amd64` or `arm64` from Linux execution policy. Only the validated lock's
+`sha256:` prefix is removed; all 64 lowercase hexadecimal characters remain.
+OCI digest references keep `@sha256:`. For example:
+
+```text
+ghcr.io/ayni-oss/sandbox:ayni-arm64-717bea5f26efff5396bd50dbd1c9efa4a36f3ffc9f6a77cda9661d50e401a3e5
+```
+
+The ARM64 and AMD64 tags are 75 characters, below the 128-character tag bound.
+Repository paths are limited to 255 characters and complete references to 512.
+Invalid names fail instead of truncating identity. Registry routing remains
+operator-controlled; `ghcr.io/build-team/source-owner/repo` preserves cross-owner
+namespace isolation. GHCR is the currently supported registry provider.
+
+## Failure and recovery
+
+Only a manifest 404 after authenticated discovery authorizes an automatic missing
+image build. Authentication errors, rate limits, outages and wrong platform are
+findings. Existing invalid certification or content requires an explicit Rebuild.
+A Rebuild freezes current inputs into a new intent; it cannot bypass setup.
+
+After publication finishes or fails, reconciliation inspects the registry before
+retrying. A published candidate proceeds directly to independent verification.
+An interrupted or missing publication Job also triggers registry inspection before
+its push can be reissued. If still absent, publication retries the same certified local image ID. If that
+candidate is evicted, the isolated builder rebuilds frozen inputs under a new Job
+identity. No unpublished-image retention is promised. Publication attempts are
+bounded at three; Jobs have execution deadlines and reconciliation failures back
+off, stopping after three until explicit retry or Rebuild.
+
+Owned Jobs, temporary checkout/configuration resources and transient credentials
+are cleaned after persisted outcomes. Exhausted operations retain bounded outcome metadata for diagnostics; their Jobs
+and transient credentials are cleaned, and restart recovery cannot recreate them
+until an explicit retry or Rebuild. Cleanup never deletes
+published images or purges node caches. Registry retention is operator policy.
+
+Public certificate trust preparation runs in the pinned worker image with Ayni and
+the pinned lock resolver. It needs checkout access and the public key only, and
+can propose the owner-reviewed policy/lock PR before an isolated image builder is
+configured. Missing image-build infrastructure still blocks subsequent builds.

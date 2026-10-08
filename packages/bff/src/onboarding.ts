@@ -1,5 +1,4 @@
-import type { RuntimeProfileRevision, AutomationInstallation, RepositorySnapshot, InspectAyniRepositoryResponse, DevelopmentAttempt } from "@ayni-orchestrator/grpc-bindings/server";
-import { automationInstallationStateToJSON } from "@ayni-orchestrator/grpc-bindings/server";
+import type { RuntimeProfileRevision, RepositorySnapshot, InspectAyniRepositoryResponse, DevelopmentAttempt } from "@ayni-orchestrator/grpc-bindings/server";
 
 export function safeText(value: string | undefined, max = 256): string {
   return (value ?? "").replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, max);
@@ -11,16 +10,11 @@ export function safeGithubLink(value: string | undefined): string | undefined {
 export function mapRevision(v: RuntimeProfileRevision) {
   const c = v.configuration;
   return { id: v.id, repositoryRevision: v.repositoryRevision, snapshotId: v.repositorySnapshotId,
-    managed: c?.$case === "ayniManaged" ? { fingerprint: c.ayniManaged.lockFingerprint, ayniVersion: safeText(c.ayniManaged.ayniVersion, 128), template: safeText(c.ayniManaged.workflowTemplateVersion,128), repository: safeText(c.ayniManaged.ociRepository,512) } : undefined };
-}
-export function mapAutomation(v: AutomationInstallation) {
-  return { id:v.id, version:safeText(v.version,128), state:automationInstallationStateToJSON(v.state).replace("AUTOMATION_INSTALLATION_STATE_", "").toLowerCase(),
-    pullNumber:v.provider?.$case === "github" ? v.provider.github.setupPullRequestNumber : undefined,
-    reason: v.failure ? safeText(v.failure.message) : undefined };
+    managed: c?.$case === "ayniManaged" ? { fingerprint: c.ayniManaged.lockFingerprint, ayniVersion: safeText(c.ayniManaged.ayniVersion, 128), repository: safeText(c.ayniManaged.ociRepository,512) } : undefined };
 }
 export function mapSnapshot(v: RepositorySnapshot) { return { id:v.id, revision:v.revision, defaultBranch:safeText(v.defaultBranch) }; }
 export function mapInspection(v: InspectAyniRepositoryResponse) {
-  return { snapshotId:v.repositorySnapshotId, head:v.repositoryRevision, fingerprint:v.lockFingerprint, version:safeText(v.ayniVersion,128), template:safeText(v.workflowTemplateVersion,128), repository:safeText(v.ociRepository,512), policyPresent:v.policyPresent, lockCompatible:v.lockCompatible, trustPinned:v.trustPolicyPinned, reason:safeText(v.reason), workflows:v.workflows.slice(0,3).map(w=>({path:safeText(w.path,256),contents:w.contents.slice(0,16000)})) };
+  return { snapshotId:v.repositorySnapshotId, head:v.repositoryRevision, fingerprint:v.lockFingerprint, version:safeText(v.ayniVersion,128), repository:safeText(v.ociRepository,512), policyPresent:v.policyPresent, lockCompatible:v.lockCompatible, trustPinned:v.trustPolicyPinned, reason:safeText(v.reason), findings:v.findings.slice(0,16).map(f=>({code:safeText(f.code,128),message:safeText(f.message,512),remediation:safeText(f.remediation,512)})) };
 }
 export function mapAttemptUsage(v: DevelopmentAttempt) {
   const t=v.result?.modelUsage?.total ?? v.modelUsage?.total;

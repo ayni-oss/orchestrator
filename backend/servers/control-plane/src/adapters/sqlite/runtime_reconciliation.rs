@@ -42,7 +42,12 @@ impl CleanStore {
             .transaction()
             .map_err(CleanStoreError::Database)?;
         transaction.execute("INSERT INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES (?1,?2,1,?3) ON CONFLICT(name) DO UPDATE SET value=excluded.value,resource_version=resource_version+1,updated_at=excluded.updated_at", params![format!("managed:{profile_id}"), value, unix_seconds()?]).map_err(CleanStoreError::Database)?;
-        if profile.reconciliation_metadata != metadata {
+        let resume = !metadata.iter().any(|m| m.key == "reason-code") && profile.failure.is_some();
+        if profile.reconciliation_metadata != metadata || resume {
+            if resume {
+                profile.failure = None;
+                profile.state = v1::RuntimeProfileState::AwaitingEnvironment as i32;
+            }
             profile.reconciliation_metadata = metadata;
             profile.resource_version += 1;
             profile.updated_at = Some(timestamp(unix_seconds()?));
@@ -56,7 +61,7 @@ impl CleanStore {
                 Some(profile_id),
                 &profile,
             )?;
-            transaction.execute("UPDATE runtime_profiles SET payload=?1,resource_version=?2,event_cursor=?3 WHERE id=?4", params![profile.encode_to_vec(), i64::try_from(profile.resource_version).map_err(|_| CleanStoreError::CorruptState)?, i64::try_from(event).map_err(|_| CleanStoreError::CorruptState)?, profile_id]).map_err(CleanStoreError::Database)?;
+            transaction.execute("UPDATE runtime_profiles SET payload=?1,resource_version=?2,event_cursor=?3,state=?5 WHERE id=?4", params![profile.encode_to_vec(), i64::try_from(profile.resource_version).map_err(|_| CleanStoreError::CorruptState)?, i64::try_from(event).map_err(|_| CleanStoreError::CorruptState)?, profile_id, profile.state]).map_err(CleanStoreError::Database)?;
         }
         transaction.commit().map_err(CleanStoreError::Database)?;
         Ok(())
@@ -68,19 +73,27 @@ impl CleanStore {
         reason: &str,
     ) -> Result<(), CleanStoreError> {
         let profile = self.runtime_profile(profile_id)?;
-        if profile.state == v1::RuntimeProfileState::Degraded as i32 {
+        if profile
+            .failure
+            .as_ref()
+            .is_some_and(|failure| failure.message == reason)
+        {
             return Ok(());
         }
+        let finding = crate::profiles::ayni::findings::finding(reason);
+        let state = if crate::profiles::ayni::findings::setup_required(reason) {
+            v1::RuntimeProfileState::SetupRequired
+        } else {
+            v1::RuntimeProfileState::Degraded
+        };
         self.transition_runtime_profile(
             profile_id,
             profile.resource_version,
-            v1::RuntimeProfileState::Degraded,
+            state,
             Some(v1::ResourceFailure {
                 reason: v1::ErrorReason::RuntimeArtifactNotVerified as i32,
                 message: reason.into(),
-                remediation: Some(
-                    "Repair runtime source or access and reconcile the profile.".into(),
-                ),
+                remediation: Some(finding.remediation),
                 observed_at: Some(timestamp(unix_seconds()?)),
             }),
         )?;

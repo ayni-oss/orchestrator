@@ -437,13 +437,10 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "ListRuntimeProfileRevisions"
         | "GetRuntimeProfileRevision"
         | "ListRuntimeArtifacts"
-        | "GetRuntimeArtifact"
-        | "ListAutomationInstallations"
-        | "GetAutomationInstallation" => (PROFILES_READ, MAX_UNARY_DEADLINE),
+        | "GetRuntimeArtifact" => (PROFILES_READ, MAX_UNARY_DEADLINE),
         "WatchRuntimeProfiles" => (PROFILES_READ, MAX_WATCH_DEADLINE),
         "InspectAyniRepository"
         | "CreateRuntimeProfile"
-        | "InstallRepositoryAutomation"
         | "ReconcileRuntimeProfile"
         | "SetRuntimeRegistry"
         | "SetRuntimeCertificate" => (PROFILES_WRITE, MAX_UNARY_DEADLINE),
@@ -683,11 +680,8 @@ mod tests {
             ("GetRuntimeProfileRevision", Capability::ProfilesRead),
             ("ListRuntimeArtifacts", Capability::ProfilesRead),
             ("GetRuntimeArtifact", Capability::ProfilesRead),
-            ("ListAutomationInstallations", Capability::ProfilesRead),
-            ("GetAutomationInstallation", Capability::ProfilesRead),
             ("WatchRuntimeProfiles", Capability::ProfilesRead),
             ("CreateRuntimeProfile", Capability::ProfilesWrite),
-            ("InstallRepositoryAutomation", Capability::ProfilesWrite),
             ("ReconcileRuntimeProfile", Capability::ProfilesWrite),
             ("ListProviderModels", Capability::ProviderModelsRead),
             ("ListDevelopmentTasks", Capability::TasksRead),

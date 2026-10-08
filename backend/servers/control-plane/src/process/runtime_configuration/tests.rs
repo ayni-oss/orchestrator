@@ -39,7 +39,7 @@ fn managed_discovery_uses_the_operator_registry_endpoint() -> Result<(), &'stati
     let mut configuration = configuration();
     let owner = "Example";
     let repository = "Sandbox";
-    let oci_repository = "ghcr.io/example/sandbox-ayni";
+    let oci_repository = "ghcr.io/example/sandbox";
     let lock_fingerprint = "a".repeat(64);
     assert!(
         configuration
@@ -61,7 +61,7 @@ fn managed_discovery_uses_the_operator_registry_endpoint() -> Result<(), &'stati
     assert_eq!(
         runtime.image,
         format!(
-            "registry.test/runtimes/example/sandbox-ayni:lock-{}",
+            "registry.test/runtimes/example/sandbox:ayni-amd64-{}",
             "a".repeat(64)
         )
     );
@@ -85,7 +85,7 @@ fn derives_managed_image_from_connected_repository_and_lock() -> Result<(), &'st
     let profile = runtime.profile_runtime("Ayni-Oss", "sandbox", &"aB".repeat(32))?;
     assert_eq!(
         profile.image,
-        format!("ghcr.io/ayni-oss/sandbox-ayni:lock-{}", "ab".repeat(32))
+        format!("ghcr.io/ayni-oss/sandbox:ayni-amd64-{}", "ab".repeat(32))
     );
     assert!(
         runtime
@@ -109,7 +109,7 @@ fn operator_document() -> serde_json::Value {
                     "image": format!("registry.test/builder@sha256:{}", "b".repeat(64)),
                     "service_account": "builder", "registry_secret": "push",
                     "signing_secret": "signing", "engine_secret": "engine",
-                    "engine_host": "tcp://engine.test:2376"
+                    "engine_host": "tcp://engine.test:2376", "isolated_engine": true
                 }
             }
         },
@@ -182,7 +182,7 @@ fn operator_json_preserves_scheduling_and_workload_defaults()
             "build": {
                 "image": format!("registry.test/builder@sha256:{}", "b".repeat(64)),
                 "registry_secret": "push", "signing_secret": "signing", "engine_secret": "engine",
-                "engine_host": "tcp://engine.test:2376"
+                "engine_host": "tcp://engine.test:2376", "isolated_engine": true
             }
         }}
     }))?;
@@ -266,20 +266,65 @@ fn quality_repairs_are_bounded() {
 fn connection_destinations_remove_only_a_repeated_source_owner() -> Result<(), &'static str> {
     assert_eq!(
         connection_image_repository("ayni-oss", "AYNI-OSS", "Sandbox")?,
-        "ghcr.io/ayni-oss/sandbox-ayni"
+        "ghcr.io/ayni-oss/sandbox"
     );
     assert_eq!(
         connection_image_repository("runtimes", "ayni-oss", "sandbox")?,
-        "ghcr.io/runtimes/ayni-oss/sandbox-ayni"
+        "ghcr.io/runtimes/ayni-oss/sandbox"
     );
     assert_eq!(
         connection_image_repository("ayni-oss/runtime", "ayni-oss", "sandbox")?,
-        "ghcr.io/ayni-oss/runtime/ayni-oss/sandbox-ayni"
+        "ghcr.io/ayni-oss/runtime/ayni-oss/sandbox"
     );
     assert_ne!(
         connection_image_repository("runtimes", "a-b", "c")?,
         connection_image_repository("runtimes", "a", "b-c")?
     );
     assert!(connection_image_repository("https://untrusted", "owner", "repo").is_err());
+    Ok(())
+}
+
+#[test]
+fn architecture_tags_preserve_the_entire_lock_and_enforce_bounds() -> Result<(), &'static str> {
+    let hash = "a".repeat(64);
+    for arch in ["amd64", "arm64"] {
+        let reference = managed_image_reference(
+            "ghcr.io/team/repo",
+            &format!("linux/{arch}"),
+            &format!("sha256:{hash}"),
+        )?;
+        assert_eq!(reference, format!("ghcr.io/team/repo:ayni-{arch}-{hash}"));
+        assert_eq!(reference.rsplit_once(':').ok_or("missing tag")?.1.len(), 75);
+    }
+    for invalid in ["sha512:abcd", "a", "sha256:bad"] {
+        assert!(managed_image_reference("ghcr.io/team/repo", "linux/arm64", invalid).is_err());
+    }
+    assert!(managed_image_reference("ghcr.io/team/repo", "linux/riscv64", &hash).is_err());
+    let path = format!("team/{}", "a".repeat(250));
+    assert!(managed_image_reference(&format!("ghcr.io/{path}"), "linux/arm64", &hash).is_ok());
+    assert!(managed_image_reference(&format!("ghcr.io/{path}a"), "linux/arm64", &hash).is_err());
+    let oversized = format!("{}.io/team/repo", "a".repeat(440));
+    assert!(managed_image_reference(&oversized, "linux/arm64", &hash).is_err());
+    Ok(())
+}
+
+#[test]
+fn tls_without_explicit_engine_isolation_is_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    let mut document = operator_document();
+    document["profiles"]["project-profile"]["build"]["isolated_engine"] = false.into();
+    let configuration: RuntimeConfiguration = serde_json::from_value(document.clone())?;
+    assert_eq!(
+        configuration.validate(),
+        Err("runtime_build_configuration_invalid")
+    );
+    document["profiles"]["project-profile"]["build"]
+        .as_object_mut()
+        .ok_or("build")?
+        .remove("isolated_engine");
+    let configuration: RuntimeConfiguration = serde_json::from_value(document)?;
+    assert_eq!(
+        configuration.validate(),
+        Err("runtime_build_configuration_invalid")
+    );
     Ok(())
 }

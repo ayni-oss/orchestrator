@@ -7,6 +7,38 @@ use ayni_orchestrator_runtime::{coding::WorkerSpec, runtime_execution::Execution
 use serde::Serialize;
 
 impl ExecutionBackend for RuntimeKubernetes {
+    async fn operation_failure(&self, name: &str, container: &str) -> ExecutionResult<String> {
+        Ok(self
+            .operation_message(name, container)
+            .await
+            .unwrap_or_else(|_| "runtime_publication_failed".into()))
+    }
+    async fn build_result(&self, name: &str) -> ExecutionResult<String> {
+        self.build_result(name).await.map_err(ExecutionError::from)
+    }
+    async fn start_publish<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        runtime: &WorkloadRuntime,
+        request: &ExecutionRequest<P>,
+        image_id: &str,
+        overwrite_authorized: bool,
+    ) -> ExecutionResult<()> {
+        self.start_publish(name, runtime, request, image_id, overwrite_authorized)
+            .await
+            .map_err(ExecutionError::from)
+    }
+    async fn start_discovery(&self, name: &str, runtime: &WorkloadRuntime) -> ExecutionResult<()> {
+        self.start_discovery(name, runtime)
+            .await
+            .map_err(ExecutionError::from)
+    }
+    async fn discover(
+        &self,
+        name: &str,
+    ) -> ExecutionResult<ayni_orchestrator_application::execution::ImageDiscovery> {
+        self.discover(name).await.map_err(ExecutionError::from)
+    }
     async fn start<P: Serialize + Sync>(
         &self,
         name: &str,

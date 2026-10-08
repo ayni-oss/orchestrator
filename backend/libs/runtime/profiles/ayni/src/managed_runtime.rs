@@ -36,14 +36,18 @@ pub struct VerifiedRuntime {
 }
 
 /// The trusted verifier did not establish the expected signed runtime.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum RuntimeVerificationError {
     #[error("runtime verification input is malformed or exceeds its bound")]
     Malformed,
     #[error("managed runtime requires a signed certificate")]
     Unsigned,
     #[error("runtime identity differs from the frozen expectation")]
-    IdentityMismatch,
+    LockMismatch,
+    #[error("runtime platform differs from the frozen expectation")]
+    PlatformMismatch,
+    #[error("runtime Ayni version is unsupported")]
+    UnsupportedVersion,
     #[error("Ayni did not report verification of this runtime")]
     MissingVerification,
 }
@@ -88,12 +92,16 @@ pub fn signed_identity(
     {
         return Err(RuntimeVerificationError::Malformed);
     }
-    if identity.lock_fingerprint != expected.lock_fingerprint
-        || identity.platform != expected.platform
-        || identity.ayni_version != expected.ayni_version
+    if identity.lock_fingerprint != expected.lock_fingerprint {
+        return Err(RuntimeVerificationError::LockMismatch);
+    }
+    if identity.platform != expected.platform
         || !matches!(expected.platform.as_str(), "linux/amd64" | "linux/arm64")
     {
-        return Err(RuntimeVerificationError::IdentityMismatch);
+        return Err(RuntimeVerificationError::PlatformMismatch);
+    }
+    if identity.ayni_version != expected.ayni_version {
+        return Err(RuntimeVerificationError::UnsupportedVersion);
     }
     Ok(identity)
 }
@@ -197,7 +205,7 @@ mod tests {
         expected.lock_fingerprint = format!("sha256:{}", "f".repeat(64));
         assert_eq!(
             signed_identity(&metadata, &expected),
-            Err(RuntimeVerificationError::IdentityMismatch)
+            Err(RuntimeVerificationError::LockMismatch)
         );
         assert_eq!(
             signed_identity(br#"{"key_id":"unsigned","signature":""}"#, &expected),

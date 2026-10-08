@@ -1,5 +1,5 @@
 //! Runtime observation and retry decisions without provider, profile or persistence codecs.
-use crate::execution::{ExecutionState, Observation};
+use crate::execution::Observation;
 
 pub const VERIFICATION_OBSERVATION_TIMEOUT_SECONDS: u64 = 1900;
 
@@ -37,8 +37,7 @@ pub enum VerificationAction {
     Start,
     Wait,
     Timeout,
-    RetainFailedBuildIntent,
-    CleanupFailure,
+    Failure,
     Accept,
 }
 
@@ -46,34 +45,17 @@ pub enum VerificationAction {
 pub const fn verification_action(
     observation: &Observation,
     elapsed_seconds: u64,
-    has_build_intent: bool,
 ) -> VerificationAction {
     match observation {
-        Observation::Missing => VerificationAction::Start,
-        Observation::Running if elapsed_seconds > VERIFICATION_OBSERVATION_TIMEOUT_SECONDS => {
+        Observation::Missing | Observation::Running
+            if elapsed_seconds > VERIFICATION_OBSERVATION_TIMEOUT_SECONDS =>
+        {
             VerificationAction::Timeout
         }
+        Observation::Missing => VerificationAction::Start,
         Observation::Running => VerificationAction::Wait,
-        Observation::Failed(_) if has_build_intent => VerificationAction::RetainFailedBuildIntent,
-        Observation::Failed(_) => VerificationAction::CleanupFailure,
+        Observation::Failed(_) => VerificationAction::Failure,
         Observation::Completed { .. } => VerificationAction::Accept,
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BuildAction {
-    Start,
-    Wait,
-    ObserveRegistry,
-}
-
-/// An interrupted/failed build may already have published; observing the registry precedes retry.
-#[must_use]
-pub const fn build_action(state: ExecutionState, started: bool) -> BuildAction {
-    match state {
-        ExecutionState::Missing if !started => BuildAction::Start,
-        ExecutionState::Running => BuildAction::Wait,
-        _ => BuildAction::ObserveRegistry,
     }
 }
 

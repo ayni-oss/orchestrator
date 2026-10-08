@@ -50,7 +50,7 @@ test("GitHub setup dialog clears dismissed credentials and prepares a canonical 
   await expect(create).toBeVisible();
   const manifest=JSON.parse(await page.locator('input[name="manifest"]').first().inputValue());
   expect(manifest.redirect_url).toBe("http://127.0.0.1:4173/source-control/github/complete");
-  expect(manifest.default_permissions).toEqual({contents:"write",metadata:"read",pull_requests:"write",workflows:"write"});
+  expect(manifest.default_permissions).toEqual({contents:"write",metadata:"read",pull_requests:"write"});
   await page.getByRole("button",{name:"Import existing App"}).click();
   await page.getByLabel("Private key (PEM)").fill("discarded-secret");
   await page.getByRole("button",{name:"Cancel",exact:true}).click();

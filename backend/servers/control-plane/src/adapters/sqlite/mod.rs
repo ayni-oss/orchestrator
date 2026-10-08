@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 7;
+pub(crate) const SCHEMA_VERSION: i64 = 8;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -42,7 +42,6 @@ const MAX_EVENTS_PER_SERVICE: usize = 4_096;
 const MAX_RECONCILE_BATCH: usize = 128;
 const MAX_PENDING_ACTION_BATCH: usize = 256;
 const CLEAN_TABLES: &[&str] = &[
-    "automation_installations",
     "certificate_operations",
     "certificates",
     "clean_schema",
@@ -109,8 +108,6 @@ pub enum CleanStoreError {
     ParentMismatch,
     #[error("the runtime profile is not ready with a verified artifact")]
     ProfileNotReady,
-    #[error("the runtime profile references an unsupported onboarding workflow template: {0:?}")]
-    UnsupportedWorkflowTemplate(String),
     #[error("the task is not actionable")]
     TaskNotActionable,
     #[error("the task deadline has expired")]
@@ -150,7 +147,6 @@ pub(crate) enum DurableActionState {
 pub(crate) struct DurableAction {
     pub idempotency_key: String,
     pub state: DurableActionState,
-    pub target_id: Option<String>,
     pub request_payload: Vec<u8>,
 }
 
@@ -168,9 +164,7 @@ pub(crate) struct CleanStore {
     quality_repair_limit: u32,
 }
 
-mod automation_tasks;
 mod connection_dependencies;
-mod onboarding;
 mod profile_identity;
 mod projects;
 mod repository_connections;
@@ -179,6 +173,7 @@ mod runtime_profiles;
 mod runtime_registry;
 mod store;
 pub(crate) mod task_admission;
+mod task_lifecycle;
 mod validation;
 use validation::{
     collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
@@ -254,7 +249,6 @@ mod tests {
                             runtime_source_digest: None,
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: "0.4.0".to_owned(),
-                            workflow_template_version: "ayni-managed-v4".to_owned(),
                             oci_repository: "ghcr.io/ayni-oss/sandbox/environment".to_owned(),
                         },
                     ),
@@ -324,35 +318,6 @@ mod tests {
         Ok((repository, store.runtime_profile(&profile.id)?, artifact))
     }
 
-    #[test]
-    fn onboarding_accepts_only_versioned_templates_and_records_owned_paths()
-    -> Result<(), CleanStoreError> {
-        let mut store = CleanStore::in_memory()?;
-        let repository =
-            store.create_repository_connection("repo-scope", &repository_request("repo", "123"))?;
-        let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
-        let (profile, _) = store.create_runtime_profile(
-            "profile-scope",
-            &profile_request("profile", &repository.id, &snapshot.id),
-        )?;
-        let automation = store.install_repository_automation(
-            "automation-scope",
-            &v1::InstallRepositoryAutomationRequest {
-                idempotency_key: "automation".to_owned(),
-                runtime_profile_id: profile.id,
-            },
-        )?;
-        let Some(v1::automation_installation::Provider::Github(github)) = automation.provider
-        else {
-            return Err(CleanStoreError::CorruptState);
-        };
-        assert_eq!(
-            github.environment_workflow_path,
-            crate::profiles::ayni::onboarding_templates::ENVIRONMENT_WORKFLOW_PATH
-        );
-        Ok(())
-    }
-
     fn task_request(
         store: &CleanStore,
         repository_id: &str,
@@ -406,8 +371,6 @@ pub(crate) mod runtime_activation;
 pub(crate) mod runtime_selection;
 
 pub(crate) mod task_retry;
-
-pub(crate) mod automation_admission;
 
 mod certificates;
 mod connections;

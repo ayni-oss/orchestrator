@@ -11,6 +11,39 @@ mod error;
 
 /// Application execution boundary. Profile inputs are opaque serialized data.
 pub trait ExecutionBackend: Send + Sync + 'static {
+    fn start_discovery(
+        &self,
+        _name: &str,
+        _runtime: &WorkloadRuntime,
+    ) -> impl Future<Output = ExecutionResult<()>> + Send {
+        async { Err(ExecutionError::from("runtime_discovery_unavailable")) }
+    }
+    fn discover(
+        &self,
+        _name: &str,
+    ) -> impl Future<Output = ExecutionResult<ImageDiscovery>> + Send {
+        async { Err(ExecutionError::from("runtime_discovery_unavailable")) }
+    }
+    fn operation_failure(
+        &self,
+        _name: &str,
+        _container: &str,
+    ) -> impl Future<Output = ExecutionResult<String>> + Send {
+        async { Ok("runtime_publication_failed".into()) }
+    }
+    fn build_result(&self, _name: &str) -> impl Future<Output = ExecutionResult<String>> + Send {
+        async { Err(ExecutionError::from("runtime_build_result_missing")) }
+    }
+    fn start_publish<P: Serialize + Sync>(
+        &self,
+        _name: &str,
+        _runtime: &WorkloadRuntime,
+        _request: &ExecutionRequest<P>,
+        _image_id: &str,
+        _overwrite_authorized: bool,
+    ) -> impl Future<Output = ExecutionResult<()>> + Send {
+        async { Err(ExecutionError::from("runtime_publication_unavailable")) }
+    }
     fn start<P: Serialize + Sync>(
         &self,
         name: &str,
@@ -64,6 +97,8 @@ pub trait ExecutionBackend: Send + Sync + 'static {
     fn cleanup(&self, name: &str) -> impl Future<Output = ExecutionResult<()>> + Send;
     fn coding_stopped(&self, name: &str) -> impl Future<Output = ExecutionResult<bool>> + Send;
 }
+
+pub use ayni_orchestrator_runtime::image_discovery::ImageDiscovery;
 
 /// Resource completion is an observation, not an application assessment.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

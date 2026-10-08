@@ -9,7 +9,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub struct SourceClient {
     client: reqwest::Client,
     credentials: std::sync::RwLock<Option<(String, EncodingKey)>>,
-    setup_cursor: std::sync::atomic::AtomicUsize,
 }
 
 impl SourceClient {
@@ -41,40 +40,6 @@ impl SourceClient {
             [value] => Ok(Some(value.clone())),
             _ => Err("publication_identity_conflict"),
         }
-    }
-
-    pub(crate) async fn find_setup_pull(
-        &self,
-        owner: &str,
-        repository: &str,
-        title: &str,
-        base: &str,
-        token: &str,
-    ) -> Result<Option<Value>, &'static str> {
-        let value = bounded(
-            self.client
-                .get(format!(
-                    "https://api.github.com/repos/{owner}/{repository}/pulls"
-                ))
-                .bearer_auth(token)
-                .query(&[("state", "open"), ("base", base), ("per_page", "100")]),
-        )
-        .await?;
-        let mut matches = value
-            .as_array()
-            .ok_or("publication_response_invalid")?
-            .iter()
-            .filter(|pull| {
-                pull["title"].as_str() == Some(title)
-                    && pull["head"]["ref"]
-                        .as_str()
-                        .is_some_and(|branch| branch.starts_with("setup/runtime-"))
-            });
-        let pull = matches.next().cloned();
-        if matches.next().is_some() {
-            return Err("publication_identity_conflict");
-        }
-        Ok(pull)
     }
 
     pub(crate) async fn pull(
@@ -124,7 +89,6 @@ impl SourceClient {
         Ok(Self {
             client,
             credentials: std::sync::RwLock::new(None),
-            setup_cursor: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -586,8 +550,6 @@ mod github_error_tests {
         assert_eq!(rate_limited.kind, GithubErrorKind::SecondaryRateLimited);
     }
 }
-
-pub mod setup;
 
 #[cfg(test)]
 mod credential_activation_tests {

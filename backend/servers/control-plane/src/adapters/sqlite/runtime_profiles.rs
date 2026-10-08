@@ -72,6 +72,9 @@ impl CleanStore {
         let operational = kind == v1::RuntimeProfileKind::AyniManaged;
         let profile = v1::RuntimeProfile {
             reconciliation_metadata: vec![],
+            findings: vec![],
+            preparation_phase: String::new(),
+            rebuild_available: false,
             certificate_id: None,
             effective_certificate: None,
             registry: Some(registry),
@@ -196,7 +199,7 @@ impl CleanStore {
         }
         let current = v1::RuntimeProfileState::try_from(resource.state)
             .map_err(|_| CleanStoreError::CorruptState)?;
-        if !valid_profile_transition(current, state) {
+        if current != state && !valid_profile_transition(current, state) {
             return Err(CleanStoreError::InvalidTransition);
         }
         resource.state = state as i32;

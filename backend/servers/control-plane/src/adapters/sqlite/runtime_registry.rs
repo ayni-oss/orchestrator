@@ -88,6 +88,43 @@ impl CleanStore {
             .desired_runtime_repository(&profile)?
             .unwrap_or_default();
         profile.effective_certificate = self.effective_runtime_certificate(&profile)?;
+        profile.findings.clear();
+        let cursor = self.runtime_cursor(&profile.id)?;
+        let metadata = cursor.metadata();
+        profile.preparation_phase = metadata
+            .iter()
+            .find(|m| m.key == "phase")
+            .map_or_else(|| "analyzing".into(), |m| m.value.clone());
+        if let Some(failure) = &profile.failure {
+            profile
+                .findings
+                .push(crate::profiles::ayni::findings::finding(&failure.message));
+            profile.rebuild_available =
+                crate::profiles::ayni::findings::rebuild_allowed(&failure.message);
+            if crate::profiles::ayni::findings::setup_required(&failure.message) {
+                profile.preparation_phase = "setup_required".into();
+            }
+        } else {
+            profile.rebuild_available = profile.state == v1::RuntimeProfileState::Ready as i32;
+        }
+        if profile.effective_certificate.is_none() {
+            profile
+                .findings
+                .push(crate::profiles::ayni::findings::finding(
+                    "certificate_setup_required",
+                ));
+            profile.rebuild_available = false;
+            profile.preparation_phase = "setup_required".into();
+        }
+        if profile.desired_image_repository.is_empty() {
+            profile
+                .findings
+                .push(crate::profiles::ayni::findings::finding(
+                    "registry_connection_missing",
+                ));
+            profile.rebuild_available = false;
+            profile.preparation_phase = "setup_required".into();
+        }
         Ok(profile)
     }
 

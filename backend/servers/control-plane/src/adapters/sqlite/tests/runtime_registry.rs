@@ -149,7 +149,7 @@ fn changed_destinations_keep_frozen_attempt_credentials_and_reject_old_activatio
         .as_deref()
         .ok_or(CleanStoreError::CorruptState)?;
     let mut artifact = verified_artifact(revision_id, DIGEST);
-    artifact.oci_repository = "ghcr.io/first/ayni-oss/sandbox-ayni".into();
+    artifact.oci_repository = "ghcr.io/first/ayni-oss/sandbox".into();
     store.record_runtime_artifact(&selected.id, artifact)?;
     let ready = store.runtime_profile(&selected.id)?;
     let (_, attempt) = store.create_development_task(
@@ -198,7 +198,7 @@ fn stale_source_observation_cannot_overwrite_a_new_runtime_destination()
         &profile.id,
         REVISION,
         &"c".repeat(64),
-        "ghcr.io/obsolete/ayni-oss/sandbox-ayni",
+        "ghcr.io/obsolete/ayni-oss/sandbox",
         DIGEST,
     )
     .map_err(|_| CleanStoreError::CorruptState)?;
@@ -238,7 +238,7 @@ fn connection_namespace_cannot_be_overridden_by_runtime_or_legacy_repository_inp
         store
             .describe_runtime_profile(updated.clone())?
             .desired_image_repository,
-        "ghcr.io/ayni-oss/sandbox-ayni"
+        "ghcr.io/ayni-oss/sandbox"
     );
     assert_eq!(store.registry_namespace(&registry.id, "")?, "ayni-oss");
     assert!(store.registry_namespace(&registry.id, "attacker").is_err());
@@ -278,7 +278,7 @@ fn legacy_destination_fixture(
     )?;
     let registry = registry("connection-registry", "ayni-oss");
     store.save_connection(&registry)?;
-    let old_destination = "ghcr.io/ayni-oss/ayni-oss/sandbox-ayni";
+    let old_destination = "ghcr.io/ayni-oss/ayni-oss/sandbox";
     profile.registry = Some(v1::RuntimeRegistrySelection {
         registry_connection_id: registry.id.clone(),
     });
@@ -331,7 +331,7 @@ fn legacy_destination_fixture(
             "expected":{"lock_fingerprint":format!("sha256:{}","c".repeat(64)),"platform":"linux/arm64","ayni_version":"0.14.5"}},
         "image":format!("{old_destination}:lock-{}","c".repeat(64)),
         "frozen_runtime":{"image":format!("{old_destination}:lock-{}","c".repeat(64)),"platform":"linux/arm64","service_account":"runtime-coding","pull_secret":registry.pull_secret_name,"build":null},
-        "started_at":1,"source_digest":DIGEST,"lock_digest":DIGEST,"build_name":"build-old","build_observed":false,"build_started":true,"force_rebuild":false});
+        "started_at":1,"source_digest":DIGEST,"lock_digest":DIGEST,"build_name":"build-old","build_observed":false,"build_started":true,"force_rebuild":false,"build_completed":false,"candidate_image_id":null,"candidate_missing":false,"discovery_complete":false,"discovery_started":false,"publish_attempts":0,"publish_remaining":3,"publish_name":null,"resolved_digest":null});
     let mut cursor = serde_json::to_value(store.runtime_cursor(&profile.id)?)
         .map_err(|_| CleanStoreError::CorruptState)?;
     cursor["pending"] = pending.clone();
@@ -384,7 +384,7 @@ fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(),
             .ok_or(CleanStoreError::CorruptState)?,
     )?;
     assert!(
-        matches!(current.configuration, Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) if configuration.oci_repository == "ghcr.io/ayni-oss/sandbox-ayni" && configuration.runtime_source_digest.is_none())
+        matches!(current.configuration, Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) if configuration.oci_repository == "ghcr.io/ayni-oss/sandbox" && configuration.runtime_source_digest.is_none())
     );
     let frozen_cursor = serde_json::to_value(store.runtime_cursor(&profile.id)?)
         .map_err(|_| CleanStoreError::CorruptState)?;
@@ -410,7 +410,7 @@ fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(),
         .as_deref()
         .ok_or(CleanStoreError::CorruptState)?;
     let mut new_artifact = verified_artifact(new_revision_id, DIGEST);
-    new_artifact.oci_repository = "ghcr.io/ayni-oss/sandbox-ayni".into();
+    new_artifact.oci_repository = "ghcr.io/ayni-oss/sandbox".into();
     store.record_runtime_artifact(&profile.id, new_artifact)?;
     let ready = store.runtime_profile(&profile.id)?;
     let (_, new_attempt) = store.create_development_task(
@@ -423,7 +423,7 @@ fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(),
             .as_ref()
             .and_then(|s| s.runtime.as_ref())
             .map(|r| r.oci_repository.as_str()),
-        Some("ghcr.io/ayni-oss/sandbox-ayni")
+        Some("ghcr.io/ayni-oss/sandbox")
     );
     drop(store);
     let store = CleanStore::open(&path, 3)?;

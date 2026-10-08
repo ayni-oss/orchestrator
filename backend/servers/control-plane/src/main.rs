@@ -209,18 +209,6 @@ fn spawn_background_loops(
             }
         },
     );
-    let onboarding_state = state.clone();
-    background.spawn_periodic(
-        "onboarding",
-        Duration::from_secs(15),
-        shutdown.clone(),
-        move || {
-            let state = onboarding_state.clone();
-            async move {
-                state.reconcile_onboarding().await;
-            }
-        },
-    );
     let reconciliation_state = state;
     background.spawn_periodic(
         "retention",

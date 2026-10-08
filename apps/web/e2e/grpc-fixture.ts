@@ -5,7 +5,6 @@ import {
   ConnectionServiceService, type Connection,
   ProjectServiceService, ProjectState,
   DevelopmentAttemptState,
-  AutomationInstallationState,
   DevelopmentTaskServiceService,
   DevelopmentTaskState,
   ModelUsageCollectionStatus,
@@ -47,7 +46,7 @@ const profile: any = {
   state: RuntimeProfileState.RUNTIME_PROFILE_STATE_READY,
   activeRevisionId: "profile-revision:1",
   activeRuntimeArtifactId: "artifact:1",
-  reconciliationMetadata: [],
+  reconciliationMetadata: [], findings: [], preparationPhase: "ready", rebuildAvailable: true,
   createdAt: now,
   updatedAt: now,
   resourceVersion: "2",
@@ -62,7 +61,7 @@ function snapshot(request = "Correct the bounded retry formula", sourceRevision 
       runtimeProfileRevisionId: "profile-revision:1",
       profileKind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,
       runtimeArtifactId: "artifact:1",
-      ociRepository: "ghcr.io/ayni-oss/sandbox/ayni-environment",
+      ociRepository: "ghcr.io/ayni-oss/sandbox",
       resolvedDigest: digest,
       platform: { operatingSystem: "linux", architecture: "amd64" },
     },
@@ -114,16 +113,14 @@ const repositoryService: UntypedServiceImplementation = {
 
 function profileView() {
   const connection=connections.find(item=>item.id===profile.registry?.registryConnectionId);
-  const imageName=connection?.imageNamespace.toLowerCase()==="ayni-oss" ? "sandbox-ayni" : "ayni-oss/sandbox-ayni";
-  return {...profile,effectiveCertificate:certificates.find(c=>c.id===profile.certificateId) ?? certificates.find(c=>c.isDefault),desiredImageRepository:connection ? `ghcr.io/${connection.imageNamespace}/${imageName}` : "ghcr.io/ayni-oss/sandbox-ayni"};
+  const imageName=connection?.imageNamespace.toLowerCase()==="ayni-oss" ? "sandbox" : "ayni-oss/sandbox";
+  return {...profile,effectiveCertificate:certificates.find(c=>c.id===profile.certificateId) ?? certificates.find(c=>c.isDefault),desiredImageRepository:connection ? `ghcr.io/${connection.imageNamespace}/${imageName}` : "ghcr.io/ayni-oss/sandbox"};
 }
 
-let installation:any;
 let profileEnrolled = true;
 const runtimeProfileService: UntypedServiceImplementation = {
-  inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator",workflows:[{path:".github/workflows/ayni-environment.yml",contents:"name: Build signed environment"}]});},
+  inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",ociRepository:"ghcr.io/ayni-oss/sandbox",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator"});},
   createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profileView()});},
-  installRepositoryAutomation(_call,callback){profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_PR_OPEN;installation={id:"automation:1",runtimeProfileId:profileId,version:"ayni-managed-v3",kind:1,state:AutomationInstallationState.AUTOMATION_INSTALLATION_STATE_SETUP_PR_OPEN,provider:{$case:"github",github:{installationId:"42",setupPullRequestNumber:"8",environmentWorkflowPath:".github/workflows/ayni-environment.yml"}},resourceVersion:"1"};callback(null,{automationInstallation:installation});},
   setRuntimeCertificate(call,callback){
     if(call.request.expectedResourceVersion!==profile.resourceVersion) return callback({code:status.ABORTED,message:"Refresh the runtime and try again."});
     profile.certificateId=call.request.certificateId;profile.resourceVersion=String(Number(profile.resourceVersion)+1);
@@ -137,10 +134,9 @@ const runtimeProfileService: UntypedServiceImplementation = {
     profile.resourceVersion=String(Number(profile.resourceVersion)+1);
     callback(null,{runtimeProfile:profileView()});
   },
-  reconcileRuntimeProfile(_call,callback){profile.resourceVersion=String(Number(profile.resourceVersion)+1);profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profileView()});},
+  reconcileRuntimeProfile(_call,callback){profile.findings=[];profile.preparationPhase="ready";profile.rebuildAvailable=true;profile.failure=undefined;profile.resourceVersion=String(Number(profile.resourceVersion)+1);profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;callback(null,{runtimeProfile:profileView()});},
 
-  getRuntimeProfileRevision(_call,callback) { callback(null,{revision:{id:"profile-revision:1",runtimeProfileId:profileId,repositoryRevision:revision,repositorySnapshotId:"snapshot:1",revisionNumber:"1",resourceVersion:"1",configuration:{$case:"ayniManaged",ayniManaged:{lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",workflowTemplateVersion:"ayni-managed-v3",ociRepository:"ghcr.io/ayni-oss/sandbox-ayni"}}}}); },
-  listAutomationInstallations(_call,callback) { callback(null,{automationInstallations:installation ? [installation] : [],page}); },
+  getRuntimeProfileRevision(_call,callback) { callback(null,{revision:{id:"profile-revision:1",runtimeProfileId:profileId,repositoryRevision:revision,repositorySnapshotId:"snapshot:1",revisionNumber:"1",resourceVersion:"1",configuration:{$case:"ayniManaged",ayniManaged:{lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",ociRepository:"ghcr.io/ayni-oss/sandbox"}}}}); },
 
   listRuntimeProfiles(call, callback) {
     const profiles = profileEnrolled && (call.request.repositoryConnectionId === undefined || call.request.repositoryConnectionId === repositoryId) ? [profileView()] : [];
@@ -269,7 +265,14 @@ const health = createServer((request, response) => {
    connections[0].testCleanupFailureReason=connections[0].testCleanup==="failed" ? "registry_cleanup_permission_required" : "";
  }
  if(request.method==="POST" && url.pathname==="/admin-connection") connections=[{id:"admin:github",kind:url.searchParams.get("kind") ?? "github_app",managementSource:"admin",displayName:"Admin App",appId:"123",username:"",imageNamespace:url.searchParams.get("kind")==="ghcr" ? "admin-team" : "",secretName:"admin-ref",secretUid:"",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"",testAuthentication:"",testPush:"",testPull:"",testCleanup:"",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""}];
- if(request.method==="POST" && url.pathname==="/reset-onboarding") { profileEnrolled=false; installation=undefined; }
+ if(request.method==="POST" && url.pathname==="/preparation") {
+   profile.preparationPhase=url.searchParams.get("phase") ?? "ready";
+   const code=url.searchParams.get("code");
+   profile.findings=code ? [{code,message:"The image certificate is invalid.",remediation:"Review trust and rebuild."}] : [];
+   profile.failure=code ? {reason:1,observedAt:now,message:code,remediation:"Review trust and rebuild."} : undefined;
+   profile.rebuildAvailable=url.searchParams.get("rebuild")!=="false";
+ }
+ if(request.method==="POST" && url.pathname==="/reset-onboarding") { profileEnrolled=false; }
  if(request.method==="POST" && url.pathname==="/profile-version") profile.resourceVersion=String(Number(profile.resourceVersion)+1);
  if(request.method==="POST" && url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
  response.writeHead(200, { "content-type": "text/plain" }); response.end("ok"); });

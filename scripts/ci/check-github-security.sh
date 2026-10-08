@@ -43,12 +43,21 @@ try:
     permissions = json.loads("{" + body + "}")
 except json.JSONDecodeError:
     sys.exit("GitHub security check: App permission manifest could not be checked")
-expected = {"contents": "write", "metadata": "read", "pull_requests": "write", "workflows": "write"}
+expected = {"contents": "write", "metadata": "read", "pull_requests": "write"}
 if permissions != expected:
-    sys.exit("GitHub security check: App permissions must be exactly Contents/Pull requests/Workflows write and Metadata read")
+    sys.exit("GitHub security check: App permissions must be exactly Contents/Pull requests write and Metadata read")
 PYTHON
 
 grep -Eq '^permissions: \{\}$' "$workflows/pr-validation.yml" \
   || fail "PR validation requires an empty workflow-level permission baseline"
 grep -Eq 'persist-credentials: false' "$workflows/pr-validation.yml" \
   || fail "PR validation must disable persisted checkout credentials"
+
+# Public trust preparation must use the same approved CLI as managed execution.
+python3 - "$repository_root" <<'PYTHON'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+release = json.loads((root / "backend/libs/runtime/profiles/ayni/ayni-release.json").read_text())
+worker = (root / "deploy/images/worker/Dockerfile").read_text()
+assert "ARG AYNI_EXECUTOR_IMAGE=" + release["executor_image"] in worker, "worker Ayni image differs from pinned release"
+PYTHON

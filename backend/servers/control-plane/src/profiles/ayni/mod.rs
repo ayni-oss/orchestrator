@@ -1,6 +1,5 @@
 //! Managed environment and repository preparation policy.
 pub mod environment;
-pub mod onboarding_templates;
 
 pub mod runtime_activation;
 
@@ -10,4 +9,4 @@ pub mod evidence_policy;
 
 pub mod inspection;
 
-pub mod automation;
+pub mod findings;

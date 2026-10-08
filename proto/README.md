@@ -1,9 +1,9 @@
-# Private worker-owned API
+# Private orchestrator API
 
 The canonical API is `ayni.orchestrator.v1`. This private breaking replacement
-uses the `worker-owned-v2` baseline recorded in `BASELINE`. Clients must regenerate
-bindings and upgrade with the server; there are no compatibility readers or
-migration adapters for the superseded task pipeline.
+uses the `managed-images-v3` baseline recorded in `BASELINE`. Clients must regenerate
+bindings and upgrade with the server. Schema-six/seven databases migrate without
+retaining workflow execution compatibility; see [release state](RELEASES.md).
 
 Connectors, projects, repositories and runtime profiles retain their resource
 behavior. Development tasks freeze source, runtime, model, constraints and
@@ -32,3 +32,5 @@ idempotency keys and, for existing resources, expected resource versions.
 runtime; an empty ID follows the global default. Profile reads expose the selection
 and effective safe certificate metadata. Custom runtimes reject certificate
 assignment. Signing seeds never appear in runtime profile or frozen task DTOs.
+
+Workflow installation RPCs, resources and fields were intentionally removed. Removed field numbers/names are reserved. Runtime reads expose structured findings, preparation phase and guarded rebuild availability. Upgrade clients and server together; see [cutover operations](../docs/operations.md).

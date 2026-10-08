@@ -6,6 +6,7 @@
 
 mod coding;
 pub mod configuration;
+mod discovery;
 pub mod execution;
 pub mod job;
 pub mod registry_probe;

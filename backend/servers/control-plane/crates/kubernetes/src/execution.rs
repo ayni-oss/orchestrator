@@ -180,7 +180,17 @@ impl RuntimeKubernetes {
                         .any(|c| c.type_ == "Failed" && c.status == "True")
                 })
         }) {
-            return Ok(Observation::Failed("runtime_verification_failed"));
+            let code = self
+                .operation_message(name, "verify")
+                .await
+                .unwrap_or_default();
+            return Ok(Observation::Failed(match code.as_str() {
+                "runtime_lock_mismatch" => "runtime_lock_mismatch",
+                "runtime_platform_mismatch" => "runtime_platform_mismatch",
+                "runtime_version_unsupported" => "runtime_version_unsupported",
+                "runtime_certificate_invalid" => "runtime_certificate_invalid",
+                _ => "runtime_verification_failed",
+            }));
         }
         if job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0) != 1 {
             return Ok(Observation::Running);

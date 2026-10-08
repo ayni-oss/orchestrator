@@ -14,7 +14,7 @@ import {
   type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
   type InspectAyniRepositoryResponse, type GetRuntimeProfileRevisionResponse,
-  type ListAutomationInstallationsResponse, type InstallRepositoryAutomationResponse,
+
   type ReconcileRuntimeProfileResponse,
   type ListDevelopmentAttemptsResponse, type RetryTaskPublicationResponse,
 
@@ -40,7 +40,7 @@ import {
   type RetryDevelopmentTaskResponse,
   type WatchDevelopmentTaskResponse,
 } from "@ayni-orchestrator/grpc-bindings/server";
-import { mapInspection, mapRevision, mapAutomation, mapAttemptUsage } from "./onboarding.js";
+import { mapInspection, mapRevision, mapAttemptUsage } from "./onboarding.js";
 import { randomUUID } from "node:crypto";
 import type {
   ProjectDto,
@@ -281,14 +281,6 @@ export class OrchestratorBff {
   async getRuntimeRevision(runtimeProfileRevisionId:string, context:RequestContext) {
     const response=await this.#unary<GetRuntimeProfileRevisionResponse>(context,(m,o,c)=>this.#profiles.getRuntimeProfileRevision({runtimeProfileRevisionId},m,o,c));
     return mapRevision(required(response.revision));
-  }
-  async listAutomation(runtimeProfileId:string, context:RequestContext) {
-    const response=await this.#unary<ListAutomationInstallationsResponse>(context,(m,o,c)=>this.#profiles.listAutomationInstallations({runtimeProfileId,page:page({pageSize:100})},m,o,c));
-    return { installations:response.automationInstallations.map(mapAutomation), page:pageDto(response.page) };
-  }
-  async installAutomation(runtimeProfileId:string, idempotencyKey:string, context:RequestContext) {
-    const response=await this.#unary<InstallRepositoryAutomationResponse>(context,(m,o,c)=>this.#profiles.installRepositoryAutomation({runtimeProfileId,idempotencyKey},m,o,c));
-    return mapAutomation(required(response.automationInstallation));
   }
   async reconcileProfile(runtimeProfileId:string, idempotencyKey:string, context:RequestContext, forceRebuild=false) {
     const response=await this.#unary<ReconcileRuntimeProfileResponse>(context,(m,o,c)=>this.#profiles.reconcileRuntimeProfile({runtimeProfileId,idempotencyKey,forceRebuild},m,o,c));

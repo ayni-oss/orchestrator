@@ -31,11 +31,19 @@ remain visible on the affected runtime. The namespace is defined once on the reg
 the server-computed image destination without a namespace input. Registry changes invalidate that runtime’s
 readiness until its new destination is verified; other runtimes are unaffected.
 
-Add repository membership to a project. Select a runtime profile and build or
-discover its signed environment through the existing runtime setup flow. Keep
-environment-building workflows and ordinary repository CI when removing obsolete
-orchestrator-installed quality workflows. Candidate workloads receive pull-only
-registry access; builders and probes hold push access separately.
+Connect the repository and open its runtime, even if configuration is incomplete.
+Select a ready certificate and GHCR connection. Analyze / Sync reports missing
+committed policy or lock, incompatible configuration, trust, registry and platform
+findings with corrective actions. Review and merge any certificate trust PR.
+General configuration bootstrap remains owner-managed.
+
+Once prerequisites pass, the control plane independently verifies an existing
+image or automatically builds, certifies, publishes and verifies a missing one.
+All successful builds publish. Mismatches offer Rebuild; access failures offer
+retry after repair. Rebuild cannot bypass setup. Add the repository to a project
+and submit work once the runtime is Ready. Repository environment-building Actions
+are removed through separate reviewed PRs; ordinary CI and deployment-component
+packaging remain. The control plane installs no workflows or checks.
 
 Submit a task against a ready runtime. Admission freezes source revision,
 runtime digest, model, constraints, coding turns, quality repair limit and

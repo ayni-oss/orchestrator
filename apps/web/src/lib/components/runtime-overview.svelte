@@ -72,14 +72,17 @@
     {@const revision=revisions[profile.id]}
     <article class="space-y-3 rounded-xl border bg-card p-4">
       <div class="flex items-center justify-between gap-3"><a class="font-semibold hover:underline" href={`/profiles/${encodeURIComponent(profile.id)}`}>{words(profile.kind)}</a><div class="flex items-center gap-2"><StatusBadge status={profile.state} tone={statusTone(profile.state)} /><Button variant="outline" size="sm" onclick={()=>edit(profile)}>{profile.support==="operational" ? "Edit" : "Details"}</Button></div></div>
+      {#if profile.preparationPhase}<p class="text-sm" role="status">Preparation: {words(profile.preparationPhase)}</p>{/if}
+      {#each profile.findings as finding (finding.code)}<div class="text-sm" role="status"><p class="text-destructive">{finding.message}</p><p class="text-muted-foreground">{finding.remediation}</p></div>{/each}
       <dl class="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
-        {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Ayni lock</dt><dd class="break-all font-mono text-xs">{revision?.managed?.fingerprint ?? "Not available yet"}</dd>{/if}
+        {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Ayni lock</dt><dd class="break-all font-mono text-xs">{revision?.managed?.fingerprint || "Not available yet"}</dd>{/if}
         {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Certificate</dt><dd>{profile.effectiveCertificate ? `${profile.effectiveCertificate.displayName} · revision ${profile.effectiveCertificate.revision}${profile.certificateId ? "" : " (default)"}` : "Not configured"}</dd>{/if}
+        {#each profile.reconciliation.filter(entry=>entry.key==="discovery-reference") as entry (entry.key)}<dt class="text-muted-foreground">Discovery tag</dt><dd class="break-all font-mono text-xs">{entry.value}</dd>{/each}
         <dt class="text-muted-foreground">Image destination</dt><dd class="break-all">{profile.desiredImageRepository || revision?.managed?.repository || "Not configured"}</dd>
       </dl>
       {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
       {#each profile.reconciliation.filter(entry=>entry.key==="certificate-trust-pr") as entry (entry.key)}<a href={entry.value} target="_blank" rel="noreferrer" class="text-sm underline">Review certificate trust update</a>{/each}
-      {#if profile.failure}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
+      {#if profile.failure && !profile.findings.length}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
     </article>
   {:else}<EmptyState title="Inspection pending" description="Runtime status will appear here when inspection completes." />{/each}
@@ -109,7 +112,7 @@
       </form>
       {/if}
       <div class="flex flex-wrap gap-2 border-t pt-4">
-        {#each ["sync","rebuild"] as action (action)}<form method="POST" action={`?/${action}`} use:enhance={submit}><input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><Button type="submit" variant="outline" disabled={busy}>{action==="sync" ? "Sync runtime" : "Rebuild runtime"}</Button></form>{/each}
+        {#each ["sync","rebuild"] as action (action)}<form method="POST" action={`?/${action}`} use:enhance={submit}><input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><Button type="submit" variant="outline" disabled={busy || (action==="rebuild" && !selected.rebuildAvailable)}>{action==="sync" ? selected.failure ? "Retry analysis" : "Analyze / Sync" : "Rebuild runtime"}</Button></form>{/each}
         <Button href={`/profiles/${encodeURIComponent(selected.id)}`} variant="outline">View details</Button>
       </div>
     {/if}

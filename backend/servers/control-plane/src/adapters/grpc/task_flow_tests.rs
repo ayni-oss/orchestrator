@@ -132,7 +132,6 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
                             lock_fingerprint: "c".repeat(64),
                             ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION
                                 .into(),
-                            workflow_template_version: "ayni-managed-v4".into(),
                             oci_repository: IMAGE.into(),
                             runtime_source_digest: None,
                         },

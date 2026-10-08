@@ -102,29 +102,3 @@ pub(super) fn retry_task(
         .map_err(crate::adapters::sqlite::task_retry::retry_error)?;
     store.development_attempt(&id)
 }
-
-pub fn automation_command(
-    key: &str,
-    request: &v1::InstallRepositoryAutomationRequest,
-) -> ayni_orchestrator_application::automation::InstallAutomation {
-    ayni_orchestrator_application::automation::InstallAutomation {
-        profile_id: request.runtime_profile_id.clone(),
-        identity: RequestIdentity {
-            key: key.into(),
-            digest: crate::adapters::sqlite::request_digest("InstallRepositoryAutomation", request),
-            payload: request.encode_to_vec(),
-        },
-    }
-}
-pub(super) fn install_automation(
-    store: &mut crate::adapters::sqlite::CleanStore,
-    command: &ayni_orchestrator_application::automation::InstallAutomation,
-) -> Result<v1::AutomationInstallation, CleanStoreError> {
-    let id = ayni_orchestrator_application::automation::install(
-        store,
-        &crate::profiles::ayni::automation::ManagedAutomation,
-        command,
-    )
-    .map_err(crate::adapters::sqlite::automation_admission::admission_error)?;
-    store.automation_installation(&id)
-}
