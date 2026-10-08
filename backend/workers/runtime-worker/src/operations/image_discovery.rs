@@ -4,7 +4,12 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{fs, io, time::Duration};
+use std::{
+    fs,
+    io::{self, Read},
+    path::Path,
+    time::Duration,
+};
 
 const ACCEPT: &str = "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json";
 
@@ -35,16 +40,32 @@ async fn body(mut response: reqwest::Response) -> Result<Vec<u8>, &'static str> 
     Ok(bytes)
 }
 
+// This fixed, read-only Kubernetes Secret mount is trusted orchestration input.
+// Projected Secret keys are symlinks; repository inputs still use read_bounded.
+fn read_registry_credentials(path: &Path) -> io::Result<Vec<u8>> {
+    let mut file = fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() > 65_536 {
+        return Err(io::Error::other(
+            "invalid or oversized registry credentials",
+        ));
+    }
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(65_537)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > 65_536 {
+        return Err(io::Error::other("oversized registry credentials"));
+    }
+    Ok(bytes)
+}
+
 fn credentials() -> Result<Option<(String, String)>, &'static str> {
     let path = std::path::Path::new("/registry/config.json");
     if !path.exists() {
         return Ok(None);
     }
-    let bytes = ayni_orchestrator_runtime::runtime_execution::read_bounded(path, 65_536)
-        .map_err(|_| "registry_credentials_unavailable")?;
-    if bytes.len() > 65_536 {
-        return Err("registry_credentials_invalid");
-    }
+    let bytes = read_registry_credentials(path).map_err(|_| "registry_credentials_unavailable")?;
     let value: Value =
         serde_json::from_slice(&bytes).map_err(|_| "registry_credentials_invalid")?;
     let entry = &value["auths"]["ghcr.io"];
@@ -181,6 +202,24 @@ pub(crate) async fn inspect(image: &str, platform: &str) -> Result<ImageDiscover
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn projected_secret_credentials_are_read_with_a_size_bound() -> io::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let revision = directory.path().join("revision");
+        fs::create_dir(&revision)?;
+        let content = b"{\"auths\":{}}";
+        fs::write(revision.join("config.json"), content)?;
+        std::os::unix::fs::symlink("revision", directory.path().join("..data"))?;
+        let key = directory.path().join("config.json");
+        std::os::unix::fs::symlink("..data/config.json", &key)?;
+        assert_eq!(read_registry_credentials(&key)?, content);
+        assert!(ayni_orchestrator_runtime::runtime_execution::read_bounded(&key, 65_536).is_err());
+        fs::write(revision.join("config.json"), vec![0; 65_537])?;
+        assert!(read_registry_credentials(&key).is_err());
+        assert!(read_registry_credentials(directory.path()).is_err());
+        Ok(())
+    }
     #[test]
     fn only_manifest_not_found_authorizes_a_build() {
         assert_eq!(response_status(StatusCode::NOT_FOUND), Ok(false));

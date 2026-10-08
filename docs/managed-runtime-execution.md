@@ -95,6 +95,11 @@ image build. Authentication errors, rate limits, outages and wrong platform are
 findings. Existing invalid certification or content requires an explicit Rebuild.
 A Rebuild freezes current inputs into a new intent; it cannot bypass setup.
 
+Discovery reads its pull-only credentials from a read-only Kubernetes Secret
+projection, including Kubernetes' symlinked keys, with a 64 KiB size bound.
+Repository-controlled input files continue to reject symlinks. A credential-read
+failure does not establish image absence or authorize a build.
+
 After publication finishes or fails, reconciliation inspects the registry before
 retrying. A published candidate proceeds directly to independent verification.
 An interrupted or missing publication Job also triggers registry inspection before
