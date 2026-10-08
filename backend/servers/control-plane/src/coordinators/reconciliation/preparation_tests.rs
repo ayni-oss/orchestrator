@@ -14,10 +14,19 @@ struct Jobs {
     publications: BTreeMap<String, String>,
     discovery: Option<ImageDiscovery>,
     candidate_missing: bool,
+    lost_engines: BTreeSet<String>,
 }
 #[derive(Clone, Default)]
 struct Backend(Arc<StdMutex<Jobs>>);
 impl ExecutionBackend for Backend {
+    async fn engine_alive(&self, name: &str, _: &WorkloadRuntime) -> ExecutionResult<bool> {
+        Ok(!self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .lost_engines
+            .contains(name))
+    }
     async fn start_discovery(&self, _: &str, _: &WorkloadRuntime) -> ExecutionResult<()> {
         Ok(())
     }
@@ -39,13 +48,18 @@ impl ExecutionBackend for Backend {
     ) -> ExecutionResult<()> {
         Err("unexpected_verification".into())
     }
-    async fn start_build<P: Serialize + Sync>(
+    async fn start_image_build<P: Serialize + Sync>(
         &self,
         name: &str,
         _: &WorkloadRuntime,
         request: &GenericRequest<P>,
         _: &str,
+        kind: &ayni_orchestrator_application::image_build::ImageBuildKind,
     ) -> ExecutionResult<()> {
+        assert!(matches!(
+            kind,
+            ayni_orchestrator_application::image_build::ImageBuildKind::RepositoryRuntime
+        ));
         assert_eq!(request.revision, "a".repeat(40));
         let mut jobs = self
             .0
@@ -202,6 +216,7 @@ impl Fixture {
             pull_secret: Some("pull-only".into()),
             build: Some(
                 ayni_orchestrator_application::execution_settings::BuildRuntime {
+                    configuration_revision: 0,
                     image: format!("ghcr.io/team/builder@sha256:{}", "d".repeat(64)),
                     service_account: "runtime-builder".into(),
                     registry_secret: "push-only".into(),
@@ -209,6 +224,7 @@ impl Fixture {
                     engine_secret: "engine-only".into(),
                     engine_host: "tcp://isolated.test:2376".into(),
                     isolated_engine: true,
+                    engine: None,
                 },
             ),
         };
@@ -223,6 +239,9 @@ impl Fixture {
             quality_repair_limit: 3,
             concurrency: 4,
             allow_emulation: false,
+            engine_mode: "external-isolated".into(),
+
+            builder_defaults: None,
             profiles: BTreeMap::new(),
             managed_runtime: None,
         };
@@ -571,5 +590,54 @@ async fn explicit_refresh_discards_old_intent_without_counting_a_preparation_fai
         fixture.cursor.status.get("phase").map(String::as_str),
         Some("analyzing")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn engine_loss_discards_candidate_and_restart_preserves_fresh_attempt() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.built().await?;
+    let old = fixture.pending()?.clone();
+    let build = old.build_name.clone().ok_or("build")?;
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .lost_engines
+        .insert(build.clone());
+    fixture.step().await?;
+    let fresh = fixture.pending()?.clone();
+    assert_ne!(fresh.build_name, old.build_name);
+    assert!(fresh.candidate_image_id.is_none());
+    assert!(fresh.publish_name.is_none());
+    assert!(!fresh.build.started && !fresh.build.completed);
+    assert_eq!(fresh.request.revision, old.request.revision);
+    assert_eq!(fresh.publish_remaining, old.publish_remaining - 1);
+    fixture.reconciler.state = AppState::open(fixture.directory.path().join("state.sqlite"), 3)?;
+    let profile = fixture.profile.clone();
+    fixture.cursor = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |s| s.runtime_cursor(&profile))
+        .await?;
+    fixture.step().await?;
+    assert_eq!(fixture.pending()?.build_name, fresh.build_name);
+    assert!(fixture.pending()?.build.started);
+    let jobs = fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(!jobs.states.contains_key(&build));
+    assert!(
+        !jobs
+            .states
+            .contains_key(old.publish_name.as_deref().ok_or("publish")?)
+    );
+    drop(jobs);
     Ok(())
 }

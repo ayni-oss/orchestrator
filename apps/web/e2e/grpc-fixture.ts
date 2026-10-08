@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { Server, ServerCredentials, status, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
+  AyniServiceService, BuildServiceSettings, BuilderInstallation, ListAyniReleasesResponse,
   CertificateServiceService, Certificate,
   ConnectionServiceService, type Connection,
   ProjectServiceService, ProjectState,
@@ -242,6 +243,25 @@ grpc.addService(ProjectServiceService, {
   createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
   updateProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
   archiveProject(_call:any,callback:any){project={...project,state:ProjectState.PROJECT_STATE_ARCHIVED,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+});
+let builderSettings = BuildServiceSettings.fromPartial({
+  resourceVersion: "1", ayniVersion: "0.14.5", securityMode: "dedicated-builder",
+  status: "configured", managementSource: "ui", platform: "linux/arm64",
+  builderImage: `registry.test/builder@sha256:${"a".repeat(64)}`,
+  engineImage: `registry.test/docker@sha256:${"b".repeat(64)}`,
+  provisioningBase: `registry.test/base@sha256:${"c".repeat(64)}`,
+});
+grpc.addService(AyniServiceService, {
+  startBuilderInstallation(_call: any, callback: any) { builderSettings = { ...builderSettings, status: "installing", installation: BuilderInstallation.fromPartial({id:"installation",status:"running",stage:"builder-build",imageTag:"ghcr.io/ayni-oss/orchestrator:ayni-builder-0.14.5-arm64"}) }; callback(null, {settings:builderSettings}); },
+  getBuilderInstallation(_call: any, callback: any) { callback(null, {installation:builderSettings.installation}); },
+  cancelBuilderInstallation(_call: any, callback: any) { builderSettings = { ...builderSettings, status: "cancelled", installation: builderSettings.installation ? {...builderSettings.installation,status:"cancelled"} : undefined }; callback(null,{settings:builderSettings}); },
+  getBuildService(_call: any, callback: any) { callback(null, { settings: builderSettings }); },
+  listAyniReleases(_call: any, callback: any) { callback(null, ListAyniReleasesResponse.fromPartial({ supportedVersion: "0.14.5", discoveryStatus: "ready", releases: [
+    { version: "0.14.5", tag: "ayni-v0.14.5", supported: true },
+    { version: "0.15.0", tag: "ayni-v0.15.0", supported: false },
+  ] })); },
+  testBuildService(_call: any, callback: any) { builderSettings = { ...builderSettings, status: "testing" }; callback(null, { settings: builderSettings }); },
+  cancelBuildServiceTest(_call: any, callback: any) { builderSettings = { ...builderSettings, status: "cancelled" }; callback(null, { settings: builderSettings }); },
 });
 grpc.addService(RepositoryServiceService, repositoryService);
 grpc.addService(RuntimeProfileServiceService, runtimeProfileService);

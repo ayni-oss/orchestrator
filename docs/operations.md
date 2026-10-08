@@ -148,3 +148,6 @@ or infer approval from TLS. Keep build approval false when isolation is unproven
 Builder candidates are disposable engine state. No artifact PVC or manual
 unpublished-image cleanup flow is needed. Normal Kubernetes image caching remains
 kubelet-owned. Retry analysis and Rebuild never purge node caches or registry images.
+
+See [deployment-wide build service](build-service.md) for global Ayni settings,
+attempt engines, security modes, and external-engine migration.

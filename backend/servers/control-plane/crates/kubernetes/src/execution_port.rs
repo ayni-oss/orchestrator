@@ -7,6 +7,38 @@ use ayni_orchestrator_runtime::{coding::WorkerSpec, runtime_execution::Execution
 use serde::Serialize;
 
 impl ExecutionBackend for RuntimeKubernetes {
+    async fn start_image_build<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        runtime: &WorkloadRuntime,
+        request: &ExecutionRequest<P>,
+        token: &str,
+        kind: &ayni_orchestrator_application::image_build::ImageBuildKind,
+    ) -> ExecutionResult<()> {
+        self.start_image_operation(
+            name,
+            runtime,
+            kind,
+            std::collections::BTreeMap::from([(
+                "execution.json".into(),
+                serde_json::to_string(request)
+                    .map_err(|_| ExecutionError::from("runtime_request_invalid"))?,
+            )]),
+            token,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn engine_alive(
+        &self,
+        session: &str,
+        runtime: &WorkloadRuntime,
+    ) -> ExecutionResult<bool> {
+        Self::engine_alive(self, session, runtime)
+            .await
+            .map_err(Into::into)
+    }
     async fn operation_failure(&self, name: &str, container: &str) -> ExecutionResult<String> {
         Ok(self
             .operation_message(name, container)
@@ -47,35 +79,6 @@ impl ExecutionBackend for RuntimeKubernetes {
         token: &str,
     ) -> ExecutionResult<()> {
         self.start(name, runtime, request, token)
-            .await
-            .map_err(ExecutionError::from)
-    }
-    async fn start_build<P: Serialize + Sync>(
-        &self,
-        name: &str,
-        runtime: &WorkloadRuntime,
-        request: &ExecutionRequest<P>,
-        token: &str,
-    ) -> ExecutionResult<()> {
-        self.start_build(name, runtime, request, token)
-            .await
-            .map_err(ExecutionError::from)
-    }
-    async fn start_trust_lock<P: Serialize + Sync>(
-        &self,
-        name: &str,
-        runtime: &WorkloadRuntime,
-        request: &ExecutionRequest<P>,
-        token: &str,
-        key_id: &str,
-        public_key: &str,
-    ) -> ExecutionResult<()> {
-        self.start_trust_lock(name, runtime, request, token, key_id, public_key)
-            .await
-            .map_err(ExecutionError::from)
-    }
-    async fn trust_lock_result(&self, name: &str) -> ExecutionResult<String> {
-        self.trust_lock_result(name)
             .await
             .map_err(ExecutionError::from)
     }

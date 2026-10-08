@@ -2,6 +2,14 @@
 use crate::configuration::{ExecutionConfiguration, WorkloadRuntime};
 use serde_json::{Value, json};
 
+/// Protected by `NodeRestriction`; administrators provision and taint these nodes.
+pub const BUILDER_NODE_LABEL: &str = "ayni.io.node-restriction.kubernetes.io/builder";
+
+/// Trusted Jobs must never share a production engine node, even if its taint is removed.
+pub fn trusted_node_affinity() -> Value {
+    json!({"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":BUILDER_NODE_LABEL,"operator":"DoesNotExist"}]}]}}})
+}
+
 pub struct WorkspaceSupport {
     pub init_containers: Vec<Value>,
     pub volumes: Vec<Value>,
@@ -96,6 +104,7 @@ pub fn source_job(
                 "restartPolicy":"Never", "serviceAccountName":service_account,
                 "automountServiceAccountToken":false, "imagePullSecrets":pulls,
                 "nodeSelector":node_selector(&runtime.platform, configuration.allow_emulation),
+                "affinity":trusted_node_affinity(),
                 "securityContext":{"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
                 "initContainers":support.init_containers, "containers":[container], "volumes":support.volumes
             }}
@@ -112,4 +121,15 @@ pub fn runtime_environment() -> Vec<Value> {
         json!({"name":"MISE_CACHE_DIR","value":"/scratch/mise-cache"}),
         json!({"name":"MISE_STATE_DIR","value":"/scratch/mise-state"}),
     ]
+}
+
+/// Trusted recipes and probes have no repository checkout authority.
+/// # Errors
+/// Rejects malformed shared manifests.
+pub fn without_checkout(job: &mut Value) -> Result<(), &'static str> {
+    job["spec"]["template"]["spec"]["initContainers"]
+        .as_array_mut()
+        .ok_or("image_manifest_invalid")?
+        .retain(|c| c["name"] == "launcher");
+    Ok(())
 }

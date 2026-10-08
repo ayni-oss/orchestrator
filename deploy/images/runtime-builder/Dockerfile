@@ -2,8 +2,8 @@
 # Supply operator-approved, digest-pinned Docker CLI and Debian Ayni executor
 # images. Git and CA certificates support frozen source checkout; Buildx supports
 # Ayni environment preparation. This recipe contains no daemon or credentials.
-ARG DOCKER_CLIENT_IMAGE
-ARG AYNI_EXECUTOR_IMAGE
+ARG DOCKER_CLIENT_IMAGE=docker.io/library/docker:28.3.3-cli@sha256:0135662b510037ea581d99c2e5929c5e01185139c0b86986a418bd4da0b98a44
+ARG AYNI_EXECUTOR_IMAGE=ghcr.io/ayni-oss/ayni-env:0.14.5-debian@sha256:d8818c4638e51d9d85ff09e050c035e3e6e548b38acc9b349de2a05c2f6253c8
 FROM ${DOCKER_CLIENT_IMAGE} AS docker-client
 FROM ${AYNI_EXECUTOR_IMAGE}
 ARG TARGETARCH
@@ -25,4 +25,11 @@ RUN case "$TARGETARCH" in \
     && mise --version
 COPY --from=docker-client /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-client /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
+LABEL org.opencontainers.image.source="https://github.com/ayni-oss/orchestrator" \
+      org.opencontainers.image.version="0.14.5"
+ENV HOME=/scratch TMPDIR=/scratch XDG_CACHE_HOME=/scratch/cache
+RUN docker --version && docker buildx version && ayni --version
 USER 10001
+# Kubernetes supplies the trusted launcher as the command arguments.
+ENTRYPOINT []
+CMD ["/bin/sh"]

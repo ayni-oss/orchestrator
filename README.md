@@ -34,6 +34,7 @@ retained final work without another coding session.
 - [Protocol contract](proto/README.md)
 - [Runtime worker](docs/runtime-runner.md)
 - [Managed runtime execution](docs/managed-runtime-execution.md)
+- [Global Ayni build service and builder infrastructure](docs/build-service.md)
 - [Operator onboarding](docs/operator-onboarding.md)
 - [Operations and breaking cutover](docs/operations.md)
 - [Local development](docs/local-development.md)

@@ -24,6 +24,37 @@ pub fn record_grpc_completion(rpc: &'static str, code: Code) {
     }
 }
 
+static BUILDER_FAILURES: OnceLock<Mutex<BTreeMap<(String, String), u64>>> = OnceLock::new();
+static BUILDER_DURATION: OnceLock<Mutex<(u64, u64)>> = OnceLock::new();
+pub fn record_builder_failure(stage: &str, reason: &str) {
+    let stage = match stage {
+        "build" | "publish" | "discover" | "verify" | "cleanup" | "engine" => stage,
+        _ => "configuration",
+    };
+    let reason = match reason {
+        "engine_startup_failed"
+        | "engine_tls_or_startup_failed"
+        | "engine_cleanup_failed"
+        | "engine_lost"
+        | "engine_recovery_exhausted"
+        | "engine_deployment_mode_mismatch"
+        | "runtime_version_unsupported" => reason,
+        _ => "stage_failed",
+    };
+    if let Ok(mut values) = BUILDER_FAILURES
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+    {
+        *values.entry((stage.into(), reason.into())).or_default() += 1;
+    }
+}
+pub fn record_builder_duration(seconds: u64) {
+    if let Ok(mut values) = BUILDER_DURATION.get_or_init(|| Mutex::new((0, 0))).lock() {
+        values.0 = values.0.saturating_add(seconds);
+        values.1 = values.1.saturating_add(1);
+    }
+}
+
 #[must_use]
 pub fn render_clean_metrics() -> String {
     let mut output = format!(
@@ -55,6 +86,23 @@ pub fn render_clean_metrics() -> String {
                 "orchestrator_grpc_completions_total{{rpc=\"{rpc}\",code=\"{code}\"}} {value}"
             );
         }
+    }
+    output.push_str("# TYPE orchestrator_builder_failures_total counter\n");
+    if let Some(values) = BUILDER_FAILURES.get().and_then(|v| v.lock().ok()) {
+        for ((stage, reason), count) in values.iter() {
+            let _ = writeln!(
+                output,
+                "orchestrator_builder_failures_total{{stage=\"{stage}\",reason=\"{reason}\"}} {count}"
+            );
+        }
+    }
+    output.push_str("# TYPE orchestrator_builder_duration_seconds summary\n");
+    if let Some(values) = BUILDER_DURATION.get().and_then(|v| v.lock().ok()) {
+        let _ = writeln!(
+            output,
+            "orchestrator_builder_duration_seconds_sum {}\norchestrator_builder_duration_seconds_count {}",
+            values.0, values.1
+        );
     }
     output
 }

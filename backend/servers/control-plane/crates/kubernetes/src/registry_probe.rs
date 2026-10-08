@@ -77,7 +77,7 @@ impl RegistryProbeRequest {
             "metadata":{"name":self.job_name(),"namespace":self.namespace,"labels":{"app.kubernetes.io/component":"connection-test","ayni.io/connection-operation":self.operation}},
             "spec":{"backoffLimit":0,"activeDeadlineSeconds":180,
                 "template":{"metadata":{"labels":{"ayni.io/connection-operation":self.operation}},"spec":{
-                    "automountServiceAccountToken":false,"restartPolicy":"Never",
+                    "automountServiceAccountToken":false,"affinity":crate::workload::trusted_node_affinity(),"restartPolicy":"Never",
                     "securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
                     "containers":[{"name":"probe","image":self.image,"imagePullPolicy":"IfNotPresent",
                         "command":["/usr/local/bin/registry-connection-test"],"env":env,"volumeMounts":mounts,

@@ -282,10 +282,20 @@ impl RuntimeKubernetes {
             Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let secrets: Api<Secret> =
             Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        match jobs.delete(name, &DeleteParams::foreground()).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(error)) if error.code == 404 => {}
+            Err(_) => return Err("runtime_cleanup_failed"),
+        }
+        if jobs
+            .get_opt(name)
+            .await
+            .map_err(|_| "runtime_cleanup_failed")?
+            .is_some()
+        {
+            return Err("runtime_cleanup_pending");
+        }
         for result in [
-            jobs.delete(name, &DeleteParams::background())
-                .await
-                .map(|_| ()),
             maps.delete(name, &DeleteParams::default())
                 .await
                 .map(|_| ()),
@@ -300,6 +310,7 @@ impl RuntimeKubernetes {
                 Err(_) => return Err("runtime_cleanup_failed"),
             }
         }
+        self.cleanup_engine(name).await?;
         Ok(())
     }
 }
@@ -379,6 +390,7 @@ mod tests {
             output_claim: "output".into(),
             model_secret: "model".into(),
             allow_emulation: false,
+            engine_mode: "external-isolated".into(),
         };
         let runtime = WorkloadRuntime {
             image: "registry/runtime:lock".into(),
@@ -444,6 +456,7 @@ mod tests {
             output_claim: "output".into(),
             model_secret: "model".into(),
             allow_emulation: true,
+            engine_mode: "external-isolated".into(),
         };
         let runtime = WorkloadRuntime {
             image: "registry/runtime:lock".into(),

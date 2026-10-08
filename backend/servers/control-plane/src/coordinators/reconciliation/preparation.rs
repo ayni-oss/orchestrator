@@ -5,6 +5,7 @@ use super::{
     operation_name, verification_action,
 };
 use ayni_orchestrator_application::execution::ExecutionState;
+use ayni_orchestrator_application::image_build::{BuildObservation, observe_build};
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn observe_pending(
@@ -70,6 +71,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         id: &str,
         reason: &'static str,
     ) -> Result<(), &'static str> {
+        crate::process::metrics::record_builder_failure("build", reason);
         let id = id.to_owned();
         let interval = self.configuration.interval_seconds;
         let pending = self
@@ -120,8 +122,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         );
         for name in [
             Some(pending.name.as_str()),
-            pending.build_name.as_deref(),
             pending.publish_name.as_deref(),
+            pending.build_name.as_deref(),
             Some(discovery.as_str()),
         ]
         .into_iter()
@@ -311,9 +313,25 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let id = observation.id;
         let runtime = observation.runtime;
         let token = observation.token.as_str();
+        let build_state = observe_build(
+            &self.kubernetes,
+            build_name,
+            &runtime.execution_runtime(),
+            pending.build.started,
+        )
+        .await?;
+        if matches!(build_state, BuildObservation::EngineLost) {
+            // Cleanup is retried against the old durable identity before advancing it.
+            self.cleanup_operation(pending).await?;
+            let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
+            restart_engine_attempt(next)?;
+            cursor.status.insert("phase".into(), "building".into());
+            self.save(id, cursor).await?;
+            return Ok(());
+        }
         if !pending.build.completed {
-            match self.kubernetes.coding_state(build_name).await? {
-                ExecutionState::Missing => {
+            match build_state {
+                BuildObservation::Missing => {
                     cursor
                         .pending
                         .as_mut()
@@ -323,30 +341,25 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     cursor.status.insert("phase".into(), "building".into());
                     self.save(id, cursor).await?;
                     self.kubernetes
-                        .start_build(
+                        .start_image_build(
                             build_name,
                             &runtime.execution_runtime(),
                             &pending.request,
                             token,
+                            &ayni_orchestrator_application::image_build::ImageBuildKind::RepositoryRuntime,
                         )
                         .await?;
                 }
-                ExecutionState::Running => {}
-                ExecutionState::Succeeded => {
-                    let image_id = self.kubernetes.build_result(build_name).await?;
+                BuildObservation::Running => {}
+                BuildObservation::Completed(image_id) => {
                     let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
                     next.build.completed = true;
                     next.candidate_image_id = Some(image_id);
                     cursor.status.insert("phase".into(), "publishing".into());
                     self.save(id, cursor).await?;
                 }
-                ExecutionState::Failed => {
-                    let code = self
-                        .kubernetes
-                        .operation_failure(build_name, "build")
-                        .await?;
-                    return Err(build_error(&code));
-                }
+                BuildObservation::Failed(code) => return Err(build_error(&code)),
+                BuildObservation::EngineLost => return Err("engine_lost"),
             }
             return Ok(());
         }
@@ -402,7 +415,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 self.kubernetes
                     .start_publish(
                         &publish_name,
-                        &runtime.execution_runtime(),
+                        &ayni_orchestrator_kubernetes::engine::bind(
+                            &runtime.execution_runtime(),
+                            pending
+                                .build_name
+                                .as_deref()
+                                .ok_or("runtime_build_result_missing")?,
+                        ),
                         &pending.request,
                         image_id,
                         pending.force_rebuild,
@@ -432,31 +451,39 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 }
 
+fn restart_engine_attempt(pending: &mut PendingVerification) -> Result<(), &'static str> {
+    if pending.publish_remaining == 0 {
+        return Err("engine_recovery_exhausted");
+    }
+    pending.publish_remaining -= 1;
+    pending.publish_attempts = pending
+        .publish_attempts
+        .checked_add(1)
+        .ok_or("runtime_sequence_exhausted")?;
+    pending.build_name = Some(operation_name(
+        &format!("build:{}", pending.name),
+        u64::from(pending.publish_attempts),
+    ));
+    pending.publish_name = None;
+    pending.candidate_image_id = None;
+    pending.candidate_missing = false;
+    pending.build.started = false;
+    pending.build.completed = false;
+    pending.build.observed = false;
+    Ok(())
+}
+
 fn build_error(code: &str) -> &'static str {
     match code {
         "runtime_lock_mismatch" => "runtime_lock_mismatch",
+        "engine_tls_or_startup_failed" => "engine_tls_or_startup_failed",
+        "runtime_version_unsupported" => "runtime_version_unsupported",
         "runtime_platform_mismatch" => "runtime_platform_mismatch",
         _ => "runtime_build_failed",
     }
 }
 
-/// A build's publication succeeds only when the registry contains its exact candidate.
-fn publication_readback(
-    discovery: ImageDiscovery,
-    candidate: Option<&str>,
-    overwrite_authorized: bool,
-) -> Result<ImageDiscovery, &'static str> {
-    if let ImageDiscovery::Resolved { image_id, .. } = &discovery
-        && candidate.is_some_and(|expected| expected != image_id)
-    {
-        return if overwrite_authorized {
-            Ok(ImageDiscovery::Missing)
-        } else {
-            Err("runtime_tag_drift")
-        };
-    }
-    Ok(discovery)
-}
+use ayni_orchestrator_application::image_build::publication_readback;
 
 #[cfg(test)]
 mod tests {
