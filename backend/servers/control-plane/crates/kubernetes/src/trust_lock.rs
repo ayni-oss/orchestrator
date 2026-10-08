@@ -106,8 +106,12 @@ fn trust_lock_job(
     let mut environment = workload::runtime_environment();
     environment.push(json!({"name":"CERTIFICATE_KEY_ID","value":key_id}));
     environment.push(json!({"name":"CERTIFICATE_PUBLIC_KEY","value":public_key}));
-    let container =
+    let mut container =
         workload::worker_container("trust-lock", &configuration.worker_image, &environment);
+    // The approved worker is immutable; local component imports use kubelet caching.
+    container["imagePullPolicy"] = json!("IfNotPresent");
+    container["command"] = json!(["/launcher/runtime-worker"]);
+    container["args"] = json!(["trust-lock"]);
     let job: Job = serde_json::from_value(workload::source_job(
         name,
         configuration,
@@ -183,6 +187,7 @@ mod tests {
         assert_eq!(pod["automountServiceAccountToken"], false);
         let containers = pod["containers"].as_array().ok_or("missing_containers")?;
         assert_eq!(containers.len(), 1);
+        assert_eq!(containers[0]["imagePullPolicy"], "IfNotPresent");
         assert_eq!(containers[0]["image"], configuration().worker_image);
         assert_eq!(pod["imagePullSecrets"], json!([{"name":"pull-only"}]));
         for container in containers
@@ -220,10 +225,8 @@ mod tests {
         let manifest = manifest()?;
         let pod = &manifest["spec"]["template"]["spec"];
         let container = &pod["containers"][0];
-        assert_eq!(
-            container["args"],
-            json!(["/launcher/runtime-worker", "trust-lock"])
-        );
+        assert_eq!(container["command"], json!(["/launcher/runtime-worker"]));
+        assert_eq!(container["args"], json!(["trust-lock"]));
         for volume in ["launcher", "request"] {
             let mount = container["volumeMounts"]
                 .as_array()

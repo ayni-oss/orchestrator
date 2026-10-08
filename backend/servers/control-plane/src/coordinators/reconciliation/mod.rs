@@ -40,6 +40,10 @@ pub struct RuntimeCursor {
 }
 
 impl RuntimeCursor {
+    fn request_rebuild(&mut self, requested: bool) {
+        self.force_rebuild |= requested || self.trust.as_ref().is_some_and(TrustUpdate::failed);
+    }
+
     fn update_status(
         &mut self,
         runtime: &ProfileRuntime,
@@ -333,8 +337,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     }
                     cursor.next_at = 0;
                     cursor.failures = 0;
-                    cursor.force_rebuild |= request.force_rebuild
-                        || cursor.trust.as_ref().is_some_and(TrustUpdate::failed);
+                    cursor.request_rebuild(request.force_rebuild);
                     // Explicit retry releases a failed verification for a fresh observation.
                     if let Some(pending) = &mut cursor.pending {
                         pending.failed = false;
@@ -386,10 +389,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Ok(());
         };
         if cursor.failures >= 3 {
-            if let Some(pending) = &cursor.pending {
-                self.cleanup_operation(pending).await?;
-            }
-            return Ok(());
+            return self.cleanup_exhausted_cursor(&cursor).await;
         }
         if cursor.next_at > time {
             return Ok(());

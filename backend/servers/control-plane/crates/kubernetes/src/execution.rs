@@ -109,7 +109,7 @@ impl RuntimeKubernetes {
             Ok(_) => {}
             Err(kube::Error::Api(error)) if error.code == 409 => {
                 let existing = maps.get(name).await.map_err(|_| "kubernetes_unavailable")?;
-                if existing.data != map.data {
+                if !request_data_matches(existing.data.as_ref(), map.data.as_ref()) {
                     return Err("runtime_request_conflict");
                 }
             }
@@ -336,8 +336,39 @@ pub fn verification_job(
     .map_err(|_| "runtime_job_invalid")
 }
 
+// Kubernetes omits an empty data map when returning a ConfigMap.
+fn request_data_matches(
+    actual: Option<&std::collections::BTreeMap<String, String>>,
+    expected: Option<&std::collections::BTreeMap<String, String>>,
+) -> bool {
+    actual
+        .into_iter()
+        .flatten()
+        .eq(expected.into_iter().flatten())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn empty_discovery_requests_survive_api_normalization_without_accepting_changed_data() {
+        use std::collections::BTreeMap;
+        assert!(super::request_data_matches(None, Some(&BTreeMap::new())));
+        let request = Some(BTreeMap::from([("execution.json".into(), "frozen".into())]));
+        assert!(super::request_data_matches(
+            request.as_ref(),
+            request.as_ref()
+        ));
+        assert!(!super::request_data_matches(None, request.as_ref()));
+        let changed = Some(BTreeMap::from([(
+            "execution.json".into(),
+            "changed".into(),
+        )]));
+        assert!(!super::request_data_matches(
+            request.as_ref(),
+            changed.as_ref()
+        ));
+    }
+
     use super::*;
     #[test]
     fn verification_preserves_entrypoint_and_limits_credentials_to_checkout()

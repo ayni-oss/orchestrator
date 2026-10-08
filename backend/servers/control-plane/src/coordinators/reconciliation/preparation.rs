@@ -22,8 +22,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if phase == PendingPhase::DiscardStale {
             self.cleanup_operation(&pending).await?;
             cursor.pending = None;
+            cursor.status.remove("reason-code");
+            cursor.status.insert("phase".into(), "analyzing".into());
             self.save(id, cursor).await?;
-            return Err("runtime_source_changed");
+            return Ok(());
         }
         if pending.failed {
             // Resume cleanup after a restart without recreating failed Jobs.
@@ -94,6 +96,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .await?;
         if let Some(pending) = pending {
             self.cleanup_operation(&pending).await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn cleanup_exhausted_cursor(
+        &self,
+        cursor: &RuntimeCursor,
+    ) -> Result<(), &'static str> {
+        if let Some(pending) = &cursor.pending {
+            self.cleanup_operation(pending).await?;
         }
         Ok(())
     }

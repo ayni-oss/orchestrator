@@ -551,3 +551,25 @@ async fn exhausted_operations_persist_failure_and_clean_jobs_without_restarting(
     drop(jobs);
     Ok(())
 }
+
+#[tokio::test]
+async fn explicit_refresh_discards_old_intent_without_counting_a_preparation_failure() -> TestResult
+{
+    let mut fixture = Fixture::new().await?;
+    fixture
+        .cursor
+        .pending
+        .as_mut()
+        .ok_or("pending")?
+        .source_digest
+        .clear();
+    fixture.step().await?;
+    assert!(fixture.cursor.pending.is_none());
+    assert_eq!(fixture.cursor.failures, 0);
+    assert!(!fixture.cursor.status.contains_key("reason-code"));
+    assert_eq!(
+        fixture.cursor.status.get("phase").map(String::as_str),
+        Some("analyzing")
+    );
+    Ok(())
+}
