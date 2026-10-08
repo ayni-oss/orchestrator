@@ -8,6 +8,7 @@ fn fixture() -> (ExecutionConfiguration, WorkloadRuntime) {
             output_claim: "outputs".into(),
             model_secret: "model".into(),
             allow_emulation: false,
+            engine_mode: "external-isolated".into(),
         },
         WorkloadRuntime {
             image: "registry.test/team/runtime:lock".into(),
@@ -15,10 +16,12 @@ fn fixture() -> (ExecutionConfiguration, WorkloadRuntime) {
             service_account: "runtime-coding".into(),
             pull_secret: Some("pull-only".into()),
             build: Some(crate::configuration::BuildRuntime {
+                configuration_revision: 0,
                 image: format!("registry.test/builder@sha256:{}", "b".repeat(64)),
                 service_account: "runtime-builder".into(),
                 engine_host: "tcp://engine.test:2376".into(),
                 isolated_engine: true,
+                engine: None,
                 engine_secret: "engine-only".into(),
                 registry_secret: "push-only".into(),
                 signing_secret: "signing-only".into(),
@@ -271,5 +274,135 @@ fn publication_runs_without_source_or_signing_authority() -> Result<(), Box<dyn 
         )
         .is_err()
     );
+    Ok(())
+}
+
+#[test]
+fn attempt_jobs_project_only_client_tls_and_freeze_the_global_revision()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (mut configuration, mut runtime) = fixture();
+    configuration.engine_mode = "local-development".into();
+    let build = runtime.build.as_mut().ok_or("build")?;
+    build.configuration_revision = 7;
+    build.image = format!("docker.io/local/builder@sha256:{}", "b".repeat(64));
+    build.engine = Some(
+        ayni_orchestrator_application::execution_settings::EngineRuntime {
+            image: format!("docker.io/library/docker@sha256:{}", "c".repeat(64)),
+            security_mode: "local-development".into(),
+        },
+    );
+    let runtime = crate::engine::bind(&runtime, "attempt-one");
+    for job in [
+        build_job("attempt-one", &configuration, &runtime)?,
+        publication_job(
+            "publisher",
+            &configuration,
+            &runtime,
+            &format!("sha256:{}", "d".repeat(64)),
+            false,
+        )?,
+    ] {
+        let template = job.spec.ok_or("job")?.template;
+        let metadata = template.metadata.ok_or("metadata")?;
+        assert_eq!(
+            metadata
+                .labels
+                .ok_or("labels")?
+                .get("ayni.io/engine-session")
+                .map(String::as_str),
+            Some("attempt-one")
+        );
+        assert_eq!(
+            metadata
+                .annotations
+                .ok_or("annotations")?
+                .get("ayni.io/build-settings-revision")
+                .map(String::as_str),
+            Some("7")
+        );
+        let pod = template.spec.ok_or("pod")?;
+        let affinity = serde_json::to_value(pod.affinity.as_ref().ok_or("trusted placement")?)?;
+        let expression = &affinity["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]
+            ["nodeSelectorTerms"][0]["matchExpressions"][0];
+        assert_eq!(expression["key"], crate::workload::BUILDER_NODE_LABEL);
+        assert_eq!(expression["operator"], "DoesNotExist");
+        assert_eq!(
+            pod.containers[0].image_pull_policy.as_deref(),
+            Some("IfNotPresent")
+        );
+        let security = pod.containers[0]
+            .security_context
+            .as_ref()
+            .ok_or("security")?;
+        assert_eq!(security.run_as_user, Some(10001));
+        assert_eq!(security.read_only_root_filesystem, Some(true));
+        let tls = pod
+            .volumes
+            .as_ref()
+            .ok_or("volumes")?
+            .iter()
+            .find(|v| v.name == "engine")
+            .and_then(|v| v.secret.as_ref())
+            .ok_or("tls")?;
+        assert_eq!(tls.secret_name.as_deref(), Some("attempt-one-engine"));
+        let keys: Vec<_> = tls
+            .items
+            .as_ref()
+            .ok_or("items")?
+            .iter()
+            .map(|i| i.key.as_str())
+            .collect();
+        assert_eq!(keys, ["ca.pem", "cert.pem", "key.pem"]);
+        assert!(!serde_json::to_string(&pod)?.contains("server-key.pem"));
+    }
+    Ok(())
+}
+
+#[test]
+fn unsigned_builder_and_certified_runtime_share_engine_but_not_signing_authority()
+-> Result<(), Box<dyn std::error::Error>> {
+    use ayni_orchestrator_application::image_build::ImageBuildKind;
+    let (configuration, mut runtime) = fixture();
+    runtime
+        .build
+        .as_mut()
+        .ok_or("build")?
+        .signing_secret
+        .clear();
+    let job = image_build_job(
+        "install",
+        &configuration,
+        &runtime,
+        &ImageBuildKind::TrustedBuilder {
+            recipe_identity: "recipe".into(),
+        },
+    )?;
+    let text = serde_json::to_string(&job)?;
+    assert!(!text.contains("AYNI_ENV_CERTIFICATE"));
+    assert!(!text.contains("push-only"));
+    assert!(!text.contains("SOURCE_TOKEN"));
+    assert!(text.contains("engine-only"));
+    assert!(text.contains("builder-package"));
+    assert!(text.contains("readOnlyRootFilesystem"));
+    assert!(
+        image_build_job(
+            "runtime",
+            &configuration,
+            &runtime,
+            &ImageBuildKind::RepositoryRuntime
+        )
+        .is_err()
+    );
+    let publisher = publication_job(
+        "publish",
+        &configuration,
+        &runtime,
+        &format!("sha256:{}", "c".repeat(64)),
+        true,
+    )?;
+    let text = serde_json::to_string(&publisher)?;
+    assert!(text.contains("push-only"));
+    assert!(!text.contains("AYNI_ENV_CERTIFICATE"));
+    assert!(!text.contains("SOURCE_TOKEN"));
     Ok(())
 }

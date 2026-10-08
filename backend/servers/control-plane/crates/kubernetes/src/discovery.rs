@@ -80,6 +80,7 @@ impl RuntimeKubernetes {
             "spec":{"backoffLimit":0,"activeDeadlineSeconds":120,"template":{
                 "metadata":{"labels":{"ayni.io/runtime-operation":name}},
                 "spec":{"restartPolicy":"Never","serviceAccountName":runtime.service_account,
+                    "affinity":workload::trusted_node_affinity(),
                     "automountServiceAccountToken":false,"securityContext":{"runAsNonRoot":true,"seccompProfile":{"type":"RuntimeDefault"}},
                     "imagePullSecrets":runtime.pull_secret.as_ref().map(|s|json!({"name":s})).into_iter().collect::<Vec<_>>(),
                     "containers":[{"name":"discover","image":self.configuration.worker_image,"args":["registry-discover"],

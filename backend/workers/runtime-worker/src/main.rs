@@ -34,12 +34,22 @@ async fn main() -> ExitCode {
             Err(error) => {
                 if matches!(
                     env::args().nth(1).as_deref(),
-                    Some("publish" | "build" | "verify")
+                    Some(
+                        "publish"
+                            | "build"
+                            | "verify"
+                            | "builder-test-build"
+                            | "builder-package"
+                            | "builder-probe"
+                            | "builder-test-verify"
+                    )
                 ) {
                     let message = error.to_string();
                     let fallback = match env::args().nth(1).as_deref() {
                         Some("publish") => "runtime_publication_failed",
-                        Some("build") => "runtime_build_failed",
+                        Some("build" | "builder-test-build" | "builder-package") => {
+                            "runtime_build_failed"
+                        }
                         _ => "runtime_verification_failed",
                     };
                     let code = match message.as_str() {
@@ -47,7 +57,8 @@ async fn main() -> ExitCode {
                         | "runtime_lock_mismatch"
                         | "runtime_platform_mismatch"
                         | "runtime_version_unsupported"
-                        | "runtime_certificate_invalid" => message.as_str(),
+                        | "runtime_certificate_invalid"
+                        | "engine_tls_or_startup_failed" => message.as_str(),
                         _ => fallback,
                     };
                     let _ = fs::write("/dev/termination-log", code);
@@ -103,20 +114,26 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
         return ayni_orchestrator_worker::coding::run(&request, Path::new("/output"), activity)
             .await;
     }
+    if let Some(result) = trusted_image_operation(&operation).await {
+        return result;
+    }
     let request: ExecutionRequest =
         serde_json::from_slice(&read_bounded(Path::new("/request/execution.json"), 65_536)?)
             .map_err(io::Error::other)?;
     match operation.as_str() {
+        "builder-test-verify" => {
+            ayni_orchestrator_worker::profiles::ayni::builder_test::verify_fixture(
+                &request,
+                Path::new("/workspace"),
+            )
+            .await
+        }
         "trust-lock" => {
             ayni_orchestrator_worker::profiles::ayni::trust_lock::run(
                 &request,
                 Path::new("/workspace"),
             )
             .await
-        }
-        "publish" => {
-            ayni_orchestrator_worker::profiles::ayni::publish(&request, Path::new("/workspace"))
-                .await
         }
         "build" => {
             activity.record(Stage::Build);
@@ -145,4 +162,28 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
         }
         _ => Err(io::Error::other("unsupported runtime operation")),
     }
+}
+
+async fn trusted_image_operation(operation: &str) -> Option<io::Result<()>> {
+    let workspace = Path::new("/workspace");
+    Some(match operation {
+        "builder-probe" => {
+            ayni_orchestrator_worker::profiles::ayni::builder_test::probe(workspace).await
+        }
+        "builder-test-build" => {
+            ayni_orchestrator_worker::profiles::ayni::builder_test::build_fixture(workspace).await
+        }
+        "builder-package" => {
+            ayni_orchestrator_worker::operations::builder_package::build(workspace).await
+        }
+        "publish" => match read_bounded(Path::new("/request/execution.json"), 65536)
+            .and_then(|bytes| serde_json::from_slice(&bytes).map_err(io::Error::other))
+        {
+            Ok(request) => {
+                ayni_orchestrator_worker::profiles::ayni::publish(&request, workspace).await
+            }
+            Err(error) => Err(error),
+        },
+        _ => return None,
+    })
 }

@@ -192,8 +192,26 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if self.configuration.managed_runtime.is_none() {
             return Ok(profiles);
         }
-        let configuration = self.configuration.clone();
+        let mut configuration = self.configuration.clone();
         self.with_database(move |store| {
+            let settings = store
+                .build_settings()
+                .map_err(|_| "build_settings_unavailable")?;
+            if let Some(managed) = &mut configuration.managed_runtime {
+                managed.build = if settings.security_mode == configuration.engine_mode
+                    && settings.status == "ready"
+                    && settings.tested_revision == settings.resource_version
+                {
+                    managed.platform.clone_from(&settings.platform);
+                    Some(crate::coordinators::build_service::runtime(
+                        &settings,
+                        "runtime-push".into(),
+                        String::new(),
+                    ))
+                } else {
+                    None
+                };
+            }
             let mut page = v1::PageRequest {
                 page_size: 100,
                 page_token: String::new(),

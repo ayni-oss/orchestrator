@@ -16,17 +16,48 @@ pub struct WorkloadRuntime {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BuildRuntime {
+    #[serde(default)]
+    pub configuration_revision: u64,
     pub image: String,
     #[serde(default = "builder_account")]
     pub service_account: String,
     pub registry_secret: String,
     #[serde(default)]
     pub signing_secret: String,
+    #[serde(default)]
     pub engine_secret: String,
+    #[serde(default)]
     pub engine_host: String,
-    /// Operator attestation: this engine is isolated from Kubernetes nodes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<EngineRuntime>,
+    /// Legacy external-engine operator attestation: this engine is isolated from Kubernetes nodes.
     #[serde(default)]
     pub isolated_engine: bool,
+}
+
+/// Per-attempt Kubernetes Docker engine. Production and development are explicit.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineRuntime {
+    pub image: String,
+    pub security_mode: String,
+}
+
+impl EngineRuntime {
+    /// Validate the pinned engine and explicit isolation mode.
+    /// # Errors
+    /// Rejects mutable images, unknown modes.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if RuntimeImage::parse(&self.image).is_err()
+            || !matches!(
+                self.security_mode.as_str(),
+                "dedicated-builder" | "local-development"
+            )
+        {
+            return Err("runtime_engine_configuration_invalid");
+        }
+        Ok(())
+    }
 }
 
 fn builder_account() -> String {
@@ -58,21 +89,25 @@ impl WorkloadRuntime {
             return Err("runtime_configuration_invalid");
         }
         if let Some(build) = &self.build
-            && (!build.isolated_engine
+            && ((build.engine.is_none() && !build.isolated_engine)
                 || RuntimeImage::parse(&build.image).is_err()
                 || !name(&build.service_account)
                 || !name(&build.registry_secret)
                 || (!build.signing_secret.is_empty() && !name(&build.signing_secret))
-                || !name(&build.engine_secret)
+                || (build.engine.is_none() && !name(&build.engine_secret))
                 || self.image.contains('@')
-                || !build.engine_host.starts_with("tcp://")
-                || build.engine_host.len() <= 11
-                || !build.engine_host.ends_with(":2376")
-                || !build.engine_host[6..build.engine_host.len() - 5]
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-')))
+                || (build.engine.is_none()
+                    && (!build.engine_host.starts_with("tcp://")
+                        || build.engine_host.len() <= 11
+                        || !build.engine_host.ends_with(":2376")
+                        || !build.engine_host[6..build.engine_host.len() - 5]
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-')))))
         {
             return Err("runtime_build_configuration_invalid");
+        }
+        if let Some(engine) = self.build.as_ref().and_then(|b| b.engine.as_ref()) {
+            engine.validate()?;
         }
         Ok(())
     }

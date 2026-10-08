@@ -17,6 +17,8 @@ pub struct ExecutionConfiguration {
     pub model_secret: String,
     /// Local Docker Desktop only; production keeps platform node selection.
     pub allow_emulation: bool,
+    /// Administrator-selected engine boundary. UI settings cannot grant privileges.
+    pub engine_mode: String,
 }
 
 impl ExecutionConfiguration {
@@ -25,7 +27,10 @@ impl ExecutionConfiguration {
     /// # Errors
     /// Returns a bounded error code for malformed names or an unpinned worker image.
     pub fn validate(&self) -> Result<(), &'static str> {
-        if !name(&self.namespace)
+        if !matches!(
+            self.engine_mode.as_str(),
+            "local-development" | "dedicated-builder" | "external-isolated"
+        ) || !name(&self.namespace)
             || !name(&self.output_claim)
             || !name(&self.model_secret)
             || RuntimeImage::parse(&self.worker_image).is_err()

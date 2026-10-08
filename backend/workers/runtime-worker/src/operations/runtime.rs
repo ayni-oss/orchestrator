@@ -252,6 +252,7 @@ pub(crate) fn command(program: &str, workspace: &Path) -> Command {
         .env("HOME", "/scratch")
         .env("XDG_CACHE_HOME", "/scratch/cache")
         .env("CARGO_HOME", "/scratch/cargo")
+        .env("BUILDX_CONFIG", "/scratch/buildx")
         .env("MISE_DATA_DIR", "/opt/ayni/mise")
         .env("MISE_TRUSTED_CONFIG_PATHS", "/etc/ayni")
         .env("MISE_AUTO_INSTALL", "0")

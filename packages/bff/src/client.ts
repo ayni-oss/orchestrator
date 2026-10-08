@@ -8,6 +8,8 @@ import {
   type ServiceError,
 } from "@grpc/grpc-js";
 import {
+  type StartBuilderInstallationRequest, type StartBuilderInstallationResponse, type CancelBuilderInstallationRequest, type CancelBuilderInstallationResponse,
+  AyniServiceClient, type BuildServiceSettings, type ListAyniReleasesResponse, type GetBuildServiceResponse, type UpdateBuildServiceRequest, type UpdateBuildServiceResponse, type TestBuildServiceRequest, type TestBuildServiceResponse, type CancelBuildServiceTestRequest, type CancelBuildServiceTestResponse,
   CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
   ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
   ProjectServiceClient, ProjectState,
@@ -144,6 +146,7 @@ function mapProject(value: Project): ProjectDto {
 }
 
 export class OrchestratorBff {
+  readonly #ayni: AyniServiceClient;
   readonly #certificates: CertificateServiceClient;
   readonly #connections: ConnectionServiceClient;
   readonly #projects: ProjectServiceClient;
@@ -160,6 +163,7 @@ export class OrchestratorBff {
       "grpc.max_send_message_length": MAX_REQUEST_BYTES,
     };
     const channelCredentials = credentials.createInsecure();
+    this.#ayni = new AyniServiceClient(address, channelCredentials, options);
     this.#certificates = new CertificateServiceClient(address, channelCredentials, options);
     this.#connections = new ConnectionServiceClient(address, channelCredentials, options);
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
@@ -167,6 +171,28 @@ export class OrchestratorBff {
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
     this.#tasks = new DevelopmentTaskServiceClient(address, channelCredentials, options);
+  }
+
+  async startBuilderInstallation(input: StartBuilderInstallationRequest, context: RequestContext): Promise<BuildServiceSettings> {
+    return required((await this.#unary<StartBuilderInstallationResponse>(context,(m,o,c)=>this.#ayni.startBuilderInstallation(input,m,o,c))).settings);
+  }
+  async cancelBuilderInstallation(input: CancelBuilderInstallationRequest, context: RequestContext): Promise<BuildServiceSettings> {
+    return required((await this.#unary<CancelBuilderInstallationResponse>(context,(m,o,c)=>this.#ayni.cancelBuilderInstallation(input,m,o,c))).settings);
+  }
+  async listAyniReleases(page: number, context: RequestContext): Promise<ListAyniReleasesResponse> {
+    return this.#unary(context, (m,o,c)=>this.#ayni.listAyniReleases({page},m,o,c));
+  }
+  async getBuildService(context: RequestContext): Promise<BuildServiceSettings> {
+    return required((await this.#unary<GetBuildServiceResponse>(context,(m,o,c)=>this.#ayni.getBuildService({},m,o,c))).settings);
+  }
+  async updateBuildService(input: UpdateBuildServiceRequest, context: RequestContext): Promise<BuildServiceSettings> {
+    return required((await this.#unary<UpdateBuildServiceResponse>(context,(m,o,c)=>this.#ayni.updateBuildService(input,m,o,c))).settings);
+  }
+  async cancelBuildServiceTest(input: CancelBuildServiceTestRequest, context: RequestContext): Promise<BuildServiceSettings> {
+    return required((await this.#unary<CancelBuildServiceTestResponse>(context,(m,o,c)=>this.#ayni.cancelBuildServiceTest(input,m,o,c))).settings);
+  }
+  async testBuildService(input: TestBuildServiceRequest, context: RequestContext): Promise<BuildServiceSettings> {
+    return required((await this.#unary<TestBuildServiceResponse>(context,(m,o,c)=>this.#ayni.testBuildService(input,m,o,c))).settings);
   }
 
   async listCertificates(context: RequestContext) {
@@ -244,6 +270,7 @@ export class OrchestratorBff {
   }
 
   close(): void {
+    this.#ayni.close();
     this.#certificates.close();
     this.#connections.close();
     this.#projects.close();

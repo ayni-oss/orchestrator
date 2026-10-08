@@ -11,6 +11,27 @@ mod error;
 
 /// Application execution boundary. Profile inputs are opaque serialized data.
 pub trait ExecutionBackend: Send + Sync + 'static {
+    fn start_image_build<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        runtime: &WorkloadRuntime,
+        request: &ExecutionRequest<P>,
+        token: &str,
+        kind: &crate::image_build::ImageBuildKind,
+    ) -> impl Future<Output = ExecutionResult<()>> + Send {
+        async move {
+            let _ = (name, runtime, request, token, kind);
+            Err(ExecutionError::from("image_build_unavailable"))
+        }
+    }
+
+    fn engine_alive(
+        &self,
+        _session: &str,
+        _runtime: &WorkloadRuntime,
+    ) -> impl Future<Output = ExecutionResult<bool>> + Send {
+        async { Ok(true) }
+    }
     fn start_discovery(
         &self,
         _name: &str,
@@ -45,13 +66,6 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         async { Err(ExecutionError::from("runtime_publication_unavailable")) }
     }
     fn start<P: Serialize + Sync>(
-        &self,
-        name: &str,
-        runtime: &WorkloadRuntime,
-        request: &ExecutionRequest<P>,
-        token: &str,
-    ) -> impl Future<Output = ExecutionResult<()>> + Send;
-    fn start_build<P: Serialize + Sync>(
         &self,
         name: &str,
         runtime: &WorkloadRuntime,

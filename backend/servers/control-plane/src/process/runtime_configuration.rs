@@ -27,6 +27,11 @@ pub struct RuntimeConfiguration {
     /// Local Docker Desktop only; production keeps platform node selection.
     #[serde(default)]
     pub allow_emulation: bool,
+    /// Infrastructure boundary selected by the deployment administrator.
+    #[serde(default = "external_engine_mode")]
+    pub engine_mode: String,
+    #[serde(default)]
+    pub builder_defaults: Option<BuilderDefaults>,
     #[serde(default)]
     pub profiles: BTreeMap<String, ProfileRuntime>,
     /// Deployment-wide execution policy for App-authorized Ayni Managed
@@ -34,6 +39,19 @@ pub struct RuntimeConfiguration {
     /// and the committed lock rather than configured repository by repository.
     #[serde(default)]
     pub managed_runtime: Option<ManagedRuntime>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuilderDefaults {
+    #[serde(default)]
+    pub builder_image: String,
+    pub engine_image: String,
+    pub provisioning_base: String,
+    #[serde(default)]
+    pub test_registry_id: String,
+    #[serde(default)]
+    pub test_certificate_id: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -65,6 +83,10 @@ pub struct ManagedRuntime {
     /// Build-only authority remains in the internal Job's `ServiceAccount`.
     #[serde(default)]
     pub build: Option<BuildRuntime>,
+}
+
+fn external_engine_mode() -> String {
+    "external-isolated".into()
 }
 
 const fn interval() -> u64 {
@@ -137,6 +159,7 @@ impl RuntimeConfiguration {
             output_claim: self.output_claim.clone(),
             model_secret: self.model_secret.clone(),
             allow_emulation: self.allow_emulation,
+            engine_mode: self.engine_mode.clone(),
         }
     }
 
@@ -156,6 +179,20 @@ impl RuntimeConfiguration {
         }
         if let Some(runtime) = &self.managed_runtime {
             runtime.validate()?;
+        }
+        for build in self
+            .profiles
+            .values()
+            .filter_map(|r| r.build.as_ref())
+            .chain(self.managed_runtime.as_ref().and_then(|r| r.build.as_ref()))
+        {
+            let mode = build
+                .engine
+                .as_ref()
+                .map_or("external-isolated", |e| e.security_mode.as_str());
+            if mode != self.engine_mode {
+                return Err("engine_deployment_mode_mismatch");
+            }
         }
         Ok(())
     }

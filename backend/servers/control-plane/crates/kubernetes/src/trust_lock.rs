@@ -136,6 +136,7 @@ mod tests {
             output_claim: "outputs-private".into(),
             model_secret: "model-private".into(),
             allow_emulation: false,
+            engine_mode: "external-isolated".into(),
         }
     }
     fn runtime() -> WorkloadRuntime {
@@ -145,6 +146,7 @@ mod tests {
             service_account: "runtime-coding".into(),
             pull_secret: Some("pull-only".into()),
             build: Some(BuildRuntime {
+                configuration_revision: 0,
                 image: format!("builder@sha256:{}", "b".repeat(64)),
                 service_account: "runtime-builder".into(),
                 registry_secret: "push-private".into(),
@@ -152,6 +154,7 @@ mod tests {
                 engine_secret: "engine-private".into(),
                 engine_host: "tcp://engine:2376".into(),
                 isolated_engine: true,
+                engine: None,
             }),
         }
     }

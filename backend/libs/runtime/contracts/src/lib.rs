@@ -4,3 +4,5 @@ pub mod coding;
 pub mod image_discovery;
 pub mod runtime_contract;
 pub mod runtime_execution;
+
+pub mod image_build;

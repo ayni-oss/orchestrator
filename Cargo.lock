@@ -262,6 +262,7 @@ dependencies = [
  "ayni-orchestrator-runtime",
  "k8s-openapi",
  "kube",
+ "rcgen",
  "serde",
  "serde_json",
  "sha2",

@@ -2,7 +2,15 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["enabled", "images", "development", "controlPlane", "web", "persistence", "customClients"],
+  "required": [
+    "enabled",
+    "images",
+    "development",
+    "controlPlane",
+    "web",
+    "persistence",
+    "customClients"
+  ],
   "properties": {
     "connections": {
       "type": "object",
@@ -106,61 +114,227 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "workerImage", "outputClaim", "outputSize", "modelSecret", "intervalSeconds", "requestTimeoutSeconds", "codingTurns", "qualityRepairLimit", "concurrency", "profiles"],
+      "required": [
+        "enabled",
+        "workerImage",
+        "outputClaim",
+        "outputSize",
+        "modelSecret",
+        "intervalSeconds",
+        "requestTimeoutSeconds",
+        "codingTurns",
+        "qualityRepairLimit",
+        "concurrency",
+        "profiles"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "workerImage": { "type": "string" },
-        "outputClaim": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
-        "outputSize": { "$ref": "#/definitions/quantity" },
-        "modelSecret": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
-        "intervalSeconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
-        "requestTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
-        "codingTurns": { "type": "integer", "minimum": 1, "maximum": 128 },
-        "qualityRepairLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
-        "concurrency": { "type": "integer", "minimum": 1, "maximum": 16 },
-        "allowEmulation": { "type": "boolean" },
-        "profiles": { "type": "object", "maxProperties": 128 },
+        "enabled": {
+          "type": "boolean"
+        },
+        "workerImage": {
+          "type": "string"
+        },
+        "outputClaim": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 63
+        },
+        "outputSize": {
+          "$ref": "#/definitions/quantity"
+        },
+        "modelSecret": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 63
+        },
+        "intervalSeconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600
+        },
+        "requestTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "codingTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "qualityRepairLimit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "allowEmulation": {
+          "type": "boolean"
+        },
+        "profiles": {
+          "type": "object",
+          "maxProperties": 128
+        },
         "managedRuntime": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
           "properties": {
-            "platform": { "enum": ["linux/amd64", "linux/arm64"] },
-            "build": { "$ref": "#/definitions/buildRuntime" },
-            "registry_prefix": { "type": "string", "maxLength": 256 },
-            "service_account": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 },
-            "pull_secret": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 }
+            "platform": {
+              "enum": [
+                "linux/amd64",
+                "linux/arm64"
+              ]
+            },
+            "build": {
+              "$ref": "#/definitions/buildRuntime"
+            },
+            "registry_prefix": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "service_account": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+              "maxLength": 63
+            },
+            "pull_secret": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+              "maxLength": 63
+            }
           },
-          "required": ["platform"]
-        }
-        ,"serviceAccounts": {
-          "type": "object", "additionalProperties": false, "required": ["create", "imagePullSecrets"],
-          "properties": { "create": { "type": "boolean" }, "imagePullSecrets": { "type": "array", "maxItems": 16, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63 } } } } }
+          "required": [
+            "platform"
+          ]
+        },
+        "serviceAccounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "create",
+            "imagePullSecrets"
+          ],
+          "properties": {
+            "create": {
+              "type": "boolean"
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                    "maxLength": 63
+                  }
+                }
+              }
+            }
+          }
+        },
+        "builderDefaults": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "builder_image": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "engine_image": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "provisioning_base": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "test_registry_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "test_certificate_id": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "engine_image",
+            "provisioning_base"
+          ]
+        },
+        "engineMode": {
+          "enum": [
+            "external-isolated",
+            "local-development",
+            "dedicated-builder"
+          ],
+          "default": "external-isolated"
         }
       }
     },
-    "global": { "type": "object" },
-    "enabled": { "type": "boolean" },
+    "global": {
+      "type": "object"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
     "images": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["controlPlane", "web", "pullPolicy"],
+      "required": [
+        "controlPlane",
+        "web",
+        "pullPolicy"
+      ],
       "properties": {
-        "controlPlane": { "$ref": "#/definitions/image" },
-        "web": { "$ref": "#/definitions/image" },
-        "pullPolicy": { "enum": ["Never", "IfNotPresent", "Always"] }
+        "controlPlane": {
+          "$ref": "#/definitions/image"
+        },
+        "web": {
+          "$ref": "#/definitions/image"
+        },
+        "pullPolicy": {
+          "enum": [
+            "Never",
+            "IfNotPresent",
+            "Always"
+          ]
+        }
       }
     },
     "development": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hotReload"],
+      "required": [
+        "hotReload"
+      ],
       "properties": {
         "hotReload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled"],
+          "required": [
+            "enabled"
+          ],
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": {
+              "type": "boolean"
+            }
           }
         }
       }
@@ -168,33 +342,61 @@
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["maxAttempts", "resources"],
+      "required": [
+        "maxAttempts",
+        "resources"
+      ],
       "properties": {
-        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
-        "resources": { "$ref": "#/definitions/resources" }
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "resources": {
+          "$ref": "#/definitions/resources"
+        }
       }
     },
     "web": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["resources"],
-      "properties": { "resources": { "$ref": "#/definitions/resources" } }
+      "required": [
+        "resources"
+      ],
+      "properties": {
+        "resources": {
+          "$ref": "#/definitions/resources"
+        }
+      }
     },
     "persistence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["controlPlaneState"],
+      "required": [
+        "controlPlaneState"
+      ],
       "properties": {
-        "controlPlaneState": { "$ref": "#/definitions/claim" }
+        "controlPlaneState": {
+          "$ref": "#/definitions/claim"
+        }
       }
     },
     "customClients": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "secretName"],
+      "required": [
+        "enabled",
+        "secretName"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "secretName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 253 }
+        "enabled": {
+          "type": "boolean"
+        },
+        "secretName": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 253
+        }
       }
     }
   },
@@ -207,10 +409,7 @@
       "additionalProperties": false,
       "required": [
         "image",
-        "registry_secret",
-        "engine_secret",
-        "engine_host",
-        "isolated_engine"
+        "registry_secret"
       ],
       "properties": {
         "image": {
@@ -235,38 +434,92 @@
         },
         "engine_host": {
           "type": "string",
-          "pattern": "^tcp://[A-Za-z0-9.-]+:2376$"
+          "pattern": "^$|^tcp://[A-Za-z0-9.-]+:2376$"
         },
         "isolated_engine": {
-          "const": true,
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
+        },
+        "engine": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "image",
+            "security_mode"
+          ],
+          "properties": {
+            "image": {
+              "type": "string",
+              "pattern": "^[^ ]+@sha256:[a-f0-9]{64}$"
+            },
+            "security_mode": {
+              "enum": [
+                "local-development",
+                "dedicated-builder"
+              ]
+            }
+          }
+        },
+        "configuration_revision": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
-    "image": { "type": "string", "pattern": "^[^\\s,]+$", "minLength": 1 },
-    "quantity": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)?(?:m|n|u|Ki|Mi|Gi|Ti|Pi|Ei)?$" },
+    "image": {
+      "type": "string",
+      "pattern": "^[^\\s,]+$",
+      "minLength": 1
+    },
+    "quantity": {
+      "type": "string",
+      "pattern": "^[0-9]+(?:\\.[0-9]+)?(?:m|n|u|Ki|Mi|Gi|Ti|Pi|Ei)?$"
+    },
     "claim": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["size"],
-      "properties": { "size": { "$ref": "#/definitions/quantity" } }
+      "required": [
+        "size"
+      ],
+      "properties": {
+        "size": {
+          "$ref": "#/definitions/quantity"
+        }
+      }
     },
     "resources": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["requests", "limits"],
+      "required": [
+        "requests",
+        "limits"
+      ],
       "properties": {
-        "requests": { "$ref": "#/definitions/cpuMemory" },
-        "limits": { "$ref": "#/definitions/cpuMemory" }
+        "requests": {
+          "$ref": "#/definitions/cpuMemory"
+        },
+        "limits": {
+          "$ref": "#/definitions/cpuMemory"
+        }
       }
     },
     "cpuMemory": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cpu", "memory"],
+      "required": [
+        "cpu",
+        "memory"
+      ],
       "properties": {
-        "cpu": { "$ref": "#/definitions/quantity" },
-        "memory": { "$ref": "#/definitions/quantity" }
+        "cpu": {
+          "$ref": "#/definitions/quantity"
+        },
+        "memory": {
+          "$ref": "#/definitions/quantity"
+        }
       }
     }
   }

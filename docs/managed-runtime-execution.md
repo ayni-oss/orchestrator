@@ -119,3 +119,6 @@ Public certificate trust preparation runs in the pinned worker image with Ayni a
 the pinned lock resolver. It needs checkout access and the public key only, and
 can propose the owner-reviewed policy/lock PR before an isolated image builder is
 configured. Missing image-build infrastructure still blocks subsequent builds.
+
+See [deployment-wide build service](build-service.md) for global Ayni settings,
+attempt engines, security modes, and external-engine migration.

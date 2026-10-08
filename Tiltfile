@@ -38,6 +38,7 @@ attach(
     sync_control_plane=True,
     live_update=[
         sync('backend', '/opt/source/backend'),
+        sync('deploy/images/runtime-builder/Dockerfile', '/opt/source/deploy/images/runtime-builder/Dockerfile'),
         sync('proto', '/opt/source/proto'),
         sync('Cargo.toml', '/opt/source/Cargo.toml'),
         sync('Cargo.lock', '/opt/source/Cargo.lock'),

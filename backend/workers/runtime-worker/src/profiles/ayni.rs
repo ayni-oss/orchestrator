@@ -307,6 +307,14 @@ fn summarize(
 /// # Errors
 /// Rejects missing signing material, source mismatch, or failed build/certification.
 pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
+    build_inner(request, workspace, false).await
+}
+
+async fn build_inner(
+    request: &ExecutionRequest,
+    workspace: &Path,
+    diagnostic: bool,
+) -> io::Result<()> {
     validate_source(request)?;
     let source = request.revision.clone();
     let directory = workspace.to_owned();
@@ -329,6 +337,7 @@ pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<(
     {
         return Err(io::Error::other("runtime_lock_mismatch"));
     }
+    wait_engine(workspace).await?;
     let values = build_environment(true)?;
     let mut build = command("/usr/local/bin/ayni", workspace);
     build
@@ -342,6 +351,9 @@ pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<(
             "--tag",
             &image,
         ]);
+    if diagnostic {
+        build.stderr(std::process::Stdio::inherit());
+    }
     success(build)
         .await
         .map_err(|_| io::Error::other("runtime_build_failed"))?;
@@ -371,7 +383,7 @@ pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<(
     fs::write("/dev/termination-log", id)
 }
 
-fn build_target() -> io::Result<String> {
+pub(crate) fn build_target() -> io::Result<String> {
     let image = std::env::var("BUILD_IMAGE").map_err(io::Error::other)?;
     if image.is_empty()
         || image.starts_with('-')
@@ -384,7 +396,7 @@ fn build_target() -> io::Result<String> {
     Ok(image)
 }
 
-fn image_id(value: &str) -> bool {
+pub(crate) fn image_id(value: &str) -> bool {
     value.len() == 71
         && value.starts_with("sha256:")
         && value[7..]
@@ -392,7 +404,7 @@ fn image_id(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
 }
 
-fn build_environment(signing: bool) -> io::Result<Vec<(&'static str, String)>> {
+pub(crate) fn build_environment(signing: bool) -> io::Result<Vec<(&'static str, String)>> {
     let mut variables = vec![
         "DOCKER_HOST",
         "DOCKER_TLS_VERIFY",
@@ -420,8 +432,10 @@ fn build_environment(signing: bool) -> io::Result<Vec<(&'static str, String)>> {
 /// Publish the exact certified candidate without signing authority or repository execution.
 /// # Errors
 /// Rejects unavailable candidates, malformed inputs or failed publication.
-pub async fn publish(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
-    validate_source(request)?;
+pub async fn publish(
+    request: &ayni_orchestrator_runtime::image_build::ImagePublicationRequest,
+    workspace: &Path,
+) -> io::Result<()> {
     let image = build_target()?;
     let id = std::env::var("BUILD_IMAGE_ID").map_err(io::Error::other)?;
     if !image_id(&id) {
@@ -429,17 +443,15 @@ pub async fn publish(request: &ExecutionRequest, workspace: &Path) -> io::Result
     }
     let values = build_environment(false)?;
     let overwrite_authorized = std::env::var("AYNI_REBUILD_AUTHORIZED").as_deref() == Ok("true");
-    let existing =
-        match crate::operations::image_discovery::inspect(&image, &request.expected.platform).await
-        {
-            Ok(existing) => existing,
-            Err("runtime_platform_mismatch" | "runtime_digest_mismatch")
-                if overwrite_authorized =>
-            {
-                ayni_orchestrator_runtime::image_discovery::ImageDiscovery::Missing
-            }
-            Err(reason) => return Err(io::Error::other(reason)),
-        };
+    let existing = match crate::operations::image_discovery::inspect(&image, &request.platform)
+        .await
+    {
+        Ok(existing) => existing,
+        Err("runtime_platform_mismatch" | "runtime_digest_mismatch") if overwrite_authorized => {
+            ayni_orchestrator_runtime::image_discovery::ImageDiscovery::Missing
+        }
+        Err(reason) => return Err(io::Error::other(reason)),
+    };
     publication_guard(&existing, &id, overwrite_authorized)?;
     let mut inspect = command("docker", workspace);
     inspect
@@ -460,6 +472,7 @@ pub async fn publish(request: &ExecutionRequest, workspace: &Path) -> io::Result
         .await
         .map_err(|_| io::Error::other("runtime_publication_failed"))?;
     let mut push = command("docker", workspace);
+    push.stderr(std::process::Stdio::inherit());
     push.envs(values.iter().map(|(k, v)| (*k, v)))
         .args(["push", &image]);
     success(push)
@@ -497,7 +510,7 @@ async fn bounded_output<R: AsyncRead + Unpin>(reader: R) -> io::Result<Vec<u8>> 
     Ok(bytes)
 }
 
-async fn capture(command: std::process::Command) -> io::Result<String> {
+pub(crate) async fn capture(command: std::process::Command) -> io::Result<String> {
     let mut command = tokio::process::Command::from(command);
     command.stdout(std::process::Stdio::piped());
     let mut child = crate::operations::process::spawn(&mut command)?;
@@ -516,7 +529,29 @@ async fn capture(command: std::process::Command) -> io::Result<String> {
     String::from_utf8(bytes?).map_err(io::Error::other)
 }
 
-async fn success(command: std::process::Command) -> io::Result<()> {
+/// Wait for attempt-local mutual TLS without consuming the build execution deadline.
+pub(crate) async fn wait_engine(workspace: &Path) -> io::Result<()> {
+    let values = build_environment(false)?;
+    for _ in 0..60 {
+        let mut probe = command("docker", workspace);
+        probe
+            .args(["info"])
+            .envs(values.iter().map(|(k, v)| (*k, v)));
+        if crate::operations::process::status(
+            &mut tokio::process::Command::from(probe),
+            Duration::from_secs(3),
+        )
+        .await
+        .is_ok_and(|status| status.success())
+        {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+    Err(io::Error::other("engine_tls_or_startup_failed"))
+}
+
+pub(crate) async fn success(command: std::process::Command) -> io::Result<()> {
     if crate::operations::process::status(
         &mut tokio::process::Command::from(command),
         Duration::from_secs(EXECUTION_DEADLINE_SECONDS),
@@ -534,3 +569,5 @@ async fn success(command: std::process::Command) -> io::Result<()> {
 mod tests;
 
 pub mod trust_lock;
+
+pub mod builder_test;
