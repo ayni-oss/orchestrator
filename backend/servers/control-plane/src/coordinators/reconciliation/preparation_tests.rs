@@ -1,0 +1,575 @@
+//! Durable image phase tests; provider and Kubernetes observations are controlled fixtures.
+use super::*;
+use ayni_orchestrator_application::execution::{ExecutionResult, ExecutionState, WorkloadRuntime};
+use ayni_orchestrator_runtime::{
+    coding::WorkerSpec, runtime_execution::ExecutionRequest as GenericRequest,
+};
+use std::{collections::BTreeSet, sync::Mutex as StdMutex};
+
+type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+#[derive(Default)]
+struct Jobs {
+    states: BTreeMap<String, ExecutionState>,
+    builds: BTreeSet<String>,
+    publications: BTreeMap<String, String>,
+    discovery: Option<ImageDiscovery>,
+    candidate_missing: bool,
+}
+#[derive(Clone, Default)]
+struct Backend(Arc<StdMutex<Jobs>>);
+impl ExecutionBackend for Backend {
+    async fn start_discovery(&self, _: &str, _: &WorkloadRuntime) -> ExecutionResult<()> {
+        Ok(())
+    }
+    async fn discover(&self, _: &str) -> ExecutionResult<ImageDiscovery> {
+        Ok(self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .discovery
+            .clone()
+            .unwrap_or(ImageDiscovery::Pending))
+    }
+    async fn start<P: Serialize + Sync>(
+        &self,
+        _: &str,
+        _: &WorkloadRuntime,
+        _: &GenericRequest<P>,
+        _: &str,
+    ) -> ExecutionResult<()> {
+        Err("unexpected_verification".into())
+    }
+    async fn start_build<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        _: &WorkloadRuntime,
+        request: &GenericRequest<P>,
+        _: &str,
+    ) -> ExecutionResult<()> {
+        assert_eq!(request.revision, "a".repeat(40));
+        let mut jobs = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        jobs.builds.insert(name.into());
+        jobs.states.insert(name.into(), ExecutionState::Running);
+        drop(jobs);
+        Ok(())
+    }
+    async fn build_result(&self, _: &str) -> ExecutionResult<String> {
+        Ok(format!("sha256:{}", "b".repeat(64)))
+    }
+    async fn start_publish<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        _: &WorkloadRuntime,
+        _: &GenericRequest<P>,
+        image_id: &str,
+        _: bool,
+    ) -> ExecutionResult<()> {
+        let mut jobs = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        jobs.publications.insert(name.into(), image_id.into());
+        jobs.states.insert(name.into(), ExecutionState::Running);
+        drop(jobs);
+        Ok(())
+    }
+    async fn operation_failure(&self, _: &str, _: &str) -> ExecutionResult<String> {
+        Ok(if self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .candidate_missing
+        {
+            "runtime_candidate_missing"
+        } else {
+            "runtime_publication_failed"
+        }
+        .into())
+    }
+    async fn start_coding<P: Serialize + Sync>(
+        &self,
+        _: &str,
+        _: &WorkloadRuntime,
+        _: &WorkerSpec<P>,
+        _: &str,
+        _: &str,
+        _: u32,
+    ) -> ExecutionResult<()> {
+        Err("unexpected_coding".into())
+    }
+    async fn refresh_credentials(&self, _: &str, _: &str) -> ExecutionResult<()> {
+        Err("unexpected_credentials".into())
+    }
+    async fn observe(&self, _: &str) -> ExecutionResult<Observation> {
+        Ok(Observation::Missing)
+    }
+    async fn coding_state(&self, name: &str) -> ExecutionResult<ExecutionState> {
+        Ok(*self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .states
+            .get(name)
+            .unwrap_or(&ExecutionState::Missing))
+    }
+    async fn cleanup(&self, name: &str) -> ExecutionResult<()> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .states
+            .remove(name);
+        Ok(())
+    }
+    async fn coding_stopped(&self, _: &str) -> ExecutionResult<bool> {
+        Ok(true)
+    }
+}
+struct Fixture {
+    directory: tempfile::TempDir,
+    reconciler: RuntimeReconciler<Backend>,
+    profile: String,
+    runtime: ProfileRuntime,
+    cursor: RuntimeCursor,
+}
+async fn create_profile(state: &AppState) -> TestResult<(String, String)> {
+    let (profile, revision) = state
+        .database
+        .execute(|store| {
+            let repository = store.create_repository_connection(
+                "repository",
+                &v1::CreateRepositoryConnectionRequest {
+                    idempotency_key: "repository".into(),
+                    display_name: "Sandbox".into(),
+                    default_branch: "main".into(),
+                    provider: Some(v1::RepositoryProvider {
+                        provider: Some(v1::repository_provider::Provider::Github(
+                            v1::GithubRepository {
+                                repository_id: "123".into(),
+                                owner: "ayni-oss".into(),
+                                name: "sandbox".into(),
+                                installation_id: 42,
+                                html_url: "https://github.com/ayni-oss/sandbox".into(),
+                            },
+                        )),
+                    }),
+                    ..Default::default()
+                },
+            )?;
+            let snapshot = store.observe_repository_snapshot(&repository.id, &"a".repeat(40))?;
+            let (profile, _) = store.create_runtime_profile(
+                "profile",
+                &v1::CreateRuntimeProfileRequest {
+                    idempotency_key: "profile".into(),
+                    repository_connection_id: repository.id,
+                    repository_snapshot_id: snapshot.id,
+                    configuration: Some(v1::RuntimeProfileConfiguration {
+                        configuration: Some(
+                            v1::runtime_profile_configuration::Configuration::AyniManaged(
+                                v1::AyniManagedProfileRevision {
+                                    lock_fingerprint: "c".repeat(64),
+                                    ayni_version: "0.14.5".into(),
+                                    oci_repository: "ghcr.io/ayni-oss/sandbox".into(),
+                                    runtime_source_digest: None,
+                                },
+                            ),
+                        ),
+                    }),
+                },
+            )?;
+            Ok((
+                profile.id,
+                profile
+                    .active_revision_id
+                    .ok_or(crate::adapters::sqlite::CleanStoreError::CorruptState)?,
+            ))
+        })
+        .await?;
+    Ok((profile, revision))
+}
+
+impl Fixture {
+    async fn new() -> TestResult<Self> {
+        let directory = tempfile::tempdir()?;
+        let state = AppState::open(directory.path().join("state.sqlite"), 3)?;
+        let (profile, revision) = create_profile(&state).await?;
+        let runtime = ProfileRuntime {
+            image: format!("ghcr.io/ayni-oss/sandbox:ayni-arm64-{}", "c".repeat(64)),
+            platform: "linux/arm64".into(),
+            service_account: "runtime-coding".into(),
+            pull_secret: Some("pull-only".into()),
+            build: Some(
+                ayni_orchestrator_application::execution_settings::BuildRuntime {
+                    image: format!("ghcr.io/team/builder@sha256:{}", "d".repeat(64)),
+                    service_account: "runtime-builder".into(),
+                    registry_secret: "push-only".into(),
+                    signing_secret: "signing-only".into(),
+                    engine_secret: "engine-only".into(),
+                    engine_host: "tcp://isolated.test:2376".into(),
+                    isolated_engine: true,
+                },
+            ),
+        };
+        let configuration = RuntimeConfiguration {
+            namespace: "test".into(),
+            worker_image: format!("ghcr.io/team/worker@sha256:{}", "d".repeat(64)),
+            output_claim: "outputs".into(),
+            model_secret: "model".into(),
+            interval_seconds: 10,
+            request_timeout_seconds: 10,
+            coding_turns: 24,
+            quality_repair_limit: 3,
+            concurrency: 4,
+            allow_emulation: false,
+            profiles: BTreeMap::new(),
+            managed_runtime: None,
+        };
+        let cursor = RuntimeCursor {
+            pending: Some(PendingVerification {
+                name: "verify-frozen".into(),
+                profile_revision: revision,
+                request: GenericRequest {
+                    repository_url: "https://github.com/ayni-oss/sandbox.git".into(),
+                    revision: "a".repeat(40),
+                    expected: RuntimeExpectation {
+                        lock_fingerprint: format!("sha256:{}", "c".repeat(64)),
+                        platform: "linux/arm64".into(),
+                        ayni_version: "0.14.5".into(),
+                    },
+                },
+                image: runtime.image.clone(),
+                frozen_runtime: Some(runtime.clone()),
+                started_at: 1,
+                source_digest: "frozen".into(),
+                lock_digest: format!("sha256:{}", "c".repeat(64)),
+                build_name: None,
+                build: BuildProgress::default(),
+                candidate_image_id: None,
+                publish_name: None,
+                publish_attempts: 0,
+                publish_remaining: 3,
+                candidate_missing: false,
+                force_rebuild: false,
+                certificate: None,
+                discovery: DiscoveryProgress::default(),
+                resolved_digest: None,
+                failed: false,
+            }),
+            ..Default::default()
+        };
+        let reconciler = RuntimeReconciler {
+            state,
+            configuration,
+            source: Arc::new(SourceClient::unconfigured(10)?),
+            kubernetes: Backend::default(),
+            pass: Mutex::new(()),
+            coding_pass: Mutex::new(()),
+            credential_refresh: Mutex::new(BTreeMap::new()),
+        };
+        reconciler.save(&profile, &cursor).await?;
+        Ok(Self {
+            directory,
+            reconciler,
+            profile,
+            runtime,
+            cursor,
+        })
+    }
+    async fn step(&mut self) -> Result<(), &'static str> {
+        let observation = ProfileObservation {
+            id: &self.profile,
+            runtime: &self.runtime,
+            time: 2,
+            github: v1::GithubRepository::default(),
+            head: "a".repeat(40),
+            token: "checkout-scoped".into(),
+            source_digest: "frozen".into(),
+            default_branch: "main".into(),
+            selected_revision: None,
+            registry: v1::RuntimeRegistrySelection::default(),
+            certificate: None,
+        };
+        self.reconciler
+            .observe_pending(&observation, &mut self.cursor)
+            .await
+    }
+    fn discovery(&self, outcome: ImageDiscovery) {
+        self.reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .discovery = Some(outcome);
+    }
+    fn complete(&self, name: &str, state: ExecutionState) {
+        self.reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .states
+            .insert(name.into(), state);
+    }
+    fn pending(&self) -> TestResult<&PendingVerification> {
+        self.cursor
+            .pending
+            .as_ref()
+            .ok_or_else(|| "pending missing".into())
+    }
+    async fn built(&mut self) -> TestResult {
+        self.discovery(ImageDiscovery::Missing);
+        self.step().await?;
+        self.step().await?;
+        let build = self.pending()?.build_name.clone().ok_or("build missing")?;
+        self.complete(&build, ExecutionState::Succeeded);
+        self.step().await?;
+        self.step().await?;
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn missing_image_builds_once_and_restart_resumes_the_same_publication() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.built().await?;
+    let publisher = fixture.pending()?.publish_name.clone().ok_or("publisher")?;
+    let pending = fixture.pending()?.clone();
+    fixture.reconciler.state = AppState::open(fixture.directory.path().join("state.sqlite"), 3)?;
+    let profile = fixture.profile.clone();
+    fixture.cursor = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| store.runtime_cursor(&profile))
+        .await?;
+    fixture.step().await?;
+    assert_eq!(fixture.pending()?.publish_name, Some(publisher.clone()));
+    assert_eq!(
+        fixture.pending()?.request.revision,
+        pending.request.revision
+    );
+    assert_eq!(
+        fixture
+            .reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .builds
+            .len(),
+        1
+    );
+    fixture.complete(&publisher, ExecutionState::Failed);
+    fixture.step().await?;
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "e".repeat(64)),
+        image_id: format!("sha256:{}", "b".repeat(64)),
+    });
+    fixture.step().await?;
+    assert!(fixture.pending()?.resolved_digest.is_some());
+    assert_eq!(
+        fixture.cursor.status.get("phase").map(String::as_str),
+        Some("verifying")
+    );
+    assert_eq!(
+        fixture
+            .reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .builds
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn publication_retries_same_candidate_and_rebuilds_evicted_candidate() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.built().await?;
+    let candidate = fixture.pending()?.candidate_image_id.clone();
+    let original_build = fixture.pending()?.build_name.clone();
+    let publisher = fixture.pending()?.publish_name.clone().ok_or("publisher")?;
+    fixture.complete(&publisher, ExecutionState::Failed);
+    fixture.step().await?;
+    fixture.step().await?; // authenticated missing-image read-back
+    fixture.step().await?; // publication of the same certified candidate
+    assert_eq!(fixture.pending()?.candidate_image_id, candidate);
+    assert_eq!(fixture.pending()?.build_name, original_build);
+    let publisher = fixture.pending()?.publish_name.clone().ok_or("publisher")?;
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .candidate_missing = true;
+    fixture.complete(&publisher, ExecutionState::Failed);
+    fixture.step().await?;
+    fixture.step().await?;
+    assert!(!fixture.pending()?.build.completed);
+    assert_ne!(fixture.pending()?.build_name, original_build);
+    assert_eq!(fixture.pending()?.request.revision, "a".repeat(40));
+    Ok(())
+}
+
+#[tokio::test]
+async fn registry_errors_and_exhausted_retries_never_authorize_a_new_build() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.discovery(ImageDiscovery::Failed {
+        reason: "registry_access_denied".into(),
+    });
+    assert_eq!(fixture.step().await, Err("registry_access_denied"));
+    assert!(fixture.pending()?.build_name.is_none());
+    fixture.built().await?;
+    for _ in 0..3 {
+        let publisher = fixture.pending()?.publish_name.clone().ok_or("publisher")?;
+        fixture.complete(&publisher, ExecutionState::Failed);
+        fixture.step().await?;
+        if fixture.pending()?.publish_remaining == 0 {
+            assert_eq!(fixture.step().await, Err("runtime_publication_failed"));
+            break;
+        }
+        fixture.step().await?;
+        fixture.step().await?;
+    }
+    assert_eq!(fixture.pending()?.publish_remaining, 0);
+    assert_eq!(
+        fixture
+            .reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .builds
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn existing_image_enters_verification_and_explicit_rebuild_handles_platform_mismatch()
+-> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "e".repeat(64)),
+        image_id: format!("sha256:{}", "b".repeat(64)),
+    });
+    fixture.step().await?;
+    assert!(fixture.pending()?.build_name.is_none());
+    assert!(fixture.pending()?.resolved_digest.is_some());
+    let mut fixture = Fixture::new().await?;
+    fixture.discovery(ImageDiscovery::Failed {
+        reason: "runtime_platform_mismatch".into(),
+    });
+    assert_eq!(fixture.step().await, Err("runtime_platform_mismatch"));
+    fixture
+        .cursor
+        .pending
+        .as_mut()
+        .ok_or("pending")?
+        .force_rebuild = true;
+    fixture.step().await?;
+    assert!(fixture.pending()?.build_name.is_some());
+    Ok(())
+}
+
+#[tokio::test]
+async fn interrupted_publisher_probes_registry_before_reissuing_the_push() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.built().await?;
+    let publisher = fixture.pending()?.publish_name.clone().ok_or("publisher")?;
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .states
+        .remove(&publisher);
+    fixture.step().await?;
+    assert!(!fixture.pending()?.discovery.complete);
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "e".repeat(64)),
+        image_id: format!("sha256:{}", "b".repeat(64)),
+    });
+    fixture.step().await?;
+    assert!(fixture.pending()?.resolved_digest.is_some());
+    assert_eq!(
+        fixture
+            .reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .publications
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn exhausted_operations_persist_failure_and_clean_jobs_without_restarting() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.built().await?;
+    for _ in 0..3 {
+        fixture
+            .reconciler
+            .record_failure(&fixture.profile, "runtime_publication_failed")
+            .await?;
+    }
+    let id = fixture.profile.clone();
+    fixture.cursor = fixture
+        .reconciler
+        .with_database(move |store| {
+            store
+                .runtime_cursor(&id)
+                .map_err(|_| "runtime_cursor_invalid")
+        })
+        .await?;
+    assert!(fixture.pending()?.failed);
+    assert_eq!(
+        fixture.cursor.status.get("reason-code").map(String::as_str),
+        Some("runtime_publication_failed")
+    );
+    fixture.step().await?;
+    let jobs = fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(jobs.states.is_empty());
+    assert_eq!(jobs.builds.len(), 1);
+    assert_eq!(jobs.publications.len(), 1);
+    drop(jobs);
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_refresh_discards_old_intent_without_counting_a_preparation_failure() -> TestResult
+{
+    let mut fixture = Fixture::new().await?;
+    fixture
+        .cursor
+        .pending
+        .as_mut()
+        .ok_or("pending")?
+        .source_digest
+        .clear();
+    fixture.step().await?;
+    assert!(fixture.cursor.pending.is_none());
+    assert_eq!(fixture.cursor.failures, 0);
+    assert!(!fixture.cursor.status.contains_key("reason-code"));
+    assert_eq!(
+        fixture.cursor.status.get("phase").map(String::as_str),
+        Some("analyzing")
+    );
+    Ok(())
+}

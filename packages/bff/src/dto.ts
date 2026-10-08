@@ -75,6 +75,9 @@ export type RuntimeProfileStateDto =
   | "updating" | "degraded" | "failed" | "unknown";
 
 export interface RuntimeProfileDto {
+  findings: Array<{ code: string; message: string; remediation: string }>;
+  preparationPhase: string;
+  rebuildAvailable: boolean;
   certificateId?: string;
   effectiveCertificate?: CertificateDto;
   registry?: { registryConnectionId: string };
@@ -103,7 +106,6 @@ export type RuntimeProfileConfigurationDto =
       kind: "ayni_managed";
       lockFingerprint: string;
       ayniVersion: string;
-      workflowTemplateVersion: string;
       ociRepository: string;
     }
   | { kind: "custom_runtime"; imageReference: string };

@@ -177,12 +177,9 @@ impl ProfileRuntime {
     /// the repository. The repository portion remains operator-configured, while
     /// each lock fingerprint receives its own image identity.
     pub(crate) fn for_lock_fingerprint(&self, fingerprint: &str) -> Result<Self, &'static str> {
-        if fingerprint.len() != 64 || !fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err("runtime_lock_fingerprint_invalid");
-        }
         let repository = image_repository(&self.image).ok_or("runtime_image_invalid")?;
         let mut runtime = self.clone();
-        runtime.image = format!("{repository}:lock-{}", fingerprint.to_lowercase());
+        runtime.image = managed_image_reference(repository, &self.platform, fingerprint)?;
         runtime.execution_runtime().validate()?;
         Ok(runtime)
     }
@@ -201,28 +198,22 @@ impl ManagedRuntime {
         repository: &str,
         lock_fingerprint: &str,
     ) -> Result<ProfileRuntime, &'static str> {
-        if !github_component(owner)
-            || !github_component(repository)
-            || lock_fingerprint.len() != 64
-            || !lock_fingerprint
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit())
-        {
+        if !github_component(owner) || !github_component(repository) {
             return Err("runtime_repository_identity_invalid");
         }
-        let runtime = ProfileRuntime {
+        let mut runtime = ProfileRuntime {
             image: format!(
-                "{}/{}/{}-ayni:lock-{}",
+                "{}/{}/{}",
                 self.registry_prefix.trim_end_matches('/'),
                 owner.to_lowercase(),
                 repository.to_lowercase(),
-                lock_fingerprint.to_lowercase()
             ),
             platform: self.platform.clone(),
             service_account: self.service_account.clone(),
             pull_secret: self.pull_secret.clone(),
             build: self.build.clone(),
         };
+        runtime.image = managed_image_reference(&runtime.image, &self.platform, lock_fingerprint)?;
         validate_profile("managed", &runtime)?;
         Ok(runtime)
     }
@@ -271,11 +262,13 @@ pub fn connection_image_repository(
     let owner = owner.to_ascii_lowercase();
     let repository = repository.to_ascii_lowercase();
     let path = if namespace == owner {
-        format!("{repository}-ayni")
+        repository
     } else {
-        format!("{owner}/{repository}-ayni")
+        format!("{owner}/{repository}")
     };
-    Ok(format!("ghcr.io/{namespace}/{path}"))
+    let destination = format!("ghcr.io/{namespace}/{path}");
+    managed_image_reference(&destination, "linux/amd64", &"a".repeat(64))?;
+    Ok(destination)
 }
 
 fn github_component(value: &str) -> bool {
@@ -288,3 +281,29 @@ fn github_component(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// Canonical discovery reference; the tag is never admission authority.
+pub fn managed_image_reference(
+    repository: &str,
+    platform: &str,
+    fingerprint: &str,
+) -> Result<String, &'static str> {
+    let fingerprint = fingerprint.strip_prefix("sha256:").unwrap_or(fingerprint);
+    if fingerprint.len() != 64 || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("runtime_lock_fingerprint_invalid");
+    }
+    let architecture = match platform {
+        "linux/amd64" => "amd64",
+        "linux/arm64" => "arm64",
+        _ => return Err("runtime_platform_invalid"),
+    };
+    let path = repository.split_once('/').ok_or("runtime_image_invalid")?.1;
+    let image = format!(
+        "{repository}:ayni-{architecture}-{}",
+        fingerprint.to_ascii_lowercase()
+    );
+    if path.len() > 255 || image.len() > 512 || image_repository(&image).is_none() {
+        return Err("runtime_image_invalid");
+    }
+    Ok(image)
+}

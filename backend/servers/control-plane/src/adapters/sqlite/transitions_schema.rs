@@ -46,20 +46,21 @@ pub(super) const fn valid_profile_transition(
             State::SetupRequired | State::AwaitingEnvironment | State::Degraded | State::Failed
         ) | (
             State::AwaitingEnvironment,
-            State::Ready | State::Updating | State::Degraded | State::Failed
-        ) | (State::Ready, State::Updating | State::Degraded)
-            | (
-                State::Updating,
-                State::Ready | State::Degraded | State::Failed
-            )
-            | (
-                State::Degraded,
-                State::SetupRequired
-                    | State::AwaitingEnvironment
-                    | State::Updating
-                    | State::Ready
-                    | State::Failed
-            )
+            State::SetupRequired | State::Ready | State::Updating | State::Degraded | State::Failed
+        ) | (
+            State::Ready,
+            State::SetupRequired | State::Updating | State::Degraded
+        ) | (
+            State::Updating,
+            State::SetupRequired | State::Ready | State::Degraded | State::Failed
+        ) | (
+            State::Degraded,
+            State::SetupRequired
+                | State::AwaitingEnvironment
+                | State::Updating
+                | State::Ready
+                | State::Failed
+        )
     )
 }
 
@@ -146,7 +147,6 @@ impl ActionRow {
         DurableAction {
             idempotency_key: key.to_owned(),
             state,
-            target_id: self.target_id,
             request_payload: self.request_payload,
         }
     }
@@ -198,17 +198,33 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
                 |row| row.get(0),
             )
             .map_err(CleanStoreError::Database)?;
-        if version == 6 && SCHEMA_VERSION == 7 {
+        if version == 6 {
             let expected = CLEAN_TABLES
                 .iter()
                 .filter(|name| !matches!(**name, "certificates" | "certificate_operations"))
                 .map(ToString::to_string)
                 .collect::<Vec<_>>();
+            let mut expected = expected;
+            expected.push("automation_installations".into());
+            expected.sort();
             if tables != expected {
                 return Err(CleanStoreError::CorruptState);
             }
             connection.execute_batch("BEGIN IMMEDIATE; CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL); CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1; CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL); UPDATE clean_schema SET version=7 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
             version = 7;
+        }
+        if version == 7 {
+            let mut expected = CLEAN_TABLES
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            expected.push("automation_installations".into());
+            expected.sort();
+            if existing_tables(connection)? != expected {
+                return Err(CleanStoreError::CorruptState);
+            }
+            connection.execute_batch("BEGIN IMMEDIATE; DROP TABLE automation_installations; DELETE FROM durable_actions WHERE operation='InstallRepositoryAutomation'; DELETE FROM resource_events WHERE resource_type='automation_installation'; DELETE FROM page_snapshots; UPDATE reconciliation_cursors SET value=json_set(value,'$.pending',null,'$.next_at',0,'$.failures',0,'$.status',json('{}')) WHERE name LIKE 'managed:%' AND json_valid(value); UPDATE clean_schema SET version=8 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
+            version = 8;
         }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
@@ -251,7 +267,7 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',7,unixepoch());
+VALUES ('control_plane',8,unixepoch());
 CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL);
 CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1;
 CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL);
@@ -306,12 +322,6 @@ CREATE TABLE runtime_artifacts(
     payload BLOB NOT NULL, resource_version INTEGER NOT NULL CHECK(resource_version > 0),
     event_cursor INTEGER NOT NULL UNIQUE,
     UNIQUE(runtime_profile_revision_id,resolved_digest,platform_key)
-);
-CREATE TABLE automation_installations(
-    id TEXT PRIMARY KEY,
-    runtime_profile_id TEXT NOT NULL REFERENCES runtime_profiles(id),
-    state INTEGER NOT NULL, version TEXT NOT NULL, payload BLOB NOT NULL,
-    resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE
 );
 CREATE TABLE development_tasks(
     project_id TEXT NOT NULL REFERENCES projects(id),

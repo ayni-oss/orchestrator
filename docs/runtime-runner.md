@@ -44,3 +44,10 @@ The coordinator binds and retains final evidence outside the sandbox. Agent and
 repository processes cannot rewrite worker progress, publication intent, final
 evidence or receipts in the retained output directory. The Linux-only Landlock
 dependency belongs to this private worker; it does not change Ayni upstream.
+
+
+Environment preparation runs separate registry-discovery, build/certification,
+publication and verification Jobs. Every successful build publishes. Coding workers
+receive only the frozen verified digest, source/model access and pull-only registry
+access. They have no signing key, push credential or engine/node socket. See
+[managed runtime execution](managed-runtime-execution.md) for phase recovery.

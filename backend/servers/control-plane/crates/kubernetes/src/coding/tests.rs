@@ -18,6 +18,7 @@ fn fixture() -> (ExecutionConfiguration, WorkloadRuntime) {
                 image: format!("registry.test/builder@sha256:{}", "b".repeat(64)),
                 service_account: "runtime-builder".into(),
                 engine_host: "tcp://engine.test:2376".into(),
+                isolated_engine: true,
                 engine_secret: "engine-only".into(),
                 registry_secret: "push-only".into(),
                 signing_secret: "signing-only".into(),
@@ -115,13 +116,14 @@ fn build_has_separate_service_account_and_secret_references_only()
     let json = serde_json::to_string(&pod)?;
     for required in [
         "DOCKER_TLS_VERIFY",
-        "push-only",
+        "pull-only",
         "signing-only",
         "engine-only",
     ] {
         assert!(json.contains(required));
     }
     assert!(!json.contains("model"));
+    assert!(!json.contains("push-only"));
     Ok(())
 }
 
@@ -228,5 +230,46 @@ fn coding_output_root_is_confined_to_output_preparation() -> Result<(), Box<dyn 
     assert_eq!(root_mounts[0].0, "output");
     assert_eq!(root_mounts[0].1.mount_path, "/outputs");
     assert!(root_mounts[0].1.sub_path.is_none());
+    Ok(())
+}
+
+#[test]
+fn publication_runs_without_source_or_signing_authority() -> Result<(), Box<dyn std::error::Error>>
+{
+    let (configuration, runtime) = fixture();
+    let candidate = format!("sha256:{}", "d".repeat(64));
+    let job = publication_job("publish-test", &configuration, &runtime, &candidate, false)?;
+    let spec = job.spec.ok_or("spec")?;
+    assert_eq!(spec.backoff_limit, Some(0));
+    let pod = spec.template.spec.ok_or("pod")?;
+    assert_eq!(pod.automount_service_account_token, Some(false));
+    let json = serde_json::to_string(&pod)?;
+    for forbidden in [
+        "SOURCE_TOKEN",
+        "checkout",
+        "signing-only",
+        "AYNI_ENV_CERTIFICATE",
+        "hostPath",
+        "persistentVolumeClaim",
+        "privileged",
+    ] {
+        assert!(
+            !json.contains(forbidden),
+            "unexpected authority: {forbidden}"
+        );
+    }
+    for required in ["push-only", "engine-only", "BUILD_IMAGE_ID", &candidate] {
+        assert!(json.contains(required));
+    }
+    assert!(
+        publication_job(
+            "publish-test",
+            &configuration,
+            &runtime,
+            "mutable:tag",
+            false
+        )
+        .is_err()
+    );
     Ok(())
 }

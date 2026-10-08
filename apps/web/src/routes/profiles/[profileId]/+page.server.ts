@@ -22,7 +22,7 @@ async function reconcile(event:Parameters<Actions[string]>[0]) {
   if(!key || !/^[0-9a-f-]{36}$/u.test(key)) return fail(400,{error:{message:"Refresh and try again."}});
   try {
     const bff=getBff(),context=requestContext(event.locals);
-    await bff.reconcileProfile(event.params.profileId!,key,context);
+    await bff.reconcileProfile(event.params.profileId!,key,context,form.get("forceRebuild")==="true");
     return {success:"Reconciliation requested."};
   } catch(error) { const mapped=safeError(error,event.locals.requestId); return fail(mapped.status,{error:mapped}); }
 }

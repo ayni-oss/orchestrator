@@ -22,7 +22,7 @@ durable collection.
 
 For a breaking deployment, inventory the exact application database volume,
 worker-output PVCs, Jobs, ConfigMaps and attempt Secrets before stopping old
-workers and resetting application state. SQLite schema version 6 rejects older databases without conversion. Preserve source repositories, runtime images, unrelated
+workers and resetting application state. SQLite schema version 8 migrates recognized versions 6/7; see operations before upgrade. Preserve source repositories, runtime images, unrelated
 resources and existing PRs. Follow [operations](operations.md); broad namespace
 purges are not the task-pipeline cutover procedure.
 
@@ -54,3 +54,18 @@ Production images keep their normal direct entrypoint. To refresh an existing
 supervised development container explicitly, run
 `bash dev/scripts/sync-control-plane-source.sh`. This preserves application data
 and credentials and uses only the `docker-desktop` context.
+
+
+Repository environments follow the same automatic build/certify/publish/verify flow
+locally. Ordinary component image packaging remains available for local deployment.
+A Docker Desktop node daemon is not an approved isolated environment builder.
+Configure a dedicated audited TLS engine and immutable builder image, and set
+`isolated_engine: true` only after proving isolation. The local chart's default has
+no builder; setup remains visible until one is configured. GHCR push and a distinct
+pull-only credential, an owner-reviewed trusted certificate and a committed lock
+are prerequisites. Always use `--context docker-desktop` for validation.
+
+Exercise missing-image onboarding, verified reuse, explicit mismatch Rebuild,
+uncertain push recovery, and task admission by immutable digest. Inspect workload
+specifications for hostPath, privileged access, engine/signing/push credentials in
+task or verification Jobs. Never delete retained task data to make validation pass.

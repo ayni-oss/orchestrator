@@ -316,8 +316,7 @@ impl RequestContext {
             CleanStoreError::StaleVersion => (Code::Aborted, v1::ErrorReason::Conflict, None, None),
             CleanStoreError::ProjectArchived
             | CleanStoreError::ParentMismatch
-            | CleanStoreError::InvalidTransition
-            | CleanStoreError::UnsupportedWorkflowTemplate(_) => (
+            | CleanStoreError::InvalidTransition => (
                 Code::FailedPrecondition,
                 v1::ErrorReason::FailedPrecondition,
                 None,
@@ -430,7 +429,7 @@ impl RequestContext {
 mod projects;
 mod task_mapping;
 #[cfg(test)]
-pub use task_mapping::{automation_command, cancel_command, retry_command, task_command};
+pub use task_mapping::{cancel_command, retry_command, task_command};
 mod providers_tasks;
 mod repositories_profiles;
 mod watch;

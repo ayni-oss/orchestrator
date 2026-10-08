@@ -43,7 +43,7 @@ async function reconcile(event: Parameters<Actions[string]>[0], action: "sync" |
     if(profile.repositoryConnectionId!==event.params.repositoryId) return fail(400,{error:{message:"Choose a runtime belonging to this repository."}});
     const forceRebuild = action === "rebuild";
     await getBff().reconcileProfile(profileId, idempotencyKey, requestContext(event.locals), forceRebuild);
-    return { success: forceRebuild ? "Runtime rebuild requested. Orchestrator will create a fresh internal build Job for the current lock." : "Runtime sync requested." };
+    return { success: forceRebuild ? "Runtime rebuild requested." : "Runtime sync requested." };
   } catch (error) {
     const mapped = safeError(error, event.locals.requestId);
     return fail(mapped.status, { error: mapped });

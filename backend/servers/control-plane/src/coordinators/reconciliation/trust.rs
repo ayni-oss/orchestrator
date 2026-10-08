@@ -40,6 +40,10 @@ pub(super) struct TrustUpdate {
     state: String,
 }
 impl TrustUpdate {
+    pub(super) fn failed(&self) -> bool {
+        self.state == "failed"
+    }
+
     fn reset(&mut self, head: &str) {
         self.attempt = self.attempt.saturating_add(1);
         self.head = head.into();
@@ -115,7 +119,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .await
             .map_err(|reason| {
                 if reason == "github_not_found" {
-                    "certificate_repository_not_ayni"
+                    "policy_missing"
                 } else {
                     reason
                 }
@@ -124,7 +128,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let lock = self
             .source
             .lock(&github.owner, &github.name, head, token)
-            .await?;
+            .await
+            .map_err(|reason| {
+                if reason == "github_not_found" {
+                    "lock_missing"
+                } else {
+                    reason
+                }
+            })?;
         crate::profiles::ayni::environment::parse_lock(&lock)
             .map_err(|_| "repository_lock_invalid")?;
         let generation = format!(

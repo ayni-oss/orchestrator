@@ -25,7 +25,6 @@ pub(super) fn page_items_decode(method: &str, items: &[Vec<u8>]) -> bool {
         "ListRuntimeProfiles" => all_decode!(v1::RuntimeProfile),
         "ListRuntimeProfileRevisions" => all_decode!(v1::RuntimeProfileRevision),
         "ListRuntimeArtifacts" => all_decode!(v1::RuntimeArtifact),
-        "ListAutomationInstallations" => all_decode!(v1::AutomationInstallation),
         "ListDevelopmentTasks" => all_decode!(v1::DevelopmentTask),
         "ListDevelopmentAttempts" => all_decode!(v1::DevelopmentAttempt),
         _ => false,

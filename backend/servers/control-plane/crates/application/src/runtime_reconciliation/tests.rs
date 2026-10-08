@@ -32,44 +32,26 @@ fn changed_source_or_configuration_discards_intent_before_build_or_late_success(
     );
 }
 #[test]
-fn uncertain_build_completion_never_automatically_rebuilds() {
+fn verification_deadline_bounds_missing_jobs_and_preserves_failure_outcomes() {
     assert_eq!(
-        build_action(ExecutionState::Missing, false),
-        BuildAction::Start
-    );
-    for state in [
-        ExecutionState::Missing,
-        ExecutionState::Failed,
-        ExecutionState::Succeeded,
-    ] {
-        assert_eq!(build_action(state, true), BuildAction::ObserveRegistry);
-    }
-    assert_eq!(
-        build_action(ExecutionState::Running, true),
-        BuildAction::Wait
-    );
-}
-#[test]
-fn verification_deadline_and_failure_respect_retained_build_intent() {
-    assert_eq!(
-        verification_action(&Observation::Running, 1900, false),
+        verification_action(&Observation::Running, 1900),
         VerificationAction::Wait
     );
     assert_eq!(
-        verification_action(&Observation::Running, 1901, false),
+        verification_action(&Observation::Running, 1901),
         VerificationAction::Timeout
     );
     assert_eq!(
-        verification_action(&Observation::Missing, 1901, false),
+        verification_action(&Observation::Missing, 1901),
+        VerificationAction::Timeout
+    );
+    assert_eq!(
+        verification_action(&Observation::Missing, 0),
         VerificationAction::Start
     );
     assert_eq!(
-        verification_action(&Observation::Failed("failed"), 0, true),
-        VerificationAction::RetainFailedBuildIntent
-    );
-    assert_eq!(
-        verification_action(&Observation::Failed("failed"), 0, false),
-        VerificationAction::CleanupFailure
+        verification_action(&Observation::Failed("failed"), 0),
+        VerificationAction::Failure
     );
     assert_eq!(
         verification_action(
@@ -77,8 +59,7 @@ fn verification_deadline_and_failure_respect_retained_build_intent() {
                 digest: "digest".into(),
                 report: "report".into()
             },
-            1901,
-            false
+            1901
         ),
         VerificationAction::Accept
     );

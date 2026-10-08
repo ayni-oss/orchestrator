@@ -212,11 +212,24 @@ fn resource_transition_tables_match_only_supported_edges() {
                 ),
                 Profile::AwaitingEnvironment => matches!(
                     next,
-                    Profile::Ready | Profile::Updating | Profile::Degraded | Profile::Failed
+                    Profile::SetupRequired
+                        | Profile::Ready
+                        | Profile::Updating
+                        | Profile::Degraded
+                        | Profile::Failed
                 ),
-                Profile::Ready => matches!(next, Profile::Updating | Profile::Degraded),
+                Profile::Ready => matches!(
+                    next,
+                    Profile::SetupRequired | Profile::Updating | Profile::Degraded
+                ),
                 Profile::Updating => {
-                    matches!(next, Profile::Ready | Profile::Degraded | Profile::Failed)
+                    matches!(
+                        next,
+                        Profile::SetupRequired
+                            | Profile::Ready
+                            | Profile::Degraded
+                            | Profile::Failed
+                    )
                 }
                 Profile::Degraded => matches!(
                     next,
@@ -344,97 +357,6 @@ fn service_events_are_monotonic_and_resumable() -> Result<(), CleanStoreError> {
     let (current, high_water) = store.initial_events(REPOSITORY_SERVICE, Some(&first.id), None)?;
     assert_eq!(current.len(), 2);
     assert_eq!(high_water, 0);
-    Ok(())
-}
-
-#[test]
-fn setup_observation_recovers_from_provider_failure() -> Result<(), CleanStoreError> {
-    let mut store = CleanStore::in_memory()?;
-    let repository = store
-        .create_repository_connection("setup-repo", &repository_request("setup-repo", "123"))?;
-    let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
-    let (profile, _) = store.create_runtime_profile(
-        "setup-profile",
-        &profile_request("setup-profile", &repository.id, &snapshot.id),
-    )?;
-    let installation = store.install_repository_automation(
-        "setup-recovery",
-        &v1::InstallRepositoryAutomationRequest {
-            idempotency_key: "setup-recovery".into(),
-            runtime_profile_id: profile.id,
-        },
-    )?;
-    store.observe_setup(
-        &installation.id,
-        Some(8),
-        v1::AutomationInstallationState::Degraded,
-        Some("github_unavailable"),
-    )?;
-    store.observe_setup(
-        &installation.id,
-        Some(8),
-        v1::AutomationInstallationState::SetupPrOpen,
-        None,
-    )?;
-    store.observe_setup(
-        &installation.id,
-        Some(8),
-        v1::AutomationInstallationState::Installed,
-        None,
-    )?;
-    let observed = store.automation_installation(&installation.id)?;
-    assert_eq!(
-        observed.state,
-        v1::AutomationInstallationState::Installed as i32
-    );
-    assert!(observed.failure.is_none());
-    Ok(())
-}
-
-#[test]
-fn matching_workflows_complete_setup_without_a_pull_request() -> Result<(), CleanStoreError> {
-    let mut store = CleanStore::in_memory()?;
-    let repository = store
-        .create_repository_connection("reuse-repo", &repository_request("reuse-repo", "123"))?;
-    let snapshot = store.observe_repository_snapshot(&repository.id, REVISION)?;
-    let (profile, _) = store.create_runtime_profile(
-        "reuse-profile",
-        &profile_request("reuse-profile", &repository.id, &snapshot.id),
-    )?;
-    let installation = store.install_repository_automation(
-        "reuse-setup",
-        &v1::InstallRepositoryAutomationRequest {
-            idempotency_key: "reuse-setup".into(),
-            runtime_profile_id: profile.id.clone(),
-        },
-    )?;
-    for _ in 0..2 {
-        store.observe_setup(
-            &installation.id,
-            None,
-            v1::AutomationInstallationState::Installed,
-            None,
-        )?;
-        store.complete_external_action("InstallRepositoryAutomation", "reuse-setup")?;
-    }
-    let installed = store.automation_installation(&installation.id)?;
-    assert_eq!(
-        installed.state,
-        v1::AutomationInstallationState::Installed as i32
-    );
-    let Some(v1::automation_installation::Provider::Github(github)) = installed.provider else {
-        return Err(CleanStoreError::CorruptState);
-    };
-    assert!(github.setup_pull_request_number.is_none());
-    assert!(
-        store
-            .pending_external_actions("InstallRepositoryAutomation")?
-            .is_empty()
-    );
-    assert_eq!(
-        store.runtime_profile(&profile.id)?.state,
-        v1::RuntimeProfileState::AwaitingEnvironment as i32
-    );
     Ok(())
 }
 
@@ -600,5 +522,49 @@ fn passing_quality_requires_bound_full_check_evidence() -> Result<(), CleanStore
         Err(CleanStoreError::CorruptState)
     ));
     assert!(store.development_attempt(&attempt.id)?.result.is_none());
+    Ok(())
+}
+
+#[test]
+fn schema_seven_cutover_retires_image_automation_and_preserves_frozen_work()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("cutover.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (task, attempt) = store.create_development_task(
+        "task",
+        &task_request(&store, &repository.id, &profile.id, "task")?,
+    )?;
+    store.connection.execute_batch("CREATE TABLE automation_installations(id TEXT PRIMARY KEY); UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
+    store.connection.execute(
+        "INSERT INTO automation_installations(id) VALUES('obsolete')",
+        [],
+    )?;
+    store.connection.execute("INSERT INTO durable_actions(operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at) VALUES('InstallRepositoryAutomation','obsolete',x'00',x'00','pending','automation_installation','obsolete',1,1)", [])?;
+    store.connection.execute("INSERT INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES(?1,?2,1,1)", params![format!("managed:{}",profile.id),r#"{"sequence":4,"next_at":0,"failures":3,"pending":{"old":"combined-build-push"},"bindings":{},"status":{},"last_success":null}"#])?;
+    drop(store);
+    let store = CleanStore::open(&path, 3)?;
+    assert_eq!(store.schema_version()?, 8);
+    assert_eq!(store.repository_connection(&repository.id)?, repository);
+    assert_eq!(store.development_task(&task.id)?.snapshot, task.snapshot);
+    assert_eq!(
+        store.development_attempt(&attempt.id)?.snapshot,
+        attempt.snapshot
+    );
+    assert!(
+        store
+            .pending_external_actions("InstallRepositoryAutomation")?
+            .is_empty()
+    );
+    let cursor = serde_json::to_value(store.runtime_cursor(&profile.id)?)?;
+    assert!(cursor["pending"].is_null());
+    assert_eq!(cursor["sequence"], 4);
+    assert_eq!(cursor["failures"], 0);
+    assert!(
+        !existing_tables(&store.connection)?
+            .iter()
+            .any(|name| name == "automation_installations")
+    );
     Ok(())
 }

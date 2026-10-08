@@ -56,8 +56,8 @@ function repository(): RepositoryConnection {
 
 function profile(): RuntimeProfile {
   return {
-    desiredImageRepository:"ghcr.io/team/sandbox-ayni",
-    reconciliationMetadata: [],
+    desiredImageRepository:"ghcr.io/team/sandbox",
+    reconciliationMetadata: [], findings: [], preparationPhase: "", rebuildAvailable: false,
     id: "profile:1",
     repositoryConnectionId: "repository:1",
     kind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,
@@ -86,7 +86,7 @@ function task(): DevelopmentTask {
         runtimeProfileRevisionId: "profile-revision:1",
         profileKind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,
         runtimeArtifactId: "artifact:1",
-        ociRepository: "ghcr.io/ayni-oss/sandbox/ayni-environment",
+        ociRepository: "ghcr.io/ayni-oss/sandbox",
         resolvedDigest: `sha256:${"b".repeat(64)}`,
         platform: { operatingSystem: "linux", architecture: "amd64" },
       },
@@ -133,7 +133,7 @@ describe("clean-v1 browser DTO mappings", () => {
   it("exposes runtime selection but keeps frozen Secret references out of browser DTOs",()=>{
     expect(mapRuntimeProfile({...profile(),registry:{registryConnectionId:"connection:ghcr"}}).registry).toEqual({registryConnectionId:"connection:ghcr"});
     expect(mapRuntimeProfile(profile()).registry).toBeUndefined();
-    expect(mapRuntimeProfile(profile()).desiredImageRepository).toBe("ghcr.io/team/sandbox-ayni");
+    expect(mapRuntimeProfile(profile()).desiredImageRepository).toBe("ghcr.io/team/sandbox");
     expect(JSON.stringify(mapDevelopmentTask(task()))).not.toContain("private-pull");
   });
 
@@ -158,8 +158,7 @@ describe("clean-v1 browser DTO mappings", () => {
       kind: "ayni_managed",
       lockFingerprint: "a".repeat(64),
       ayniVersion: "0.13.0",
-      workflowTemplateVersion: "v1",
-      ociRepository: "ghcr.io/ayni-oss/sandbox/ayni-environment",
+      ociRepository: "ghcr.io/ayni-oss/sandbox",
     });
     const custom = toProtoProfileConfiguration({
       kind: "custom_runtime",

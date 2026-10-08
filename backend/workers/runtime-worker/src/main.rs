@@ -32,6 +32,26 @@ async fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(error) => {
+                if matches!(
+                    env::args().nth(1).as_deref(),
+                    Some("publish" | "build" | "verify")
+                ) {
+                    let message = error.to_string();
+                    let fallback = match env::args().nth(1).as_deref() {
+                        Some("publish") => "runtime_publication_failed",
+                        Some("build") => "runtime_build_failed",
+                        _ => "runtime_verification_failed",
+                    };
+                    let code = match message.as_str() {
+                        "runtime_candidate_missing"
+                        | "runtime_lock_mismatch"
+                        | "runtime_platform_mismatch"
+                        | "runtime_version_unsupported"
+                        | "runtime_certificate_invalid" => message.as_str(),
+                        _ => fallback,
+                    };
+                    let _ = fs::write("/dev/termination-log", code);
+                }
                 activity.fail(ayni_orchestrator_worker::coding::activity::io_failure(
                     &error,
                 ));
@@ -50,6 +70,9 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     let operation = env::args()
         .nth(1)
         .ok_or_else(|| io::Error::other("missing operation"))?;
+    if operation == "registry-discover" {
+        return ayni_orchestrator_worker::operations::image_discovery::run().await;
+    }
     if operation == "install" {
         activity.record(Stage::Install);
         fs::copy(env::current_exe()?, "/launcher/runtime-worker")?;
@@ -90,6 +113,10 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
                 Path::new("/workspace"),
             )
             .await
+        }
+        "publish" => {
+            ayni_orchestrator_worker::profiles::ayni::publish(&request, Path::new("/workspace"))
+                .await
         }
         "build" => {
             activity.record(Stage::Build);

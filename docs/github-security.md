@@ -13,11 +13,10 @@ evidence, logs, metrics or pull request content.
 | Metadata | Read | Identify an authorized repository |
 | Contents | Read and write | Checkout source and push owned task/setup branches |
 | Pull requests | Read and write | Create and adopt task drafts and runtime setup PRs |
-| Workflows | Read and write | Maintain environment-building workflow through reviewed setup PRs |
 
 Task delivery does not require Actions, Checks or Issues permission. Preserve
-ordinary repository CI and useful environment-building workflows. Remove
-obsolete orchestrator-installed quality workflows through reviewed cleanup PRs.
+ordinary repository CI and deployment-component packaging. Repository environment
+workflows are obsolete and removed in reviewed PRs; Ayni installs no workflows.
 Never merge setup or cleanup PRs automatically.
 
 Publication verifies repository, deterministic branch, base, head and task
@@ -54,7 +53,9 @@ creation. Standard Kubernetes RBAC cannot enforce label ownership or grant only
 metadata reads; a Secret get permission permits reading its contents. Use a
 dedicated namespace and trusted operator access.
 
-GHCR test/build Jobs receive push credentials. Candidate workloads receive a
-separate pull-only Secret. Neither receives the control-plane service-account token
+GHCR test/publication Jobs receive push credentials. Environment build Jobs and
+verification/task workloads receive a separate pull-only Secret. Signing authority
+is confined to trusted certification orchestration and never passed to repository
+dependency execution. Neither receives the control-plane service-account token
 through connection testing. Rotation validates a candidate revision before
 activation; each process reconciles changes without self-restart.

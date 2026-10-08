@@ -75,12 +75,6 @@ impl SourceClient {
         Ok(json!({"repositories": repositories}))
     }
 
-    pub(crate) fn setup_action_offset(&self, count: usize) -> usize {
-        self.setup_cursor
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            % count.max(1)
-    }
-
     pub(crate) async fn discover_repository(
         &self,
         owner: &str,
@@ -117,18 +111,6 @@ impl SourceClient {
         .await?;
         repository["installation_id"] = json!(id);
         Ok(repository)
-    }
-
-    pub(crate) async fn setup_token(
-        &self,
-        github: &ayni_orchestrator_api::v1::GithubRepository,
-    ) -> Result<String, &'static str> {
-        self.scoped_token(
-            github.installation_id,
-            &github.repository_id,
-            json!({"contents":"write","pull_requests":"write","workflows":"write"}),
-        )
-        .await
     }
 
     pub(crate) async fn setup_api(
@@ -198,57 +180,6 @@ impl SourceClient {
             Err(error) if error.kind == GithubErrorKind::NotFound => Ok(None),
             Err(error) => Err(error.reason()),
         }
-    }
-
-    pub(crate) async fn setup_branch(
-        &self,
-        github: &ayni_orchestrator_api::v1::GithubRepository,
-        request: &crate::adapters::github::setup::SetupPullRequest,
-        token: &str,
-    ) -> Result<(), &'static str> {
-        if let Some(head) = self.setup_reference(github, &request.branch, token).await? {
-            for (path, expected) in &request.files.files {
-                if self
-                    .file(&github.owner, &github.name, &head, path, token)
-                    .await?
-                    != expected.as_bytes()
-                {
-                    return Err("setup_branch_conflict");
-                }
-            }
-            return Ok(());
-        }
-        let head = self
-            .head(&github.owner, &github.name, &request.base_branch, token)
-            .await?;
-        let commit = self
-            .setup_api(github, &format!("git/commits/{head}"), token, None)
-            .await?;
-        let tree = request.files.files.iter().map(|(path, contents)| json!({"path":path,"mode":"100644","type":"blob","content":contents})).collect::<Vec<_>>();
-        let tree = self
-            .setup_api(
-                github,
-                "git/trees",
-                token,
-                Some(&json!({"base_tree":commit["tree"]["sha"],"tree":tree})),
-            )
-            .await?;
-        let commit = self
-            .setup_api(
-                github,
-                "git/commits",
-                token,
-                Some(&json!({"message":request.title,"tree":tree["sha"],"parents":[head]})),
-            )
-            .await?;
-        self.setup_api(
-            github,
-            "git/refs",
-            token,
-            Some(&json!({"ref":format!("refs/heads/{}",request.branch),"sha":commit["sha"]})),
-        )
-        .await?;
-        Ok(())
     }
 }
 

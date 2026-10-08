@@ -11,6 +11,7 @@ use ayni_orchestrator_runtime::{
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{fs, io, path::Path, time::Duration};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 /// Attest the immutable runtime metadata before source checkout.
 /// # Errors
@@ -21,8 +22,19 @@ pub fn attest(request: &ExecutionRequest) -> io::Result<()> {
         Path::new("/etc/ayni/runtime.json"),
         managed_runtime::MAX_METADATA_BYTES,
     )?;
-    managed_runtime::signed_identity(&metadata, &request.expected).map_err(io::Error::other)?;
+    managed_runtime::signed_identity(&metadata, &request.expected).map_err(verification_error)?;
     Ok(())
+}
+
+fn verification_error(error: managed_runtime::RuntimeVerificationError) -> io::Error {
+    use managed_runtime::RuntimeVerificationError as Error;
+    io::Error::other(match error {
+        Error::LockMismatch => "runtime_lock_mismatch",
+        Error::PlatformMismatch => "runtime_platform_mismatch",
+        Error::UnsupportedVersion => "runtime_version_unsupported",
+        Error::Unsigned | Error::Malformed => "runtime_certificate_invalid",
+        Error::MissingVerification => "runtime_verification_failed",
+    })
 }
 
 /// Verify checkout and runtime identity before exposing coding tools.
@@ -116,7 +128,7 @@ pub async fn invoke(
             .await?;
     let bytes = read_bounded(&signals, managed_runtime::MAX_SIGNALS_BYTES)?;
     let runtime = managed_runtime::verified_result(&metadata, &bytes, &request.expected)
-        .map_err(io::Error::other)?;
+        .map_err(verification_error)?;
     // Delegate full schema/finding/canonical-summary validation to the pinned CLI,
     // rather than duplicating Ayni's adapter or wire validation rules.
     let mut parse = command("/usr/local/bin/ayni", workspace);
@@ -289,11 +301,11 @@ fn summarize(
     })
 }
 
-/// Build-only entrypoint for a separately authorized TLS engine and push Secret.
+/// Build and certify through a separately approved isolated TLS engine.
 /// Never invoked by a coding Job or the controller.
 ///
 /// # Errors
-/// Rejects missing signing material, source mismatch, or failed build/publication.
+/// Rejects missing signing material, source mismatch, or failed build/certification.
 pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
     validate_source(request)?;
     let source = request.revision.clone();
@@ -306,44 +318,202 @@ pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<(
     })
     .await
     .map_err(io::Error::other)??;
-    let image = std::env::var("BUILD_IMAGE").map_err(io::Error::other)?;
-    if image.is_empty() || image.starts_with('-') || image.contains('@') || image.len() > 512 {
-        return Err(io::Error::other("invalid build target"));
+    let image = build_target()?;
+    let lock: Value = serde_json::from_slice(&read_bounded(
+        &workspace.join(".ayni.lock"),
+        managed_runtime::MAX_METADATA_BYTES,
+    )?)
+    .map_err(io::Error::other)?;
+    if lock["fingerprint"] != request.expected.lock_fingerprint
+        || lock["ayni_version"] != request.expected.ayni_version
+    {
+        return Err(io::Error::other("runtime_lock_mismatch"));
     }
-    let variables = [
-        "DOCKER_HOST",
-        "DOCKER_TLS_VERIFY",
-        "DOCKER_CERT_PATH",
-        "DOCKER_CONFIG",
-        "AYNI_ENV_CERTIFICATE_SIGNING_KEY",
-        "AYNI_ENV_CERTIFICATE_KEY_ID",
-    ];
-    let values: Vec<_> = variables
-        .iter()
-        .map(|name| {
-            std::env::var(name)
-                .map(|value| (*name, value))
-                .map_err(io::Error::other)
-        })
-        .collect::<Result<_, _>>()?;
-    if values.iter().any(|(_, v)| v.is_empty()) {
-        return Err(io::Error::other("build credentials missing"));
-    }
+    let values = build_environment(true)?;
     let mut build = command("/usr/local/bin/ayni", workspace);
     build
         .envs(values.iter().map(|(k, v)| (*k, v)))
         .env("AYNI_OCI_RUNTIME", "docker")
-        .args(["env", "build", "--tag", &image]);
-    success(build).await?;
+        .args([
+            "env",
+            "build",
+            "--executor-image",
+            ayni_orchestrator_profile_ayni::ayni_release::EXECUTOR_IMAGE,
+            "--tag",
+            &image,
+        ]);
+    success(build)
+        .await
+        .map_err(|_| io::Error::other("runtime_build_failed"))?;
+    let mut inspect = command("docker", workspace);
+    inspect
+        .envs(
+            values
+                .iter()
+                .filter(|(k, _)| k.starts_with("DOCKER_"))
+                .map(|(k, v)| (*k, v)),
+        )
+        .args([
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}} {{.Os}}/{{.Architecture}}",
+            &image,
+        ]);
+    let output = capture(inspect).await?;
+    let (id, platform) = output
+        .trim()
+        .split_once(' ')
+        .ok_or_else(|| io::Error::other("runtime_build_result_invalid"))?;
+    if !image_id(id) || platform != request.expected.platform {
+        return Err(io::Error::other("runtime_platform_mismatch"));
+    }
+    fs::write("/dev/termination-log", id)
+}
+
+fn build_target() -> io::Result<String> {
+    let image = std::env::var("BUILD_IMAGE").map_err(io::Error::other)?;
+    if image.is_empty()
+        || image.starts_with('-')
+        || image.contains('@')
+        || image.len() > 512
+        || image.contains(['\n', '\r'])
+    {
+        return Err(io::Error::other("runtime_image_invalid"));
+    }
+    Ok(image)
+}
+
+fn image_id(value: &str) -> bool {
+    value.len() == 71
+        && value.starts_with("sha256:")
+        && value[7..]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+}
+
+fn build_environment(signing: bool) -> io::Result<Vec<(&'static str, String)>> {
+    let mut variables = vec![
+        "DOCKER_HOST",
+        "DOCKER_TLS_VERIFY",
+        "DOCKER_CERT_PATH",
+        "DOCKER_CONFIG",
+    ];
+    if signing {
+        variables.extend([
+            "AYNI_ENV_CERTIFICATE_SIGNING_KEY",
+            "AYNI_ENV_CERTIFICATE_KEY_ID",
+        ]);
+    }
+    variables
+        .into_iter()
+        .map(|name| {
+            std::env::var(name)
+                .ok()
+                .filter(|v| !v.is_empty())
+                .map(|value| (name, value))
+                .ok_or_else(|| io::Error::other("runtime_build_credentials_missing"))
+        })
+        .collect()
+}
+
+/// Publish the exact certified candidate without signing authority or repository execution.
+/// # Errors
+/// Rejects unavailable candidates, malformed inputs or failed publication.
+pub async fn publish(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
+    validate_source(request)?;
+    let image = build_target()?;
+    let id = std::env::var("BUILD_IMAGE_ID").map_err(io::Error::other)?;
+    if !image_id(&id) {
+        return Err(io::Error::other("runtime_build_result_invalid"));
+    }
+    let values = build_environment(false)?;
+    let overwrite_authorized = std::env::var("AYNI_REBUILD_AUTHORIZED").as_deref() == Ok("true");
+    let existing =
+        match crate::operations::image_discovery::inspect(&image, &request.expected.platform).await
+        {
+            Ok(existing) => existing,
+            Err("runtime_platform_mismatch" | "runtime_digest_mismatch")
+                if overwrite_authorized =>
+            {
+                ayni_orchestrator_runtime::image_discovery::ImageDiscovery::Missing
+            }
+            Err(reason) => return Err(io::Error::other(reason)),
+        };
+    publication_guard(&existing, &id, overwrite_authorized)?;
+    let mut inspect = command("docker", workspace);
+    inspect
+        .envs(values.iter().map(|(k, v)| (*k, v)))
+        .args(["image", "inspect", "--format", "{{.Id}}", &id]);
+    if capture(inspect)
+        .await
+        .map_err(|_| io::Error::other("runtime_candidate_missing"))?
+        .trim()
+        != id
+    {
+        return Err(io::Error::other("runtime_candidate_missing"));
+    }
+    let mut tag = command("docker", workspace);
+    tag.envs(values.iter().map(|(k, v)| (*k, v)))
+        .args(["tag", &id, &image]);
+    success(tag)
+        .await
+        .map_err(|_| io::Error::other("runtime_publication_failed"))?;
     let mut push = command("docker", workspace);
-    push.envs(
-        values
-            .iter()
-            .filter(|(k, _)| k.starts_with("DOCKER_"))
-            .map(|(k, v)| (*k, v)),
-    )
-    .args(["push", &image]);
-    success(push).await
+    push.envs(values.iter().map(|(k, v)| (*k, v)))
+        .args(["push", &image]);
+    success(push)
+        .await
+        .map_err(|_| io::Error::other("runtime_publication_failed"))?;
+    fs::write("/dev/termination-log", "published")
+}
+
+fn publication_guard(
+    existing: &ayni_orchestrator_runtime::image_discovery::ImageDiscovery,
+    candidate: &str,
+    overwrite_authorized: bool,
+) -> io::Result<()> {
+    use ayni_orchestrator_runtime::image_discovery::ImageDiscovery;
+    match existing {
+        ImageDiscovery::Missing => Ok(()),
+        ImageDiscovery::Resolved { image_id, .. }
+            if image_id == candidate || overwrite_authorized =>
+        {
+            Ok(())
+        }
+        ImageDiscovery::Resolved { .. } => Err(io::Error::other("runtime_tag_drift")),
+        ImageDiscovery::Failed { .. } | ImageDiscovery::Pending => {
+            Err(io::Error::other("runtime_publication_failed"))
+        }
+    }
+}
+
+async fn bounded_output<R: AsyncRead + Unpin>(reader: R) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(4097).read_to_end(&mut bytes).await?;
+    if bytes.len() > 4096 {
+        return Err(io::Error::other("runtime_build_result_invalid"));
+    }
+    Ok(bytes)
+}
+
+async fn capture(command: std::process::Command) -> io::Result<String> {
+    let mut command = tokio::process::Command::from(command);
+    command.stdout(std::process::Stdio::piped());
+    let mut child = crate::operations::process::spawn(&mut command)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("runtime_build_result_invalid"))?;
+    let (status, bytes) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(child.wait(), bounded_output(stdout))
+    })
+    .await
+    .map_err(|_| io::Error::other("runtime_build_timeout"))?;
+    if !status?.success() {
+        return Err(io::Error::other("runtime_build_failed"));
+    }
+    String::from_utf8(bytes?).map_err(io::Error::other)
 }
 
 async fn success(command: std::process::Command) -> io::Result<()> {

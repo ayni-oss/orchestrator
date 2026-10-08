@@ -65,7 +65,7 @@ function task() {
         runtimeProfileRevisionId: "profile-revision:1",
         profileKind: RuntimeProfileKind.RUNTIME_PROFILE_KIND_AYNI_MANAGED,
         runtimeArtifactId: "artifact:1",
-        ociRepository: "ghcr.io/ayni-oss/sandbox/ayni-environment",
+        ociRepository: "ghcr.io/ayni-oss/sandbox",
         resolvedDigest: `sha256:${"b".repeat(64)}`,
         platform: { operatingSystem: "linux", architecture: "amd64" },
       },

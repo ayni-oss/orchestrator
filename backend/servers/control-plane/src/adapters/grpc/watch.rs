@@ -188,11 +188,6 @@ pub(super) fn profile_update(
         "runtime_artifact" => v1::watch_runtime_profiles_response::Update::RuntimeArtifact(
             decode_event(&event.payload)?,
         ),
-        "automation_installation" => {
-            v1::watch_runtime_profiles_response::Update::AutomationInstallation(decode_event(
-                &event.payload,
-            )?)
-        }
         _ => return Err(CleanStoreError::CorruptState),
     };
     Ok(v1::WatchRuntimeProfilesResponse {

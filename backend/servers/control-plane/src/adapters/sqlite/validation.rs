@@ -114,23 +114,6 @@ pub(super) fn validate_resource_tables(connection: &Connection) -> Result<(), Cl
                 && !row.get::<_, String>(2)?.is_empty())
         },
     )?;
-    validate_indexed_rows::<v1::AutomationInstallation, _>(
-        connection,
-        "SELECT payload,id,runtime_profile_id,state,version,resource_version,event_cursor
-         FROM automation_installations",
-        |row, value| {
-            Ok(!value.id.is_empty()
-                && !value.runtime_profile_id.is_empty()
-                && !value.version.is_empty()
-                && value.state != v1::AutomationInstallationState::Unspecified as i32
-                && v1::AutomationInstallationState::try_from(value.state).is_ok()
-                && value.id == row.get::<_, String>(1)?
-                && value.runtime_profile_id == row.get::<_, String>(2)?
-                && value.state == row.get::<_, i32>(3)?
-                && value.version == row.get::<_, String>(4)?
-                && valid_version_and_cursor(value.resource_version, row.get(5)?, row.get(6)?))
-        },
-    )?;
     validate_indexed_rows::<v1::DevelopmentTask, _>(
         connection,
         "SELECT payload,id,state,active_attempt_id,deadline_at_seconds,deadline_at_nanos,
@@ -280,12 +263,6 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
         }),
         "CreateRuntimeProfile" => v1::CreateRuntimeProfileRequest::decode(payload)
             .is_ok_and(|value| api_validation::create_runtime_profile(&value).is_ok()),
-        "InstallRepositoryAutomation" => v1::InstallRepositoryAutomationRequest::decode(payload)
-            .is_ok_and(|value| {
-                api_validation::idempotency_key(&value.idempotency_key).is_ok()
-                    && api_validation::resource_id(&value.runtime_profile_id, "runtime_profile_id")
-                        .is_ok()
-            }),
         "ReconcileRuntimeProfile" => {
             v1::ReconcileRuntimeProfileRequest::decode(payload).is_ok_and(|value| {
                 api_validation::idempotency_key(&value.idempotency_key).is_ok()
@@ -372,9 +349,6 @@ pub(super) fn valid_resource_event(
         (PROFILE_SERVICE, "runtime_artifact") => {
             valid_runtime_artifact_event(payload, resource_id, version)
         }
-        (PROFILE_SERVICE, "automation_installation") => {
-            valid_automation_installation_event(payload, resource_id, version)
-        }
         (DEVELOPMENT_SERVICE, "development_task") => {
             valid_development_task_event(payload, resource_id, version)
         }
@@ -450,20 +424,6 @@ pub(super) fn valid_runtime_artifact_event(
     let value = decode::<v1::RuntimeArtifact>(payload)?;
     Ok(value.id == resource_id
         && valid_artifact_report(&value)
-        && i64::try_from(value.resource_version) == Ok(version))
-}
-
-pub(super) fn valid_automation_installation_event(
-    payload: &[u8],
-    resource_id: &str,
-    version: i64,
-) -> Result<bool, CleanStoreError> {
-    let value = decode::<v1::AutomationInstallation>(payload)?;
-    Ok(value.id == resource_id
-        && !value.runtime_profile_id.is_empty()
-        && !value.version.is_empty()
-        && value.state != v1::AutomationInstallationState::Unspecified as i32
-        && v1::AutomationInstallationState::try_from(value.state).is_ok()
         && i64::try_from(value.resource_version) == Ok(version))
 }
 

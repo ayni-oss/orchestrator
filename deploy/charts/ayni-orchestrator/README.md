@@ -55,10 +55,27 @@ projected API token and namespaced Secret/Job permissions independently of runti
 execution. Set `connections.testImage` to the digest-pinned control-plane image
 containing `registry-connection-test` to enable GHCR probes. The chart never accepts
 credential values. UI-managed Secrets survive redeploys and remain separate from
-admin synchronization. Schema upgrades require the documented fresh-state cutover;
+admin synchronization. Schema-six/seven upgrades use the documented transactional migration;
 never remove retained claims without explicit approval.
 
 Register administrator GHCR connections explicitly with `connections.adminRegistries`:
 `id`, `displayName`, `imageNamespace`, `username`, `pullSecretName` and
 `pushSecretName`. These are safe metadata and references, never token values.
 Use separate pull and push Secrets; labels cannot substitute for explicit registration.
+
+
+## Automatic repository image preparation
+
+`runtime.managedRuntime.build` configures a digest-pinned builder, `service_account`,
+`engine_host` (`tcp://<host>:2376`), `engine_secret`, `registry_secret`, `signing_secret`, and
+`isolated_engine` (default false). Approval is explicit operator attestation after
+an engine isolation audit; TLS alone is insufficient. The chart does not create
+an engine or grant node socket/host access. Selected runtime certificates supply
+immutable signing Secret revisions. Selected registry connections supply distinct
+push and pull references. See [operations](../../../docs/operations.md).
+
+Every successful repository environment build publishes and is independently
+verified before Ready. No auto-publish toggle, artifact PVC, node-local importer or
+environment workflow installation is supported. Database and retained task-output
+claims remain distinct from kubelet-owned image caching. Ordinary control-plane,
+worker, builder and web component packaging remains unchanged.

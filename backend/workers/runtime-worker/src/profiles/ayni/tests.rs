@@ -175,3 +175,26 @@ fn infrastructure_and_measurement_errors_do_not_request_source_repairs() -> io::
     }
     Ok(())
 }
+
+#[test]
+fn publication_rejects_changed_registry_content_without_rebuild_authority() {
+    use ayni_orchestrator_runtime::image_discovery::ImageDiscovery;
+    let existing = ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "a".repeat(64)),
+        image_id: format!("sha256:{}", "b".repeat(64)),
+    };
+    assert!(publication_guard(&existing, "different-candidate", false).is_err());
+    assert!(publication_guard(&existing, "different-candidate", true).is_ok());
+    assert!(publication_guard(&existing, &format!("sha256:{}", "b".repeat(64)), false).is_ok());
+    assert!(publication_guard(&ImageDiscovery::Missing, "candidate", false).is_ok());
+    assert!(
+        publication_guard(
+            &ImageDiscovery::Failed {
+                reason: "registry_access_denied".into()
+            },
+            "candidate",
+            true
+        )
+        .is_err()
+    );
+}

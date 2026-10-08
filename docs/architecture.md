@@ -26,7 +26,7 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 7 adds certificate tables and
+and pull request receipts. SQLite schema version 8 retains certificate tables and
 migrates recognized schema-6 databases transactionally without rewriting existing resources. Earlier
 and unknown schema versions are rejected. Connectors, projects, repositories and runtime profiles remain
 control-plane resources. Credentials are separate inputs and are never worker output.
@@ -115,8 +115,23 @@ evidence or receipts in the retained output directory. The Linux-only Landlock
 dependency belongs to this private worker; it does not change Ayni upstream.
 
 For a connection whose namespace matches the source owner, the computed runtime
-destination is `ghcr.io/<namespace>/<repository>-ayni`. Cross-owner destinations
-retain `ghcr.io/<namespace>/<source-owner>/<repository>-ayni` so repository names
+destination is `ghcr.io/<namespace>/<repository>`. Cross-owner destinations
+retain `ghcr.io/<namespace>/<source-owner>/<repository>` so repository names
 remain distinct. One backend helper derives build, pull, admission and read-only
 UI destinations. Deployment-only fallback settings retain their existing layout.
 Previously admitted tasks and pending Jobs retain their original frozen paths.
+
+
+## Repository image lifecycle
+
+Runtime preparation has one implementation: persisted control-plane intent,
+pull-only registry discovery, isolated build/certification, automatic publication,
+and a separate pull-only verification Job. A verified manifest digest, selected
+runtime revision and source identity gate admission. A later selection cannot be
+activated by a superseded Job. Tasks retain their frozen image digests.
+
+Discovery uses `ayni-<arch>-<full-lock-hash>` on the approved repository path.
+Source owners are retained beneath a different registry namespace. A tag is a
+lookup key; only independently verified immutable manifest digests authorize work.
+[Managed runtime execution](managed-runtime-execution.md) defines recovery and
+credential boundaries. No GitHub workflow installation participates in readiness.

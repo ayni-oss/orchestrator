@@ -208,17 +208,13 @@ pub fn create_runtime_profile(
         .ok_or_else(|| ValidationError::new(v1::ErrorReason::InvalidInput, "configuration"))?;
     match configuration.configuration.as_ref() {
         Some(v1::runtime_profile_configuration::Configuration::AyniManaged(profile)) => {
-            lock_fingerprint(&profile.lock_fingerprint)?;
+            if !profile.lock_fingerprint.is_empty() {
+                lock_fingerprint(&profile.lock_fingerprint)?;
+            }
             if let Some(digest) = &profile.runtime_source_digest {
                 oci_digest(digest, "runtime_source_digest")?;
             }
             safe_text(&profile.ayni_version, 1, 128, "ayni_version")?;
-            safe_text(
-                &profile.workflow_template_version,
-                1,
-                128,
-                "workflow_template_version",
-            )?;
             oci_repository(&profile.oci_repository)
         }
         Some(v1::runtime_profile_configuration::Configuration::CustomRuntime(profile)) => {
@@ -668,9 +664,7 @@ mod tests {
                             runtime_source_digest: None,
                             lock_fingerprint: "d".repeat(64),
                             ayni_version: "0.13.0".to_owned(),
-                            workflow_template_version: "v1".to_owned(),
-                            oci_repository: "ghcr.io/ayni-oss/orchestrator/ayni-environment"
-                                .to_owned(),
+                            oci_repository: "ghcr.io/ayni-oss/orchestrator".to_owned(),
                         },
                     ),
                 ),

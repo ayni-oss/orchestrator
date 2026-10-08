@@ -15,6 +15,35 @@ use serde::Serialize;
 use serde_json::json;
 
 impl RuntimeKubernetes {
+    /// Schedule idempotent publication of a certified candidate.
+    /// # Errors
+    /// Rejects invalid runtime settings or conflicting Kubernetes resources.
+    pub async fn start_publish<P: Serialize + Sync>(
+        &self,
+        name: &str,
+        runtime: &WorkloadRuntime,
+        request: &ExecutionRequest<P>,
+        image_id: &str,
+        overwrite_authorized: bool,
+    ) -> Result<(), &'static str> {
+        let job = publication_job(
+            name,
+            &self.configuration,
+            runtime,
+            image_id,
+            overwrite_authorized,
+        )?;
+        self.create(
+            name,
+            std::collections::BTreeMap::from([(
+                "execution.json".into(),
+                serde_json::to_string(request).map_err(|_| "runtime_request_invalid")?,
+            )]),
+            "",
+            &job,
+        )
+        .await
+    }
     /// Starts or adopts a dedicated build Job using operator-scoped authority.
     ///
     /// # Errors
@@ -176,12 +205,13 @@ fn build_job(
     configuration: &ExecutionConfiguration,
     runtime: &WorkloadRuntime,
 ) -> Result<Job, &'static str> {
+    runtime.validate()?;
     let build = runtime.build.as_ref().ok_or("runtime_builder_missing")?;
     if build.signing_secret.is_empty() {
         return Err("certificate_setup_required");
     }
     let environment = vec![
-        json!({"name":"BUILD_IMAGE","value":runtime.image}),
+        json!({"name":"BUILD_IMAGE","value":format!("{}:candidate-{name}",ayni_orchestrator_application::execution_settings::image_repository(&runtime.image).ok_or("runtime_image_invalid")?)}),
         json!({"name":"DOCKER_HOST","value":build.engine_host}),
         json!({"name":"DOCKER_TLS_VERIFY","value":"1"}),
         json!({"name":"DOCKER_CERT_PATH","value":"/engine"}),
@@ -194,7 +224,9 @@ fn build_job(
         .as_array_mut()
         .ok_or("runtime_build_invalid")?;
     mounts.push(json!({"name":"engine","mountPath":"/engine","readOnly":true}));
-    mounts.push(json!({"name":"registry","mountPath":"/registry","readOnly":true}));
+    if runtime.pull_secret.is_some() {
+        mounts.push(json!({"name":"registry","mountPath":"/registry","readOnly":true}));
+    }
     let mut job = workload::source_job(
         name,
         configuration,
@@ -206,7 +238,63 @@ fn build_job(
         .as_array_mut()
         .ok_or("runtime_build_invalid")?;
     volumes.push(json!({"name":"engine","secret":{"secretName":build.engine_secret}}));
-    volumes.push(json!({"name":"registry","secret":{"secretName":build.registry_secret,"items":[{"key":".dockerconfigjson","path":"config.json"}]}}));
+    if let Some(secret) = &runtime.pull_secret {
+        volumes.push(json!({"name":"registry","secret":{"secretName":secret,"items":[{"key":".dockerconfigjson","path":"config.json"}]}}));
+    }
+    serde_json::from_value(job).map_err(|_| "runtime_build_invalid")
+}
+
+fn publication_job(
+    name: &str,
+    configuration: &ExecutionConfiguration,
+    runtime: &WorkloadRuntime,
+    image_id: &str,
+    overwrite_authorized: bool,
+) -> Result<Job, &'static str> {
+    runtime.validate()?;
+    if image_id.len() != 71
+        || !image_id.starts_with("sha256:")
+        || !image_id[7..]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+    {
+        return Err("runtime_build_result_invalid");
+    }
+    let build = runtime.build.as_ref().ok_or("runtime_builder_missing")?;
+    let environment = vec![
+        json!({"name":"BUILD_IMAGE","value":runtime.image}),
+        json!({"name":"BUILD_IMAGE_ID","value":image_id}),
+        json!({"name":"AYNI_REBUILD_AUTHORIZED","value":overwrite_authorized.to_string()}),
+        json!({"name":"DOCKER_HOST","value":build.engine_host}),
+        json!({"name":"DOCKER_TLS_VERIFY","value":"1"}),
+        json!({"name":"DOCKER_CERT_PATH","value":"/engine"}),
+        json!({"name":"DOCKER_CONFIG","value":"/registry"}),
+    ];
+    let mut container = workload::worker_container("publish", &build.image, &environment);
+    container["volumeMounts"]
+        .as_array_mut()
+        .ok_or("runtime_build_invalid")?
+        .extend([
+            json!({"name":"engine","mountPath":"/engine","readOnly":true}),
+            json!({"name":"registry","mountPath":"/registry","readOnly":true}),
+        ]);
+    let mut job = workload::source_job(
+        name,
+        configuration,
+        runtime,
+        &build.service_account,
+        &container,
+    );
+    let spec = &mut job["spec"]["template"]["spec"];
+    // Publication executes no repository checkout or repository code.
+    spec["initContainers"]
+        .as_array_mut()
+        .ok_or("runtime_build_invalid")?
+        .retain(|c| c["name"] == "launcher");
+    spec["volumes"].as_array_mut().ok_or("runtime_build_invalid")?.extend([
+        json!({"name":"engine","secret":{"secretName":build.engine_secret}}),
+        json!({"name":"registry","secret":{"secretName":build.registry_secret,"items":[{"key":".dockerconfigjson","path":"config.json"}]}}),
+    ]);
     serde_json::from_value(job).map_err(|_| "runtime_build_invalid")
 }
 

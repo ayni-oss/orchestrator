@@ -25,7 +25,7 @@ test("repository overview keeps identity in its header and configuration on its 
   await expect(dialog.getByText("Namespace: admin-team",{exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/profile-version");
   await page.waitForTimeout(11000);
-  await dialog.getByRole("button",{name:"Sync runtime",exact:true}).click();
+  await dialog.getByRole("button",{name:"Analyze / Sync",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
   await expect(dialog.getByRole("alert")).toContainText("Close and reopen");
@@ -35,12 +35,38 @@ test("repository overview keeps identity in its header and configuration on its 
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
   await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
   await expect(page.getByText("Runtime image destination updated.",{exact:true})).toBeVisible();
-  await expect(runtime).toContainText("ghcr.io/admin-team/ayni-oss/sandbox-ayni");
+  await expect(runtime).toContainText("ghcr.io/admin-team/ayni-oss/sandbox");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await dialog.getByRole("button",{name:"Sync runtime",exact:true}).click();
+  await dialog.getByRole("button",{name:"Analyze / Sync",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await page.getByRole("button",{name:"Dismiss notification"}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toHaveCount(0);
+});
+
+
+test("runtime preparation shows progress, findings and guarded corrective actions", async({page,request}) => {
+  await request.post("http://127.0.0.1:50062/admin-certificate");
+  await request.post("http://127.0.0.1:50062/preparation?phase=building");
+  await page.goto("/repositories/repository:1");
+  await expect(page.locator("article").first()).toContainText("Preparation: Building");
+  for(const phase of ["publishing", "verifying", "ready"]) {
+    await request.post(`http://127.0.0.1:50062/preparation?phase=${phase}`);
+    await page.reload();
+    await expect(page.locator("article").first()).toContainText(`Preparation: ${phase[0]!.toUpperCase()}${phase.slice(1)}`);
+  }
+  await request.post("http://127.0.0.1:50062/preparation?phase=verifying&code=runtime_certificate_invalid");
+  await page.reload();
+  await expect(page.locator("article").first()).toContainText("The image certificate is invalid.");
+  await expect(page.locator("article").first()).toContainText("Review trust and rebuild.");
+  await page.locator("article").first().getByRole("button", {name:"Edit",exact:true}).click();
+  await page.getByRole("dialog").getByRole("button",{name:"Rebuild runtime",exact:true}).click();
+  await expect(page.getByText("Runtime rebuild requested.", {exact:true})).toBeVisible();
+  await request.post("http://127.0.0.1:50062/preparation?phase=setup_required&code=lock_missing&rebuild=false");
+  await page.reload();
+  await page.locator("article").first().getByRole("button", {name:"Edit",exact:true}).click();
+  await expect(page.getByRole("dialog").getByRole("button",{name:"Rebuild runtime",exact:true})).toBeDisabled();
+  await page.getByRole("dialog").getByRole("button",{name:"Retry analysis",exact:true}).click();
+  await expect(page.getByText("Runtime sync requested.", {exact:true})).toBeVisible();
 });

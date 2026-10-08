@@ -1,5 +1,4 @@
 use super::onboarding_error::{provider_error, status as onboarding_error};
-use super::task_mapping;
 use super::{
     BoxGrpcStream, GrpcApi, Request, Response, Status, api_validation, page_response,
     profile_watch, repository_watch, v1, validate_id, validate_optional_id, with_store,
@@ -571,67 +570,6 @@ impl v1::runtime_profile_service_server::RuntimeProfileService for GrpcApi {
         .map_err(|error| context.store_error(&error))?;
         Ok(context.response(v1::GetRuntimeArtifactResponse {
             runtime_artifact: Some(resource),
-        }))
-    }
-
-    async fn list_automation_installations(
-        &self,
-        request: Request<v1::ListAutomationInstallationsRequest>,
-    ) -> Result<Response<v1::ListAutomationInstallationsResponse>, Status> {
-        let context = self.context(&request, "ListAutomationInstallations")?;
-        validate_id(&request.get_ref().runtime_profile_id, "runtime_profile_id")
-            .and_then(|()| api_validation::page(request.get_ref().page.as_ref()))
-            .map_err(|error| context.validation(&error))?;
-        let message = request.into_inner();
-        let page = with_store(&self.state, move |store| {
-            store.list_automation_installations(&message.runtime_profile_id, message.page.as_ref())
-        })
-        .await
-        .map_err(|error| context.store_error(&error))?;
-        Ok(context.response(v1::ListAutomationInstallationsResponse {
-            automation_installations: page.items.clone(),
-            page: Some(page_response(&page)),
-        }))
-    }
-
-    async fn get_automation_installation(
-        &self,
-        request: Request<v1::GetAutomationInstallationRequest>,
-    ) -> Result<Response<v1::GetAutomationInstallationResponse>, Status> {
-        let context = self.context(&request, "GetAutomationInstallation")?;
-        validate_id(
-            &request.get_ref().automation_installation_id,
-            "automation_installation_id",
-        )
-        .map_err(|error| context.validation(&error))?;
-        let message = request.into_inner();
-        let resource = with_store(&self.state, move |store| {
-            store.automation_installation(&message.automation_installation_id)
-        })
-        .await
-        .map_err(|error| context.store_error(&error))?;
-        Ok(context.response(v1::GetAutomationInstallationResponse {
-            automation_installation: Some(resource),
-        }))
-    }
-
-    async fn install_repository_automation(
-        &self,
-        request: Request<v1::InstallRepositoryAutomationRequest>,
-    ) -> Result<Response<v1::InstallRepositoryAutomationResponse>, Status> {
-        let context = self.context(&request, "InstallRepositoryAutomation")?;
-        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
-        validate_id(&request.get_ref().runtime_profile_id, "runtime_profile_id")
-            .map_err(|error| context.validation(&error))?;
-        let message = request.into_inner();
-        let command = task_mapping::automation_command(&key, &message);
-        let installation = with_store(&self.state, move |store| {
-            task_mapping::install_automation(store, &command)
-        })
-        .await
-        .map_err(|error| context.store_error(&error))?;
-        Ok(context.response(v1::InstallRepositoryAutomationResponse {
-            automation_installation: Some(installation),
         }))
     }
 

@@ -5,8 +5,7 @@ use crate::{
 use ayni_orchestrator_api::{v1, validation};
 use std::sync::Arc;
 mod error;
-mod setup;
-use crate::profiles::ayni::onboarding_templates;
+
 pub use error::{FailureKind, OnboardingError};
 
 pub fn provider_error(reason: &'static str) -> OnboardingError {
@@ -146,14 +145,6 @@ impl AppState {
             );
             return;
         };
-        if !inspection.policy_present || !inspection.lock_compatible {
-            tracing::info!(
-                repository_connection_id = connection.id,
-                reason = inspection.reason,
-                "repository is not an Ayni-managed runtime candidate"
-            );
-            return;
-        }
         let request = v1::CreateRuntimeProfileRequest {
             idempotency_key: format!("connect:{}:{}", connection.id, inspection.lock_fingerprint),
             repository_connection_id: connection.id.clone(),
@@ -164,9 +155,6 @@ impl AppState {
                         v1::AyniManagedProfileRevision {
                             lock_fingerprint: inspection.lock_fingerprint,
                             ayni_version: inspection.ayni_version,
-                            // Kept for wire compatibility; the producer is an internal
-                            // Kubernetes Job, never a repository workflow.
-                            workflow_template_version: "internal-build-v1".into(),
                             oci_repository: inspection.oci_repository,
                             runtime_source_digest: None,
                         },
@@ -230,12 +218,11 @@ impl AppState {
             repository_snapshot_id: snapshot.id,
             repository_revision: head.clone(),
             ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
-            workflow_template_version: "internal-build-v1".into(),
             oci_repository: format!(
-                "ghcr.io/{}-ayni",
-                format!("{}/{}", github.owner, github.name).to_lowercase()
+                "ghcr.io/{}/{}",
+                github.owner.to_ascii_lowercase(),
+                github.name.to_ascii_lowercase()
             ),
-            workflows: vec![],
             ..Default::default()
         };
         let policy = source
@@ -246,6 +233,11 @@ impl AppState {
             Err("github_not_found") => false,
             Err(reason) => return Err(provider_error(reason)),
         };
+        if !result.policy_present {
+            result
+                .findings
+                .push(crate::profiles::ayni::findings::finding("policy_missing"));
+        }
         let lock = match source
             .lock(&github.owner, &github.name, &head, &token)
             .await
@@ -253,6 +245,9 @@ impl AppState {
             Ok(bytes) => bytes,
             Err("github_not_found") => {
                 result.reason = "lock_missing".into();
+                result
+                    .findings
+                    .push(crate::profiles::ayni::findings::finding("lock_missing"));
                 return Ok(result);
             }
             Err(reason) => return Err(provider_error(reason)),
@@ -263,18 +258,20 @@ impl AppState {
         result.lock_fingerprint = inspection.lock_fingerprint;
         result.trust_policy_pinned = inspection.trust_policy_pinned;
         result.reason = inspection.reason.into();
-        Ok(result)
-    }
-
-    /// Repository connections are inspected at creation time and runtime
-    /// reconciliation owns all later registry/build work. It never mutates a
-    /// connected repository.
-    pub async fn reconcile_onboarding(&self) {
-        if let Err(reason) = self.reconcile_setup_actions().await {
-            tracing::warn!(
-                reason_code = reason,
-                "repository setup reconciliation deferred"
-            );
+        if !result.lock_compatible {
+            result
+                .findings
+                .push(crate::profiles::ayni::findings::finding(
+                    "lock_incompatible",
+                ));
         }
+        if !result.trust_policy_pinned {
+            result
+                .findings
+                .push(crate::profiles::ayni::findings::finding(
+                    "trust_policy_missing",
+                ));
+        }
+        Ok(result)
     }
 }

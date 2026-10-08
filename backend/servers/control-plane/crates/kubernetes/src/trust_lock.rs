@@ -100,16 +100,18 @@ fn trust_lock_job(
     key_id: &str,
     public_key: &str,
 ) -> Result<Job, &'static str> {
-    let build = runtime.build.as_ref().ok_or("trust_lock_builder_missing")?;
-    if RuntimeImage::parse(&build.image).is_err()
-        || RuntimeImage::parse(&configuration.worker_image).is_err()
-    {
+    if RuntimeImage::parse(&configuration.worker_image).is_err() {
         return Err("trust_lock_image_unpinned");
     }
     let mut environment = workload::runtime_environment();
     environment.push(json!({"name":"CERTIFICATE_KEY_ID","value":key_id}));
     environment.push(json!({"name":"CERTIFICATE_PUBLIC_KEY","value":public_key}));
-    let container = workload::worker_container("trust-lock", &build.image, &environment);
+    let mut container =
+        workload::worker_container("trust-lock", &configuration.worker_image, &environment);
+    // The approved worker is immutable; local component imports use kubelet caching.
+    container["imagePullPolicy"] = json!("IfNotPresent");
+    container["command"] = json!(["/launcher/runtime-worker"]);
+    container["args"] = json!(["trust-lock"]);
     let job: Job = serde_json::from_value(workload::source_job(
         name,
         configuration,
@@ -149,6 +151,7 @@ mod tests {
                 signing_secret: "seed-private".into(),
                 engine_secret: "engine-private".into(),
                 engine_host: "tcp://engine:2376".into(),
+                isolated_engine: true,
             }),
         }
     }
@@ -184,10 +187,8 @@ mod tests {
         assert_eq!(pod["automountServiceAccountToken"], false);
         let containers = pod["containers"].as_array().ok_or("missing_containers")?;
         assert_eq!(containers.len(), 1);
-        assert_eq!(
-            containers[0]["image"],
-            runtime().build.ok_or("missing_build")?.image
-        );
+        assert_eq!(containers[0]["imagePullPolicy"], "IfNotPresent");
+        assert_eq!(containers[0]["image"], configuration().worker_image);
         assert_eq!(pod["imagePullSecrets"], json!([{"name":"pull-only"}]));
         for container in containers
             .iter()
@@ -224,10 +225,8 @@ mod tests {
         let manifest = manifest()?;
         let pod = &manifest["spec"]["template"]["spec"];
         let container = &pod["containers"][0];
-        assert_eq!(
-            container["args"],
-            json!(["/launcher/runtime-worker", "trust-lock"])
-        );
+        assert_eq!(container["command"], json!(["/launcher/runtime-worker"]));
+        assert_eq!(container["args"], json!(["trust-lock"]));
         for volume in ["launcher", "request"] {
             let mount = container["volumeMounts"]
                 .as_array()
@@ -255,43 +254,24 @@ mod tests {
     }
 
     #[test]
-    fn trust_job_requires_pinned_builder_and_checkout_images() {
+    fn trust_job_requires_only_a_pinned_worker_and_accepts_no_builder() {
         let mut runtime = runtime();
-        if let Some(build) = runtime.build.as_mut() {
-            build.image = "builder:latest".into();
-        }
-        assert!(matches!(
+        runtime.build = None;
+        assert!(
             trust_lock_job(
                 "trust-one",
                 &configuration(),
                 &runtime,
                 "release",
                 &"a".repeat(64)
-            ),
-            Err("trust_lock_image_unpinned")
-        ));
+            )
+            .is_ok()
+        );
         let mut config = configuration();
         config.worker_image = "worker:latest".into();
         assert!(matches!(
-            trust_lock_job(
-                "trust-one",
-                &config,
-                &self::runtime(),
-                "release",
-                &"a".repeat(64)
-            ),
+            trust_lock_job("trust-one", &config, &runtime, "release", &"a".repeat(64)),
             Err("trust_lock_image_unpinned")
-        ));
-        runtime.build = None;
-        assert!(matches!(
-            trust_lock_job(
-                "trust-one",
-                &configuration(),
-                &runtime,
-                "release",
-                &"a".repeat(64)
-            ),
-            Err("trust_lock_builder_missing")
         ));
     }
 }

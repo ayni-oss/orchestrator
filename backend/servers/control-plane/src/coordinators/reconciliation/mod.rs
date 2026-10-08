@@ -6,10 +6,10 @@ use crate::{
 };
 use ayni_orchestrator_api::v1;
 use ayni_orchestrator_application::execution::ExecutionBackend;
-use ayni_orchestrator_application::execution::Observation;
+use ayni_orchestrator_application::execution::{ImageDiscovery, Observation};
 use ayni_orchestrator_application::runtime_reconciliation::{
-    BuildAction, PendingPhase, SourceIdentity, VerificationAction, build_action, pending_phase,
-    retry_delay, verification_action,
+    PendingPhase, SourceIdentity, VerificationAction, pending_phase, retry_delay,
+    verification_action,
 };
 use ayni_orchestrator_kubernetes::execution::{RuntimeKubernetes, operation_name};
 use ayni_orchestrator_profile_ayni::{
@@ -40,6 +40,10 @@ pub struct RuntimeCursor {
 }
 
 impl RuntimeCursor {
+    fn request_rebuild(&mut self, requested: bool) {
+        self.force_rebuild |= requested || self.trust.as_ref().is_some_and(TrustUpdate::failed);
+    }
+
     fn update_status(
         &mut self,
         runtime: &ProfileRuntime,
@@ -99,12 +103,50 @@ struct PendingVerification {
     source_digest: String,
     lock_digest: String,
     build_name: Option<String>,
-    build_observed: bool,
-    build_started: bool,
+    #[serde(flatten)]
+    build: BuildProgress,
+    #[serde(default)]
+    candidate_image_id: Option<String>,
+    #[serde(default)]
+    publish_name: Option<String>,
+    #[serde(default)]
+    publish_attempts: u32,
+    #[serde(default = "publication_budget")]
+    publish_remaining: u8,
+    #[serde(default)]
+    candidate_missing: bool,
     #[serde(default)]
     force_rebuild: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     certificate: Option<SigningIdentity>,
+    #[serde(flatten)]
+    discovery: DiscoveryProgress,
+    #[serde(default)]
+    resolved_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    failed: bool,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+struct BuildProgress {
+    #[serde(default, rename = "build_started")]
+    started: bool,
+    #[serde(default, rename = "build_completed")]
+    completed: bool,
+    #[serde(default, rename = "build_observed")]
+    observed: bool,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+struct DiscoveryProgress {
+    #[serde(default, rename = "discovery_started")]
+    started: bool,
+    #[serde(default, rename = "discovery_complete")]
+    complete: bool,
+}
+
+const fn publication_budget() -> u8 {
+    3
 }
 
 struct ProfileObservation<'a> {
@@ -251,20 +293,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     Err(_) => "runtime_observation_timeout",
                 };
                 tracing::warn!(reason_code = reason, "runtime reconciliation deferred");
-                let interval = reconciler.configuration.interval_seconds;
-                let _ = reconciler
-                    .with_database(move |store| {
-                        let _ = store.runtime_failure(&profile, reason);
-                        if let Ok(mut cursor) = store.runtime_cursor(&profile) {
-                            cursor.failures = cursor.failures.saturating_add(1);
-                            cursor.status.insert("reason-code".into(), reason.into());
-                            cursor.next_at =
-                                now().unwrap_or(0) + retry_delay(interval, cursor.failures);
-                            let _ = store.save_runtime_cursor(&profile, &cursor);
-                        }
-                        Ok(())
-                    })
-                    .await;
+                let _ = reconciler.record_failure(&profile, reason).await;
             });
         }
         while tasks.join_next().await.is_some() {}
@@ -307,7 +336,27 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         continue;
                     }
                     cursor.next_at = 0;
-                    cursor.force_rebuild |= request.force_rebuild;
+                    cursor.failures = 0;
+                    cursor.request_rebuild(request.force_rebuild);
+                    // Explicit retry releases a failed verification for a fresh observation.
+                    if let Some(pending) = &mut cursor.pending {
+                        pending.failed = false;
+                        if !request.force_rebuild
+                            && cursor
+                                .status
+                                .get("reason-code")
+                                .is_some_and(|reason| reason == "runtime_publication_failed")
+                        {
+                            pending.publish_remaining = publication_budget();
+                            pending.discovery.complete = false;
+                            pending.discovery.started = false;
+                            pending.started_at = now().map_err(|_| "runtime_clock_invalid")?;
+                        } else if request.force_rebuild || cursor.status.contains_key("reason-code")
+                        {
+                            pending.source_digest.clear();
+                        }
+                    }
+                    cursor.status.remove("reason-code");
                     // Persist the wake-up before acknowledging the action. Replaying
                     // after a crash is harmless and never resets build intent.
                     store
@@ -339,6 +388,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         else {
             return Ok(());
         };
+        if cursor.failures >= 3 {
+            return self.cleanup_exhausted_cursor(&cursor).await;
+        }
         if cursor.next_at > time {
             return Ok(());
         }
@@ -397,13 +449,51 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 )
                 .await?
             {
+                let lookup_id = id.to_owned();
+                self.with_database(move |store| {
+                    store
+                        .runtime_failure(&lookup_id, "trust_policy_missing")
+                        .map_err(|_| "runtime_cursor_invalid")
+                })
+                .await?;
+                cursor
+                    .status
+                    .insert("reason-code".into(), "trust_policy_missing".into());
+                cursor
+                    .status
+                    .insert("phase".into(), "setup_required".into());
+                self.save(id, &cursor).await?;
                 return Ok(());
             }
+            cursor.status.remove("reason-code");
+            cursor.status.insert("phase".into(), "analyzing".into());
+            self.save(id, &cursor).await?;
+        }
+        let policy = self
+            .source
+            .file(&github.owner, &github.name, &head, ".ayni.toml", &token)
+            .await
+            .map_err(|reason| {
+                if reason == "github_not_found" {
+                    "policy_missing"
+                } else {
+                    reason
+                }
+            })?;
+        if policy.is_empty() {
+            return Err("policy_missing");
         }
         let lock = self
             .source
             .lock(&github.owner, &github.name, &head, &token)
-            .await?;
+            .await
+            .map_err(|reason| {
+                if reason == "github_not_found" {
+                    "lock_missing"
+                } else {
+                    reason
+                }
+            })?;
         let lock_identity = crate::profiles::ayni::environment::parse_lock(&lock)
             .map_err(|_| "repository_lock_invalid")?;
         let (runtime, source_digest) =
@@ -449,7 +539,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 Ok(profile.active_revision_id.as_deref() == Some(pending_revision.as_str()))
             })
             .await?;
-        let phase = if !selected && (pending.build_name.is_none() || pending.build_observed) {
+        let phase = if !selected && (pending.build_name.is_none() || pending.build.observed) {
             PendingPhase::DiscardStale
         } else {
             pending_phase(
@@ -461,136 +551,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     revision: &observation.head,
                     configuration_digest: &observation.source_digest,
                 },
-                pending.build_name.is_some() && !pending.build_observed,
+                pending.build_name.is_some() && !pending.build.observed,
             )
         };
         Ok(phase)
-    }
-
-    async fn observe_pending(
-        &self,
-        observation: &ProfileObservation<'_>,
-        cursor: &mut RuntimeCursor,
-    ) -> Result<(), &'static str> {
-        let id = observation.id;
-        let runtime = observation.runtime;
-        let time = observation.time;
-        let token = observation.token.as_str();
-
-        let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        let phase = self
-            .pending_verification_phase(observation, &pending)
-            .await?;
-        if phase == PendingPhase::DiscardStale {
-            self.kubernetes.cleanup(&pending.name).await?;
-            if let Some(name) = &pending.build_name {
-                self.kubernetes.cleanup(name).await?;
-            }
-            cursor.pending = None;
-            self.save(id, cursor).await?;
-            return Err("runtime_source_changed");
-        }
-        if let Some(build_name) = &pending.build_name
-            && phase == PendingPhase::ObserveBuild
-        {
-            self.observe_build(observation, cursor, &pending, build_name)
-                .await?;
-            return Ok(());
-        }
-        let observation_result = self.kubernetes.observe(&pending.name).await?;
-        match verification_action(
-            &observation_result,
-            time.saturating_sub(pending.started_at),
-            pending.build_name.is_some(),
-        ) {
-            VerificationAction::Start => {
-                self.kubernetes
-                    .start(
-                        &pending.name,
-                        &runtime.execution_runtime(),
-                        &pending.request,
-                        token,
-                    )
-                    .await?;
-            }
-            VerificationAction::Wait => {}
-            VerificationAction::Timeout => {
-                self.kubernetes.cleanup(&pending.name).await?;
-                cursor.pending = None;
-                self.save(id, cursor).await?;
-                return Err("runtime_verification_timeout");
-            }
-            action @ (VerificationAction::RetainFailedBuildIntent
-            | VerificationAction::CleanupFailure) => {
-                let Observation::Failed(reason) = observation_result else {
-                    return Err("runtime_result_invalid");
-                };
-                if action == VerificationAction::RetainFailedBuildIntent {
-                    return Err(reason);
-                }
-                self.kubernetes.cleanup(&pending.name).await?;
-                if let Some(name) = &pending.build_name {
-                    self.kubernetes.cleanup(name).await?;
-                }
-                cursor.pending = None;
-                self.save(id, cursor).await?;
-                return Err(reason);
-            }
-            VerificationAction::Accept => {
-                let Observation::Completed { digest, report } = observation_result else {
-                    return Err("runtime_result_invalid");
-                };
-                let report = serde_json::from_str(&report).map_err(|_| "runtime_result_invalid")?;
-                self.accept(observation, cursor, digest, &report).await?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn observe_build(
-        &self,
-        observation: &ProfileObservation<'_>,
-        cursor: &mut RuntimeCursor,
-        pending: &PendingVerification,
-        build_name: &str,
-    ) -> Result<(), &'static str> {
-        let id = observation.id;
-        let runtime = observation.runtime;
-        let token = observation.token.as_str();
-        let time = observation.time;
-        match build_action(
-            self.kubernetes.coding_state(build_name).await?,
-            pending.build_started,
-        ) {
-            BuildAction::Start => {
-                let build_name = build_name.to_owned();
-                let request = pending.request.clone();
-                cursor
-                    .pending
-                    .as_mut()
-                    .ok_or("runtime_cursor_invalid")?
-                    .build_started = true;
-                self.save(id, cursor).await?;
-                self.kubernetes
-                    .start_build(&build_name, &runtime.execution_runtime(), &request, token)
-                    .await?;
-            }
-            BuildAction::Wait => {}
-            BuildAction::ObserveRegistry => {
-                cursor
-                    .pending
-                    .as_mut()
-                    .ok_or("runtime_cursor_invalid")?
-                    .build_observed = true;
-                cursor
-                    .pending
-                    .as_mut()
-                    .ok_or("runtime_cursor_invalid")?
-                    .started_at = time;
-                self.save(id, cursor).await?;
-            }
-        }
-        Ok(())
     }
 
     async fn accept(
@@ -634,6 +598,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             != head
         {
             return Err("runtime_source_changed");
+        }
+        if pending.resolved_digest.as_deref() != Some(digest.as_str()) {
+            return Err("runtime_digest_mismatch");
         }
         if let Some((_, expected)) = runtime.image.split_once('@')
             && expected != digest
@@ -682,10 +649,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if let Some(name) = &pending.build_name {
             self.kubernetes.cleanup(name).await?;
         }
+        if let Some(name) = &pending.publish_name {
+            self.kubernetes.cleanup(name).await?;
+        }
         cursor.pending = None;
         cursor.last_success = Some(time);
         cursor.failures = 0;
         cursor.status.remove("reason-code");
+        cursor.status.insert("phase".into(), "ready".into());
         let jitter =
             u64::from(Sha256::digest(id)[0]) % (self.configuration.interval_seconds / 5 + 1);
         cursor.next_at = time + self.configuration.interval_seconds + jitter;
@@ -749,27 +720,22 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .ok_or("runtime_sequence_exhausted")?;
                 cursor.pending = Some(PendingVerification {
                     name: operation_name(&id, cursor.sequence),
-                    profile_revision: revision.clone(),
+                    profile_revision: revision,
                     image: runtime.image.clone(),
                     frozen_runtime: Some(runtime.clone()),
                     started_at: time,
                     source_digest: source_digest.clone(),
                     lock_digest: format!("sha256:{:x}", Sha256::digest(&bytes)),
-                    build_name: if runtime.build.is_some()
-                        && (cursor.force_rebuild
-                            || !cursor.bindings.contains_key(&format!(
-                                "{:x}",
-                                Sha256::digest(format!(
-                                    "{}:{}:sha256:{}",
-                                    source_digest, runtime.platform, identity.fingerprint
-                                ))
-                            ))) {
-                        Some(operation_name(&format!("build:{revision}"), 0))
-                    } else {
-                        None
-                    },
-                    build_observed: false,
-                    build_started: false,
+                    build_name: None,
+                    build: BuildProgress::default(),
+                    candidate_image_id: None,
+                    publish_name: None,
+                    publish_attempts: 0,
+                    publish_remaining: publication_budget(),
+                    candidate_missing: false,
+                    discovery: DiscoveryProgress::default(),
+                    resolved_digest: None,
+                    failed: false,
                     force_rebuild: cursor.force_rebuild,
                     certificate,
                     request: ExecutionRequest {
@@ -809,6 +775,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 }
 
+mod preparation;
+#[cfg(test)]
+mod preparation_tests;
 mod trust;
 use trust::{SigningIdentity, TrustUpdate};
 mod coding;
@@ -924,12 +893,24 @@ fn selected_registry_runtime(
         &github.owner,
         &github.name,
     )?;
-    let mut runtime =
-        managed_runtime.profile_runtime(&github.owner, &github.name, &managed.lock_fingerprint)?;
-    runtime.image = format!(
-        "{destination}:lock-{}",
-        managed.lock_fingerprint.to_ascii_lowercase()
-    );
+    let mut runtime = managed_runtime.profile_runtime(
+        &github.owner,
+        &github.name,
+        if managed.lock_fingerprint.is_empty() {
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        } else {
+            &managed.lock_fingerprint
+        },
+    )?;
+    runtime.image = crate::process::runtime_configuration::managed_image_reference(
+        &destination,
+        &runtime.platform,
+        if managed.lock_fingerprint.is_empty() {
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        } else {
+            &managed.lock_fingerprint
+        },
+    )?;
     Ok(Some(runtime))
 }
 
@@ -956,6 +937,18 @@ fn certificate_source_digest(
                 .map_err(|_| "certificate_identity_invalid")?
         )
     ))
+}
+
+fn discovery_error(reason: &str) -> &'static str {
+    match reason {
+        "registry_access_denied" => "registry_access_denied",
+        "registry_rate_limited" => "registry_rate_limited",
+        "runtime_platform_mismatch" => "runtime_platform_mismatch",
+        "registry_credentials_invalid" => "registry_credentials_invalid",
+        "registry_provider_unsupported" => "registry_provider_unsupported",
+        "runtime_digest_mismatch" => "runtime_digest_mismatch",
+        _ => "registry_unavailable",
+    }
 }
 
 #[cfg(test)]

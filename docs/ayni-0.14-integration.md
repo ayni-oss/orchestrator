@@ -17,3 +17,14 @@ are retained together and disclosed in worker-created drafts. Focused evidence
 cannot satisfy the full gate. The runtime must pin a CLI release that supports
 these commands and provenance checks; runtime-version changes require actual
 managed-topology verification.
+
+
+Environment build uses `ayni env build --executor-image <approved digest> --tag
+<candidate>` with selected trusted signing identity. Certification is performed by
+that supported build contract after dependencies are prepared; an unsigned result
+cannot become Ready. Separate publication pushes the certified candidate and
+separate verification consumes Ayni’s signed metadata and fresh managed signals.
+No orchestrator implementation interprets adapter policy or regenerates a lock
+without the supported CLI. Environment certification and task code quality remain
+separate outcomes. PR CI invokes `ayni check` on the host with pinned quality tools;
+it asserts `execution_mode: host` and does not build repository environment images.
