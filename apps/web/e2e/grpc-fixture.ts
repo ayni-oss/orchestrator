@@ -273,28 +273,36 @@ function certificateFixture(pathname: string): void {
  if(pathname==="/admin-certificate") certificates=[certificate({id:"admin:certificate",managementSource:"admin",displayName:"Admin signing",sourceSecretName:"admin-signing"})];
  if(pathname==="/custom-profile") profile.kind=RuntimeProfileKind.RUNTIME_PROFILE_KIND_CUSTOM_RUNTIME;
 }
-const health = createServer((request, response) => {
- const url=new URL(request.url ?? "/","http://127.0.0.1");
- if(request.method==="POST") certificateFixture(url.pathname);
- if(request.method==="POST" && url.pathname==="/reset-connections") {connections=[];rejectConnectionMutation=false;}
- if(request.method==="POST" && url.pathname==="/reject-connection-mutation") rejectConnectionMutation=true;
- if(request.method==="POST" && url.pathname==="/connection-state" && connections[0]) {
+function connectionFixture(url: URL): void {
+ if(url.pathname==="/reset-connections") {connections=[];rejectConnectionMutation=false;}
+ if(url.pathname==="/reject-connection-mutation") rejectConnectionMutation=true;
+ if(url.pathname==="/connection-state" && connections[0]) {
    connections[0].resourceVersion=String(Number(connections[0].resourceVersion)+1);
    connections[0].status=url.searchParams.get("status") ?? "ready";
    connections[0].testCleanup=url.searchParams.get("cleanup") ?? "passed";
    connections[0].testCleanupFailureReason=connections[0].testCleanup==="failed" ? "registry_cleanup_permission_required" : "";
  }
- if(request.method==="POST" && url.pathname==="/admin-connection") connections=[{id:"admin:github",kind:url.searchParams.get("kind") ?? "github_app",managementSource:"admin",displayName:"Admin App",appId:"123",username:"",imageNamespace:url.searchParams.get("kind")==="ghcr" ? "admin-team" : "",secretName:"admin-ref",secretUid:"",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"",testAuthentication:"",testPush:"",testPull:"",testCleanup:"",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""}];
- if(request.method==="POST" && url.pathname==="/preparation") {
+ if(url.pathname==="/admin-connection") connections=[{id:"admin:github",kind:url.searchParams.get("kind") ?? "github_app",managementSource:"admin",displayName:"Admin App",appId:"123",username:"",imageNamespace:url.searchParams.get("kind")==="ghcr" ? "admin-team" : "",secretName:"admin-ref",secretUid:"",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"",testAuthentication:"",testPush:"",testPull:"",testCleanup:"",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""}];
+}
+function profileFixture(url: URL): void {
+ if(url.pathname==="/preparation") {
    profile.preparationPhase=url.searchParams.get("phase") ?? "ready";
    const code=url.searchParams.get("code");
    profile.findings=code ? [{code,message:"The image certificate is invalid.",remediation:"Review trust and rebuild."}] : [];
    profile.failure=code ? {reason:1,observedAt:now,message:code,remediation:"Review trust and rebuild."} : undefined;
    profile.rebuildAvailable=url.searchParams.get("rebuild")!=="false";
  }
- if(request.method==="POST" && url.pathname==="/reset-onboarding") { profileEnrolled=false; }
- if(request.method==="POST" && url.pathname==="/profile-version") profile.resourceVersion=String(Number(profile.resourceVersion)+1);
- if(request.method==="POST" && url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
+ if(url.pathname==="/reset-onboarding") { profileEnrolled=false; }
+ if(url.pathname==="/profile-version") profile.resourceVersion=String(Number(profile.resourceVersion)+1);
+ if(url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
+}
+const health = createServer((request, response) => {
+ const url=new URL(request.url ?? "/","http://127.0.0.1");
+ if(request.method==="POST") {
+   certificateFixture(url.pathname);
+   connectionFixture(url);
+   profileFixture(url);
+ }
  response.writeHead(200, { "content-type": "text/plain" }); response.end("ok"); });
 health.listen(50062, "127.0.0.1");
 function shutdown(): void { health.close(); grpc.tryShutdown(() => process.exit(0)); }
