@@ -1,7 +1,5 @@
 //! Application runtime policy and its operator-facing configuration contract.
-use ayni_orchestrator_application::execution_settings::{
-    BuildRuntime, WorkloadRuntime, image_repository,
-};
+use ayni_orchestrator_application::execution_settings::BuildRuntime;
 use ayni_orchestrator_kubernetes::configuration::ExecutionConfiguration;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, env, fs};
@@ -39,18 +37,9 @@ pub struct RuntimeConfiguration {
     pub managed_runtime: Option<ManagedRuntime>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProfileRuntime {
-    pub image: String,
-    pub platform: String,
-    #[serde(default = "runtime_account")]
-    pub service_account: String,
-    #[serde(default)]
-    pub pull_secret: Option<String>,
-    #[serde(default)]
-    pub build: Option<BuildRuntime>,
-}
+pub use ayni_orchestrator_application::execution_settings::{
+    ProfileRuntime, managed_image_reference,
+};
 
 /// Shared Kubernetes execution settings for self-service Ayni Managed profiles.
 #[derive(Clone, Deserialize, Serialize)]
@@ -186,30 +175,6 @@ impl RuntimeConfiguration {
     }
 }
 
-impl ProfileRuntime {
-    /// Supplies the workload fields for the worker-owned execution.
-    pub(crate) fn execution_runtime(&self) -> WorkloadRuntime {
-        WorkloadRuntime {
-            image: self.image.clone(),
-            platform: self.platform.clone(),
-            service_account: self.service_account.clone(),
-            pull_secret: self.pull_secret.clone(),
-            build: self.build.clone(),
-        }
-    }
-
-    /// Rebinds a managed runtime's mutable lookup tag to the lock observed from
-    /// the repository. The repository portion remains operator-configured, while
-    /// each lock fingerprint receives its own image identity.
-    pub(crate) fn for_lock_fingerprint(&self, fingerprint: &str) -> Result<Self, &'static str> {
-        let repository = image_repository(&self.image).ok_or("runtime_image_invalid")?;
-        let mut runtime = self.clone();
-        runtime.image = managed_image_reference(repository, &self.platform, fingerprint)?;
-        runtime.execution_runtime().validate()?;
-        Ok(runtime)
-    }
-}
-
 impl ManagedRuntime {
     /// Derives the only acceptable GHCR reference for a connected repository.
     ///
@@ -306,29 +271,3 @@ fn github_component(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
-
-/// Canonical discovery reference; the tag is never admission authority.
-pub fn managed_image_reference(
-    repository: &str,
-    platform: &str,
-    fingerprint: &str,
-) -> Result<String, &'static str> {
-    let fingerprint = fingerprint.strip_prefix("sha256:").unwrap_or(fingerprint);
-    if fingerprint.len() != 64 || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("runtime_lock_fingerprint_invalid");
-    }
-    let architecture = match platform {
-        "linux/amd64" => "amd64",
-        "linux/arm64" => "arm64",
-        _ => return Err("runtime_platform_invalid"),
-    };
-    let path = repository.split_once('/').ok_or("runtime_image_invalid")?.1;
-    let image = format!(
-        "{repository}:ayni-{architecture}-{}",
-        fingerprint.to_ascii_lowercase()
-    );
-    if path.len() > 255 || image.len() > 512 || image_repository(&image).is_none() {
-        return Err("runtime_image_invalid");
-    }
-    Ok(image)
-}

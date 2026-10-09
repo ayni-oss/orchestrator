@@ -26,9 +26,11 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 8 retains certificate tables and
-migrates recognized schema-6 databases transactionally without rewriting existing resources. Earlier
-and unknown schema versions are rejected. Connectors, projects, repositories and runtime profiles remain
+and pull request receipts. SQLite schema version 10 preserves active runtime
+preparation while replacing boolean progress flags with explicit phases. Recognized
+schema versions 6 through 9 upgrade through ordered migrations; the earlier builder
+cutover still retires obsolete global operations. Older and unknown versions are
+rejected. Connectors, projects, repositories and runtime profiles remain
 control-plane resources. Credentials are separate inputs and are never worker output.
 
 ## Connection credentials
@@ -135,3 +137,63 @@ Source owners are retained beneath a different registry namespace. A tag is a
 lookup key; only independently verified immutable manifest digests authorize work.
 [Managed runtime execution](managed-runtime-execution.md) defines recovery and
 credential boundaries. No GitHub workflow installation participates in readiness.
+
+### Product overview reads and browser refresh
+
+Repository and project overview pages consume control-plane summary queries.
+Application readiness rules operate on complete operational-profile counts and
+require readiness in every member repository. SQLite builds the read projection,
+using the immutable task creation-time index for each project's latest task, then
+retains the summaries in bounded pagination snapshots. This keeps overview meaning
+out of browser components and avoids per-repository profile requests or sampling
+global task/profile pages. Unavailable summaries produce a visible error instead
+of an empty-success state. Resource detail and mutation APIs remain available.
+
+Browser consumers share one refresh timer and one in-flight invalidation per
+resource scope. The page loaders declare their runtime, task, connection or
+certificate dependencies. Background refresh pauses in hidden tabs and while a
+dialog or editable input is active; the next scheduled poll catches changes after
+editing ends, including terminal task events received during the pause. Successful
+mutations explicitly refresh their scope, bypassing this pause. Task events and
+periodic task refresh use the same coordinator, so their requests coalesce.
+
+
+## Runtime preparation ownership
+
+The application owns the durable preparation envelope, image phase vocabulary,
+builder resolution state, workload settings and retained-credential interface.
+Ayni-specific frozen requests, verification evidence and trust proposal data live
+in the profile integration layer. Coordinators execute provider and Kubernetes
+actions; SQLite persists the same typed state without importing coordinator types.
+The public API remains a presentation boundary rather than the cursor format.
+
+Each pending image preparation has one authoritative phase: discovery intent or
+started discovery, build intent or started build, publication, publication
+readback intent or started readback, verification, and activation. Intent is saved
+before workload creation. Uncertain publication resumes registry readback before
+another publication attempt. Activation retains verified evidence before cleanup,
+and source/configuration guards prevent stale operations from restoring readiness.
+Failure and retry budgets remain separate from execution phase. Cleanup progress
+still uses the existing coordinator result boundary and never consumes a failure
+budget; a broader typed coordinator error API is not part of this consolidation.
+
+Schema 10 decodes each retained schema-9 cursor and writes its typed equivalent in
+one transaction, including builder lookup identity and timestamp. It preserves
+operation names, frozen credentials, publication budgets and evidence; malformed
+state aborts the transaction. Earlier binaries reject schema 10. This is an upgrade
+contract, not a format suitable for rolling back to an earlier binary.
+
+Credential retention is derived through one typed application interface from both
+frozen preparation and pending execution. A credential rotation cannot delete a
+revision while either stage can resume using it. Successful activation releases
+both execution and preparation references after workload cleanup; artifact history
+retains public provenance independently. Corrupt retained state blocks cleanup.
+
+Private shared libraries own OCI syntax parsing, bounded GHCR credential decoding,
+authentication request construction and registry response handling. API and domain
+validation share syntax without depending on each other's admission policy. The
+registry library receives only each caller's scoped credentials; it does not widen
+probe, discovery, build or publication authority. Kubernetes discovery and
+verification use a shared observer for owned Job/Pod completion and bounded result
+collection. Execution adapters must implement every capability explicitly; missing
+production behavior cannot inherit a successful default.

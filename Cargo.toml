@@ -3,6 +3,8 @@ members = [
     "backend/servers/control-plane/crates/application",
     "backend/servers/control-plane/crates/grpc-contract",
     "backend/libs/domain",
+    "backend/libs/registry",
+    "backend/libs/oci",
     "backend/libs/observability",
     "backend/servers/control-plane",
     "backend/workers/runtime-worker",

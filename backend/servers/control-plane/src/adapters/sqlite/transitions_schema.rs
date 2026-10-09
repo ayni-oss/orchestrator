@@ -230,6 +230,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             super::builder_cutover::migrate(connection)?;
             version = 9;
         }
+        if version == 9 {
+            super::preparation_migration::migrate(connection)?;
+            version = 10;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -271,7 +275,7 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',9,unixepoch());
+VALUES ('control_plane',10,unixepoch());
 CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL);
 CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1;
 CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL);
@@ -334,11 +338,13 @@ CREATE TABLE development_tasks(
     runtime_profile_id TEXT NOT NULL REFERENCES runtime_profiles(id),
     state INTEGER NOT NULL, active_attempt_id TEXT,
     deadline_at_seconds INTEGER, deadline_at_nanos INTEGER,
+    created_at_seconds INTEGER NOT NULL DEFAULT 0, created_at_nanos INTEGER NOT NULL DEFAULT 0,
     payload BLOB NOT NULL,
     resource_version INTEGER NOT NULL CHECK(resource_version > 0), event_cursor INTEGER NOT NULL UNIQUE
 );
 CREATE INDEX development_tasks_deadline_idx
 ON development_tasks(state,deadline_at_seconds,deadline_at_nanos);
+CREATE INDEX development_tasks_project_created_idx ON development_tasks(project_id,created_at_seconds DESC,created_at_nanos DESC,id DESC);
 CREATE TABLE development_attempts(
     id TEXT PRIMARY KEY,
     development_task_id TEXT NOT NULL REFERENCES development_tasks(id),

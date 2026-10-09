@@ -20,8 +20,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .ok_or("runtime_preparation_missing")?
             .generation
             .clone();
-        if cursor.status.get("builder-contract") == Some(&key)
-            && let Some(image) = cursor.status.get("builder-image")
+        if cursor.builder.contract.as_ref() == Some(&key)
+            && let Some(image) = cursor.builder.image.as_ref()
         {
             runtime
                 .build
@@ -29,23 +29,19 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .ok_or("runtime_builder_missing")?
                 .image
                 .clone_from(image);
-            if let Some(name) = cursor.status.get("builder-job") {
+            if let Some(name) = cursor.builder.job.as_ref() {
                 self.kubernetes.cleanup(name).await?;
-                cursor.status.remove("builder-job");
-                cursor.status.remove("builder-started");
+                cursor.builder.job = None;
+                cursor.builder.started_at = None;
                 self.save(id, cursor).await?;
             }
             return Ok(true);
         }
         let name = operation_name(&format!("official-builder:{id}:{key}"), cursor.sequence);
-        if cursor.status.get("builder-job") != Some(&name)
-            || !cursor.status.contains_key("builder-started")
-        {
-            cursor
-                .status
-                .insert("builder-started".into(), super::now()?.to_string());
+        if cursor.builder.job.as_ref() != Some(&name) || cursor.builder.started_at.is_none() {
+            cursor.builder.started_at = Some(super::now()?);
         }
-        cursor.status.insert("builder-job".into(), name.clone());
+        cursor.builder.job = Some(name.clone());
         cursor
             .status
             .insert("phase".into(), "resolving_builder".into());
@@ -58,9 +54,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let image = match self.kubernetes.discover(&name).await? {
             ImageDiscovery::Pending => {
                 let started = cursor
-                    .status
-                    .get("builder-started")
-                    .and_then(|value| value.parse::<u64>().ok())
+                    .builder
+                    .started_at
                     .ok_or("runtime_preparation_invalid")?;
                 if super::now()?.saturating_sub(started) > 180 {
                     return Err("official_builder_timeout");
@@ -82,15 +77,15 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .ok_or("runtime_builder_missing")?
             .image
             .clone_from(&image);
-        cursor.status.insert("builder-contract".into(), key);
-        cursor.status.insert("builder-image".into(), image);
+        cursor.builder.contract = Some(key);
+        cursor.builder.image = Some(image);
         if let Some(preparation) = &mut cursor.preparation {
             preparation.runtime = runtime.clone();
         }
         self.save(id, cursor).await?;
         self.kubernetes.cleanup(&name).await?;
-        cursor.status.remove("builder-job");
-        cursor.status.remove("builder-started");
+        cursor.builder.job = None;
+        cursor.builder.started_at = None;
         self.save(id, cursor).await?;
         Ok(true)
     }
@@ -163,7 +158,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .as_ref()
                 .is_none_or(|identity| identity.generation != generation)
             {
-                if let Some(name) = cursor.status.get("builder-job") {
+                if let Some(name) = cursor.builder.job.as_ref() {
                     self.kubernetes.cleanup(name).await?;
                 }
                 cursor.preparation = Some(super::PreparationIdentity {

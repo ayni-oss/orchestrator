@@ -1,5 +1,7 @@
 //! GHCR-only probe executed in an isolated Job, never inside the API process.
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use ayni_orchestrator_registry::{
+    Credentials, decode_credentials, read_credentials, token_request,
+};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -25,48 +27,15 @@ pub struct RegistryTestReport {
     pub artifact_digest: String,
 }
 
-struct Credentials {
-    username: String,
-    password: String,
-}
-
 fn credentials(path: &str) -> Result<Credentials, &'static str> {
-    let data = fs::read(path).map_err(|_| "registry_credentials_unavailable")?;
-    if data.len() > 65_536 {
-        return Err("registry_credentials_invalid");
-    }
-    let value: serde_json::Value =
-        serde_json::from_slice(&data).map_err(|_| "registry_credentials_invalid")?;
-    let entry = value
-        .get("auths")
-        .and_then(|auths| auths.get("ghcr.io"))
-        .ok_or("registry_credentials_invalid")?;
-    let decoded;
-    let (username, password) = if let Some(auth) = entry.get("auth").and_then(|v| v.as_str()) {
-        decoded = STANDARD
-            .decode(auth)
-            .map_err(|_| "registry_credentials_invalid")?;
-        let pair = std::str::from_utf8(&decoded).map_err(|_| "registry_credentials_invalid")?;
-        pair.split_once(':').ok_or("registry_credentials_invalid")?
-    } else {
-        (
-            entry
-                .get("username")
-                .and_then(|v| v.as_str())
-                .ok_or("registry_credentials_invalid")?,
-            entry
-                .get("password")
-                .and_then(|v| v.as_str())
-                .ok_or("registry_credentials_invalid")?,
-        )
-    };
-    if username.is_empty() || password.is_empty() {
-        return Err("registry_credentials_invalid");
-    }
-    Ok(Credentials {
-        username: username.into(),
-        password: password.into(),
-    })
+    let data = read_credentials(std::path::Path::new(path)).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::InvalidData {
+            "registry_credentials_invalid"
+        } else {
+            "registry_credentials_unavailable"
+        }
+    })?;
+    decode_credentials(&data)
 }
 
 /// Validates a GHCR namespace without permitting hostnames or credential destinations.
@@ -120,13 +89,7 @@ async fn auth(
     credentials: Option<&Credentials>,
     actions: &str,
 ) -> Result<String, &'static str> {
-    let scope = format!("repository:{repository}:{actions}");
-    let mut request = client
-        .get("https://ghcr.io/token")
-        .query(&[("service", "ghcr.io"), ("scope", scope.as_str())]);
-    if let Some(credentials) = credentials {
-        request = request.basic_auth(&credentials.username, Some(&credentials.password));
-    }
+    let request = token_request(client, repository, credentials, actions);
     let response = request
         .send()
         .await
@@ -236,22 +199,8 @@ async fn push(client: &Client, repository: &str, token: &str) -> Result<String, 
     Ok(digest)
 }
 
-async fn bounded_body(mut response: reqwest::Response) -> Result<Vec<u8>, &'static str> {
-    if response.content_length().is_some_and(|size| size > 65_536) {
-        return Err("registry_response_oversized");
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| "registry_response_unavailable")?
-    {
-        if bytes.len() + chunk.len() > 65_536 {
-            return Err("registry_response_oversized");
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
+async fn bounded_body(response: reqwest::Response) -> Result<Vec<u8>, &'static str> {
+    ayni_orchestrator_registry::bounded_body(response, 65_536).await
 }
 
 async fn cleanup(

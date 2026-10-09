@@ -11,6 +11,14 @@ selectors and reads `.ayni/verify/last/signals.json`. `ayni_check` directly invo
 the full quality gate. The coordinator always runs the full check even if the
 agent calls no verification tool.
 
+Coding sessions invoke a `CodingAgentRunner` adapter. The current adapter uses
+Rig and OpenAI; it owns model credentials, tools, usage tracking and the hook
+that persists consumed turns before provider calls. Session state, recovery and
+deadline calculations stay outside that adapter. Replacing the adapter must
+preserve the frozen budget, bounded conversation and input-question result.
+Ayni's supported CLI currently supplies environment and quality execution; an
+external Ayni coding-agent invocation contract is not yet implemented here.
+
 Coding turns are counted across initial and repair sessions. Coherent milestones
 use Conventional Commit messages, and remaining permitted changes are committed
 when a session ends. Empty commits are skipped. Repairs retain original context

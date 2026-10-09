@@ -1,4 +1,5 @@
 //! Existing-App repository onboarding. Provider credentials never enter the BFF.
+use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 use crate::{
     AppState, adapters::github::SourceClient, coordinators::with_store_async as with_store,
 };

@@ -12,6 +12,24 @@ resumes retained final work; retry task starts a new attempt with its frozen
 snapshot. Persisted budgets apply after worker restart. Collection is idempotent
 and resource cleanup follows durable collection.
 
+## Preparation state upgrade
+
+Deploying schema 10 upgrades retained schema-9 runtime preparation in one
+transaction. The migration preserves frozen source and runtime identities,
+operation names, retained verification evidence and remaining publication budget.
+It also indexes immutable task creation timestamps for project summaries. An
+invalid cursor or task aborts the transaction; repair the invalid retained record
+from a trusted backup before retrying, rather than deleting pending work.
+
+Back up the database before upgrading and run one control-plane writer during the
+upgrade. Earlier binaries reject schema 10, so rollback requires restoring the
+pre-upgrade backup while preserving and reconciling any external work performed
+since the backup. Do not run an earlier binary against the upgraded database.
+After restart, uncertain publication still reads the registry before retrying, and
+cleanup still precedes runtime activation. Credential cleanup retains revisions
+referenced by preparation as well as pending Jobs, then releases preparation
+references once activation and workload cleanup complete.
+
 ## Breaking cutover
 
 Use the explicit `docker-desktop` context for local deployment. Back up the private
@@ -119,7 +137,7 @@ mise into writable volumes. Lock updates must preserve immutable environment inp
 Retain previous immutable signing Secret revisions while pending or frozen build
 references need them. Already admitted tasks retain their frozen runtime image;
 rotation does not rewrite their snapshots. Never delete administrator-owned source
-Secrets as certificate cleanup. The supported schema-6 to schema-8 migration keeps
+Secrets as certificate cleanup. The supported schema-6 through schema-10 upgrade keeps
 existing connections and retained execution state; back up the private database
 before upgrading and preserve Secret ownership references.
 

@@ -1,8 +1,9 @@
 //! Pull-only manifest discovery; no repository code or engine authority.
+use crate::observation::{container_status, termination_message};
 use crate::{execution::RuntimeKubernetes, workload};
 use ayni_orchestrator_application::execution::{ImageDiscovery, WorkloadRuntime};
-use k8s_openapi::api::{batch::v1::Job, core::v1::Pod};
-use kube::{Api, api::ListParams};
+use k8s_openapi::api::batch::v1::Job;
+use kube::Api;
 use serde_json::json;
 
 impl RuntimeKubernetes {
@@ -13,33 +14,10 @@ impl RuntimeKubernetes {
     ) -> Result<String, &'static str> {
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
         let job = jobs.get(name).await.map_err(|_| "kubernetes_unavailable")?;
-        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
-        let list = pods
-            .list(
-                &ListParams::default()
-                    .labels(&format!("ayni.io/runtime-operation={name}"))
-                    .limit(2),
-            )
-            .await
-            .map_err(|_| "kubernetes_unavailable")?;
-        let [pod] = list.items.as_slice() else {
-            return Err("runtime_pod_identity_invalid");
-        };
-        if !pod.metadata.owner_references.as_ref().is_some_and(|refs| {
-            refs.iter()
-                .any(|r| r.controller == Some(true) && Some(&r.uid) == job.metadata.uid.as_ref())
-        }) {
-            return Err("runtime_pod_identity_invalid");
-        }
-        pod.status
-            .as_ref()
-            .and_then(|s| s.container_statuses.as_ref())
-            .and_then(|s| s.iter().find(|c| c.name == container))
-            .and_then(|c| c.state.as_ref())
-            .and_then(|s| s.terminated.as_ref())
-            .and_then(|s| s.message.as_ref())
-            .filter(|s| s.len() <= 4096)
-            .cloned()
+        let pod = self.owned_operation_pod(name, &job).await?;
+        container_status(&pod, container)
+            .and_then(|status| termination_message(status, false))
+            .map(str::to_owned)
             .ok_or("runtime_result_missing")
     }
     /// Read the owned build Job’s immutable local candidate identity.
@@ -116,34 +94,9 @@ impl RuntimeKubernetes {
         if job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0) != 1 {
             return Ok(ImageDiscovery::Pending);
         }
-        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
-        let list = pods
-            .list(
-                &ListParams::default()
-                    .labels(&format!("ayni.io/runtime-operation={name}"))
-                    .limit(2),
-            )
-            .await
-            .map_err(|_| "kubernetes_unavailable")?;
-        let [pod] = list.items.as_slice() else {
-            return Err("runtime_pod_identity_invalid");
-        };
-        if !pod.metadata.owner_references.as_ref().is_some_and(|refs| {
-            refs.iter()
-                .any(|r| r.controller == Some(true) && Some(&r.uid) == job.metadata.uid.as_ref())
-        }) {
-            return Err("runtime_pod_identity_invalid");
-        }
-        let message = pod
-            .status
-            .as_ref()
-            .and_then(|s| s.container_statuses.as_ref())
-            .and_then(|s| s.iter().find(|c| c.name == "discover"))
-            .and_then(|c| c.state.as_ref())
-            .and_then(|s| s.terminated.as_ref())
-            .filter(|s| s.exit_code == 0)
-            .and_then(|s| s.message.as_ref())
-            .filter(|s| s.len() <= 4096)
+        let pod = self.owned_operation_pod(name, &job).await?;
+        let message = container_status(&pod, "discover")
+            .and_then(|status| termination_message(status, true))
             .ok_or("runtime_result_invalid")?;
         serde_json::from_str(message).map_err(|_| "runtime_result_invalid")
     }

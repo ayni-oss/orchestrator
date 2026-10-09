@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-registry = { path = "../../libs/registry" }
 ayni-orchestrator-observability = { path = "../../libs/observability" }
 tracing.workspace = true
 ayni-orchestrator-runtime = { path = "../../libs/runtime/contracts" }

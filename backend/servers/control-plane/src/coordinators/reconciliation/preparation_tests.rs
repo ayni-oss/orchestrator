@@ -295,7 +295,7 @@ impl Fixture {
                 source_digest: "frozen".into(),
                 lock_digest: format!("sha256:{}", "c".repeat(64)),
                 build_name: None,
-                build: BuildProgress::default(),
+                phase: ImagePreparationPhase::default(),
                 candidate_image_id: None,
                 publish_name: None,
                 publish_attempts: 0,
@@ -303,7 +303,6 @@ impl Fixture {
                 candidate_missing: false,
                 force_rebuild: false,
                 certificate: None,
-                discovery: DiscoveryProgress::default(),
                 resolved_digest: None,
                 verification: None,
                 failed: false,
@@ -462,7 +461,7 @@ async fn publication_retries_same_candidate_and_rebuilds_evicted_candidate() -> 
     fixture.complete(&publisher, ExecutionState::Failed);
     fixture.step().await?;
     fixture.step().await?;
-    assert!(!fixture.pending()?.build.completed);
+    assert!(fixture.pending()?.phase != ImagePreparationPhase::Publishing);
     assert_ne!(fixture.pending()?.build_name, original_build);
     assert_eq!(fixture.pending()?.request.revision, "a".repeat(40));
     Ok(())
@@ -544,7 +543,7 @@ async fn interrupted_publisher_probes_registry_before_reissuing_the_push() -> Te
         .states
         .remove(&publisher);
     fixture.step().await?;
-    assert!(!fixture.pending()?.discovery.complete);
+    assert!(fixture.pending()?.phase.discovering());
     fixture.discovery(ImageDiscovery::Resolved {
         digest: format!("sha256:{}", "e".repeat(64)),
         image_id: format!("sha256:{}", "b".repeat(64)),
@@ -644,7 +643,7 @@ async fn engine_loss_discards_candidate_and_restart_preserves_fresh_attempt() ->
     assert_ne!(fresh.build_name, old.build_name);
     assert!(fresh.candidate_image_id.is_none());
     assert!(fresh.publish_name.is_none());
-    assert!(!fresh.build.started && !fresh.build.completed);
+    assert!(fresh.phase == ImagePreparationPhase::Building);
     assert_eq!(fresh.request.revision, old.request.revision);
     assert_eq!(fresh.publish_remaining, old.publish_remaining - 1);
     fixture.reconciler.state = AppState::open(fixture.directory.path().join("state.sqlite"), 3)?;
@@ -657,7 +656,7 @@ async fn engine_loss_discards_candidate_and_restart_preserves_fresh_attempt() ->
         .await?;
     fixture.step().await?;
     assert_eq!(fixture.pending()?.build_name, fresh.build_name);
-    assert!(fixture.pending()?.build.started);
+    assert!(fixture.pending()?.phase == ImagePreparationPhase::BuildingStarted);
     let jobs = fixture
         .reconciler
         .kubernetes

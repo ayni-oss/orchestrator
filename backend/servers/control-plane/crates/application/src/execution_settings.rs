@@ -1,5 +1,7 @@
 //! Application workload admission and isolation settings.
-use ayni_orchestrator_runtime::runtime_contract::{RuntimeImage, RuntimePlatform};
+use ayni_orchestrator_runtime::runtime_contract::{
+    ImageRepository, ImageTag, RuntimeImage, RuntimePlatform,
+};
 use serde::{Deserialize, Serialize};
 
 /// Runtime settings used to construct one isolated workload.
@@ -126,19 +128,12 @@ pub fn image_repository(image: &str) -> Option<&str> {
         return (path.len() <= 255).then_some(repository);
     }
     let (repository, tag) = image.rsplit_once(':')?;
-    if tag.is_empty()
-        || tag.len() > 128
-        || tag.starts_with(['-', '.'])
-        || !tag
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
-        || repository
-            .split_once('/')
-            .is_none_or(|(_, path)| path.len() > 255)
-    {
+    ImageTag::parse(tag).ok()?;
+    ImageRepository::parse(repository).ok()?;
+    let (_, path) = repository.split_once('/')?;
+    if path.len() > 255 {
         return None;
     }
-    RuntimeImage::parse(&format!("{repository}@sha256:{}", "a".repeat(64))).ok()?;
     Some(repository)
 }
 
@@ -150,4 +145,78 @@ fn name(value: &str) -> bool {
         && value
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileRuntime {
+    pub image: String,
+    pub platform: String,
+    #[serde(default = "runtime_account")]
+    pub service_account: String,
+    #[serde(default)]
+    pub pull_secret: Option<String>,
+    #[serde(default)]
+    pub build: Option<BuildRuntime>,
+}
+
+impl ProfileRuntime {
+    /// Supplies the workload fields for the worker-owned execution.
+    #[must_use]
+    pub fn execution_runtime(&self) -> WorkloadRuntime {
+        WorkloadRuntime {
+            image: self.image.clone(),
+            platform: self.platform.clone(),
+            service_account: self.service_account.clone(),
+            pull_secret: self.pull_secret.clone(),
+            build: self.build.clone(),
+        }
+    }
+
+    /// Rebinds a managed runtime's mutable lookup tag to the lock observed from
+    /// the repository. The repository portion remains operator-configured, while
+    /// each lock fingerprint receives its own image identity.
+    ///
+    /// # Errors
+    /// Rejects invalid image, platform, fingerprint or workload settings.
+    pub fn for_lock_fingerprint(&self, fingerprint: &str) -> Result<Self, &'static str> {
+        let repository = image_repository(&self.image).ok_or("runtime_image_invalid")?;
+        let mut runtime = self.clone();
+        runtime.image = managed_image_reference(repository, &self.platform, fingerprint)?;
+        runtime.execution_runtime().validate()?;
+        Ok(runtime)
+    }
+}
+
+/// Canonical discovery reference; the tag is never admission authority.
+///
+/// # Errors
+/// Rejects unsupported platforms, malformed fingerprints and image repositories.
+pub fn managed_image_reference(
+    repository: &str,
+    platform: &str,
+    fingerprint: &str,
+) -> Result<String, &'static str> {
+    let fingerprint = fingerprint.strip_prefix("sha256:").unwrap_or(fingerprint);
+    if fingerprint.len() != 64 || !fingerprint.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("runtime_lock_fingerprint_invalid");
+    }
+    let architecture = match platform {
+        "linux/amd64" => "amd64",
+        "linux/arm64" => "arm64",
+        _ => return Err("runtime_platform_invalid"),
+    };
+    let path = repository.split_once('/').ok_or("runtime_image_invalid")?.1;
+    let image = format!(
+        "{repository}:ayni-{architecture}-{}",
+        fingerprint.to_ascii_lowercase()
+    );
+    if path.len() > 255 || image.len() > 512 || image_repository(&image).is_none() {
+        return Err("runtime_image_invalid");
+    }
+    Ok(image)
+}
+
+fn runtime_account() -> String {
+    "runtime-coding".into()
 }

@@ -419,6 +419,18 @@ const TASKS_RETRY: &[Capability] = &[Capability::TasksRetry];
 
 fn operation(rpc: &'static str) -> Option<Operation> {
     let (required, deadline) = match rpc {
+        "ListProjectSummaries" => (
+            &[
+                Capability::RepositoriesRead,
+                Capability::ProfilesRead,
+                Capability::TasksRead,
+            ][..],
+            MAX_UNARY_DEADLINE,
+        ),
+        "ListRepositorySummaries" => (
+            &[Capability::RepositoriesRead, Capability::ProfilesRead][..],
+            MAX_UNARY_DEADLINE,
+        ),
         "ListProjects"
         | "GetProject"
         | "ListRepositoryConnections"
@@ -658,6 +670,40 @@ mod tests {
         assert_eq!(
             accepted.ok().map(|identity| identity.id().to_owned()),
             Some("ci-client".to_owned())
+        );
+    }
+
+    #[test]
+    fn summaries_require_all_capabilities_for_their_projected_resources() {
+        let repositories = guard(u64::MAX, &["repositories.read"]);
+        assert!(
+            repositories
+                .authorize(&request(Some(TOKEN), "30S"), "ListRepositorySummaries")
+                .is_err()
+        );
+        assert!(
+            repositories
+                .authorize(&request(Some(TOKEN), "30S"), "ListProjectSummaries")
+                .is_err()
+        );
+        let profiles = guard(u64::MAX, &["repositories.read", "profiles.read"]);
+        assert!(
+            profiles
+                .authorize(&request(Some(TOKEN), "30S"), "ListRepositorySummaries")
+                .is_ok()
+        );
+        assert!(
+            profiles
+                .authorize(&request(Some(TOKEN), "30S"), "ListProjectSummaries")
+                .is_err()
+        );
+        let all = guard(
+            u64::MAX,
+            &["repositories.read", "profiles.read", "tasks.read"],
+        );
+        assert!(
+            all.authorize(&request(Some(TOKEN), "30S"), "ListProjectSummaries")
+                .is_ok()
         );
     }
 

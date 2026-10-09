@@ -1,14 +1,5 @@
 //! Bounded lock envelope observation; Ayni owns full lock and signature validation.
-use serde::Deserialize;
 use thiserror::Error;
-
-#[derive(Deserialize)]
-struct Lock {
-    ayni_version: String,
-    schema_version: String,
-    recipe_version: String,
-    fingerprint: String,
-}
 
 pub struct LockIdentity {
     pub(crate) fingerprint: String,
@@ -24,10 +15,8 @@ pub enum AdmissionError {
 }
 
 pub fn parse_lock(bytes: &[u8]) -> Result<LockIdentity, AdmissionError> {
-    if bytes.len() > 1_048_576 {
-        return Err(AdmissionError::InvalidLock);
-    }
-    let lock: Lock = serde_json::from_slice(bytes).map_err(|_| AdmissionError::InvalidLock)?;
+    let lock = ayni_orchestrator_profile_ayni::compatibility::decode_lock_envelope(bytes)
+        .map_err(|_| AdmissionError::InvalidLock)?;
     let contract = ayni_orchestrator_profile_ayni::compatibility::contract(&lock.ayni_version)
         .map_err(|_| AdmissionError::InvalidLock)?;
     if (lock.schema_version.as_str(), lock.recipe_version.as_str())
@@ -35,17 +24,11 @@ pub fn parse_lock(bytes: &[u8]) -> Result<LockIdentity, AdmissionError> {
     {
         return Err(AdmissionError::InvalidLock);
     }
-    let fingerprint = lock
-        .fingerprint
-        .strip_prefix("sha256:")
-        .filter(|f| {
-            f.len() == 64
-                && f.bytes()
-                    .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
-        })
-        .ok_or(AdmissionError::InvalidFingerprint)?;
+    let fingerprint =
+        ayni_orchestrator_runtime::runtime_contract::Sha256Digest::parse(&lock.fingerprint)
+            .map_err(|_| AdmissionError::InvalidFingerprint)?;
     Ok(LockIdentity {
-        fingerprint: fingerprint.into(),
+        fingerprint: fingerprint.hex().into(),
         ayni_version: lock.ayni_version,
     })
 }

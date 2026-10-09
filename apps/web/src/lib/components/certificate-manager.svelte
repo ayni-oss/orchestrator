@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { enhance } from "$app/forms";
-  import { invalidateAll } from "$app/navigation";
+  import { refreshScope, subscribeRefresh } from "$lib/refresh.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { CertificateView } from "$lib/certificate.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -26,14 +26,14 @@
       // FormData already contains the submitted seed; remove it after the request completes.
       return async({result,update})=>{
         formData.delete("signingSeed");clearSeeds();
-        try {await update({reset:false});showError=result.type==="failure" || result.type==="error";if(result.type==="success" && operation==="create")closeCreate(false);if(result.type==="success" && operation==="delete")closeEdit(false);await invalidateAll();}
+        try {await update({reset:false,invalidateAll:false});showError=result.type==="failure" || result.type==="error";if(result.type==="success" && operation==="create")closeCreate(false);if(result.type==="success" && operation==="delete")closeEdit(false);await refreshScope("app:certificates", true);}
         finally {busy=false;clearSeeds();}
       };
     };
   }
   const snippet=(c:CertificateView)=>`[environment.certificate.trusted_keys]\n${JSON.stringify(c.keyId)} = ${JSON.stringify(c.publicKey)}`;
   async function copy(value:string) {try{await navigator.clipboard.writeText(value);copyMessage="Copied.";}catch{copyMessage="Copy unavailable. Select and copy the displayed value.";}}
-  onMount(()=>{const timer=setInterval(()=>{void invalidateAll();},30_000);return()=>{clearInterval(timer);clearSeeds();};});
+  onMount(()=>{const unsubscribe=subscribeRefresh("app:certificates",{intervalMs:30_000});return()=>{unsubscribe();clearSeeds();};});
 </script>
 
 {#snippet identityFields(prefix:string)}

@@ -296,8 +296,8 @@ impl TaskRepository for CleanStore {
             .execute(
                 "INSERT INTO development_tasks(
                     id,repository_connection_id,runtime_profile_id,state,active_attempt_id,
-                    deadline_at_seconds,deadline_at_nanos,payload,resource_version,event_cursor,project_id
-                 ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10)",
+                    deadline_at_seconds,deadline_at_nanos,payload,resource_version,event_cursor,project_id,created_at_seconds,created_at_nanos
+                 ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10,?11,?12)",
                 params![
                     task_id,
                     repository_id,
@@ -314,7 +314,9 @@ impl TaskRepository for CleanStore {
                         .map(|value| value.nanos),
                     task.encode_to_vec(),
                     i64::try_from(task_cursor).map_err(|_| CleanStoreError::CorruptState)?,
-                    task.project_id
+                    task.project_id,
+                    task.created_at.ok_or(CleanStoreError::CorruptState)?.seconds,
+                    task.created_at.ok_or(CleanStoreError::CorruptState)?.nanos
                 ],
             )
             .map_err(map_constraint)?;

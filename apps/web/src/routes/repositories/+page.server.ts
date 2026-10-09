@@ -1,4 +1,3 @@
-import type { RuntimeProfileDto } from "@ayni-orchestrator/bff/server";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
@@ -12,25 +11,16 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   try {
     const context = requestContext(locals);
     const bff = getBff();
-    const result = await bff.listRepositoryConnections({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
-    const runtimeProfiles = await Promise.all(result.repositoryConnections.map(async (repository) => {
-      try {
-        const profiles = await bff.listRuntimeProfiles(repository.id, { pageSize: 10 }, context);
-        return [repository.id, profiles.runtimeProfiles] as const;
-      } catch {
-        return [repository.id, []] as const;
-      }
-    }));
+    const result = await bff.listRepositorySummaries({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
     return {
-      repositoryConnections: result.repositoryConnections,
-      runtimeProfiles: Object.fromEntries(runtimeProfiles) as Record<string, RuntimeProfileDto[]>,
+      summaries: result.summaries,
       nextPageToken: result.page.nextPageToken || undefined,
       requestId: locals.requestId,
       backend: "connected" as const,
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { repositoryConnections: [], runtimeProfiles: {} as Record<string, RuntimeProfileDto[]>, requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 

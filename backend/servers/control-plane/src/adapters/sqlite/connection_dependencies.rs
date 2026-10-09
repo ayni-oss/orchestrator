@@ -78,13 +78,10 @@ impl CleanStore {
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(CleanStoreError::Database)?;
         for row in rows {
-            let cursor: serde_json::Value =
+            let cursor: crate::profiles::ayni::preparation_state::RuntimeCursor =
                 serde_json::from_str(&row.map_err(CleanStoreError::Database)?)
                     .map_err(|_| CleanStoreError::CorruptState)?;
-            let runtime = &cursor["pending"]["frozen_runtime"];
-            if runtime["pull_secret"].as_str() == Some(name)
-                || runtime["build"]["registry_secret"].as_str() == Some(name)
-            {
+            if ayni_orchestrator_application::runtime_preparation::RetainedCredentials::credential_references(&cursor).secrets.contains(name) {
                 return Ok(true);
             }
         }
@@ -135,7 +132,7 @@ mod tests {
     #[test]
     fn pending_build_retains_both_credential_revisions() -> Result<(), CleanStoreError> {
         let store = CleanStore::in_memory()?;
-        let cursor=serde_json::json!({"pending":{"frozen_runtime":{"pull_secret":"retired-pull","build":{"registry_secret":"retired-push"}}}}).to_string();
+        let cursor = crate::profiles::ayni::preparation_state::tests::legacy_cursor().to_string();
         store
             .connection
             .execute(

@@ -34,20 +34,19 @@
   </PageHeader>
   {#if data.error}<Feedback kind="warning" title="Some project data is unavailable" message={data.error.message} requestId={data.requestId} />{/if}
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-    {#each data.projects as project (project.id)}
-      {@const repositoryNames = project.repositoryConnectionIds.map(id => data.repositories.find(repo => repo.id === id)?.displayName ?? "Repository unavailable")}
-      {@const profiles = data.profiles.filter(profile => project.repositoryConnectionIds.includes(profile.repositoryConnectionId))}
-      {@const latest = data.tasksComplete ? data.tasks.filter(task => task.projectId === project.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt))[0] : undefined}
+    {#each data.summaries as summary (summary.project.id)}
+      {@const project = summary.project}
+      {@const latest = summary.tasksComplete ? summary.latestTask : undefined}
       <Card.Root class="h-full"><Card.Header>
         <Card.Title><a class="hover:underline" href={`/projects/${encodeURIComponent(project.id)}`}>{project.displayName}</a></Card.Title>
-        <Card.Description>{repositoryNames.join(", ")}</Card.Description>
+        <Card.Description>{summary.repositoryNames.join(", ")}</Card.Description>
       </Card.Header><Card.Content class="space-y-4 text-sm">
-        <div class="flex items-center justify-between"><span class="text-muted-foreground">Environment</span><span>{project.state === "archived" ? "Archived" : !data.profilesComplete ? "Unavailable" : project.repositoryConnectionIds.every(id => profiles.some(profile => profile.repositoryConnectionId === id && profile.support === "operational") && profiles.filter(profile => profile.repositoryConnectionId === id && profile.support === "operational").every(profile => profile.state === "ready")) ? "Ready" : "Setup required"}</span></div>
-        <div class="flex items-center justify-between gap-3"><span class="text-muted-foreground">Last task</span>{#if latest}<StatusBadge status={latest.state} tone={statusTone(latest.state)} />{:else}<span>{data.tasksComplete ? "No tasks yet" : "Unavailable"}</span>{/if}</div>
-        {#if latest}<p class="truncate text-muted-foreground">{latest.snapshot.request} · {formatDate(latest.createdAt)}</p>{/if}
+        <div class="flex items-center justify-between"><span class="text-muted-foreground">Environment</span><span>{project.state === "archived" ? "Archived" : !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : "Setup required"}</span></div>
+        <div class="flex items-center justify-between gap-3"><span class="text-muted-foreground">Last task</span>{#if latest}<StatusBadge status={latest.state} tone={statusTone(latest.state)} />{:else}<span>{summary.tasksComplete ? "No tasks yet" : "Unavailable"}</span>{/if}</div>
+        {#if latest}<p class="truncate text-muted-foreground">{latest.request} · {formatDate(latest.createdAt)}</p>{/if}
         <div class="flex items-center justify-between"><span class="flex items-center gap-2 text-muted-foreground"><GitPullRequest class="size-4" aria-hidden="true" /> Open PRs</span><span>Unavailable</span></div>
       </Card.Content></Card.Root>
-    {:else}<div class="col-span-full rounded-xl border border-dashed p-12 text-center"><FolderGit2 class="mx-auto mb-4 size-8 text-muted-foreground" aria-hidden="true" /><h2 class="font-semibold">Create your first project</h2><p class="mt-2 text-sm text-muted-foreground">Group repositories and start work from one place.</p></div>{/each}
+    {:else}{#if data.available}<div class="col-span-full rounded-xl border border-dashed p-12 text-center"><FolderGit2 class="mx-auto mb-4 size-8 text-muted-foreground" aria-hidden="true" /><h2 class="font-semibold">Create your first project</h2><p class="mt-2 text-sm text-muted-foreground">Group repositories and start work from one place.</p></div>{/if}{/each}
   </div>
   {#if data.nextPageToken}<Button href={`?pageToken=${encodeURIComponent(data.nextPageToken)}`} variant="outline">More projects</Button>{/if}
   <Dialog.Root bind:open onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>Create project</Dialog.Title><Dialog.Description>Choose one or more repositories. Repositories and their runtime setup can be shared across projects.</Dialog.Description></Dialog.Header>

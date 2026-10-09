@@ -1,8 +1,13 @@
+use super::super::{
+    activity::ActivityLog,
+    sessions::{SessionState, run},
+};
 use super::*;
 use rig_core::{
     completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
     streaming::StreamingCompletionResponse,
 };
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct CountingFailure(Arc<AtomicUsize>);

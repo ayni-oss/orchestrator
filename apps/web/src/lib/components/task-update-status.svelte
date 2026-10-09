@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation";
+  import { refreshScope } from "$lib/refresh.js";
   import { onMount } from "svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
 
@@ -32,7 +32,7 @@
       connection = "live";
       try {
         const update = JSON.parse((event as MessageEvent<string>).data) as { resourceVersion?: string };
-        if (update.resourceVersion !== undefined && update.resourceVersion !== resourceVersion) void invalidateAll();
+        if (update.resourceVersion !== undefined && update.resourceVersion !== resourceVersion) void refreshScope("app:tasks").catch(() => { connection = "disconnected"; });
       } catch { connection = "disconnected"; }
     });
     stream.addEventListener("error", () => { if (!terminal) connection = "disconnected"; });

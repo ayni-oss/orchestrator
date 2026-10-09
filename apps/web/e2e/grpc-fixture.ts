@@ -107,6 +107,7 @@ const repositoryService: UntypedServiceImplementation = {
   setRepositoryRegistry(call,callback){repository={...repository,registryConnectionId:call.request.registryConnectionId,imageNamespace:call.request.imageNamespace,resourceVersion:String(version++)};callback(null,{repositoryConnection:repository});},
   connectGithubRepository(_call,callback){callback(null,{repositoryConnection:repository});},
 
+  listRepositorySummaries(_call,callback) { callback(null,{summaries:[repository,secondRepository].map(item=>({repositoryConnection:item,runtime:runtimeSummary(item.id)})),page}); },
   listRepositoryConnections(_call, callback) { callback(null, { repositoryConnections: [repository,secondRepository], page }); },
   getRepositoryConnection(call, callback) { callback(null, { repositoryConnection: call.request.repositoryConnectionId === secondRepository.id ? secondRepository : repository }); },
   createRepositoryConnection(call, callback) {
@@ -125,6 +126,12 @@ function profileView() {
 }
 
 let profileEnrolled = true;
+function runtimeSummary(repository:string) {
+  const operational=profileEnrolled && repository===repositoryId && profile.support===RuntimeProfileSupport.RUNTIME_PROFILE_SUPPORT_OPERATIONAL;
+  const ready=operational && profile.state===RuntimeProfileState.RUNTIME_PROFILE_STATE_READY;
+  return {complete:true,ready,operationalProfiles:operational ? 1 : 0,readyProfiles:ready ? 1 : 0};
+}
+
 const runtimeProfileService: UntypedServiceImplementation = {
   inspectAyniRepository(_call,callback){callback(null,{repositorySnapshotId:"snapshot:1",repositoryRevision:revision,lockFingerprint:"c".repeat(64),ayniVersion:"0.14.5",ociRepository:"ghcr.io/ayni-oss/sandbox",policyPresent:true,lockCompatible:true,trustPolicyPinned:true,reason:"signing_configuration_requires_operator"});},
   createRuntimeProfile(_call,callback){profileEnrolled=true;profile.state=RuntimeProfileState.RUNTIME_PROFILE_STATE_SETUP_REQUIRED;callback(null,{runtimeProfile:profileView()});},
@@ -244,6 +251,11 @@ grpc.addService(CertificateServiceService,{
 });
 grpc.addService(ConnectionServiceService,connectionService);
 grpc.addService(ProjectServiceService, {
+  listProjectSummaries(_call:any,callback:any){
+    const members=project.repositoryConnectionIds.map((id:string)=>runtimeSummary(id));
+    const latest=[...tasks.values()].filter(task=>task.projectId===project.id).sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime() || b.id.localeCompare(a.id))[0];
+    callback(null,{summaries:[{project,repositoryNames:project.repositoryConnectionIds.map((id:string)=>id===repositoryId ? repository.displayName : secondRepository.displayName),runtime:{complete:true,ready:members.every((member:any)=>member.ready),operationalProfiles:members.reduce((n:number,member:any)=>n+member.operationalProfiles,0),readyProfiles:members.reduce((n:number,member:any)=>n+member.readyProfiles,0)},tasksComplete:true,latestTask:latest ? {id:latest.id,state:latest.state,request:latest.snapshot.request,createdAt:latest.createdAt} : undefined}],page});
+  },
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
   getProject(_call:any,callback:any){callback(null,{project});},
   createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},

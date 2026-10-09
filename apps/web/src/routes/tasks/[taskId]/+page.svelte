@@ -28,7 +28,7 @@
     {@const task = data.task}
     {@const terminal = terminalStates.includes(task.state)}
     <PageHeader eyebrow={`Task ${task.id}`} title={task.snapshot.request} description="The worker codes, checks the full repository and publishes a draft with its actual quality result.">
-      {#snippet actions()}<PollStatus />{/snippet}
+      {#snippet actions()}<PollStatus scope="app:tasks" />{/snippet}
     </PageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4"><div class="flex items-center gap-3"><StatusBadge status={task.state} tone={statusTone(task.state)} /><span class="text-xs text-muted-foreground">Updated {formatDate(task.updatedAt)}</span></div><div class="flex gap-2">
       {#if ["failed", "cancelled", "deadline_exceeded"].includes(task.state)}<form method="POST" action="?/retry" use:enhance={() => { pending = "retry"; return async ({ update }) => { pending = undefined; await update(); }; }}><input type="hidden" name="idempotencyKey" value={data.actionKeys.retry} /><SubmitButton variant="outline" pending={pending === "retry"}><RotateCcw aria-hidden="true" /> Retry task · new attempt</SubmitButton></form>{/if}

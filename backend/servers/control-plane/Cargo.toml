@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-registry = { path = "../../libs/registry" }
 ayni-orchestrator-application = { path = "crates/application" }
 ayni-orchestrator-domain = { path = "../../libs/domain" }
 async-stream.workspace = true

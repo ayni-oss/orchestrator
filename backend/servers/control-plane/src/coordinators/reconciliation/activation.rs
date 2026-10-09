@@ -138,6 +138,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_mut()
             .ok_or("runtime_cursor_invalid")?
             .verification = Some(report.clone());
+        cursor
+            .pending
+            .as_mut()
+            .ok_or("runtime_cursor_invalid")?
+            .phase =
+            ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase::Activating;
         cursor.status.insert("phase".into(), "cleanup".into());
         self.save(id, cursor).await?;
         self.cleanup_operation(&pending).await?;
@@ -148,6 +154,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         })
         .await?;
         cursor.pending = None;
+        cursor.preparation = None;
         cursor.last_success = Some(time);
         cursor.failures = 0;
         cursor.status.remove("reason-code");

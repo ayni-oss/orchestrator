@@ -8,7 +8,7 @@ pub fn sha256(bytes: &[u8]) -> String {
 
 #[must_use]
 pub fn digest(value: &str) -> bool {
-    value.strip_prefix("sha256:").is_some_and(|v| hex(v, 64))
+    crate::oci::Sha256Digest::parse(value).is_ok()
 }
 
 #[must_use]

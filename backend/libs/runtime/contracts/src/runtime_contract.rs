@@ -7,7 +7,7 @@
 use std::fmt;
 use thiserror::Error;
 
-const SHA256_HEX_LENGTH: usize = 64;
+pub use ayni_orchestrator_domain::oci::{ImageRepository, ImageTag, Sha256Digest};
 const MAX_COMMAND_ARGUMENTS: usize = 32;
 const MAX_COMMAND_ARGUMENT_BYTES: usize = 4_096;
 
@@ -25,12 +25,8 @@ impl RuntimeImage {
         let Some((repository, digest)) = value.split_once("@sha256:") else {
             return Err(RuntimeContractError::MutableImage(value.to_owned()));
         };
-        if value.matches("@sha256:").count() != 1
-            || !valid_repository(repository)
-            || digest.len() != SHA256_HEX_LENGTH
-            || !digest
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        if ImageRepository::parse(repository).is_err()
+            || Sha256Digest::parse(&format!("sha256:{digest}")).is_err()
         {
             return Err(RuntimeContractError::InvalidImage(value.to_owned()));
         }
@@ -200,20 +196,6 @@ impl RuntimeContract {
     pub const fn user(&self) -> RuntimeUser {
         self.user
     }
-}
-
-fn valid_repository(value: &str) -> bool {
-    let Some(last) = value.rsplit('/').next() else {
-        return false;
-    };
-    !value.is_empty()
-        && value.len() <= 512
-        && !last.contains(':')
-        && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'/' | b'-' | b'_' | b':')
-        })
 }
 
 /// A runtime artifact cannot safely start with the supplied admission data.
