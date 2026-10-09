@@ -3,5 +3,6 @@
   "linux_amd64_archive_sha256": "45d20c9ae833b0cd403a917b2e07667cb2a6a4130a71d2bf94691c1d651e0139",
   "executor_image": "ghcr.io/ayni-oss/ayni-env:0.14.5-debian@sha256:d8818c4638e51d9d85ff09e050c035e3e6e548b38acc9b349de2a05c2f6253c8",
   "signals_schema_version": "0.5.0",
-  "docker_client_image": "docker.io/library/docker@sha256:0135662b510037ea581d99c2e5929c5e01185139c0b86986a418bd4da0b98a44"
+  "docker_client_image": "docker.io/library/docker@sha256:0135662b510037ea581d99c2e5929c5e01185139c0b86986a418bd4da0b98a44",
+  "linux_arm64_archive_sha256": "e57d65e87a6b7827d1534c21c3f88ee428e088991f0e7b04be28c1771fa54849"
 }

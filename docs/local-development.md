@@ -32,6 +32,12 @@ checks. Fixture-backed UI checks do not replace actual worker-topology evidence.
 Exercise managed runtime and publication against the authorized sandbox using
 the explicit local context before claiming deployable behavior is validated.
 
+Local worker images package the approved Ayni CLI from checksum-verified GitHub
+release archives for amd64 or arm64. They do not require the managed executor
+image to be available in GHCR. Image builds stop on the first build, inspection
+or tagging failure, before deployment can attempt to load an invalid reference.
+The isolated runtime-builder recipe still requires its pinned executor image.
+
 The worker launcher is built as a static musl executable for the Docker Desktop
 node architecture. Its mandatory kernel sandbox must run natively. Use a signed
 managed environment matching the node architecture; the Ayni lock supports both

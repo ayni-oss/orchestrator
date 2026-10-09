@@ -21,6 +21,7 @@ bash -n \
   "$repository_root"/dev/scripts/*.sh \
   "$repository_root"/dev/tests/*.sh
 "$repository_root/dev/ctl" help >/dev/null
+bash "$repository_root/dev/tests/check-image-build.sh"
 if find "$repository_root" \
     \( -path "$repository_root/.git" -o -path "$repository_root/.worktrees" \) -prune -o \
     -name kustomization.yaml -print -quit | grep -q .; then
