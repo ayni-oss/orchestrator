@@ -25,19 +25,6 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         }))
     }
 
-    async fn list_ayni_builder_versions(
-        &self,
-        request: Request<v1::ListAyniBuilderVersionsRequest>,
-    ) -> Result<Response<v1::ListAyniBuilderVersionsResponse>, Status> {
-        let context = self.context(&request, "ListAyniBuilderVersions")?;
-        let versions = self
-            .state
-            .ayni_builder_versions()
-            .await
-            .map_err(onboarding_error)?;
-        Ok(context.response(v1::ListAyniBuilderVersionsResponse { versions }))
-    }
-
     async fn list_github_installations(
         &self,
         request: Request<v1::ListGithubInstallationsRequest>,

@@ -25,12 +25,6 @@ const SUPPORTED: &[AyniContract] = &[AyniContract {
     platforms: &["linux/amd64", "linux/arm64"],
 }];
 
-/// Official builder contracts admitted by this integration.
-#[must_use]
-pub const fn supported_contracts() -> &'static [AyniContract] {
-    SUPPORTED
-}
-
 /// Select exactly an admitted release, never a compatible-looking version range.
 /// # Errors
 /// Unsupported versions require an explicit repository upgrade.

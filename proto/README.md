@@ -39,11 +39,7 @@ Repository connections expose durable onboarding status, reason and inspected co
 `ConnectGithubRepository` and `CreateRepositoryConnection` accept optional
 `use_ayni`; explicit false persists the opt-out and skips automatic analysis and
 managed runtime creation. Absent values retain legacy enabled behavior.
-`ListAyniBuilderVersions` returns supported versions with published official GHCR
-builder manifests, using anonymous pull access and bounded provider requests.
-The `ayni_version` selection (empty means follow the lock) is stored on
-the repository connection; onboarding and reconciliation require an exact match
-with the observed committed lock. Repository reads expose both saved choices. `AnalyzeRepository` explicitly enables
+Repository reads expose the saved choice. `AnalyzeRepository` explicitly enables
 Ayni and retries analysis without granting runtime replacement.
 `RemoveRepository` is restricted to the trusted operator listener and requires
 an idempotency key and expected repository resource version. It atomically removes

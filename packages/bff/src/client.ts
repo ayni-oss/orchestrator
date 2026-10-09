@@ -35,7 +35,6 @@ import {
   type ListDevelopmentTasksResponse,
   type ListProviderModelsResponse,
   type ListRepositoryConnectionsResponse,
-  type ListAyniBuilderVersionsResponse,
   type ListGithubInstallationsResponse,
   type ListGithubInstallationRepositoriesResponse,
   type ListRuntimeArtifactsResponse,
@@ -276,13 +275,8 @@ export class OrchestratorBff {
   }
 
 
-  async listAyniBuilderVersions(context: RequestContext): Promise<string[]> {
-    const response = await this.#unary<ListAyniBuilderVersionsResponse>(context, (m,o,c)=>this.#repositories.listAyniBuilderVersions({},m,o,c));
-    return response.versions.filter(version => /^\d+\.\d+\.\d+$/u.test(version));
-  }
-
-  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string;useAyni?:boolean;ayniVersion?:string }, context: RequestContext) {
-    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:"",ayniVersion:input.ayniVersion ?? ""},m,o,c));
+  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string;useAyni?:boolean }, context: RequestContext) {
+    const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:""},m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
   }
   async removeRepository(input: RemoveRepositoryRequest, context: RequestContext): Promise<void> {
@@ -345,7 +339,7 @@ export class OrchestratorBff {
       this.#repositories.createRepositoryConnection({
         idempotencyKey: input.idempotencyKey,
         provider: toProtoRepositoryProvider(input),
-        registryConnectionId:"",imageNamespace:"",ayniVersion:"",
+        registryConnectionId:"",imageNamespace:"",
         displayName: input.displayName,
         defaultBranch: input.defaultBranch,
       }, metadata, options, callback));

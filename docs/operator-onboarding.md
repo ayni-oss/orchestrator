@@ -29,13 +29,6 @@ restart. Enable it to select a ready GHCR connection on the same row; the select
 namespace appears below. You can leave **Configure later** selected and finish
 the runtime destination afterward. For repositories connected without Ayni,
 choose **Set up Ayni** on the repository page to enable onboarding later.
-The **Ayni version** selector checks publication of official `ayni-builder`
-manifests and offers only versions admitted by Orchestrator. **Use repository
-lock version** keeps the existing lock-driven behavior. An explicit version is
-saved with the repository and must match its committed `.ayni.lock`; regenerate
-and commit that lock with the selected CLI before retrying analysis if they differ.
-The selection never edits repository files or substitutes a different builder for
-the lock. If GHCR is unavailable, lock-driven connection remains available.
 
 Administrator-managed connections show **Managed by your administrator** and
 cannot be edited or deleted through the UI. Register them explicitly using the

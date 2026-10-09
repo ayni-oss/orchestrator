@@ -9,7 +9,6 @@ import "google/protobuf/timestamp.proto";
 service RepositoryService {
   rpc ListRepositorySummaries(ListRepositorySummariesRequest) returns (ListRepositorySummariesResponse);
   rpc AnalyzeRepository(AnalyzeRepositoryRequest) returns (AnalyzeRepositoryResponse);
-  rpc ListAyniBuilderVersions(ListAyniBuilderVersionsRequest) returns (ListAyniBuilderVersionsResponse);
   rpc ListGithubInstallations(ListGithubInstallationsRequest) returns (ListGithubInstallationsResponse);
   rpc ListGithubInstallationRepositories(ListGithubInstallationRepositoriesRequest) returns (ListGithubInstallationRepositoriesResponse);
   rpc ConnectGithubRepository(ConnectGithubRepositoryRequest) returns (ConnectGithubRepositoryResponse);
@@ -21,12 +20,6 @@ service RepositoryService {
   rpc GetRepositorySnapshot(GetRepositorySnapshotRequest) returns (GetRepositorySnapshotResponse);
   rpc SetRepositoryRegistry(SetRepositoryRegistryRequest) returns (SetRepositoryRegistryResponse);
   rpc WatchRepositories(WatchRepositoriesRequest) returns (stream WatchRepositoriesResponse);
-}
-
-// Published official builders admitted by Orchestrator.
-message ListAyniBuilderVersionsRequest {}
-message ListAyniBuilderVersionsResponse {
-  repeated string versions = 1;
 }
 
 message GithubInstallationOption {
@@ -102,8 +95,6 @@ message RepositoryConnection {
   string onboarding_revision = 14;
   // Absent legacy values enable Ayni; explicit false skips automatic runtime onboarding.
   optional bool use_ayni = 15;
-  // Empty follows the repository lock; otherwise requires an exact version match.
-  string ayni_version = 16;
 }
 
 // RepositorySnapshot is an immutable observed repository revision.
@@ -145,7 +136,6 @@ message CreateRepositoryConnectionRequest {
   string registry_connection_id = 5;
   string image_namespace = 6;
   optional bool use_ayni = 7;
-  string ayni_version = 8;
 }
 
 message CreateRepositoryConnectionResponse {
@@ -196,7 +186,6 @@ message ConnectGithubRepositoryRequest {
   string image_namespace = 5;
   // Absent values preserve automatic onboarding for existing clients.
   optional bool use_ayni = 6;
-  string ayni_version = 7;
 }
 
 message ConnectGithubRepositoryResponse {

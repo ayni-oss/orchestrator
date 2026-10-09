@@ -83,7 +83,6 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
     let repository = RepositoryServiceClient::new(channel.clone())
         .create_repository_connection(v1::CreateRepositoryConnectionRequest {
             use_ayni: None,
-            ayni_version: String::new(),
             idempotency_key: "repository".into(),
             display_name: "Task flow fixture".into(),
             default_branch: "main".into(),

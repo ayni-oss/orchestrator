@@ -47,7 +47,6 @@ impl CleanStore {
             }
             .into(),
             use_ayni: Some(request.use_ayni.unwrap_or(true)),
-            ayni_version: request.ayni_version.clone(),
             onboarding_reason: String::new(),
             onboarding_revision: String::new(),
         };

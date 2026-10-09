@@ -42,14 +42,12 @@
   function openConnect() {
     useAyni = false;
     selectedRegistryId = "";
-    selectedAyniVersion = "";
     connectOpen = true;
     void loadOptions();
   }
   let selectedRepository = $state("");
   let selectedRegistryId = $state("");
   let useAyni = $state(false);
-  let selectedAyniVersion = $state("");
   const selectedRegistry = $derived(data.registryConnections.find(connection => connection.id === selectedRegistryId));
   const selectedOwner = $derived(options.installations.find(item => item.installationId === options.selectedInstallationId)?.owner ?? "");
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
@@ -111,7 +109,7 @@
           <input type="hidden" name="useAyni" value={useAyni ? "true" : "false"} />
           <div class="grid gap-4 sm:grid-cols-[auto_1fr]">
             <div class="flex h-9 items-center gap-2 sm:mt-6">
-              <Checkbox.Root id="use-ayni" bind:checked={useAyni} disabled={connecting} onCheckedChange={checked => { if (!checked) { selectedRegistryId = ""; selectedAyniVersion = ""; } }} />
+              <Checkbox.Root id="use-ayni" bind:checked={useAyni} disabled={connecting} onCheckedChange={checked => { if (!checked) selectedRegistryId = ""; }} />
               <Label for="use-ayni">Use Ayni</Label>
             </div>
             <div class="space-y-2">
@@ -125,19 +123,6 @@
                 <p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>
               {/if}
             </div>
-          </div>
-          <div class="space-y-2">
-            <Label for="connect-ayni-version">Ayni version</Label>
-            <ThemedSelect id="connect-ayni-version" name="ayniVersion" bind:value={selectedAyniVersion} options={[{ value: "", label: "Use repository lock version" }, ...data.builderVersions.map(version => ({ value: version, label: version }))]} disabled={connecting || !useAyni} />
-            {#if useAyni}
-              <p class="text-xs text-muted-foreground">Published ayni-builder versions supported by Orchestrator. The selected version must match the repository’s .ayni.lock.</p>
-              {#if data.builderError}
-                <Feedback kind="error" title="Ayni versions unavailable" message={data.builderError.message} requestId={data.builderError.requestId} />
-                <p class="text-sm text-muted-foreground">You can use the repository’s lock version and retry runtime preparation later.</p>
-              {:else if !data.builderVersions.length}
-                <p class="text-sm text-muted-foreground">No supported Ayni builder versions are currently published.</p>
-              {/if}
-            {/if}
           </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>

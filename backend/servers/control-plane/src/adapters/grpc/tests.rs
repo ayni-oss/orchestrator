@@ -128,7 +128,6 @@ pub(super) async fn server_validates_bounds_before_durable_resource_operations()
     let Err(status) = api
         .create_repository_connection(Request::new(v1::CreateRepositoryConnectionRequest {
             use_ayni: None,
-            ayni_version: String::new(),
             idempotency_key: String::new(),
             provider: None,
             display_name: String::new(),
@@ -187,7 +186,6 @@ pub(super) async fn clean_v1_repository_operations_are_durable_and_idempotent()
     let api = GrpcApi::new(state, shutdown);
     let request = v1::CreateRepositoryConnectionRequest {
         use_ayni: None,
-        ayni_version: String::new(),
         idempotency_key: "repository:create:1".to_owned(),
         provider: Some(v1::RepositoryProvider {
             provider: Some(v1::repository_provider::Provider::Github(
@@ -294,7 +292,6 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
     let repo = api
         .create_repository_connection(Request::new(v1::CreateRepositoryConnectionRequest {
             use_ayni: None,
-            ayni_version: String::new(),
             idempotency_key: "repository".into(),
             display_name: "Sandbox".into(),
             default_branch: "main".into(),

@@ -273,7 +273,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         } else {
             self.configured_profile(id).await?
         };
-        let selected_version = repository.ayni_version;
         let github = configuration::github_identity(repository.provider)?;
         let token = self
             .source
@@ -298,9 +297,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             &lock,
             &runtime.platform,
         )?;
-        if !selected_version.is_empty() && selected_version != lock_identity.ayni_version {
-            return Err("runtime_version_mismatch");
-        }
         runtime = runtime.for_lock_fingerprint(&lock_identity.fingerprint)?;
         if !self
             .freeze_preparation(

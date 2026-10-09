@@ -221,7 +221,6 @@ mod tests {
     fn repository_request(key: &str, repository_id: &str) -> v1::CreateRepositoryConnectionRequest {
         v1::CreateRepositoryConnectionRequest {
             use_ayni: None,
-            ayni_version: String::new(),
             idempotency_key: key.to_owned(),
             provider: Some(v1::RepositoryProvider {
                 provider: Some(v1::repository_provider::Provider::Github(
