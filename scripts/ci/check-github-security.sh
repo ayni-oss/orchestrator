@@ -59,5 +59,8 @@ import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 release = json.loads((root / "backend/libs/runtime/profiles/ayni/ayni-release.json").read_text())
 worker = (root / "deploy/images/worker/Dockerfile").read_text()
-assert "ARG AYNI_EXECUTOR_IMAGE=" + release["executor_image"] in worker, "worker Ayni image differs from pinned release"
+assert "ARG AYNI_VERSION=" + release["cli_version"] in worker, "worker Ayni CLI differs from pinned release"
+for architecture in ("amd64", "arm64"):
+    checksum = release[f"linux_{architecture}_archive_sha256"]
+    assert f"ARG AYNI_{architecture.upper()}_SHA256={checksum}" in worker, f"worker {architecture} CLI checksum differs from pinned release"
 PYTHON
