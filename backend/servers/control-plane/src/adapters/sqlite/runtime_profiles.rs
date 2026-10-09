@@ -62,18 +62,7 @@ impl CleanStore {
         {
             self.ensure_managed_lock_available(&repository.id, &requested.lock_fingerprint)?;
         }
-        let registry = if repository.registry_connection_id.is_empty()
-            || match self.get_connection(&repository.registry_connection_id) {
-                Ok(_) => true,
-                Err(CleanStoreError::NotFound { .. }) => false,
-                Err(error) => return Err(error),
-            } {
-            v1::RuntimeRegistrySelection {
-                registry_connection_id: repository.registry_connection_id.clone(),
-            }
-        } else {
-            v1::RuntimeRegistrySelection::default()
-        };
+        let registry = self.initial_profile_registry(&repository)?;
         let now = unix_seconds()?;
         let profile_id = resource_id("profile");
         let revision_id = resource_id("profile-revision");
@@ -183,6 +172,25 @@ impl CleanStore {
             .map_err(map_constraint)?;
         transaction.commit().map_err(CleanStoreError::Database)?;
         Ok((profile, revision))
+    }
+
+    fn initial_profile_registry(
+        &self,
+        repository: &v1::RepositoryConnection,
+    ) -> Result<v1::RuntimeRegistrySelection, CleanStoreError> {
+        let selection = if repository.registry_connection_id.is_empty()
+            || match self.get_connection(&repository.registry_connection_id) {
+                Ok(_) => true,
+                Err(CleanStoreError::NotFound { .. }) => false,
+                Err(error) => return Err(error),
+            } {
+            v1::RuntimeRegistrySelection {
+                registry_connection_id: repository.registry_connection_id.clone(),
+            }
+        } else {
+            v1::RuntimeRegistrySelection::default()
+        };
+        Ok(selection)
     }
 
     pub(crate) fn runtime_profile(&self, id: &str) -> Result<v1::RuntimeProfile, CleanStoreError> {

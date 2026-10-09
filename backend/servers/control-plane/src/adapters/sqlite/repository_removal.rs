@@ -5,6 +5,13 @@ use super::{
 };
 use crate::profiles::ayni::preparation_state::RuntimeCursor;
 
+struct RepositoryRemovalPlan {
+    repository: v1::RepositoryConnection,
+    profiles: Vec<v1::RuntimeProfile>,
+    discovery: String,
+    cleanup: Vec<(String, String)>,
+}
+
 impl CleanStore {
     pub(crate) fn remove_repository(
         &mut self,
@@ -22,76 +29,13 @@ impl CleanStore {
                 Err(CleanStoreError::IdempotencyConflict)
             };
         }
+        let RepositoryRemovalPlan {
+            repository,
+            profiles,
+            discovery,
+            cleanup,
+        } = self.repository_removal_plan(request)?;
         let id = &request.repository_connection_id;
-        let repository = self.repository_connection(id)?;
-        if repository.resource_version != request.expected_resource_version {
-            return Err(CleanStoreError::StaleVersion);
-        }
-        let referenced: bool = self.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM project_repositories WHERE repository_connection_id=?1)",
-            [id], |row| row.get(0),
-        ).map_err(CleanStoreError::Database)?;
-        if referenced {
-            return Err(CleanStoreError::RepositoryRemovalBlocked(
-                "Remove this repository from its projects before removing its onboarding configuration. Archived project references are also retained.",
-            ));
-        }
-        let tasks: bool = self
-            .connection
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM development_tasks WHERE repository_connection_id=?1)",
-                [id],
-                |row| row.get(0),
-            )
-            .map_err(CleanStoreError::Database)?;
-        if tasks {
-            return Err(CleanStoreError::RepositoryRemovalBlocked(
-                "This repository has retained tasks. Its runtime configuration cannot be removed while task history depends on it.",
-            ));
-        }
-        let mut statement = self
-            .connection
-            .prepare("SELECT payload FROM runtime_profiles WHERE repository_connection_id=?1")
-            .map_err(CleanStoreError::Database)?;
-        let profiles = statement
-            .query_map([id], |row| row.get::<_, Vec<u8>>(0))
-            .map_err(CleanStoreError::Database)?
-            .map(|row| decode::<v1::RuntimeProfile>(&row.map_err(CleanStoreError::Database)?))
-            .collect::<Result<Vec<_>, _>>()?;
-        drop(statement);
-        let discovery = match repository
-            .provider
-            .as_ref()
-            .and_then(|provider| provider.provider.as_ref())
-        {
-            Some(v1::repository_provider::Provider::Github(github)) => {
-                format!("{}/{}", github.owner, github.name)
-            }
-            None => return Err(CleanStoreError::CorruptState),
-        };
-        let mut cleanup = Vec::new();
-        for profile in &profiles {
-            let cursor = self.runtime_cursor(&profile.id)?;
-            if cursor
-                .pending
-                .as_ref()
-                .is_some_and(|pending| !pending.failed)
-                || (cursor.failures < 3
-                    && (cursor.builder.started_at.is_some()
-                        || cursor
-                            .trust
-                            .as_ref()
-                            .is_some_and(|trust| trust.state == "pending")))
-            {
-                return Err(CleanStoreError::RepositoryRemovalBlocked(
-                    "Runtime preparation is still active. Wait for it to finish or fail, then retry removal.",
-                ));
-            }
-            cleanup.push((
-                profile.id.clone(),
-                serde_json::to_string(&cursor).map_err(|_| CleanStoreError::CorruptState)?,
-            ));
-        }
         let now = unix_seconds()?;
         let tx = self
             .connection
@@ -170,6 +114,88 @@ impl CleanStore {
         tx.execute("INSERT INTO durable_actions(operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at) VALUES('RemoveRepository',?1,?2,?3,'completed','repository_connection',?4,?5,?5)",
             params![request.idempotency_key, digest, request.encode_to_vec(), id, now]).map_err(map_constraint)?;
         tx.commit().map_err(CleanStoreError::Database)
+    }
+
+    fn repository_removal_plan(
+        &self,
+        request: &v1::RemoveRepositoryRequest,
+    ) -> Result<RepositoryRemovalPlan, CleanStoreError> {
+        let id = &request.repository_connection_id;
+        let repository = self.repository_connection(id)?;
+        if repository.resource_version != request.expected_resource_version {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        let referenced: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM project_repositories WHERE repository_connection_id=?1)",
+            [id], |row| row.get(0),
+        ).map_err(CleanStoreError::Database)?;
+        if referenced {
+            return Err(CleanStoreError::RepositoryRemovalBlocked(
+                "Remove this repository from its projects before removing its onboarding configuration. Archived project references are also retained.",
+            ));
+        }
+        let tasks: bool = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM development_tasks WHERE repository_connection_id=?1)",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(CleanStoreError::Database)?;
+        if tasks {
+            return Err(CleanStoreError::RepositoryRemovalBlocked(
+                "This repository has retained tasks. Its runtime configuration cannot be removed while task history depends on it.",
+            ));
+        }
+        let mut statement = self
+            .connection
+            .prepare("SELECT payload FROM runtime_profiles WHERE repository_connection_id=?1")
+            .map_err(CleanStoreError::Database)?;
+        let profiles = statement
+            .query_map([id], |row| row.get::<_, Vec<u8>>(0))
+            .map_err(CleanStoreError::Database)?
+            .map(|row| decode::<v1::RuntimeProfile>(&row.map_err(CleanStoreError::Database)?))
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+        let discovery = match repository
+            .provider
+            .as_ref()
+            .and_then(|provider| provider.provider.as_ref())
+        {
+            Some(v1::repository_provider::Provider::Github(github)) => {
+                format!("{}/{}", github.owner, github.name)
+            }
+            None => return Err(CleanStoreError::CorruptState),
+        };
+        let mut cleanup = Vec::new();
+        for profile in &profiles {
+            let cursor = self.runtime_cursor(&profile.id)?;
+            if cursor
+                .pending
+                .as_ref()
+                .is_some_and(|pending| !pending.failed)
+                || (cursor.failures < 3
+                    && (cursor.builder.started_at.is_some()
+                        || cursor
+                            .trust
+                            .as_ref()
+                            .is_some_and(|trust| trust.state == "pending")))
+            {
+                return Err(CleanStoreError::RepositoryRemovalBlocked(
+                    "Runtime preparation is still active. Wait for it to finish or fail, then retry removal.",
+                ));
+            }
+            cleanup.push((
+                profile.id.clone(),
+                serde_json::to_string(&cursor).map_err(|_| CleanStoreError::CorruptState)?,
+            ));
+        }
+        Ok(RepositoryRemovalPlan {
+            repository,
+            profiles,
+            discovery,
+            cleanup,
+        })
     }
 
     pub(crate) fn removed_runtime_cleanup(
