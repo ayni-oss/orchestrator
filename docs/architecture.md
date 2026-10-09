@@ -1,5 +1,8 @@
 # Architecture
 
+The [product flow](ayni-product-flow.md) defines shared repository/runtime ownership.
+[Assurance](assurance.md) and [environment changes](environment-changes.md) distinguish accepted direction from current execution.
+
 The control plane admits tasks, freezes repository and runtime identity, model,
 constraints, total coding turns, quality repair limit and deadline. It schedules
 one worker, supplies repository-scoped credentials, observes durable progress and

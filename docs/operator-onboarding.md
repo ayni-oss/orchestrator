@@ -1,5 +1,9 @@
 # Operator onboarding
 
+Integrations hold provider credentials; repository runtimes select those integrations.
+Projects use shared repository runtimes. Changes to a runtime affect future admissions in every consuming project,
+while existing tasks retain frozen inputs. See the [product model](ayni-product-flow.md).
+
 Start the control plane without a GitHub App, registry or model credentials to
 configure connections through the trusted operator UI. Model credentials are
 required when admitting model-backed work, not when opening onboarding.
