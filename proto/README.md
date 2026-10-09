@@ -37,6 +37,13 @@ Workflow installation RPCs, resources and fields were intentionally removed. Rem
 
 Repository connections expose durable onboarding status, reason and inspected commit.
 `AnalyzeRepository` retries analysis without granting runtime replacement.
+`RemoveRepository` is restricted to the trusted operator listener and requires
+an idempotency key and expected repository resource version. It atomically removes
+unused repository onboarding and runtime state, preserves action receipts, and
+emits repository/profile removal updates to resumable watches. Projects, retained
+tasks, and active runtime preparation block removal. Failed operation cleanup
+remains durable until the runtime reconciler completes it. Provider content,
+registry images, integrations, and certificates are not removed.
 The deployment-wide Ayni settings, release discovery, installation and service-test
 API has been removed; clients must upgrade with this cutover.
 

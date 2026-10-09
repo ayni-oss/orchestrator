@@ -67,6 +67,7 @@ impl AppState {
         &self,
         request: &v1::ConnectGithubRepositoryRequest,
     ) -> Result<v1::RepositoryConnection, OnboardingError> {
+        let _lifecycle = self.repository_lifecycle.read().await;
         let valid_name = |value: &str| {
             !value.is_empty()
                 && value.len() <= 100
@@ -171,7 +172,7 @@ impl AppState {
         // profile for a supported committed Ayni configuration.  The runtime
         // reconciler owns resolve-or-build; no workflow or pull request is installed
         // in the connected repository.
-        let result = self.analyze_repository(&connection.id).await?;
+        let result = self.analyze_repository_inner(&connection.id).await?;
         let key = request.idempotency_key.clone();
         with_store(self, move |store| {
             store.complete_external_action("ConnectGithubRepository", &key)
@@ -255,6 +256,14 @@ impl AppState {
     }
 
     pub(crate) async fn analyze_repository(
+        &self,
+        id: &str,
+    ) -> Result<v1::RepositoryConnection, OnboardingError> {
+        let _lifecycle = self.repository_lifecycle.read().await;
+        self.analyze_repository_inner(id).await
+    }
+
+    async fn analyze_repository_inner(
         &self,
         id: &str,
     ) -> Result<v1::RepositoryConnection, OnboardingError> {

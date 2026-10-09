@@ -863,3 +863,98 @@ fn persisted_cleanup_failure_recovers_without_authorizing_rebuild() {
     assert!(!cursor.resume_cleanup());
     assert_eq!(cursor.failures, 3);
 }
+
+#[tokio::test]
+async fn repository_removal_cleanup_retries_after_restart_and_releases_credentials() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture
+        .cursor
+        .pending
+        .as_mut()
+        .ok_or("pending operation missing")?
+        .failed = true;
+    fixture.cursor.failures = 3;
+    fixture
+        .reconciler
+        .save(&fixture.profile, &fixture.cursor)
+        .await?;
+    let profile_id = fixture.profile.clone();
+    fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| {
+            let profile = store.runtime_profile(&profile_id)?;
+            let repository = store.repository_connection(&profile.repository_connection_id)?;
+            store.remove_repository(&v1::RemoveRepositoryRequest {
+                idempotency_key: "remove-repository".into(),
+                repository_connection_id: repository.id,
+                expected_resource_version: repository.resource_version,
+            })
+        })
+        .await?;
+    // Frozen preparation credentials remain retained until all owned operations are cleaned.
+    assert!(
+        fixture
+            .reconciler
+            .state
+            .database
+            .execute(|store| store.connection_secret_in_use("pull-only"))
+            .await?
+    );
+    fixture.reconciler.state.shutdown_database().await?;
+    fixture.reconciler.state = AppState::open(fixture.directory.path().join("state.sqlite"), 3)?;
+    {
+        let mut jobs = fixture
+            .reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        jobs.cleanup_pending = true;
+        jobs.states
+            .insert("verify-frozen".into(), ExecutionState::Running);
+    }
+    let reconciler = Arc::new(fixture.reconciler);
+    reconciler.reconcile().await;
+    assert_eq!(
+        reconciler
+            .state
+            .database
+            .execute(|store| store.removed_runtime_cleanup().map(|cursors| cursors.len()))
+            .await?,
+        1
+    );
+    reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .cleanup_pending = false;
+    reconciler.reconcile().await;
+    assert!(
+        reconciler
+            .state
+            .database
+            .execute(|store| store.removed_runtime_cleanup())
+            .await?
+            .is_empty()
+    );
+    assert!(
+        !reconciler
+            .state
+            .database
+            .execute(|store| store.connection_secret_in_use("pull-only"))
+            .await?
+    );
+    assert!(
+        !reconciler
+            .kubernetes
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .states
+            .contains_key("verify-frozen")
+    );
+    Ok(())
+}

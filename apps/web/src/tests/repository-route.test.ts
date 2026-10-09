@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const bff = vi.hoisted(() => ({
   listRepositoryConnections: vi.fn(),
   getRuntimeProfile:vi.fn(),
+  getRepositoryConnection: vi.fn(),
+  removeRepository: vi.fn(),
   analyzeRepository: vi.fn(),
   reconcileProfile: vi.fn(),
   setRuntimeRegistry:vi.fn(),
@@ -18,6 +20,7 @@ describe("repository connection route actions", () => {
   const requestSignal = new AbortController().signal;
   beforeEach(() => {
     vi.clearAllMocks();
+    bff.getRepositoryConnection.mockResolvedValue({ id: "repository:1", displayName: "ayni-oss/sandbox", resourceVersion: "2" });
     bff.listGithubInstallations.mockResolvedValue([{ installationId: "42", owner: "ayni-oss" }]);
     bff.listGithubInstallationRepositories.mockResolvedValue([{ owner: "ayni-oss", name: "sandbox" }]);
   });
@@ -85,4 +88,33 @@ describe("repository connection route actions", () => {
     expect(bff.reconcileProfile).not.toHaveBeenCalled();
   });
 
+});
+
+describe("repository removal boundary", () => {
+  function event(confirmation: string, resourceVersion = "2") {
+    return {
+      params: { repositoryId: "repository:1" },
+      locals: { requestId: "remove-repository", requestSignal: new AbortController().signal },
+      request: new Request("http://localhost/repositories/repository:1?/remove", {
+        method: "POST", body: new URLSearchParams({ confirmation, resourceVersion, idempotencyKey: "00000000-0000-4000-8000-000000000099" }),
+      }),
+    } as never;
+  }
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bff.getRepositoryConnection.mockResolvedValue({ id: "repository:1", displayName: "ayni-oss/sandbox", resourceVersion: "2" });
+  });
+  it("requires the server-observed repository name before removal", async () => {
+    expect(await runtimeActions.remove!(event("another/repository"))).toMatchObject({ status: 400 });
+    expect(bff.removeRepository).not.toHaveBeenCalled();
+  });
+  it("rejects an invalid version before invoking the backend", async () => {
+    expect(await runtimeActions.remove!(event("ayni-oss/sandbox", "0"))).toMatchObject({ status: 400 });
+    expect(bff.getRepositoryConnection).not.toHaveBeenCalled();
+    expect(bff.removeRepository).not.toHaveBeenCalled();
+  });
+  it("forwards the observed version and redirects after confirmed removal", async () => {
+    await expect(runtimeActions.remove!(event("ayni-oss/sandbox"))).rejects.toMatchObject({ status: 303, location: "/repositories" });
+    expect(bff.removeRepository).toHaveBeenCalledWith({ repositoryConnectionId: "repository:1", expectedResourceVersion: "2", idempotencyKey: "00000000-0000-4000-8000-000000000099" }, expect.objectContaining({ requestId: "remove-repository" }));
+  });
 });

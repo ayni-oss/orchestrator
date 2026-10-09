@@ -102,6 +102,8 @@ pub enum CleanStoreError {
     RepositoryAlreadyAssigned,
     #[error("the project is archived")]
     ProjectArchived,
+    #[error("{0}")]
+    RepositoryRemovalBlocked(&'static str),
     #[error("the requested resource transition is not supported")]
     InvalidTransition,
     #[error("the resource changed after it was observed")]
@@ -170,6 +172,7 @@ mod connection_dependencies;
 mod profile_identity;
 mod projects;
 mod repository_connections;
+mod repository_removal;
 mod runtime_certificate;
 mod runtime_profiles;
 mod runtime_registry;

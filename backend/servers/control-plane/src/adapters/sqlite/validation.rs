@@ -241,6 +241,15 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
                         .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
             })
         }
+        "RemoveRepository" => v1::RemoveRepositoryRequest::decode(payload).is_ok_and(|value| {
+            api_validation::idempotency_key(&value.idempotency_key).is_ok()
+                && api_validation::resource_id(
+                    &value.repository_connection_id,
+                    "repository_connection_id",
+                )
+                .is_ok()
+                && value.expected_resource_version > 0
+        }),
         "AnalyzeRepository" => v1::AnalyzeRepositoryRequest::decode(payload).is_ok_and(|value| {
             api_validation::idempotency_key(&value.idempotency_key).is_ok()
                 && api_validation::resource_id(
@@ -362,6 +371,14 @@ pub(super) fn valid_resource_event(
         (REPOSITORY_SERVICE, "repository_connection") => {
             valid_repository_connection_event(payload, resource_id, version)
         }
+        (REPOSITORY_SERVICE, "repository_removed") => Ok(v1::RepositoryRemoved::decode(payload)
+            .is_ok_and(|value| value.repository_connection_id == resource_id)),
+        (PROFILE_SERVICE, "runtime_profile_removed") => Ok(v1::RuntimeProfileRemoved::decode(
+            payload,
+        )
+        .is_ok_and(|value| {
+            value.runtime_profile_id == resource_id && !value.repository_connection_id.is_empty()
+        })),
         (REPOSITORY_SERVICE, "repository_snapshot") => {
             valid_repository_snapshot_event(payload, resource_id, version)
         }

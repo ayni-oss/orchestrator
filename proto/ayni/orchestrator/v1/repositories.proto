@@ -13,6 +13,7 @@ service RepositoryService {
   rpc ListGithubInstallationRepositories(ListGithubInstallationRepositoriesRequest) returns (ListGithubInstallationRepositoriesResponse);
   rpc ConnectGithubRepository(ConnectGithubRepositoryRequest) returns (ConnectGithubRepositoryResponse);
   rpc ListRepositoryConnections(ListRepositoryConnectionsRequest) returns (ListRepositoryConnectionsResponse);
+  rpc RemoveRepository(RemoveRepositoryRequest) returns (RemoveRepositoryResponse);
   rpc GetRepositoryConnection(GetRepositoryConnectionRequest) returns (GetRepositoryConnectionResponse);
   rpc CreateRepositoryConnection(CreateRepositoryConnectionRequest) returns (CreateRepositoryConnectionResponse);
   rpc ListRepositorySnapshots(ListRepositorySnapshotsRequest) returns (ListRepositorySnapshotsResponse);
@@ -169,6 +170,7 @@ message WatchRepositoriesResponse {
   oneof update {
     RepositoryConnection repository_connection = 2;
     RepositorySnapshot repository_snapshot = 3;
+    RepositoryRemoved repository_removed = 4;
   }
 }
 
@@ -223,4 +225,15 @@ message ListRepositorySummariesRequest {
 message ListRepositorySummariesResponse {
   repeated RepositorySummary summaries = 1;
   PageResponse page = 2;
+}
+
+// Remove unused local onboarding and runtime configuration. Provider content is unchanged.
+message RemoveRepositoryRequest {
+  string idempotency_key = 1;
+  string repository_connection_id = 2;
+  uint64 expected_resource_version = 3;
+}
+message RemoveRepositoryResponse {}
+message RepositoryRemoved {
+  string repository_connection_id = 1;
 }

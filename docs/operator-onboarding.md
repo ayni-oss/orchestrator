@@ -40,6 +40,17 @@ the server-computed image destination without a namespace input. Registry change
 readiness until its new destination is verified; other runtimes are unaffected.
 
 Connect the repository and open its runtime, even if configuration is incomplete.
+To restart onboarding, open **Edit → Remove repository** on its repository page
+and enter the repository name to confirm. Removal clears the local connection,
+snapshots, runtime profiles, revisions, and artifact records. Reconnect from
+Repositories to start with fresh onboarding and runtime selections. GitHub content,
+registry images, provider integrations, and signing certificates remain intact.
+Project references (including archived projects), retained tasks, and active
+runtime preparation block removal. Failed preparation retains durable cleanup
+intents; the runtime reconciler retries cleanup of its owned jobs and temporary
+resources, including after a restart. Interrupted onboarding intents are retired
+so recovery cannot recreate the removed connection.
+
 Select a ready certificate and GHCR connection. Analyze repository reports missing
 committed policy or lock, incompatible configuration, trust, registry and platform
 findings with corrective actions. Review and merge any certificate trust PR.

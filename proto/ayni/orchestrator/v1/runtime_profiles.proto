@@ -262,6 +262,7 @@ message WatchRuntimeProfilesResponse {
     RuntimeProfile runtime_profile = 2;
     RuntimeProfileRevision revision = 3;
     RuntimeArtifact runtime_artifact = 4;
+    RuntimeProfileRemoved runtime_profile_removed = 6;
   }
   reserved 5;
   reserved "automation_installation";
@@ -325,4 +326,9 @@ message RuntimeFinding {
   string code = 1;
   string message = 2;
   string remediation = 3;
+}
+
+message RuntimeProfileRemoved {
+  string runtime_profile_id = 1;
+  string repository_connection_id = 2;
 }

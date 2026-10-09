@@ -451,6 +451,7 @@ export interface WatchRuntimeProfilesResponse {
     | { $case: "runtimeProfile"; runtimeProfile: RuntimeProfile }
     | { $case: "revision"; revision: RuntimeProfileRevision }
     | { $case: "runtimeArtifact"; runtimeArtifact: RuntimeArtifact }
+    | { $case: "runtimeProfileRemoved"; runtimeProfileRemoved: RuntimeProfileRemoved }
     | undefined;
 }
 
@@ -504,6 +505,11 @@ export interface RuntimeFinding {
   code: string;
   message: string;
   remediation: string;
+}
+
+export interface RuntimeProfileRemoved {
+  runtimeProfileId: string;
+  repositoryConnectionId: string;
 }
 
 function createBaseRuntimeProfile(): RuntimeProfile {
@@ -3606,6 +3612,9 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
       case "runtimeArtifact":
         RuntimeArtifact.encode(message.update.runtimeArtifact, writer.uint32(34).fork()).join();
         break;
+      case "runtimeProfileRemoved":
+        RuntimeProfileRemoved.encode(message.update.runtimeProfileRemoved, writer.uint32(50).fork()).join();
+        break;
     }
     return writer;
   },
@@ -3661,6 +3670,17 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
             };
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.update = {
+              $case: "runtimeProfileRemoved",
+              runtimeProfileRemoved: RuntimeProfileRemoved.decode(reader, reader.uint32()),
+            };
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3686,6 +3706,16 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
         ? { $case: "runtimeArtifact", runtimeArtifact: RuntimeArtifact.fromJSON(object.runtimeArtifact) }
         : isSet(object.runtime_artifact)
         ? { $case: "runtimeArtifact", runtimeArtifact: RuntimeArtifact.fromJSON(object.runtime_artifact) }
+        : isSet(object.runtimeProfileRemoved)
+        ? {
+          $case: "runtimeProfileRemoved",
+          runtimeProfileRemoved: RuntimeProfileRemoved.fromJSON(object.runtimeProfileRemoved),
+        }
+        : isSet(object.runtime_profile_removed)
+        ? {
+          $case: "runtimeProfileRemoved",
+          runtimeProfileRemoved: RuntimeProfileRemoved.fromJSON(object.runtime_profile_removed),
+        }
         : undefined,
     };
   },
@@ -3701,6 +3731,8 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
       obj.revision = RuntimeProfileRevision.toJSON(message.update.revision);
     } else if (message.update?.$case === "runtimeArtifact") {
       obj.runtimeArtifact = RuntimeArtifact.toJSON(message.update.runtimeArtifact);
+    } else if (message.update?.$case === "runtimeProfileRemoved") {
+      obj.runtimeProfileRemoved = RuntimeProfileRemoved.toJSON(message.update.runtimeProfileRemoved);
     }
     return obj;
   },
@@ -3732,6 +3764,15 @@ export const WatchRuntimeProfilesResponse: MessageFns<WatchRuntimeProfilesRespon
           message.update = {
             $case: "runtimeArtifact",
             runtimeArtifact: RuntimeArtifact.fromPartial(object.update.runtimeArtifact),
+          };
+        }
+        break;
+      }
+      case "runtimeProfileRemoved": {
+        if (object.update?.runtimeProfileRemoved !== undefined && object.update?.runtimeProfileRemoved !== null) {
+          message.update = {
+            $case: "runtimeProfileRemoved",
+            runtimeProfileRemoved: RuntimeProfileRemoved.fromPartial(object.update.runtimeProfileRemoved),
           };
         }
         break;
@@ -4658,6 +4699,99 @@ export const RuntimeFinding: MessageFns<RuntimeFinding> = {
     message.code = object.code ?? "";
     message.message = object.message ?? "";
     message.remediation = object.remediation ?? "";
+    return message;
+  },
+};
+
+function createBaseRuntimeProfileRemoved(): RuntimeProfileRemoved {
+  return { runtimeProfileId: "", repositoryConnectionId: "" };
+}
+
+export const RuntimeProfileRemoved: MessageFns<RuntimeProfileRemoved> = {
+  encode(message: RuntimeProfileRemoved, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.runtimeProfileId !== "") {
+      writer.uint32(10).string(message.runtimeProfileId);
+    }
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(18).string(message.repositoryConnectionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeProfileRemoved {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeProfileRemoved();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeProfileRemoved {
+    return {
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : "",
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RuntimeProfileRemoved): unknown {
+    const obj: any = {};
+    if (message.runtimeProfileId !== "") {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeProfileRemoved>): RuntimeProfileRemoved {
+    return RuntimeProfileRemoved.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeProfileRemoved>): RuntimeProfileRemoved {
+    const message = createBaseRuntimeProfileRemoved();
+    message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
     return message;
   },
 };

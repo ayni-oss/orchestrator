@@ -226,10 +226,11 @@ export interface WatchRepositoriesRequest {
 export interface WatchRepositoriesResponse {
   /** cursor is monotonic within RepositoryService and is safe to resume. */
   cursor: string;
-  update?: { $case: "repositoryConnection"; repositoryConnection: RepositoryConnection } | {
-    $case: "repositorySnapshot";
-    repositorySnapshot: RepositorySnapshot;
-  } | undefined;
+  update?:
+    | { $case: "repositoryConnection"; repositoryConnection: RepositoryConnection }
+    | { $case: "repositorySnapshot"; repositorySnapshot: RepositorySnapshot }
+    | { $case: "repositoryRemoved"; repositoryRemoved: RepositoryRemoved }
+    | undefined;
 }
 
 /** Connect through the operator's existing GitHub App; identities are provider-observed. */
@@ -290,6 +291,20 @@ export interface ListRepositorySummariesRequest {
 export interface ListRepositorySummariesResponse {
   summaries: RepositorySummary[];
   page?: PageResponse | undefined;
+}
+
+/** Remove unused local onboarding and runtime configuration. Provider content is unchanged. */
+export interface RemoveRepositoryRequest {
+  idempotencyKey: string;
+  repositoryConnectionId: string;
+  expectedResourceVersion: string;
+}
+
+export interface RemoveRepositoryResponse {
+}
+
+export interface RepositoryRemoved {
+  repositoryConnectionId: string;
 }
 
 function createBaseGithubInstallationOption(): GithubInstallationOption {
@@ -2548,6 +2563,9 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
       case "repositorySnapshot":
         RepositorySnapshot.encode(message.update.repositorySnapshot, writer.uint32(26).fork()).join();
         break;
+      case "repositoryRemoved":
+        RepositoryRemoved.encode(message.update.repositoryRemoved, writer.uint32(34).fork()).join();
+        break;
     }
     return writer;
   },
@@ -2595,6 +2613,17 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
             };
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.update = {
+              $case: "repositoryRemoved",
+              repositoryRemoved: RepositoryRemoved.decode(reader, reader.uint32()),
+            };
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2624,6 +2653,10 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
         ? { $case: "repositorySnapshot", repositorySnapshot: RepositorySnapshot.fromJSON(object.repositorySnapshot) }
         : isSet(object.repository_snapshot)
         ? { $case: "repositorySnapshot", repositorySnapshot: RepositorySnapshot.fromJSON(object.repository_snapshot) }
+        : isSet(object.repositoryRemoved)
+        ? { $case: "repositoryRemoved", repositoryRemoved: RepositoryRemoved.fromJSON(object.repositoryRemoved) }
+        : isSet(object.repository_removed)
+        ? { $case: "repositoryRemoved", repositoryRemoved: RepositoryRemoved.fromJSON(object.repository_removed) }
         : undefined,
     };
   },
@@ -2637,6 +2670,8 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
       obj.repositoryConnection = RepositoryConnection.toJSON(message.update.repositoryConnection);
     } else if (message.update?.$case === "repositorySnapshot") {
       obj.repositorySnapshot = RepositorySnapshot.toJSON(message.update.repositorySnapshot);
+    } else if (message.update?.$case === "repositoryRemoved") {
+      obj.repositoryRemoved = RepositoryRemoved.toJSON(message.update.repositoryRemoved);
     }
     return obj;
   },
@@ -2662,6 +2697,15 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
           message.update = {
             $case: "repositorySnapshot",
             repositorySnapshot: RepositorySnapshot.fromPartial(object.update.repositorySnapshot),
+          };
+        }
+        break;
+      }
+      case "repositoryRemoved": {
+        if (object.update?.repositoryRemoved !== undefined && object.update?.repositoryRemoved !== null) {
+          message.update = {
+            $case: "repositoryRemoved",
+            repositoryRemoved: RepositoryRemoved.fromPartial(object.update.repositoryRemoved),
           };
         }
         break;
@@ -3669,6 +3713,244 @@ export const ListRepositorySummariesResponse: MessageFns<ListRepositorySummaries
   },
 };
 
+function createBaseRemoveRepositoryRequest(): RemoveRepositoryRequest {
+  return { idempotencyKey: "", repositoryConnectionId: "", expectedResourceVersion: "0" };
+}
+
+export const RemoveRepositoryRequest: MessageFns<RemoveRepositoryRequest> = {
+  encode(message: RemoveRepositoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(18).string(message.repositoryConnectionId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RemoveRepositoryRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRemoveRepositoryRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RemoveRepositoryRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+    };
+  },
+
+  toJSON(message: RemoveRepositoryRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RemoveRepositoryRequest>): RemoveRepositoryRequest {
+    return RemoveRepositoryRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RemoveRepositoryRequest>): RemoveRepositoryRequest {
+    const message = createBaseRemoveRepositoryRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    return message;
+  },
+};
+
+function createBaseRemoveRepositoryResponse(): RemoveRepositoryResponse {
+  return {};
+}
+
+export const RemoveRepositoryResponse: MessageFns<RemoveRepositoryResponse> = {
+  encode(_: RemoveRepositoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RemoveRepositoryResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRemoveRepositoryResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): RemoveRepositoryResponse {
+    return {};
+  },
+
+  toJSON(_: RemoveRepositoryResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<RemoveRepositoryResponse>): RemoveRepositoryResponse {
+    return RemoveRepositoryResponse.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<RemoveRepositoryResponse>): RemoveRepositoryResponse {
+    const message = createBaseRemoveRepositoryResponse();
+    return message;
+  },
+};
+
+function createBaseRepositoryRemoved(): RepositoryRemoved {
+  return { repositoryConnectionId: "" };
+}
+
+export const RepositoryRemoved: MessageFns<RepositoryRemoved> = {
+  encode(message: RepositoryRemoved, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(10).string(message.repositoryConnectionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositoryRemoved {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositoryRemoved();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositoryRemoved {
+    return {
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+    };
+  },
+
+  toJSON(message: RepositoryRemoved): unknown {
+    const obj: any = {};
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RepositoryRemoved>): RepositoryRemoved {
+    return RepositoryRemoved.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RepositoryRemoved>): RepositoryRemoved {
+    const message = createBaseRepositoryRemoved();
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    return message;
+  },
+};
+
 /** RepositoryService manages provider-neutral repository connections and snapshots. */
 export type RepositoryServiceService = typeof RepositoryServiceService;
 export const RepositoryServiceService = {
@@ -3744,6 +4026,17 @@ export const RepositoryServiceService = {
       Buffer.from(ListRepositoryConnectionsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListRepositoryConnectionsResponse =>
       ListRepositoryConnectionsResponse.decode(value),
+  },
+  removeRepository: {
+    path: "/ayni.orchestrator.v1.RepositoryService/RemoveRepository" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RemoveRepositoryRequest): Buffer =>
+      Buffer.from(RemoveRepositoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RemoveRepositoryRequest => RemoveRepositoryRequest.decode(value),
+    responseSerialize: (value: RemoveRepositoryResponse): Buffer =>
+      Buffer.from(RemoveRepositoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RemoveRepositoryResponse => RemoveRepositoryResponse.decode(value),
   },
   getRepositoryConnection: {
     path: "/ayni.orchestrator.v1.RepositoryService/GetRepositoryConnection" as const,
@@ -3827,6 +4120,7 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
   >;
   connectGithubRepository: handleUnaryCall<ConnectGithubRepositoryRequest, ConnectGithubRepositoryResponse>;
   listRepositoryConnections: handleUnaryCall<ListRepositoryConnectionsRequest, ListRepositoryConnectionsResponse>;
+  removeRepository: handleUnaryCall<RemoveRepositoryRequest, RemoveRepositoryResponse>;
   getRepositoryConnection: handleUnaryCall<GetRepositoryConnectionRequest, GetRepositoryConnectionResponse>;
   createRepositoryConnection: handleUnaryCall<CreateRepositoryConnectionRequest, CreateRepositoryConnectionResponse>;
   listRepositorySnapshots: handleUnaryCall<ListRepositorySnapshotsRequest, ListRepositorySnapshotsResponse>;
@@ -3925,6 +4219,21 @@ export interface RepositoryServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListRepositoryConnectionsResponse) => void,
+  ): ClientUnaryCall;
+  removeRepository(
+    request: RemoveRepositoryRequest,
+    callback: (error: ServiceError | null, response: RemoveRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  removeRepository(
+    request: RemoveRepositoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RemoveRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  removeRepository(
+    request: RemoveRepositoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RemoveRepositoryResponse) => void,
   ): ClientUnaryCall;
   getRepositoryConnection(
     request: GetRepositoryConnectionRequest,

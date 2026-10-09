@@ -72,7 +72,7 @@ impl CleanStore {
         }
         let mut statement = self
             .connection
-            .prepare("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%'")
+            .prepare("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%' OR name LIKE 'repository-removal:%'")
             .map_err(CleanStoreError::Database)?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
