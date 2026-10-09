@@ -363,6 +363,7 @@ impl RequestContext {
             | CleanStoreError::CreateDirectory(_)
             | CleanStoreError::Database(_)
             | CleanStoreError::DatabaseWorker(_)
+            | CleanStoreError::RuntimeConfiguration(_)
             | CleanStoreError::CorruptState
             | CleanStoreError::Clock => (Code::Internal, v1::ErrorReason::Internal, None, None),
             CleanStoreError::StoreUnavailable => {

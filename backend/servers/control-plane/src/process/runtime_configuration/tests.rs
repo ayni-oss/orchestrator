@@ -331,3 +331,24 @@ fn tls_without_explicit_engine_isolation_is_rejected() -> Result<(), Box<dyn std
     );
     Ok(())
 }
+
+#[test]
+fn infrastructure_only_managed_engine_does_not_require_repository_credentials()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut document = serde_json::json!({
+        "namespace":"ayni-orchestrator-dev", "worker_image":format!("docker.io/local/ayni-orchestrator-worker@sha256:{}", "a".repeat(64)),
+        "output_claim":"runtime-outputs", "model_secret":"openai-api", "engine_mode":"local-development",
+        "managed_runtime":{"platform":"linux/arm64", "service_account":"runtime-coding", "pull_secret":"runtime-pull",
+          "build":{"service_account":"runtime-builder", "engine":{"image":format!("docker.io/library/docker:28.3.3-dind@sha256:{}", "b".repeat(64)), "security_mode":"local-development"}}}
+    });
+    let invalid: RuntimeConfiguration = serde_json::from_value(document.clone())?;
+    assert_eq!(
+        invalid.validate(),
+        Err("runtime_engine_configuration_invalid")
+    );
+    document["managed_runtime"]["build"]["engine"]["image"] =
+        format!("docker.io/library/docker@sha256:{}", "b".repeat(64)).into();
+    let configuration: RuntimeConfiguration = serde_json::from_value(document)?;
+    configuration.validate()?;
+    Ok(())
+}

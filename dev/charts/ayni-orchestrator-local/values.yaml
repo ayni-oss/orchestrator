@@ -8,7 +8,7 @@ ayni-orchestrator:
     managedRuntime:
       build:
         engine:
-          image: docker.io/library/docker:28.3.3-dind@sha256:a56b3bdde89315ed2cc0e4906e582b5033d93bf20d9cb9510c2cdd4e7f7690b1
+          image: docker.io/library/docker@sha256:a56b3bdde89315ed2cc0e4906e582b5033d93bf20d9cb9510c2cdd4e7f7690b1
           security_mode: local-development
         service_account: runtime-builder
       platform: linux/arm64

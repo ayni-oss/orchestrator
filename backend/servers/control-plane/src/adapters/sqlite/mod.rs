@@ -85,6 +85,8 @@ pub enum CleanStoreError {
     RetiredPilotSchema,
     #[error("unsupported clean-v1 schema version {0}")]
     UnsupportedSchemaVersion(i64),
+    #[error("runtime infrastructure configuration is invalid: {0}")]
+    RuntimeConfiguration(&'static str),
     #[error("durable clean-v1 state is corrupt")]
     CorruptState,
     #[error("resource {resource_type} {resource_id} was not found")]
