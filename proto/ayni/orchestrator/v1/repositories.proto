@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 // RepositoryService manages provider-neutral repository connections and snapshots.
 service RepositoryService {
+  rpc AnalyzeRepository(AnalyzeRepositoryRequest) returns (AnalyzeRepositoryResponse);
   rpc ListGithubInstallations(ListGithubInstallationsRequest) returns (ListGithubInstallationsResponse);
   rpc ListGithubInstallationRepositories(ListGithubInstallationRepositoriesRequest) returns (ListGithubInstallationRepositoriesResponse);
   rpc ConnectGithubRepository(ConnectGithubRepositoryRequest) returns (ConnectGithubRepositoryResponse);
@@ -86,6 +87,10 @@ message RepositoryConnection {
   uint64 resource_version = 9;
   string registry_connection_id = 10;
   string image_namespace = 11;
+  // Durable onboarding is independent from provider access.
+  string onboarding_status = 12;
+  string onboarding_reason = 13;
+  string onboarding_revision = 14;
 }
 
 // RepositorySnapshot is an immutable observed repository revision.
@@ -188,5 +193,13 @@ message SetRepositoryRegistryRequest {
   string image_namespace = 5;
 }
 message SetRepositoryRegistryResponse {
+  RepositoryConnection repository_connection = 1;
+}
+
+message AnalyzeRepositoryRequest {
+  string repository_connection_id = 1;
+  string idempotency_key = 2;
+}
+message AnalyzeRepositoryResponse {
   RepositoryConnection repository_connection = 1;
 }

@@ -22,7 +22,7 @@ fn report(revision: &str) -> VerificationReport {
         runtime: VerifiedRuntime {
             lock_fingerprint: format!("sha256:{}", "c".repeat(64)),
             platform: "linux/amd64".into(),
-            ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
+            ayni_version: "0.15.0".into(),
             certificate_key_id: "test-producer".into(),
             metadata_digest: DIGEST.into(),
             protected_content_root: DIGEST.into(),
@@ -214,6 +214,7 @@ fn select(
         fingerprint,
         repository,
         source_digest,
+        "0.15.0",
     )
     .map_err(|_| CleanStoreError::CorruptState)?;
     ayni_orchestrator_application::runtime_selection::select(store, &command)
@@ -268,5 +269,44 @@ fn runtime_activation_stale_commit_preserves_artifacts_and_events()
             .items
             .is_empty()
     );
+    Ok(())
+}
+
+#[test]
+fn unsupported_historical_contract_blocks_new_admission_and_preserves_frozen_tasks()
+-> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let (task, _) = store.create_development_task(
+        "retained-task",
+        &task_request(&store, &repository.id, &profile.id, "retained-task")?,
+    )?;
+    let mut revision = store.runtime_profile_revision(
+        profile
+            .active_revision_id
+            .as_deref()
+            .ok_or(CleanStoreError::CorruptState)?,
+    )?;
+    let Some(v1::runtime_profile_revision::Configuration::AyniManaged(configuration)) =
+        &mut revision.configuration
+    else {
+        return Err(CleanStoreError::CorruptState);
+    };
+    configuration.ayni_version = "0.14.5".into();
+    store
+        .connection
+        .execute(
+            "UPDATE runtime_profile_revisions SET payload=?1 WHERE id=?2",
+            params![revision.encode_to_vec(), revision.id],
+        )
+        .map_err(CleanStoreError::Database)?;
+    assert!(matches!(
+        store.create_development_task(
+            "new-task",
+            &task_request(&store, &repository.id, &profile.id, "new-task")?
+        ),
+        Err(CleanStoreError::ProfileNotReady)
+    ));
+    assert_eq!(store.development_task(&task.id)?, task);
     Ok(())
 }

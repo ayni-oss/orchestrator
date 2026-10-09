@@ -14,6 +14,7 @@ struct Jobs {
     publications: BTreeMap<String, String>,
     discovery: Option<ImageDiscovery>,
     candidate_missing: bool,
+    cleanup_failed: bool,
     lost_engines: BTreeSet<String>,
 }
 #[derive(Clone, Default)]
@@ -130,6 +131,14 @@ impl ExecutionBackend for Backend {
             .unwrap_or(&ExecutionState::Missing))
     }
     async fn cleanup(&self, name: &str) -> ExecutionResult<()> {
+        if self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cleanup_failed
+        {
+            return Err("cleanup_failed".into());
+        }
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -184,7 +193,7 @@ async fn create_profile(state: &AppState) -> TestResult<(String, String)> {
                             v1::runtime_profile_configuration::Configuration::AyniManaged(
                                 v1::AyniManagedProfileRevision {
                                     lock_fingerprint: "c".repeat(64),
-                                    ayni_version: "0.14.5".into(),
+                                    ayni_version: "0.15.0".into(),
                                     oci_repository: "ghcr.io/ayni-oss/sandbox".into(),
                                     runtime_source_digest: None,
                                 },
@@ -217,7 +226,7 @@ impl Fixture {
             build: Some(
                 ayni_orchestrator_application::execution_settings::BuildRuntime {
                     configuration_revision: 0,
-                    image: format!("ghcr.io/team/builder@sha256:{}", "d".repeat(64)),
+                    image: format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "d".repeat(64)),
                     service_account: "runtime-builder".into(),
                     registry_secret: "push-only".into(),
                     signing_secret: "signing-only".into(),
@@ -241,7 +250,6 @@ impl Fixture {
             allow_emulation: false,
             engine_mode: "external-isolated".into(),
 
-            builder_defaults: None,
             profiles: BTreeMap::new(),
             managed_runtime: None,
         };
@@ -255,7 +263,7 @@ impl Fixture {
                     expected: RuntimeExpectation {
                         lock_fingerprint: format!("sha256:{}", "c".repeat(64)),
                         platform: "linux/arm64".into(),
-                        ayni_version: "0.14.5".into(),
+                        ayni_version: "0.15.0".into(),
                     },
                 },
                 image: runtime.image.clone(),
@@ -274,6 +282,7 @@ impl Fixture {
                 certificate: None,
                 discovery: DiscoveryProgress::default(),
                 resolved_digest: None,
+                verification: None,
                 failed: false,
             }),
             ..Default::default()
@@ -640,4 +649,102 @@ async fn engine_loss_discards_candidate_and_restart_preserves_fresh_attempt() ->
     );
     drop(jobs);
     Ok(())
+}
+
+#[tokio::test]
+async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.cursor.pending = None;
+    fixture.cursor.preparation = Some(PreparationIdentity {
+        generation: "approved-generation".into(),
+        source_revision: "a".repeat(40),
+        policy_digest: "policy".into(),
+        lock_digest: "lock".into(),
+        contract_version: "0.15.0".into(),
+        platform: fixture.runtime.platform.clone(),
+        registry: vec![],
+        certificate: None,
+        runtime: fixture.runtime.clone(),
+    });
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "a".repeat(64)),
+        image_id: String::new(),
+    });
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .cleanup_failed = true;
+    assert!(
+        fixture
+            .reconciler
+            .resolve_builder(
+                &fixture.profile,
+                "0.15.0",
+                &mut fixture.runtime,
+                &mut fixture.cursor
+            )
+            .await
+            .is_err()
+    );
+    let id = fixture.profile.clone();
+    fixture.cursor = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| store.runtime_cursor(&id))
+        .await?;
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .cleanup_failed = false;
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "b".repeat(64)),
+        image_id: String::new(),
+    });
+    assert!(
+        fixture
+            .reconciler
+            .resolve_builder(
+                &fixture.profile,
+                "0.15.0",
+                &mut fixture.runtime,
+                &mut fixture.cursor
+            )
+            .await?
+    );
+    assert_eq!(
+        fixture
+            .runtime
+            .build
+            .as_ref()
+            .ok_or("builder missing")?
+            .image,
+        format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "a".repeat(64))
+    );
+    assert!(!fixture.cursor.status.contains_key("builder-job"));
+    Ok(())
+}
+
+#[test]
+fn retry_never_grants_permission_to_replace_a_runtime() {
+    let mut cursor = RuntimeCursor {
+        failures: 3,
+        next_at: 99,
+        ..Default::default()
+    };
+    cursor.request_rebuild(false);
+    assert!(!cursor.force_rebuild);
+    assert!(cursor.retry_trust);
+    cursor.retry();
+    assert_eq!(cursor.failures, 0);
+    assert_eq!(cursor.next_at, 0);
+    assert!(!cursor.force_rebuild);
+    cursor.request_rebuild(true);
+    assert!(cursor.force_rebuild);
 }

@@ -193,10 +193,80 @@ pub(crate) async fn inspect(image: &str, platform: &str) -> Result<ImageDiscover
         .ok_or("registry_response_invalid")?;
     RuntimeImage::parse(&format!("{repository}@{image_id}"))
         .map_err(|_| "registry_response_invalid")?;
+    verify_config(&client, path, token, image_id, platform).await?;
     Ok(ImageDiscovery::Resolved {
         image_id: image_id.into(),
         digest: format!("sha256:{:x}", Sha256::digest(bytes)),
     })
+}
+
+async fn verify_config(
+    client: &Client,
+    path: &str,
+    token: &str,
+    image_id: &str,
+    platform: &str,
+) -> Result<(), &'static str> {
+    // A single-platform tag has no index platform descriptor. The config is
+    // authoritative in both cases, and is independently bound to its digest.
+    let response = client
+        .get(format!("https://ghcr.io/v2/{path}/blobs/{image_id}"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| "registry_unavailable")?;
+    let config = body(config_response(client, response).await?).await?;
+    if format!("sha256:{:x}", Sha256::digest(&config)) != image_id {
+        return Err("runtime_digest_mismatch");
+    }
+    let config: Value = serde_json::from_slice(&config).map_err(|_| "registry_response_invalid")?;
+    validate_platform(&config, platform)?;
+    Ok(())
+}
+
+// GHCR delegates blob delivery to its object store. Never forward registry
+// authorization to that host or follow arbitrary registry-provided redirects.
+async fn config_response(
+    client: &Client,
+    response: reqwest::Response,
+) -> Result<reqwest::Response, &'static str> {
+    if !response.status().is_redirection() {
+        if !response_status(response.status())? {
+            return Err("registry_response_invalid");
+        }
+        return Ok(response);
+    }
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|value| value.to_str().ok())
+        .ok_or("registry_response_invalid")?;
+    let url = reqwest::Url::parse(location).map_err(|_| "registry_response_invalid")?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("pkg-containers.githubusercontent.com")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+    {
+        return Err("registry_response_invalid");
+    }
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|_| "registry_unavailable")?;
+    if !response_status(response.status())? {
+        return Err("registry_response_invalid");
+    }
+    Ok(response)
+}
+
+fn validate_platform(config: &Value, platform: &str) -> Result<(), &'static str> {
+    let (os, architecture) = platform.split_once('/').ok_or("runtime_platform_invalid")?;
+    if config["os"] != os || config["architecture"] != architecture {
+        return Err("runtime_platform_mismatch");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -231,5 +301,13 @@ mod tests {
         ] {
             assert!(response_status(status).is_err());
         }
+    }
+
+    #[test]
+    fn manifest_config_must_match_requested_platform() {
+        let config = serde_json::json!({"os":"linux","architecture":"arm64"});
+        assert!(validate_platform(&config, "linux/arm64").is_ok());
+        assert!(validate_platform(&config, "linux/amd64").is_err());
+        assert!(validate_platform(&serde_json::json!({}), "linux/arm64").is_err());
     }
 }

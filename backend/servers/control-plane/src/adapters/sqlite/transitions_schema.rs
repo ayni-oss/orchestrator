@@ -226,6 +226,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             connection.execute_batch("BEGIN IMMEDIATE; DROP TABLE automation_installations; DELETE FROM durable_actions WHERE operation='InstallRepositoryAutomation'; DELETE FROM resource_events WHERE resource_type='automation_installation'; DELETE FROM page_snapshots; UPDATE reconciliation_cursors SET value=json_set(value,'$.pending',null,'$.next_at',0,'$.failures',0,'$.status',json('{}')) WHERE name LIKE 'managed:%' AND json_valid(value); UPDATE clean_schema SET version=8 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
             version = 8;
         }
+        if version == 8 {
+            super::builder_cutover::migrate(connection)?;
+            version = 9;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -267,7 +271,7 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',8,unixepoch());
+VALUES ('control_plane',9,unixepoch());
 CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL);
 CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1;
 CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL);

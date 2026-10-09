@@ -58,12 +58,11 @@ and credentials and uses only the `docker-desktop` context.
 
 Repository environments follow the same automatic build/certify/publish/verify flow
 locally. Ordinary component image packaging remains available for local deployment.
-A Docker Desktop node daemon is not an approved isolated environment builder.
-Configure a dedicated audited TLS engine and immutable builder image, and set
-`isolated_engine: true` only after proving isolation. The local chart's default has
-no builder; setup remains visible until one is configured. GHCR push and a distinct
-pull-only credential, an owner-reviewed trusted certificate and a committed lock
-are prerequisites. Always use `--context docker-desktop` for validation.
+The local chart explicitly selects local-development disposable engines. Official
+builders are pulled by resolved digest; no custom builder packaging or image seeding
+is required. GHCR push and distinct pull-only credentials, a trusted certificate,
+and a compatible committed policy/lock are prerequisites. Always use
+`--context docker-desktop` for validation. Deploy cleaned values with `--reset-values`.
 
 Exercise missing-image onboarding, verified reuse, explicit mismatch Rebuild,
 uncertain push recovery, and task admission by immutable digest. Inspect workload

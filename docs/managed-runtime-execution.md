@@ -117,8 +117,9 @@ published images or purges node caches. Registry retention is operator policy.
 
 Public certificate trust preparation runs in the pinned worker image with Ayni and
 the pinned lock resolver. It needs checkout access and the public key only, and
-can propose the owner-reviewed policy/lock PR before an isolated image builder is
-configured. Missing image-build infrastructure still blocks subsequent builds.
+proposes owner-reviewed policy/lock trust updates using the catalog-selected
+official builder and public certificate data. Missing engine infrastructure blocks
+subsequent runtime builds.
 
-See [deployment-wide build service](build-service.md) for global Ayni settings,
-attempt engines, security modes, and external-engine migration.
+See [repository-selected official builders](repository-builders.md) for immutable
+version selection, attempt engines, security modes and recovery.

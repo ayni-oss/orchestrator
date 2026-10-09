@@ -103,12 +103,15 @@ fn trust_lock_job(
     if RuntimeImage::parse(&configuration.worker_image).is_err() {
         return Err("trust_lock_image_unpinned");
     }
+    let build = runtime.build.as_ref().ok_or("runtime_builder_missing")?;
+    ayni_orchestrator_runtime::runtime_contract::RuntimeImage::parse(&build.image)
+        .map_err(|_| "runtime_builder_unpinned")?;
     let mut environment = workload::runtime_environment();
+    environment.push(json!({"name":"PATH","value":"/launcher:/usr/local/bin:/usr/bin:/bin"}));
     environment.push(json!({"name":"CERTIFICATE_KEY_ID","value":key_id}));
     environment.push(json!({"name":"CERTIFICATE_PUBLIC_KEY","value":public_key}));
-    let mut container =
-        workload::worker_container("trust-lock", &configuration.worker_image, &environment);
-    // The approved worker is immutable; local component imports use kubelet caching.
+    let mut container = workload::worker_container("trust-lock", &build.image, &environment);
+    // The approved builder is immutable; cached content remains bound to its digest.
     container["imagePullPolicy"] = json!("IfNotPresent");
     container["command"] = json!(["/launcher/runtime-worker"]);
     container["args"] = json!(["trust-lock"]);
@@ -147,7 +150,7 @@ mod tests {
             pull_secret: Some("pull-only".into()),
             build: Some(BuildRuntime {
                 configuration_revision: 0,
-                image: format!("builder@sha256:{}", "b".repeat(64)),
+                image: format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "b".repeat(64)),
                 service_account: "runtime-builder".into(),
                 registry_secret: "push-private".into(),
                 signing_secret: "seed-private".into(),
@@ -191,7 +194,10 @@ mod tests {
         let containers = pod["containers"].as_array().ok_or("missing_containers")?;
         assert_eq!(containers.len(), 1);
         assert_eq!(containers[0]["imagePullPolicy"], "IfNotPresent");
-        assert_eq!(containers[0]["image"], configuration().worker_image);
+        assert_eq!(
+            containers[0]["image"],
+            runtime().build.ok_or("build")?.image
+        );
         assert_eq!(pod["imagePullSecrets"], json!([{"name":"pull-only"}]));
         for container in containers
             .iter()
@@ -257,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn trust_job_requires_only_a_pinned_worker_and_accepts_no_builder() {
+    fn trust_job_requires_pinned_worker_and_builder() {
         let mut runtime = runtime();
         runtime.build = None;
         assert!(
@@ -268,7 +274,7 @@ mod tests {
                 "release",
                 &"a".repeat(64)
             )
-            .is_ok()
+            .is_err()
         );
         let mut config = configuration();
         config.worker_image = "worker:latest".into();

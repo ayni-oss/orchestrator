@@ -5,7 +5,7 @@
 //! container runtime. The Actions evidence importer remains the current
 //! implementation; these modules expose managed admission expectations.
 
-pub mod ayni_release;
 pub mod coding;
+pub mod compatibility;
 pub mod managed_runtime;
 pub mod runtime_execution;

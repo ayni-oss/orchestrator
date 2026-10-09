@@ -1,8 +1,8 @@
 //! Managed onboarding observations, distinct from certificate verification.
 use ayni_orchestrator_domain::digest;
-use ayni_orchestrator_profile_ayni::ayni_release;
 #[derive(Default)]
 pub struct LockInspection {
+    pub ayni_version: String,
     pub lock_compatible: bool,
     pub lock_fingerprint: String,
     pub trust_policy_pinned: bool,
@@ -14,12 +14,22 @@ pub fn inspect_lock(bytes: &[u8], policy_present: bool) -> LockInspection {
         result.reason = "lock_invalid";
         return result;
     };
-    let fingerprint = lock["fingerprint"].as_str().unwrap_or("");
-    result.lock_compatible = digest::digest(fingerprint)
-        && lock["ayni_version"] == ayni_release::CLI_VERSION
-        && lock["schema_version"] == "0.9.0";
-    if result.lock_compatible {
-        result.lock_fingerprint = fingerprint.trim_start_matches("sha256:").into();
+    if bytes.len() > 1_048_576 {
+        result.reason = "lock_invalid";
+        return result;
+    }
+    let version = lock["ayni_version"].as_str().unwrap_or_default();
+    result.ayni_version = version.into();
+    if !version.is_empty()
+        && ayni_orchestrator_profile_ayni::compatibility::contract(version).is_err()
+    {
+        result.reason = "runtime_version_unsupported";
+        return result;
+    }
+    if let Ok(identity) = super::environment::parse_lock(bytes) {
+        result.lock_compatible = policy_present;
+        result.lock_fingerprint = identity.fingerprint;
+        result.ayni_version = identity.ayni_version;
     }
     // This is a pinned-policy observation, never certificate verification.
     result.trust_policy_pinned = lock["certificate_trust_policy"]["fingerprint"]
@@ -43,7 +53,7 @@ mod tests {
     #[test]
     fn compatibility_and_policy_pin_do_not_claim_certificate_verification()
     -> Result<(), serde_json::Error> {
-        let mut lock = serde_json::json!({"schema_version":"0.9.0","ayni_version":ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION,"fingerprint":format!("sha256:{}","a".repeat(64)),"certificate_trust_policy":{"fingerprint":ayni_orchestrator_domain::digest::sha256(b"{}")}});
+        let mut lock = serde_json::json!({"schema_version":"0.9.0","recipe_version":"2","ayni_version":"0.15.0","fingerprint":format!("sha256:{}","a".repeat(64)),"certificate_trust_policy":{"fingerprint":ayni_orchestrator_domain::digest::sha256(b"{}")}});
         let result = inspect_lock(&serde_json::to_vec(&lock)?, true);
         assert!(result.lock_compatible);
         assert!(!result.trust_policy_pinned);
@@ -51,7 +61,7 @@ mod tests {
         lock["ayni_version"] = "unsupported".into();
         let result = inspect_lock(&serde_json::to_vec(&lock)?, true);
         assert!(!result.lock_compatible);
-        assert_eq!(result.reason, "lock_incompatible");
+        assert_eq!(result.reason, "runtime_version_unsupported");
         Ok(())
     }
 }

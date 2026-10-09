@@ -130,8 +130,7 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
                     v1::runtime_profile_configuration::Configuration::AyniManaged(
                         v1::AyniManagedProfileRevision {
                             lock_fingerprint: "c".repeat(64),
-                            ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION
-                                .into(),
+                            ayni_version: "0.15.0".into(),
                             oci_repository: IMAGE.into(),
                             runtime_source_digest: None,
                         },
@@ -173,6 +172,16 @@ async fn observe_verified_runtime(
                     variant: None,
                 }),
                 status: v1::RuntimeArtifactStatus::Verified as i32,
+                verified_metadata: vec![
+                    v1::VerifiedMetadata {
+                        key: "ayni-contract".into(),
+                        value: "0.15.0".into(),
+                    },
+                    v1::VerifiedMetadata {
+                        key: "builder-image".into(),
+                        value: format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "a".repeat(64)),
+                    },
+                ],
                 ..Default::default()
             },
         )

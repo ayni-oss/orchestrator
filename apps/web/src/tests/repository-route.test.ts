@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const bff = vi.hoisted(() => ({
   listRepositoryConnections: vi.fn(),
   getRuntimeProfile:vi.fn(),
+  analyzeRepository: vi.fn(),
+  reconcileProfile: vi.fn(),
   setRuntimeRegistry:vi.fn(),
   connectGithubRepository: vi.fn(),
   listGithubInstallations: vi.fn(),
@@ -73,6 +75,14 @@ describe("repository connection route actions", () => {
     const result=await runtimeActions.registry!({params:{repositoryId:"repository:1"},locals:{requestId:"runtime-save",requestSignal},request:new Request("http://127.0.0.1/repositories/repository:1?/registry",{method:"POST",body})} as never);
     expect(result).toEqual({success:"Runtime image destination updated."});
     expect(bff.setRuntimeRegistry).toHaveBeenCalledWith({runtimeProfileId:"profile:1",idempotencyKey:"00000000-0000-4000-8000-000000000099",expectedResourceVersion:"2",registryConnectionId:"connection:ghcr"},expect.objectContaining({requestId:"runtime-save"}));
+  });
+
+  it("analysis retries onboarding without authorizing runtime replacement", async () => {
+    const body = new URLSearchParams({ idempotencyKey: "analysis-1", forceRebuild: "true" });
+    const result = await runtimeActions.analyze!({ params: { repositoryId: "repository:1" }, locals: { requestId: "analysis", requestSignal }, request: new Request("http://127.0.0.1/repositories/repository:1?/analyze", { method: "POST", body }) } as never);
+    expect(result).toEqual({ success: "Repository analysis requested." });
+    expect(bff.analyzeRepository).toHaveBeenCalledWith("repository:1", "analysis-1", expect.objectContaining({ requestId: "analysis" }));
+    expect(bff.reconcileProfile).not.toHaveBeenCalled();
   });
 
 });

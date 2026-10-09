@@ -15,6 +15,15 @@ pub(super) struct SigningIdentity {
     pub enabled: bool,
     pub status: String,
 }
+pub(super) fn ready_certificate(
+    certificate: Option<&SigningIdentity>,
+) -> Result<&SigningIdentity, &'static str> {
+    let certificate = certificate.ok_or("certificate_setup_required")?;
+    if !certificate.enabled || certificate.status != "ready" {
+        return Err("certificate_not_ready");
+    }
+    Ok(certificate)
+}
 impl From<v1::Certificate> for SigningIdentity {
     fn from(certificate: v1::Certificate) -> Self {
         Self {
@@ -32,18 +41,16 @@ impl From<v1::Certificate> for SigningIdentity {
 pub(super) struct TrustUpdate {
     generation: String,
     head: String,
-    job: String,
+    pub(super) job: String,
     #[serde(default)]
     attempt: u64,
     result: Option<TrustResult>,
     pull_number: Option<u64>,
     state: String,
+    #[serde(default)]
+    merge_revision: Option<String>,
 }
 impl TrustUpdate {
-    pub(super) fn failed(&self) -> bool {
-        self.state == "failed"
-    }
-
     fn reset(&mut self, head: &str) {
         self.attempt = self.attempt.saturating_add(1);
         self.head = head.into();
@@ -101,7 +108,11 @@ struct TrustContext<'a> {
 }
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::too_many_lines,
+        reason = "one trust transition binds provider, source and certificate identities before external work"
+    )]
     pub(super) async fn ensure_certificate_trust(
         &self,
         id: &str,
@@ -113,6 +124,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         certificate: &SigningIdentity,
         cursor: &mut RuntimeCursor,
     ) -> Result<bool, &'static str> {
+        let default_head = head;
+        let merged_head = cursor
+            .trust
+            .as_ref()
+            .and_then(|trust| trust.merge_revision.clone());
+        let head = merged_head.as_deref().unwrap_or(head);
         let policy = self
             .source
             .file(&github.owner, &github.name, head, ".ayni.toml", token)
@@ -141,12 +158,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let generation = format!(
             "{:x}",
             Sha256::digest(format!(
-                "{}\0{}\0{}\0{}\0{}",
+                "{}\0{}\0{}\0{}\0{}\0{}\0{}",
                 github.repository_id,
                 certificate.id,
                 certificate.revision,
                 certificate.key_id,
-                certificate.public_key
+                certificate.public_key,
+                runtime.platform,
+                runtime
+                    .build
+                    .as_ref()
+                    .ok_or("runtime_builder_missing")?
+                    .image
             ))
         );
         if cursor
@@ -165,6 +188,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 result: None,
                 pull_number: None,
                 state: "pending".into(),
+                merge_revision: None,
             });
             cursor.status.remove("certificate-trust-pr");
             self.save(id, cursor).await?;
@@ -186,6 +210,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         };
         // A previously generated/merged policy must still pin exactly the selected key.
         if trust.state == "verified" && pinned && trust.head == head {
+            if default_head != head {
+                trust.merge_revision = None;
+                trust.reset(default_head);
+                cursor.trust = Some(trust);
+                self.save(id, cursor).await?;
+                return Ok(false);
+            }
             return Ok(true);
         }
         if trust.state == "verified" || (trust.head != head && trust.pull_number.is_none()) {
@@ -195,6 +226,15 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
         self.observe_trust_pull(&context, &mut trust, cursor)
             .await?;
+        if trust
+            .merge_revision
+            .as_deref()
+            .is_some_and(|revision| revision != head)
+        {
+            cursor.trust = Some(trust);
+            self.save(id, cursor).await?;
+            return Ok(false);
+        }
         self.retry_trust_update(&context, &mut trust, cursor)
             .await?;
         self.observe_trust_job(&context, &mut trust, cursor).await?;
@@ -212,7 +252,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if trust.state == "closed" {
             return Err("certificate_trust_pull_closed");
         }
-        Ok(trust.state == "verified")
+        Ok(trust.state == "verified" && default_head == head)
     }
     async fn retry_trust_update(
         &self,
@@ -232,7 +272,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             lock: _,
         } = *context;
         if trust.state == "closed" {
-            if !cursor.force_rebuild {
+            if !cursor.retry_trust {
                 return Err("certificate_trust_pull_closed");
             }
             let write_token = self.source.trust_token(github).await?;
@@ -244,12 +284,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 )
                 .await?;
             trust.state = "open".into();
-            cursor.force_rebuild = false;
+            cursor.retry_trust = false;
         }
-        if trust.state == "failed" && cursor.force_rebuild {
+        if trust.state == "failed" && cursor.retry_trust {
             self.kubernetes.cleanup(&trust.job).await?;
             trust.reset(head);
-            cursor.force_rebuild = false;
+            cursor.retry_trust = false;
         }
         Ok(())
     }
@@ -278,12 +318,38 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .pull(&github.owner, &github.name, number, &pull_token)
                 .await?;
             let merged = pull["merged_at"].as_str().is_some();
+            let merged_revision = if merged {
+                let revision = pull["merge_commit_sha"]
+                    .as_str()
+                    .ok_or("certificate_trust_merge_invalid")?;
+                ayni_orchestrator_application::identity::GitRevision::parse(revision)
+                    .map_err(|_| "certificate_trust_merge_invalid")?;
+                let merged_policy = self
+                    .source
+                    .file(
+                        &github.owner,
+                        &github.name,
+                        revision,
+                        ".ayni.toml",
+                        &pull_token,
+                    )
+                    .await?;
+                if !policy_matches(&merged_policy, certificate)? {
+                    return Err("certificate_trust_merge_mismatch");
+                }
+                Some(revision.to_owned())
+            } else {
+                None
+            };
             trust.observe_pull(
                 merged,
                 pull["state"] == "open",
-                policy_matches(policy, certificate)?,
-                head,
+                merged || policy_matches(policy, certificate)?,
+                merged_revision.as_deref().unwrap_or(head),
             )?;
+            if merged {
+                trust.merge_revision = merged_revision;
+            }
             if merged {
                 cursor
                     .status
@@ -320,10 +386,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         ),
                         revision: trust.head.clone(),
                         expected: RuntimeExpectation {
-                            lock_fingerprint: String::new(),
+                            lock_fingerprint: format!(
+                                "sha256:{}",
+                                crate::profiles::ayni::environment::parse_lock(lock)
+                                    .map_err(|_| "repository_lock_invalid")?
+                                    .fingerprint
+                            ),
                             platform: runtime.platform.clone(),
-                            ayni_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION
-                                .into(),
+                            ayni_version: crate::profiles::ayni::environment::parse_lock(lock)
+                                .map_err(|_| "repository_lock_invalid")?
+                                .ayni_version,
                         },
                     };
                     self.kubernetes
@@ -534,6 +606,64 @@ fn validate_result(
     Ok(())
 }
 
+impl<E: ExecutionBackend> RuntimeReconciler<E> {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one preparation phase binds frozen repository and certificate inputs"
+    )]
+    pub(super) async fn prepare_certificate_trust(
+        &self,
+        id: &str,
+        runtime: &mut ProfileRuntime,
+        github: &v1::GithubRepository,
+        branch: &str,
+        head: &str,
+        token: &str,
+        certificate: Option<&SigningIdentity>,
+        cursor: &mut RuntimeCursor,
+    ) -> Result<bool, &'static str> {
+        if cursor.pending.is_none() {
+            let certificate = ready_certificate(certificate)?;
+            if let Some(build) = &mut runtime.build {
+                build.signing_secret.clone_from(&certificate.secret_name);
+            }
+            if !self
+                .ensure_certificate_trust(
+                    id,
+                    runtime,
+                    github,
+                    branch,
+                    head,
+                    token,
+                    certificate,
+                    cursor,
+                )
+                .await?
+            {
+                let lookup_id = id.to_owned();
+                self.with_database(move |store| {
+                    store
+                        .runtime_failure(&lookup_id, "trust_policy_missing")
+                        .map_err(|_| "runtime_cursor_invalid")
+                })
+                .await?;
+                cursor
+                    .status
+                    .insert("reason-code".into(), "trust_policy_missing".into());
+                cursor
+                    .status
+                    .insert("phase".into(), "setup_required".into());
+                self.save(id, cursor).await?;
+                return Ok(false);
+            }
+            cursor.status.remove("reason-code");
+            cursor.status.insert("phase".into(), "analyzing".into());
+            self.save(id, cursor).await?;
+        }
+        Ok(true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{SigningIdentity, TrustResult, policy_matches, validate_result};
@@ -549,7 +679,7 @@ mod tests {
         }
     }
     fn lock() -> String {
-        serde_json::json!({"schema_version":"0.9.0","recipe_version":"2","fingerprint":format!("sha256:{}","b".repeat(64)),"provisioning_base":{"reference":"registry.test/base","digest":format!("sha256:{}","c".repeat(64))},"targets":[],"mise_version":"2026.6.14","platforms":[],"ayni_version":"0.14.5"}).to_string()
+        serde_json::json!({"schema_version":"0.9.0","recipe_version":"2","fingerprint":format!("sha256:{}","b".repeat(64)),"provisioning_base":{"reference":"registry.test/base","digest":format!("sha256:{}","c".repeat(64))},"targets":[],"mise_version":"2026.6.14","platforms":[],"ayni_version":"0.15.0"}).to_string()
     }
     fn result(policy: &str) -> Result<TrustResult, toml_edit::TomlError> {
         let mut document: toml_edit::DocumentMut = policy.parse()?;
@@ -646,6 +776,7 @@ mod tests {
             result: None,
             pull_number: Some(17),
             state: "open".into(),
+            merge_revision: None,
         }
     }
     #[test]

@@ -86,6 +86,29 @@ impl TaskRepository for CleanStore {
         };
         let revision = self.runtime_profile_revision(&revision_id)?;
         let artifact = self.runtime_artifact(&artifact_id)?;
+        if let Some(v1::runtime_profile_revision::Configuration::AyniManaged(managed)) =
+            &revision.configuration
+        {
+            let contract =
+                ayni_orchestrator_profile_ayni::compatibility::contract(&managed.ayni_version);
+            let metadata = |key: &str| {
+                artifact
+                    .verified_metadata
+                    .iter()
+                    .find(|item| item.key == key)
+                    .map(|item| item.value.as_str())
+            };
+            if contract.is_err()
+                || metadata("ayni-contract") != Some(managed.ayni_version.as_str())
+                || metadata("builder-image").is_none_or(|image| {
+                    ayni_orchestrator_profile_ayni::compatibility::validate_builder(image).is_err()
+                })
+            {
+                facts.profile_ready = false;
+                return Ok(facts);
+            }
+        }
+
         if expected_destination.is_some_and(|expected| artifact.oci_repository != expected) {
             facts.profile_ready = false;
             return Ok(facts);

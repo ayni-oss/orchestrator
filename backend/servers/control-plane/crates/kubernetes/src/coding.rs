@@ -49,35 +49,7 @@ impl RuntimeKubernetes {
         )
         .await
     }
-    /// Publish an unsigned builder using the same publication Job and credentials.
-    /// # Errors
-    /// Rejects invalid candidate identities and manifests.
-    pub async fn publish_image(
-        &self,
-        name: &str,
-        runtime: &WorkloadRuntime,
-        image_id: &str,
-        overwrite: bool,
-    ) -> Result<(), &'static str> {
-        let job = publication_job(name, &self.configuration, runtime, image_id, overwrite)?;
-        self.create(
-            name,
-            std::collections::BTreeMap::from([(
-                "execution.json".into(),
-                serde_json::to_string(
-                    &ayni_orchestrator_runtime::image_build::ImagePublicationRequest {
-                        platform: runtime.platform.clone(),
-                    },
-                )
-                .map_err(|_| "runtime_request_invalid")?,
-            )]),
-            "",
-            &job,
-        )
-        .await
-    }
-
-    /// One build interface for trusted packaging, fixtures, and repository runtimes.
+    /// Build a repository runtime with its frozen executor and isolated engine.
     /// # Errors
     /// Rejects missing authority or conflicting attempt identities.
     pub async fn start_image_operation(
@@ -251,10 +223,15 @@ pub fn image_build_job(
     runtime: &WorkloadRuntime,
     kind: &ayni_orchestrator_application::image_build::ImageBuildKind,
 ) -> Result<Job, &'static str> {
-    use ayni_orchestrator_application::image_build::ImageBuildKind;
     runtime.validate()?;
     let build = runtime.build.as_ref().ok_or("runtime_builder_missing")?;
-    if !matches!(kind, ImageBuildKind::TrustedBuilder { .. }) && build.signing_secret.is_empty() {
+    if build.registry_secret.is_empty() {
+        return Err("runtime_registry_required");
+    }
+    let _ = kind;
+    ayni_orchestrator_runtime::runtime_contract::RuntimeImage::parse(&build.image)
+        .map_err(|_| "runtime_builder_unpinned")?;
+    if build.signing_secret.is_empty() {
         return Err("certificate_setup_required");
     }
     let mut environment = workload::runtime_environment();
@@ -265,34 +242,14 @@ pub fn image_build_job(
         json!({"name":"DOCKER_CERT_PATH","value":"/engine"}),
         json!({"name":"DOCKER_CONFIG","value":"/registry"}),
     ]);
-    if !matches!(kind, ImageBuildKind::TrustedBuilder { .. }) {
-        environment.extend([
-            json!({"name":"AYNI_ENV_CERTIFICATE_SIGNING_KEY","valueFrom":{"secretKeyRef":{"name":build.signing_secret,"key":"signing-key"}}}),
-            json!({"name":"AYNI_ENV_CERTIFICATE_KEY_ID","valueFrom":{"secretKeyRef":{"name":build.signing_secret,"key":"key-id"}}}),
-        ]);
-    }
-    environment.push(json!({"name":"TEST_PLATFORM","value":runtime.platform}));
-    let operation = match kind {
-        ImageBuildKind::RepositoryRuntime => "build",
-        ImageBuildKind::TrustedBuilder { recipe_identity } => {
-            environment.push(json!({"name":"BUILDER_RECIPE_ID","value":recipe_identity}));
-            "builder-package"
-        }
-        ImageBuildKind::TrustedFixture {
-            provisioning_base,
-            key_id,
-            public_key,
-        } => {
-            environment.extend([
-                json!({"name":"PROVISIONING_BASE","value":provisioning_base}),
-                json!({"name":"CERTIFICATE_KEY_ID","value":key_id}),
-                json!({"name":"CERTIFICATE_PUBLIC_KEY","value":public_key}),
-            ]);
-            "builder-test-build"
-        }
-    };
+    environment.extend([
+        json!({"name":"AYNI_BUILDER_IMAGE","value":build.image}),
+        json!({"name":"AYNI_ENV_CERTIFICATE_SIGNING_KEY","valueFrom":{"secretKeyRef":{"name":build.signing_secret,"key":"signing-key"}}}),
+        json!({"name":"AYNI_ENV_CERTIFICATE_KEY_ID","valueFrom":{"secretKeyRef":{"name":build.signing_secret,"key":"key-id"}}}),
+    ]);
     let mut container = workload::worker_container("build", &build.image, &environment);
-    container["args"] = json!(["/launcher/runtime-worker", operation]);
+    container["command"] = json!(["/launcher/runtime-worker"]);
+    container["args"] = json!(["build"]);
     let mounts = container["volumeMounts"]
         .as_array_mut()
         .ok_or("runtime_build_invalid")?;
@@ -307,13 +264,6 @@ pub fn image_build_job(
         &build.service_account,
         &container,
     );
-    if !matches!(kind, ImageBuildKind::RepositoryRuntime) {
-        workload::without_checkout(&mut job)?;
-    }
-    if matches!(kind, ImageBuildKind::TrustedBuilder { .. }) {
-        job["spec"]["template"]["spec"]["nodeSelector"] =
-            workload::node_selector(&runtime.platform, false);
-    }
     let volumes = job["spec"]["template"]["spec"]["volumes"]
         .as_array_mut()
         .ok_or("runtime_build_invalid")?;
@@ -322,15 +272,6 @@ pub fn image_build_job(
         volumes.push(json!({"name":"registry","secret":{"secretName":secret,"items":[{"key":".dockerconfigjson","path":"config.json"}]}}));
     }
     attach_engine_label(&mut job, runtime);
-    if configuration.engine_mode == "local-development"
-        && build.image.starts_with("docker.io/local/")
-        && build
-            .engine
-            .as_ref()
-            .is_some_and(|e| e.security_mode == "local-development")
-    {
-        job["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] = json!("IfNotPresent");
-    }
     serde_json::from_value(job).map_err(|_| "runtime_build_invalid")
 }
 
@@ -351,6 +292,9 @@ fn publication_job(
         return Err("runtime_build_result_invalid");
     }
     let build = runtime.build.as_ref().ok_or("runtime_builder_missing")?;
+    if build.registry_secret.is_empty() {
+        return Err("runtime_registry_required");
+    }
     let mut environment = workload::runtime_environment();
     environment.extend([
         json!({"name":"BUILD_IMAGE","value":runtime.image}),
@@ -361,7 +305,11 @@ fn publication_job(
         json!({"name":"DOCKER_CERT_PATH","value":"/engine"}),
         json!({"name":"DOCKER_CONFIG","value":"/registry"}),
     ]);
+    ayni_orchestrator_runtime::runtime_contract::RuntimeImage::parse(&build.image)
+        .map_err(|_| "runtime_builder_unpinned")?;
     let mut container = workload::worker_container("publish", &build.image, &environment);
+    container["command"] = json!(["/launcher/runtime-worker"]);
+    container["args"] = json!(["publish"]);
     container["volumeMounts"]
         .as_array_mut()
         .ok_or("runtime_build_invalid")?
@@ -387,15 +335,6 @@ fn publication_job(
         json!({"name":"registry","secret":{"secretName":build.registry_secret,"items":[{"key":".dockerconfigjson","path":"config.json"}]}}),
     ]);
     attach_engine_label(&mut job, runtime);
-    if configuration.engine_mode == "local-development"
-        && build.image.starts_with("docker.io/local/")
-        && build
-            .engine
-            .as_ref()
-            .is_some_and(|e| e.security_mode == "local-development")
-    {
-        job["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] = json!("IfNotPresent");
-    }
     serde_json::from_value(job).map_err(|_| "runtime_build_invalid")
 }
 

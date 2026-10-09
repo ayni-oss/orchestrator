@@ -32,6 +32,19 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             // Resume cleanup after a restart without recreating failed Jobs.
             return self.cleanup_operation(&pending).await;
         }
+        if let Some(report) = &pending.verification {
+            return self
+                .accept(
+                    observation,
+                    cursor,
+                    pending
+                        .resolved_digest
+                        .clone()
+                        .ok_or("runtime_digest_unavailable")?,
+                    report,
+                )
+                .await;
+        }
         if !pending.discovery.complete {
             return self.observe_discovery(observation, cursor, &pending).await;
         }
@@ -71,7 +84,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         id: &str,
         reason: &'static str,
     ) -> Result<(), &'static str> {
-        crate::process::metrics::record_builder_failure("build", reason);
+        crate::process::metrics::record_runtime_failure("build", reason);
         let id = id.to_owned();
         let interval = self.configuration.interval_seconds;
         let pending = self
@@ -108,6 +121,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     ) -> Result<(), &'static str> {
         if let Some(pending) = &cursor.pending {
             self.cleanup_operation(pending).await?;
+        }
+        if let Some(name) = cursor.status.get("builder-job") {
+            self.kubernetes.cleanup(name).await?;
+        }
+        if let Some(trust) = &cursor.trust {
+            self.kubernetes.cleanup(&trust.job).await?;
         }
         Ok(())
     }

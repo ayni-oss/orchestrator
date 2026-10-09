@@ -40,6 +40,9 @@ impl CleanStore {
             resource_version: 1,
             registry_connection_id: request.registry_connection_id.clone(),
             image_namespace,
+            onboarding_status: "pending".into(),
+            onboarding_reason: String::new(),
+            onboarding_revision: String::new(),
         };
         let transaction = self
             .connection
@@ -140,6 +143,48 @@ impl CleanStore {
         if changed != 1 {
             return Err(CleanStoreError::StaleVersion);
         }
+        transaction.commit().map_err(CleanStoreError::Database)?;
+        Ok(resource)
+    }
+
+    pub(crate) fn record_onboarding(
+        &mut self,
+        id: &str,
+        status: &str,
+        reason: &str,
+        revision: &str,
+    ) -> Result<v1::RepositoryConnection, CleanStoreError> {
+        let mut resource = self.repository_connection(id)?;
+        if resource.onboarding_status == status
+            && resource.onboarding_reason == reason
+            && resource.onboarding_revision == revision
+        {
+            return Ok(resource);
+        }
+        resource.onboarding_status = status.into();
+        resource.onboarding_reason = reason.into();
+        resource.onboarding_revision = revision.into();
+        resource.updated_at = Some(timestamp(unix_seconds()?));
+        resource.resource_version = resource
+            .resource_version
+            .checked_add(1)
+            .ok_or(CleanStoreError::BoundExceeded)?;
+        let transaction = self
+            .connection
+            .transaction()
+            .map_err(CleanStoreError::Database)?;
+        let cursor = append_event(
+            &transaction,
+            REPOSITORY_SERVICE,
+            "repository_connection",
+            id,
+            resource.resource_version,
+            Some(id),
+            None,
+            &resource,
+        )?;
+        transaction.execute("UPDATE repository_connections SET payload=?1,resource_version=?2,event_cursor=?3 WHERE id=?4",
+            params![resource.encode_to_vec(), i64::try_from(resource.resource_version).map_err(|_| CleanStoreError::BoundExceeded)?, i64::try_from(cursor).map_err(|_| CleanStoreError::BoundExceeded)?, id]).map_err(CleanStoreError::Database)?;
         transaction.commit().map_err(CleanStoreError::Database)?;
         Ok(resource)
     }

@@ -6,14 +6,6 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ImageBuildKind {
     RepositoryRuntime,
-    TrustedBuilder {
-        recipe_identity: String,
-    },
-    TrustedFixture {
-        provisioning_base: String,
-        key_id: String,
-        public_key: String,
-    },
 }
 
 pub use ayni_orchestrator_runtime::image_build::ImagePublicationRequest;

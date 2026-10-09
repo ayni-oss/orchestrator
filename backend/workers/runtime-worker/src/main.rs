@@ -34,22 +34,12 @@ async fn main() -> ExitCode {
             Err(error) => {
                 if matches!(
                     env::args().nth(1).as_deref(),
-                    Some(
-                        "publish"
-                            | "build"
-                            | "verify"
-                            | "builder-test-build"
-                            | "builder-package"
-                            | "builder-probe"
-                            | "builder-test-verify"
-                    )
+                    Some("publish" | "build" | "verify")
                 ) {
                     let message = error.to_string();
                     let fallback = match env::args().nth(1).as_deref() {
                         Some("publish") => "runtime_publication_failed",
-                        Some("build" | "builder-test-build" | "builder-package") => {
-                            "runtime_build_failed"
-                        }
+                        Some("build") => "runtime_build_failed",
                         _ => "runtime_verification_failed",
                     };
                     let code = match message.as_str() {
@@ -87,6 +77,7 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     if operation == "install" {
         activity.record(Stage::Install);
         fs::copy(env::current_exe()?, "/launcher/runtime-worker")?;
+        fs::copy("/usr/local/bin/mise", "/launcher/mise")?;
         return Ok(());
     }
     if operation == "prepare-output" {
@@ -121,13 +112,6 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
         serde_json::from_slice(&read_bounded(Path::new("/request/execution.json"), 65_536)?)
             .map_err(io::Error::other)?;
     match operation.as_str() {
-        "builder-test-verify" => {
-            ayni_orchestrator_worker::profiles::ayni::builder_test::verify_fixture(
-                &request,
-                Path::new("/workspace"),
-            )
-            .await
-        }
         "trust-lock" => {
             ayni_orchestrator_worker::profiles::ayni::trust_lock::run(
                 &request,
@@ -167,15 +151,6 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
 async fn trusted_image_operation(operation: &str) -> Option<io::Result<()>> {
     let workspace = Path::new("/workspace");
     Some(match operation {
-        "builder-probe" => {
-            ayni_orchestrator_worker::profiles::ayni::builder_test::probe(workspace).await
-        }
-        "builder-test-build" => {
-            ayni_orchestrator_worker::profiles::ayni::builder_test::build_fixture(workspace).await
-        }
-        "builder-package" => {
-            ayni_orchestrator_worker::operations::builder_package::build(workspace).await
-        }
         "publish" => match read_bounded(Path::new("/request/execution.json"), 65536)
             .and_then(|bytes| serde_json::from_slice(&bytes).map_err(io::Error::other))
         {

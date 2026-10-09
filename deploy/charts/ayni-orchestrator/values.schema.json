@@ -245,39 +245,6 @@
             }
           }
         },
-        "builderDefaults": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "builder_image": {
-              "type": "string",
-              "maxLength": 512
-            },
-            "engine_image": {
-              "type": "string",
-              "maxLength": 512
-            },
-            "provisioning_base": {
-              "type": "string",
-              "maxLength": 512
-            },
-            "test_registry_id": {
-              "type": "string",
-              "maxLength": 128
-            },
-            "test_certificate_id": {
-              "type": "string",
-              "maxLength": 128
-            }
-          },
-          "required": [
-            "engine_image",
-            "provisioning_base"
-          ]
-        },
         "engineMode": {
           "enum": [
             "external-isolated",
@@ -407,15 +374,8 @@
         "null"
       ],
       "additionalProperties": false,
-      "required": [
-        "image",
-        "registry_secret"
-      ],
+      "required": [],
       "properties": {
-        "image": {
-          "type": "string",
-          "pattern": "@sha256:[a-f0-9]{64}$"
-        },
         "service_account": {
           "type": "string",
           "maxLength": 63

@@ -66,16 +66,13 @@ Use separate pull and push Secrets; labels cannot substitute for explicit regist
 
 ## Automatic repository image preparation
 
-`runtime.managedRuntime.build` configures a digest-pinned builder, `service_account`,
-`engine_host` (`tcp://<host>:2376`), `engine_secret`, `registry_secret`, `signing_secret`, and
-`isolated_engine` (default false). Approval is explicit operator attestation after
-an engine isolation audit; TLS alone is insufficient. The chart does not create
-an engine or grant node socket/host access. Selected runtime certificates supply
-immutable signing Secret revisions. Selected registry connections supply distinct
-push and pull references. See [operations](../../../docs/operations.md).
+`runtime.managedRuntime.build` configures engine infrastructure and service accounts.
+Builder identity is resolved from the committed lock through the official compatibility
+catalog. Selected certificates supply immutable signing references; selected registry
+connections supply separate push and pull references. `runtime.engineMode` controls
+the explicit engine boundary. See [repository builders](../../../docs/repository-builders.md).
 
-Every successful repository environment build publishes and is independently
-verified before Ready. No auto-publish toggle, artifact PVC, node-local importer or
-environment workflow installation is supported. Database and retained task-output
-claims remain distinct from kubelet-owned image caching. Ordinary control-plane,
-worker, builder and web component packaging remains unchanged.
+Every successful environment build publishes and is independently verified before
+Ready. Application and worker images remain deployment components. Upgrade using
+cleaned values and `helm upgrade --install --reset-values`; removed global builder
+fields are rejected by the schema. Preserve database and retained task-output claims.

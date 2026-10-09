@@ -194,9 +194,7 @@ fn spawn_background_loops(
         move || {
             let state = connection_state.clone();
             async move {
-                if let Err(reason) = Box::pin(state.reconcile_build_service()).await {
-                    warn!(reason_code = reason, "build service reconciliation failed");
-                }
+                state.reconcile_repository_onboarding().await;
                 if state.reconcile_certificates().await.is_err() {
                     warn!(
                         reason_code = "certificate_reconciliation_failed",

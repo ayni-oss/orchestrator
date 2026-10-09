@@ -28,6 +28,7 @@ export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
     repositoryConnection: repository.status === "fulfilled" ? repository.value : undefined,
     runtimeProfiles: profiles.status === "fulfilled" ? profiles.value.runtimeProfiles : [],
     runtimeKeys: profiles.status === "fulfilled" ? Object.fromEntries(profiles.value.runtimeProfiles.map((profile) => [profile.id, actionKey()])) : {},
+    analyzeKey: actionKey(),
     requestId: locals.requestId,
     ...(failure === undefined ? {} : { error: safeError(failure, locals.requestId) }),
   };
@@ -51,6 +52,16 @@ async function reconcile(event: Parameters<Actions[string]>[0], action: "sync" |
 }
 
 export const actions: Actions = {
+  analyze: async ({ request, params, locals }) => {
+    const form = await request.formData();
+    try {
+      await getBff().analyzeRepository(params.repositoryId, text(form, "idempotencyKey", 128) ?? "", requestContext(locals));
+      return { success: "Repository analysis requested." };
+    } catch (error) {
+      const mapped = safeError(error, locals.requestId);
+      return fail(mapped.status, { error: mapped });
+    }
+  },
   registry: async ({request,params,locals})=>{
     const f=await request.formData();
     try {

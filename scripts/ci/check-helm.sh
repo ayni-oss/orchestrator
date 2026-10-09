@@ -37,6 +37,14 @@ helm lint --strict "$application_chart" --set runtime.enabled=true \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 helm lint --strict "$local_chart" --set ayni-orchestrator.runtime.enabled=false
 
+# Obsolete deployment-wide settings and repository-selected builder overrides fail closed.
+for removed in runtime.builderDefaults.engine_image runtime.managedRuntime.build.image; do
+  if helm template removed "$application_chart" --set-string "$removed=obsolete" >"$scratch/removed.yaml" 2>"$scratch/removed.err"; then
+    echo "removed Helm field was accepted: $removed" >&2
+    exit 1
+  fi
+done
+
 helm template reusable "$application_chart" --set runtime.enabled=false \
   --namespace reusable-install \
   --set-string images.controlPlane=registry.example/control-plane:test \

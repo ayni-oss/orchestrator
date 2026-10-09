@@ -5,7 +5,3 @@ pub use state::{AppState, ReconciliationError};
 
 pub mod onboarding;
 pub mod reconciliation;
-
-pub mod build_service;
-
-mod image_build_pipeline;

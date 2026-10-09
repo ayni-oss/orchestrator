@@ -1,6 +1,4 @@
 # syntax=docker/dockerfile:1.7
-ARG AYNI_EXECUTOR_IMAGE=ghcr.io/ayni-oss/ayni-env:0.14.5-debian@sha256:d8818c4638e51d9d85ff09e050c035e3e6e548b38acc9b349de2a05c2f6253c8
-FROM ${AYNI_EXECUTOR_IMAGE} AS ayni-cli
 FROM rust:1.94.0-bookworm AS builder
 WORKDIR /workspace
 ARG TARGETARCH
@@ -8,7 +6,6 @@ RUN apt-get update && apt-get install --yes --no-install-recommends musl-tools \
     && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY backend ./backend
-COPY deploy/images/runtime-builder/Dockerfile ./deploy/images/runtime-builder/Dockerfile
 RUN --mount=type=cache,id=ayni-orchestrator-worker-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-worker-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-worker-target,target=/workspace/target \
@@ -39,7 +36,6 @@ RUN case "$TARGETARCH" in \
     && tar --extract --gzip --file /tmp/mise.tar.gz --directory /usr/local/bin --strip-components=2 mise/bin/mise \
     && rm /tmp/mise.tar.gz \
     && mise --version
-COPY --from=ayni-cli /usr/local/bin/ayni /usr/local/bin/ayni
 COPY --from=builder /tmp/worker-binaries/ /usr/local/bin/
 RUN if ! getent group 10001 >/dev/null; then groupadd --gid 10001 ayni-worker; fi \
     && if ! getent passwd 10001 >/dev/null; then useradd --uid 10001 --gid 10001 --create-home ayni-worker; fi

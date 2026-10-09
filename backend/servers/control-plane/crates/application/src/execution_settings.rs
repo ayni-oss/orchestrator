@@ -18,9 +18,12 @@ pub struct WorkloadRuntime {
 pub struct BuildRuntime {
     #[serde(default)]
     pub configuration_revision: u64,
+    /// Populated from repository resolution; omitted by infrastructure configuration.
+    #[serde(default)]
     pub image: String,
     #[serde(default = "builder_account")]
     pub service_account: String,
+    #[serde(default)]
     pub registry_secret: String,
     #[serde(default)]
     pub signing_secret: String,
@@ -90,9 +93,9 @@ impl WorkloadRuntime {
         }
         if let Some(build) = &self.build
             && ((build.engine.is_none() && !build.isolated_engine)
-                || RuntimeImage::parse(&build.image).is_err()
+                || (!build.image.is_empty() && RuntimeImage::parse(&build.image).is_err())
                 || !name(&build.service_account)
-                || !name(&build.registry_secret)
+                || (!build.registry_secret.is_empty() && !name(&build.registry_secret))
                 || (!build.signing_secret.is_empty() && !name(&build.signing_secret))
                 || (build.engine.is_none() && !name(&build.engine_secret))
                 || self.image.contains('@')

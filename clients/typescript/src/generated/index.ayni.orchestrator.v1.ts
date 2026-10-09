@@ -5,7 +5,6 @@
 
 /* eslint-disable */
 
-export * from "./ayni/orchestrator/v1/ayni";
 export * from "./ayni/orchestrator/v1/certificates";
 export * from "./ayni/orchestrator/v1/errors";
 export * from "./ayni/orchestrator/v1/common";

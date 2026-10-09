@@ -4,6 +4,7 @@ use thiserror::Error;
 
 #[derive(Deserialize)]
 struct Lock {
+    ayni_version: String,
     schema_version: String,
     recipe_version: String,
     fingerprint: String,
@@ -11,6 +12,7 @@ struct Lock {
 
 pub struct LockIdentity {
     pub(crate) fingerprint: String,
+    pub(crate) ayni_version: String,
 }
 
 #[derive(Debug, Error)]
@@ -26,7 +28,11 @@ pub fn parse_lock(bytes: &[u8]) -> Result<LockIdentity, AdmissionError> {
         return Err(AdmissionError::InvalidLock);
     }
     let lock: Lock = serde_json::from_slice(bytes).map_err(|_| AdmissionError::InvalidLock)?;
-    if lock.schema_version != "0.9.0" || lock.recipe_version != "2" {
+    let contract = ayni_orchestrator_profile_ayni::compatibility::contract(&lock.ayni_version)
+        .map_err(|_| AdmissionError::InvalidLock)?;
+    if (lock.schema_version.as_str(), lock.recipe_version.as_str())
+        != (contract.lock_schema, contract.recipe_version)
+    {
         return Err(AdmissionError::InvalidLock);
     }
     let fingerprint = lock
@@ -40,6 +46,7 @@ pub fn parse_lock(bytes: &[u8]) -> Result<LockIdentity, AdmissionError> {
         .ok_or(AdmissionError::InvalidFingerprint)?;
     Ok(LockIdentity {
         fingerprint: fingerprint.into(),
+        ayni_version: lock.ayni_version,
     })
 }
 
@@ -49,7 +56,7 @@ mod tests {
     #[test]
     fn requires_supported_envelope_and_full_fingerprint() {
         let lock = format!(
-            r#"{{"schema_version":"0.9.0","recipe_version":"2","fingerprint":"sha256:{}"}}"#,
+            r#"{{"ayni_version":"0.15.0","schema_version":"0.9.0","recipe_version":"2","fingerprint":"sha256:{}"}}"#,
             "a".repeat(64)
         );
         assert!(parse_lock(lock.as_bytes()).is_ok());

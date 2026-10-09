@@ -224,6 +224,28 @@ pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
         }),
         "CreateRepositoryConnection" => v1::CreateRepositoryConnectionRequest::decode(payload)
             .is_ok_and(|value| api_validation::create_repository_connection(&value).is_ok()),
+        "ConnectGithubRepository" => {
+            v1::ConnectGithubRepositoryRequest::decode(payload).is_ok_and(|value| {
+                api_validation::idempotency_key(&value.idempotency_key).is_ok()
+                    && !value.owner.is_empty()
+                    && !value.name.is_empty()
+                    && value.owner.len() <= 100
+                    && value.name.len() <= 100
+                    && value
+                        .owner
+                        .bytes()
+                        .chain(value.name.bytes())
+                        .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+            })
+        }
+        "AnalyzeRepository" => v1::AnalyzeRepositoryRequest::decode(payload).is_ok_and(|value| {
+            api_validation::idempotency_key(&value.idempotency_key).is_ok()
+                && api_validation::resource_id(
+                    &value.repository_connection_id,
+                    "repository_connection_id",
+                )
+                .is_ok()
+        }),
         "SetRepositoryRegistry" => {
             v1::SetRepositoryRegistryRequest::decode(payload).is_ok_and(|v| {
                 api_validation::idempotency_key(&v.idempotency_key).is_ok()
