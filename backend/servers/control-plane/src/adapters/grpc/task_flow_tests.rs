@@ -82,6 +82,7 @@ struct RuntimeFixture {
 async fn create_profile(server: &Server, channel: Channel) -> TestResult<RuntimeFixture> {
     let repository = RepositoryServiceClient::new(channel.clone())
         .create_repository_connection(v1::CreateRepositoryConnectionRequest {
+            use_ayni: None,
             idempotency_key: "repository".into(),
             display_name: "Task flow fixture".into(),
             default_branch: "main".into(),

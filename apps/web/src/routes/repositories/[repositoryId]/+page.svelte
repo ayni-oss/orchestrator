@@ -72,15 +72,17 @@
     {#if repository.failure}<Feedback kind="warning" title="Repository needs attention" message={repository.failure.message} />{/if}
     <section class="space-y-3 rounded-lg border p-4" aria-label="Repository onboarding">
       <h2 class="font-semibold">Onboarding</h2>
-      <p>{repository.onboardingStatus === "enrolled" ? "Analysis complete — runtime preparation below" : words(repository.onboardingStatus || "pending")}</p>
+      <p>{repository.useAyni === false ? "Ayni is not enabled for this repository." : repository.onboardingStatus === "enrolled" ? "Analysis complete — runtime preparation below" : words(repository.onboardingStatus || "pending")}</p>
       {#if repository.onboardingReason}<p class="text-sm text-muted-foreground">{remediation[repository.onboardingReason] ?? words(repository.onboardingReason)}</p>{/if}
       {#if repository.onboardingRevision}<p class="break-all text-xs text-muted-foreground">Source commit {repository.onboardingRevision}</p>{/if}
       <form method="POST" action="?/analyze" use:enhance>
         <input type="hidden" name="idempotencyKey" value={data.analyzeKey} />
-        <Button type="submit" variant="outline">{repository.onboardingStatus === "failed" ? "Retry analysis" : "Analyze repository"}</Button>
+        <Button type="submit" variant="outline">{repository.useAyni === false ? "Set up Ayni" : repository.onboardingStatus === "failed" ? "Retry analysis" : "Analyze repository"}</Button>
       </form>
     </section>
+    {#if repository.useAyni !== false}
     <RuntimeOverview profiles={data.runtimeProfiles} revisions={data.runtimeRevisions} repository={repository} connections={data.registryConnections} certificates={data.certificates} keys={data.runtimeKeys} error={form?.error?.message} />
+    {/if}
   {/if}
 </div>
 

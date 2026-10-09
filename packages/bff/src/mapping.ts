@@ -121,6 +121,7 @@ export function mapRepositoryConnection(value: RepositoryConnection): Repository
       htmlUrl: safeGithubLink(github.htmlUrl) ?? "",
     },
     displayName: safeText(value.displayName),
+    useAyni: value.useAyni ?? true,
     onboardingStatus: safeText(value.onboardingStatus),
     onboardingReason: safeText(value.onboardingReason),
     onboardingRevision: safeText(value.onboardingRevision),

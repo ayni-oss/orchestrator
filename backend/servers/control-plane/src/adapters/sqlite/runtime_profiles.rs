@@ -39,6 +39,14 @@ impl CleanStore {
             .as_ref()
             .and_then(|value| value.configuration.clone())
             .ok_or(CleanStoreError::CorruptState)?;
+        if repository.use_ayni == Some(false)
+            && matches!(
+                &configuration,
+                v1::runtime_profile_configuration::Configuration::AyniManaged(_)
+            )
+        {
+            return Err(CleanStoreError::InvalidTransition);
+        }
         let (kind, revision_configuration) = match configuration {
             v1::runtime_profile_configuration::Configuration::AyniManaged(value) => (
                 v1::RuntimeProfileKind::AyniManaged,

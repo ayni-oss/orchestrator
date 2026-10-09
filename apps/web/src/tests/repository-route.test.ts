@@ -80,6 +80,20 @@ describe("repository connection route actions", () => {
     expect(bff.setRuntimeRegistry).toHaveBeenCalledWith({runtimeProfileId:"profile:1",idempotencyKey:"00000000-0000-4000-8000-000000000099",expectedResourceVersion:"2",registryConnectionId:"connection:ghcr"},expect.objectContaining({requestId:"runtime-save"}));
   });
 
+
+  it("Ayni opt-out is forwarded and ignores a submitted registry selection", async () => {
+    bff.connectGithubRepository.mockResolvedValueOnce({ displayName: "ayni-oss/sandbox" });
+    const body = new URLSearchParams({ idempotencyKey: "00000000-0000-4000-8000-000000000099", installationId: "42", owner: "ayni-oss", repository: "sandbox", useAyni: "false", registryConnectionId: "connection:ghcr" });
+    await actions.connect!({ locals: { requestId: "ayni-opt-out", requestSignal }, request: new Request("http://localhost/repositories?/connect", { method: "POST", body }) } as never);
+    expect(bff.connectGithubRepository).toHaveBeenCalledWith(expect.objectContaining({ useAyni: false, registryConnectionId: "" }), expect.anything());
+  });
+
+  it("Ayni opt-in forwards the selected registry connection", async () => {
+    bff.connectGithubRepository.mockResolvedValueOnce({ displayName: "ayni-oss/sandbox" });
+    const body = new URLSearchParams({ idempotencyKey: "00000000-0000-4000-8000-000000000099", installationId: "42", owner: "ayni-oss", repository: "sandbox", useAyni: "true", registryConnectionId: "connection:ghcr" });
+    await actions.connect!({ locals: { requestId: "ayni-opt-in", requestSignal }, request: new Request("http://localhost/repositories?/connect", { method: "POST", body }) } as never);
+    expect(bff.connectGithubRepository).toHaveBeenCalledWith(expect.objectContaining({ useAyni: true, registryConnectionId: "connection:ghcr" }), expect.anything());
+  });
   it("analysis retries onboarding without authorizing runtime replacement", async () => {
     const body = new URLSearchParams({ idempotencyKey: "analysis-1", forceRebuild: "true" });
     const result = await runtimeActions.analyze!({ params: { repositoryId: "repository:1" }, locals: { requestId: "analysis", requestSignal }, request: new Request("http://127.0.0.1/repositories/repository:1?/analyze", { method: "POST", body }) } as never);

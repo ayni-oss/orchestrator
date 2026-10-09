@@ -93,6 +93,8 @@ message RepositoryConnection {
   string onboarding_status = 12;
   string onboarding_reason = 13;
   string onboarding_revision = 14;
+  // Absent legacy values enable Ayni; explicit false skips automatic runtime onboarding.
+  optional bool use_ayni = 15;
 }
 
 // RepositorySnapshot is an immutable observed repository revision.
@@ -133,6 +135,7 @@ message CreateRepositoryConnectionRequest {
   string default_branch = 4;
   string registry_connection_id = 5;
   string image_namespace = 6;
+  optional bool use_ayni = 7;
 }
 
 message CreateRepositoryConnectionResponse {
@@ -181,6 +184,8 @@ message ConnectGithubRepositoryRequest {
   string name = 3;
   string registry_connection_id = 4;
   string image_namespace = 5;
+  // Absent values preserve automatic onboarding for existing clients.
+  optional bool use_ayni = 6;
 }
 
 message ConnectGithubRepositoryResponse {

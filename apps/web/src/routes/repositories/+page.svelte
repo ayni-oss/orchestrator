@@ -12,6 +12,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
+  import * as Checkbox from "$lib/components/ui/checkbox/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
 
   let { data, form }: PageProps = $props();
@@ -39,12 +40,14 @@
     }
   }
   function openConnect() {
+    useAyni = false;
     selectedRegistryId = "";
     connectOpen = true;
     void loadOptions();
   }
   let selectedRepository = $state("");
   let selectedRegistryId = $state("");
+  let useAyni = $state(false);
   const selectedRegistry = $derived(data.registryConnections.find(connection => connection.id === selectedRegistryId));
   const selectedOwner = $derived(options.installations.find(item => item.installationId === options.selectedInstallationId)?.owner ?? "");
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
@@ -52,7 +55,7 @@
 
 <svelte:head><title>Repository connections · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
-  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect a repository and Orchestrator immediately inspects its default revision and resolves a verified runtime image.">
+  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect repositories and choose whether to prepare an Ayni runtime.">
     {#snippet actions()}<Button onclick={openConnect}><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
   </PageHeader>
   {#if data.error}<Feedback kind="error" title="Connections unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
@@ -65,8 +68,8 @@
       <div class="grid gap-4 lg:grid-cols-2">
         {#each data.summaries as summary (summary.repository.id)}
           {@const item = summary.repository}
-          {@const readiness = !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : "Setup required"}
-          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div><StatusBadge status={readiness} tone={summary.runtime.ready ? "success" : "warning"} /></div></Card.Header><Card.Content class="text-sm"><p class="text-muted-foreground">{summary.runtime.complete ? `${summary.runtime.readyProfiles} of ${summary.runtime.operationalProfiles} operational runtimes ready` : "Runtime status is unavailable."}</p></Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Runtime status <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
+          {@const readiness = !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : item.useAyni === false ? "Ayni not enabled" : "Setup required"}
+          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div><StatusBadge status={readiness} tone={summary.runtime.ready ? "success" : "warning"} /></div></Card.Header><Card.Content class="text-sm"><p class="text-muted-foreground">{item.useAyni === false ? "Set up Ayni from the repository page when you need a runtime." : summary.runtime.complete ? `${summary.runtime.readyProfiles} of ${summary.runtime.operationalProfiles} operational runtimes ready` : "Runtime status is unavailable."}</p></Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Runtime status <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
         {/each}
       </div>
       {#if nextPageHref}<div class="flex justify-end"><Button href={nextPageHref} variant="outline">Next page</Button></div>{/if}
@@ -77,7 +80,7 @@
     <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
       <Dialog.Header>
         <Dialog.Title>Connect repository</Dialog.Title>
-        <Dialog.Description>Choose a GitHub App and repository. Optionally choose a GHCR connection for its Ayni runtime.</Dialog.Description>
+        <Dialog.Description>Choose a GitHub App and repository, then enable Ayni to configure its runtime.</Dialog.Description>
       </Dialog.Header>
       {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
       {#if options.error}<Feedback kind="error" title="GitHub unavailable" message={options.error.message} requestId={options.error.requestId} /><Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
@@ -103,16 +106,23 @@
           <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
           <input type="hidden" name="installationId" value={options.selectedInstallationId} />
           <input type="hidden" name="owner" value={selectedOwner} />
-          <div class="space-y-2">
-            <Label for="connect-registry">GHCR connection</Label>
-            <ThemedSelect id="connect-registry" name="registryConnectionId" bind:value={selectedRegistryId} options={[{ value: "", label: "Configure later" }, ...data.registryConnections.map(connection => ({ value: connection.id, label: connection.displayName }))]} disabled={connecting} />
-            {#if selectedRegistry}<p class="text-xs text-muted-foreground">Namespace: {selectedRegistry.imageNamespace}</p>{/if}
-            {#if data.registryError}
-              <Feedback kind="error" title="GHCR connections unavailable" message={data.registryError.message} requestId={data.registryError.requestId} />
-              <p class="text-sm text-muted-foreground">You can connect now and configure the runtime's image destination later.</p>
-            {:else if !data.registryConnections.length}
-              <p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>
-            {/if}
+          <input type="hidden" name="useAyni" value={useAyni ? "true" : "false"} />
+          <div class="grid gap-4 sm:grid-cols-[auto_1fr]">
+            <div class="flex h-9 items-center gap-2 sm:mt-6">
+              <Checkbox.Root id="use-ayni" bind:checked={useAyni} disabled={connecting} onCheckedChange={checked => { if (!checked) selectedRegistryId = ""; }} />
+              <Label for="use-ayni">Use Ayni</Label>
+            </div>
+            <div class="space-y-2">
+              <Label for="connect-registry">GHCR connection</Label>
+              <ThemedSelect id="connect-registry" name="registryConnectionId" bind:value={selectedRegistryId} options={[{ value: "", label: "Configure later" }, ...data.registryConnections.map(connection => ({ value: connection.id, label: connection.displayName }))]} disabled={connecting || !useAyni} />
+              {#if selectedRegistry}<p class="text-xs text-muted-foreground">Namespace: {selectedRegistry.imageNamespace}</p>{/if}
+              {#if useAyni && data.registryError}
+                <Feedback kind="error" title="GHCR connections unavailable" message={data.registryError.message} requestId={data.registryError.requestId} />
+                <p class="text-sm text-muted-foreground">You can connect now and configure the runtime's image destination later.</p>
+              {:else if useAyni && !data.registryConnections.length}
+                <p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>
+              {/if}
+            </div>
           </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>

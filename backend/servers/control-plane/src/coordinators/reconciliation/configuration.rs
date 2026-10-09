@@ -23,7 +23,9 @@ pub(super) fn configured_managed_profile(
     if explicitly_configured && registry.registry_connection_id.is_empty() {
         return Ok(None);
     }
-    if repository.status != v1::RepositoryConnectionStatus::Connected as i32 {
+    if repository.use_ayni == Some(false)
+        || repository.status != v1::RepositoryConnectionStatus::Connected as i32
+    {
         return Ok(None);
     }
     let Some(v1::repository_provider::Provider::Github(github)) = repository

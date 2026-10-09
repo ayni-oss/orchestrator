@@ -150,6 +150,8 @@ export interface RepositoryConnection {
   onboardingStatus: string;
   onboardingReason: string;
   onboardingRevision: string;
+  /** Absent legacy values enable Ayni; explicit false skips automatic runtime onboarding. */
+  useAyni?: boolean | undefined;
 }
 
 /** RepositorySnapshot is an immutable observed repository revision. */
@@ -190,6 +192,7 @@ export interface CreateRepositoryConnectionRequest {
   defaultBranch: string;
   registryConnectionId: string;
   imageNamespace: string;
+  useAyni?: boolean | undefined;
 }
 
 export interface CreateRepositoryConnectionResponse {
@@ -240,6 +243,8 @@ export interface ConnectGithubRepositoryRequest {
   name: string;
   registryConnectionId: string;
   imageNamespace: string;
+  /** Absent values preserve automatic onboarding for existing clients. */
+  useAyni?: boolean | undefined;
 }
 
 export interface ConnectGithubRepositoryResponse {
@@ -1053,6 +1058,7 @@ function createBaseRepositoryConnection(): RepositoryConnection {
     onboardingStatus: "",
     onboardingReason: "",
     onboardingRevision: "",
+    useAyni: undefined,
   };
 }
 
@@ -1099,6 +1105,9 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     }
     if (message.onboardingRevision !== "") {
       writer.uint32(114).string(message.onboardingRevision);
+    }
+    if (message.useAyni !== undefined) {
+      writer.uint32(120).bool(message.useAyni);
     }
     return writer;
   },
@@ -1228,6 +1237,14 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
             message.onboardingRevision = reader.string();
             continue;
           }
+          case 15: {
+            if (tag !== 120) {
+              break;
+            }
+
+            message.useAyni = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1296,6 +1313,11 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
         : isSet(object.onboarding_revision)
         ? globalThis.String(object.onboarding_revision)
         : "",
+      useAyni: isSet(object.useAyni)
+        ? globalThis.Boolean(object.useAyni)
+        : isSet(object.use_ayni)
+        ? globalThis.Boolean(object.use_ayni)
+        : undefined,
     };
   },
 
@@ -1343,6 +1365,9 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     if (message.onboardingRevision !== "") {
       obj.onboardingRevision = message.onboardingRevision;
     }
+    if (message.useAyni !== undefined) {
+      obj.useAyni = message.useAyni;
+    }
     return obj;
   },
 
@@ -1369,6 +1394,7 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     message.onboardingStatus = object.onboardingStatus ?? "";
     message.onboardingReason = object.onboardingReason ?? "";
     message.onboardingRevision = object.onboardingRevision ?? "";
+    message.useAyni = object.useAyni ?? undefined;
     return message;
   },
 };
@@ -1879,6 +1905,7 @@ function createBaseCreateRepositoryConnectionRequest(): CreateRepositoryConnecti
     defaultBranch: "",
     registryConnectionId: "",
     imageNamespace: "",
+    useAyni: undefined,
   };
 }
 
@@ -1901,6 +1928,9 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     }
     if (message.imageNamespace !== "") {
       writer.uint32(50).string(message.imageNamespace);
+    }
+    if (message.useAyni !== undefined) {
+      writer.uint32(56).bool(message.useAyni);
     }
     return writer;
   },
@@ -1966,6 +1996,14 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
             message.imageNamespace = reader.string();
             continue;
           }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.useAyni = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2006,6 +2044,11 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
         : isSet(object.image_namespace)
         ? globalThis.String(object.image_namespace)
         : "",
+      useAyni: isSet(object.useAyni)
+        ? globalThis.Boolean(object.useAyni)
+        : isSet(object.use_ayni)
+        ? globalThis.Boolean(object.use_ayni)
+        : undefined,
     };
   },
 
@@ -2029,6 +2072,9 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     if (message.imageNamespace !== "") {
       obj.imageNamespace = message.imageNamespace;
     }
+    if (message.useAyni !== undefined) {
+      obj.useAyni = message.useAyni;
+    }
     return obj;
   },
 
@@ -2045,6 +2091,7 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     message.defaultBranch = object.defaultBranch ?? "";
     message.registryConnectionId = object.registryConnectionId ?? "";
     message.imageNamespace = object.imageNamespace ?? "";
+    message.useAyni = object.useAyni ?? undefined;
     return message;
   },
 };
@@ -2716,7 +2763,7 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
 };
 
 function createBaseConnectGithubRepositoryRequest(): ConnectGithubRepositoryRequest {
-  return { idempotencyKey: "", owner: "", name: "", registryConnectionId: "", imageNamespace: "" };
+  return { idempotencyKey: "", owner: "", name: "", registryConnectionId: "", imageNamespace: "", useAyni: undefined };
 }
 
 export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryRequest> = {
@@ -2735,6 +2782,9 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     }
     if (message.imageNamespace !== "") {
       writer.uint32(42).string(message.imageNamespace);
+    }
+    if (message.useAyni !== undefined) {
+      writer.uint32(48).bool(message.useAyni);
     }
     return writer;
   },
@@ -2792,6 +2842,14 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
             message.imageNamespace = reader.string();
             continue;
           }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.useAyni = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2823,6 +2881,11 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
         : isSet(object.image_namespace)
         ? globalThis.String(object.image_namespace)
         : "",
+      useAyni: isSet(object.useAyni)
+        ? globalThis.Boolean(object.useAyni)
+        : isSet(object.use_ayni)
+        ? globalThis.Boolean(object.use_ayni)
+        : undefined,
     };
   },
 
@@ -2843,6 +2906,9 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     if (message.imageNamespace !== "") {
       obj.imageNamespace = message.imageNamespace;
     }
+    if (message.useAyni !== undefined) {
+      obj.useAyni = message.useAyni;
+    }
     return obj;
   },
 
@@ -2856,6 +2922,7 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     message.name = object.name ?? "";
     message.registryConnectionId = object.registryConnectionId ?? "";
     message.imageNamespace = object.imageNamespace ?? "";
+    message.useAyni = object.useAyni ?? undefined;
     return message;
   },
 };

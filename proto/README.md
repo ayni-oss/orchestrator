@@ -36,7 +36,11 @@ assignment. Signing seeds never appear in runtime profile or frozen task DTOs.
 Workflow installation RPCs, resources and fields were intentionally removed. Removed field numbers/names are reserved. Runtime reads expose structured findings, preparation phase and guarded rebuild availability. Upgrade clients and server together; see [cutover operations](../docs/operations.md).
 
 Repository connections expose durable onboarding status, reason and inspected commit.
-`AnalyzeRepository` retries analysis without granting runtime replacement.
+`ConnectGithubRepository` and `CreateRepositoryConnection` accept optional
+`use_ayni`; explicit false persists the opt-out and skips automatic analysis and
+managed runtime creation. Absent values retain legacy enabled behavior.
+Repository reads expose the saved choice. `AnalyzeRepository` explicitly enables
+Ayni and retries analysis without granting runtime replacement.
 `RemoveRepository` is restricted to the trusted operator listener and requires
 an idempotency key and expected repository resource version. It atomically removes
 unused repository onboarding and runtime state, preserves action receipts, and

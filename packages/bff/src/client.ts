@@ -275,7 +275,7 @@ export class OrchestratorBff {
   }
 
 
-  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string }, context: RequestContext) {
+  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string;useAyni?:boolean }, context: RequestContext) {
     const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:""},m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
   }
