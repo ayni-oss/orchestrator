@@ -84,6 +84,24 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         id: &str,
         reason: &'static str,
     ) -> Result<(), &'static str> {
+        if reason == "runtime_cleanup_pending" {
+            let id = id.to_owned();
+            return self
+                .with_database(move |store| {
+                    let mut cursor = store
+                        .runtime_cursor(&id)
+                        .map_err(|_| "runtime_cursor_invalid")?;
+                    cursor.resume_cleanup();
+                    // Deletion is asynchronous. Keep all frozen operation evidence and
+                    // retry on the next controller pass without spending failure budget.
+                    cursor.next_at = super::now()? + 1;
+                    cursor.status.insert("phase".into(), "cleaning_up".into());
+                    store
+                        .save_runtime_cursor(&id, &cursor)
+                        .map_err(|_| "runtime_cursor_invalid")
+                })
+                .await;
+        }
         crate::process::metrics::record_runtime_failure("build", reason);
         let id = id.to_owned();
         let interval = self.configuration.interval_seconds;

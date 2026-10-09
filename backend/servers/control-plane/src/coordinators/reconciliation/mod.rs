@@ -55,6 +55,20 @@ impl RuntimeCursor {
         }
     }
 
+    // Recover cursors written when asynchronous deletion incorrectly consumed retries.
+    fn resume_cleanup(&mut self) -> bool {
+        if self.status.get("reason-code").map(String::as_str) != Some("runtime_cleanup_pending") {
+            return false;
+        }
+        self.status.remove("reason-code");
+        self.failures = 0;
+        self.next_at = 0;
+        if let Some(pending) = &mut self.pending {
+            pending.failed = false;
+        }
+        true
+    }
+
     fn request_rebuild(&mut self, requested: bool) {
         self.force_rebuild |= requested;
         self.retry_trust = true;
@@ -355,7 +369,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     Ok(Err(reason)) => reason,
                     Err(_) => "runtime_observation_timeout",
                 };
-                tracing::warn!(reason_code = reason, "runtime reconciliation deferred");
+                if reason != "runtime_cleanup_pending" {
+                    tracing::warn!(reason_code = reason, "runtime reconciliation deferred");
+                }
                 let _ = reconciler.record_failure(&profile, reason).await;
             });
         }
@@ -378,6 +394,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         else {
             return Ok(());
         };
+        if cursor.resume_cleanup() {
+            self.save(id, &cursor).await?;
+        }
         if cursor.failures >= 3 {
             return self.cleanup_exhausted_cursor(&cursor).await;
         }

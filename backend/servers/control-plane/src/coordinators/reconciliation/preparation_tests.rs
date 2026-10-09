@@ -15,6 +15,7 @@ struct Jobs {
     discovery: Option<ImageDiscovery>,
     candidate_missing: bool,
     cleanup_failed: bool,
+    cleanup_pending: bool,
     lost_engines: BTreeSet<String>,
 }
 #[derive(Clone, Default)]
@@ -131,6 +132,14 @@ impl ExecutionBackend for Backend {
             .unwrap_or(&ExecutionState::Missing))
     }
     async fn cleanup(&self, name: &str) -> ExecutionResult<()> {
+        if self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cleanup_pending
+        {
+            return Err("runtime_cleanup_pending".into());
+        }
         if self
             .0
             .lock()
@@ -676,7 +685,7 @@ async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> Tes
         .0
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .cleanup_failed = true;
+        .cleanup_pending = true;
     assert!(
         fixture
             .reconciler
@@ -689,6 +698,10 @@ async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> Tes
             .await
             .is_err()
     );
+    fixture
+        .reconciler
+        .record_failure(&fixture.profile, "runtime_cleanup_pending")
+        .await?;
     let id = fixture.profile.clone();
     fixture.cursor = fixture
         .reconciler
@@ -702,7 +715,9 @@ async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> Tes
         .0
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .cleanup_failed = false;
+        .cleanup_pending = false;
+    assert_eq!(fixture.cursor.failures, 0);
+    assert!(!fixture.cursor.status.contains_key("reason-code"));
     fixture.discovery(ImageDiscovery::Resolved {
         digest: format!("sha256:{}", "b".repeat(64)),
         image_id: String::new(),
@@ -747,4 +762,91 @@ fn retry_never_grants_permission_to_replace_a_runtime() {
     assert!(!cursor.force_rebuild);
     cursor.request_rebuild(true);
     assert!(cursor.force_rebuild);
+}
+
+#[tokio::test]
+async fn cleanup_wait_preserves_failure_budget_and_frozen_operation() -> TestResult {
+    let fixture = Fixture::new().await?;
+    let id = fixture.profile.clone();
+    let mut cursor = fixture.cursor.clone();
+    cursor.failures = 1;
+    cursor
+        .status
+        .insert("reason-code".into(), "runtime_publication_failed".into());
+    fixture.reconciler.save(&id, &cursor).await?;
+    let frozen = serde_json::to_value(&cursor.pending)?;
+    for _ in 0..4 {
+        fixture
+            .reconciler
+            .record_failure(&id, "runtime_cleanup_pending")
+            .await?;
+    }
+    let stored = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| store.runtime_cursor(&id))
+        .await?;
+    assert_eq!(stored.failures, 1);
+    assert_eq!(
+        stored.status.get("reason-code").map(String::as_str),
+        Some("runtime_publication_failed")
+    );
+    assert_eq!(
+        stored.status.get("phase").map(String::as_str),
+        Some("cleaning_up")
+    );
+    assert!(stored.next_at <= now()? + 1);
+    assert_eq!(serde_json::to_value(&stored.pending)?, frozen);
+    Ok(())
+}
+
+#[tokio::test]
+async fn cleanup_wait_does_not_degrade_profile() -> TestResult {
+    let fixture = Fixture::new().await?;
+    fixture
+        .reconciler
+        .record_failure(&fixture.profile, "runtime_cleanup_pending")
+        .await?;
+    let id = fixture.profile.clone();
+    let (cursor, profile) = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| Ok((store.runtime_cursor(&id)?, store.runtime_profile(&id)?)))
+        .await?;
+    assert_eq!(cursor.failures, 0);
+    assert!(!cursor.status.contains_key("reason-code"));
+    assert!(profile.failure.is_none());
+    Ok(())
+}
+
+#[test]
+fn persisted_cleanup_failure_recovers_without_authorizing_rebuild() {
+    let mut cursor = RuntimeCursor {
+        failures: 3,
+        next_at: u64::MAX,
+        ..RuntimeCursor::default()
+    };
+    cursor
+        .status
+        .insert("reason-code".into(), "runtime_cleanup_pending".into());
+    cursor
+        .status
+        .insert("builder-image".into(), "frozen-builder".into());
+    assert!(cursor.resume_cleanup());
+    assert_eq!(cursor.failures, 0);
+    assert_eq!(cursor.next_at, 0);
+    assert!(!cursor.force_rebuild);
+    assert_eq!(
+        cursor.status.get("builder-image").map(String::as_str),
+        Some("frozen-builder")
+    );
+    assert!(!cursor.resume_cleanup());
+    cursor
+        .status
+        .insert("reason-code".into(), "runtime_cleanup_failed".into());
+    cursor.failures = 3;
+    assert!(!cursor.resume_cleanup());
+    assert_eq!(cursor.failures, 3);
 }

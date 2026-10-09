@@ -76,6 +76,10 @@ pub fn finding(code: &str) -> v1::RuntimeFinding {
             "Approved isolated build infrastructure is unavailable.",
             "Configure an explicitly approved isolated TLS engine and runtime registry.",
         ),
+        "runtime_cleanup_pending" => (
+            "Temporary preparation resources are being removed.",
+            "Preparation resumes automatically after cleanup completes.",
+        ),
         "runtime_build_failed" => (
             "The environment build failed.",
             "Review committed environment inputs and builder health, then rebuild.",
