@@ -14,11 +14,27 @@ struct Jobs {
     publications: BTreeMap<String, String>,
     discovery: Option<ImageDiscovery>,
     candidate_missing: bool,
+    cleanup_failed: bool,
+    cleanup_pending: bool,
     lost_engines: BTreeSet<String>,
 }
 #[derive(Clone, Default)]
 struct Backend(Arc<StdMutex<Jobs>>);
 impl ExecutionBackend for Backend {
+    async fn start_trust_lock<P: Serialize + Sync>(
+        &self,
+        _: &str,
+        _: &WorkloadRuntime,
+        _: &GenericRequest<P>,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> ExecutionResult<()> {
+        Err("unexpected_trust_preparation".into())
+    }
+    async fn trust_lock_result(&self, _: &str) -> ExecutionResult<String> {
+        Err("unexpected_trust_preparation".into())
+    }
     async fn engine_alive(&self, name: &str, _: &WorkloadRuntime) -> ExecutionResult<bool> {
         Ok(!self
             .0
@@ -130,6 +146,22 @@ impl ExecutionBackend for Backend {
             .unwrap_or(&ExecutionState::Missing))
     }
     async fn cleanup(&self, name: &str) -> ExecutionResult<()> {
+        if self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cleanup_pending
+        {
+            return Err("runtime_cleanup_pending".into());
+        }
+        if self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cleanup_failed
+        {
+            return Err("cleanup_failed".into());
+        }
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -184,7 +216,7 @@ async fn create_profile(state: &AppState) -> TestResult<(String, String)> {
                             v1::runtime_profile_configuration::Configuration::AyniManaged(
                                 v1::AyniManagedProfileRevision {
                                     lock_fingerprint: "c".repeat(64),
-                                    ayni_version: "0.14.5".into(),
+                                    ayni_version: "0.15.0".into(),
                                     oci_repository: "ghcr.io/ayni-oss/sandbox".into(),
                                     runtime_source_digest: None,
                                 },
@@ -217,7 +249,7 @@ impl Fixture {
             build: Some(
                 ayni_orchestrator_application::execution_settings::BuildRuntime {
                     configuration_revision: 0,
-                    image: format!("ghcr.io/team/builder@sha256:{}", "d".repeat(64)),
+                    image: format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "d".repeat(64)),
                     service_account: "runtime-builder".into(),
                     registry_secret: "push-only".into(),
                     signing_secret: "signing-only".into(),
@@ -241,7 +273,6 @@ impl Fixture {
             allow_emulation: false,
             engine_mode: "external-isolated".into(),
 
-            builder_defaults: None,
             profiles: BTreeMap::new(),
             managed_runtime: None,
         };
@@ -255,7 +286,7 @@ impl Fixture {
                     expected: RuntimeExpectation {
                         lock_fingerprint: format!("sha256:{}", "c".repeat(64)),
                         platform: "linux/arm64".into(),
-                        ayni_version: "0.14.5".into(),
+                        ayni_version: "0.15.0".into(),
                     },
                 },
                 image: runtime.image.clone(),
@@ -274,6 +305,7 @@ impl Fixture {
                 certificate: None,
                 discovery: DiscoveryProgress::default(),
                 resolved_digest: None,
+                verification: None,
                 failed: false,
             }),
             ..Default::default()
@@ -640,4 +672,195 @@ async fn engine_loss_discards_candidate_and_restart_preserves_fresh_attempt() ->
     );
     drop(jobs);
     Ok(())
+}
+
+#[tokio::test]
+async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> TestResult {
+    let mut fixture = Fixture::new().await?;
+    fixture.cursor.pending = None;
+    fixture.cursor.preparation = Some(PreparationIdentity {
+        generation: "approved-generation".into(),
+        source_revision: "a".repeat(40),
+        policy_digest: "policy".into(),
+        lock_digest: "lock".into(),
+        contract_version: "0.15.0".into(),
+        platform: fixture.runtime.platform.clone(),
+        registry: vec![],
+        certificate: None,
+        runtime: fixture.runtime.clone(),
+    });
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "a".repeat(64)),
+        image_id: String::new(),
+    });
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .cleanup_pending = true;
+    assert!(
+        fixture
+            .reconciler
+            .resolve_builder(
+                &fixture.profile,
+                "0.15.0",
+                &mut fixture.runtime,
+                &mut fixture.cursor
+            )
+            .await
+            .is_err()
+    );
+    fixture
+        .reconciler
+        .record_failure(&fixture.profile, "runtime_cleanup_pending")
+        .await?;
+    let id = fixture.profile.clone();
+    fixture.cursor = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| store.runtime_cursor(&id))
+        .await?;
+    fixture
+        .reconciler
+        .kubernetes
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .cleanup_pending = false;
+    assert_eq!(fixture.cursor.failures, 0);
+    assert!(!fixture.cursor.status.contains_key("reason-code"));
+    fixture.discovery(ImageDiscovery::Resolved {
+        digest: format!("sha256:{}", "b".repeat(64)),
+        image_id: String::new(),
+    });
+    assert!(
+        fixture
+            .reconciler
+            .resolve_builder(
+                &fixture.profile,
+                "0.15.0",
+                &mut fixture.runtime,
+                &mut fixture.cursor
+            )
+            .await?
+    );
+    assert_eq!(
+        fixture
+            .runtime
+            .build
+            .as_ref()
+            .ok_or("builder missing")?
+            .image,
+        format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "a".repeat(64))
+    );
+    assert!(!fixture.cursor.status.contains_key("builder-job"));
+    Ok(())
+}
+
+#[test]
+fn retry_never_grants_permission_to_replace_a_runtime() {
+    let mut cursor = RuntimeCursor {
+        failures: 3,
+        next_at: 99,
+        ..Default::default()
+    };
+    cursor.request_rebuild(false);
+    assert!(!cursor.force_rebuild);
+    assert!(cursor.retry_trust);
+    cursor.retry();
+    assert_eq!(cursor.failures, 0);
+    assert_eq!(cursor.next_at, 0);
+    assert!(!cursor.force_rebuild);
+    cursor.request_rebuild(true);
+    assert!(cursor.force_rebuild);
+}
+
+#[tokio::test]
+async fn cleanup_wait_preserves_failure_budget_and_frozen_operation() -> TestResult {
+    let fixture = Fixture::new().await?;
+    let id = fixture.profile.clone();
+    let mut cursor = fixture.cursor.clone();
+    cursor.failures = 1;
+    cursor
+        .status
+        .insert("reason-code".into(), "runtime_publication_failed".into());
+    fixture.reconciler.save(&id, &cursor).await?;
+    let frozen = serde_json::to_value(&cursor.pending)?;
+    for _ in 0..4 {
+        fixture
+            .reconciler
+            .record_failure(&id, "runtime_cleanup_pending")
+            .await?;
+    }
+    let stored = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| store.runtime_cursor(&id))
+        .await?;
+    assert_eq!(stored.failures, 1);
+    assert_eq!(
+        stored.status.get("reason-code").map(String::as_str),
+        Some("runtime_publication_failed")
+    );
+    assert_eq!(
+        stored.status.get("phase").map(String::as_str),
+        Some("cleaning_up")
+    );
+    assert!(stored.next_at <= now()? + 1);
+    assert_eq!(serde_json::to_value(&stored.pending)?, frozen);
+    Ok(())
+}
+
+#[tokio::test]
+async fn cleanup_wait_does_not_degrade_profile() -> TestResult {
+    let fixture = Fixture::new().await?;
+    fixture
+        .reconciler
+        .record_failure(&fixture.profile, "runtime_cleanup_pending")
+        .await?;
+    let id = fixture.profile.clone();
+    let (cursor, profile) = fixture
+        .reconciler
+        .state
+        .database
+        .execute(move |store| Ok((store.runtime_cursor(&id)?, store.runtime_profile(&id)?)))
+        .await?;
+    assert_eq!(cursor.failures, 0);
+    assert!(!cursor.status.contains_key("reason-code"));
+    assert!(profile.failure.is_none());
+    Ok(())
+}
+
+#[test]
+fn persisted_cleanup_failure_recovers_without_authorizing_rebuild() {
+    let mut cursor = RuntimeCursor {
+        failures: 3,
+        next_at: u64::MAX,
+        ..RuntimeCursor::default()
+    };
+    cursor
+        .status
+        .insert("reason-code".into(), "runtime_cleanup_pending".into());
+    cursor
+        .status
+        .insert("builder-image".into(), "frozen-builder".into());
+    assert!(cursor.resume_cleanup());
+    assert_eq!(cursor.failures, 0);
+    assert_eq!(cursor.next_at, 0);
+    assert!(!cursor.force_rebuild);
+    assert_eq!(
+        cursor.status.get("builder-image").map(String::as_str),
+        Some("frozen-builder")
+    );
+    assert!(!cursor.resume_cleanup());
+    cursor
+        .status
+        .insert("reason-code".into(), "runtime_cleanup_failed".into());
+    cursor.failures = 3;
+    assert!(!cursor.resume_cleanup());
+    assert_eq!(cursor.failures, 3);
 }

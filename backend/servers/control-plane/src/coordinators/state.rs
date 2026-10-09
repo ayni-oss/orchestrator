@@ -41,7 +41,7 @@ impl AppState {
         let mut store = CleanStore::open(database_path, max_attempts)?;
         if let Some(configuration) =
             crate::process::runtime_configuration::RuntimeConfiguration::from_environment()
-                .map_err(|_| CleanStoreError::CorruptState)?
+                .map_err(CleanStoreError::RuntimeConfiguration)?
         {
             store.configure_worker_limits(
                 u32::from(configuration.coding_turns),

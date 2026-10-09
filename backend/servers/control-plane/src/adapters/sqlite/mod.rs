@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 8;
+pub(crate) const SCHEMA_VERSION: i64 = 9;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -85,6 +85,8 @@ pub enum CleanStoreError {
     RetiredPilotSchema,
     #[error("unsupported clean-v1 schema version {0}")]
     UnsupportedSchemaVersion(i64),
+    #[error("runtime infrastructure configuration is invalid: {0}")]
+    RuntimeConfiguration(&'static str),
     #[error("durable clean-v1 state is corrupt")]
     CorruptState,
     #[error("resource {resource_type} {resource_id} was not found")]
@@ -248,7 +250,7 @@ mod tests {
                         v1::AyniManagedProfileRevision {
                             runtime_source_digest: None,
                             lock_fingerprint: "c".repeat(64),
-                            ayni_version: "0.4.0".to_owned(),
+                            ayni_version: "0.15.0".to_owned(),
                             oci_repository: "ghcr.io/ayni-oss/sandbox/environment".to_owned(),
                         },
                     ),
@@ -279,7 +281,16 @@ mod tests {
                 )),
             }),
             status: v1::RuntimeArtifactStatus::Verified as i32,
-            verified_metadata: Vec::new(),
+            verified_metadata: vec![
+                v1::VerifiedMetadata {
+                    key: "ayni-contract".into(),
+                    value: "0.15.0".into(),
+                },
+                v1::VerifiedMetadata {
+                    key: "builder-image".into(),
+                    value: format!("ghcr.io/ayni-oss/ayni-builder@{DIGEST}"),
+                },
+            ],
             failure: None,
             created_at: None,
             verified_at: None,
@@ -375,4 +386,4 @@ pub(crate) mod task_retry;
 mod certificates;
 mod connections;
 
-mod build_service;
+mod builder_cutover;

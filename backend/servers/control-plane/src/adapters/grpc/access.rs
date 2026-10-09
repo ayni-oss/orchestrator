@@ -431,6 +431,7 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "ArchiveProject"
         | "CreateRepositoryConnection"
         | "ConnectGithubRepository"
+        | "AnalyzeRepository"
         | "SetRepositoryRegistry" => (REPOSITORIES_WRITE, MAX_UNARY_DEADLINE),
         "ListRuntimeProfiles"
         | "GetRuntimeProfile"

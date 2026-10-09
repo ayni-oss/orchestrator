@@ -46,7 +46,7 @@ function repository(): RepositoryConnection {
     },
     displayName: "ayni-oss/sandbox",
     defaultBranch: "main",
-    registryConnectionId:"",imageNamespace:"",
+    registryConnectionId:"",imageNamespace:"", onboardingStatus:"pending", onboardingReason:"", onboardingRevision:"",
     status: RepositoryConnectionStatus.REPOSITORY_CONNECTION_STATUS_CONNECTED,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:01.000Z"),

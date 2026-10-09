@@ -20,11 +20,11 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-For a breaking deployment, inventory the exact application database volume,
-worker-output PVCs, Jobs, ConfigMaps and attempt Secrets before stopping old
-workers and resetting application state. SQLite schema version 8 migrates recognized versions 6/7; see operations before upgrade. Preserve source repositories, runtime images, unrelated
-resources and existing PRs. Follow [operations](operations.md); broad namespace
-purges are not the task-pipeline cutover procedure.
+SQLite schema version 9 migrates recognized versions 6–8 before reconciliation.
+The migration preserves connections, certificates, registries, runtime history
+and retained tasks, and records obsolete installation resources for restartable
+cleanup. Follow [operations](operations.md) and upgrade with cleaned values and
+`--reset-values`; do not reset application state or purge the namespace.
 
 Run Rust formatting, Clippy, tests and compilation; protocol generation and
 baseline checks; TypeScript/Svelte tests and builds; chart validation; and browser
@@ -32,11 +32,11 @@ checks. Fixture-backed UI checks do not replace actual worker-topology evidence.
 Exercise managed runtime and publication against the authorized sandbox using
 the explicit local context before claiming deployable behavior is validated.
 
-Local worker images package the approved Ayni CLI from checksum-verified GitHub
-release archives for amd64 or arm64. They do not require the managed executor
-image to be available in GHCR. Image builds stop on the first build, inspection
-or tagging failure, before deployment can attempt to load an invalid reference.
-The isolated runtime-builder recipe still requires its pinned executor image.
+Local worker images package the trusted launcher and checksum-pinned mise.
+Repository locks select official Ayni builders, resolved to immutable platform
+digests before validation and runtime preparation. Image builds stop on the first
+build, inspection or tagging failure, before deployment can attempt to load an
+invalid reference.
 
 The worker launcher is built as a static musl executable for the Docker Desktop
 node architecture. Its mandatory kernel sandbox must run natively. Use a signed
@@ -64,12 +64,11 @@ and credentials and uses only the `docker-desktop` context.
 
 Repository environments follow the same automatic build/certify/publish/verify flow
 locally. Ordinary component image packaging remains available for local deployment.
-A Docker Desktop node daemon is not an approved isolated environment builder.
-Configure a dedicated audited TLS engine and immutable builder image, and set
-`isolated_engine: true` only after proving isolation. The local chart's default has
-no builder; setup remains visible until one is configured. GHCR push and a distinct
-pull-only credential, an owner-reviewed trusted certificate and a committed lock
-are prerequisites. Always use `--context docker-desktop` for validation.
+The local chart explicitly selects local-development disposable engines. Official
+builders are pulled by resolved digest; no custom builder packaging or image seeding
+is required. GHCR push and distinct pull-only credentials, a trusted certificate,
+and a compatible committed policy/lock are prerequisites. Always use
+`--context docker-desktop` for validation. Deploy cleaned values with `--reset-values`.
 
 Exercise missing-image onboarding, verified reuse, explicit mismatch Rebuild,
 uncertain push recovery, and task admission by immutable digest. Inspect workload

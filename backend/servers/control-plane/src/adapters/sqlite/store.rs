@@ -374,7 +374,6 @@ impl CleanStore {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn fail_external_action(
         &mut self,
         operation: &str,

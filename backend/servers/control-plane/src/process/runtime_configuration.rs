@@ -31,27 +31,12 @@ pub struct RuntimeConfiguration {
     #[serde(default = "external_engine_mode")]
     pub engine_mode: String,
     #[serde(default)]
-    pub builder_defaults: Option<BuilderDefaults>,
-    #[serde(default)]
     pub profiles: BTreeMap<String, ProfileRuntime>,
     /// Deployment-wide execution policy for App-authorized Ayni Managed
     /// repositories. Their environment image is derived from GitHub identity
     /// and the committed lock rather than configured repository by repository.
     #[serde(default)]
     pub managed_runtime: Option<ManagedRuntime>,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct BuilderDefaults {
-    #[serde(default)]
-    pub builder_image: String,
-    pub engine_image: String,
-    pub provisioning_base: String,
-    #[serde(default)]
-    pub test_registry_id: String,
-    #[serde(default)]
-    pub test_certificate_id: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -186,6 +171,9 @@ impl RuntimeConfiguration {
             .filter_map(|r| r.build.as_ref())
             .chain(self.managed_runtime.as_ref().and_then(|r| r.build.as_ref()))
         {
+            if !build.image.is_empty() {
+                return Err("runtime_builder_configuration_removed");
+            }
             let mode = build
                 .engine
                 .as_ref()

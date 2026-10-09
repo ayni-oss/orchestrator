@@ -25,7 +25,7 @@ test("repository overview keeps identity in its header and configuration on its 
   await expect(dialog.getByText("Namespace: admin-team",{exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/profile-version");
   await page.waitForTimeout(11000);
-  await dialog.getByRole("button",{name:"Analyze / Sync",exact:true}).click();
+  await dialog.getByRole("button",{name:"Build / Retry",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
   await expect(dialog.getByRole("alert")).toContainText("Close and reopen");
@@ -37,7 +37,7 @@ test("repository overview keeps identity in its header and configuration on its 
   await expect(page.getByText("Runtime image destination updated.",{exact:true})).toBeVisible();
   await expect(runtime).toContainText("ghcr.io/admin-team/ayni-oss/sandbox");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await dialog.getByRole("button",{name:"Analyze / Sync",exact:true}).click();
+  await dialog.getByRole("button",{name:"Build / Retry",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
@@ -67,6 +67,20 @@ test("runtime preparation shows progress, findings and guarded corrective action
   await page.reload();
   await page.locator("article").first().getByRole("button", {name:"Edit",exact:true}).click();
   await expect(page.getByRole("dialog").getByRole("button",{name:"Rebuild runtime",exact:true})).toBeDisabled();
-  await page.getByRole("dialog").getByRole("button",{name:"Retry analysis",exact:true}).click();
+  await page.getByRole("dialog").getByRole("button",{name:"Retry",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.", {exact:true})).toBeVisible();
+});
+
+
+test("repository analysis retains onboarding independently of connection access", async ({ page }) => {
+  await page.goto("/repositories/repository:1");
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+  const onboarding = page.getByRole("region", { name: "Repository onboarding" });
+  await expect(onboarding).toContainText("Awaiting trust");
+  await expect(onboarding).toContainText("Merge the trust proposal before preparing the runtime.");
+  await expect(page.locator("main header").filter({ has: page.getByRole("heading", { name: "ayni-oss/sandbox" }) })).toContainText("Connected");
+  await onboarding.getByRole("button", { name: "Analyze repository" }).click();
+  await expect(onboarding).toContainText("Analyzing");
+  await page.reload();
+  await expect(onboarding).toContainText("Analyzing");
 });

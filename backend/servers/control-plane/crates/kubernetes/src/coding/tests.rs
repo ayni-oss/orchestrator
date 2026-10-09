@@ -17,7 +17,7 @@ fn fixture() -> (ExecutionConfiguration, WorkloadRuntime) {
             pull_secret: Some("pull-only".into()),
             build: Some(crate::configuration::BuildRuntime {
                 configuration_revision: 0,
-                image: format!("registry.test/builder@sha256:{}", "b".repeat(64)),
+                image: format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "b".repeat(64)),
                 service_account: "runtime-builder".into(),
                 engine_host: "tcp://engine.test:2376".into(),
                 isolated_engine: true,
@@ -99,6 +99,21 @@ fn build_has_separate_service_account_and_secret_references_only()
     let pod = spec.template.spec.ok_or("pod")?;
     assert_eq!(pod.service_account_name.as_deref(), Some("runtime-builder"));
     assert_eq!(pod.automount_service_account_token, Some(false));
+    let producer = &pod.containers[0];
+    assert_eq!(
+        producer.command.as_deref(),
+        Some(["/launcher/runtime-worker".to_owned()].as_slice())
+    );
+    assert_eq!(
+        producer
+            .env
+            .as_ref()
+            .and_then(|values| values
+                .iter()
+                .find(|value| value.name == "AYNI_BUILDER_IMAGE"))
+            .and_then(|value| value.value.as_ref()),
+        producer.image.as_ref()
+    );
     for container in pod
         .containers
         .iter()
@@ -278,13 +293,13 @@ fn publication_runs_without_source_or_signing_authority() -> Result<(), Box<dyn 
 }
 
 #[test]
-fn attempt_jobs_project_only_client_tls_and_freeze_the_global_revision()
+fn attempt_jobs_project_only_client_tls_and_freeze_the_infrastructure_revision()
 -> Result<(), Box<dyn std::error::Error>> {
     let (mut configuration, mut runtime) = fixture();
     configuration.engine_mode = "local-development".into();
     let build = runtime.build.as_mut().ok_or("build")?;
     build.configuration_revision = 7;
-    build.image = format!("docker.io/local/builder@sha256:{}", "b".repeat(64));
+    build.image = format!("ghcr.io/ayni-oss/ayni-builder@sha256:{}", "b".repeat(64));
     build.engine = Some(
         ayni_orchestrator_application::execution_settings::EngineRuntime {
             image: format!("docker.io/library/docker@sha256:{}", "c".repeat(64)),
@@ -328,7 +343,7 @@ fn attempt_jobs_project_only_client_tls_and_freeze_the_global_revision()
         assert_eq!(expression["operator"], "DoesNotExist");
         assert_eq!(
             pod.containers[0].image_pull_policy.as_deref(),
-            Some("IfNotPresent")
+            Some("Always")
         );
         let security = pod.containers[0]
             .security_context
@@ -359,9 +374,7 @@ fn attempt_jobs_project_only_client_tls_and_freeze_the_global_revision()
 }
 
 #[test]
-fn unsigned_builder_and_certified_runtime_share_engine_but_not_signing_authority()
--> Result<(), Box<dyn std::error::Error>> {
-    use ayni_orchestrator_application::image_build::ImageBuildKind;
+fn certified_runtime_requires_signing_authority() -> Result<(), Box<dyn std::error::Error>> {
     let (configuration, mut runtime) = fixture();
     runtime
         .build
@@ -369,40 +382,6 @@ fn unsigned_builder_and_certified_runtime_share_engine_but_not_signing_authority
         .ok_or("build")?
         .signing_secret
         .clear();
-    let job = image_build_job(
-        "install",
-        &configuration,
-        &runtime,
-        &ImageBuildKind::TrustedBuilder {
-            recipe_identity: "recipe".into(),
-        },
-    )?;
-    let text = serde_json::to_string(&job)?;
-    assert!(!text.contains("AYNI_ENV_CERTIFICATE"));
-    assert!(!text.contains("push-only"));
-    assert!(!text.contains("SOURCE_TOKEN"));
-    assert!(text.contains("engine-only"));
-    assert!(text.contains("builder-package"));
-    assert!(text.contains("readOnlyRootFilesystem"));
-    assert!(
-        image_build_job(
-            "runtime",
-            &configuration,
-            &runtime,
-            &ImageBuildKind::RepositoryRuntime
-        )
-        .is_err()
-    );
-    let publisher = publication_job(
-        "publish",
-        &configuration,
-        &runtime,
-        &format!("sha256:{}", "c".repeat(64)),
-        true,
-    )?;
-    let text = serde_json::to_string(&publisher)?;
-    assert!(text.contains("push-only"));
-    assert!(!text.contains("AYNI_ENV_CERTIFICATE"));
-    assert!(!text.contains("SOURCE_TOKEN"));
+    assert!(build_job("runtime", &configuration, &runtime).is_err());
     Ok(())
 }

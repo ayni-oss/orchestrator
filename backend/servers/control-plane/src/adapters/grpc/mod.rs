@@ -126,11 +126,6 @@ pub async fn serve(
                 .max_decoding_message_size(MAX_REQUEST_BYTES)
                 .max_encoding_message_size(MAX_RESPONSE_BYTES),
         )
-        .add_service(
-            v1::ayni_service_server::AyniServiceServer::new(api.clone())
-                .max_decoding_message_size(MAX_REQUEST_BYTES)
-                .max_encoding_message_size(MAX_RESPONSE_BYTES),
-        )
         .add_service(development_server(api))
         .serve_with_shutdown(address, async move {
             if !*shutdown.borrow() {
@@ -368,6 +363,7 @@ impl RequestContext {
             | CleanStoreError::CreateDirectory(_)
             | CleanStoreError::Database(_)
             | CleanStoreError::DatabaseWorker(_)
+            | CleanStoreError::RuntimeConfiguration(_)
             | CleanStoreError::CorruptState
             | CleanStoreError::Clock => (Code::Internal, v1::ErrorReason::Internal, None, None),
             CleanStoreError::StoreUnavailable => {
@@ -456,5 +452,3 @@ mod onboarding_error;
 
 mod certificates;
 mod connections;
-
-mod ayni;

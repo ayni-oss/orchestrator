@@ -33,7 +33,7 @@
   let notificationKind=$state<"success"|"warning">("success");
   const selected=$derived(profiles.find(profile=>profile.id===selectedId));
   const selectedConnection=$derived(connections.find(connection=>connection.id===registryId));
-  const failureMessage=(message:string)=>message==="runtime_verification_failed" ? "Runtime image verification failed. Sync or rebuild to retry." : /^[a-z][a-z0-9_]+$/u.test(message) ? words(message) : message;
+  const failureMessage=(message:string)=>message==="runtime_verification_failed" ? "Runtime image verification failed. Rebuild explicitly to replace this image." : /^[a-z][a-z0-9_]+$/u.test(message) ? words(message) : message;
   const selection=(profile:RuntimeProfileDto)=>profile.registry ?? {registryConnectionId:repository.registryConnectionId ?? ""};
   function edit(profile:RuntimeProfileDto) {
     selectedId=profile.id;
@@ -112,7 +112,7 @@
       </form>
       {/if}
       <div class="flex flex-wrap gap-2 border-t pt-4">
-        {#each ["sync","rebuild"] as action (action)}<form method="POST" action={`?/${action}`} use:enhance={submit}><input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><Button type="submit" variant="outline" disabled={busy || (action==="rebuild" && !selected.rebuildAvailable)}>{action==="sync" ? selected.failure ? "Retry analysis" : "Analyze / Sync" : "Rebuild runtime"}</Button></form>{/each}
+        {#each ["sync","rebuild"] as action (action)}<form method="POST" action={`?/${action}`} use:enhance={submit}><input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><Button type="submit" variant="outline" disabled={busy || (action==="rebuild" && !selected.rebuildAvailable)}>{action==="sync" ? selected.failure ? "Retry" : "Build / Retry" : "Rebuild runtime"}</Button></form>{/each}
         <Button href={`/profiles/${encodeURIComponent(selected.id)}`} variant="outline">View details</Button>
       </div>
     {/if}

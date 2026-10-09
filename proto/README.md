@@ -1,7 +1,7 @@
 # Private orchestrator API
 
 The canonical API is `ayni.orchestrator.v1`. This private breaking replacement
-uses the `managed-images-v3` baseline recorded in `BASELINE`. Clients must regenerate
+uses the `repository-builders-v4` baseline recorded in `BASELINE`. Clients must regenerate
 bindings and upgrade with the server. Schema-six/seven databases migrate without
 retaining workflow execution compatibility; see [release state](RELEASES.md).
 
@@ -34,3 +34,8 @@ and effective safe certificate metadata. Custom runtimes reject certificate
 assignment. Signing seeds never appear in runtime profile or frozen task DTOs.
 
 Workflow installation RPCs, resources and fields were intentionally removed. Removed field numbers/names are reserved. Runtime reads expose structured findings, preparation phase and guarded rebuild availability. Upgrade clients and server together; see [cutover operations](../docs/operations.md).
+
+Repository connections expose durable onboarding status, reason and inspected commit.
+`AnalyzeRepository` retries analysis without granting runtime replacement.
+The deployment-wide Ayni settings, release discovery, installation and service-test
+API has been removed; clients must upgrade with this cutover.

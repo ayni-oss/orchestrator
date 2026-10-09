@@ -106,6 +106,55 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         }))
     }
 
+    async fn analyze_repository(
+        &self,
+        request: Request<v1::AnalyzeRepositoryRequest>,
+    ) -> Result<Response<v1::AnalyzeRepositoryResponse>, Status> {
+        let context = self.context(&request, "AnalyzeRepository")?;
+        context.idempotency_key(&request.get_ref().idempotency_key)?;
+        validate_id(
+            &request.get_ref().repository_connection_id,
+            "repository_connection_id",
+        )
+        .map_err(|error| context.validation(&error))?;
+        let message = request.into_inner();
+        let intent = message.clone();
+        let action = with_store(&self.state, move |store| {
+            store.repository_connection(&intent.repository_connection_id)?;
+            store.begin_external_action(
+                "AnalyzeRepository",
+                &intent.idempotency_key,
+                &intent,
+                "repository_connection",
+                &intent.repository_connection_id,
+            )
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        if action.state == crate::adapters::sqlite::DurableActionState::Completed {
+            let id = message.repository_connection_id.clone();
+            let repository = with_store(&self.state, move |store| store.repository_connection(&id))
+                .await
+                .map_err(|error| context.store_error(&error))?;
+            return Ok(context.response(v1::AnalyzeRepositoryResponse {
+                repository_connection: Some(repository),
+            }));
+        }
+        let repository = self
+            .state
+            .analyze_repository(&message.repository_connection_id)
+            .await
+            .map_err(onboarding_error)?;
+        with_store(&self.state, move |store| {
+            store.complete_external_action("AnalyzeRepository", &message.idempotency_key)
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        Ok(context.response(v1::AnalyzeRepositoryResponse {
+            repository_connection: Some(repository),
+        }))
+    }
+
     async fn set_repository_registry(
         &self,
         request: Request<v1::SetRepositoryRegistryRequest>,

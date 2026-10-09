@@ -1,8 +1,12 @@
 //! Product diagnostics from bounded internal codes, never raw provider output.
 use ayni_orchestrator_api::v1;
 
-pub fn finding(code: &str) -> v1::RuntimeFinding {
-    let (message, remediation) = match code {
+fn finding_text(code: &str) -> (&'static str, &'static str) {
+    match code {
+        "github_app_unconfigured" => (
+            "The controller's GitHub App client is not initialized.",
+            "Check the GitHub connection status, then retry analysis after initialization completes.",
+        ),
         "policy_missing" => (
             "Committed Ayni configuration is missing.",
             "Commit .ayni.toml through an owner-reviewed PR, then analyze again.",
@@ -16,8 +20,20 @@ pub fn finding(code: &str) -> v1::RuntimeFinding {
             "Refresh the lock with the supported Ayni CLI and commit it through review.",
         ),
         "runtime_version_unsupported" => (
-            "The image uses an unsupported Ayni version.",
-            "Refresh committed environment inputs and rebuild with the supported executor.",
+            "The repository selects an unsupported Ayni contract.",
+            "Upgrade the committed policy and lock with Ayni 0.15.0, review the changes, then analyze again.",
+        ),
+        "runtime_resolver_unsupported" => (
+            "The lock selects an unsupported resolver.",
+            "Refresh the lock with Ayni 0.15.0 and mise 2026.6.14, review and commit it, then analyze again.",
+        ),
+        "official_builder_unavailable" => (
+            "The official builder is unavailable for the selected contract and platform.",
+            "Restore GHCR access or choose a supported platform, then retry analysis.",
+        ),
+        "certificate_trust_pull_closed" => (
+            "The certificate trust proposal was closed without merging.",
+            "Choose Retry to reopen the proposal, then review and merge it.",
         ),
         "runtime_lock_mismatch" => (
             "The environment does not match the frozen lock.",
@@ -56,13 +72,17 @@ pub fn finding(code: &str) -> v1::RuntimeFinding {
         ),
         "trust_lock_builder_missing" | "trust_lock_image_unpinned" => (
             "Public certificate trust preparation tooling is unavailable.",
-            "Deploy the pinned worker containing Ayni and its lock resolver, then retry analysis. The signing certificate itself is not the missing builder.",
+            "Deploy the trusted launcher and approved resolver, then retry analysis. The signing certificate itself is not the missing builder.",
         ),
         "runtime_builder_missing"
         | "runtime_build_configuration_invalid"
         | "runtime_source_missing" => (
             "Approved isolated build infrastructure is unavailable.",
-            "Configure a digest-pinned builder and an explicitly approved isolated TLS engine.",
+            "Configure an explicitly approved isolated TLS engine and runtime registry.",
+        ),
+        "runtime_cleanup_pending" => (
+            "Temporary preparation resources are being removed.",
+            "Preparation resumes automatically after cleanup completes.",
         ),
         "runtime_build_failed" => (
             "The environment build failed.",
@@ -80,10 +100,18 @@ pub fn finding(code: &str) -> v1::RuntimeFinding {
             "Runtime preparation could not complete.",
             "Review source access and runtime infrastructure, then retry analysis.",
         ),
-    };
+    }
+}
+
+pub fn finding(code: &str) -> v1::RuntimeFinding {
+    let (message, remediation) = finding_text(code);
     v1::RuntimeFinding {
         code: code.into(),
-        message: message.into(),
+        message: if message == "Runtime preparation could not complete." {
+            format!("Runtime preparation stopped: {code}.")
+        } else {
+            message.into()
+        },
         remediation: remediation.into(),
     }
 }
@@ -95,6 +123,9 @@ pub fn setup_required(code: &str) -> bool {
             | "lock_missing"
             | "lock_incompatible"
             | "repository_lock_invalid"
+            | "runtime_version_unsupported"
+            | "runtime_resolver_unsupported"
+            | "runtime_lock_contract_unsupported"
             | "certificate_setup_required"
             | "certificate_not_ready"
             | "trust_policy_missing"
@@ -112,8 +143,7 @@ pub fn setup_required(code: &str) -> bool {
 pub fn rebuild_allowed(code: &str) -> bool {
     matches!(
         code,
-        "runtime_version_unsupported"
-            | "runtime_lock_mismatch"
+        "runtime_lock_mismatch"
             | "runtime_platform_mismatch"
             | "runtime_tag_drift"
             | "runtime_digest_mismatch"
@@ -129,9 +159,9 @@ pub fn rebuild_allowed(code: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn image_version_findings_allow_rebuild_but_trust_prerequisites_do_not() {
-        assert!(super::rebuild_allowed("runtime_version_unsupported"));
-        assert!(!super::setup_required("runtime_version_unsupported"));
+    fn unsupported_contract_and_trust_prerequisites_require_remediation() {
+        assert!(!super::rebuild_allowed("runtime_version_unsupported"));
+        assert!(super::setup_required("runtime_version_unsupported"));
         assert!(super::setup_required("certificate_trust_lock_failed"));
         assert!(!super::rebuild_allowed("certificate_trust_lock_failed"));
     }

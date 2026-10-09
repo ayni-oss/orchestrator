@@ -5,11 +5,12 @@ ayni-orchestrator:
     allowEmulation: false
     # Explicit development-only exception; production defaults stay non-privileged.
     engineMode: local-development
-    builderDefaults:
-      builder_image: ""
-      engine_image: docker.io/library/docker:28.3.3-dind@sha256:a56b3bdde89315ed2cc0e4906e582b5033d93bf20d9cb9510c2cdd4e7f7690b1
-      provisioning_base: ghcr.io/ayni-oss/ayni-provisioning@sha256:30453fcd751acff069c7b16a1cd2eba01051bd94b64cd9d333c4ce82a9ff0961
     managedRuntime:
+      build:
+        engine:
+          image: docker.io/library/docker@sha256:a56b3bdde89315ed2cc0e4906e582b5033d93bf20d9cb9510c2cdd4e7f7690b1
+          security_mode: local-development
+        service_account: runtime-builder
       platform: linux/arm64
       service_account: runtime-coding
       pull_secret: runtime-pull

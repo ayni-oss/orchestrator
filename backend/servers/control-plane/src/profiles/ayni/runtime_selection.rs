@@ -10,6 +10,7 @@ pub fn command(
     fingerprint: &str,
     repository: &str,
     source_digest: &str,
+    ayni_version: &str,
 ) -> Result<SelectRuntimeRevision, InvalidGitRevision> {
     Ok(SelectRuntimeRevision {
         profile_id: profile_id.into(),
@@ -19,6 +20,6 @@ pub fn command(
             image_repository: repository.into(),
             source_digest: Some(source_digest.into()),
         },
-        policy_version: ayni_orchestrator_profile_ayni::ayni_release::CLI_VERSION.into(),
+        policy_version: ayni_version.into(),
     })
 }

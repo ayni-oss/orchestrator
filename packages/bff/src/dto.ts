@@ -40,6 +40,9 @@ export interface GithubRepositoryDto {
 }
 
 export interface RepositoryConnectionDto {
+  onboardingStatus?: string;
+  onboardingReason?: string;
+  onboardingRevision?: string;
   registryConnectionId?: string;
   imageNamespace?: string;
   id: string;

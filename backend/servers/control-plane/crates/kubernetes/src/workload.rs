@@ -122,14 +122,3 @@ pub fn runtime_environment() -> Vec<Value> {
         json!({"name":"MISE_STATE_DIR","value":"/scratch/mise-state"}),
     ]
 }
-
-/// Trusted recipes and probes have no repository checkout authority.
-/// # Errors
-/// Rejects malformed shared manifests.
-pub fn without_checkout(job: &mut Value) -> Result<(), &'static str> {
-    job["spec"]["template"]["spec"]["initContainers"]
-        .as_array_mut()
-        .ok_or("image_manifest_invalid")?
-        .retain(|c| c["name"] == "launcher");
-    Ok(())
-}

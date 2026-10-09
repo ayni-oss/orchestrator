@@ -70,7 +70,7 @@ if [[ -n "$signing_secret_name" ]]; then
 fi
 
 echo "renderer=$(helm version --short 2>/dev/null)"
-helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" \
+helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
   --namespace "$namespace" \
   --create-namespace \

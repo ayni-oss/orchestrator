@@ -26,13 +26,13 @@ restart or Tilt restart is required. Connection pages refresh status periodicall
 
 The repository overview shows connection status and branch once, followed by its
 runtimes. Lock fingerprints and image destinations belong to each runtime.
-Inspection notifications are transient; ongoing progress and actionable failures
-remain visible on the affected runtime. The namespace is defined once on the registry connection; runtime dialogs show
+Onboarding status, inspected commit and actionable failures persist independently
+from repository access and remain visible on its overview. The namespace is defined once on the registry connection; runtime dialogs show
 the server-computed image destination without a namespace input. Registry changes invalidate that runtime’s
 readiness until its new destination is verified; other runtimes are unaffected.
 
 Connect the repository and open its runtime, even if configuration is incomplete.
-Select a ready certificate and GHCR connection. Analyze / Sync reports missing
+Select a ready certificate and GHCR connection. Analyze repository reports missing
 committed policy or lock, incompatible configuration, trust, registry and platform
 findings with corrective actions. Review and merge any certificate trust PR.
 General configuration bootstrap remains owner-managed.
@@ -57,8 +57,8 @@ A failed-quality draft is completed delivery. Publication failure can be retried
 against retained final work without coding again. Ordinary retry creates a new
 attempt.
 
-Before a breaking deployment, follow the exact-resource inventory and state
-reset procedure in [operations](operations.md). Existing source repositories,
+Before a breaking deployment, follow the exact-resource inventory and migration
+procedure in [operations](operations.md). Existing source repositories,
 runtime images and GitHub pull requests are retained.
 
 Manage the GitHub App at `/source-control/github`. Use **Add GitHub App** to create an App in your organization or personal account, or import an existing App ID and private key. The compact connection card opens an **Edit** dialog for key rotation, testing, disablement, and deletion; administrator-managed Apps expose read-only **Details**. App installation stays in GitHub. Legacy `/setup/github` links redirect here, and existing Apps using `/setup/github/complete` retain callback compatibility.

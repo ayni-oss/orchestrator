@@ -307,15 +307,8 @@ fn summarize(
 /// # Errors
 /// Rejects missing signing material, source mismatch, or failed build/certification.
 pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
-    build_inner(request, workspace, false).await
-}
-
-async fn build_inner(
-    request: &ExecutionRequest,
-    workspace: &Path,
-    diagnostic: bool,
-) -> io::Result<()> {
     validate_source(request)?;
+    validate_cli_version(&request.expected.ayni_version, workspace).await?;
     let source = request.revision.clone();
     let directory = workspace.to_owned();
     tokio::task::spawn_blocking(move || {
@@ -337,6 +330,14 @@ async fn build_inner(
     {
         return Err(io::Error::other("runtime_lock_mismatch"));
     }
+    let builder = std::env::var("AYNI_BUILDER_IMAGE").map_err(io::Error::other)?;
+    ayni_orchestrator_profile_ayni::compatibility::validate_builder(&builder)
+        .map_err(io::Error::other)?;
+    ayni_orchestrator_profile_ayni::compatibility::validate_lock_envelope(
+        &serde_json::to_vec(&lock).map_err(io::Error::other)?,
+        &request.expected.platform,
+    )
+    .map_err(io::Error::other)?;
     wait_engine(workspace).await?;
     let values = build_environment(true)?;
     let mut build = command("/usr/local/bin/ayni", workspace);
@@ -347,13 +348,10 @@ async fn build_inner(
             "env",
             "build",
             "--executor-image",
-            ayni_orchestrator_profile_ayni::ayni_release::EXECUTOR_IMAGE,
+            &builder,
             "--tag",
             &image,
         ]);
-    if diagnostic {
-        build.stderr(std::process::Stdio::inherit());
-    }
     success(build)
         .await
         .map_err(|_| io::Error::other("runtime_build_failed"))?;
@@ -381,6 +379,16 @@ async fn build_inner(
         return Err(io::Error::other("runtime_platform_mismatch"));
     }
     fs::write("/dev/termination-log", id)
+}
+
+async fn validate_cli_version(version: &str, workspace: &Path) -> io::Result<()> {
+    ayni_orchestrator_profile_ayni::compatibility::contract(version).map_err(io::Error::other)?;
+    let mut cli = command("/usr/local/bin/ayni", workspace);
+    cli.arg("--version");
+    if capture(cli).await?.trim() != format!("ayni {version}") {
+        return Err(io::Error::other("runtime_version_unsupported"));
+    }
+    Ok(())
 }
 
 pub(crate) fn build_target() -> io::Result<String> {
@@ -569,5 +577,3 @@ pub(crate) async fn success(command: std::process::Command) -> io::Result<()> {
 mod tests;
 
 pub mod trust_lock;
-
-pub mod builder_test;

@@ -9,7 +9,6 @@ readonly namespace="$(dev_namespace)"
 # attaches. Never copy build output, dependencies or deployment credentials.
 COPYFILE_DISABLE=1 tar -C "$repository_root" -cf - \
   backend proto Cargo.toml Cargo.lock rust-toolchain.toml \
-  deploy/images/runtime-builder/Dockerfile \
   dev/scripts/restart-control-plane.sh \
   | kubectl --context docker-desktop --namespace "$namespace" \
       exec -i deployment/control-plane -c control-plane -- tar -xf - -C /opt/source

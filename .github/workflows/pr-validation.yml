@@ -206,11 +206,11 @@ jobs:
 
       - name: Validate contract and generated bindings
         run: |
-          if ! grep -qx 'managed-images-v3' proto/BASELINE; then
-            echo 'The current protobuf baseline marker must be exactly managed-images-v3.' >&2
+          if ! grep -qx 'repository-builders-v4' proto/BASELINE; then
+            echo 'The current protobuf baseline marker must be exactly repository-builders-v4.' >&2
             exit 1
-          elif test -f .contract-base/proto/BASELINE && grep -qx 'worker-owned-v2' .contract-base/proto/BASELINE; then
-            echo 'Buf breaking comparison reset for the intentional managed-images-v3 contract cutover.'
+          elif test -f .contract-base/proto/BASELINE && grep -qx 'managed-images-v3' .contract-base/proto/BASELINE; then
+            echo 'Buf breaking comparison reset for the intentional repository-builders-v4 contract cutover.'
             scripts/ci/check-proto.sh
           elif cmp -s proto/BASELINE .contract-base/proto/BASELINE; then
             scripts/ci/check-proto.sh .contract-base/proto
@@ -259,7 +259,7 @@ jobs:
       - name: Install Ayni
         run: |
           set -euo pipefail
-          release=backend/libs/runtime/profiles/ayni/ayni-release.json
+          release=scripts/ci/ayni-tool.json
           AYNI_VERSION=$(jq -er .cli_version "$release")
           AYNI_ARCHIVE="ayni-ayni-v${AYNI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
           AYNI_SHA256=$(jq -er .linux_amd64_archive_sha256 "$release")

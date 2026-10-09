@@ -4,7 +4,6 @@ FROM rust:1.94.0-bookworm AS builder
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY backend ./backend
-COPY deploy/images/runtime-builder/Dockerfile ./deploy/images/runtime-builder/Dockerfile
 COPY proto ./proto
 RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-control-cargo-git,target=/usr/local/cargo/git \

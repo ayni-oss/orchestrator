@@ -5,8 +5,8 @@ dev_build_image() {
   local component="${1:?component is required}"
   local requested_image_ref="${2:-}"
   case "$component" in
-    control-plane | control-plane-dev | worker | web | web-dev | runtime-builder) ;;
-    *) echo "component must be control-plane, control-plane-dev, worker, web, web-dev, or runtime-builder" >&2; return 2 ;;
+    control-plane | control-plane-dev | worker | web | web-dev) ;;
+    *) echo "component must be control-plane, control-plane-dev, worker, web, or web-dev" >&2; return 2 ;;
   esac
 
   local dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/$component/Dockerfile"
@@ -94,7 +94,6 @@ dev_prune_images() (
   local node_id temporary_directory keep runtime_ref local_ref image_ref
   local pinned_worker="${4:?pinned runtime worker is required}"
   local pinned_connection_test="${5:-}"
-  local pinned_builder="${6:-}"
   node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
   temporary_directory="$(mktemp -d)"
   trap 'rm -rf "$temporary_directory"' EXIT
@@ -106,7 +105,6 @@ dev_prune_images() (
     | sed 's#^docker.io/##' | grep '^local/ayni-orchestrator-' >> "$keep" || true
   printf '%s\n' "${pinned_worker#docker.io/}" >> "$keep"
   [[ -z "$pinned_connection_test" ]] || printf '%s\n' "${pinned_connection_test#docker.io/}" >> "$keep"
-  [[ -z "$pinned_builder" ]] || printf '%s\n' "${pinned_builder#docker.io/}" >> "$keep"
   sort -u "$keep" -o "$keep"
 
   while IFS= read -r runtime_ref; do

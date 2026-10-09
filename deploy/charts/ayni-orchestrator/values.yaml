@@ -16,8 +16,6 @@ runtime:
   # Production releases retain strict runtime platform scheduling.
   allowEmulation: false
   engineMode: external-isolated
-  # Infrastructure policy is administrator-managed; the UI configures image identities.
-  builderDefaults: null
   profiles: {}
   # Deployment-wide policy for connected managed repositories; no repository map.
   # The local chart supplies this policy automatically.

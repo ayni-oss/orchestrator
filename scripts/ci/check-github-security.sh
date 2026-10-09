@@ -53,14 +53,16 @@ grep -Eq '^permissions: \{\}$' "$workflows/pr-validation.yml" \
 grep -Eq 'persist-credentials: false' "$workflows/pr-validation.yml" \
   || fail "PR validation must disable persisted checkout credentials"
 
-# Public trust preparation must use the same approved CLI as managed execution.
+# CI tool selection is independent of repository runtime compatibility.
 python3 - "$repository_root" <<'PYTHON'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
-release = json.loads((root / "backend/libs/runtime/profiles/ayni/ayni-release.json").read_text())
+release = json.loads((root / "scripts/ci/ayni-tool.json").read_text())
+assert release["cli_version"] and len(release["linux_amd64_archive_sha256"]) == 64
 worker = (root / "deploy/images/worker/Dockerfile").read_text()
-assert "ARG AYNI_VERSION=" + release["cli_version"] in worker, "worker Ayni CLI differs from pinned release"
+assert "AYNI_EXECUTOR_IMAGE" not in worker and "ARG AYNI_VERSION" not in worker, "worker must consume repository-selected official builders"
+assert "mise_sha=" in worker and "sha256sum --check" in worker
 for architecture in ("amd64", "arm64"):
     checksum = release[f"linux_{architecture}_archive_sha256"]
-    assert f"ARG AYNI_{architecture.upper()}_SHA256={checksum}" in worker, f"worker {architecture} CLI checksum differs from pinned release"
+    assert len(checksum) == 64 and all(c in "0123456789abcdef" for c in checksum), "CI CLI checksum must be pinned"
 PYTHON

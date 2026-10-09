@@ -61,6 +61,7 @@ pub fn signed_identity(
     metadata: &[u8],
     expected: &RuntimeExpectation,
 ) -> Result<VerifiedRuntime, RuntimeVerificationError> {
+    let (metadata_schema, _) = evidence_contract(&expected.ayni_version)?;
     let value = bounded_json(metadata, MAX_METADATA_BYTES)?;
     let key = field(&value, "key_id")?;
     let signature = field(&value, "signature");
@@ -85,7 +86,7 @@ pub fn signed_identity(
         metadata_digest: format!("sha256:{:x}", Sha256::digest(metadata)),
         protected_content_root: field(claims, "protected_content_root")?,
     };
-    if claims["schema_version"] != "2"
+    if claims["schema_version"] != metadata_schema
         || !digest(&identity.lock_fingerprint)
         || !digest(&identity.protected_content_root)
         || !digest(&field(claims, "tool_inventory_digest")?)
@@ -122,7 +123,7 @@ pub fn verified_result(
     let identity = signed_identity(metadata, expected)?;
     let certificate = bounded_json(metadata, MAX_METADATA_BYTES)?;
     let result = bounded_json(signals, MAX_SIGNALS_BYTES)?;
-    if result["schema_version"] != crate::ayni_release::SIGNALS_SCHEMA_VERSION
+    if result["schema_version"] != evidence_contract(&expected.ayni_version)?.1
         || result["execution_mode"] != "managed"
         || result["environment_lock_fingerprint"] != identity.lock_fingerprint
         || result["ayni_version"] != identity.ayni_version
@@ -133,6 +134,20 @@ pub fn verified_result(
         return Err(RuntimeVerificationError::MissingVerification);
     }
     Ok(identity)
+}
+
+// Already-admitted tasks retain their frozen runtime through worker recreation.
+// This evidence reader is intentionally separate from the admission/build/trust
+// catalog: it grants no new runtime admission or builder mapping for 0.14.5.
+fn evidence_contract(
+    version: &str,
+) -> Result<(&'static str, &'static str), RuntimeVerificationError> {
+    match version {
+        "0.14.5" => Ok(("2", "0.5.0")),
+        _ => crate::compatibility::contract(version)
+            .map(|contract| (contract.metadata_schema, contract.signals_schema))
+            .map_err(|_| RuntimeVerificationError::UnsupportedVersion),
+    }
 }
 
 fn bounded_json(bytes: &[u8], limit: usize) -> Result<Value, RuntimeVerificationError> {
@@ -173,15 +188,15 @@ mod tests {
         let expected = RuntimeExpectation {
             lock_fingerprint: fingerprint.clone(),
             platform: "linux/amd64".into(),
-            ayni_version: crate::ayni_release::CLI_VERSION.into(),
+            ayni_version: "0.15.0".into(),
         };
         let certificate = json!({"key_id":"producer", "signature":"b".repeat(128), "certificate": {
-            "schema_version":"2", "lock_fingerprint":fingerprint, "platform":"linux/amd64", "ayni_version":crate::ayni_release::CLI_VERSION,
+            "schema_version":"2", "lock_fingerprint":fingerprint, "platform":"linux/amd64", "ayni_version":"0.15.0",
             "tool_inventory_digest": format!("sha256:{}", "c".repeat(64)), "protected_content_root":format!("sha256:{}", "d".repeat(64))
         }});
         let metadata = certificate.to_string().into_bytes();
-        let signals = json!({"schema_version":crate::ayni_release::SIGNALS_SCHEMA_VERSION, "execution_mode":"managed", "environment_lock_fingerprint":expected.lock_fingerprint,
-            "ayni_version":crate::ayni_release::CLI_VERSION, "prebuilt_runtime":{"metadata_path":"/etc/ayni/runtime.json", "metadata_digest":format!("sha256:{:x}", Sha256::digest(&metadata)), "certificate":certificate}});
+        let signals = json!({"schema_version":"0.5.0", "execution_mode":"managed", "environment_lock_fingerprint":expected.lock_fingerprint,
+            "ayni_version":"0.15.0", "prebuilt_runtime":{"metadata_path":"/etc/ayni/runtime.json", "metadata_digest":format!("sha256:{:x}", Sha256::digest(&metadata)), "certificate":certificate}});
         (expected, metadata, signals)
     }
 
@@ -215,5 +230,36 @@ mod tests {
             signed_identity(&vec![b' '; MAX_METADATA_BYTES + 1], &expected),
             Err(RuntimeVerificationError::Malformed)
         );
+    }
+
+    #[test]
+    fn retained_task_evidence_preserves_its_frozen_version_and_fingerprint()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (mut expected, metadata, mut signals) = fixture();
+        expected.ayni_version = "0.14.5".into();
+        let mut certificate: Value = serde_json::from_slice(&metadata)?;
+        certificate["certificate"]["ayni_version"] = "0.14.5".into();
+        let metadata = serde_json::to_vec(&certificate)?;
+        signals["ayni_version"] = "0.14.5".into();
+        signals["prebuilt_runtime"]["certificate"] = certificate;
+        signals["prebuilt_runtime"]["metadata_digest"] =
+            format!("sha256:{:x}", Sha256::digest(&metadata)).into();
+        let verified = verified_result(&metadata, &serde_json::to_vec(&signals)?, &expected)?;
+        assert_eq!(verified.ayni_version, "0.14.5");
+        assert_eq!(verified.lock_fingerprint, expected.lock_fingerprint);
+        assert!(crate::compatibility::contract("0.14.5").is_err());
+        expected.lock_fingerprint = format!("sha256:{}", "f".repeat(64));
+        assert_eq!(
+            signed_identity(&metadata, &expected),
+            Err(RuntimeVerificationError::LockMismatch)
+        );
+        for version in ["0.14.4", "0.15.1", "unknown"] {
+            expected.ayni_version = version.into();
+            assert_eq!(
+                signed_identity(&metadata, &expected),
+                Err(RuntimeVerificationError::UnsupportedVersion)
+            );
+        }
+        Ok(())
     }
 }

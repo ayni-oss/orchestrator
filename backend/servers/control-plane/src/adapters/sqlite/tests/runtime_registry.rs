@@ -200,6 +200,7 @@ fn stale_source_observation_cannot_overwrite_a_new_runtime_destination()
         &"c".repeat(64),
         "ghcr.io/obsolete/ayni-oss/sandbox",
         DIGEST,
+        "0.15.0",
     )
     .map_err(|_| CleanStoreError::CorruptState)?;
     assert!(matches!(
