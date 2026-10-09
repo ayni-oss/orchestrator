@@ -1,4 +1,5 @@
 use super::*;
+use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 
 fn registry(id: &str, namespace: &str) -> v1::Connection {
     v1::Connection {
@@ -389,7 +390,12 @@ fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(),
     );
     let frozen_cursor = serde_json::to_value(store.runtime_cursor(&profile.id)?)
         .map_err(|_| CleanStoreError::CorruptState)?;
-    assert_eq!(frozen_cursor["pending"], pending);
+    let expected: crate::profiles::ayni::preparation_state::PendingVerification =
+        serde_json::from_value(pending).map_err(|_| CleanStoreError::CorruptState)?;
+    assert_eq!(
+        frozen_cursor["pending"],
+        serde_json::to_value(&expected).map_err(|_| CleanStoreError::CorruptState)?
+    );
     assert_eq!(frozen_cursor["next_at"], 0);
     assert_eq!(
         store.development_attempt(&attempt.id)?.snapshot,
@@ -436,7 +442,7 @@ fn old_destination_is_retired_once_without_rewriting_frozen_work() -> Result<(),
     assert_eq!(
         serde_json::to_value(store.runtime_cursor(&profile.id)?)
             .map_err(|_| CleanStoreError::CorruptState)?["pending"],
-        pending
+        serde_json::to_value(&expected).map_err(|_| CleanStoreError::CorruptState)?
     );
     Ok(())
 }

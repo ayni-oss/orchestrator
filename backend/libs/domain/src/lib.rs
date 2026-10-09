@@ -1,6 +1,7 @@
 //! Shared change constraints, change bounds, and model usage contracts.
 
 pub mod digest;
+pub use ayni_orchestrator_oci as oci;
 mod usage;
 
 pub use usage::{ModelInteractionOutcome, ModelUsageReport, ModelUsageStage, ProviderTokenUsage};

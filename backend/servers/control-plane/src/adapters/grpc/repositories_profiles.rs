@@ -6,6 +6,25 @@ use super::{
 
 #[tonic::async_trait]
 impl v1::repository_service_server::RepositoryService for GrpcApi {
+    async fn list_repository_summaries(
+        &self,
+        request: Request<v1::ListRepositorySummariesRequest>,
+    ) -> Result<Response<v1::ListRepositorySummariesResponse>, Status> {
+        let context = self.context(&request, "ListRepositorySummaries")?;
+        api_validation::page(request.get_ref().page.as_ref())
+            .map_err(|error| context.validation(&error))?;
+        let message = request.into_inner();
+        let page = with_store(&self.state, move |store| {
+            store.repository_summaries(message.page.as_ref())
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        Ok(context.response(v1::ListRepositorySummariesResponse {
+            summaries: page.items.clone(),
+            page: Some(page_response(&page)),
+        }))
+    }
+
     async fn list_github_installations(
         &self,
         request: Request<v1::ListGithubInstallationsRequest>,

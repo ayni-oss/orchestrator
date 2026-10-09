@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 // RepositoryService manages provider-neutral repository connections and snapshots.
 service RepositoryService {
+  rpc ListRepositorySummaries(ListRepositorySummariesRequest) returns (ListRepositorySummariesResponse);
   rpc AnalyzeRepository(AnalyzeRepositoryRequest) returns (AnalyzeRepositoryResponse);
   rpc ListGithubInstallations(ListGithubInstallationsRequest) returns (ListGithubInstallationsResponse);
   rpc ListGithubInstallationRepositories(ListGithubInstallationRepositoriesRequest) returns (ListGithubInstallationRepositoriesResponse);
@@ -202,4 +203,24 @@ message AnalyzeRepositoryRequest {
 }
 message AnalyzeRepositoryResponse {
   RepositoryConnection repository_connection = 1;
+}
+
+// Readiness is computed from every operational profile, never a sampled page.
+// Unknown or incomplete data must not be represented as setup_required.
+message RuntimeReadinessSummary {
+  bool complete = 1;
+  bool ready = 2;
+  uint32 operational_profiles = 3;
+  uint32 ready_profiles = 4;
+}
+message RepositorySummary {
+  RepositoryConnection repository_connection = 1;
+  RuntimeReadinessSummary runtime = 2;
+}
+message ListRepositorySummariesRequest {
+  PageRequest page = 1;
+}
+message ListRepositorySummariesResponse {
+  repeated RepositorySummary summaries = 1;
+  PageResponse page = 2;
 }

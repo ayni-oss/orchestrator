@@ -39,3 +39,16 @@ Repository connections expose durable onboarding status, reason and inspected co
 `AnalyzeRepository` retries analysis without granting runtime replacement.
 The deployment-wide Ayni settings, release discovery, installation and service-test
 API has been removed; clients must upgrade with this cutover.
+
+`RepositoryService.ListRepositorySummaries` and `ProjectService.ListProjectSummaries`
+provide complete product overview projections. Runtime readiness requires at least
+one operational profile for every project repository, with every such profile ready.
+Unsupported profiles do not affect readiness. Counts include every operational
+profile, rather than the first page of profiles. Project summaries include the latest
+created task across retained history; equal creation times are ordered by task ID.
+An absent latest task with `tasks_complete=true` means there are no tasks.
+Readiness completeness and task completeness are explicit fields. Storage errors,
+corrupt resources and result-bound failures fail the RPC rather than returning
+partial success. Standard pagination freezes the entire summary projection;
+`snapshot_cursor` is the corresponding service cursor, not a cross-service watch
+cursor. Refresh by starting a new first-page query.

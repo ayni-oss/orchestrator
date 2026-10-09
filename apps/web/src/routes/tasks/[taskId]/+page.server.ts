@@ -6,7 +6,8 @@ import { actionKey, requestContext, safeError, text } from "$lib/server/page.js"
 
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 
-export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
+export const load: PageServerLoad = async ({ locals, params, depends,setHeaders }) => {
+  depends("app:tasks");
   setHeaders({ "cache-control": "no-store" });
   const actionKeys = { cancel: actionKey(), retry: actionKey(), retryPublication: actionKey() };
   if (!RESOURCE_ID.test(params.taskId)) return { task: undefined, requestId: locals.requestId, actionKeys, error: { status: 400, reason: "invalid_identifier", message: "The task identifier is invalid.", requestId: locals.requestId, retryable: false } };

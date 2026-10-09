@@ -2,12 +2,13 @@ use super::{
     CleanStore, CleanStoreError, Message, OptionalExtension, PROFILE_SERVICE, append_event, params,
     timestamp, unix_seconds, v1,
 };
+use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 
 impl CleanStore {
     pub(crate) fn runtime_cursor(
         &self,
         profile_id: &str,
-    ) -> Result<crate::coordinators::reconciliation::RuntimeCursor, CleanStoreError> {
+    ) -> Result<crate::profiles::ayni::preparation_state::RuntimeCursor, CleanStoreError> {
         let value: Option<String> = self
             .connection
             .query_row(
@@ -26,7 +27,7 @@ impl CleanStore {
     pub(crate) fn save_runtime_cursor(
         &mut self,
         profile_id: &str,
-        cursor: &crate::coordinators::reconciliation::RuntimeCursor,
+        cursor: &crate::profiles::ayni::preparation_state::RuntimeCursor,
     ) -> Result<(), CleanStoreError> {
         let value = serde_json::to_string(cursor).map_err(|_| CleanStoreError::CorruptState)?;
         if value.len() > 3 * 1_048_576 {

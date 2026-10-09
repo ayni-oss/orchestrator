@@ -1,3 +1,4 @@
+import { mapSummaryReadiness } from "./summaries.js";
 import { mapCertificate } from "./certificates.js";
 import {
   credentials,
@@ -11,6 +12,7 @@ import {
   CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
   ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
   ProjectServiceClient, ProjectState,
+  type ListProjectSummariesResponse, type ListRepositorySummariesResponse,
   type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
   type InspectAyniRepositoryResponse, type GetRuntimeProfileRevisionResponse,
@@ -69,6 +71,7 @@ import {
   BffMappingError,
   mapDevelopmentAttempt,
   mapDevelopmentTask,
+  mapTaskState,
   mapProviderModel,
   mapRepositoryConnection,
   mapRuntimeArtifact,
@@ -228,6 +231,18 @@ export class OrchestratorBff {
     return safeConnection(required((await this.#unary<{connection?:Connection | undefined}>(context,(m,o,c)=>this.#connections.completeGithubManifest({code,idempotencyKey},m,o,c))).connection));
   }
 
+  async listProjectSummaries(selection: PageInput, context: RequestContext) {
+    const response = await this.#unary<ListProjectSummariesResponse>(context, (m,o,c) => this.#projects.listProjectSummaries({page:page(selection)},m,o,c));
+    return {summaries:response.summaries.map(summary => ({
+      project:mapProject(required(summary.project)), repositoryNames:summary.repositoryNames,
+      runtime:mapSummaryReadiness(summary.runtime), tasksComplete:summary.tasksComplete,
+      latestTask:summary.latestTask ? {id:summary.latestTask.id,state:mapTaskState(summary.latestTask.state),request:summary.latestTask.request,createdAt:required(summary.latestTask.createdAt).toISOString()} : undefined,
+    })),page:pageDto(response.page)};
+  }
+  async listRepositorySummaries(selection: PageInput, context: RequestContext) {
+    const response = await this.#unary<ListRepositorySummariesResponse>(context, (m,o,c) => this.#repositories.listRepositorySummaries({page:page(selection)},m,o,c));
+    return {summaries:response.summaries.map(summary => ({repository:mapRepositoryConnection(required(summary.repositoryConnection)),runtime:mapSummaryReadiness(summary.runtime)})),page:pageDto(response.page)};
+  }
   async listProjects(selection: PageInput, context: RequestContext, activeOnly = false) {
     const response = await this.#unary<ListProjectsResponse>(context, (m,o,c) => this.#projects.listProjects({page:page(selection), ...(activeOnly ? {state:ProjectState.PROJECT_STATE_ACTIVE} : {})},m,o,c));
     return {projects:response.projects.map(mapProject), page:pageDto(response.page)};

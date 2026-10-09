@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { enhance } from "$app/forms";
-  import { invalidateAll } from "$app/navigation";
+  import { refreshScope, subscribeRefresh } from "$lib/refresh.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { ConnectionView } from "$lib/connection.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -22,7 +22,7 @@
   let submitting = $state(false);
   let showError = $state(false);
   let manifestError = $state("");
-  onMount(() => { const timer = setInterval(() => { void invalidateAll(); }, 30_000); return () => clearInterval(timer); });
+  onMount(() => subscribeRefresh("app:connections", {intervalMs:30_000}));
   function closeCreate(open: boolean) { createOpen = open; if (!open) { privateKey = ""; showError = false; } }
   function closeEdit(open: boolean) { editOpen = open; if (!open) { replacementKey = ""; showError = false; } }
   function openCreate() { createOpen = true; mode = "create"; showError = false; manifestError = ""; void prepareManifest(); }
@@ -30,10 +30,10 @@
   function submit(operation: string): SubmitFunction {
     return () => { submitting = true; showError = false; return async ({result, update}) => {
       privateKey = ""; replacementKey = "";
-      try { await update(); showError = result.type === "failure" || result.type === "error";
+      try { await update({invalidateAll:false}); showError = result.type === "failure" || result.type === "error";
         if (result.type === "success" && operation === "create") closeCreate(false);
         if (result.type === "success" && operation === "delete") closeEdit(false);
-        await invalidateAll();
+        await refreshScope("app:connections", true);
       } finally { submitting = false; }
     }; };
   }

@@ -20,6 +20,8 @@ import {
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
 import { PageRequest, PageResponse } from "./common";
+import { DevelopmentTaskState, developmentTaskStateFromJSON, developmentTaskStateToJSON } from "./development_tasks";
+import { RuntimeReadinessSummary } from "./repositories";
 
 /** Lifecycle is separate from the readiness of the project's execution profile. */
 export enum ProjectState {
@@ -125,6 +127,34 @@ export interface ArchiveProjectRequest {
 
 export interface ArchiveProjectResponse {
   project?: Project | undefined;
+}
+
+/**
+ * A bounded, complete read projection retained with its pagination snapshot.
+ * Unavailable storage fails the RPC rather than returning empty successful data.
+ */
+export interface ProjectSummary {
+  project?: Project | undefined;
+  repositoryNames: string[];
+  runtime?: RuntimeReadinessSummary | undefined;
+  latestTask?: ProjectTaskSummary | undefined;
+  tasksComplete: boolean;
+}
+
+export interface ProjectTaskSummary {
+  id: string;
+  state: DevelopmentTaskState;
+  request: string;
+  createdAt?: Date | undefined;
+}
+
+export interface ListProjectSummariesRequest {
+  page?: PageRequest | undefined;
+}
+
+export interface ListProjectSummariesResponse {
+  summaries: ProjectSummary[];
+  page?: PageResponse | undefined;
 }
 
 function createBaseProject(): Project {
@@ -1248,9 +1278,450 @@ export const ArchiveProjectResponse: MessageFns<ArchiveProjectResponse> = {
   },
 };
 
+function createBaseProjectSummary(): ProjectSummary {
+  return { project: undefined, repositoryNames: [], runtime: undefined, latestTask: undefined, tasksComplete: false };
+}
+
+export const ProjectSummary: MessageFns<ProjectSummary> = {
+  encode(message: ProjectSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.project !== undefined) {
+      Project.encode(message.project, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.repositoryNames) {
+      writer.uint32(18).string(v!);
+    }
+    if (message.runtime !== undefined) {
+      RuntimeReadinessSummary.encode(message.runtime, writer.uint32(26).fork()).join();
+    }
+    if (message.latestTask !== undefined) {
+      ProjectTaskSummary.encode(message.latestTask, writer.uint32(34).fork()).join();
+    }
+    if (message.tasksComplete !== false) {
+      writer.uint32(40).bool(message.tasksComplete);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectSummary();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.project = Project.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.repositoryNames.push(reader.string());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.runtime = RuntimeReadinessSummary.decode(reader, reader.uint32());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.latestTask = ProjectTaskSummary.decode(reader, reader.uint32());
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.tasksComplete = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectSummary {
+    return {
+      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
+      repositoryNames: globalThis.Array.isArray(object?.repositoryNames)
+        ? object.repositoryNames.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.repository_names)
+        ? object.repository_names.map((e: any) => globalThis.String(e))
+        : [],
+      runtime: isSet(object.runtime) ? RuntimeReadinessSummary.fromJSON(object.runtime) : undefined,
+      latestTask: isSet(object.latestTask)
+        ? ProjectTaskSummary.fromJSON(object.latestTask)
+        : isSet(object.latest_task)
+        ? ProjectTaskSummary.fromJSON(object.latest_task)
+        : undefined,
+      tasksComplete: isSet(object.tasksComplete)
+        ? globalThis.Boolean(object.tasksComplete)
+        : isSet(object.tasks_complete)
+        ? globalThis.Boolean(object.tasks_complete)
+        : false,
+    };
+  },
+
+  toJSON(message: ProjectSummary): unknown {
+    const obj: any = {};
+    if (message.project !== undefined) {
+      obj.project = Project.toJSON(message.project);
+    }
+    if (message.repositoryNames?.length) {
+      obj.repositoryNames = message.repositoryNames;
+    }
+    if (message.runtime !== undefined) {
+      obj.runtime = RuntimeReadinessSummary.toJSON(message.runtime);
+    }
+    if (message.latestTask !== undefined) {
+      obj.latestTask = ProjectTaskSummary.toJSON(message.latestTask);
+    }
+    if (message.tasksComplete !== false) {
+      obj.tasksComplete = message.tasksComplete;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectSummary>): ProjectSummary {
+    return ProjectSummary.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectSummary>): ProjectSummary {
+    const message = createBaseProjectSummary();
+    message.project = (object.project !== undefined && object.project !== null)
+      ? Project.fromPartial(object.project)
+      : undefined;
+    message.repositoryNames = object.repositoryNames?.map((e) => e) || [];
+    message.runtime = (object.runtime !== undefined && object.runtime !== null)
+      ? RuntimeReadinessSummary.fromPartial(object.runtime)
+      : undefined;
+    message.latestTask = (object.latestTask !== undefined && object.latestTask !== null)
+      ? ProjectTaskSummary.fromPartial(object.latestTask)
+      : undefined;
+    message.tasksComplete = object.tasksComplete ?? false;
+    return message;
+  },
+};
+
+function createBaseProjectTaskSummary(): ProjectTaskSummary {
+  return { id: "", state: 0, request: "", createdAt: undefined };
+}
+
+export const ProjectTaskSummary: MessageFns<ProjectTaskSummary> = {
+  encode(message: ProjectTaskSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.state !== 0) {
+      writer.uint32(16).int32(message.state);
+    }
+    if (message.request !== "") {
+      writer.uint32(26).string(message.request);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectTaskSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectTaskSummary();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.request = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectTaskSummary {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      state: isSet(object.state) ? developmentTaskStateFromJSON(object.state) : 0,
+      request: isSet(object.request) ? globalThis.String(object.request) : "",
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ProjectTaskSummary): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.state !== 0) {
+      obj.state = developmentTaskStateToJSON(message.state);
+    }
+    if (message.request !== "") {
+      obj.request = message.request;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectTaskSummary>): ProjectTaskSummary {
+    return ProjectTaskSummary.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectTaskSummary>): ProjectTaskSummary {
+    const message = createBaseProjectTaskSummary();
+    message.id = object.id ?? "";
+    message.state = object.state ?? 0;
+    message.request = object.request ?? "";
+    message.createdAt = object.createdAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseListProjectSummariesRequest(): ListProjectSummariesRequest {
+  return { page: undefined };
+}
+
+export const ListProjectSummariesRequest: MessageFns<ListProjectSummariesRequest> = {
+  encode(message: ListProjectSummariesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectSummariesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListProjectSummariesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.page = PageRequest.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListProjectSummariesRequest {
+    return { page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined };
+  },
+
+  toJSON(message: ListProjectSummariesRequest): unknown {
+    const obj: any = {};
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListProjectSummariesRequest>): ListProjectSummariesRequest {
+    return ListProjectSummariesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListProjectSummariesRequest>): ListProjectSummariesRequest {
+    const message = createBaseListProjectSummariesRequest();
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListProjectSummariesResponse(): ListProjectSummariesResponse {
+  return { summaries: [], page: undefined };
+}
+
+export const ListProjectSummariesResponse: MessageFns<ListProjectSummariesResponse> = {
+  encode(message: ListProjectSummariesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.summaries) {
+      ProjectSummary.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectSummariesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListProjectSummariesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.summaries.push(ProjectSummary.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.page = PageResponse.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListProjectSummariesResponse {
+    return {
+      summaries: globalThis.Array.isArray(object?.summaries)
+        ? object.summaries.map((e: any) => ProjectSummary.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListProjectSummariesResponse): unknown {
+    const obj: any = {};
+    if (message.summaries?.length) {
+      obj.summaries = message.summaries.map((e) => ProjectSummary.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListProjectSummariesResponse>): ListProjectSummariesResponse {
+    return ListProjectSummariesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListProjectSummariesResponse>): ListProjectSummariesResponse {
+    const message = createBaseListProjectSummariesResponse();
+    message.summaries = object.summaries?.map((e) => ProjectSummary.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
 /** Projects are user-facing workspaces with shared, editable repository membership. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
+  listProjectSummaries: {
+    path: "/ayni.orchestrator.v1.ProjectService/ListProjectSummaries" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListProjectSummariesRequest): Buffer =>
+      Buffer.from(ListProjectSummariesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListProjectSummariesRequest => ListProjectSummariesRequest.decode(value),
+    responseSerialize: (value: ListProjectSummariesResponse): Buffer =>
+      Buffer.from(ListProjectSummariesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListProjectSummariesResponse => ListProjectSummariesResponse.decode(value),
+  },
   createProject: {
     path: "/ayni.orchestrator.v1.ProjectService/CreateProject" as const,
     requestStream: false as const,
@@ -1304,6 +1775,7 @@ export const ProjectServiceService = {
 } as const;
 
 export interface ProjectServiceServer extends UntypedServiceImplementation {
+  listProjectSummaries: handleUnaryCall<ListProjectSummariesRequest, ListProjectSummariesResponse>;
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
   listProjects: handleUnaryCall<ListProjectsRequest, ListProjectsResponse>;
   getProject: handleUnaryCall<GetProjectRequest, GetProjectResponse>;
@@ -1312,6 +1784,21 @@ export interface ProjectServiceServer extends UntypedServiceImplementation {
 }
 
 export interface ProjectServiceClient extends Client {
+  listProjectSummaries(
+    request: ListProjectSummariesRequest,
+    callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,
+  ): ClientUnaryCall;
+  listProjectSummaries(
+    request: ListProjectSummariesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,
+  ): ClientUnaryCall;
+  listProjectSummaries(
+    request: ListProjectSummariesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,
+  ): ClientUnaryCall;
   createProject(
     request: CreateProjectRequest,
     callback: (error: ServiceError | null, response: CreateProjectResponse) => void,

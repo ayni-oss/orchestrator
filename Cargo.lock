@@ -183,6 +183,7 @@ dependencies = [
 name = "ayni-orchestrator-api"
 version = "0.1.0"
 dependencies = [
+ "ayni-orchestrator-oci",
  "prost",
  "prost-build",
  "prost-types",
@@ -214,6 +215,7 @@ dependencies = [
  "ayni-orchestrator-kubernetes",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
+ "ayni-orchestrator-registry",
  "ayni-orchestrator-runtime",
  "base64 0.22.1",
  "ed25519-dalek",
@@ -248,6 +250,7 @@ dependencies = [
 name = "ayni-orchestrator-domain"
 version = "0.1.0"
 dependencies = [
+ "ayni-orchestrator-oci",
  "serde",
  "serde_json",
  "sha2",
@@ -279,6 +282,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ayni-orchestrator-oci"
+version = "0.1.0"
+
+[[package]]
 name = "ayni-orchestrator-profile-ayni"
 version = "0.1.0"
 dependencies = [
@@ -287,6 +294,17 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
+]
+
+[[package]]
+name = "ayni-orchestrator-registry"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -306,6 +324,7 @@ dependencies = [
  "ayni-orchestrator-domain",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
+ "ayni-orchestrator-registry",
  "ayni-orchestrator-runtime",
  "base64 0.22.1",
  "landlock",

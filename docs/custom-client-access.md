@@ -381,3 +381,11 @@ setup. Read responses include `findings` (code/message/remediation),
 `preparation_phase` and `rebuild_available`. Workflow-installation APIs and metadata
 were removed at `managed-images-v3`; clients must regenerate. There is no publish-only
 or retained-build API. Task publication retry remains a separate coding-work feature.
+
+The product overview queries combine several resource types. `ListRepositorySummaries`
+requires both `repositories.read` and `profiles.read`; `ListProjectSummaries` also
+requires `tasks.read`. These are deployment-wide capabilities, matching the existing
+list APIs. A client missing any required capability receives permission denied.
+Both APIs use the standard bounded pagination contract. Their summaries are frozen
+with the page snapshot, including readiness and the latest task; subsequent pages
+do not mix later resource changes into the original view.

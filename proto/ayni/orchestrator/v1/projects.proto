@@ -3,10 +3,13 @@ syntax = "proto3";
 package ayni.orchestrator.v1;
 
 import "ayni/orchestrator/v1/common.proto";
+import "ayni/orchestrator/v1/development_tasks.proto";
+import "ayni/orchestrator/v1/repositories.proto";
 import "google/protobuf/timestamp.proto";
 
 // Projects are user-facing workspaces with shared, editable repository membership.
 service ProjectService {
+  rpc ListProjectSummaries(ListProjectSummariesRequest) returns (ListProjectSummariesResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
@@ -76,4 +79,27 @@ message ArchiveProjectRequest {
 }
 message ArchiveProjectResponse {
   Project project = 1;
+}
+
+// A bounded, complete read projection retained with its pagination snapshot.
+// Unavailable storage fails the RPC rather than returning empty successful data.
+message ProjectSummary {
+  Project project = 1;
+  repeated string repository_names = 2;
+  RuntimeReadinessSummary runtime = 3;
+  optional ProjectTaskSummary latest_task = 4;
+  bool tasks_complete = 5;
+}
+message ProjectTaskSummary {
+  string id = 1;
+  DevelopmentTaskState state = 2;
+  string request = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+message ListProjectSummariesRequest {
+  PageRequest page = 1;
+}
+message ListProjectSummariesResponse {
+  repeated ProjectSummary summaries = 1;
+  PageResponse page = 2;
 }

@@ -4,8 +4,10 @@ use super::{
     ProfileObservation, RuntimeCursor, RuntimeReconciler, VerificationAction, discovery_error,
     operation_name, verification_action,
 };
+use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 use ayni_orchestrator_application::execution::ExecutionState;
 use ayni_orchestrator_application::image_build::{BuildObservation, observe_build};
+use ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase;
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn observe_pending(
@@ -45,7 +47,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 )
                 .await;
         }
-        if !pending.discovery.complete {
+        if pending.phase.discovering() {
             return self.observe_discovery(observation, cursor, &pending).await;
         }
         if let Some(build_name) = &pending.build_name
@@ -140,7 +142,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if let Some(pending) = &cursor.pending {
             self.cleanup_operation(pending).await?;
         }
-        if let Some(name) = cursor.status.get("builder-job") {
+        if let Some(name) = cursor.builder.job.as_ref() {
             self.kubernetes.cleanup(name).await?;
         }
         if let Some(trust) = &cursor.trust {
@@ -214,13 +216,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             &format!("discover:{}", pending.name),
             u64::from(pending.publish_attempts),
         );
-        if !pending.discovery.started {
+        if !pending.phase.discovery_started() {
             cursor
                 .pending
                 .as_mut()
                 .ok_or("runtime_cursor_invalid")?
-                .discovery
-                .started = true;
+                .phase
+                .start_discovery();
             cursor.status.insert("phase".into(), "analyzing".into());
             self.save(id, cursor).await?;
         }
@@ -234,7 +236,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             pending
                 .candidate_image_id
                 .as_deref()
-                .filter(|_| pending.build.observed),
+                .filter(|_| pending.phase.publication_observed()),
             pending.force_rebuild,
         )?;
         match discovery {
@@ -245,7 +247,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 return Ok(());
             }
             ImageDiscovery::Missing => {
-                if pending.build.observed {
+                if pending.phase.publication_observed() {
                     return self
                         .retry_publication_readback(id, cursor, pending, &discovery_name)
                         .await;
@@ -254,7 +256,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     return Err("runtime_builder_missing");
                 }
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
-                next.discovery.complete = true;
+
+                next.phase = ImagePreparationPhase::Building;
                 next.build_name = Some(operation_name(&format!("build:{}", pending.name), 0));
                 cursor.status.insert("phase".into(), "building".into());
             }
@@ -269,14 +272,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 ))
                 .map_err(|_| "runtime_digest_unavailable")?;
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
-                next.discovery.complete = true;
-                if pending.force_rebuild && !pending.build.observed {
+
+                if pending.force_rebuild && !pending.phase.publication_observed() {
                     if runtime.build.is_none() {
                         return Err("runtime_builder_missing");
                     }
+                    next.phase = ImagePreparationPhase::Building;
                     next.build_name = Some(operation_name(&format!("build:{}", pending.name), 0));
                     cursor.status.insert("phase".into(), "building".into());
                 } else {
+                    next.phase = ImagePreparationPhase::Verifying;
                     next.resolved_digest = Some(digest);
                     cursor.status.insert("phase".into(), "verifying".into());
                 }
@@ -292,7 +297,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     return Err("runtime_builder_missing");
                 }
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
-                next.discovery.complete = true;
+
+                next.phase = ImagePreparationPhase::Building;
                 next.build_name = Some(operation_name(&format!("build:{}", pending.name), 0));
                 cursor.status.insert("phase".into(), "building".into());
             }
@@ -314,12 +320,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Err("runtime_publication_failed");
         }
         let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
-        next.build.observed = false;
+
         next.publish_name = None;
-        next.discovery.complete = true;
+
         if pending.candidate_missing {
-            next.build.completed = false;
-            next.build.started = false;
+            next.phase = ImagePreparationPhase::Building;
             next.candidate_image_id = None;
             next.candidate_missing = false;
             next.build_name = Some(operation_name(
@@ -328,6 +333,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             ));
             cursor.status.insert("phase".into(), "building".into());
         } else {
+            next.phase = ImagePreparationPhase::Publishing;
             cursor.status.insert("phase".into(), "publishing".into());
         }
         self.save(id, cursor).await?;
@@ -354,7 +360,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             &self.kubernetes,
             build_name,
             &runtime.execution_runtime(),
-            pending.build.started,
+            pending.phase.build_started(),
         )
         .await?;
         if matches!(build_state, BuildObservation::EngineLost) {
@@ -366,15 +372,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             self.save(id, cursor).await?;
             return Ok(());
         }
-        if !pending.build.completed {
+        if !matches!(pending.phase, ImagePreparationPhase::Publishing) {
             match build_state {
                 BuildObservation::Missing => {
                     cursor
                         .pending
                         .as_mut()
                         .ok_or("runtime_cursor_invalid")?
-                        .build
-                        .started = true;
+                        .phase = ImagePreparationPhase::BuildingStarted;
                     cursor.status.insert("phase".into(), "building".into());
                     self.save(id, cursor).await?;
                     self.kubernetes
@@ -390,7 +395,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 BuildObservation::Running => {}
                 BuildObservation::Completed(image_id) => {
                     let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
-                    next.build.completed = true;
+                    next.phase = ImagePreparationPhase::Publishing;
                     next.candidate_image_id = Some(image_id);
                     cursor.status.insert("phase".into(), "publishing".into());
                     self.save(id, cursor).await?;
@@ -441,9 +446,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             ExecutionState::Missing if pending.publish_name.is_some() => {
                 // A persisted publisher may have pushed before its Job disappeared.
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
-                next.build.observed = true;
-                next.discovery.complete = false;
-                next.discovery.started = false;
+                next.phase = ImagePreparationPhase::PublicationReadback;
                 next.started_at = time;
                 self.save(id, cursor).await?;
                 self.kubernetes.cleanup(&publish_name).await?;
@@ -475,9 +478,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         == "runtime_candidate_missing";
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
                 next.candidate_missing = candidate_missing;
-                next.build.observed = true;
-                next.discovery.complete = false;
-                next.discovery.started = false;
+                next.phase = ImagePreparationPhase::PublicationReadback;
                 next.started_at = time;
                 // Always read back the registry after an uncertain publication.
                 self.save(id, cursor).await?;
@@ -504,9 +505,7 @@ fn restart_engine_attempt(pending: &mut PendingVerification) -> Result<(), &'sta
     pending.publish_name = None;
     pending.candidate_image_id = None;
     pending.candidate_missing = false;
-    pending.build.started = false;
-    pending.build.completed = false;
-    pending.build.observed = false;
+    pending.phase = ImagePreparationPhase::Building;
     Ok(())
 }
 

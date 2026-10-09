@@ -10,6 +10,9 @@ pub use error::{ExecutionError, ExecutionErrorKind};
 mod error;
 
 /// Application execution boundary. Profile inputs are opaque serialized data.
+///
+/// Every capability must be implemented explicitly: unsupported operations and
+/// liveness must never be silently assumed by an incomplete adapter.
 pub trait ExecutionBackend: Send + Sync + 'static {
     fn start_image_build<P: Serialize + Sync>(
         &self,
@@ -18,43 +21,26 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         request: &ExecutionRequest<P>,
         token: &str,
         kind: &crate::image_build::ImageBuildKind,
-    ) -> impl Future<Output = ExecutionResult<()>> + Send {
-        async move {
-            let _ = (name, runtime, request, token, kind);
-            Err(ExecutionError::from("image_build_unavailable"))
-        }
-    }
+    ) -> impl Future<Output = ExecutionResult<()>> + Send;
 
     fn engine_alive(
         &self,
         _session: &str,
         _runtime: &WorkloadRuntime,
-    ) -> impl Future<Output = ExecutionResult<bool>> + Send {
-        async { Ok(true) }
-    }
+    ) -> impl Future<Output = ExecutionResult<bool>> + Send;
     fn start_discovery(
         &self,
         _name: &str,
         _runtime: &WorkloadRuntime,
-    ) -> impl Future<Output = ExecutionResult<()>> + Send {
-        async { Err(ExecutionError::from("runtime_discovery_unavailable")) }
-    }
-    fn discover(
-        &self,
-        _name: &str,
-    ) -> impl Future<Output = ExecutionResult<ImageDiscovery>> + Send {
-        async { Err(ExecutionError::from("runtime_discovery_unavailable")) }
-    }
+    ) -> impl Future<Output = ExecutionResult<()>> + Send;
+    fn discover(&self, _name: &str)
+    -> impl Future<Output = ExecutionResult<ImageDiscovery>> + Send;
     fn operation_failure(
         &self,
         _name: &str,
         _container: &str,
-    ) -> impl Future<Output = ExecutionResult<String>> + Send {
-        async { Ok("runtime_publication_failed".into()) }
-    }
-    fn build_result(&self, _name: &str) -> impl Future<Output = ExecutionResult<String>> + Send {
-        async { Err(ExecutionError::from("runtime_build_result_missing")) }
-    }
+    ) -> impl Future<Output = ExecutionResult<String>> + Send;
+    fn build_result(&self, _name: &str) -> impl Future<Output = ExecutionResult<String>> + Send;
     fn start_publish<P: Serialize + Sync>(
         &self,
         _name: &str,
@@ -62,9 +48,7 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         _request: &ExecutionRequest<P>,
         _image_id: &str,
         _overwrite_authorized: bool,
-    ) -> impl Future<Output = ExecutionResult<()>> + Send {
-        async { Err(ExecutionError::from("runtime_publication_unavailable")) }
-    }
+    ) -> impl Future<Output = ExecutionResult<()>> + Send;
     fn start<P: Serialize + Sync>(
         &self,
         name: &str,

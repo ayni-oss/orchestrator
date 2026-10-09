@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 9;
+pub(crate) const SCHEMA_VERSION: i64 = 10;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -174,6 +174,7 @@ mod runtime_certificate;
 mod runtime_profiles;
 mod runtime_registry;
 mod store;
+mod summaries;
 pub(crate) mod task_admission;
 mod task_lifecycle;
 mod validation;
@@ -365,6 +366,7 @@ mod tests {
     mod runtime;
     mod runtime_certificate;
     mod runtime_registry;
+    mod summaries;
 }
 
 mod project_validation;
@@ -387,3 +389,7 @@ mod certificates;
 mod connections;
 
 mod builder_cutover;
+
+mod preparation_migration;
+
+mod summary_index;

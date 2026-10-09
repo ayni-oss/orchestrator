@@ -9,6 +9,7 @@ pub mod configuration;
 mod discovery;
 pub mod execution;
 pub mod job;
+mod observation;
 pub mod registry_probe;
 mod workload;
 

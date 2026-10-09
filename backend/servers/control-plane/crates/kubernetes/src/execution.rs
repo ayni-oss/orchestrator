@@ -195,47 +195,22 @@ impl RuntimeKubernetes {
         if job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0) != 1 {
             return Ok(Observation::Running);
         }
-        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
-        let list = pods
-            .list(
-                &ListParams::default()
-                    .labels(&format!("ayni.io/runtime-operation={name}"))
-                    .limit(2),
-            )
-            .await
-            .map_err(|_| "kubernetes_unavailable")?;
-        if list.items.len() != 1 {
-            return Ok(Observation::Failed("runtime_pod_identity_invalid"));
-        }
-        let pod = &list.items[0];
-        let owner_matches = pod
-            .metadata
-            .owner_references
-            .as_ref()
-            .is_some_and(|owners| {
-                owners.iter().any(|owner| {
-                    Some(&owner.uid) == job.metadata.uid.as_ref() && owner.controller == Some(true)
-                })
-            });
-        if !owner_matches {
-            return Ok(Observation::Failed("runtime_pod_identity_invalid"));
-        }
-        let status = pod
-            .status
-            .as_ref()
-            .and_then(|s| s.container_statuses.as_ref())
-            .and_then(|s| s.iter().find(|s| s.name == "verify"))
-            .ok_or("runtime_result_missing")?;
-        let finished = status
+        let pod = match self.owned_operation_pod(name, &job).await {
+            Ok(pod) => pod,
+            Err("runtime_pod_identity_invalid") => {
+                return Ok(Observation::Failed("runtime_pod_identity_invalid"));
+            }
+            Err(reason) => return Err(reason),
+        };
+        let status =
+            crate::observation::container_status(&pod, "verify").ok_or("runtime_result_missing")?;
+        status
             .state
             .as_ref()
             .and_then(|s| s.terminated.as_ref())
             .filter(|s| s.exit_code == 0)
             .ok_or("runtime_verification_failed")?;
-        let message = finished
-            .message
-            .as_deref()
-            .filter(|s| s.len() <= 4096)
+        let message = crate::observation::termination_message(status, true)
             .ok_or("runtime_result_invalid")?;
         let report = message.to_owned();
         let digest = status

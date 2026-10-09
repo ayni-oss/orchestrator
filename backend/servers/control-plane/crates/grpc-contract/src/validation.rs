@@ -4,6 +4,7 @@
 //! belongs to the control plane (for example, whether an artifact is verified).
 
 use crate::v1;
+use ayni_orchestrator_oci::{ImageRepository, ImageTag, Sha256Digest};
 
 /// A stable validation failure suitable for mapping to `ErrorDetail`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,10 +134,7 @@ pub fn lock_fingerprint(value: &str) -> Result<(), ValidationError> {
 ///
 /// Returns `INVALID_OCI_DIGEST` for a noncanonical digest.
 pub fn oci_digest(value: &str, field: &'static str) -> Result<(), ValidationError> {
-    if value
-        .strip_prefix("sha256:")
-        .is_none_or(|digest| !lower_hex(digest, 64))
-    {
+    if Sha256Digest::parse(value).is_err() {
         return Err(ValidationError::new(
             v1::ErrorReason::InvalidOciDigest,
             field,
@@ -422,9 +420,7 @@ fn oci_reference(value: &str, field: &'static str) -> Result<(), ValidationError
     let valid = if let Some((repository, digest)) = value.split_once('@') {
         !digest.contains('@')
             && valid_oci_repository(repository)
-            && digest
-                .strip_prefix("sha256:")
-                .is_some_and(|value| lower_hex(value, 64))
+            && Sha256Digest::parse(digest).is_ok()
     } else if let Some(slash) = value.rfind('/') {
         let final_component = &value[slash + 1..];
         if let Some((name, tag)) = final_component.split_once(':') {
@@ -446,51 +442,11 @@ fn oci_reference(value: &str, field: &'static str) -> Result<(), ValidationError
 }
 
 fn valid_oci_repository(value: &str) -> bool {
-    if !(1..=512).contains(&value.len())
-        || !value.is_ascii()
-        || value.contains('@')
-        || value.bytes().any(|byte| byte.is_ascii_whitespace())
-    {
-        return false;
-    }
-    let Some((registry, path)) = value.split_once('/') else {
-        return false;
-    };
-    valid_registry(registry)
-        && path.split('/').all(|component| {
-            !component.is_empty()
-                && component.len() <= 255
-                && component.bytes().all(|byte| {
-                    byte.is_ascii_lowercase()
-                        || byte.is_ascii_digit()
-                        || matches!(byte, b'.' | b'_' | b'-')
-                })
-                && component.as_bytes()[0].is_ascii_alphanumeric()
-                && component.as_bytes()[component.len() - 1].is_ascii_alphanumeric()
-        })
-}
-
-fn valid_registry(value: &str) -> bool {
-    let (host, port) = value
-        .rsplit_once(':')
-        .map_or((value, None), |(host, port)| (host, Some(port)));
-    !host.is_empty()
-        && host.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-        })
-        && host.as_bytes()[0].is_ascii_alphanumeric()
-        && host.as_bytes()[host.len() - 1].is_ascii_alphanumeric()
-        && port
-            .is_none_or(|port| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
+    value.contains('/') && ImageRepository::parse(value).is_ok()
 }
 
 fn valid_oci_tag(value: &str) -> bool {
-    (1..=128).contains(&value.len())
-        && value.is_ascii()
-        && (value.as_bytes()[0].is_ascii_alphanumeric() || value.as_bytes()[0] == b'_')
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+    ImageTag::parse(value).is_ok()
 }
 
 fn oci_component(value: &str) -> bool {

@@ -117,7 +117,7 @@ pub(super) fn validate_resource_tables(connection: &Connection) -> Result<(), Cl
     validate_indexed_rows::<v1::DevelopmentTask, _>(
         connection,
         "SELECT payload,id,state,active_attempt_id,deadline_at_seconds,deadline_at_nanos,
-                resource_version,event_cursor,project_id FROM development_tasks",
+                resource_version,event_cursor,project_id,created_at_seconds,created_at_nanos FROM development_tasks",
         |row, value| {
             let deadline = value
                 .snapshot
@@ -126,6 +126,9 @@ pub(super) fn validate_resource_tables(connection: &Connection) -> Result<(), Cl
             Ok(!value.id.is_empty()
                 && !value.project_id.is_empty()
                 && value.project_id == row.get::<_, String>(8)?
+                && value.created_at.is_some_and(|created| created.seconds >= 0 && (0..1_000_000_000).contains(&created.nanos))
+                && value.created_at.map(|created| created.seconds) == Some(row.get::<_, i64>(9)?)
+                && value.created_at.map(|created| created.nanos) == Some(row.get::<_, i32>(10)?)
                 && value.snapshot.is_some()
                 && value.attempt_count > 0
                 && value.state != v1::DevelopmentTaskState::Unspecified as i32

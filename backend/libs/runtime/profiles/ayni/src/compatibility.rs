@@ -1,5 +1,5 @@
 //! Explicit admission catalog. Repository locks select contracts; deployments do not.
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 
 /// A CLI/artifact contract tested by this integration.
 #[derive(Clone, Copy)]
@@ -42,6 +42,37 @@ fn lookup<'a>(
         .ok_or("runtime_version_unsupported")
 }
 
+/// Bounded routing fields shared by source admission and worker validation.
+/// Unknown fields belong to Ayni and are intentionally left uninterpreted.
+#[derive(Deserialize, Serialize)]
+pub struct DecodedLockEnvelope {
+    pub ayni_version: String,
+    pub schema_version: String,
+    pub recipe_version: String,
+    pub fingerprint: String,
+    #[serde(default)]
+    pub mise_version: Option<String>,
+    #[serde(default)]
+    pub platforms: Vec<LockPlatform>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct LockPlatform {
+    pub os: String,
+    pub architecture: String,
+    pub libc: String,
+}
+
+/// Decode routing data once, without interpreting Ayni policy or signatures.
+/// # Errors
+/// Reject oversized or malformed lock envelopes.
+pub fn decode_lock_envelope(bytes: &[u8]) -> Result<DecodedLockEnvelope, &'static str> {
+    if bytes.len() > crate::managed_runtime::MAX_METADATA_BYTES {
+        return Err("runtime_lock_invalid");
+    }
+    serde_json::from_slice(bytes).map_err(|_| "runtime_lock_invalid")
+}
+
 /// Minimal routing identity; authoritative policy and lock interpretation stays in Ayni.
 pub struct LockEnvelope {
     pub contract_version: String,
@@ -61,33 +92,27 @@ fn validate_envelope(
     bytes: &[u8],
     platform: &str,
 ) -> Result<LockEnvelope, &'static str> {
-    if bytes.len() > crate::managed_runtime::MAX_METADATA_BYTES {
-        return Err("runtime_lock_invalid");
-    }
-    let lock: Value = serde_json::from_slice(bytes).map_err(|_| "runtime_lock_invalid")?;
-    let version = lock["ayni_version"]
-        .as_str()
-        .ok_or("runtime_lock_invalid")?;
+    let lock = decode_lock_envelope(bytes)?;
+    let version = lock.ayni_version.as_str();
     let supported = lookup(catalog, version)?;
-    if lock["schema_version"] != supported.lock_schema
-        || lock["recipe_version"] != supported.recipe_version
+    if (lock.schema_version.as_str(), lock.recipe_version.as_str())
+        != (supported.lock_schema, supported.recipe_version)
     {
         return Err("runtime_lock_contract_unsupported");
     }
-    if lock["mise_version"] != supported.resolver_version {
+    if lock.mise_version.as_deref() != Some(supported.resolver_version) {
         return Err("runtime_resolver_unsupported");
     }
-    let fingerprint = lock["fingerprint"]
-        .as_str()
-        .filter(|value| digest(value))
-        .ok_or("runtime_lock_invalid")?;
+    let fingerprint = lock.fingerprint.as_str();
+    if !digest(fingerprint) {
+        return Err("runtime_lock_invalid");
+    }
     let (os, architecture) = platform.split_once('/').ok_or("runtime_platform_invalid")?;
     if !supported.platforms.contains(&platform)
-        || !lock["platforms"].as_array().is_some_and(|items| {
-            items.iter().any(|item| {
-                item["os"] == os && item["architecture"] == architecture && item["libc"] == "glibc"
-            })
-        })
+        || !lock
+            .platforms
+            .iter()
+            .any(|item| item.os == os && item.architecture == architecture && item.libc == "glibc")
     {
         return Err("runtime_platform_mismatch");
     }
@@ -112,12 +137,7 @@ pub fn validate_builder(image: &str) -> Result<(), &'static str> {
 }
 
 fn digest(value: &str) -> bool {
-    value.strip_prefix("sha256:").is_some_and(|value| {
-        value.len() == 64
-            && value
-                .bytes()
-                .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
-    })
+    ayni_orchestrator_runtime::runtime_contract::Sha256Digest::parse(value).is_ok()
 }
 
 #[cfg(test)]

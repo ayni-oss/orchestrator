@@ -15,7 +15,8 @@ use ayni_orchestrator_kubernetes::execution::{RuntimeKubernetes, operation_name}
 use ayni_orchestrator_profile_ayni::{
     managed_runtime::RuntimeExpectation, runtime_execution::ExecutionRequest,
 };
-use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -24,180 +25,11 @@ use std::{
 };
 use tokio::{sync::Mutex, task::JoinSet};
 
-#[derive(Clone, Default, Deserialize, Serialize)]
-pub struct RuntimeCursor {
-    sequence: u64,
-    next_at: u64,
-    last_success: Option<u64>,
-    failures: u32,
-    pending: Option<PendingVerification>,
-    bindings: BTreeMap<String, String>,
-    #[serde(default)]
-    preparation: Option<PreparationIdentity>,
-    status: BTreeMap<String, String>,
-    #[serde(default)]
-    force_rebuild: bool,
-    #[serde(default)]
-    retry_trust: bool,
-    #[serde(default)]
-    trust: Option<TrustUpdate>,
-}
-
-impl RuntimeCursor {
-    pub(crate) fn retry(&mut self) {
-        self.next_at = 0;
-        self.failures = 0;
-        self.retry_trust = true;
-        self.status.remove("builder-started");
-        self.status.remove("reason-code");
-        if let Some(pending) = &mut self.pending {
-            pending.failed = false;
-        }
-    }
-
-    // Recover cursors written when asynchronous deletion incorrectly consumed retries.
-    fn resume_cleanup(&mut self) -> bool {
-        if self.status.get("reason-code").map(String::as_str) != Some("runtime_cleanup_pending") {
-            return false;
-        }
-        self.status.remove("reason-code");
-        self.failures = 0;
-        self.next_at = 0;
-        if let Some(pending) = &mut self.pending {
-            pending.failed = false;
-        }
-        true
-    }
-
-    fn request_rebuild(&mut self, requested: bool) {
-        self.force_rebuild |= requested;
-        self.retry_trust = true;
-        self.status.remove("builder-started");
-    }
-
-    fn update_status(
-        &mut self,
-        runtime: &ProfileRuntime,
-        fingerprint: String,
-    ) -> Result<(), &'static str> {
-        self.status.insert(
-            "source-kind".into(),
-            if runtime.build.is_some() {
-                "build"
-            } else {
-                "registry"
-            }
-            .into(),
-        );
-        self.status
-            .insert("discovery-reference".into(), runtime.image.clone());
-        self.status.insert(
-            "default-sha".into(),
-            self.pending
-                .as_ref()
-                .ok_or("runtime_self_invalid")?
-                .request
-                .revision
-                .clone(),
-        );
-        self.status.insert("lock-fingerprint".into(), fingerprint);
-        if let Some(name) = self.pending.as_ref().and_then(|p| p.build_name.clone()) {
-            self.status.insert("build-job".into(), name);
-        } else {
-            self.status.remove("build-job");
-        }
-        Ok(())
-    }
-
-    pub(crate) fn metadata(&self) -> Vec<v1::VerifiedMetadata> {
-        let mut status = self.status.clone();
-        status.remove("builder-contract");
-        status.remove("builder-job");
-        status.remove("builder-started");
-        status.insert("next-retry".into(), self.next_at.to_string());
-        if let Some(last) = self.last_success {
-            status.insert("last-success".into(), last.to_string());
-        }
-        status
-            .into_iter()
-            .map(|(key, value)| v1::VerifiedMetadata { key, value })
-            .collect()
-    }
-}
-
-/// Complete public input identity retained before any repository preparation Job.
-#[derive(Clone, Deserialize, Serialize)]
-struct PreparationIdentity {
-    generation: String,
-    source_revision: String,
-    policy_digest: String,
-    lock_digest: String,
-    contract_version: String,
-    platform: String,
-    registry: Vec<u8>,
-    certificate: Option<SigningIdentity>,
-    runtime: ProfileRuntime,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-struct PendingVerification {
-    name: String,
-    profile_revision: String,
-    request: ExecutionRequest,
-    image: String,
-    #[serde(default)]
-    frozen_runtime: Option<ProfileRuntime>,
-    started_at: u64,
-    source_digest: String,
-    lock_digest: String,
-    build_name: Option<String>,
-    #[serde(flatten)]
-    build: BuildProgress,
-    #[serde(default)]
-    candidate_image_id: Option<String>,
-    #[serde(default)]
-    publish_name: Option<String>,
-    #[serde(default)]
-    publish_attempts: u32,
-    #[serde(default = "publication_budget")]
-    publish_remaining: u8,
-    #[serde(default)]
-    candidate_missing: bool,
-    #[serde(default)]
-    force_rebuild: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    certificate: Option<SigningIdentity>,
-    #[serde(flatten)]
-    discovery: DiscoveryProgress,
-    #[serde(default)]
-    resolved_digest: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    verification: Option<ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    failed: bool,
-}
-
-#[derive(Clone, Default, Deserialize, Serialize)]
-struct BuildProgress {
-    #[serde(default, rename = "build_started")]
-    started: bool,
-    #[serde(default, rename = "build_completed")]
-    completed: bool,
-    #[serde(default, rename = "build_observed")]
-    observed: bool,
-}
-
-#[derive(Clone, Default, Deserialize, Serialize)]
-struct DiscoveryProgress {
-    #[serde(default, rename = "discovery_started")]
-    started: bool,
-    #[serde(default, rename = "discovery_complete")]
-    complete: bool,
-}
-
-const fn publication_budget() -> u8 {
-    3
-}
+use crate::profiles::ayni::preparation_state::{
+    PendingVerification, PreparationIdentity, RuntimeCursor, RuntimeCursorExt, SigningIdentity,
+    publication_budget,
+};
+use ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase;
 
 struct ProfileObservation<'a> {
     id: &'a str,
@@ -522,7 +354,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 Ok(profile.active_revision_id.as_deref() == Some(pending_revision.as_str()))
             })
             .await?;
-        let phase = if !selected && (pending.build_name.is_none() || pending.build.observed) {
+        let phase = if !selected
+            && (pending.build_name.is_none() || pending.phase.publication_observed())
+        {
             PendingPhase::DiscardStale
         } else {
             pending_phase(
@@ -534,7 +368,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     revision: &observation.head,
                     configuration_digest: &observation.source_digest,
                 },
-                pending.build_name.is_some() && !pending.build.observed,
+                pending.build_name.is_some() && !pending.phase.publication_observed(),
             )
         };
         Ok(phase)
@@ -604,13 +438,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     source_digest: source_digest.clone(),
                     lock_digest: format!("sha256:{:x}", Sha256::digest(&bytes)),
                     build_name: None,
-                    build: BuildProgress::default(),
+                    phase: ImagePreparationPhase::default(),
                     candidate_image_id: None,
                     publish_name: None,
                     publish_attempts: 0,
                     publish_remaining: publication_budget(),
                     candidate_missing: false,
-                    discovery: DiscoveryProgress::default(),
                     resolved_digest: None,
                     verification: None,
                     failed: false,
@@ -652,12 +485,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 }
 
+mod coding;
 mod preparation;
 #[cfg(test)]
 mod preparation_tests;
 mod trust;
-use trust::{SigningIdentity, TrustUpdate};
-mod coding;
 mod worker_mapping;
 
 fn now() -> Result<u64, &'static str> {

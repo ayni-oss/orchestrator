@@ -3,6 +3,8 @@ use super::{
     ExecutionBackend, ProfileRuntime, RuntimeConfiguration, RuntimeCursor, RuntimeReconciler,
     SigningIdentity, now, publication_budget, v1,
 };
+use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
+use ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase;
 
 // Selecting a revision changes its stored lock; bind the observed lock before
 // hashing configuration so that bookkeeping cannot invalidate pending work.
@@ -159,8 +161,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                             .is_some_and(|reason| reason == "runtime_publication_failed")
                     {
                         pending.publish_remaining = publication_budget();
-                        pending.discovery.complete = false;
-                        pending.discovery.started = false;
+                        pending.phase = ImagePreparationPhase::PublicationReadback;
                         pending.started_at = now().map_err(|_| "runtime_clock_invalid")?;
                     } else if request.force_rebuild || cursor.status.contains_key("reason-code") {
                         pending.source_digest.clear();

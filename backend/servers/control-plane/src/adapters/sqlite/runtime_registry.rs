@@ -3,6 +3,7 @@ use super::{
     CleanStore, CleanStoreError, Message, PROFILE_SERVICE, action_row, append_event,
     map_constraint, params, request_digest, resource_id, timestamp, unix_seconds, v1,
 };
+use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 
 impl CleanStore {
     pub(crate) fn normalize_runtime_destination(

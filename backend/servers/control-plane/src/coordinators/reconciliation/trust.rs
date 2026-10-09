@@ -1,20 +1,11 @@
 //! Durable public signing trust proposals. Private material never enters this state.
 use super::{
-    Deserialize, Digest, ExecutionBackend, ExecutionRequest, ProfileRuntime, RuntimeCursor,
-    RuntimeExpectation, RuntimeReconciler, Serialize, Sha256, operation_name, v1,
+    Digest, ExecutionBackend, ExecutionRequest, ProfileRuntime, RuntimeCursor, RuntimeExpectation,
+    RuntimeReconciler, Sha256, operation_name, v1,
 };
+use crate::profiles::ayni::preparation_state::{SigningIdentity, TrustResult, TrustUpdate};
 use ayni_orchestrator_application::execution::ExecutionState;
 
-#[derive(Clone, Deserialize, Serialize)]
-pub(super) struct SigningIdentity {
-    pub id: String,
-    pub revision: String,
-    pub key_id: String,
-    pub public_key: String,
-    pub secret_name: String,
-    pub enabled: bool,
-    pub status: String,
-}
 pub(super) fn ready_certificate(
     certificate: Option<&SigningIdentity>,
 ) -> Result<&SigningIdentity, &'static str> {
@@ -24,76 +15,6 @@ pub(super) fn ready_certificate(
     }
     Ok(certificate)
 }
-impl From<v1::Certificate> for SigningIdentity {
-    fn from(certificate: v1::Certificate) -> Self {
-        Self {
-            id: certificate.id,
-            revision: certificate.revision,
-            key_id: certificate.key_id,
-            public_key: certificate.public_key,
-            secret_name: certificate.secret_name,
-            enabled: certificate.enabled,
-            status: certificate.status,
-        }
-    }
-}
-#[derive(Clone, Deserialize, Serialize)]
-pub(super) struct TrustUpdate {
-    generation: String,
-    head: String,
-    pub(super) job: String,
-    #[serde(default)]
-    attempt: u64,
-    result: Option<TrustResult>,
-    pull_number: Option<u64>,
-    state: String,
-    #[serde(default)]
-    merge_revision: Option<String>,
-}
-impl TrustUpdate {
-    fn reset(&mut self, head: &str) {
-        self.attempt = self.attempt.saturating_add(1);
-        self.head = head.into();
-        self.job = operation_name(&format!("trust:{}:{head}", self.generation), self.attempt);
-        self.result = None;
-        self.pull_number = None;
-        self.state = "pending".into();
-    }
-
-    fn branch(&self) -> String {
-        format!("setup/certificate-{}", &self.generation[..24])
-    }
-
-    fn after_merged_branch(&self, number: u64) -> String {
-        format!("{}-after-{number}", self.branch())
-    }
-
-    fn observe_pull(
-        &mut self,
-        merged: bool,
-        open: bool,
-        pinned: bool,
-        head: &str,
-    ) -> Result<(), &'static str> {
-        if merged {
-            if !pinned {
-                return Err("certificate_trust_merge_mismatch");
-            }
-            self.reset(head);
-        } else {
-            self.state = if open { "open" } else { "closed" }.into();
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-struct TrustResult {
-    revision: String,
-    policy: String,
-    lock: String,
-}
-
 #[derive(Clone, Copy)]
 struct TrustContext<'a> {
     id: &'a str,

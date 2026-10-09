@@ -9,21 +9,16 @@ import { projectSchema } from "$lib/project-schema.js";
 export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   setHeaders({ "cache-control": "no-store" });
   const context = requestContext(locals);
-  const [projects, repositories, profiles, tasks] = await Promise.allSettled([
-    getBff().listProjects({ pageSize: 100, pageToken: url.searchParams.get("pageToken") ?? "" }, context),
+  const [projects, repositories] = await Promise.allSettled([
+    getBff().listProjectSummaries({ pageSize: 100, pageToken: url.searchParams.get("pageToken") ?? "" }, context),
     projectRepositoryChoices(context),
-    getBff().listRuntimeProfiles(undefined, {pageSize:100}, context),
-    getBff().listDevelopmentTasks({pageSize:100}, context),
   ]);
-  const failure = [projects, repositories, profiles, tasks].find(result => result.status === "rejected");
+  const failure = [projects, repositories].find(result => result.status === "rejected");
   return {
-    projects: projects.status === "fulfilled" ? projects.value.projects : [],
+    summaries: projects.status === "fulfilled" ? projects.value.summaries : [],
+    available: projects.status === "fulfilled",
     nextPageToken: projects.status === "fulfilled" ? projects.value.page.nextPageToken : "",
     repositories: repositories.status === "fulfilled" ? repositories.value : [],
-    profiles: profiles.status === "fulfilled" ? profiles.value.runtimeProfiles : [],
-    profilesComplete: profiles.status === "fulfilled" && !profiles.value.page.nextPageToken,
-    tasks: tasks.status === "fulfilled" ? tasks.value.developmentTasks : [],
-    tasksComplete: tasks.status === "fulfilled" && !tasks.value.page.nextPageToken,
     form: await superValidate({idempotencyKey:actionKey()}, zod(projectSchema)),
     requestId: locals.requestId,
     ...(failure?.status === "rejected" ? { error: safeError(failure.reason, locals.requestId) } : {}),

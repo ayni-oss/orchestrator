@@ -2,7 +2,8 @@ import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey,requestContext,safeError,text } from "$lib/server/page.js";
-export const load: PageServerLoad=async({locals,params,setHeaders})=>{
+export const load: PageServerLoad=async({locals,params,depends,setHeaders})=>{
+  depends("app:runtimes");
   setHeaders({"cache-control":"no-store"});
   const keys={reconcile:actionKey()};
   try {

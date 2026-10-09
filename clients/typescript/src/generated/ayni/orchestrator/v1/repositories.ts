@@ -267,6 +267,31 @@ export interface AnalyzeRepositoryResponse {
   repositoryConnection?: RepositoryConnection | undefined;
 }
 
+/**
+ * Readiness is computed from every operational profile, never a sampled page.
+ * Unknown or incomplete data must not be represented as setup_required.
+ */
+export interface RuntimeReadinessSummary {
+  complete: boolean;
+  ready: boolean;
+  operationalProfiles: number;
+  readyProfiles: number;
+}
+
+export interface RepositorySummary {
+  repositoryConnection?: RepositoryConnection | undefined;
+  runtime?: RuntimeReadinessSummary | undefined;
+}
+
+export interface ListRepositorySummariesRequest {
+  page?: PageRequest | undefined;
+}
+
+export interface ListRepositorySummariesResponse {
+  summaries: RepositorySummary[];
+  page?: PageResponse | undefined;
+}
+
 function createBaseGithubInstallationOption(): GithubInstallationOption {
   return { installationId: "", owner: "", appName: "" };
 }
@@ -3268,9 +3293,397 @@ export const AnalyzeRepositoryResponse: MessageFns<AnalyzeRepositoryResponse> = 
   },
 };
 
+function createBaseRuntimeReadinessSummary(): RuntimeReadinessSummary {
+  return { complete: false, ready: false, operationalProfiles: 0, readyProfiles: 0 };
+}
+
+export const RuntimeReadinessSummary: MessageFns<RuntimeReadinessSummary> = {
+  encode(message: RuntimeReadinessSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.complete !== false) {
+      writer.uint32(8).bool(message.complete);
+    }
+    if (message.ready !== false) {
+      writer.uint32(16).bool(message.ready);
+    }
+    if (message.operationalProfiles !== 0) {
+      writer.uint32(24).uint32(message.operationalProfiles);
+    }
+    if (message.readyProfiles !== 0) {
+      writer.uint32(32).uint32(message.readyProfiles);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeReadinessSummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeReadinessSummary();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.complete = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.ready = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.operationalProfiles = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.readyProfiles = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeReadinessSummary {
+    return {
+      complete: isSet(object.complete) ? globalThis.Boolean(object.complete) : false,
+      ready: isSet(object.ready) ? globalThis.Boolean(object.ready) : false,
+      operationalProfiles: isSet(object.operationalProfiles)
+        ? globalThis.Number(object.operationalProfiles)
+        : isSet(object.operational_profiles)
+        ? globalThis.Number(object.operational_profiles)
+        : 0,
+      readyProfiles: isSet(object.readyProfiles)
+        ? globalThis.Number(object.readyProfiles)
+        : isSet(object.ready_profiles)
+        ? globalThis.Number(object.ready_profiles)
+        : 0,
+    };
+  },
+
+  toJSON(message: RuntimeReadinessSummary): unknown {
+    const obj: any = {};
+    if (message.complete !== false) {
+      obj.complete = message.complete;
+    }
+    if (message.ready !== false) {
+      obj.ready = message.ready;
+    }
+    if (message.operationalProfiles !== 0) {
+      obj.operationalProfiles = Math.round(message.operationalProfiles);
+    }
+    if (message.readyProfiles !== 0) {
+      obj.readyProfiles = Math.round(message.readyProfiles);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeReadinessSummary>): RuntimeReadinessSummary {
+    return RuntimeReadinessSummary.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeReadinessSummary>): RuntimeReadinessSummary {
+    const message = createBaseRuntimeReadinessSummary();
+    message.complete = object.complete ?? false;
+    message.ready = object.ready ?? false;
+    message.operationalProfiles = object.operationalProfiles ?? 0;
+    message.readyProfiles = object.readyProfiles ?? 0;
+    return message;
+  },
+};
+
+function createBaseRepositorySummary(): RepositorySummary {
+  return { repositoryConnection: undefined, runtime: undefined };
+}
+
+export const RepositorySummary: MessageFns<RepositorySummary> = {
+  encode(message: RepositorySummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnection !== undefined) {
+      RepositoryConnection.encode(message.repositoryConnection, writer.uint32(10).fork()).join();
+    }
+    if (message.runtime !== undefined) {
+      RuntimeReadinessSummary.encode(message.runtime, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RepositorySummary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRepositorySummary();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnection = RepositoryConnection.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.runtime = RuntimeReadinessSummary.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RepositorySummary {
+    return {
+      repositoryConnection: isSet(object.repositoryConnection)
+        ? RepositoryConnection.fromJSON(object.repositoryConnection)
+        : isSet(object.repository_connection)
+        ? RepositoryConnection.fromJSON(object.repository_connection)
+        : undefined,
+      runtime: isSet(object.runtime) ? RuntimeReadinessSummary.fromJSON(object.runtime) : undefined,
+    };
+  },
+
+  toJSON(message: RepositorySummary): unknown {
+    const obj: any = {};
+    if (message.repositoryConnection !== undefined) {
+      obj.repositoryConnection = RepositoryConnection.toJSON(message.repositoryConnection);
+    }
+    if (message.runtime !== undefined) {
+      obj.runtime = RuntimeReadinessSummary.toJSON(message.runtime);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RepositorySummary>): RepositorySummary {
+    return RepositorySummary.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RepositorySummary>): RepositorySummary {
+    const message = createBaseRepositorySummary();
+    message.repositoryConnection = (object.repositoryConnection !== undefined && object.repositoryConnection !== null)
+      ? RepositoryConnection.fromPartial(object.repositoryConnection)
+      : undefined;
+    message.runtime = (object.runtime !== undefined && object.runtime !== null)
+      ? RuntimeReadinessSummary.fromPartial(object.runtime)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListRepositorySummariesRequest(): ListRepositorySummariesRequest {
+  return { page: undefined };
+}
+
+export const ListRepositorySummariesRequest: MessageFns<ListRepositorySummariesRequest> = {
+  encode(message: ListRepositorySummariesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRepositorySummariesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRepositorySummariesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.page = PageRequest.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRepositorySummariesRequest {
+    return { page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined };
+  },
+
+  toJSON(message: ListRepositorySummariesRequest): unknown {
+    const obj: any = {};
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRepositorySummariesRequest>): ListRepositorySummariesRequest {
+    return ListRepositorySummariesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRepositorySummariesRequest>): ListRepositorySummariesRequest {
+    const message = createBaseListRepositorySummariesRequest();
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListRepositorySummariesResponse(): ListRepositorySummariesResponse {
+  return { summaries: [], page: undefined };
+}
+
+export const ListRepositorySummariesResponse: MessageFns<ListRepositorySummariesResponse> = {
+  encode(message: ListRepositorySummariesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.summaries) {
+      RepositorySummary.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListRepositorySummariesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListRepositorySummariesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.summaries.push(RepositorySummary.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.page = PageResponse.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListRepositorySummariesResponse {
+    return {
+      summaries: globalThis.Array.isArray(object?.summaries)
+        ? object.summaries.map((e: any) => RepositorySummary.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListRepositorySummariesResponse): unknown {
+    const obj: any = {};
+    if (message.summaries?.length) {
+      obj.summaries = message.summaries.map((e) => RepositorySummary.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListRepositorySummariesResponse>): ListRepositorySummariesResponse {
+    return ListRepositorySummariesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListRepositorySummariesResponse>): ListRepositorySummariesResponse {
+    const message = createBaseListRepositorySummariesResponse();
+    message.summaries = object.summaries?.map((e) => RepositorySummary.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
 /** RepositoryService manages provider-neutral repository connections and snapshots. */
 export type RepositoryServiceService = typeof RepositoryServiceService;
 export const RepositoryServiceService = {
+  listRepositorySummaries: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ListRepositorySummaries" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListRepositorySummariesRequest): Buffer =>
+      Buffer.from(ListRepositorySummariesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListRepositorySummariesRequest => ListRepositorySummariesRequest.decode(value),
+    responseSerialize: (value: ListRepositorySummariesResponse): Buffer =>
+      Buffer.from(ListRepositorySummariesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListRepositorySummariesResponse =>
+      ListRepositorySummariesResponse.decode(value),
+  },
   analyzeRepository: {
     path: "/ayni.orchestrator.v1.RepositoryService/AnalyzeRepository" as const,
     requestStream: false as const,
@@ -3405,6 +3818,7 @@ export const RepositoryServiceService = {
 } as const;
 
 export interface RepositoryServiceServer extends UntypedServiceImplementation {
+  listRepositorySummaries: handleUnaryCall<ListRepositorySummariesRequest, ListRepositorySummariesResponse>;
   analyzeRepository: handleUnaryCall<AnalyzeRepositoryRequest, AnalyzeRepositoryResponse>;
   listGithubInstallations: handleUnaryCall<ListGithubInstallationsRequest, ListGithubInstallationsResponse>;
   listGithubInstallationRepositories: handleUnaryCall<
@@ -3422,6 +3836,21 @@ export interface RepositoryServiceServer extends UntypedServiceImplementation {
 }
 
 export interface RepositoryServiceClient extends Client {
+  listRepositorySummaries(
+    request: ListRepositorySummariesRequest,
+    callback: (error: ServiceError | null, response: ListRepositorySummariesResponse) => void,
+  ): ClientUnaryCall;
+  listRepositorySummaries(
+    request: ListRepositorySummariesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListRepositorySummariesResponse) => void,
+  ): ClientUnaryCall;
+  listRepositorySummaries(
+    request: ListRepositorySummariesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListRepositorySummariesResponse) => void,
+  ): ClientUnaryCall;
   analyzeRepository(
     request: AnalyzeRepositoryRequest,
     callback: (error: ServiceError | null, response: AnalyzeRepositoryResponse) => void,

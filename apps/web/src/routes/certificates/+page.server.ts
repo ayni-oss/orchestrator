@@ -3,7 +3,8 @@ import type { Actions, PageServerLoad } from "./$types";
 import { BffError } from "@ayni-orchestrator/bff/server";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError } from "$lib/server/page.js";
-export const load: PageServerLoad = async ({locals,setHeaders}) => {
+export const load: PageServerLoad = async ({locals,depends,setHeaders}) => {
+  depends("app:certificates");
   setHeaders({"cache-control":"no-store"});
   try { return {certificates:await getBff().listCertificates(requestContext(locals)),idempotencyKey:actionKey(),available:true}; }
   catch(error) { return {certificates:[],idempotencyKey:actionKey(),available:false,error:safeError(error,locals.requestId)}; }

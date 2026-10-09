@@ -13,7 +13,6 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-  import { statusTone } from "$lib/presentation.js";
 
   let { data, form }: PageProps = $props();
   let connecting = $state(false);
@@ -57,14 +56,14 @@
   {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{:else if form?.success}<Feedback kind="success" title="Repository connected" message={form.success} />{/if}
 
   <section class="space-y-4">
-    {#if data.repositoryConnections.length === 0}
+    {#if data.summaries.length === 0 && data.backend === "connected"}
       <EmptyState title="No repository connections" description="Connect an approved provider repository to inspect its committed Ayni configuration and runtime image." />
     {:else}
       <div class="grid gap-4 lg:grid-cols-2">
-        {#each data.repositoryConnections as item (item.id)}
-          {@const profiles = data.runtimeProfiles[item.id] ?? []}
-          {@const runtime = profiles.find((profile) => profile.state === "ready") ?? profiles[0]}
-          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div>{#if runtime}<StatusBadge status={runtime.state} tone={statusTone(runtime.state)} />{:else}<span class="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">Inspection pending</span>{/if}</div></Card.Header><Card.Content class="text-sm">{#if runtime}<p>Runtime: <span class="text-muted-foreground">{runtime.state === "ready" ? "Verified and ready" : runtime.state.replaceAll("_", " ")}</span></p>{:else}<p class="text-muted-foreground">No runtime profile yet. Orchestrator is inspecting the committed Ayni configuration.</p>{/if}</Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Runtime status <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
+        {#each data.summaries as summary (summary.repository.id)}
+          {@const item = summary.repository}
+          {@const readiness = !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : "Setup required"}
+          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div><StatusBadge status={readiness} tone={summary.runtime.ready ? "success" : "warning"} /></div></Card.Header><Card.Content class="text-sm"><p class="text-muted-foreground">{summary.runtime.complete ? `${summary.runtime.readyProfiles} of ${summary.runtime.operationalProfiles} operational runtimes ready` : "Runtime status is unavailable."}</p></Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Runtime status <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
         {/each}
       </div>
       {#if nextPageHref}<div class="flex justify-end"><Button href={nextPageHref} variant="outline">Next page</Button></div>{/if}

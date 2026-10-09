@@ -58,10 +58,10 @@ impl CleanStore {
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(CleanStoreError::Database)?;
         for row in rows {
-            let cursor: serde_json::Value =
+            let cursor: crate::profiles::ayni::preparation_state::RuntimeCursor =
                 serde_json::from_str(&row.map_err(CleanStoreError::Database)?)
                     .map_err(|_| CleanStoreError::CorruptState)?;
-            if cursor["pending"]["certificate"]["id"].as_str() == Some(id) {
+            if ayni_orchestrator_application::runtime_preparation::RetainedCredentials::credential_references(&cursor).certificates.contains(id) {
                 count += 1;
             }
         }

@@ -2,6 +2,25 @@ use super::{GrpcApi, Request, Response, Status, api_validation, page_response, v
 
 #[tonic::async_trait]
 impl v1::project_service_server::ProjectService for GrpcApi {
+    async fn list_project_summaries(
+        &self,
+        request: Request<v1::ListProjectSummariesRequest>,
+    ) -> Result<Response<v1::ListProjectSummariesResponse>, Status> {
+        let context = self.context(&request, "ListProjectSummaries")?;
+        api_validation::page(request.get_ref().page.as_ref())
+            .map_err(|error| context.validation(&error))?;
+        let message = request.into_inner();
+        let page = with_store(&self.state, move |store| {
+            store.project_summaries(message.page.as_ref())
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        Ok(context.response(v1::ListProjectSummariesResponse {
+            summaries: page.items.clone(),
+            page: Some(page_response(&page)),
+        }))
+    }
+
     async fn create_project(
         &self,
         request: Request<v1::CreateProjectRequest>,

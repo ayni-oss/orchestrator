@@ -155,14 +155,23 @@ test("GHCR editing clears credentials on success, failure, and dismissal and sup
   await expect(page.getByRole("region", {name:"Team images"})).toHaveCount(0);
 });
 
-test("GHCR open edit dialog observes new revisions and shows cleanup warnings on ready rows", async ({page,request})=>{
+test("GHCR editing preserves inputs until close and refreshes new revisions before reopening", async ({page,request})=>{
   await page.clock.install();
   await createRegistry(page);
   await page.getByRole("region", {name:"Team images"}).getByRole("button", {name:"Edit",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await dialog.getByLabel("New push token").fill("unsaved-push");
+  let backgroundRequests=0;
+  page.on("request", request=>{if(request.url().includes("__data.json")) backgroundRequests++;});
   await request.post("http://127.0.0.1:50062/connection-state?status=ready&cleanup=failed");
   await page.clock.fastForward(30_000);
+  await expect(dialog.getByLabel("New push token")).toHaveValue("unsaved-push");
+  expect(backgroundRequests).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.clock.fastForward(30_000);
   await expect(page.getByRole("region", {name:"Team images"}).getByText("Cleanup required", {exact:true})).toBeVisible();
-  const dialog=page.getByRole("dialog");
+  await page.getByRole("region", {name:"Team images"}).getByRole("button", {name:"Edit",exact:true}).click();
   await expect(dialog.getByText("registry_cleanup_permission_required", {exact:false})).toBeVisible();
   await dialog.getByLabel("New push token").fill("current-revision-push");
   await dialog.getByLabel("Separate pull-only token").fill("current-revision-pull");

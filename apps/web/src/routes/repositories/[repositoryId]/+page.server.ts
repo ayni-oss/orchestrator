@@ -5,7 +5,8 @@ import { actionKey, requestContext, safeError, text } from "$lib/server/page.js"
 
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 
-export const load: PageServerLoad = async ({ locals, params, setHeaders }) => {
+export const load: PageServerLoad = async ({ locals, params, depends,setHeaders }) => {
+  depends("app:runtimes");
   setHeaders({ "cache-control": "no-store" });
   if (!RESOURCE_ID.test(params.repositoryId)) {
     return {certificates:[],registryConnections:[],runtimeRevisions:{}, repositoryConnection: undefined, runtimeProfiles: [], runtimeKeys: {}, requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };

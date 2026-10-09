@@ -1,9 +1,10 @@
-import { fail, type Actions, type RequestEvent } from "@sveltejs/kit";
+import { fail, type Actions, type ServerLoadEvent } from "@sveltejs/kit";
 import { BffError } from "@ayni-orchestrator/bff/server";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError } from "$lib/server/page.js";
 export function connectionLoad(kind:string) {
-  return async ({locals,setHeaders}:RequestEvent) => {
+  return async ({locals,setHeaders,depends}:ServerLoadEvent) => {
+    depends("app:connections");
     setHeaders({"cache-control":"no-store"});
     try { return {connections:(await getBff().listConnections(requestContext(locals))).filter(c=>c.kind===kind),idempotencyKey:actionKey(),available:true}; }
     catch(error) {return {connections:[],idempotencyKey:actionKey(),available:false,error:safeError(error,locals.requestId)};}
