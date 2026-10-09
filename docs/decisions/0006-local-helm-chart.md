@@ -7,7 +7,7 @@
 
 ## Historical scope
 
-The Helm composition, explicit Docker Desktop context, and loopback deployment boundary remain accepted. Its pilot storage and Docker-in-Docker worker descriptions are historical; [Decision 0007](0007-clean-v1-runtime-profiles.md) defines the clean-v1 resource and runner model.
+The Helm composition, explicit Docker Desktop context, and loopback deployment boundary remain accepted. Its pilot storage and Docker-in-Docker worker descriptions are historical; [current architecture](../architecture.md) defines the resource and runner model.
 
 ## Decision
 
@@ -90,7 +90,7 @@ assessment containers pull a controller-admitted digest and start it through
 the platform launcher; they do not build an Ayni environment, use
 Docker-in-Docker, or mount a Docker socket. The worker remains non-root and has
 no Kubernetes service-account token. See the [shared runtime runner](../runtime-runner.md)
-and [Ayni 0.14 integration contract](../ayni-0.14-integration.md).
+and [Ayni integration contract](../ayni-integration.md).
 
 ## Consequences
 

@@ -5,7 +5,7 @@
 
 ## Historical scope
 
-The product name and application-API-first boundary remain accepted. References to pilot preparation and its resource model are historical; [Decision 0007](0007-clean-v1-runtime-profiles.md) defines the current pre-public v1 architecture.
+The product name and application-API-first boundary remain accepted. References to pilot preparation and its resource model are historical; [current architecture](../architecture.md) defines implemented behavior.
 
 ## Decision
 

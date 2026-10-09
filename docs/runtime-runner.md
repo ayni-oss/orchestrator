@@ -1,5 +1,9 @@
 # Runtime worker
 
+This is the implemented worker contract. Optional independent assessment and separate task-stage pods remain
+[execution-isolation research](https://github.com/ayni-oss/orchestrator/issues/128).
+Ordinary lock protections remain until the [environment-change flow](environment-changes.md) is implemented.
+
 One worker owns runtime admission, checkout, coding, commits, full quality
 checking, repair, push and draft creation. Kubernetes fixes the image digest,
 resources, output isolation and deadline. Repository-scoped credentials are

@@ -1,5 +1,8 @@
 # Repository-selected official builders
 
+The topology below is implemented behavior. Disposable VM execution, remote execution destinations, and separate task-stage pods
+are alternatives under [research #128](https://github.com/ayni-oss/orchestrator/issues/128), not additional guarantees of this deployment.
+
 Each committed `.ayni.lock` selects an explicitly supported Ayni contract.
 The compatibility catalog currently admits Ayni 0.15.0. The control plane resolves
 `ghcr.io/ayni-oss/ayni-builder:0.15.0` to the requested Linux platform manifest and

@@ -1,8 +1,9 @@
 # Ayni Orchestrator
 
 Ayni Orchestrator is a private control plane for worker-owned development tasks.
-Connectors manage access, projects organize repositories, and tasks freeze
-source, runtime digest, model, constraints, coding turns, repair limit and
+Integrations manage provider access, repositories own shared runtimes, and projects
+organize repository work. Tasks freeze source, runtime digest, model, constraints,
+coding turns, quality repair limit and
 deadline. Ayni remains independently useful as a local CLI.
 
 The trusted operator UI onboards one GitHub App, multiple GHCR connections, and
@@ -27,10 +28,20 @@ Execution, quality and publication are separate outcomes. A draft with failed
 quality is completed delivery with failed quality. Publication retry resumes
 retained final work without another coding session.
 
+Repository changes reconcile shared runtimes for future work across consuming projects;
+admitted tasks retain their frozen identities. Ayni Managed is operational; Custom
+Runtime and coordinated multi-repository tasks remain future work.
+
+The [Polish Ayni development flow milestone](https://github.com/ayni-oss/orchestrator/milestone/8)
+tracks documentation, isolated-execution research, and reviewed environment changes.
+Separate task-stage pods and independent assessment are research, not current execution guarantees.
+
 ## Documentation
 
 - [Ayni product flow and object relationships](docs/ayni-product-flow.md)
 - [Architecture](docs/architecture.md)
+- [Assurance boundaries](docs/assurance.md)
+- [Reviewed environment changes](docs/environment-changes.md)
 - [Protocol contract](proto/README.md)
 - [Runtime worker](docs/runtime-runner.md)
 - [Managed runtime execution](docs/managed-runtime-execution.md)
@@ -38,10 +49,10 @@ retained final work without another coding session.
 - [Operator onboarding](docs/operator-onboarding.md)
 - [Operations and breaking cutover](docs/operations.md)
 - [Local development](docs/local-development.md)
-- [Ayni integration contract](docs/ayni-0.14-integration.md)
+- [Ayni integration contract](docs/ayni-integration.md)
 - [Custom-client access](docs/custom-client-access.md)
 
-Historical decisions remain as provenance. Descriptions of superseded task
+[Historical decisions](docs/decisions/README.md) remain as provenance. Descriptions of superseded task
 execution in those decisions do not define the active implementation.
 
 ## Planning and delivery
