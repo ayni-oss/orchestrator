@@ -122,6 +122,7 @@ export function mapRepositoryConnection(value: RepositoryConnection): Repository
     },
     displayName: safeText(value.displayName),
     useAyni: value.useAyni ?? true,
+    ayniVersion: safeText(value.ayniVersion, 128),
     onboardingStatus: safeText(value.onboardingStatus),
     onboardingReason: safeText(value.onboardingReason),
     onboardingRevision: safeText(value.onboardingRevision),

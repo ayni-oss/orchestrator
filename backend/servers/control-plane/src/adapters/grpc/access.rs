@@ -433,6 +433,7 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         ),
         "ListProjects"
         | "GetProject"
+        | "ListAyniBuilderVersions"
         | "ListRepositoryConnections"
         | "GetRepositoryConnection"
         | "ListRepositorySnapshots"

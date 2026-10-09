@@ -41,6 +41,7 @@
   const remediation: Record<string, string> = {
     policy_missing: "Commit .ayni.toml, then retry analysis.",
     lock_missing: "Generate and commit .ayni.lock with Ayni 0.15.0, then retry analysis.",
+    runtime_version_mismatch: "Regenerate and commit .ayni.lock with the selected Ayni version, then retry analysis.",
     runtime_version_unsupported: "Update the repository policy and lock using supported Ayni 0.15.0 tooling, then retry analysis.",
     runtime_lock_contract_unsupported: "Validate and update the committed policy and lock using Ayni 0.15.0, then retry analysis.",
     repository_lock_invalid: "Repair the committed lock with matching Ayni tooling, then retry analysis.",
@@ -73,6 +74,7 @@
     <section class="space-y-3 rounded-lg border p-4" aria-label="Repository onboarding">
       <h2 class="font-semibold">Onboarding</h2>
       <p>{repository.useAyni === false ? "Ayni is not enabled for this repository." : repository.onboardingStatus === "enrolled" ? "Analysis complete — runtime preparation below" : words(repository.onboardingStatus || "pending")}</p>
+      {#if repository.ayniVersion}<p class="text-sm text-muted-foreground">Selected Ayni version {repository.ayniVersion}</p>{/if}
       {#if repository.onboardingReason}<p class="text-sm text-muted-foreground">{remediation[repository.onboardingReason] ?? words(repository.onboardingReason)}</p>{/if}
       {#if repository.onboardingRevision}<p class="break-all text-xs text-muted-foreground">Source commit {repository.onboardingRevision}</p>{/if}
       <form method="POST" action="?/analyze" use:enhance>

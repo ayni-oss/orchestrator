@@ -81,6 +81,14 @@ export function repositoryConnectionStatusToJSON(object: RepositoryConnectionSta
   }
 }
 
+/** Published official builders admitted by Orchestrator. */
+export interface ListAyniBuilderVersionsRequest {
+}
+
+export interface ListAyniBuilderVersionsResponse {
+  versions: string[];
+}
+
 export interface GithubInstallationOption {
   installationId: string;
   owner: string;
@@ -151,7 +159,11 @@ export interface RepositoryConnection {
   onboardingReason: string;
   onboardingRevision: string;
   /** Absent legacy values enable Ayni; explicit false skips automatic runtime onboarding. */
-  useAyni?: boolean | undefined;
+  useAyni?:
+    | boolean
+    | undefined;
+  /** Empty follows the repository lock; otherwise requires an exact version match. */
+  ayniVersion: string;
 }
 
 /** RepositorySnapshot is an immutable observed repository revision. */
@@ -193,6 +205,7 @@ export interface CreateRepositoryConnectionRequest {
   registryConnectionId: string;
   imageNamespace: string;
   useAyni?: boolean | undefined;
+  ayniVersion: string;
 }
 
 export interface CreateRepositoryConnectionResponse {
@@ -245,6 +258,7 @@ export interface ConnectGithubRepositoryRequest {
   imageNamespace: string;
   /** Absent values preserve automatic onboarding for existing clients. */
   useAyni?: boolean | undefined;
+  ayniVersion: string;
 }
 
 export interface ConnectGithubRepositoryResponse {
@@ -311,6 +325,127 @@ export interface RemoveRepositoryResponse {
 export interface RepositoryRemoved {
   repositoryConnectionId: string;
 }
+
+function createBaseListAyniBuilderVersionsRequest(): ListAyniBuilderVersionsRequest {
+  return {};
+}
+
+export const ListAyniBuilderVersionsRequest: MessageFns<ListAyniBuilderVersionsRequest> = {
+  encode(_: ListAyniBuilderVersionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAyniBuilderVersionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListAyniBuilderVersionsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): ListAyniBuilderVersionsRequest {
+    return {};
+  },
+
+  toJSON(_: ListAyniBuilderVersionsRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListAyniBuilderVersionsRequest>): ListAyniBuilderVersionsRequest {
+    return ListAyniBuilderVersionsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<ListAyniBuilderVersionsRequest>): ListAyniBuilderVersionsRequest {
+    const message = createBaseListAyniBuilderVersionsRequest();
+    return message;
+  },
+};
+
+function createBaseListAyniBuilderVersionsResponse(): ListAyniBuilderVersionsResponse {
+  return { versions: [] };
+}
+
+export const ListAyniBuilderVersionsResponse: MessageFns<ListAyniBuilderVersionsResponse> = {
+  encode(message: ListAyniBuilderVersionsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.versions) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListAyniBuilderVersionsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListAyniBuilderVersionsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.versions.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListAyniBuilderVersionsResponse {
+    return {
+      versions: globalThis.Array.isArray(object?.versions) ? object.versions.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: ListAyniBuilderVersionsResponse): unknown {
+    const obj: any = {};
+    if (message.versions?.length) {
+      obj.versions = message.versions;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListAyniBuilderVersionsResponse>): ListAyniBuilderVersionsResponse {
+    return ListAyniBuilderVersionsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListAyniBuilderVersionsResponse>): ListAyniBuilderVersionsResponse {
+    const message = createBaseListAyniBuilderVersionsResponse();
+    message.versions = object.versions?.map((e) => e) || [];
+    return message;
+  },
+};
 
 function createBaseGithubInstallationOption(): GithubInstallationOption {
   return { installationId: "", owner: "", appName: "" };
@@ -1059,6 +1194,7 @@ function createBaseRepositoryConnection(): RepositoryConnection {
     onboardingReason: "",
     onboardingRevision: "",
     useAyni: undefined,
+    ayniVersion: "",
   };
 }
 
@@ -1108,6 +1244,9 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     }
     if (message.useAyni !== undefined) {
       writer.uint32(120).bool(message.useAyni);
+    }
+    if (message.ayniVersion !== "") {
+      writer.uint32(130).string(message.ayniVersion);
     }
     return writer;
   },
@@ -1245,6 +1384,14 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
             message.useAyni = reader.bool();
             continue;
           }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.ayniVersion = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1318,6 +1465,11 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
         : isSet(object.use_ayni)
         ? globalThis.Boolean(object.use_ayni)
         : undefined,
+      ayniVersion: isSet(object.ayniVersion)
+        ? globalThis.String(object.ayniVersion)
+        : isSet(object.ayni_version)
+        ? globalThis.String(object.ayni_version)
+        : "",
     };
   },
 
@@ -1368,6 +1520,9 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     if (message.useAyni !== undefined) {
       obj.useAyni = message.useAyni;
     }
+    if (message.ayniVersion !== "") {
+      obj.ayniVersion = message.ayniVersion;
+    }
     return obj;
   },
 
@@ -1395,6 +1550,7 @@ export const RepositoryConnection: MessageFns<RepositoryConnection> = {
     message.onboardingReason = object.onboardingReason ?? "";
     message.onboardingRevision = object.onboardingRevision ?? "";
     message.useAyni = object.useAyni ?? undefined;
+    message.ayniVersion = object.ayniVersion ?? "";
     return message;
   },
 };
@@ -1906,6 +2062,7 @@ function createBaseCreateRepositoryConnectionRequest(): CreateRepositoryConnecti
     registryConnectionId: "",
     imageNamespace: "",
     useAyni: undefined,
+    ayniVersion: "",
   };
 }
 
@@ -1931,6 +2088,9 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     }
     if (message.useAyni !== undefined) {
       writer.uint32(56).bool(message.useAyni);
+    }
+    if (message.ayniVersion !== "") {
+      writer.uint32(66).string(message.ayniVersion);
     }
     return writer;
   },
@@ -2004,6 +2164,14 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
             message.useAyni = reader.bool();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.ayniVersion = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2049,6 +2217,11 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
         : isSet(object.use_ayni)
         ? globalThis.Boolean(object.use_ayni)
         : undefined,
+      ayniVersion: isSet(object.ayniVersion)
+        ? globalThis.String(object.ayniVersion)
+        : isSet(object.ayni_version)
+        ? globalThis.String(object.ayni_version)
+        : "",
     };
   },
 
@@ -2075,6 +2248,9 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     if (message.useAyni !== undefined) {
       obj.useAyni = message.useAyni;
     }
+    if (message.ayniVersion !== "") {
+      obj.ayniVersion = message.ayniVersion;
+    }
     return obj;
   },
 
@@ -2092,6 +2268,7 @@ export const CreateRepositoryConnectionRequest: MessageFns<CreateRepositoryConne
     message.registryConnectionId = object.registryConnectionId ?? "";
     message.imageNamespace = object.imageNamespace ?? "";
     message.useAyni = object.useAyni ?? undefined;
+    message.ayniVersion = object.ayniVersion ?? "";
     return message;
   },
 };
@@ -2763,7 +2940,15 @@ export const WatchRepositoriesResponse: MessageFns<WatchRepositoriesResponse> = 
 };
 
 function createBaseConnectGithubRepositoryRequest(): ConnectGithubRepositoryRequest {
-  return { idempotencyKey: "", owner: "", name: "", registryConnectionId: "", imageNamespace: "", useAyni: undefined };
+  return {
+    idempotencyKey: "",
+    owner: "",
+    name: "",
+    registryConnectionId: "",
+    imageNamespace: "",
+    useAyni: undefined,
+    ayniVersion: "",
+  };
 }
 
 export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryRequest> = {
@@ -2785,6 +2970,9 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     }
     if (message.useAyni !== undefined) {
       writer.uint32(48).bool(message.useAyni);
+    }
+    if (message.ayniVersion !== "") {
+      writer.uint32(58).string(message.ayniVersion);
     }
     return writer;
   },
@@ -2850,6 +3038,14 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
             message.useAyni = reader.bool();
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.ayniVersion = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2886,6 +3082,11 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
         : isSet(object.use_ayni)
         ? globalThis.Boolean(object.use_ayni)
         : undefined,
+      ayniVersion: isSet(object.ayniVersion)
+        ? globalThis.String(object.ayniVersion)
+        : isSet(object.ayni_version)
+        ? globalThis.String(object.ayni_version)
+        : "",
     };
   },
 
@@ -2909,6 +3110,9 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     if (message.useAyni !== undefined) {
       obj.useAyni = message.useAyni;
     }
+    if (message.ayniVersion !== "") {
+      obj.ayniVersion = message.ayniVersion;
+    }
     return obj;
   },
 
@@ -2923,6 +3127,7 @@ export const ConnectGithubRepositoryRequest: MessageFns<ConnectGithubRepositoryR
     message.registryConnectionId = object.registryConnectionId ?? "";
     message.imageNamespace = object.imageNamespace ?? "";
     message.useAyni = object.useAyni ?? undefined;
+    message.ayniVersion = object.ayniVersion ?? "";
     return message;
   },
 };
@@ -4044,6 +4249,18 @@ export const RepositoryServiceService = {
       Buffer.from(AnalyzeRepositoryResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): AnalyzeRepositoryResponse => AnalyzeRepositoryResponse.decode(value),
   },
+  listAyniBuilderVersions: {
+    path: "/ayni.orchestrator.v1.RepositoryService/ListAyniBuilderVersions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListAyniBuilderVersionsRequest): Buffer =>
+      Buffer.from(ListAyniBuilderVersionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListAyniBuilderVersionsRequest => ListAyniBuilderVersionsRequest.decode(value),
+    responseSerialize: (value: ListAyniBuilderVersionsResponse): Buffer =>
+      Buffer.from(ListAyniBuilderVersionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListAyniBuilderVersionsResponse =>
+      ListAyniBuilderVersionsResponse.decode(value),
+  },
   listGithubInstallations: {
     path: "/ayni.orchestrator.v1.RepositoryService/ListGithubInstallations" as const,
     requestStream: false as const,
@@ -4180,6 +4397,7 @@ export const RepositoryServiceService = {
 export interface RepositoryServiceServer extends UntypedServiceImplementation {
   listRepositorySummaries: handleUnaryCall<ListRepositorySummariesRequest, ListRepositorySummariesResponse>;
   analyzeRepository: handleUnaryCall<AnalyzeRepositoryRequest, AnalyzeRepositoryResponse>;
+  listAyniBuilderVersions: handleUnaryCall<ListAyniBuilderVersionsRequest, ListAyniBuilderVersionsResponse>;
   listGithubInstallations: handleUnaryCall<ListGithubInstallationsRequest, ListGithubInstallationsResponse>;
   listGithubInstallationRepositories: handleUnaryCall<
     ListGithubInstallationRepositoriesRequest,
@@ -4226,6 +4444,21 @@ export interface RepositoryServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: AnalyzeRepositoryResponse) => void,
+  ): ClientUnaryCall;
+  listAyniBuilderVersions(
+    request: ListAyniBuilderVersionsRequest,
+    callback: (error: ServiceError | null, response: ListAyniBuilderVersionsResponse) => void,
+  ): ClientUnaryCall;
+  listAyniBuilderVersions(
+    request: ListAyniBuilderVersionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListAyniBuilderVersionsResponse) => void,
+  ): ClientUnaryCall;
+  listAyniBuilderVersions(
+    request: ListAyniBuilderVersionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListAyniBuilderVersionsResponse) => void,
   ): ClientUnaryCall;
   listGithubInstallations(
     request: ListGithubInstallationsRequest,

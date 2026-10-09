@@ -41,6 +41,7 @@ export interface GithubRepositoryDto {
 
 export interface RepositoryConnectionDto {
   useAyni?: boolean;
+  ayniVersion?: string;
   onboardingStatus?: string;
   onboardingReason?: string;
   onboardingRevision?: string;

@@ -11,11 +11,14 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   try {
     const context = requestContext(locals);
     const bff = getBff();
-    const [repositories, connections] = await Promise.allSettled([
+    const [repositories, connections, builders] = await Promise.allSettled([
       bff.listRepositorySummaries({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context),
       bff.listConnections(context),
+      bff.listAyniBuilderVersions(context),
     ]);
     const registry = {
+      builderVersions: builders.status === "fulfilled" ? builders.value : [],
+      ...(builders.status === "rejected" ? { builderError: safeError(builders.reason, locals.requestId) } : {}),
       registryConnections: connections.status === "fulfilled" ? connections.value.filter(connection => connection.kind === "ghcr" && connection.status === "ready" && connection.enabled) : [],
       ...(connections.status === "rejected" ? { registryError: safeError(connections.reason, locals.requestId) } : {}),
     };
@@ -31,7 +34,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { registryConnections: [], summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { builderVersions: [], registryConnections: [], summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 
@@ -67,7 +70,11 @@ export const actions: Actions = {
         return fail(400, { action: "connect", error: { status:400, reason:"invalid_selection", message:"Choose a repository the selected GitHub App installation can access.", requestId:locals.requestId, retryable:false } });
       }
       const registryConnectionId=useAyni ? text(form,"registryConnectionId",128) ?? "" : "";
-      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository,registryConnectionId,...(useAyniChoice === null ? {} : {useAyni})}, context);
+      const ayniVersion = useAyni ? text(form, "ayniVersion", 128) ?? "" : "";
+      if (ayniVersion && !(await bff.listAyniBuilderVersions(context)).includes(ayniVersion)) {
+        return fail(400, { action: "connect", error: { message: "Choose an available Ayni builder version.", requestId: locals.requestId } });
+      }
+      const connection = await bff.connectGithubRepository({idempotencyKey,owner,name:repository,registryConnectionId,ayniVersion,...(useAyniChoice === null ? {} : {useAyni})}, context);
       return { action: "connect", success: `Connected ${connection.displayName}.` };
     } catch (error) {
       const mapped = safeError(error, locals.requestId);

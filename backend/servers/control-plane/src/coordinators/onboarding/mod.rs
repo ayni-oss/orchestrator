@@ -5,6 +5,7 @@ use crate::{
 };
 use ayni_orchestrator_api::{v1, validation};
 use std::sync::Arc;
+mod builder_versions;
 mod error;
 
 pub use error::{FailureKind, OnboardingError};
@@ -37,6 +38,15 @@ fn github(repository: &v1::RepositoryConnection) -> Result<&v1::GithubRepository
             "repository_provider_unsupported",
         )),
     }
+}
+
+fn require_selected_version(selected: &str, observed: &str) -> Result<(), OnboardingError> {
+    if !selected.is_empty() && selected != observed {
+        return Err(OnboardingError::failed_precondition(
+            "runtime_version_mismatch",
+        ));
+    }
+    Ok(())
 }
 
 impl AppState {
@@ -77,6 +87,10 @@ impl AppState {
         };
         if !valid_name(&request.owner) || !valid_name(&request.name) {
             return Err(OnboardingError::invalid_argument("repository_name_invalid"));
+        }
+        if request.use_ayni != Some(false) && !request.ayni_version.is_empty() {
+            ayni_orchestrator_profile_ayni::compatibility::contract(&request.ayni_version)
+                .map_err(|_| OnboardingError::invalid_argument("runtime_version_unsupported"))?;
         }
         let intent = request.clone();
         let action = with_store(self, move |store| {
@@ -157,6 +171,11 @@ impl AppState {
                 request.image_namespace.clone()
             },
             use_ayni: request.use_ayni,
+            ayni_version: if request.use_ayni == Some(false) {
+                String::new()
+            } else {
+                request.ayni_version.clone()
+            },
         };
         validation::create_repository_connection(&message)
             .map_err(|_| OnboardingError::invalid_argument("repository_identity_invalid"))?;
@@ -375,6 +394,7 @@ impl AppState {
                 },
             ));
         }
+        require_selected_version(&connection.ayni_version, &inspection.ayni_version)?;
         let revision = inspection.repository_revision.clone();
         let request = v1::CreateRuntimeProfileRequest {
             idempotency_key: format!("connect:{}:{}", connection.id, inspection.lock_fingerprint),

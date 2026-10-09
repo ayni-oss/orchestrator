@@ -104,7 +104,14 @@ fn finding_text(code: &str) -> (&'static str, &'static str) {
 }
 
 pub fn finding(code: &str) -> v1::RuntimeFinding {
-    let (message, remediation) = finding_text(code);
+    let (message, remediation) = if code == "runtime_version_mismatch" {
+        (
+            "The committed lock does not match the selected Ayni version.",
+            "Regenerate and commit .ayni.lock with the selected Ayni version, then retry analysis.",
+        )
+    } else {
+        finding_text(code)
+    };
     v1::RuntimeFinding {
         code: code.into(),
         message: if message == "Runtime preparation could not complete." {
@@ -123,6 +130,7 @@ pub fn setup_required(code: &str) -> bool {
             | "lock_missing"
             | "lock_incompatible"
             | "repository_lock_invalid"
+            | "runtime_version_mismatch"
             | "runtime_version_unsupported"
             | "runtime_resolver_unsupported"
             | "runtime_lock_contract_unsupported"

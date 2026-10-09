@@ -185,6 +185,9 @@ pub fn create_repository_connection(
             "display_name",
         ));
     }
+    if !value.ayni_version.is_empty() {
+        safe_text(&value.ayni_version, 1, 128, "ayni_version")?;
+    }
     provider(value.provider.as_ref())?;
     provider_reference(&value.default_branch, "default_branch")
 }
@@ -660,6 +663,7 @@ mod tests {
     fn repository_and_publication_inputs_are_bounded() {
         let repository = v1::CreateRepositoryConnectionRequest {
             use_ayni: None,
+            ayni_version: String::new(),
             idempotency_key: "repo:1".to_owned(),
             provider: Some(github_provider()),
             display_name: "Ayni Orchestrator".to_owned(),
