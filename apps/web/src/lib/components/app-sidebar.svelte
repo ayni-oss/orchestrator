@@ -6,8 +6,7 @@
 
   const sidebar = Sidebar.useSidebar();
   const repositoriesActive = $derived(page.url.pathname.startsWith("/repositories") || page.url.pathname.startsWith("/profiles"));
-  const sourceControlActive = $derived(page.url.pathname === "/source-control");
-  const githubActive = $derived(page.url.pathname.startsWith("/source-control/github") || page.url.pathname.startsWith("/setup/github"));
+  const sourceControlActive = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
   const registriesActive = $derived(page.url.pathname.startsWith("/container-registries"));
   const certificatesActive = $derived(page.url.pathname.startsWith("/certificates"));
   const projectsActive = $derived(page.url.pathname.startsWith("/projects") || page.url.pathname.startsWith("/tasks"));
@@ -44,13 +43,6 @@
               <Sidebar.MenuSubButton href="/source-control" isActive={sourceControlActive} aria-current={sourceControlActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
                 <GitBranch aria-hidden="true" /><span>Source control</span>
               </Sidebar.MenuSubButton>
-              <Sidebar.MenuSub class="mx-2 px-1">
-                <Sidebar.MenuSubItem>
-                  <Sidebar.MenuSubButton href="/source-control/github" isActive={githubActive} aria-current={githubActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
-                    <img src="/provider-logos/github.svg" alt="" class="size-4 shrink-0 invert dark:invert-0" /><span>GitHub</span>
-                  </Sidebar.MenuSubButton>
-                </Sidebar.MenuSubItem>
-              </Sidebar.MenuSub>
             </Sidebar.MenuSubItem>
           </SidebarNavGroup>
           <SidebarNavGroup title="Runtimes">
