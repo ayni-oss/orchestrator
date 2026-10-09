@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Boxes, FolderGit2, BookOpen, GitBranch, Github, Container, ShieldCheck, Plug, Layers, Wrench } from "@lucide/svelte";
+  import { Boxes, FolderGit2, BookOpen, GitBranch, Container, ShieldCheck, Plug, Layers, Wrench } from "@lucide/svelte";
   import { page } from "$app/state";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import SidebarNavGroup from "$lib/components/sidebar-nav-group.svelte";
@@ -47,7 +47,7 @@
               <Sidebar.MenuSub class="mx-2 px-1">
                 <Sidebar.MenuSubItem>
                   <Sidebar.MenuSubButton href="/source-control/github" isActive={githubActive} aria-current={githubActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
-                    <Github aria-hidden="true" /><span>GitHub</span>
+                    <img src="/provider-logos/github.svg" alt="" class="size-4 shrink-0 invert dark:invert-0" /><span>GitHub</span>
                   </Sidebar.MenuSubButton>
                 </Sidebar.MenuSubItem>
               </Sidebar.MenuSub>
