@@ -1,8 +1,12 @@
 //! Product diagnostics from bounded internal codes, never raw provider output.
 use ayni_orchestrator_api::v1;
 
-pub fn finding(code: &str) -> v1::RuntimeFinding {
-    let (message, remediation) = match code {
+fn finding_text(code: &str) -> (&'static str, &'static str) {
+    match code {
+        "github_app_unconfigured" => (
+            "The controller's GitHub App client is not initialized.",
+            "Check the GitHub connection status, then retry analysis after initialization completes.",
+        ),
         "policy_missing" => (
             "Committed Ayni configuration is missing.",
             "Commit .ayni.toml through an owner-reviewed PR, then analyze again.",
@@ -96,10 +100,18 @@ pub fn finding(code: &str) -> v1::RuntimeFinding {
             "Runtime preparation could not complete.",
             "Review source access and runtime infrastructure, then retry analysis.",
         ),
-    };
+    }
+}
+
+pub fn finding(code: &str) -> v1::RuntimeFinding {
+    let (message, remediation) = finding_text(code);
     v1::RuntimeFinding {
         code: code.into(),
-        message: message.into(),
+        message: if message == "Runtime preparation could not complete." {
+            format!("Runtime preparation stopped: {code}.")
+        } else {
+            message.into()
+        },
         remediation: remediation.into(),
     }
 }

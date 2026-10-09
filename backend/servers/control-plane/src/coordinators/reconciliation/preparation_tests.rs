@@ -21,6 +21,20 @@ struct Jobs {
 #[derive(Clone, Default)]
 struct Backend(Arc<StdMutex<Jobs>>);
 impl ExecutionBackend for Backend {
+    async fn start_trust_lock<P: Serialize + Sync>(
+        &self,
+        _: &str,
+        _: &WorkloadRuntime,
+        _: &GenericRequest<P>,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> ExecutionResult<()> {
+        Err("unexpected_trust_preparation".into())
+    }
+    async fn trust_lock_result(&self, _: &str) -> ExecutionResult<String> {
+        Err("unexpected_trust_preparation".into())
+    }
     async fn engine_alive(&self, name: &str, _: &WorkloadRuntime) -> ExecutionResult<bool> {
         Ok(!self
             .0
