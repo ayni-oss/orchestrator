@@ -20,17 +20,23 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-For a breaking deployment, inventory the exact application database volume,
-worker-output PVCs, Jobs, ConfigMaps and attempt Secrets before stopping old
-workers and resetting application state. SQLite schema version 8 migrates recognized versions 6/7; see operations before upgrade. Preserve source repositories, runtime images, unrelated
-resources and existing PRs. Follow [operations](operations.md); broad namespace
-purges are not the task-pipeline cutover procedure.
+SQLite schema version 9 migrates recognized versions 6–8 before reconciliation.
+The migration preserves connections, certificates, registries, runtime history
+and retained tasks, and records obsolete installation resources for restartable
+cleanup. Follow [operations](operations.md) and upgrade with cleaned values and
+`--reset-values`; do not reset application state or purge the namespace.
 
 Run Rust formatting, Clippy, tests and compilation; protocol generation and
 baseline checks; TypeScript/Svelte tests and builds; chart validation; and browser
 checks. Fixture-backed UI checks do not replace actual worker-topology evidence.
 Exercise managed runtime and publication against the authorized sandbox using
 the explicit local context before claiming deployable behavior is validated.
+
+Local worker images package the trusted launcher and checksum-pinned mise.
+Repository locks select official Ayni builders, resolved to immutable platform
+digests before validation and runtime preparation. Image builds stop on the first
+build, inspection or tagging failure, before deployment can attempt to load an
+invalid reference.
 
 The worker launcher is built as a static musl executable for the Docker Desktop
 node architecture. Its mandatory kernel sandbox must run natively. Use a signed

@@ -60,6 +60,9 @@ root = pathlib.Path(sys.argv[1])
 release = json.loads((root / "scripts/ci/ayni-tool.json").read_text())
 assert release["cli_version"] and len(release["linux_amd64_archive_sha256"]) == 64
 worker = (root / "deploy/images/worker/Dockerfile").read_text()
-assert "AYNI_EXECUTOR_IMAGE" not in worker, "worker must consume repository-selected official builders"
+assert "AYNI_EXECUTOR_IMAGE" not in worker and "ARG AYNI_VERSION" not in worker, "worker must consume repository-selected official builders"
 assert "mise_sha=" in worker and "sha256sum --check" in worker
+for architecture in ("amd64", "arm64"):
+    checksum = release[f"linux_{architecture}_archive_sha256"]
+    assert len(checksum) == 64 and all(c in "0123456789abcdef" for c in checksum), "CI CLI checksum must be pinned"
 PYTHON

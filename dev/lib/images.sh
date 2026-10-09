@@ -10,33 +10,41 @@ dev_build_image() {
   esac
 
   local dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/$component/Dockerfile"
-  local revision source_dirty build_image_ref image_ref image_id content_id
-  revision="$(git -C "$DEV_REPOSITORY_ROOT" rev-parse --short=12 HEAD)"
+  local revision full_revision source_status source_dirty build_image_ref image_ref image_id content_id
+  revision="$(git -C "$DEV_REPOSITORY_ROOT" rev-parse --short=12 HEAD)" || return
+  full_revision="$(git -C "$DEV_REPOSITORY_ROOT" rev-parse HEAD)" || return
+  source_status="$(git -C "$DEV_REPOSITORY_ROOT" status --porcelain)" || return
   source_dirty=false
-  if [[ -n "$(git -C "$DEV_REPOSITORY_ROOT" status --porcelain)" ]]; then
+  if [[ -n "$source_status" ]]; then
     source_dirty=true
   fi
   build_image_ref="${requested_image_ref:-local/ayni-orchestrator-$component:build-git-${revision}-$$}"
 
   # The worker launcher must use the node architecture so mandatory kernel
   # sandbox syscalls execute natively. Managed tools may still be emulated.
+  # Callers capture stdout with $(...), where Bash may disable errexit.
+  # Propagate failures explicitly rather than emitting an unusable image tag.
   docker build \
     --file "$dockerfile" \
-    --label "org.opencontainers.image.revision=$(git -C "$DEV_REPOSITORY_ROOT" rev-parse HEAD)" \
+    --label "org.opencontainers.image.revision=$full_revision" \
     --label "org.opencontainers.image.source.dirty=$source_dirty" \
     --tag "$build_image_ref" \
-    "$DEV_REPOSITORY_ROOT" >&2
+    "$DEV_REPOSITORY_ROOT" >&2 || return
 
   image_ref="$requested_image_ref"
   if [[ -z "$image_ref" ]]; then
-    image_id="$(docker image inspect "$build_image_ref" --format '{{.Id}}')"
+    image_id="$(docker image inspect "$build_image_ref" --format '{{.Id}}')" || return
+    if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+      echo "built image $build_image_ref did not report a valid content ID" >&2
+      return 1
+    fi
     content_id="${image_id#sha256:}"
     image_ref="local/ayni-orchestrator-$component:git-${revision}-${content_id:0:12}"
-    docker image tag "$build_image_ref" "$image_ref"
-    docker image remove "$build_image_ref" >/dev/null
+    docker image tag "$build_image_ref" "$image_ref" || return
+    docker image remove "$build_image_ref" >/dev/null || return
   fi
   docker image inspect "$image_ref" \
-    --format 'image={{.Id}} platform={{.Os}}/{{.Architecture}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}' >&2
+    --format 'image={{.Id}} platform={{.Os}}/{{.Architecture}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}' >&2 || return
   printf '%s\n' "$image_ref"
 }
 
