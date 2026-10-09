@@ -11,16 +11,27 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
   try {
     const context = requestContext(locals);
     const bff = getBff();
-    const result = await bff.listRepositorySummaries({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
+    const [repositories, connections] = await Promise.allSettled([
+      bff.listRepositorySummaries({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context),
+      bff.listConnections(context),
+    ]);
+    const registry = {
+      registryConnections: connections.status === "fulfilled" ? connections.value.filter(connection => connection.kind === "ghcr" && connection.status === "ready" && connection.enabled) : [],
+      ...(connections.status === "rejected" ? { registryError: safeError(connections.reason, locals.requestId) } : {}),
+    };
+    if (repositories.status === "rejected") {
+      return { ...registry, summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(repositories.reason, locals.requestId) };
+    }
     return {
-      summaries: result.summaries,
-      nextPageToken: result.page.nextPageToken || undefined,
+      ...registry,
+      summaries: repositories.value.summaries,
+      nextPageToken: repositories.value.page.nextPageToken || undefined,
       requestId: locals.requestId,
       backend: "connected" as const,
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { registryConnections: [], summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 

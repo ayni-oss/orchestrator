@@ -23,6 +23,9 @@ image namespace, username, push token and a distinct pull-only token. Check the
 independent authentication, push, pull and cleanup results. A cleanup failure is
 reported separately and can be retried. Select the connection in the runtime’s **Edit** dialog on its repository overview. Repository
 enrollment does not require a registry selection.
+The **Connect repository** dialog also offers ready GHCR connections and shows
+the selected namespace. Choose one to initialize its runtime destination, or
+leave **Configure later** selected and finish runtime setup after connecting.
 
 Administrator-managed connections show **Managed by your administrator** and
 cannot be edited or deleted through the UI. Register them explicitly using the

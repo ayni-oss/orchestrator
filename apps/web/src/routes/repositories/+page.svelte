@@ -39,10 +39,13 @@
     }
   }
   function openConnect() {
+    selectedRegistryId = "";
     connectOpen = true;
     void loadOptions();
   }
   let selectedRepository = $state("");
+  let selectedRegistryId = $state("");
+  const selectedRegistry = $derived(data.registryConnections.find(connection => connection.id === selectedRegistryId));
   const selectedOwner = $derived(options.installations.find(item => item.installationId === options.selectedInstallationId)?.owner ?? "");
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
 </script>
@@ -74,7 +77,7 @@
     <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
       <Dialog.Header>
         <Dialog.Title>Connect repository</Dialog.Title>
-        <Dialog.Description>Choose a GitHub App and repository. Configure image destinations on each runtime.</Dialog.Description>
+        <Dialog.Description>Choose a GitHub App and repository. Optionally choose a GHCR connection for its Ayni runtime.</Dialog.Description>
       </Dialog.Header>
       {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
       {#if options.error}<Feedback kind="error" title="GitHub unavailable" message={options.error.message} requestId={options.error.requestId} /><Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
@@ -100,6 +103,17 @@
           <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
           <input type="hidden" name="installationId" value={options.selectedInstallationId} />
           <input type="hidden" name="owner" value={selectedOwner} />
+          <div class="space-y-2">
+            <Label for="connect-registry">GHCR connection</Label>
+            <ThemedSelect id="connect-registry" name="registryConnectionId" bind:value={selectedRegistryId} options={[{ value: "", label: "Configure later" }, ...data.registryConnections.map(connection => ({ value: connection.id, label: connection.displayName }))]} disabled={connecting} />
+            {#if selectedRegistry}<p class="text-xs text-muted-foreground">Namespace: {selectedRegistry.imageNamespace}</p>{/if}
+            {#if data.registryError}
+              <Feedback kind="error" title="GHCR connections unavailable" message={data.registryError.message} requestId={data.registryError.requestId} />
+              <p class="text-sm text-muted-foreground">You can connect now and configure the runtime's image destination later.</p>
+            {:else if !data.registryConnections.length}
+              <p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>
+            {/if}
+          </div>
           {#if !options.repositories.length}<p class="text-sm text-muted-foreground">No repositories are available to this installation.</p>{/if}
           <Dialog.Footer>
             <Button variant="outline" onclick={() => { connectOpen = false; }}>Cancel</Button>
