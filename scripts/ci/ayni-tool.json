@@ -1,5 +1,5 @@
 {
-  "cli_version": "0.14.5",
-  "linux_amd64_archive_sha256": "45d20c9ae833b0cd403a917b2e07667cb2a6a4130a71d2bf94691c1d651e0139",
-  "linux_arm64_archive_sha256": "e57d65e87a6b7827d1534c21c3f88ee428e088991f0e7b04be28c1771fa54849"
+  "cli_version": "0.15.0",
+  "linux_amd64_archive_sha256": "7f1c7c054e9de84c550f7a7a9cebd8506a22b1a4cde831edf06c438ecb5d2da9",
+  "linux_arm64_archive_sha256": "335284cd2d69dd6d14c8f9c9690e97d084a41a2fa761f31432831a49c6ca9c2a"
 }
