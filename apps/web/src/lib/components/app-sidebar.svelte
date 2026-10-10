@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Boxes, FolderGit2, BookOpen, GitBranch, Container, ShieldCheck, Plug, Layers, Wrench } from "@lucide/svelte";
+  import { Boxes, FolderGit2, BookOpen, GitBranch, Container, ShieldCheck, Plug, Settings, Wrench } from "@lucide/svelte";
   import { page } from "$app/state";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import SidebarNavGroup from "$lib/components/sidebar-nav-group.svelte";
@@ -45,8 +45,8 @@
               </Sidebar.MenuSubButton>
             </Sidebar.MenuSubItem>
           </SidebarNavGroup>
-          <SidebarNavGroup title="Runtimes">
-            {#snippet icon()}<Layers aria-hidden="true" />{/snippet}
+          <SidebarNavGroup title="Config">
+            {#snippet icon()}<Settings aria-hidden="true" />{/snippet}
             <SidebarNavGroup title="Ayni">
               {#snippet icon()}<Wrench aria-hidden="true" />{/snippet}
               <Sidebar.MenuSubItem>

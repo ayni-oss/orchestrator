@@ -8,8 +8,8 @@ Start the control plane without a GitHub App, registry or model credentials to
 configure connections through the trusted operator UI. Model credentials are
 required when admitting model-backed work, not when opening onboarding.
 
-The sidebar groups **Projects**, **Integrations**, and **Runtimes**. Integrations
-contains Repositories and Source control; Runtimes contains Ayni's Certificates
+The sidebar groups **Projects**, **Integrations**, and **Config**. Integrations
+contains Repositories and Source control; Config contains Ayni's Certificates
 and Container registries. These navigation groups do not change credential ownership.
 
 Under **Integrations → Source control → GitHub**, create a customer-owned App through the
@@ -18,7 +18,7 @@ a Kubernetes Secret and returns safe connection status. Install the App on the
 repositories it may access in GitHub, then connect those repositories in Ayni.
 App ownership and installation permissions remain under GitHub administration.
 
-Under **Runtimes → Ayni → Container registries → GitHub**, add a GHCR connection with an approved
+Under **Config → Ayni → Container registries → GitHub**, add a GHCR connection with an approved
 image namespace, username, push token and a distinct pull-only token. Check the
 independent authentication, push, pull and cleanup results. A cleanup failure is
 reported separately and can be retried. Select the connection in the runtime’s **Edit** dialog on its repository overview. Repository
