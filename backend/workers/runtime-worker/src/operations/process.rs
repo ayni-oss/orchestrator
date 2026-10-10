@@ -79,6 +79,51 @@ pub async fn status(command: &mut Command, deadline: Duration) -> io::Result<Exi
     }
 }
 
+/// Drain bounded CLI output concurrently with waiting, retaining process-group cancellation.
+pub async fn output(
+    command: &mut Command,
+    deadline: Duration,
+    limit: usize,
+) -> io::Result<(ExitStatus, Vec<u8>)> {
+    use tokio::io::AsyncReadExt as _;
+    command.stdout(std::process::Stdio::piped());
+    let mut process = spawn(command)?;
+    let mut stdout = process
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("stdout missing"))?;
+    let collect = async {
+        let mut bytes = Vec::new();
+        let mut chunk = vec![0; 8192];
+        let mut exceeded = false;
+        loop {
+            let count = stdout.read(&mut chunk).await?;
+            if count == 0 {
+                break;
+            }
+            if bytes.len() + count <= limit && !exceeded {
+                bytes.extend_from_slice(&chunk[..count]);
+            } else {
+                exceeded = true;
+            }
+        }
+        if exceeded {
+            return Err(io::Error::other("CLI report exceeds bound"));
+        }
+        Ok(bytes)
+    };
+    let run = async { tokio::try_join!(process.wait(), collect) };
+    if let Ok(result) = tokio::time::timeout(deadline, run).await {
+        result
+    } else {
+        process.terminate().await?;
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "worker command deadline exceeded",
+        ))
+    }
+}
+
 /// Blocking Git/checkpoint work remains bounded even after an async caller disconnects.
 pub struct SynchronousProcess {
     child: std::process::Child,
@@ -153,6 +198,41 @@ impl Drop for SynchronousProcess {
 mod tests {
     use super::*;
     use std::path::Path;
+    #[tokio::test]
+    async fn report_output_drains_large_pipes_and_preserves_failure_exit() -> io::Result<()> {
+        let command = || {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "i=0; while [ $i -lt 1000 ]; do printf '01234567890123456789012345678901'; i=$((i+1)); done; exit 3"]);
+            command
+        };
+        let (status, bytes) = output(&mut command(), Duration::from_secs(2), 65_536).await?;
+        assert_eq!(status.code(), Some(3));
+        assert_eq!(bytes.len(), 32_000);
+        assert!(
+            output(&mut command(), Duration::from_secs(2), 10)
+                .await
+                .is_err()
+        );
+        Ok(())
+    }
+    #[tokio::test]
+    async fn report_capture_deadline_stops_descendants() -> io::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let marker = directory.path().join("marker");
+        let ready = directory.path().join("ready");
+        let error = output(
+            &mut descendants(&marker, &ready),
+            Duration::from_millis(100),
+            65_536,
+        )
+        .await
+        .err()
+        .ok_or_else(|| io::Error::other("expected timeout"))?;
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(!marker.exists());
+        Ok(())
+    }
     fn descendants(marker: &Path, ready: &Path) -> Command {
         let mut command = Command::new("/bin/sh");
         command

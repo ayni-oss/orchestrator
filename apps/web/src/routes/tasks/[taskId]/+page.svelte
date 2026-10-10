@@ -8,6 +8,7 @@
   import InformationTable from "$lib/components/information-table.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import PollStatus from "$lib/components/poll-status.svelte";
+  import QualitySignal from "$lib/components/quality-signal.svelte";
   import EmptyState from "$lib/components/empty-state.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { formatDate, formatTokens, words } from "$lib/presentation.js";
@@ -141,7 +142,7 @@
             { label: "Failures", value: String(quality?.failingOffenders ?? "Unavailable") },
             ...(quality?.evidence ? [{ label: "Checked commit", value: quality.evidence.commit, monospace: true }, { label: "Evidence digest", value: quality.evidence.signalsDigest, monospace: true }] : []),
           ]} />
-          <ul class="flex flex-wrap gap-2 text-sm" aria-label="Quality signals">{#each quality?.rows ?? [] as row, index (`${row.kind}:${index}`)}<li class="flex items-center gap-2 rounded-lg border px-3 py-2"><span>{row.kind}</span><StatusBadge status={row.passed ? "succeeded" : "failed"} /></li>{/each}</ul>
+          <ul class="flex flex-wrap gap-2 text-sm" aria-label="Quality signals">{#each quality?.rows ?? [] as row, index (`${row.kind}:${index}`)}<li><QualitySignal {row} /></li>{/each}</ul>
           <ul class="space-y-1 text-sm text-destructive" aria-label="Actionable findings">{#each quality?.findings ?? [] as finding, index (index)}<li>{finding}</li>{/each}</ul>
         </InformationCard>
       {:else}<EmptyState title="Quality result unavailable" description="Repository check results will appear when the worker completes a full check." />{/each}

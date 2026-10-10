@@ -304,6 +304,10 @@ message QualityEvidence {
 message QualityRow {
   string kind = 1;
   bool passed = 2;
+  // Ayni Markdown presentation; absent on legacy evidence.
+  string status = 3;
+  string summary = 4;
+  string target = 5;
 }
 message QualityResult {
   QualityOutcome outcome = 1;

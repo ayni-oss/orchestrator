@@ -83,6 +83,12 @@ pub enum PublicationOutcome {
 pub struct QualityRow {
     pub kind: String,
     pub passed: bool,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub target: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -249,6 +255,9 @@ mod tests {
             rows: vec![QualityRow {
                 kind: "test".into(),
                 passed: true,
+                status: String::new(),
+                summary: String::new(),
+                target: String::new(),
             }],
             findings: vec![],
         };

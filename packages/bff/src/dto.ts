@@ -297,7 +297,7 @@ export interface QualityResultDto {
   skippedTargets?: number | undefined;
   warningOffenders?: number | undefined;
   failingOffenders?: number | undefined;
-  rows: Array<{ kind: string; passed: boolean }>;
+  rows: Array<{ kind: string; passed: boolean; status: "pass" | "warn" | "fail"; summary: string; target: string }>;
   findings: string[];
   evidence?: { signalsDigest: string; sourceFingerprint: string; commit: string } | undefined;
 }

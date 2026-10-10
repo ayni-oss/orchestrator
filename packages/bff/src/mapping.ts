@@ -389,7 +389,7 @@ export function mapQuality(value: QualityResult): QualityResultDto {
   const validEvidence = evidence && /^(?:sha256:)?[a-f0-9]{64}$/u.test(evidence.signalsDigest) && /^(?:sha256:)?[a-f0-9]{64}$/u.test(evidence.sourceFingerprint) && /^[a-f0-9]{40}$/u.test(evidence.commit);
   const outcome = value.outcome === QualityOutcome.QUALITY_OUTCOME_FAILED ? "failed" : value.outcome === QualityOutcome.QUALITY_OUTCOME_PASSED && validEvidence ? "passed" : "unavailable";
   return { outcome, completedTargets: value.completedTargets, skippedTargets: value.skippedTargets, warningOffenders: value.warningOffenders, failingOffenders: value.failingOffenders,
-    rows: value.rows.slice(0, 64).map(row => ({ kind: safeText(row.kind, 128), passed: row.passed })), findings: value.findings.slice(0, 32).map(finding => safeText(finding, 1024)),
+    rows: value.rows.slice(0, 64).map(row => ({ kind: safeText(row.kind, 128), passed: row.passed, status: !row.passed ? "fail" : row.status === "warn" ? "warn" : "pass", summary: safeText(row.summary, 1024), target: safeText(row.target, 256) })), findings: value.findings.slice(0, 32).map(finding => safeText(finding, 1024)),
     evidence: validEvidence ? { signalsDigest: evidence.signalsDigest, sourceFingerprint: evidence.sourceFingerprint, commit: evidence.commit } : undefined };
 }
 export function mapPullRequest(value: PullRequestReceipt): PullRequestReceiptDto {

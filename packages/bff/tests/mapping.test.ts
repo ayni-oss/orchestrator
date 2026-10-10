@@ -216,6 +216,18 @@ it("retains bounded activity on failed attempts for task polling and watch updat
 
 
 describe("worker quality evidence", () => {
+  it("preserves Ayni warning summaries and safely maps legacy or conflicting statuses", () => {
+    const quality = QualityResult.fromPartial({rows:[
+      {kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"},
+      {kind:"test",passed:true},
+      {kind:"complexity",passed:false,status:"pass",summary:"max_cyclo=32"},
+      {kind:"deps",passed:true,status:"https://untrusted.example/icon.svg"},
+    ]});
+    const rows = mapQuality(quality).rows;
+    expect(rows[0]).toEqual({kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"});
+    expect(rows.map(row => row.status)).toEqual(["warn","pass","fail","pass"]);
+    expect(rows[1]?.summary).toBe("");
+  });
   it("preserves passing evidence with canonical sha256 prefixes and legacy hex digests", () => {
     for (const prefix of ["sha256:", ""]) {
       const evidence = {artifactPath:"evidence/signals.json",signalsDigest:prefix+"a".repeat(64),sourceFingerprint:prefix+"b".repeat(64),commit:"c".repeat(40)};

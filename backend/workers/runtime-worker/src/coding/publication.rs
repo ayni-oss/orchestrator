@@ -20,6 +20,8 @@ struct Journal {
     base_branch: String,
     head_commit: String,
     receipt: Option<PullRequestReceipt>,
+    #[serde(default)]
+    comment_digest: Option<String>,
 }
 fn intent(context: &Context, result: &WorkerResult) -> io::Result<Journal> {
     Ok(Journal {
@@ -33,6 +35,7 @@ fn intent(context: &Context, result: &WorkerResult) -> io::Result<Journal> {
             .clone()
             .ok_or_else(|| io::Error::other("publication has no final commit"))?,
         receipt: None,
+        comment_digest: None,
     })
 }
 fn marker(journal: &Journal) -> String {
@@ -264,8 +267,8 @@ pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result
             "publication intent conflicts with frozen final work",
         ));
     }
-    if let Some(receipt) = journal.receipt {
-        if receipt.repository != journal.repository
+    if let Some(receipt) = &journal.receipt
+        && (receipt.repository != journal.repository
             || receipt.branch != journal.branch
             || receipt.base_branch != journal.base_branch
             || receipt.head_commit != journal.head_commit
@@ -275,13 +278,9 @@ pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result
                 != format!(
                     "https://github.com/{}/pull/{}",
                     journal.repository, receipt.number
-                )
-        {
-            return Err(io::Error::other("persisted receipt identity is invalid"));
-        }
-        result.pull_request = Some(receipt);
-        result.publication = PublicationOutcome::Published;
-        return Ok(());
+                ))
+    {
+        return Err(io::Error::other("persisted receipt identity is invalid"));
     }
     recovery::write_json(&path, &journal)?;
     result.publication = PublicationOutcome::Publishing;
@@ -290,7 +289,21 @@ pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result
     let mut last_error = None;
     for _ in 0..3 {
         context.remaining()?;
-        match publish_once(context, &journal, result).await {
+        let publication = async {
+            let pull = if let Some(pull) = &journal.receipt {
+                pull.clone()
+            } else {
+                publish_once(context, &journal, result).await?
+            };
+            journal.receipt = Some(pull.clone());
+            recovery::write_json(&path, &journal)?;
+            // Retain the PR receipt before posting; a retry resumes the comment.
+            result.pull_request = Some(pull.clone());
+            ensure_quality_comment(context, &mut journal, result, &pull).await?;
+            Ok::<_, io::Error>(pull)
+        }
+        .await;
+        match publication {
             Ok(pull) => {
                 journal.receipt = Some(pull.clone());
                 recovery::write_json(&path, &journal)?;
@@ -310,6 +323,50 @@ pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result
     result.publication = PublicationOutcome::Failed;
     Err(last_error.unwrap_or_else(|| io::Error::other("publication unavailable")))
 }
+async fn ensure_quality_comment(
+    context: &Context,
+    journal: &mut Journal,
+    result: &WorkerResult,
+    pull: &PullRequestReceipt,
+) -> io::Result<()> {
+    let path = context.output.join("evidence/report.json");
+    if !path.exists() {
+        return Ok(());
+    } // Legacy/unavailable checks have no generated report.
+    let report = super::report::Report::read(&path)?;
+    let evidence = result
+        .quality
+        .evidence
+        .as_ref()
+        .ok_or_else(|| io::Error::other("quality comment has no evidence"))?;
+    if !report.matches(evidence) || report.commit != journal.head_commit {
+        return Err(io::Error::other(
+            "quality comment conflicts with final evidence",
+        ));
+    }
+    let body = report.comment(&journal.attempt_id);
+    let digest = ayni_orchestrator_domain::digest::sha256(body.as_bytes());
+    if journal.comment_digest.as_ref() == Some(&digest) {
+        return Ok(());
+    }
+    let remote = api(
+        context,
+        reqwest::Method::GET,
+        &format!("pulls/{}", pull.number),
+        &[],
+        None,
+    )
+    .await?
+    .ok_or_else(|| io::Error::other("published draft missing"))?;
+    receipt(journal, &remote)?;
+    let endpoint = format!("issues/{}/comments", pull.number);
+    comments::publish(&comments::Github { context, endpoint }, &body).await?;
+    journal.comment_digest = Some(digest);
+    Ok(())
+}
+
+mod comments;
+
 async fn publish_once(
     context: &Context,
     journal: &Journal,

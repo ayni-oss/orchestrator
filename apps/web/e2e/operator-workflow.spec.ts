@@ -33,6 +33,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 // Provider operations are fixture-backed; this tests browser/BFF behavior, not live GitHub.
 test("connected runtime and truthful worker draft delivery are visible", async ({ page }) => {
  await page.goto("/tasks/00000000-0000-4000-8000-000000000039");
+ await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
  await expect(page.getByRole("link", {name:"Open pull request #9",exact:true})).toHaveAttribute("href", "https://github.com/ayni-oss/sandbox/pull/9");
  const delivery = page.getByRole("region",{name:"Pull request · attempt 1",exact:true});
  await expect(delivery).toContainText("Failed");
@@ -45,6 +46,16 @@ test("connected runtime and truthful worker draft delivery are visible", async (
  await progress.getByText("Worker activity · 0 events",{exact:true}).click();
  await expect(progress.getByText("No worker activity has been retained for this attempt yet.")).toBeVisible();
  await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("Protected paths");
+ const warning = page.getByRole("button",{name:"size: warn · rust (workspace)",exact:true});
+ await expect(warning.getByRole("img",{name:"warn",exact:true})).toHaveAttribute("src","/icons/ayni/warn.svg");
+ await expect.poll(() => warning.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+ await warning.hover();
+ await expect(page.getByRole("tooltip")).toBeVisible();
+ await expect(page.getByRole("tooltip")).toContainText("max_lines=900 fail_count=0");
+ await page.mouse.move(0,0);
+ await page.getByRole("button",{name:"test: fail · rust (workspace)",exact:true}).focus();
+ await expect(page.getByRole("tooltip")).toContainText("total=4 passed=3 failed=1");
+ await page.getByRole("link",{name:"Development tasks",exact:true}).focus();
  const accessibility = await new AxeBuilder({page}).include("main").analyze();
  expect(accessibility.violations).toEqual([]);
  await page.screenshot({path:"/tmp/orchestrator-task-design-desktop.png",fullPage:true});

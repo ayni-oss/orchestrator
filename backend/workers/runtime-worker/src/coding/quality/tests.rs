@@ -70,6 +70,9 @@ impl Runner for MockRunner {
             rows: vec![QualityRow {
                 kind: "test".into(),
                 passed: outcome == QualityOutcome::Passed,
+                status: String::new(),
+                summary: String::new(),
+                target: String::new(),
             }],
             findings: if outcome == QualityOutcome::Failed {
                 vec!["repair the failing test".into()]
@@ -305,5 +308,32 @@ async fn interrupted_repair_with_protected_partial_edits_remains_fail_closed() -
         context.spec.execution.revision
     );
     assert!(!context.output.join("evidence/signals.json").exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn only_markdown_matching_final_evidence_is_retained() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let context = context(directory.path(), 0)?;
+    let runner = MockRunner::new([QualityOutcome::Passed]);
+    let result = runner.check(&context, Duration::from_secs(10)).await?;
+    let evidence = result.evidence.as_ref().ok_or("evidence missing")?;
+    let mut report = super::super::report::Report {
+        signals_digest: evidence.signals_digest.clone(),
+        commit: evidence.commit.clone(),
+        markdown: "# ayni check\nAyni-generated report".into(),
+    };
+    let pending = context.output.join("quality-report.pending.json");
+    recovery::write_json(&pending, &report)?;
+    freeze(&context, result.clone()).await?;
+    let retained = context.output.join("evidence/report.json");
+    assert_eq!(
+        super::super::report::Report::read(&retained)?.markdown,
+        report.markdown
+    );
+    report.signals_digest = "sha256:stale".into();
+    recovery::write_json(&pending, &report)?;
+    freeze(&context, result).await?;
+    assert!(!retained.exists());
     Ok(())
 }
