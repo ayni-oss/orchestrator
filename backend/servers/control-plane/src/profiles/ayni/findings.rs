@@ -1,7 +1,32 @@
 //! Product diagnostics from bounded internal codes, never raw provider output.
 use ayni_orchestrator_api::v1;
 
+fn trust_finding(code: &str) -> Option<(&'static str, &'static str)> {
+    Some(match code {
+        "certificate_trust_proposal_conflict" => (
+            "Multiple certificate trust proposals are already open.",
+            "Resolve the duplicate proposals, then retry preparation; no additional proposal was created.",
+        ),
+        "certificate_trust_branch_conflict" => (
+            "The certificate trust branch contains unrelated changes.",
+            "Review those changes before retrying; automatic updates will not overwrite them.",
+        ),
+        "certificate_trust_pull_closed" => (
+            "The certificate trust proposal was closed without merging.",
+            "Choose Retry to reopen the proposal, then review and merge it.",
+        ),
+        "trust_policy_missing" | "certificate_trust_lock_failed" => (
+            "Repository signing trust needs attention.",
+            "Review the certificate trust update PR and its regenerated lock; merge it before building.",
+        ),
+        _ => return None,
+    })
+}
+
 fn finding_text(code: &str) -> (&'static str, &'static str) {
+    if let Some(finding) = trust_finding(code) {
+        return finding;
+    }
     match code {
         "github_app_unconfigured" => (
             "The controller's GitHub App client is not initialized.",
@@ -31,18 +56,12 @@ fn finding_text(code: &str) -> (&'static str, &'static str) {
             "The official builder is unavailable for the selected contract and platform.",
             "Restore GHCR access or choose a supported platform, then retry analysis.",
         ),
-        "certificate_trust_pull_closed" => (
-            "The certificate trust proposal was closed without merging.",
-            "Choose Retry to reopen the proposal, then review and merge it.",
-        ),
+
         "runtime_lock_mismatch" => (
             "The environment does not match the frozen lock.",
             "Review configuration and lock consistency, then rebuild.",
         ),
-        "trust_policy_missing" | "certificate_trust_lock_failed" => (
-            "Repository signing trust needs attention.",
-            "Review the certificate trust update PR and its regenerated lock; merge it before building.",
-        ),
+
         "certificate_setup_required" | "certificate_not_ready" => (
             "A usable signing certificate is required.",
             "Select an enabled, ready signing certificate.",

@@ -34,7 +34,7 @@
 
   {#if data.profile && data.repository}
     {@const profile = data.profile}
-    {@const trustUpdate = profile.reconciliation.find(entry => entry.key === "certificate-trust-pr")}
+    {@const trustUpdate = ["merged", "verified"].includes(profile.reconciliation.find(entry => entry.key === "certificate-trust-state")?.value ?? "") ? undefined : profile.reconciliation.find(entry => entry.key === "certificate-trust-pr")}
     <Button href={`/repositories/${encodeURIComponent(data.repository.id)}`} variant="ghost">Back to {data.repository.displayName}</Button>
     <PageHeader title={words(profile.kind)} />
     <section class="space-y-4" aria-labelledby="runtime-identity-title">

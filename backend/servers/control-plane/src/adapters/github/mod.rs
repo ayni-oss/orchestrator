@@ -12,36 +12,6 @@ pub struct SourceClient {
 }
 
 impl SourceClient {
-    pub(crate) async fn find_pull(
-        &self,
-        owner: &str,
-        repository: &str,
-        branch: &str,
-        base: &str,
-        token: &str,
-    ) -> Result<Option<Value>, &'static str> {
-        let value = bounded(
-            self.client
-                .get(format!(
-                    "https://api.github.com/repos/{owner}/{repository}/pulls"
-                ))
-                .bearer_auth(token)
-                .query(&[
-                    ("state", "all"),
-                    ("head", &format!("{owner}:{branch}")),
-                    ("base", base),
-                    ("per_page", "2"),
-                ]),
-        )
-        .await?;
-        let values = value.as_array().ok_or("publication_response_invalid")?;
-        match values.as_slice() {
-            [] => Ok(None),
-            [value] => Ok(Some(value.clone())),
-            _ => Err("publication_identity_conflict"),
-        }
-    }
-
     pub(crate) async fn pull(
         &self,
         owner: &str,
@@ -336,6 +306,7 @@ enum GithubOperation {
     CreateCommit,
     CreateReference,
     ReadSetupReference,
+    UpdateReference,
 }
 
 impl GithubOperation {
@@ -348,6 +319,7 @@ impl GithubOperation {
             Self::CreateCommit => "create_commit",
             Self::CreateReference => "create_reference",
             Self::ReadSetupReference => "read_setup_reference",
+            Self::UpdateReference => "update_reference",
         }
     }
 }
@@ -586,3 +558,5 @@ mod credential_activation_tests {
         Ok(())
     }
 }
+
+mod trust;

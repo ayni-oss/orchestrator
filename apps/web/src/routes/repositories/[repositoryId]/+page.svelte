@@ -21,7 +21,8 @@
       id: profile.id,
       certificate: profile.effectiveCertificate?.displayName ?? "Signing certificate",
       state: profile.reconciliation.find(entry => entry.key === "certificate-trust-state")?.value,
-      href: profile.reconciliation.find(entry => entry.key === "certificate-trust-pr")?.value,
+      href: ["merged", "verified"].includes(profile.reconciliation.find(entry => entry.key === "certificate-trust-state")?.value ?? "")
+        ? undefined : profile.reconciliation.find(entry => entry.key === "certificate-trust-pr")?.value,
     }))
     .filter((update, index, updates) => (update.state || update.href)
       && (!update.href || updates.findIndex(other => other.href === update.href) === index)));
@@ -31,7 +32,7 @@
     open: "Review and merge the certificate trust update before the runtime can be prepared.",
     merged: "The trust update was merged. Checking the repository before preparing the runtime.",
     verified: "The repository trusts the selected signing certificate.",
-    closed: "The trust update was closed without merging. Retry runtime preparation to create a new proposal.",
+    closed: "The trust update was closed without merging. Retry runtime preparation to reopen the proposal.",
     failed: "The certificate trust update failed. Review the runtime findings and retry preparation.",
   };
   const onboardingStatus = $derived(

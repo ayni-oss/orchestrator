@@ -15,12 +15,18 @@ test("certificate trust proposal and progress appear in Ayni onboarding", async 
     for (const [state, description] of [
       ["propose", "Creating a pull request"],
       ["closed", "closed without merging"],
+      ["merged", "The trust update was merged"],
       ["verified", "trusts the selected signing certificate"],
     ]) {
-      await request.post(`http://127.0.0.1:50062/certificate-trust?state=${state}`);
+      await request.post(`http://127.0.0.1:50062/certificate-trust?state=${state}${["merged","verified"].includes(state!) ? `&href=${encodeURIComponent(href)}` : ""}`);
       await page.reload();
       await expect(onboarding).toContainText(description!);
       await expect(onboarding.getByRole("link", {name:"Review certificate trust update"})).toHaveCount(0);
+      if (["merged","verified"].includes(state!)) {
+        await page.goto("/profiles/profile:1");
+        await expect(page.getByRole("link",{name:"Review certificate trust update"})).toHaveCount(0);
+        await page.goto("/repositories/repository:1");
+      }
     }
   } finally {
     await request.post("http://127.0.0.1:50062/certificate-trust");
