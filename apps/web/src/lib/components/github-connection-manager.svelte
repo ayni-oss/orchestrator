@@ -6,6 +6,7 @@
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { ConnectionView } from "$lib/connection.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
@@ -19,7 +20,7 @@
   let editOpen = $state(false);
   let selectedId = $state("");
   const selected = $derived(connections.find(connection => connection.id === selectedId));
-  let mode = $state<"create" | "import">("create");
+  let mode = $state("create");
   let privateKey = $state("");
   let replacementKey = $state("");
   let submitting = $state(false);
@@ -107,9 +108,12 @@
 <Dialog.Root open={createOpen} onOpenChange={closeCreate}>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
     <Dialog.Header><Dialog.Title>Add GitHub App</Dialog.Title><Dialog.Description>Create an App in GitHub or import an existing App.</Dialog.Description></Dialog.Header>
-    <div class="flex gap-2"><Button variant={mode === "create" ? "default" : "outline"} onclick={() => { mode = "create"; privateKey = ""; }}>Create App</Button><Button variant={mode === "import" ? "default" : "outline"} onclick={() => { mode = "import"; }}>Import existing App</Button></div>
-
-    {#if mode === "create"}
+    <Tabs.Root bind:value={mode} onValueChange={(value) => { if (value === "create") privateKey = ""; }}>
+      <Tabs.List aria-label="GitHub App setup method">
+        <Tabs.Trigger value="create">Create App</Tabs.Trigger>
+        <Tabs.Trigger value="import">Import existing App</Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content value="create" class="space-y-4 pt-2">
       {@render guidance()}
       <p class="text-sm text-muted-foreground">GitHub creates the private key through its App Manifest flow. Ayni stores the generated credentials securely and returns you to the connection status page.</p>
 
@@ -118,7 +122,8 @@
       {#if organizationAppUrl}<form action={organizationAppUrl} method="POST" target="_blank"><input type="hidden" name="manifest" value={appManifest} /><Button type="submit">Create App for {owner}</Button></form>{:else}<Button disabled>{flowState ? "Enter an organization name to continue" : "Preparing GitHub setup…"}</Button>{/if}
       {#if personalAppUrl}<form action={personalAppUrl} method="POST" target="_blank"><input type="hidden" name="manifest" value={appManifest} /><Button type="submit" variant="outline">Create App for personal account</Button></form>{/if}
       <div class="flex justify-end"><Button variant="outline" onclick={() => closeCreate(false)}>Cancel</Button></div>
-    {:else}
+      </Tabs.Content>
+      <Tabs.Content value="import" class="pt-2">
       <form method="POST" action="?/create" use:enhance={submit("create")} class="space-y-4">
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
         <div class="space-y-2"><Label for="github-name">Connection name</Label><Input id="github-name" name="displayName" required maxlength={128} /></div>
@@ -128,7 +133,8 @@
         <p class="text-sm text-muted-foreground">Credentials are stored in Kubernetes Secrets and are never returned by this page. Validated credentials activate automatically.</p>
         <div class="flex justify-end gap-2"><Button variant="outline" onclick={() => closeCreate(false)}>Cancel</Button><Button type="submit" disabled={submitting}>Save and test</Button></div>
       </form>
-    {/if}
+      </Tabs.Content>
+    </Tabs.Root>
   </Dialog.Content>
 </Dialog.Root>
 <Dialog.Root open={editOpen} onOpenChange={closeEdit}>
