@@ -1,83 +1,150 @@
 <script lang="ts">
   import { enhance } from "$lib/forms.js";
-  import { RotateCcw, X } from "@lucide/svelte";
+  import type { SubmitFunction } from "@sveltejs/kit";
   import type { PageProps } from "./$types";
-  import CodeValue from "$lib/components/code-value.svelte";
   import Feedback from "$lib/components/feedback.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
-  import SubmitButton from "$lib/components/submit-button.svelte";
   import PollStatus from "$lib/components/poll-status.svelte";
+  import EmptyState from "$lib/components/empty-state.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
-  import { formatDate, statusTone, words } from "$lib/presentation.js";
+  import { formatDate, formatTokens, words } from "$lib/presentation.js";
 
   let { data }: PageProps = $props();
   const latestAttempt = $derived(data.progress?.attempts.at(-1));
   const canRetryPublication = $derived(Boolean(latestAttempt?.result?.commit && ["failed", "conflict"].includes(latestAttempt.result.publication)));
-  let pending = $state<string | undefined>();
+  let retryForm = $state<HTMLFormElement | undefined>();
+  let publicationForm = $state<HTMLFormElement | undefined>();
+  let cancelForm = $state<HTMLFormElement | undefined>();
+  let busy = $state(false);
   const terminalStates = ["succeeded", "failed", "cancelled", "deadline_exceeded", "unsupported"];
+  const submit: SubmitFunction = () => {
+    busy = true;
+    return async ({ update }) => {
+      try { await update(); } finally { busy = false; }
+    };
+  };
 </script>
 
 <svelte:head><title>{data.task?.snapshot.request.slice(0, 60) ?? "Task unavailable"} · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8">
+<div class="max-w-4xl space-y-6">
   <Button href="/tasks" variant="ghost">Development tasks</Button>
-
   {#if data.task}
     {@const task = data.task}
     {@const terminal = terminalStates.includes(task.state)}
-    <PageHeader eyebrow={`Task ${task.id}`} title={task.snapshot.request} description="The worker codes, checks the full repository and publishes a draft with its actual quality result.">
-      {#snippet actions()}<PollStatus scope="app:tasks" />{/snippet}
-    </PageHeader>
-    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4"><div class="flex items-center gap-3"><StatusBadge status={task.state} tone={statusTone(task.state)} /><span class="text-xs text-muted-foreground">Updated {formatDate(task.updatedAt)}</span></div><div class="flex gap-2">
-      {#if ["failed", "cancelled", "deadline_exceeded"].includes(task.state)}<form method="POST" action="?/retry" use:enhance={() => { pending = "retry"; return async ({ update }) => { pending = undefined; await update(); }; }}><input type="hidden" name="idempotencyKey" value={data.actionKeys.retry} /><SubmitButton variant="outline" pending={pending === "retry"}><RotateCcw aria-hidden="true" /> Retry task · new attempt</SubmitButton></form>{/if}
-      {#if terminal && canRetryPublication}<form method="POST" action="?/retryPublication" use:enhance={() => { pending = "retryPublication"; return async ({ update }) => { pending = undefined; await update(); }; }}><input type="hidden" name="idempotencyKey" value={data.actionKeys.retryPublication} /><SubmitButton variant="outline" pending={pending === "retryPublication"}><RotateCcw aria-hidden="true" /> Retry publication</SubmitButton></form>{/if}
-      {#if !terminal}<form method="POST" action="?/cancel" use:enhance={() => { pending = "cancel"; return async ({ update }) => { pending = undefined; await update(); }; }}><input type="hidden" name="idempotencyKey" value={data.actionKeys.cancel} /><SubmitButton variant="destructive" pending={pending === "cancel"}><X aria-hidden="true" /> Cancel</SubmitButton></form>{/if}
-    </div></div>
+    <PageHeader eyebrow="Task" title={task.snapshot.request} />
+    <section class="space-y-4" aria-labelledby="task-information-title">
+      <div class="flex flex-wrap items-center justify-between gap-2"><h2 id="task-information-title" class="text-lg font-semibold">Information</h2><PollStatus scope="app:tasks" /></div>
+      <InformationCard title="Task" status={task.state} actions={[
+        ...(["failed", "cancelled", "deadline_exceeded"].includes(task.state) ? [{ label: "Retry task · new attempt", onSelect: () => retryForm?.requestSubmit(), disabled: busy }] : []),
+        ...(terminal && canRetryPublication ? [{ label: "Retry publication", onSelect: () => publicationForm?.requestSubmit(), disabled: busy }] : []),
+        ...(!terminal ? [{ label: "Cancel task", onSelect: () => cancelForm?.requestSubmit(), disabled: busy, destructive: true }] : []),
+      ]}>
+        <InformationTable rows={[
+          { label: "Updated", value: formatDate(task.updatedAt) },
+          { label: "Model", value: `${task.snapshot.agent.provider}/${task.snapshot.agent.model}` },
+          { label: "Agent iterations", value: String(task.snapshot.limits.codingTurns) },
+          { label: "Task ID", value: task.id, monospace: true },
+        ]} />
+        {#if task.failure}<Feedback kind="error" title="Task failed" message={task.failure.message} />{/if}
+        <form hidden bind:this={retryForm} method="POST" action="?/retry" use:enhance={submit}><input type="hidden" name="idempotencyKey" value={data.actionKeys.retry} /></form>
+        <form hidden bind:this={publicationForm} method="POST" action="?/retryPublication" use:enhance={submit}><input type="hidden" name="idempotencyKey" value={data.actionKeys.retryPublication} /></form>
+        <form hidden bind:this={cancelForm} method="POST" action="?/cancel" use:enhance={submit}><input type="hidden" name="idempotencyKey" value={data.actionKeys.cancel} /></form>
+      </InformationCard>
+    </section>
 
-    {#if task.failure}<Feedback kind="error" title="Task failed" message={task.failure.message} />{/if}
-    <Card.Root><Card.Header><Card.Title>Progress</Card.Title><Card.Description>Worker stages and Rig model/tool activity. Logs are advisory and omit private reasoning, prompts, and command output.</Card.Description></Card.Header><Card.Content class="space-y-5">
-      {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
-        <section class="space-y-2">
-          <h3 class="text-sm font-medium">Attempt {attempt.attemptNumber}{attempt.publicationOnly ? " · publication retry" : ""} · {words(attempt.state)} · {words(attempt.progress?.phase ?? "unavailable")}</h3>
-          <p class="text-sm">Turns consumed: {attempt.result?.codingTurnsConsumed ?? attempt.progress?.codingTurnsConsumed ?? "unavailable"} / {attempt.snapshot.limits.codingTurns} · Quality round: {attempt.result?.qualityRound ?? attempt.progress?.qualityRound ?? "unavailable"} · Repair limit: {attempt.snapshot.limits.qualityRepairLimit}</p>
-          {#if attempt.result}<p class="text-sm">Execution: {words(attempt.result.execution)}</p>{/if}
-          {#if attempt.failure}<p class="text-sm text-destructive">{attempt.failure.message}</p>{/if}
-          <ol class="max-h-80 space-y-2 overflow-auto text-sm" aria-label={`Activity for attempt ${attempt.attemptNumber}`}>
-            {#each attempt.agentActivity ?? [] as event (event.sequence)}
-              <li class={event.failed ? "text-destructive" : "text-muted-foreground"}><time>{event.observedAt ? formatDate(event.observedAt) : "Time unavailable"}</time> · {event.message}{event.failed ? " — failed" : ""}</li>
-            {:else}<li class="text-muted-foreground">No worker activity has been retained for this attempt yet.</li>{/each}
-          </ol>
-        </section>
-      {:else}<p class="text-sm text-muted-foreground">Waiting for the first attempt.</p>{/each}
-    </Card.Content></Card.Root>
-    <div class="grid gap-6 lg:grid-cols-2">
-      <Card.Root><Card.Header><Card.Title>Frozen repository and runtime</Card.Title></Card.Header><Card.Content><dl class="space-y-4 text-sm"><div><dt class="text-muted-foreground">Repository revision</dt><dd><CodeValue value={task.snapshot.repository.revision} /></dd></div><div><dt class="text-muted-foreground">Profile revision</dt><dd><CodeValue value={task.snapshot.runtime.runtimeProfileRevisionId} /></dd></div><div><dt class="text-muted-foreground">OCI image</dt><dd><CodeValue value={`${task.snapshot.runtime.ociRepository}@${task.snapshot.runtime.resolvedDigest}`} /></dd></div><div><dt class="text-muted-foreground">Platform</dt><dd>{task.snapshot.runtime.platform.operatingSystem}/{task.snapshot.runtime.platform.architecture}</dd></div></dl></Card.Content></Card.Root>
-      <Card.Root><Card.Header><Card.Title>Frozen request</Card.Title></Card.Header><Card.Content class="space-y-4 text-sm"><p><strong>Agent:</strong> {task.snapshot.agent.agent} · {task.snapshot.agent.provider}/{task.snapshot.agent.model}</p><div><h3 class="font-medium">Acceptance criteria</h3><ol class="mt-2 list-decimal pl-5">{#each task.snapshot.acceptanceCriteria as criterion}<li>{criterion}</li>{/each}</ol></div><p><strong>Agent iterations:</strong> {task.snapshot.limits.codingTurns}</p><p><strong>Deadline:</strong> {task.snapshot.deadlineAt ? formatDate(task.snapshot.deadlineAt) : "none"}</p><p><strong>Test edits:</strong> {task.snapshot.changeConstraints.allowTestEdits ? "authorized" : "protected"}</p></Card.Content></Card.Root>
-    </div>
-    <Card.Root><Card.Header><Card.Title>Quality</Card.Title><Card.Description>Mandatory full-repository checks bind the final committed source.</Card.Description></Card.Header><Card.Content class="space-y-5">
-      {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
-        {@const quality = attempt.result?.quality ?? attempt.progress?.latestFullCheck}
-        <section class="space-y-2"><h3 class="font-medium">Attempt {attempt.attemptNumber} · {words(quality?.outcome ?? "unavailable")}</h3>
-          <p class="text-sm">Completed targets: {quality?.completedTargets ?? "unavailable"} · Skipped targets: {quality?.skippedTargets ?? "unavailable"} · Warnings: {quality?.warningOffenders ?? "unavailable"} · Failures: {quality?.failingOffenders ?? "unavailable"}</p>
-          {#if quality?.evidence}<p class="text-sm">Checked commit: <CodeValue value={quality.evidence.commit} /></p><p class="text-sm">Evidence digest: <CodeValue value={quality.evidence.signalsDigest} /></p>{/if}
-          <ul class="space-y-1 text-sm" aria-label="Quality signals">{#each quality?.rows ?? [] as row, index (`${row.kind}:${index}`)}<li>{row.kind}: {row.passed ? "passed" : "failed"}</li>{/each}</ul>
-          <ul class="space-y-1 text-sm" aria-label="Actionable findings">{#each quality?.findings ?? [] as finding, index (index)}<li>{finding}</li>{/each}</ul>
-        </section>
-      {:else}<p class="text-sm text-muted-foreground">Full quality result unavailable.</p>{/each}
-    </Card.Content></Card.Root>
-    <Card.Root><Card.Header><Card.Title>Pull request</Card.Title><Card.Description>The worker delivers retained final work as a draft and records the publication receipt.</Card.Description></Card.Header><Card.Content class="space-y-4">
+    <section class="space-y-4" aria-labelledby="task-delivery-title">
+      <h2 id="task-delivery-title" class="text-lg font-semibold">Delivery</h2>
       {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
         {@const receipt = attempt.pullRequest ?? attempt.result?.pullRequest}
-        {@const publication = attempt.result?.publication ?? attempt.progress?.publication ?? "unavailable"}
-        <section class="space-y-2"><p>Attempt {attempt.attemptNumber} · {receipt ? attempt.result?.quality?.outcome === "failed" ? "Draft published · quality checks failed" : attempt.result?.quality?.outcome === "passed" ? "Draft published · quality checks passed" : "Draft published · quality checks unavailable" : `Publication ${words(publication)}`}</p>
-          {#if receipt?.url}<a class="underline" href={receipt.url} target="_blank" rel="noreferrer">Open pull request #{receipt.number}</a>{/if}
-          {#if receipt}<p class="text-sm">Head: <CodeValue value={receipt.headCommit} /></p>{/if}
-        </section>
-      {:else}<p class="text-sm text-muted-foreground">Waiting for worker delivery.</p>{/each}
-    </Card.Content></Card.Root>
-    <Card.Root><Card.Header><Card.Title>Attempts and model usage</Card.Title></Card.Header><Card.Content class="space-y-3">
-    {#each data.progress?.attempts ?? [] as attempt (attempt.id)}<div class="text-sm"><p>Attempt {attempt.attemptNumber} · {words(attempt.state)}</p><p class="text-muted-foreground">Input tokens: {attempt.usage.input ?? "unavailable"} · Output tokens: {attempt.usage.output ?? "unavailable"} · Interactions: {attempt.usage.interactions ?? "unavailable"}</p>{#if attempt.failure}<p>{attempt.failure.message}</p>{/if}</div>{:else}<p class="text-sm">Waiting for the first attempt.</p>{/each}
-    </Card.Content></Card.Root>
+        {@const publication = attempt.result?.publication ?? attempt.progress?.publication ?? "pending"}
+          {#snippet pullRequest()}
+            {#if receipt?.url}<a class="underline" href={receipt.url} target="_blank" rel="noreferrer">Open pull request #{receipt.number}</a>{:else}Waiting for worker delivery.{/if}
+          {/snippet}
+        <InformationCard title={`Pull request · attempt ${attempt.attemptNumber}`} status={publication}>
+          <InformationTable rows={[
+            { label: "Pull request", value: pullRequest },
+            { label: "Quality checks", value: words(attempt.result?.quality?.outcome ?? "unavailable") },
+            ...(receipt ? [{ label: "Head commit", value: receipt.headCommit, monospace: true }] : []),
+          ]} />
+          {#if receipt}<p class="text-sm text-muted-foreground">Published as a draft with the actual quality check result.</p>{/if}
+        </InformationCard>
+      {:else}<EmptyState title="Waiting for delivery" description="The worker publishes a draft pull request after completing the task and repository checks." />{/each}
+    </section>
+
+    <section class="space-y-4" aria-labelledby="task-progress-title">
+      <h2 id="task-progress-title" class="text-lg font-semibold">Progress</h2>
+      {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
+        <InformationCard title={`Attempt ${attempt.attemptNumber}${attempt.publicationOnly ? " · publication retry" : ""}`} status={attempt.state}>
+          <InformationTable rows={[
+            { label: "Stage", value: words(attempt.progress?.phase ?? "unavailable") },
+            { label: "Iterations used", value: `${attempt.result?.codingTurnsConsumed ?? attempt.progress?.codingTurnsConsumed ?? "Unavailable"} / ${attempt.snapshot.limits.codingTurns}` },
+            { label: "Quality round", value: String(attempt.result?.qualityRound ?? attempt.progress?.qualityRound ?? "Unavailable") },
+            { label: "Repair limit", value: String(attempt.snapshot.limits.qualityRepairLimit) },
+            ...(attempt.result ? [{ label: "Execution", value: words(attempt.result.execution) }] : []),
+            { label: "Input tokens", value: formatTokens(attempt.usage.input) },
+            { label: "Output tokens", value: formatTokens(attempt.usage.output) },
+            { label: "Model interactions", value: String(attempt.usage.interactions ?? "Unavailable") },
+          ]} />
+          {#if attempt.failure}<Feedback kind="error" title="Attempt needs attention" message={attempt.failure.message} />{/if}
+          <details class="rounded-lg border p-3">
+            <summary class="cursor-pointer text-sm font-medium">Worker activity · {attempt.agentActivity?.length ?? 0} events</summary>
+            <p class="my-3 text-xs text-muted-foreground">Activity omits private reasoning, prompts, and command output.</p>
+            <ol class="max-h-80 space-y-3 overflow-auto text-sm" aria-label={`Activity for attempt ${attempt.attemptNumber}`}>
+              {#each attempt.agentActivity ?? [] as event (event.sequence)}
+                <li class="border-l-2 pl-3"><p class={event.failed ? "text-destructive" : ""}>{event.message}{event.failed ? " — failed" : ""}</p><time class="text-xs text-muted-foreground" datetime={event.observedAt}>{event.observedAt ? formatDate(event.observedAt) : "Time unavailable"}</time></li>
+              {:else}<li class="text-muted-foreground">No worker activity has been retained for this attempt yet.</li>{/each}
+            </ol>
+          </details>
+        </InformationCard>
+      {:else}<EmptyState title="Waiting for the first attempt" description="Progress will appear when the worker starts." />{/each}
+    </section>
+
+    <section class="space-y-4" aria-labelledby="task-request-title">
+      <h2 id="task-request-title" class="text-lg font-semibold">Task configuration</h2>
+      <p class="text-sm text-muted-foreground">Each attempt keeps the repository, runtime, and request selected when the task was created.</p>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <InformationCard title="Frozen request">
+          <InformationTable rows={[
+            { label: "Agent", value: task.snapshot.agent.agent },
+            { label: "Model", value: `${task.snapshot.agent.provider}/${task.snapshot.agent.model}` },
+            { label: "Agent iterations", value: String(task.snapshot.limits.codingTurns) },
+            { label: "Deadline", value: task.snapshot.deadlineAt ? formatDate(task.snapshot.deadlineAt) : "None" },
+            { label: "Test edits", value: task.snapshot.changeConstraints.allowTestEdits ? "Authorized" : "Protected" },
+          ]} />
+          <div class="space-y-2 text-sm"><h4 class="font-medium">Acceptance criteria</h4><ol class="list-decimal space-y-1 pl-5">{#each task.snapshot.acceptanceCriteria as criterion, index (index)}<li>{criterion}</li>{:else}<li class="list-none text-muted-foreground">None specified.</li>{/each}</ol></div>
+          <div class="space-y-2 text-sm"><h4 class="font-medium">Protected paths</h4><ul class="space-y-1 font-mono text-xs [overflow-wrap:anywhere]">{#each task.snapshot.changeConstraints.protectedPaths as path, index (index)}<li>{path}</li>{:else}<li class="font-sans text-muted-foreground">None specified.</li>{/each}</ul></div>
+        </InformationCard>
+        <InformationCard title="Frozen repository and runtime">
+          <InformationTable rows={[
+            { label: "Repository revision", value: task.snapshot.repository.revision, monospace: true },
+            { label: "Profile revision", value: task.snapshot.runtime.runtimeProfileRevisionId, monospace: true },
+            { label: "OCI image", value: `${task.snapshot.runtime.ociRepository}@${task.snapshot.runtime.resolvedDigest}`, monospace: true },
+            { label: "Platform", value: `${task.snapshot.runtime.platform.operatingSystem}/${task.snapshot.runtime.platform.architecture}` },
+          ]} />
+        </InformationCard>
+      </div>
+    </section>
+
+    <section class="space-y-4" aria-labelledby="task-quality-title">
+      <h2 id="task-quality-title" class="text-lg font-semibold">Quality</h2>
+      <p class="text-sm text-muted-foreground">Full repository checks apply to the final committed source.</p>
+      {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
+        {@const quality = attempt.result?.quality ?? attempt.progress?.latestFullCheck}
+        <InformationCard title={`Quality · attempt ${attempt.attemptNumber}`} status={quality?.outcome ?? "unavailable"}>
+          <InformationTable rows={[
+            { label: "Completed targets", value: String(quality?.completedTargets ?? "Unavailable") },
+            { label: "Skipped targets", value: String(quality?.skippedTargets ?? "Unavailable") },
+            { label: "Warnings", value: String(quality?.warningOffenders ?? "Unavailable") },
+            { label: "Failures", value: String(quality?.failingOffenders ?? "Unavailable") },
+            ...(quality?.evidence ? [{ label: "Checked commit", value: quality.evidence.commit, monospace: true }, { label: "Evidence digest", value: quality.evidence.signalsDigest, monospace: true }] : []),
+          ]} />
+          <ul class="flex flex-wrap gap-2 text-sm" aria-label="Quality signals">{#each quality?.rows ?? [] as row, index (`${row.kind}:${index}`)}<li class="flex items-center gap-2 rounded-lg border px-3 py-2"><span>{row.kind}</span><StatusBadge status={row.passed ? "succeeded" : "failed"} /></li>{/each}</ul>
+          <ul class="space-y-1 text-sm text-destructive" aria-label="Actionable findings">{#each quality?.findings ?? [] as finding, index (index)}<li>{finding}</li>{/each}</ul>
+        </InformationCard>
+      {:else}<EmptyState title="Quality result unavailable" description="Repository check results will appear when the worker completes a full check." />{/each}
+    </section>
   {/if}
 </div>

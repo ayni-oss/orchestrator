@@ -61,6 +61,11 @@ Admission failures, unsafe changes, cancellation, and no-change outcomes do not 
 Publication retry uses retained final work; ordinary task retry creates another attempt.
 A delivered draft is not approval to merge, and the product never merges automatically.
 
+Task details use the shared information cards and tables: task status and actions,
+draft delivery, attempt progress and model usage, frozen configuration, and quality
+evidence. Worker activity expands within each attempt. The task action menu keeps
+cancellation, a new attempt, and retrying retained publication distinct.
+
 ## Trust and independent assessment
 
 Environment certification, quality results, and merge approval are separate claims.

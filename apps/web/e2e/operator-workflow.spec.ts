@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 async function choose(page: Page, label: string, option: string): Promise<void> {
   await page.getByLabel(label, { exact: true }).click();
@@ -31,17 +32,26 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 
 // Provider operations are fixture-backed; this tests browser/BFF behavior, not live GitHub.
 test("connected runtime and truthful worker draft delivery are visible", async ({ page }) => {
- await page.goto("/profiles/profile:1");
- await page.getByRole("link", {name:"New request",exact:true}).click();
- await choose(page, "Model", "gpt-5.6-sol");
- await page.getByLabel("Request", {exact:true}).fill("Add a bounded example");
- await page.getByLabel("Acceptance criteria").fill("The example is covered");
- await page.getByRole("button", {name:"Submit task",exact:true}).click();
+ await page.goto("/tasks/00000000-0000-4000-8000-000000000039");
  await expect(page.getByRole("link", {name:"Open pull request #9",exact:true})).toHaveAttribute("href", "https://github.com/ayni-oss/sandbox/pull/9");
- await expect(page.getByText("Attempt 1 · Draft published · quality checks failed", {exact:true})).toBeVisible();
+ const delivery = page.getByRole("region",{name:"Pull request · attempt 1",exact:true});
+ await expect(delivery).toContainText("Failed");
+ await expect(delivery).toContainText("Published as a draft");
  await expect(page.getByText("Repair the failing test", {exact:true})).toBeVisible();
- await expect(page.getByText("Turns consumed: 5 / 24 · Quality round: 2 · Repair limit: 3", {exact:true})).toBeVisible();
- await page.screenshot({path:"/tmp/orchestrator-task-ui.png",fullPage:true});
+ const progress = page.getByRole("region",{name:"Attempt 1",exact:true});
+ await expect(progress).toContainText("5 / 24");
+ await expect(progress).toContainText("Quality round");
+ await expect(progress.locator("details")).not.toHaveAttribute("open");
+ await progress.getByText("Worker activity · 0 events",{exact:true}).click();
+ await expect(progress.getByText("No worker activity has been retained for this attempt yet.")).toBeVisible();
+ await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("Protected paths");
+ const accessibility = await new AxeBuilder({page}).include("main").analyze();
+ expect(accessibility.violations).toEqual([]);
+ await page.screenshot({path:"/tmp/orchestrator-task-design-desktop.png",fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await expect(page.getByRole("link",{name:"Open pull request #9",exact:true})).toBeVisible();
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+ await page.screenshot({path:"/tmp/orchestrator-task-design-mobile.png",fullPage:true});
 });
 
 test("every managed profile state explains the next step",async({page,request})=>{
@@ -115,16 +125,18 @@ test("projects select several repositories and tasks require one target",async({
  await page.getByLabel("Acceptance criteria",{exact:true}).fill("The other repository is unchanged");
  await page.getByRole("button",{name:"Submit task",exact:true}).click();
  await expect(page.getByRole("heading",{name:"Work only in the selected repository",exact:true})).toBeVisible();
- await expect(page.getByText("Agent iterations: 17",{exact:true})).toBeVisible();
- await expect(page.getByText("Test edits: authorized",{exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Cancel",exact:true}).click();
+ await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("17");
+ await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("Authorized");
+ await page.getByRole("button",{name:"Task actions",exact:true}).click();
+ await page.getByRole("menuitem",{name:"Cancel task",exact:true}).click();
  await expect(page).toHaveURL(/notice=cancelled/u);
 });
 
 test("publication retry resumes retained final work and is distinct from task retry", async ({page}) => {
  await page.goto("/tasks/00000000-0000-4000-8000-000000000044");
- await expect(page.getByRole("button",{name:"Retry task · new attempt",exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Retry publication",exact:true}).click();
+ await page.getByRole("button",{name:"Task actions",exact:true}).click();
+ await expect(page.getByRole("menuitem",{name:"Retry task · new attempt",exact:true})).toBeVisible();
+ await page.getByRole("menuitem",{name:"Retry publication",exact:true}).click();
  await expect(page).toHaveURL(/notice=publication-retried/u);
  await expect(page.getByText(/Attempt 1 · publication retry/u)).toBeVisible();
 });
