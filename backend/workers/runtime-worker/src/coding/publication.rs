@@ -373,7 +373,7 @@ fn description(context: &Context, journal: &Journal, result: &WorkerResult) -> S
         .as_ref()
         .map_or("unavailable", |v| v.signals_digest.as_str());
     format!(
-        "{}\n\n## Request\n\n{}\n\n## Implementation\n\n{}\n\nFinal commit: `{}`\n\n## Full quality check\n\nOutcome: {:?}\n\nCompleted targets: {} · skipped: {} · warnings: {} · failures: {}\n\nCoding turns: {} / {} · repair sessions: {} / {}\n\nEvidence digest: `{}`\n\n{}",
+        "{}\n\n## Request\n\n{}\n\n## Implementation\n\n{}\n\nFinal commit: `{}`\n\n## Full quality check\n\nThis worker-run final check is independent of agent tool calls described above. Its result is the authoritative quality status for this draft.\n\nOutcome: {:?}\n\nCompleted targets: {} · skipped: {} · warnings: {} · failures: {}\n\nCoding turns: {} / {} · repair sessions: {} / {}\n\nEvidence digest: `{}`\n\n{}",
         marker(journal),
         escape(&context.spec.request),
         escape(&context.state.try_lock().map_or_else(

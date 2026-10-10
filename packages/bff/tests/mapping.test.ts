@@ -1,4 +1,6 @@
 import {
+  QualityOutcome,
+  QualityResult,
   DevelopmentAttempt,
   DevelopmentAttemptState,
   DevelopmentTaskState,
@@ -11,7 +13,7 @@ import {
   type RepositoryConnection,
   type RuntimeProfile,
 } from "@ayni-orchestrator/grpc-bindings/server";
-import { mapDevelopmentAttempt } from "../src/mapping.js";
+import { mapDevelopmentAttempt, mapQuality } from "../src/mapping.js";
 import { describe, expect, it } from "vitest";
 import {
   BffMappingError,
@@ -209,5 +211,22 @@ it("retains bounded activity on failed attempts for task polling and watch updat
   expect(mapped.agentActivity.at(-1)).toEqual({
     sequence: 300, observedAt: original.createdAt?.toISOString(),
     message: "Waiting for a model response", failed: true,
+  });
+});
+
+
+describe("worker quality evidence", () => {
+  it("preserves passing evidence with canonical sha256 prefixes and legacy hex digests", () => {
+    for (const prefix of ["sha256:", ""]) {
+      const evidence = {artifactPath:"evidence/signals.json",signalsDigest:prefix+"a".repeat(64),sourceFingerprint:prefix+"b".repeat(64),commit:"c".repeat(40)};
+      const quality = QualityResult.fromPartial({outcome:QualityOutcome.QUALITY_OUTCOME_PASSED,evidence});
+      expect(mapQuality(quality).outcome).toBe("passed");
+      expect(mapQuality(quality).evidence).toEqual({signalsDigest:evidence.signalsDigest,sourceFingerprint:evidence.sourceFingerprint,commit:evidence.commit});
+      for (const invalid of ["sha256:bad", "sha512:"+"a".repeat(64), "a".repeat(63)]) {
+        quality.evidence = {...evidence,signalsDigest:invalid};
+        expect(mapQuality(quality).outcome).toBe("unavailable");
+        expect(mapQuality(quality).evidence).toBeUndefined();
+      }
+    }
   });
 });

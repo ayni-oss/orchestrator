@@ -386,7 +386,7 @@ export function mapProviderModel(value: ProviderModel): ProviderModelDto {
 
 export function mapQuality(value: QualityResult): QualityResultDto {
   const evidence = value.evidence;
-  const validEvidence = evidence && /^[a-f0-9]{64}$/u.test(evidence.signalsDigest) && /^[a-f0-9]{64}$/u.test(evidence.sourceFingerprint) && /^[a-f0-9]{40}$/u.test(evidence.commit);
+  const validEvidence = evidence && /^(?:sha256:)?[a-f0-9]{64}$/u.test(evidence.signalsDigest) && /^(?:sha256:)?[a-f0-9]{64}$/u.test(evidence.sourceFingerprint) && /^[a-f0-9]{40}$/u.test(evidence.commit);
   const outcome = value.outcome === QualityOutcome.QUALITY_OUTCOME_FAILED ? "failed" : value.outcome === QualityOutcome.QUALITY_OUTCOME_PASSED && validEvidence ? "passed" : "unavailable";
   return { outcome, completedTargets: value.completedTargets, skippedTargets: value.skippedTargets, warningOffenders: value.warningOffenders, failingOffenders: value.failingOffenders,
     rows: value.rows.slice(0, 64).map(row => ({ kind: safeText(row.kind, 128), passed: row.passed })), findings: value.findings.slice(0, 32).map(finding => safeText(finding, 1024)),
