@@ -11,11 +11,35 @@
   import { Label } from "$lib/components/ui/label/index.js";
   import SubmitButton from "$lib/components/submit-button.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { words } from "$lib/presentation.js";
+  import { statusTone, words } from "$lib/presentation.js";
   let { data }: PageProps = $props();
   let confirmation = $state("");
   let analysisForm = $state<HTMLFormElement | undefined>();
   let busy = $state(false);
+  const trustUpdates = $derived(data.runtimeProfiles.filter(profile => profile.kind === "ayni_managed")
+    .map(profile => ({
+      id: profile.id,
+      certificate: profile.effectiveCertificate?.displayName ?? "Signing certificate",
+      state: profile.reconciliation.find(entry => entry.key === "certificate-trust-state")?.value,
+      href: profile.reconciliation.find(entry => entry.key === "certificate-trust-pr")?.value,
+    }))
+    .filter((update, index, updates) => (update.state || update.href)
+      && (!update.href || updates.findIndex(other => other.href === update.href) === index)));
+  const trustDescriptions: Record<string, string> = {
+    pending: "Checking the repository's signing certificate trust.",
+    propose: "Creating a pull request with the certificate trust policy and regenerated lock.",
+    open: "Review and merge the certificate trust update before the runtime can be prepared.",
+    merged: "The trust update was merged. Checking the repository before preparing the runtime.",
+    verified: "The repository trusts the selected signing certificate.",
+    closed: "The trust update was closed without merging. Retry runtime preparation to create a new proposal.",
+    failed: "The certificate trust update failed. Review the runtime findings and retry preparation.",
+  };
+  const onboardingStatus = $derived(
+    trustUpdates.some(update => ["closed", "failed"].includes(update.state ?? "")) ? "setup_required"
+      : trustUpdates.some(update => update.state === "open" || (!update.state && update.href)) ? "setup_pr_open"
+      : trustUpdates.some(update => ["pending", "propose", "merged"].includes(update.state ?? "")) ? "awaiting_trust"
+      : data.repositoryConnection?.onboardingStatus === "enrolled" ? "analysis_complete"
+      : data.repositoryConnection?.onboardingStatus || "pending");
   const remove: SubmitFunction = () => {
     busy = true;
     return async ({ update }) => {
@@ -63,11 +87,21 @@
           ]} />
         </InformationCard>
         {#if showOnboarding}
-          <InformationCard title="Ayni onboarding" status={repository.onboardingStatus === "enrolled" ? "analysis_complete" : repository.onboardingStatus || "pending"} tone={repository.onboardingStatus === "enrolled" ? "success" : "neutral"} actions={[{ label: repository.onboardingStatus === "failed" ? "Retry analysis" : "Analyze repository", onSelect: () => analysisForm?.requestSubmit() }]}>
+          <InformationCard title="Ayni onboarding" status={onboardingStatus === "setup_pr_open" ? "Setup PR open" : onboardingStatus} tone={onboardingStatus === "analysis_complete" ? "success" : statusTone(onboardingStatus)} actions={[{ label: repository.onboardingStatus === "failed" ? "Retry analysis" : "Analyze repository", onSelect: () => analysisForm?.requestSubmit() }]}>
             <InformationTable rows={[
               { label: "Source commit", value: repository.onboardingRevision || "Not available yet", monospace: true },
               ...(repository.onboardingReason ? [{ label: "Next step", value: remediation[repository.onboardingReason] ?? words(repository.onboardingReason) }] : []),
             ]} />
+            {#each trustUpdates as update (update.id)}
+              <div class="space-y-2 text-sm">
+                <InformationTable rows={[
+                  { label: "Certificate", value: update.certificate },
+                  { label: "Certificate trust", value: words(update.state ?? "open") },
+                ]} />
+                <p class="text-muted-foreground">{trustDescriptions[update.state ?? "open"] ?? words(update.state ?? "open")}</p>
+                {#if update.href}<a href={update.href} target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 underline">Review certificate trust update<ExternalLink class="size-4 shrink-0" aria-hidden="true" /></a>{/if}
+              </div>
+            {/each}
             <form bind:this={analysisForm} method="POST" action="?/analyze" use:enhance>
               <input type="hidden" name="idempotencyKey" value={data.analyzeKey} />
             </form>

@@ -284,6 +284,14 @@ function connectionFixture(url: URL): void {
  if(url.pathname==="/admin-connection") connections=[{id:"admin:github",kind:url.searchParams.get("kind") ?? "github_app",managementSource:"admin",displayName:"Admin App",appId:"123",username:"",imageNamespace:url.searchParams.get("kind")==="ghcr" ? "admin-team" : "",secretName:"admin-ref",secretUid:"",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"",testAuthentication:"",testPush:"",testPull:"",testCleanup:"",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""}];
 }
 function profileFixture(url: URL): void {
+ if(url.pathname==="/certificate-trust") {
+   const state=url.searchParams.get("state");
+   const href=url.searchParams.get("href");
+   profile.reconciliationMetadata=[
+     ...(state ? [{key:"certificate-trust-state",value:state}] : []),
+     ...(href ? [{key:"certificate-trust-pr",value:href}] : []),
+   ];
+ }
  if(url.pathname==="/preparation") {
    profile.preparationPhase=url.searchParams.get("phase") ?? "ready";
    const code=url.searchParams.get("code");

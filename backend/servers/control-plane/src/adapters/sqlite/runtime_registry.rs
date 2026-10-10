@@ -96,6 +96,7 @@ impl CleanStore {
             .iter()
             .find(|m| m.key == "phase")
             .map_or_else(|| "analyzing".into(), |m| m.value.clone());
+        profile.reconciliation_metadata = metadata;
         if let Some(failure) = &profile.failure {
             profile
                 .findings

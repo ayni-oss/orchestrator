@@ -3,6 +3,37 @@ use serde_json::{Value, json};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+#[test]
+fn persisted_verification_repairs_stale_display_metadata_after_restart() -> TestResult {
+    let mut persisted = serde_json::to_value(RuntimeCursor::default())?;
+    persisted["status"] = json!({"certificate-trust-state": "pending"});
+    persisted["trust"] = json!({
+            "generation": "generation", "head": "source", "job": "trust-job",
+            "attempt": 0, "result": null, "pull_number": null,
+            "state": "verified", "merge_revision": null
+    });
+    let mut cursor: RuntimeCursor = serde_json::from_value(persisted)?;
+    let restarted: RuntimeCursor = serde_json::from_str(&serde_json::to_string(&cursor)?)?;
+    let displayed_state = |cursor: &RuntimeCursor| {
+        cursor
+            .metadata()
+            .into_iter()
+            .find(|entry| entry.key == "certificate-trust-state")
+            .map(|entry| entry.value)
+    };
+    assert_eq!(displayed_state(&restarted).as_deref(), Some("verified"));
+    // Matching certificates alone do not promote an unfinished trust check.
+    cursor
+        .trust
+        .as_mut()
+        .ok_or("trust missing")?
+        .reset("new-source");
+    assert_eq!(displayed_state(&cursor).as_deref(), Some("pending"));
+    cursor.trust = None;
+    assert_eq!(displayed_state(&cursor).as_deref(), Some("pending"));
+    Ok(())
+}
+
 pub fn legacy_cursor() -> Value {
     json!({
         "sequence": 4, "next_at": 60, "last_success": null, "failures": 1,

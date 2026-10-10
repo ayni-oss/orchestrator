@@ -185,6 +185,48 @@ fn runtime_cursor_and_status_survive_restart() -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
+#[test]
+fn runtime_reads_recover_verified_trust_from_legacy_cursor_after_restart()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("runtime.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (_, profile, _) = ready_profile(&mut store)?;
+    let mut cursor = store.runtime_cursor(&profile.id)?;
+    cursor
+        .status
+        .insert("certificate-trust-state".into(), "pending".into());
+    store.save_runtime_cursor(&profile.id, &cursor)?;
+    cursor.trust = Some(crate::profiles::ayni::preparation_state::TrustUpdate {
+        generation: "generation".into(),
+        head: REVISION.into(),
+        job: "trust-job".into(),
+        attempt: 0,
+        result: None,
+        pull_number: None,
+        state: "verified".into(),
+        merge_revision: None,
+    });
+    // Reproduce the old interrupted save: verified durable evidence, pending projection.
+    store.connection.execute(
+        "UPDATE reconciliation_cursors SET value=?1 WHERE name=?2",
+        params![
+            serde_json::to_string(&cursor)?,
+            format!("managed:{}", profile.id)
+        ],
+    )?;
+    drop(store);
+    let store = CleanStore::open(path, 3)?;
+    let described = store.describe_runtime_profile(store.runtime_profile(&profile.id)?)?;
+    assert!(
+        described
+            .reconciliation_metadata
+            .iter()
+            .any(|entry| entry.key == "certificate-trust-state" && entry.value == "verified")
+    );
+    Ok(())
+}
+
 fn activate(
     store: &mut CleanStore,
     profile: &str,

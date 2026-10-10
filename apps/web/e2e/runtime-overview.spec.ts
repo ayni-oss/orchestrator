@@ -1,5 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("certificate trust proposal and progress appear in Ayni onboarding", async ({page, request}) => {
+  const href = "https://github.com/ayni-oss/sandbox/pull/17";
+  try {
+    await request.post(`http://127.0.0.1:50062/certificate-trust?state=open&href=${encodeURIComponent(href)}`);
+    await page.goto("/repositories/repository:1");
+    const onboarding = page.getByRole("region", {name:"Ayni onboarding",exact:true});
+    await expect(onboarding).toContainText("Setup PR open");
+    await expect(onboarding).toContainText("Review and merge");
+    const proposal = onboarding.getByRole("link", {name:"Review certificate trust update"});
+    await expect(proposal).toHaveAttribute("href", href);
+    await expect(proposal).toHaveAttribute("target", "_blank");
+    await expect(page.getByRole("region", {name:"Ayni managed",exact:true}).getByRole("link", {name:"Review certificate trust update"})).toHaveCount(0);
+    for (const [state, description] of [
+      ["propose", "Creating a pull request"],
+      ["closed", "closed without merging"],
+      ["verified", "trusts the selected signing certificate"],
+    ]) {
+      await request.post(`http://127.0.0.1:50062/certificate-trust?state=${state}`);
+      await page.reload();
+      await expect(onboarding).toContainText(description!);
+      await expect(onboarding.getByRole("link", {name:"Review certificate trust update"})).toHaveCount(0);
+    }
+  } finally {
+    await request.post("http://127.0.0.1:50062/certificate-trust");
+  }
+});
+
 test("repository overview shows identity and readiness separately from runtime configuration",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
   await page.goto("/repositories/repository:1");

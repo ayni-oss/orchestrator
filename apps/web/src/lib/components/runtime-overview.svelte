@@ -82,7 +82,6 @@
         { label: "Image destination", value: profile.desiredImageRepository || revision?.managed?.repository || "Not configured" },
       ]} />
       {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
-      {#each profile.reconciliation.filter(entry=>entry.key==="certificate-trust-pr") as entry (entry.key)}<a href={entry.value} target="_blank" rel="noreferrer" class="text-sm underline">Review certificate trust update</a>{/each}
       {#if profile.failure && !profile.findings.length}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
     </InformationCard>

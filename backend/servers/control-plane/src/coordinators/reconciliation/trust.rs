@@ -131,10 +131,24 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         };
         // A previously generated/merged policy must still pin exactly the selected key.
         if trust.state == "verified" && pinned && trust.head == head {
+            if cursor
+                .status
+                .get("certificate-trust-state")
+                .map(String::as_str)
+                != Some("verified")
+            {
+                cursor
+                    .status
+                    .insert("certificate-trust-state".into(), "verified".into());
+                self.save(id, cursor).await?;
+            }
             self.kubernetes.cleanup(&trust.job).await?;
             if default_head != head {
                 trust.merge_revision = None;
                 trust.reset(default_head);
+                cursor
+                    .status
+                    .insert("certificate-trust-state".into(), trust.state.clone());
                 cursor.trust = Some(trust);
                 self.save(id, cursor).await?;
                 return Ok(false);
@@ -352,6 +366,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         // Preserve the verified no-op before asynchronous deletion;
                         // the next pass must finish cleanup, not recreate the Job.
                         cursor.trust = Some(trust.clone());
+                        cursor
+                            .status
+                            .insert("certificate-trust-state".into(), trust.state.clone());
                         self.save(id, cursor).await?;
                         self.kubernetes.cleanup(&trust.job).await?;
                     } else {
