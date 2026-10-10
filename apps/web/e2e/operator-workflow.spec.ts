@@ -65,9 +65,13 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await expect(page.getByRole("button",{name:"Done",exact:true})).toBeHidden();
   await page.getByRole("dialog").getByRole("button", { name: "Create project", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payments", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Payments project actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await page.getByLabel("Project name", { exact: true }).fill("Ledger");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Ledger", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ledger project actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
   await page.getByRole("button", { name: "Archive project", exact: true }).click();
   await expect(page.getByText("New tasks and retries are disabled for this archived project.", {exact:true})).toBeVisible();
   await expect(page.getByRole("link", { name: "New task", exact: true })).toHaveCount(0);
@@ -117,4 +121,25 @@ test("publication retry resumes retained final work and is distinct from task re
  await page.getByRole("button",{name:"Retry publication",exact:true}).click();
  await expect(page).toHaveURL(/notice=publication-retried/u);
  await expect(page.getByText(/Attempt 1 · publication retry/u)).toBeVisible();
+});
+
+
+test("project overview puts tasks first and adapts the repository grid", async ({ page }) => {
+  await page.setViewportSize({ width: 1185, height: 1071 });
+  await page.goto("/projects/project:1");
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+  const sections = page.locator("main section");
+  await expect(sections.nth(0).getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
+  await expect(sections.nth(1).getByRole("heading", {name:"Repositories",exact:true})).toBeVisible();
+  const grid = sections.nth(1).locator(".grid");
+  expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(3);
+  await expect(page.getByRole("button", {name:"Save settings",exact:true})).toHaveCount(0);
+  await page.getByRole("button", {name:/project actions$/u}).click();
+  await page.getByRole("menuitem", {name:"Archive",exact:true}).click();
+  await expect(page.getByRole("dialog", {name:"Archive project",exact:true})).toBeVisible();
+  await page.getByRole("button", {name:"Cancel",exact:true}).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", {name:"New task",exact:true})).toBeVisible();
+  await page.setViewportSize({width:375,height:720});
+  expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
 });
