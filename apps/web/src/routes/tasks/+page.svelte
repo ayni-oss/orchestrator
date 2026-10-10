@@ -3,7 +3,7 @@
   import ThemedSection from "$lib/components/ui/collapsible/section.svelte";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import { enhance } from "$app/forms";
+  import { enhance } from "$lib/forms.js";
   import { Play } from "@lucide/svelte";
   import type { PageProps } from "./$types";
   import CodeValue from "$lib/components/code-value.svelte";
@@ -20,7 +20,7 @@
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { formatDate, statusTone, words } from "$lib/presentation.js";
 
-  let { data, form }: PageProps = $props();
+  let { data }: PageProps = $props();
   let submitting = $state(false);
   let projectChoice=$state<string | undefined>();
   const selectedProject=$derived(projectChoice ?? page.url.searchParams.get("project") ?? data.projects.find(p=>p.repositoryConnectionIds.includes(page.url.searchParams.get("repository") ?? ""))?.id ?? "");
@@ -36,8 +36,6 @@
 <svelte:head><title>Development tasks · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
   <PageHeader eyebrow="Execution" title="Development tasks" description="Each task freezes repository revision, profile revision, runtime digest, agent/model selection, request, constraints, and deadline." />
-  {#if data.error}<Feedback kind="warning" title="Some task data is unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
-  {#if form?.error}<Feedback kind="error" title="Task submission failed" message={form.error.message} requestId={form.error.requestId} />{/if}
 
   <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
     <section class="space-y-4"><div><h2 class="text-lg font-semibold">Task history</h2><p class="text-sm text-muted-foreground">Status and worker phase show delivery progress. Quality and publication have separate outcomes.</p></div>

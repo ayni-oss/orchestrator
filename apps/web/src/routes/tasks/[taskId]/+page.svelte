@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { ArrowLeft, RotateCcw, X } from "@lucide/svelte";
+  import { enhance } from "$lib/forms.js";
+  import { RotateCcw, X } from "@lucide/svelte";
   import type { PageProps } from "./$types";
   import CodeValue from "$lib/components/code-value.svelte";
   import Feedback from "$lib/components/feedback.svelte";
@@ -12,7 +12,7 @@
   import * as Card from "$lib/components/ui/card/index.js";
   import { formatDate, statusTone, words } from "$lib/presentation.js";
 
-  let { data, form }: PageProps = $props();
+  let { data }: PageProps = $props();
   const latestAttempt = $derived(data.progress?.attempts.at(-1));
   const canRetryPublication = $derived(Boolean(latestAttempt?.result?.commit && ["failed", "conflict"].includes(latestAttempt.result.publication)));
   let pending = $state<string | undefined>();
@@ -21,9 +21,8 @@
 
 <svelte:head><title>{data.task?.snapshot.request.slice(0, 60) ?? "Task unavailable"} · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8">
-  <Button href="/tasks" variant="ghost"><ArrowLeft aria-hidden="true" /> Development tasks</Button>
-  {#if data.error}<Feedback kind="error" title="Task unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
-  {#if form?.error}<Feedback kind="error" title="Task action failed" message={form.error.message} requestId={form.error.requestId} />{/if}
+  <Button href="/tasks" variant="ghost">Development tasks</Button>
+
   {#if data.task}
     {@const task = data.task}
     {@const terminal = terminalStates.includes(task.state)}

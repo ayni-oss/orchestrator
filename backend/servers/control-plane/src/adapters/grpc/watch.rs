@@ -164,6 +164,9 @@ pub(super) fn repository_update(
         "repository_connection" => v1::watch_repositories_response::Update::RepositoryConnection(
             decode_event(&event.payload)?,
         ),
+        "repository_removed" => v1::watch_repositories_response::Update::RepositoryRemoved(
+            decode_event(&event.payload)?,
+        ),
         "repository_snapshot" => v1::watch_repositories_response::Update::RepositorySnapshot(
             decode_event(&event.payload)?,
         ),
@@ -182,6 +185,11 @@ pub(super) fn profile_update(
         "runtime_profile" => v1::watch_runtime_profiles_response::Update::RuntimeProfile(
             decode_event(&event.payload)?,
         ),
+        "runtime_profile_removed" => {
+            v1::watch_runtime_profiles_response::Update::RuntimeProfileRemoved(decode_event(
+                &event.payload,
+            )?)
+        }
         "runtime_profile_revision" => {
             v1::watch_runtime_profiles_response::Update::Revision(decode_event(&event.payload)?)
         }

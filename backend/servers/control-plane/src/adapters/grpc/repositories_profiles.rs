@@ -125,6 +125,35 @@ impl v1::repository_service_server::RepositoryService for GrpcApi {
         }))
     }
 
+    async fn remove_repository(
+        &self,
+        request: Request<v1::RemoveRepositoryRequest>,
+    ) -> Result<Response<v1::RemoveRepositoryResponse>, Status> {
+        // Destructive onboarding management belongs to the trusted operator listener.
+        if self.custom_clients.is_some() {
+            return Err(Status::permission_denied(
+                "Repository removal requires the trusted operator listener.",
+            ));
+        }
+        let context = self.context(&request, "RemoveRepository")?;
+        context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let message = request.into_inner();
+        validate_id(
+            &message.repository_connection_id,
+            "repository_connection_id",
+        )
+        .map_err(|error| context.validation(&error))?;
+        if message.expected_resource_version == 0 {
+            return Err(Status::invalid_argument("resource_version_required"));
+        }
+        let _lifecycle = self.state.repository_lifecycle.write().await;
+        let _connection = self.state.connection_lock.lock().await;
+        with_store(&self.state, move |store| store.remove_repository(&message))
+            .await
+            .map_err(|error| context.store_error(&error))?;
+        Ok(context.response(v1::RemoveRepositoryResponse {}))
+    }
+
     async fn analyze_repository(
         &self,
         request: Request<v1::AnalyzeRepositoryRequest>,

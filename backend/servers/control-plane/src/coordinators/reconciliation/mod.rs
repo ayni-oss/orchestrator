@@ -156,6 +156,31 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let Ok(_guard) = self.pass.try_lock() else {
             return;
         };
+        // Removal waits for in-flight runtime observations before retiring their inputs.
+        let _lifecycle = self.state.repository_lifecycle.read().await;
+        let Ok(removed) = self
+            .state
+            .database
+            .execute(|store| store.removed_runtime_cleanup())
+            .await
+        else {
+            return;
+        };
+        for (name, cursor) in removed {
+            if self.cleanup_exhausted_cursor(&cursor).await.is_err() {
+                tracing::warn!("Removed runtime cleanup deferred");
+                continue;
+            }
+            if self
+                .state
+                .database
+                .execute(move |store| store.complete_removed_runtime_cleanup(&name))
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
         // Installation operations are disabled by migration before these cleanup intents run.
         let Ok(names) = self
             .state

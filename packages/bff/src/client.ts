@@ -22,7 +22,7 @@ import {
 
   ProviderServiceClient,
   RepositoryServiceClient,
-  type AnalyzeRepositoryResponse,
+  type AnalyzeRepositoryResponse, type RemoveRepositoryRequest, type RemoveRepositoryResponse,
   RuntimeProfileServiceClient,
   type CancelDevelopmentTaskResponse,
   type CreateDevelopmentTaskResponse,
@@ -275,9 +275,12 @@ export class OrchestratorBff {
   }
 
 
-  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string }, context: RequestContext) {
+  async connectGithubRepository(input: { idempotencyKey:string; owner:string; name:string;registryConnectionId?:string;useAyni?:boolean }, context: RequestContext) {
     const response = await this.#unary<ConnectGithubRepositoryResponse>(context, (m,o,c)=>this.#repositories.connectGithubRepository({...input,registryConnectionId:input.registryConnectionId ?? "",imageNamespace:""},m,o,c));
     return mapRepositoryConnection(required(response.repositoryConnection));
+  }
+  async removeRepository(input: RemoveRepositoryRequest, context: RequestContext): Promise<void> {
+    await this.#unary<RemoveRepositoryResponse>(context, (m, o, c) => this.#repositories.removeRepository(input, m, o, c));
   }
   async setRepositoryRegistry(input:{idempotencyKey:string;repositoryConnectionId:string;expectedResourceVersion:string;registryConnectionId:string;imageNamespace:string},context:RequestContext):Promise<RepositoryConnectionDto> {
     const response=await this.#unary<SetRepositoryRegistryResponse>(context,(m,o,c)=>this.#repositories.setRepositoryRegistry(input,m,o,c));

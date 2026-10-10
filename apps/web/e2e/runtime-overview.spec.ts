@@ -1,15 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-test("repository overview keeps identity in its header and configuration on its runtime",async({page,request})=>{
+test("repository overview shows identity and readiness separately from runtime configuration",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
   await page.goto("/repositories/repository:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
   const header=page.locator("main header").filter({has:page.getByRole("heading",{name:"ayni-oss/sandbox"})});
   await expect(header.getByRole("heading",{name:"ayni-oss/sandbox"})).toBeVisible();
-  await expect(header.getByRole("link",{name:"ayni-oss/sandbox"})).toHaveAttribute("href","https://github.com/ayni-oss/sandbox");
-  await expect(header).toContainText("Connected");
-  await expect(header).toContainText("main");
-  await expect(header).not.toContainText("Ayni lock");
+  const information = page.getByRole("region", {name:"Information",exact:true});
+  await expect(information.getByRole("link",{name:"https://github.com/ayni-oss/sandbox"})).toHaveAttribute("href","https://github.com/ayni-oss/sandbox");
+  await expect(information).toContainText("Connected");
+  await expect(information).toContainText("main");
+  await expect(information).not.toContainText("runtimes ready");
+  await expect(information).not.toContainText("Ayni lock");
   await expect(page.getByText("Automatic runtime inspection",{exact:true})).toHaveCount(0);
   await expect(page.getByLabel("GHCR connection")).toHaveCount(0);
   const runtime=page.locator("article").first();
@@ -75,10 +77,10 @@ test("runtime preparation shows progress, findings and guarded corrective action
 test("repository analysis retains onboarding independently of connection access", async ({ page }) => {
   await page.goto("/repositories/repository:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
-  const onboarding = page.getByRole("region", { name: "Repository onboarding" });
+  const onboarding = page.getByRole("region", { name: "Ayni onboarding" });
   await expect(onboarding).toContainText("Awaiting trust");
   await expect(onboarding).toContainText("Merge the trust proposal before preparing the runtime.");
-  await expect(page.locator("main header").filter({ has: page.getByRole("heading", { name: "ayni-oss/sandbox" }) })).toContainText("Connected");
+  await expect(page.getByRole("region", {name:"Information",exact:true})).toContainText("Connected");
   await onboarding.getByRole("button", { name: "Analyze repository" }).click();
   await expect(onboarding).toContainText("Analyzing");
   await page.reload();

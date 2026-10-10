@@ -23,6 +23,7 @@ pub enum ReconciliationError {
 pub struct AppState {
     pub(crate) database: Database,
     model_catalog: Option<ModelCatalog>,
+    pub(crate) repository_lifecycle: Arc<tokio::sync::RwLock<()>>,
     pub(crate) connection_lock: Arc<tokio::sync::Mutex<()>>,
     pub(crate) source: Option<Arc<runtime_source::SourceClient>>,
 }
@@ -53,6 +54,7 @@ impl AppState {
         Ok(Self {
             database,
             model_catalog: None,
+            repository_lifecycle: Arc::new(tokio::sync::RwLock::new(())),
             connection_lock: Arc::new(tokio::sync::Mutex::new(())),
             source: None,
         })

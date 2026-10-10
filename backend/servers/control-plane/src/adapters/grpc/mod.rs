@@ -314,7 +314,8 @@ impl RequestContext {
                 None,
             ),
             CleanStoreError::StaleVersion => (Code::Aborted, v1::ErrorReason::Conflict, None, None),
-            CleanStoreError::ProjectArchived
+            CleanStoreError::RepositoryRemovalBlocked(_)
+            | CleanStoreError::ProjectArchived
             | CleanStoreError::ParentMismatch
             | CleanStoreError::InvalidTransition => (
                 Code::FailedPrecondition,

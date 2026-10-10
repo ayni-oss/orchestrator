@@ -8,6 +8,7 @@ fn database() -> Result<Database, CleanStoreError> {
 
 fn repository_request() -> v1::CreateRepositoryConnectionRequest {
     v1::CreateRepositoryConnectionRequest {
+        use_ayni: None,
         idempotency_key: "create".into(),
         display_name: "Repository".into(),
         default_branch: "main".into(),

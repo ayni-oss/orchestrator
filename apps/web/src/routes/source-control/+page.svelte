@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { ArrowRight } from "@lucide/svelte";
   import PageHeader from "$lib/components/page-header.svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -21,7 +20,7 @@
         <Card.Content class="flex-1"><p class="text-sm text-muted-foreground">{provider.description}</p></Card.Content>
         <Card.Footer class="mt-auto">
           {#if provider.href}
-            <Button href={provider.href}>Configure {provider.name} <ArrowRight aria-hidden="true" /></Button>
+            <Button href={provider.href}>Configure {provider.name}</Button>
           {:else}
             <Button variant="outline" disabled class="disabled:opacity-70">Not available</Button>
           {/if}

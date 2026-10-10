@@ -40,6 +40,7 @@ export interface GithubRepositoryDto {
 }
 
 export interface RepositoryConnectionDto {
+  useAyni?: boolean;
   onboardingStatus?: string;
   onboardingReason?: string;
   onboardingRevision?: string;

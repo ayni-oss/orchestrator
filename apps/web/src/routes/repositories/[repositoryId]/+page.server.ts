@@ -1,4 +1,4 @@
-import { fail } from "@sveltejs/kit";
+import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError, text } from "$lib/server/page.js";
@@ -29,6 +29,7 @@ export const load: PageServerLoad = async ({ locals, params, depends,setHeaders 
     repositoryConnection: repository.status === "fulfilled" ? repository.value : undefined,
     runtimeProfiles: profiles.status === "fulfilled" ? profiles.value.runtimeProfiles : [],
     runtimeKeys: profiles.status === "fulfilled" ? Object.fromEntries(profiles.value.runtimeProfiles.map((profile) => [profile.id, actionKey()])) : {},
+    removeKey: actionKey(),
     analyzeKey: actionKey(),
     requestId: locals.requestId,
     ...(failure === undefined ? {} : { error: safeError(failure, locals.requestId) }),
@@ -53,6 +54,28 @@ async function reconcile(event: Parameters<Actions[string]>[0], action: "sync" |
 }
 
 export const actions: Actions = {
+  remove: async ({ request, params, locals }) => {
+    const form = await request.formData();
+    const idempotencyKey = text(form, "idempotencyKey", 36);
+    const expectedResourceVersion = text(form, "resourceVersion", 24);
+    const confirmation = text(form, "confirmation", 256);
+    if (!idempotencyKey || !/^[0-9a-f-]{36}$/u.test(idempotencyKey) || !expectedResourceVersion || !/^[1-9][0-9]*$/u.test(expectedResourceVersion)) {
+      return fail(400, { action: "remove", error: { message: "Refresh the page and try again." } });
+    }
+    try {
+      const bff = getBff();
+      const context = requestContext(locals);
+      const repository = await bff.getRepositoryConnection(params.repositoryId, context);
+      if (confirmation !== repository.displayName) {
+        return fail(400, { action: "remove", error: { message: "Enter the repository name to confirm removal." } });
+      }
+      await bff.removeRepository({ repositoryConnectionId: params.repositoryId, idempotencyKey, expectedResourceVersion }, context);
+    } catch (error) {
+      const mapped = safeError(error, locals.requestId);
+      return fail(mapped.status, { action: "remove", error: { ...mapped, ...(mapped.status === 409 ? { message: "This repository changed. Refresh the page before trying again." } : {}) } });
+    }
+    redirect(303, "/repositories");
+  },
   analyze: async ({ request, params, locals }) => {
     const form = await request.formData();
     try {

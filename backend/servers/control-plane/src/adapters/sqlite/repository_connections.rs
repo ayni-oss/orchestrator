@@ -40,7 +40,13 @@ impl CleanStore {
             resource_version: 1,
             registry_connection_id: request.registry_connection_id.clone(),
             image_namespace,
-            onboarding_status: "pending".into(),
+            onboarding_status: if request.use_ayni == Some(false) {
+                "not_enabled"
+            } else {
+                "pending"
+            }
+            .into(),
+            use_ayni: Some(request.use_ayni.unwrap_or(true)),
             onboarding_reason: String::new(),
             onboarding_revision: String::new(),
         };
@@ -158,8 +164,12 @@ impl CleanStore {
         if resource.onboarding_status == status
             && resource.onboarding_reason == reason
             && resource.onboarding_revision == revision
+            && !(status == "analyzing" && resource.use_ayni == Some(false))
         {
             return Ok(resource);
+        }
+        if status == "analyzing" {
+            resource.use_ayni = Some(true);
         }
         resource.onboarding_status = status.into();
         resource.onboarding_reason = reason.into();

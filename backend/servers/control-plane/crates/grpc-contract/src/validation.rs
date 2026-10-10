@@ -659,6 +659,7 @@ mod tests {
     #[test]
     fn repository_and_publication_inputs_are_bounded() {
         let repository = v1::CreateRepositoryConnectionRequest {
+            use_ayni: None,
             idempotency_key: "repo:1".to_owned(),
             provider: Some(github_provider()),
             display_name: "Ayni Orchestrator".to_owned(),

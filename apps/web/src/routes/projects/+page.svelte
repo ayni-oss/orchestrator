@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { notify, redirectNotification } from "$lib/notifications.js";
   import { tick } from "svelte";
   import type { PageProps } from "./$types";
   import { Plus, GitPullRequest, FolderGit2 } from "@lucide/svelte";
@@ -6,7 +7,6 @@
   import { zodClient } from "sveltekit-superforms/adapters";
   import { projectSchema } from "$lib/project-schema.js";
   import PageHeader from "$lib/components/page-header.svelte";
-  import Feedback from "$lib/components/feedback.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -24,15 +24,15 @@
     await new Promise<void>(resolve => {finishClosing=resolve;open=false;});
     await tick();
   }
-  const projectForm = (() => superForm(data.form, {validators:zodClient(projectSchema), onError: "apply", onResult:async ({result}) => {if(result.type === "redirect") await closeBeforeNavigation();}}))();
-  const { form: values, enhance, submitting, message } = projectForm;
+  const projectForm = (() => superForm(data.form, {validators:zodClient(projectSchema), onError: ({result}) => notify("error", "Action failed", result.error.message), onResult:async ({result}) => {if(result.type === "redirect") { await closeBeforeNavigation(); redirectNotification(result, new URL("?/create", window.location.href)); }}}))();
+  const { form: values, enhance, submitting } = projectForm;
 </script>
 <svelte:head><title>Projects · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8">
   <PageHeader title="Projects" description="Your repositories, environments, and development tasks.">
     {#snippet actions()}<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create project</Button>{/snippet}
   </PageHeader>
-  {#if data.error}<Feedback kind="warning" title="Some project data is unavailable" message={data.error.message} requestId={data.requestId} />{/if}
+
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {#each data.summaries as summary (summary.project.id)}
       {@const project = summary.project}
@@ -55,7 +55,7 @@
       <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={data.repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       {#if !data.repositories.length}<p class="text-sm text-muted-foreground">Connect a repository in Repositories before creating a project.</p><Button href="/repositories" variant="outline">Connect repositories</Button>{/if}
-      {#if $message}<p class="text-sm text-destructive" role="alert">{$message}</p>{/if}
+
       <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={$submitting || !data.repositories.length}>{$submitting ? "Creating…" : "Create project"}</Button></Dialog.Footer>
     </form>
   </Dialog.Content></Dialog.Root>

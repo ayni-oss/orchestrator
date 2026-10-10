@@ -67,6 +67,7 @@ impl AppState {
         &self,
         request: &v1::ConnectGithubRepositoryRequest,
     ) -> Result<v1::RepositoryConnection, OnboardingError> {
+        let _lifecycle = self.repository_lifecycle.read().await;
         let valid_name = |value: &str| {
             !value.is_empty()
                 && value.len() <= 100
@@ -145,8 +146,17 @@ impl AppState {
             }),
             display_name: format!("{owner}/{name}"),
             default_branch: field("default_branch")?,
-            registry_connection_id: request.registry_connection_id.clone(),
-            image_namespace: request.image_namespace.clone(),
+            registry_connection_id: if request.use_ayni == Some(false) {
+                String::new()
+            } else {
+                request.registry_connection_id.clone()
+            },
+            image_namespace: if request.use_ayni == Some(false) {
+                String::new()
+            } else {
+                request.image_namespace.clone()
+            },
+            use_ayni: request.use_ayni,
         };
         validation::create_repository_connection(&message)
             .map_err(|_| OnboardingError::invalid_argument("repository_identity_invalid"))?;
@@ -171,7 +181,11 @@ impl AppState {
         // profile for a supported committed Ayni configuration.  The runtime
         // reconciler owns resolve-or-build; no workflow or pull request is installed
         // in the connected repository.
-        let result = self.analyze_repository(&connection.id).await?;
+        let result = if connection.use_ayni == Some(false) {
+            connection
+        } else {
+            self.analyze_repository_inner(&connection.id).await?
+        };
         let key = request.idempotency_key.clone();
         with_store(self, move |store| {
             store.complete_external_action("ConnectGithubRepository", &key)
@@ -237,12 +251,13 @@ impl AppState {
                 return;
             };
             for repository in repositories.items {
-                if repository.status == v1::RepositoryConnectionStatus::Connecting as i32
-                    || repository.onboarding_status.is_empty()
-                    || matches!(
-                        repository.onboarding_status.as_str(),
-                        "pending" | "analyzing"
-                    )
+                if repository.use_ayni != Some(false)
+                    && (repository.status == v1::RepositoryConnectionStatus::Connecting as i32
+                        || repository.onboarding_status.is_empty()
+                        || matches!(
+                            repository.onboarding_status.as_str(),
+                            "pending" | "analyzing"
+                        ))
                 {
                     let _ = self.analyze_repository(&repository.id).await;
                 }
@@ -255,6 +270,14 @@ impl AppState {
     }
 
     pub(crate) async fn analyze_repository(
+        &self,
+        id: &str,
+    ) -> Result<v1::RepositoryConnection, OnboardingError> {
+        let _lifecycle = self.repository_lifecycle.read().await;
+        self.analyze_repository_inner(id).await
+    }
+
+    async fn analyze_repository_inner(
         &self,
         id: &str,
     ) -> Result<v1::RepositoryConnection, OnboardingError> {
@@ -598,6 +621,85 @@ mod tests {
             with_store(&state, move |store| store.repository_connection(&id)).await?,
             failed
         );
+        state.shutdown_database().await?;
+        Ok(())
+    }
+    async fn opt_out_connection(
+        state: &AppState,
+    ) -> Result<v1::RepositoryConnection, crate::adapters::sqlite::CleanStoreError> {
+        with_store(state, |store| {
+            let repository = store.create_repository_connection(
+                "connect-opt-out",
+                &v1::CreateRepositoryConnectionRequest {
+                    idempotency_key: "connect-opt-out".into(),
+                    use_ayni: Some(false),
+                    display_name: "example/repository".into(),
+                    default_branch: "main".into(),
+                    provider: Some(v1::RepositoryProvider {
+                        provider: Some(v1::repository_provider::Provider::Github(
+                            v1::GithubRepository {
+                                owner: "example".into(),
+                                name: "repository".into(),
+                                repository_id: "123".into(),
+                                installation_id: 1,
+                                html_url: "https://github.com/example/repository".into(),
+                            },
+                        )),
+                    }),
+                    ..Default::default()
+                },
+            )?;
+            store.transition_repository_connection(
+                &repository.id,
+                repository.resource_version,
+                v1::RepositoryConnectionStatus::Connected,
+                None,
+            )
+        })
+        .await
+    }
+
+    #[tokio::test]
+    async fn ayni_opt_out_survives_restart_and_background_reconciliation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("state.sqlite");
+        let state = AppState::open(&path, 3)?;
+        let connection = opt_out_connection(&state).await?;
+        state.shutdown_database().await?;
+        let reopened = AppState::open(&path, 3)?;
+        // Without the persisted opt-out guard, the unconfigured provider would cause onboarding failure.
+        reopened.reconcile_repository_onboarding().await;
+        let id = connection.id.clone();
+        with_store(&reopened, move |store| {
+            assert_eq!(store.repository_connection(&id)?, connection);
+            assert!(
+                store
+                    .list_runtime_profiles(Some(&id), None, None, None)?
+                    .items
+                    .is_empty()
+            );
+            store.integrity_check()
+        })
+        .await?;
+        reopened.shutdown_database().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ayni_opt_out_can_be_enabled_with_explicit_analysis()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let state = AppState::open(directory.path().join("state.sqlite"), 3)?;
+        let connection = opt_out_connection(&state).await?;
+        let enabled = state.analyze_repository(&connection.id).await?;
+        assert_eq!(enabled.use_ayni, Some(true));
+        assert_eq!(enabled.onboarding_status, "failed");
+        assert_eq!(
+            enabled.onboarding_reason,
+            "repository_provider_unconfigured"
+        );
+        assert!(enabled.resource_version > connection.resource_version);
         state.shutdown_database().await?;
         Ok(())
     }

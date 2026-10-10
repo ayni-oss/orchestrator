@@ -102,6 +102,8 @@ pub enum CleanStoreError {
     RepositoryAlreadyAssigned,
     #[error("the project is archived")]
     ProjectArchived,
+    #[error("{0}")]
+    RepositoryRemovalBlocked(&'static str),
     #[error("the requested resource transition is not supported")]
     InvalidTransition,
     #[error("the resource changed after it was observed")]
@@ -170,6 +172,7 @@ mod connection_dependencies;
 mod profile_identity;
 mod projects;
 mod repository_connections;
+mod repository_removal;
 mod runtime_certificate;
 mod runtime_profiles;
 mod runtime_registry;
@@ -217,6 +220,7 @@ mod tests {
 
     fn repository_request(key: &str, repository_id: &str) -> v1::CreateRepositoryConnectionRequest {
         v1::CreateRepositoryConnectionRequest {
+            use_ayni: None,
             idempotency_key: key.to_owned(),
             provider: Some(v1::RepositoryProvider {
                 provider: Some(v1::repository_provider::Provider::Github(

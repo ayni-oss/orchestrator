@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { notify } from "$lib/notifications.js";
   import { onMount, tick } from "svelte";
-  import { enhance } from "$app/forms";
+  import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { PageData } from "../../routes/repositories/[repositoryId]/$types";
   type RuntimeProfileDto = PageData["runtimeProfiles"][number];
@@ -11,6 +12,8 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { Label } from "$lib/components/ui/label/index.js";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import Feedback from "$lib/components/feedback.svelte";
   import EmptyState from "$lib/components/empty-state.svelte";
@@ -18,19 +21,16 @@
   import { statusTone, words } from "$lib/presentation.js";
 
   type Revision = { managed?: {fingerprint:string;repository:string} | undefined };
-  let { profiles, revisions, repository, connections, certificates, keys, error }: {
+  let { profiles, revisions, repository, connections, certificates, keys }: {
     profiles:RuntimeProfileDto[]; revisions:Record<string,Revision | undefined>;
-    repository:RepositoryConnectionDto; connections:ConnectionView[]; certificates:CertificateView[]; keys:Record<string,string>; error?:string | undefined;
+    repository:RepositoryConnectionDto; connections:ConnectionView[]; certificates:CertificateView[]; keys:Record<string,string>;
   } = $props();
   let selectedId=$state("");
   let editVersion=$state("");
   let open=$state(false);
   let busy=$state(false);
-  let showError=$state(false);
   let certificateId=$state("");
   let registryId=$state("");
-  let notification=$state("");
-  let notificationKind=$state<"success"|"warning">("success");
   const selected=$derived(profiles.find(profile=>profile.id===selectedId));
   const selectedConnection=$derived(connections.find(connection=>connection.id===registryId));
   const failureMessage=(message:string)=>message==="runtime_verification_failed" ? "Runtime image verification failed. Rebuild explicitly to replace this image." : /^[a-z][a-z0-9_]+$/u.test(message) ? words(message) : message;
@@ -40,15 +40,13 @@
     editVersion=profile.resourceVersion;
     certificateId=profile.certificateId ?? "";
     registryId=selection(profile).registryConnectionId;
-    showError=false;
     open=true;
   }
   const submit:SubmitFunction=({action})=>{
     const registrySave=(action.searchParams.has("/registry") || action.searchParams.has("/certificate"));
-    busy=true;showError=false;
+    busy=true;
     return async({result,update})=>{
-      busy=false;showError=result.type==="failure";
-      if(result.type==="success") { notificationKind="success"; notification=typeof result.data?.success==="string" ? result.data.success : "Runtime action requested."; }
+      busy=false;
       await update({reset:false});
       await tick();
       if(result.type==="success" && registrySave) editVersion=selected?.resourceVersion ?? "";
@@ -57,41 +55,44 @@
   onMount(()=>{
     let previous=new Map(profiles.map(profile=>[profile.id,profile.state]));
     const timer=setInterval(()=>{
-      const changed=profiles.find(profile=>previous.get(profile.id)!==profile.state);
-      if(changed) { notificationKind=["failed","degraded"].includes(changed.state) ? "warning" : "success"; notification=`${words(changed.kind)} runtime is ${words(changed.state).toLowerCase()}.`; }
+      for (const profile of profiles) {
+        if (previous.has(profile.id) && previous.get(profile.id) !== profile.state) {
+          notify(["failed", "degraded"].includes(profile.state) ? "warning" : "info", "Runtime update", `${words(profile.kind)} runtime is ${words(profile.state).toLowerCase()}.`);
+        }
+      }
       previous=new Map(profiles.map(profile=>[profile.id,profile.state]));
     },1000);
     return ()=>clearInterval(timer);
   });
 </script>
 
-{#if notification}<div class="flex items-start gap-2"><div class="flex-1"><Feedback kind={notificationKind} title="Runtime update" message={notification} /></div><Button variant="ghost" size="sm" aria-label="Dismiss notification" onclick={()=>notification=""}>Dismiss</Button></div>{/if}
 <section class="space-y-4">
   <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-lg font-semibold">Runtimes</h2><PollStatus /></div>
   {#each profiles as profile (profile.id)}
     {@const revision=revisions[profile.id]}
-    <article class="space-y-3 rounded-xl border bg-card p-4">
-      <div class="flex items-center justify-between gap-3"><a class="font-semibold hover:underline" href={`/profiles/${encodeURIComponent(profile.id)}`}>{words(profile.kind)}</a><div class="flex items-center gap-2"><StatusBadge status={profile.state} tone={statusTone(profile.state)} /><Button variant="outline" size="sm" onclick={()=>edit(profile)}>{profile.support==="operational" ? "Edit" : "Details"}</Button></div></div>
-      {#if profile.preparationPhase}<p class="text-sm" role="status">Preparation: {words(profile.preparationPhase)}</p>{/if}
+    <InformationCard title={words(profile.kind)} navigationHref={`/profiles/${encodeURIComponent(profile.id)}`} status={profile.state}>
       {#each profile.findings as finding (finding.code)}<div class="text-sm" role="status"><p class="text-destructive">{finding.message}</p><p class="text-muted-foreground">{finding.remediation}</p></div>{/each}
-      <dl class="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
-        {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Ayni lock</dt><dd class="break-all font-mono text-xs">{revision?.managed?.fingerprint || "Not available yet"}</dd>{/if}
-        {#if profile.kind==="ayni_managed"}<dt class="text-muted-foreground">Certificate</dt><dd>{profile.effectiveCertificate ? `${profile.effectiveCertificate.displayName} · revision ${profile.effectiveCertificate.revision}${profile.certificateId ? "" : " (default)"}` : "Not configured"}</dd>{/if}
-        {#each profile.reconciliation.filter(entry=>entry.key==="discovery-reference") as entry (entry.key)}<dt class="text-muted-foreground">Discovery tag</dt><dd class="break-all font-mono text-xs">{entry.value}</dd>{/each}
-        <dt class="text-muted-foreground">Image destination</dt><dd class="break-all">{profile.desiredImageRepository || revision?.managed?.repository || "Not configured"}</dd>
-      </dl>
+      <InformationTable rows={[
+        ...(profile.preparationPhase ? [{ label: "Preparation", value: words(profile.preparationPhase) }] : []),
+        ...(profile.kind === "ayni_managed" ? [
+          { label: "Ayni lock", value: revision?.managed?.fingerprint || "Not available yet", monospace: true },
+          { label: "Certificate", value: profile.effectiveCertificate ? `${profile.effectiveCertificate.displayName} · revision ${profile.effectiveCertificate.revision}${profile.certificateId ? "" : " (default)"}` : "Not configured" },
+        ] : []),
+        ...profile.reconciliation.filter(entry => entry.key === "discovery-reference").map(entry => ({ label: "Discovery tag", value: entry.value, monospace: true })),
+        { label: "Image destination", value: profile.desiredImageRepository || revision?.managed?.repository || "Not configured" },
+      ]} />
       {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
       {#each profile.reconciliation.filter(entry=>entry.key==="certificate-trust-pr") as entry (entry.key)}<a href={entry.value} target="_blank" rel="noreferrer" class="text-sm underline">Review certificate trust update</a>{/each}
       {#if profile.failure && !profile.findings.length}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
-    </article>
-  {:else}<EmptyState title="Inspection pending" description="Runtime status will appear here when inspection completes." />{/each}
+    </InformationCard>
+  {:else}<EmptyState title={repository.useAyni === false ? "No runtimes configured" : "Inspection pending"} description={repository.useAyni === false ? "Enable Ayni when you want to prepare a managed runtime." : "Runtime status will appear here when inspection completes."} />{/each}
 </section>
 
 <Dialog.Root bind:open>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
     <Dialog.Header><Dialog.Title>Edit runtime</Dialog.Title><Dialog.Description>{selected ? `${words(selected.kind)} · ${repository.displayName}` : "This runtime is no longer available."}</Dialog.Description></Dialog.Header>
-    {#if showError && error}<Feedback kind="error" title="Runtime action failed" message={error} />{/if}
+
     {#if selected}
       <StatusBadge status={selected.state} tone={statusTone(selected.state)} />
       {#if selected.failure}<Feedback kind="warning" title="Runtime needs attention" message={failureMessage(selected.failure.message)} />{/if}

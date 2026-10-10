@@ -8,17 +8,29 @@ Start the control plane without a GitHub App, registry or model credentials to
 configure connections through the trusted operator UI. Model credentials are
 required when admitting model-backed work, not when opening onboarding.
 
-Under **Source control → GitHub**, create a customer-owned App through the
+The sidebar groups **Projects**, **Integrations**, and **Config**. Integrations
+contains Repositories and Source control; Config contains Ayni's Certificates
+and Container registries. These navigation groups do not change credential ownership.
+
+Under **Integrations → Source control → GitHub**, create a customer-owned App through the
 manifest flow or import its App ID and PEM key. The server stores credentials in
 a Kubernetes Secret and returns safe connection status. Install the App on the
 repositories it may access in GitHub, then connect those repositories in Ayni.
 App ownership and installation permissions remain under GitHub administration.
 
-Under **Container registries → GitHub**, add a GHCR connection with an approved
+Under **Config → Ayni → Container registries → GitHub**, add a GHCR connection with an approved
 image namespace, username, push token and a distinct pull-only token. Check the
 independent authentication, push, pull and cleanup results. A cleanup failure is
 reported separately and can be retried. Select the connection in the runtime’s **Edit** dialog on its repository overview. Repository
 enrollment does not require a registry selection.
+The **Connect repository** dialog starts with **Use Ayni** unchecked. Connecting
+without it skips Ayni runtime onboarding, including background retries after a
+restart. Enable it to select a ready GHCR connection on the same row; the selected
+namespace appears below. You can leave **Configure later** selected and finish
+the runtime destination afterward. For repositories connected without Ayni,
+choose **Set up Ayni** on the repository page to enable onboarding later.
+Ayni and its official builder always use the version in the repository’s committed
+`.ayni.lock`; version upgrades require regenerating and committing that lock.
 
 Administrator-managed connections show **Managed by your administrator** and
 cannot be edited or deleted through the UI. Register them explicitly using the
@@ -36,6 +48,17 @@ the server-computed image destination without a namespace input. Registry change
 readiness until its new destination is verified; other runtimes are unaffected.
 
 Connect the repository and open its runtime, even if configuration is incomplete.
+To restart onboarding, open **Edit → Remove repository** on its repository page
+and enter the repository name to confirm. Removal clears the local connection,
+snapshots, runtime profiles, revisions, and artifact records. Reconnect from
+Repositories to start with fresh onboarding and runtime selections. GitHub content,
+registry images, provider integrations, and signing certificates remain intact.
+Project references (including archived projects), retained tasks, and active
+runtime preparation block removal. Failed preparation retains durable cleanup
+intents; the runtime reconciler retries cleanup of its owned jobs and temporary
+resources, including after a restart. Interrupted onboarding intents are retired
+so recovery cannot recreate the removed connection.
+
 Select a ready certificate and GHCR connection. Analyze repository reports missing
 committed policy or lock, incompatible configuration, trust, registry and platform
 findings with corrective actions. Review and merge any certificate trust PR.

@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { notify } from "$lib/notifications.js";
   import { onMount } from "svelte";
-  import { enhance } from "$app/forms";
+  import { enhance } from "$lib/forms.js";
   import { refreshScope, subscribeRefresh } from "$lib/refresh.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { CertificateView } from "$lib/certificate.js";
@@ -8,31 +9,31 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-  import StatusBadge from "$lib/components/status-badge.svelte";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import Feedback from "$lib/components/feedback.svelte";
-  import { statusTone } from "$lib/presentation.js";
-  let {certificates,idempotencyKey,available=true,error}: {certificates:CertificateView[];idempotencyKey:string;available?:boolean;error?:string | undefined}=$props();
+  let {certificates,idempotencyKey,available=true}: {certificates:CertificateView[];idempotencyKey:string;available?:boolean}=$props();
   let createOpen=$state(false),editOpen=$state(false),selectedId=$state("");
   let createSeed=$state(""),editSeed=$state(""),createMode=$state("generate"),editMode=$state("generate");
-  let busy=$state(false),showError=$state(false),copyMessage=$state("");
+  let busy=$state(false);
   const selected=$derived(certificates.find(c=>c.id===selectedId));
   function clearSeeds() { createSeed="";editSeed=""; }
-  function closeCreate(open:boolean) {createOpen=open;if(!open){clearSeeds();showError=false;}}
-  function closeEdit(open:boolean) {editOpen=open;if(!open){clearSeeds();showError=false;copyMessage="";}}
-  function edit(id:string) {selectedId=id;clearSeeds();editMode="generate";showError=false;copyMessage="";editOpen=true;}
+  function closeCreate(open:boolean) {createOpen=open;if(!open){clearSeeds();}}
+  function closeEdit(open:boolean) {editOpen=open;if(!open){clearSeeds();}}
+  function edit(id:string) {selectedId=id;clearSeeds();editMode="generate";editOpen=true;}
   function submit(operation:string):SubmitFunction {
     return ({formData})=>{
-      busy=true;showError=false;clearSeeds();
+      busy=true;clearSeeds();
       // FormData already contains the submitted seed; remove it after the request completes.
       return async({result,update})=>{
         formData.delete("signingSeed");clearSeeds();
-        try {await update({reset:false,invalidateAll:false});showError=result.type==="failure" || result.type==="error";if(result.type==="success" && operation==="create")closeCreate(false);if(result.type==="success" && operation==="delete")closeEdit(false);await refreshScope("app:certificates", true);}
+        try {await update({reset:false,invalidateAll:false});if(result.type==="success" && operation==="create")closeCreate(false);if(result.type==="success" && operation==="delete")closeEdit(false);await refreshScope("app:certificates", true);}
         finally {busy=false;clearSeeds();}
       };
     };
   }
   const snippet=(c:CertificateView)=>`[environment.certificate.trusted_keys]\n${JSON.stringify(c.keyId)} = ${JSON.stringify(c.publicKey)}`;
-  async function copy(value:string) {try{await navigator.clipboard.writeText(value);copyMessage="Copied.";}catch{copyMessage="Copy unavailable. Select and copy the displayed value.";}}
+  async function copy(value:string) {try{await navigator.clipboard.writeText(value);notify("success", "Copied to clipboard");}catch{notify("error", "Copy unavailable", "Select and copy the displayed value.");}}
   onMount(()=>{const unsubscribe=subscribeRefresh("app:certificates",{intervalMs:30_000});return()=>{unsubscribe();clearSeeds();};});
 </script>
 
@@ -43,18 +44,23 @@
   <input type="hidden" name="id" value={c.id}/><input type="hidden" name="idempotencyKey" value={`${idempotencyKey}-${operation}-${c.id}-${c.resourceVersion}`}/><input type="hidden" name="resourceVersion" value={c.resourceVersion}/>
 {/snippet}
 <div class="space-y-4">
-  <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">Signing certificates</h2><Button onclick={()=>{createMode="generate";clearSeeds();showError=false;createOpen=true;}} disabled={!available}>Add certificate</Button></div>
+  <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">Signing certificates</h2><Button onclick={()=>{createMode="generate";clearSeeds();createOpen=true;}} disabled={!available}>Add certificate</Button></div>
   {#if !certificates.length}<p class="text-sm text-muted-foreground">Add a certificate to sign Ayni environment images. The first certificate becomes the default.</p>{/if}
   {#each certificates as c (c.id)}
-    <section aria-label={c.displayName} class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-      <div class="min-w-0 flex-1"><h3 class="truncate font-medium">{c.displayName}</h3><p class="text-sm text-muted-foreground">{c.keyId} · Revision {c.revision} · {c.usageCount} runtime{c.usageCount==="1" ? "" : "s"}</p>{#if c.managementSource==="admin"}<p class="text-xs text-muted-foreground">Managed by your administrator</p>{/if}</div>
-      <div class="flex flex-wrap items-center gap-2">{#if c.isDefault}<StatusBadge status="default" tone="success" />{/if}<StatusBadge status={c.enabled ? c.status : "disabled"} tone={statusTone(c.enabled ? c.status : "disabled")} /><Button variant="outline" size="sm" onclick={()=>edit(c.id)}>{c.managementSource==="admin" ? "Details" : "Edit"}</Button></div>
-    </section>
+    <InformationCard title={c.displayName} status={c.enabled ? c.status : "disabled"} actions={[{ label: c.managementSource === "admin" ? "Details" : "Edit", onSelect: () => edit(c.id) }]}>
+      <InformationTable rows={[
+        { label: "Key ID", value: c.keyId },
+        { label: "Revision", value: String(c.revision) },
+        { label: "Runtimes", value: c.usageCount },
+        { label: "Default", value: c.isDefault ? "Yes" : "No" },
+        ...(c.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
+      ]} />
+    </InformationCard>
   {/each}
 </div>
 <Dialog.Root open={createOpen} onOpenChange={closeCreate}>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>Add certificate</Dialog.Title><Dialog.Description>Generate an Ed25519 key or import an existing Ayni signing seed.</Dialog.Description></Dialog.Header>
-    {#if showError && error}<Feedback kind="error" title="Certificate failed" message={error}/>{/if}
+
     <form method="POST" action="?/create" use:enhance={submit("create")} class="space-y-4">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey}/>
       <div class="space-y-2"><Label for="certificate-name">Certificate name</Label><Input id="certificate-name" name="displayName" required maxlength={128}/></div>
@@ -67,11 +73,11 @@
   </Dialog.Content>
 </Dialog.Root>
 <Dialog.Root open={editOpen} onOpenChange={closeEdit}>
-  <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>{selected?.managementSource==="admin" ? "Certificate details" : "Edit certificate"}</Dialog.Title><Dialog.Description>{selected?.displayName ?? "This certificate is no longer available."}</Dialog.Description></Dialog.Header>
-    {#if showError && error}<Feedback kind="error" title="Certificate update failed" message={error}/>{/if}
+  <Dialog.Content class="w-max max-w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto sm:max-w-[calc(100vw-2rem)] [&>*]:min-w-0"><Dialog.Header><Dialog.Title>{selected?.managementSource==="admin" ? "Certificate details" : "Edit certificate"}</Dialog.Title><Dialog.Description>{selected?.displayName ?? "This certificate is no longer available."}</Dialog.Description></Dialog.Header>
+
     {#if selected}
       <dl class="space-y-2 text-sm"><div><dt class="text-muted-foreground">Public key</dt><dd class="break-all font-mono text-xs">{selected.publicKey}</dd></div><div><dt class="text-muted-foreground">Key ID / revision</dt><dd>{selected.keyId} / {selected.revision}</dd></div></dl>
-      <div class="space-y-2"><p class="text-sm font-medium">Public trust policy</p><pre class="overflow-x-auto rounded-lg bg-muted p-3 text-xs">{snippet(selected)}</pre><div class="flex gap-2"><Button variant="outline" onclick={()=>copy(selected!.publicKey)}>Copy public key</Button><Button variant="outline" onclick={()=>copy(snippet(selected!))}>Copy trust policy</Button></div>{#if copyMessage}<p role="status" class="text-xs">{copyMessage}</p>{/if}</div>
+      <div class="space-y-2"><p class="text-sm font-medium">Public trust policy</p><pre class="overflow-x-auto rounded-lg bg-muted p-3 text-xs">{snippet(selected)}</pre><div class="flex flex-wrap gap-2"><Button variant="outline" onclick={()=>copy(selected!.publicKey)}>Copy public key</Button><Button variant="outline" onclick={()=>copy(snippet(selected!))}>Copy trust policy</Button></div></div>
       {#if selected.failureReason}<Feedback kind="warning" title="Certificate needs attention" message={selected.failureReason}/>{/if}
       {#if selected.managementSource==="admin"}<p class="text-sm">Managed by your administrator. Update the configured Kubernetes Secret to rotate this certificate.</p><p class="text-xs text-muted-foreground">Source Secret: {selected.sourceSecretName || selected.secretName}</p>
       {:else}
