@@ -72,7 +72,7 @@ export const actions: Actions = {
       await bff.removeRepository({ repositoryConnectionId: params.repositoryId, idempotencyKey, expectedResourceVersion }, context);
     } catch (error) {
       const mapped = safeError(error, locals.requestId);
-      return fail(mapped.status, { action: "remove", error: { ...mapped, ...(mapped.status === 409 ? { message: "This repository changed. Close and reopen Edit before trying again." } : {}) } });
+      return fail(mapped.status, { action: "remove", error: { ...mapped, ...(mapped.status === 409 ? { message: "This repository changed. Refresh the page before trying again." } : {}) } });
     }
     redirect(303, "/repositories");
   },

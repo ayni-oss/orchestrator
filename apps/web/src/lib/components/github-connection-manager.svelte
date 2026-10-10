@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { notify } from "$lib/notifications.js";
   import { onMount } from "svelte";
-  import { enhance } from "$app/forms";
+  import { enhance } from "$lib/forms.js";
   import { refreshScope, subscribeRefresh } from "$lib/refresh.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { ConnectionView } from "$lib/connection.js";
@@ -9,9 +10,11 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import StatusBadge from "$lib/components/status-badge.svelte";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import Feedback from "$lib/components/feedback.svelte";
   import { statusTone } from "$lib/presentation.js";
-  let { connections, idempotencyKey, available = true, error }: { connections: ConnectionView[]; idempotencyKey: string; available?: boolean; error?: string | undefined } = $props();
+  let { connections, idempotencyKey, available = true }: { connections: ConnectionView[]; idempotencyKey: string; available?: boolean } = $props();
   let createOpen = $state(false);
   let editOpen = $state(false);
   let selectedId = $state("");
@@ -20,17 +23,16 @@
   let privateKey = $state("");
   let replacementKey = $state("");
   let submitting = $state(false);
-  let showError = $state(false);
-  let manifestError = $state("");
+  let actionForms = $state<Record<string, HTMLFormElement | undefined>>({});
   onMount(() => subscribeRefresh("app:connections", {intervalMs:30_000}));
-  function closeCreate(open: boolean) { createOpen = open; if (!open) { privateKey = ""; showError = false; } }
-  function closeEdit(open: boolean) { editOpen = open; if (!open) { replacementKey = ""; showError = false; } }
-  function openCreate() { createOpen = true; mode = "create"; showError = false; manifestError = ""; void prepareManifest(); }
-  function openEdit(id: string) { selectedId = id; replacementKey = ""; showError = false; editOpen = true; }
+  function closeCreate(open: boolean) { createOpen = open; if (!open) { privateKey = ""; } }
+  function closeEdit(open: boolean) { editOpen = open; if (!open) { replacementKey = ""; } }
+  function openCreate() { createOpen = true; mode = "create"; void prepareManifest(); }
+  function openEdit(id: string) { selectedId = id; replacementKey = ""; editOpen = true; }
   function submit(operation: string): SubmitFunction {
-    return () => { submitting = true; showError = false; return async ({result, update}) => {
+    return () => { submitting = true; return async ({result, update}) => {
       privateKey = ""; replacementKey = "";
-      try { await update({invalidateAll:false}); showError = result.type === "failure" || result.type === "error";
+      try { await update({invalidateAll:false});
         if (result.type === "success" && operation === "create") closeCreate(false);
         if (result.type === "success" && operation === "delete") closeEdit(false);
         await refreshScope("app:connections", true);
@@ -64,8 +66,8 @@
     try {
       const response = await fetch("/source-control/github/start", { method: "POST" });
       if (response.ok) flowState = (await response.json() as { state: string }).state;
-      else manifestError = "GitHub setup could not be prepared. Close this dialog and try again.";
-    } catch { manifestError = "GitHub setup could not be prepared. Close this dialog and try again."; }
+      else notify("error", "Setup unavailable", "GitHub setup could not be prepared. Close this dialog and try again.");
+    } catch { notify("error", "Setup unavailable", "GitHub setup could not be prepared. Close this dialog and try again."); }
   }
 </script>
 {#snippet guidance()}
@@ -75,22 +77,42 @@
   <div class="flex items-center justify-between gap-3"><h2 class="text-lg font-semibold">GitHub App</h2>{#if !connections.length}<Button onclick={openCreate} disabled={!available}>Add GitHub App</Button>{/if}</div>
   {#if !available}<p role="status">Connection service unavailable. Retry when the control plane is ready.</p>{/if}
   {#if !connections.length}<p class="text-sm text-muted-foreground">Add a GitHub App to connect your repositories.</p>{/if}
+
   {#each connections as connection (connection.id)}
-    <section aria-label={connection.displayName} class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-      <div class="min-w-0 flex-1"><h3 class="truncate font-medium">{connection.displayName}</h3><p class="text-sm text-muted-foreground">App ID: {connection.appId}</p>{#if connection.managementSource === "admin"}<p class="text-xs text-muted-foreground">Managed by your administrator</p>{/if}</div>
-      <div class="flex items-center gap-2"><StatusBadge status={connection.enabled ? connection.status : "disabled"} tone={statusTone(connection.enabled ? connection.status : "disabled")} /><Button variant="outline" size="sm" onclick={() => openEdit(connection.id)}>{connection.managementSource === "admin" ? "Details" : "Edit"}</Button></div>
-    </section>
+    <InformationCard title={connection.displayName} status={connection.enabled ? connection.status : "disabled"} actions={[
+      { label: connection.managementSource === "admin" ? "Details" : "Edit", onSelect: () => openEdit(connection.id), disabled: submitting },
+      ...(connection.managementSource === "admin" ? [] : [
+        { label: "Test connection / Retry", onSelect: () => actionForms[`${connection.id}-test`]?.requestSubmit(), disabled: submitting },
+        { label: connection.enabled ? "Disable" : "Enable", onSelect: () => actionForms[`${connection.id}-toggle`]?.requestSubmit(), disabled: submitting },
+        { label: "Delete", onSelect: () => actionForms[`${connection.id}-delete`]?.requestSubmit(), disabled: submitting, destructive: true },
+      ]),
+    ]}>
+      <InformationTable rows={[
+        { label: "App ID", value: String(connection.appId) },
+        ...(connection.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
+      ]} />
+      {#if connection.managementSource !== "admin"}
+        {#each ["test", "toggle", "delete"] as action (action)}
+          <form hidden bind:this={actionForms[`${connection.id}-${action}`]} method="POST" action={`?/${action}`} use:enhance={submit(action)}>
+            <input type="hidden" name="id" value={connection.id} />
+            <input type="hidden" name="idempotencyKey" value={`${idempotencyKey}-${action}-${connection.id}`} />
+            <input type="hidden" name="resourceVersion" value={connection.resourceVersion} />
+            <input type="hidden" name="enabled" value={String(!connection.enabled)} />
+          </form>
+        {/each}
+      {/if}
+    </InformationCard>
   {/each}
 </div>
 <Dialog.Root open={createOpen} onOpenChange={closeCreate}>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
     <Dialog.Header><Dialog.Title>Add GitHub App</Dialog.Title><Dialog.Description>Create an App in GitHub or import an existing App.</Dialog.Description></Dialog.Header>
     <div class="flex gap-2"><Button variant={mode === "create" ? "default" : "outline"} onclick={() => { mode = "create"; privateKey = ""; }}>Create App</Button><Button variant={mode === "import" ? "default" : "outline"} onclick={() => { mode = "import"; }}>Import existing App</Button></div>
-    {#if showError && error}<Feedback kind="error" title="Connection failed" message={error} />{/if}
+
     {#if mode === "create"}
       {@render guidance()}
       <p class="text-sm text-muted-foreground">GitHub creates the private key through its App Manifest flow. Ayni stores the generated credentials securely and returns you to the connection status page.</p>
-      {#if manifestError}<Feedback kind="error" title="Setup unavailable" message={manifestError} />{/if}
+
       <div class="space-y-2"><Label for="github-owner">GitHub organization</Label><Input id="github-owner" bind:value={owner} autocomplete="organization" placeholder="acme-inc" /></div>
       <p class="text-sm text-muted-foreground">App name: {appName}</p>
       {#if organizationAppUrl}<form action={organizationAppUrl} method="POST" target="_blank"><input type="hidden" name="manifest" value={appManifest} /><Button type="submit">Create App for {owner}</Button></form>{:else}<Button disabled>{flowState ? "Enter an organization name to continue" : "Preparing GitHub setup…"}</Button>{/if}
@@ -112,7 +134,7 @@
 <Dialog.Root open={editOpen} onOpenChange={closeEdit}>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
     <Dialog.Header><Dialog.Title>{selected?.managementSource === "admin" ? "App details" : "Edit GitHub App"}</Dialog.Title><Dialog.Description>{selected ? `${selected.displayName} · App ID: ${selected.appId}` : "This connection is no longer available."}</Dialog.Description></Dialog.Header>
-    {#if showError && error}<Feedback kind="error" title="Connection update failed" message={error} />{/if}
+
     {#if selected}
       <StatusBadge status={selected.enabled ? selected.status : "disabled"} tone={statusTone(selected.enabled ? selected.status : "disabled")} />
       {#if selected.failureReason}<Feedback kind="warning" title="Connection needs attention" message={selected.failureReason} />{/if}
@@ -123,9 +145,6 @@
           <div class="space-y-2"><Label for="github-replacement">New private key</Label><textarea id="github-replacement" name="privateKey" required autocomplete="off" bind:value={replacementKey} class="min-h-28 w-full rounded-md border bg-background p-3 text-sm"></textarea></div>
           <p class="text-sm text-muted-foreground">Generate a new private key for this same App in GitHub. The current key remains active until its replacement passes validation.</p><Button type="submit" disabled={submitting}>Replace credentials</Button>
         </form>
-        <div class="flex flex-wrap gap-2 border-t pt-4">{#each ["test", "toggle", "delete"] as action (action)}
-          <form method="POST" action={`?/${action}`} use:enhance={submit(action)}><input type="hidden" name="id" value={selected.id} /><input type="hidden" name="idempotencyKey" value={`${idempotencyKey}-${action}-${selected.id}`} /><input type="hidden" name="resourceVersion" value={selected.resourceVersion} /><input type="hidden" name="enabled" value={String(!selected.enabled)} /><Button type="submit" variant={action === "delete" ? "destructive" : "outline"} disabled={submitting}>{action === "test" ? "Test connection / Retry" : action === "toggle" ? selected.enabled ? "Disable" : "Enable" : "Delete"}</Button></form>
-        {/each}</div>
       {/if}
     {/if}
   </Dialog.Content>

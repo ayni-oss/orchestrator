@@ -1,21 +1,22 @@
 <script lang="ts">
+  import { notify } from "$lib/notifications.js";
   import type { RepositoryOptions } from "$lib/server/repository-options.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
-  import { enhance } from "$app/forms";
-  import { ArrowRight, Plus } from "@lucide/svelte";
+  import { enhance } from "$lib/forms.js";
+  import { Plus } from "@lucide/svelte";
   import type { PageProps } from "./$types";
+  import AyniIcon from "$lib/components/ayni-icon.svelte";
   import EmptyState from "$lib/components/empty-state.svelte";
-  import Feedback from "$lib/components/feedback.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
-  import StatusBadge from "$lib/components/status-badge.svelte";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import SubmitButton from "$lib/components/submit-button.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import * as Card from "$lib/components/ui/card/index.js";
   import * as Checkbox from "$lib/components/ui/checkbox/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
 
-  let { data, form }: PageProps = $props();
+  let { data }: PageProps = $props();
   let connecting = $state(false);
   let connectOpen = $state(false);
   let options = $state<RepositoryOptions>({ installations: [], selectedAppName: "", selectedInstallationId: "", repositories: [] });
@@ -32,9 +33,9 @@
       const result = await response.json();
       if (sequence !== optionsRequest) return;
       if (response.ok) options = result;
-      else options.error = result.error;
+      else { options.error = result.error; notify("error", "GitHub unavailable", options.error?.message, options.error?.requestId); }
     } catch {
-      if (sequence === optionsRequest) options.error = { status: 503, reason: "provider_unavailable", message: "GitHub options could not be loaded. Try again.", requestId: data.requestId, retryable: true };
+      if (sequence === optionsRequest) { options.error = { status: 503, reason: "provider_unavailable", message: "GitHub options could not be loaded. Try again.", requestId: data.requestId, retryable: true }; notify("error", "GitHub unavailable", options.error.message, options.error.requestId); }
     } finally {
       if (sequence === optionsRequest) loadingOptions = false;
     }
@@ -55,21 +56,30 @@
 
 <svelte:head><title>Repository connections · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
-  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect repositories and choose whether to prepare an Ayni runtime.">
+  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect repositories to make them available to Orchestrator. It builds runtimes from their Ayni configuration; for repositories without Ayni, provide your own container image.">
     {#snippet actions()}<Button onclick={openConnect}><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
   </PageHeader>
-  {#if data.error}<Feedback kind="error" title="Connections unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
-  {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{:else if form?.success}<Feedback kind="success" title="Repository connected" message={form.success} />{/if}
 
   <section class="space-y-4">
     {#if data.summaries.length === 0 && data.backend === "connected"}
-      <EmptyState title="No repository connections" description="Connect an approved provider repository to inspect its committed Ayni configuration and runtime image." />
+      <EmptyState title="No repository connections" description="Connect a repository to discover its Ayni configuration, or provide your own container image for its runtime." />
     {:else}
       <div class="grid gap-4 lg:grid-cols-2">
         {#each data.summaries as summary (summary.repository.id)}
           {@const item = summary.repository}
           {@const readiness = !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : item.useAyni === false ? "Ayni not enabled" : "Setup required"}
-          <Card.Root><Card.Header><div class="flex items-start justify-between gap-3"><div><Card.Title>{item.displayName}</Card.Title><Card.Description>{item.provider.owner}/{item.provider.name} · {item.defaultBranch}</Card.Description></div><StatusBadge status={readiness} tone={summary.runtime.ready ? "success" : "warning"} /></div></Card.Header><Card.Content class="text-sm"><p class="text-muted-foreground">{item.useAyni === false ? "Set up Ayni from the repository page when you need a runtime." : summary.runtime.complete ? `${summary.runtime.readyProfiles} of ${summary.runtime.operationalProfiles} operational runtimes ready` : "Runtime status is unavailable."}</p></Card.Content><Card.Footer><Button href={`/repositories/${encodeURIComponent(item.id)}`} variant="outline">Runtime status <ArrowRight aria-hidden="true" /></Button></Card.Footer></Card.Root>
+          {@const repositoryHref = `/repositories/${encodeURIComponent(item.id)}`}
+          <a href={repositoryHref} aria-label={`Open repository ${item.displayName}`} class="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>div]:h-full [&>div]:transition-colors hover:[&>div]:bg-accent/30">
+          <InformationCard title={item.displayName} status={readiness} tone={summary.runtime.ready ? "success" : "warning"}>
+            {#snippet titleAccessory()}
+              {#if item.useAyni !== false}<AyniIcon class="size-5 shrink-0 text-muted-foreground" role="img" aria-label="Ayni enabled" />{/if}
+            {/snippet}
+            <InformationTable rows={[
+              { label: "Default branch", value: item.defaultBranch },
+              { label: "Runtimes", value: summary.runtime.complete ? `${summary.runtime.readyProfiles} of ${summary.runtime.operationalProfiles} operational runtimes ready` : "Unavailable" },
+            ]} />
+          </InformationCard>
+          </a>
         {/each}
       </div>
       {#if nextPageHref}<div class="flex justify-end"><Button href={nextPageHref} variant="outline">Next page</Button></div>{/if}
@@ -82,8 +92,8 @@
         <Dialog.Title>Connect repository</Dialog.Title>
         <Dialog.Description>Choose a GitHub App and repository, then enable Ayni to configure its runtime.</Dialog.Description>
       </Dialog.Header>
-      {#if form?.error}<Feedback kind="error" title="Connection failed" message={form.error.message} requestId={form.error.requestId} />{/if}
-      {#if options.error}<Feedback kind="error" title="GitHub unavailable" message={options.error.message} requestId={options.error.requestId} /><Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
+
+      {#if options.error}<Button variant="outline" onclick={() => { void loadOptions(); }}>Try again</Button>{/if}
       {#if loadingOptions}<p class="text-sm text-muted-foreground" role="status">Loading GitHub repositories…</p>{/if}
       {#if options.installations.length}
         <div class="space-y-5">
@@ -117,7 +127,7 @@
               <ThemedSelect id="connect-registry" name="registryConnectionId" bind:value={selectedRegistryId} options={[{ value: "", label: "Configure later" }, ...data.registryConnections.map(connection => ({ value: connection.id, label: connection.displayName }))]} disabled={connecting || !useAyni} />
               {#if selectedRegistry}<p class="text-xs text-muted-foreground">Namespace: {selectedRegistry.imageNamespace}</p>{/if}
               {#if useAyni && data.registryError}
-                <Feedback kind="error" title="GHCR connections unavailable" message={data.registryError.message} requestId={data.registryError.requestId} />
+
                 <p class="text-sm text-muted-foreground">You can connect now and configure the runtime's image destination later.</p>
               {:else if useAyni && !data.registryConnections.length}
                 <p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>

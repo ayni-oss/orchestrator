@@ -1,41 +1,25 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import { mergeProps } from "bits-ui";
+  import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import { ArrowLeft, ExternalLink, Trash2 } from "@lucide/svelte";
+  import { ExternalLink, Trash2 } from "@lucide/svelte";
   import type { PageProps } from "./$types";
   import Feedback from "$lib/components/feedback.svelte";
-  import StatusBadge from "$lib/components/status-badge.svelte";
   import RuntimeOverview from "$lib/components/runtime-overview.svelte";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import SubmitButton from "$lib/components/submit-button.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { statusTone, words } from "$lib/presentation.js";
-  let { data, form }: PageProps = $props();
-  let editOpen = $state(false);
+  import { words } from "$lib/presentation.js";
+  let { data }: PageProps = $props();
   let confirmation = $state("");
-  let editVersion = $state("");
+  let analysisForm = $state<HTMLFormElement | undefined>();
   let busy = $state(false);
-  let removalError = $state("");
-  function editRepository() {
-    confirmation = "";
-    removalError = "";
-    editVersion = data.repositoryConnection?.resourceVersion ?? "";
-  }
   const remove: SubmitFunction = () => {
     busy = true;
-    removalError = "";
-    return async ({ result, update }) => {
-      busy = false;
-      if (result.type === "failure") {
-        const error = result.data?.error as { message?: string } | undefined;
-        removalError = error?.message ?? "Repository removal failed. Try again.";
-      } else if (result.type === "error") {
-        removalError = "Repository removal failed. Try again.";
-      }
-      await update({ reset: false });
+    return async ({ update }) => {
+      try { await update({ reset: false }); } finally { busy = false; }
     };
   };
   const remediation: Record<string, string> = {
@@ -51,65 +35,76 @@
 </script>
 
 <svelte:head><title>{data.repositoryConnection?.displayName ?? "Repository unavailable"} · Ayni Orchestrator</title></svelte:head>
-<Dialog.Root bind:open={editOpen}>
 <div class="max-w-4xl space-y-6">
-  <Button href="/repositories" variant="ghost"><ArrowLeft aria-hidden="true" /> Repositories</Button>
-  {#if data.error}<Feedback kind="error" title="Repository data unavailable" message={data.error.message} requestId={data.error.requestId} />{/if}
+  <Button href="/repositories" variant="ghost">Repositories</Button>
+
   {#if data.repositoryConnection}
     {@const repository = data.repositoryConnection}
+    {@const showOnboarding = repository.useAyni !== false && (!data.runtimeProfiles.length || data.runtimeProfiles.some(profile => profile.kind === "ayni_managed"))}
     <header class="space-y-3">
       <div class="flex flex-wrap items-center gap-3">
-        <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl"><a href={repository.provider.htmlUrl} target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 hover:underline">{repository.displayName}<ExternalLink class="size-4" aria-hidden="true" /></a></h1>
-        <StatusBadge status={repository.status} tone={statusTone(repository.status)} />
-        <Dialog.Trigger>
-          {#snippet child({ props })}
-            <Button {...mergeProps(props, { onclick: editRepository })} variant="outline" size="sm" class="ml-auto">Edit</Button>
-          {/snippet}
-        </Dialog.Trigger>
+        <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{repository.displayName}</h1>
       </div>
-      <p class="text-sm text-muted-foreground">Default branch <span class="font-medium text-foreground">{repository.defaultBranch}</span></p>
     </header>
     {#if repository.failure}<Feedback kind="warning" title="Repository needs attention" message={repository.failure.message} />{/if}
-    <section class="space-y-3 rounded-lg border p-4" aria-label="Repository onboarding">
-      <h2 class="font-semibold">Onboarding</h2>
-      <p>{repository.useAyni === false ? "Ayni is not enabled for this repository." : repository.onboardingStatus === "enrolled" ? "Analysis complete — runtime preparation below" : words(repository.onboardingStatus || "pending")}</p>
-      {#if repository.onboardingReason}<p class="text-sm text-muted-foreground">{remediation[repository.onboardingReason] ?? words(repository.onboardingReason)}</p>{/if}
-      {#if repository.onboardingRevision}<p class="break-all text-xs text-muted-foreground">Source commit {repository.onboardingRevision}</p>{/if}
-      <form method="POST" action="?/analyze" use:enhance>
-        <input type="hidden" name="idempotencyKey" value={data.analyzeKey} />
-        <Button type="submit" variant="outline">{repository.useAyni === false ? "Set up Ayni" : repository.onboardingStatus === "failed" ? "Retry analysis" : "Analyze repository"}</Button>
-      </form>
+    <section class="space-y-4" aria-labelledby="repository-information-title">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="repository-information-title" class="text-lg font-semibold">Information</h2>
+      </div>
+      <div class={["grid gap-4", showOnboarding && "lg:grid-cols-2"]}>
+        {#snippet repositoryUrl()}
+          <a href={repository.provider.htmlUrl} target="_blank" rel="noreferrer" class="inline-flex max-w-full items-center gap-2 hover:underline"><span class="min-w-0 [overflow-wrap:anywhere]">{repository.provider.htmlUrl}</span><ExternalLink class="size-4 shrink-0" aria-hidden="true" /></a>
+        {/snippet}
+        <InformationCard title="Repository" status={repository.status}>
+          <InformationTable rows={[
+            { label: "Full name", value: `${repository.provider.owner}/${repository.provider.name}` },
+            { label: "Default branch", value: repository.defaultBranch },
+            { label: "URL", value: repositoryUrl },
+          ]} />
+        </InformationCard>
+        {#if showOnboarding}
+          <InformationCard title="Ayni onboarding" status={repository.onboardingStatus === "enrolled" ? "analysis_complete" : repository.onboardingStatus || "pending"} tone={repository.onboardingStatus === "enrolled" ? "success" : "neutral"} actions={[{ label: repository.onboardingStatus === "failed" ? "Retry analysis" : "Analyze repository", onSelect: () => analysisForm?.requestSubmit() }]}>
+            <InformationTable rows={[
+              { label: "Source commit", value: repository.onboardingRevision || "Not available yet", monospace: true },
+              ...(repository.onboardingReason ? [{ label: "Next step", value: remediation[repository.onboardingReason] ?? words(repository.onboardingReason) }] : []),
+            ]} />
+            <form bind:this={analysisForm} method="POST" action="?/analyze" use:enhance>
+              <input type="hidden" name="idempotencyKey" value={data.analyzeKey} />
+            </form>
+          </InformationCard>
+        {/if}
+      </div>
+      {#if repository.useAyni === false}
+        <form method="POST" action="?/analyze" use:enhance>
+          <input type="hidden" name="idempotencyKey" value={data.analyzeKey} />
+          <Button type="submit" variant="outline">Set up Ayni</Button>
+        </form>
+      {/if}
     </section>
-    {#if repository.useAyni !== false}
-    <RuntimeOverview profiles={data.runtimeProfiles} revisions={data.runtimeRevisions} repository={repository} connections={data.registryConnections} certificates={data.certificates} keys={data.runtimeKeys} error={form?.error?.message} />
-    {/if}
+    <RuntimeOverview profiles={data.runtimeProfiles} revisions={data.runtimeRevisions} repository={repository} connections={data.registryConnections} certificates={data.certificates} keys={data.runtimeKeys} />
+    <section class="space-y-4" aria-labelledby="repository-danger-zone-title">
+      <h2 id="repository-danger-zone-title" class="text-lg font-semibold">Danger zone</h2>
+      <InformationCard title="Remove repository" danger>
+        <InformationTable rows={[
+          { label: "Removes", value: "This connection, onboarding results, and all runtime configuration. Reconnect the repository to start onboarding again." },
+          { label: "Keeps", value: "Your GitHub repository, registry images, integrations, and signing certificates." },
+          { label: "Blocked by", value: "Projects, retained tasks, or active preparation referencing this repository." },
+        ]} />
+
+        <form method="POST" action="?/remove" use:enhance={remove} class="space-y-4">
+          <input type="hidden" name="idempotencyKey" value={data.removeKey} />
+          <input type="hidden" name="resourceVersion" value={repository.resourceVersion} />
+          <div class="space-y-2">
+            <Label for="remove-repository-confirmation">Enter {repository.displayName} to confirm</Label>
+            <Input id="remove-repository-confirmation" name="confirmation" bind:value={confirmation} autocomplete="off" disabled={busy} required />
+          </div>
+          <div class="flex justify-end">
+            <SubmitButton variant="destructive" pending={busy} pendingLabel="Removing…" disabled={confirmation !== repository.displayName}>
+              <Trash2 aria-hidden="true" /> Remove repository
+            </SubmitButton>
+          </div>
+        </form>
+      </InformationCard>
+    </section>
   {/if}
 </div>
-
-  <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-lg" showCloseButton={!busy} onInteractOutside={(event) => { if (busy) event.preventDefault(); }} onEscapeKeydown={(event) => { if (busy) event.preventDefault(); }}>
-    <Dialog.Header>
-      <Dialog.Title>Edit repository</Dialog.Title>
-      <Dialog.Description>{data.repositoryConnection?.displayName ?? "Repository unavailable"}</Dialog.Description>
-    </Dialog.Header>
-    <section class="space-y-4 border-t pt-4" aria-labelledby="remove-repository-title">
-      <h2 id="remove-repository-title" class="font-semibold">Remove repository</h2>
-      <p class="text-sm text-muted-foreground">Remove this connection, its onboarding results, and all runtime configuration from Ayni Orchestrator. You can then reconnect the repository to start onboarding again.</p>
-      <p class="text-sm text-muted-foreground">Your GitHub repository, registry images, integrations, and signing certificates are kept. Removal is blocked while projects, retained tasks, or active preparation reference this repository.</p>
-      {#if removalError}<Feedback kind="error" title="Repository removal failed" message={removalError} />{/if}
-      <form method="POST" action="?/remove" use:enhance={remove} class="space-y-4">
-        <input type="hidden" name="idempotencyKey" value={data.removeKey} />
-        <input type="hidden" name="resourceVersion" value={editVersion} />
-        <div class="space-y-2">
-          <Label for="remove-repository-confirmation">Enter {data.repositoryConnection?.displayName} to confirm</Label>
-          <Input id="remove-repository-confirmation" name="confirmation" bind:value={confirmation} autocomplete="off" disabled={busy} required />
-        </div>
-        <Dialog.Footer>
-          <Button variant="outline" disabled={busy} onclick={() => editOpen = false}>Cancel</Button>
-          <SubmitButton variant="destructive" pending={busy} pendingLabel="Removing…" disabled={!data.repositoryConnection || confirmation !== data.repositoryConnection.displayName}>
-            <Trash2 aria-hidden="true" /> Remove repository
-          </SubmitButton>
-        </Dialog.Footer>
-      </form>
-    </section>
-  </Dialog.Content>
-</Dialog.Root>

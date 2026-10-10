@@ -1,15 +1,27 @@
 <script lang="ts">
-  import { Boxes, FolderGit2, BookOpen, GitBranch, Container, ShieldCheck, Plug, Settings, Wrench } from "@lucide/svelte";
+  import { Boxes, FolderGit2, BookOpen, GitBranch, Container, Settings } from "@lucide/svelte";
+  import { onMount } from "svelte";
+  import { subscribeRefresh } from "$lib/refresh.js";
+  import AyniIcon from "$lib/components/ayni-icon.svelte";
   import { page } from "$app/state";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+  import SidebarStatus from "$lib/components/sidebar-status.svelte";
   import SidebarNavGroup from "$lib/components/sidebar-nav-group.svelte";
 
   const sidebar = Sidebar.useSidebar();
   const repositoriesActive = $derived(page.url.pathname.startsWith("/repositories") || page.url.pathname.startsWith("/profiles"));
   const sourceControlActive = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
   const registriesActive = $derived(page.url.pathname.startsWith("/container-registries"));
-  const certificatesActive = $derived(page.url.pathname.startsWith("/certificates"));
+  const ayniActive = $derived(page.url.pathname.startsWith("/ayni") || page.url.pathname.startsWith("/certificates"));
   const projectsActive = $derived(page.url.pathname.startsWith("/projects") || page.url.pathname.startsWith("/tasks"));
+  const sourceControlConfiguration = $derived(page.data.sourceControlConfiguration);
+  const registryConfiguration = $derived(page.data.registryConfiguration);
+  const certificateConfiguration = $derived(page.data.certificateConfiguration);
+  onMount(() => {
+    const certificates = subscribeRefresh("app:certificates", { intervalMs: 30_000 });
+    const connections = subscribeRefresh("app:connections", { intervalMs: 30_000 });
+    return () => { certificates(); connections(); };
+  });
 </script>
 
 <Sidebar.Root collapsible="icon" class="shrink-0">
@@ -32,34 +44,35 @@
               {/snippet}
             </Sidebar.MenuButton>
           </Sidebar.MenuItem>
-          <SidebarNavGroup title="Integrations">
-            {#snippet icon()}<Plug aria-hidden="true" />{/snippet}
-            <Sidebar.MenuSubItem>
-              <Sidebar.MenuSubButton href="/repositories" isActive={repositoriesActive} aria-current={repositoriesActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
-                <BookOpen aria-hidden="true" /><span>Repositories</span>
-              </Sidebar.MenuSubButton>
-            </Sidebar.MenuSubItem>
-            <Sidebar.MenuSubItem>
-              <Sidebar.MenuSubButton href="/source-control" isActive={sourceControlActive} aria-current={sourceControlActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
-                <GitBranch aria-hidden="true" /><span>Source control</span>
-              </Sidebar.MenuSubButton>
-            </Sidebar.MenuSubItem>
-          </SidebarNavGroup>
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton isActive={repositoriesActive} tooltipContent="Repositories">
+              {#snippet child({ props })}
+                <a {...props} onclick={() => sidebar.setOpenMobile(false)} href="/repositories" aria-current={repositoriesActive ? "page" : undefined}>
+                  <BookOpen aria-hidden="true" /><span>Repositories</span>
+                </a>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
           <SidebarNavGroup title="Config">
             {#snippet icon()}<Settings aria-hidden="true" />{/snippet}
-            <SidebarNavGroup title="Ayni">
-              {#snippet icon()}<Wrench aria-hidden="true" />{/snippet}
-              <Sidebar.MenuSubItem>
-                <Sidebar.MenuSubButton href="/certificates" isActive={certificatesActive} aria-current={certificatesActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
-                  <ShieldCheck aria-hidden="true" /><span>Certificates</span>
-                </Sidebar.MenuSubButton>
-              </Sidebar.MenuSubItem>
-              <Sidebar.MenuSubItem>
-                <Sidebar.MenuSubButton href="/container-registries" isActive={registriesActive} aria-current={registriesActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
-                  <Container aria-hidden="true" /><span>Container registries</span>
-                </Sidebar.MenuSubButton>
-              </Sidebar.MenuSubItem>
-            </SidebarNavGroup>
+            <Sidebar.MenuSubItem>
+              <Sidebar.MenuSubButton class="translate-x-0" href="/source-control" isActive={sourceControlActive} aria-current={sourceControlActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
+                <GitBranch aria-hidden="true" /><span>Source control</span>
+                <SidebarStatus status={sourceControlConfiguration ?? { status: "warning", description: "Source control configuration status is unavailable." }} />
+              </Sidebar.MenuSubButton>
+            </Sidebar.MenuSubItem>
+            <Sidebar.MenuSubItem>
+              <Sidebar.MenuSubButton class="translate-x-0" href="/container-registries" isActive={registriesActive} aria-current={registriesActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
+                <Container aria-hidden="true" /><span>Container registries</span>
+                <SidebarStatus status={registryConfiguration ?? { status: "warning", description: "Container registry permission status is unavailable." }} />
+              </Sidebar.MenuSubButton>
+            </Sidebar.MenuSubItem>
+            <Sidebar.MenuSubItem>
+              <Sidebar.MenuSubButton class="translate-x-0" href="/ayni" isActive={ayniActive} aria-current={ayniActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
+                <AyniIcon aria-hidden="true" /><span>Ayni</span>
+                <SidebarStatus status={certificateConfiguration ?? { status: "warning", description: "Certificate configuration status is unavailable." }} />
+              </Sidebar.MenuSubButton>
+            </Sidebar.MenuSubItem>
           </SidebarNavGroup>
         </Sidebar.Menu>
       </Sidebar.GroupContent>

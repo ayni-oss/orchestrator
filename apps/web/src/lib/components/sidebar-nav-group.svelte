@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { ChevronRight } from "@lucide/svelte";
+  import SidebarStatus from "$lib/components/sidebar-status.svelte";
   import { mergeProps } from "bits-ui";
   import type { Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
 
-  let { title, icon, children }: { title: string; icon: Snippet; children: Snippet } = $props();
+  let { title, icon, status, children }: { title: string; icon: Snippet; status?: { status: string; description: string }; children: Snippet } = $props();
   let open = $state(true);
   const sidebar = Sidebar.useSidebar();
 
@@ -27,7 +27,7 @@
         >
           {@render icon()}
           <span>{title}</span>
-          <ChevronRight class={['ml-auto transition-transform group-data-[collapsible=icon]:hidden', open && 'rotate-90']} aria-hidden="true" />
+          <SidebarStatus {status} dropdown expanded={open} />
         </Sidebar.MenuButton>
       {/snippet}
     </Collapsible.Trigger>

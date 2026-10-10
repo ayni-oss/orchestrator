@@ -12,9 +12,9 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await expect(page.getByRole("heading", { name: "Projects", exact:true })).toBeVisible();
 
   await page.goto("/repositories");
-  await page.getByRole("link", { name: "Runtime status" }).first().click();
+  await page.getByRole("link", { name: "Manage repository" }).first().click();
   await expect(page.getByRole("heading", { name: "Runtimes" })).toBeVisible();
-  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+  await expect(page.locator("article").getByText("Ready", { exact: true })).toBeVisible();
 
   await page.goto("/tasks");
   await choose(page, "Project", "Sandbox");

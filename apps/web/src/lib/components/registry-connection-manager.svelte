@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { enhance } from "$app/forms";
+  import { enhance } from "$lib/forms.js";
   import { refreshScope, subscribeRefresh } from "$lib/refresh.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { ConnectionView } from "$lib/connection.js";
@@ -9,14 +9,15 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import StatusBadge from "$lib/components/status-badge.svelte";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import Feedback from "$lib/components/feedback.svelte";
   import { statusTone } from "$lib/presentation.js";
 
-  let { connections, idempotencyKey, available = true, error }: {
+  let { connections, idempotencyKey, available = true }: {
     connections: ConnectionView[];
     idempotencyKey: string;
     available?: boolean;
-    error?: string | undefined;
   } = $props();
   let createOpen = $state(false);
   let editOpen = $state(false);
@@ -27,32 +28,28 @@
   let editPush = $state("");
   let editPull = $state("");
   let submitting = $state(false);
-  let showError = $state(false);
   onMount(() => subscribeRefresh("app:connections", {intervalMs:30_000}));
   function closeCreate(open: boolean) {
     createOpen = open;
-    if (!open) { createPush = ""; createPull = ""; showError = false; }
+    if (!open) { createPush = ""; createPull = ""; }
   }
   function closeEdit(open: boolean) {
     editOpen = open;
-    if (!open) { editPush = ""; editPull = ""; showError = false; }
+    if (!open) { editPush = ""; editPull = ""; }
   }
   function openEdit(id: string) {
     selectedId = id;
     editPush = "";
     editPull = "";
-    showError = false;
     editOpen = true;
   }
   function submit(operation: string): SubmitFunction {
     return () => {
       submitting = true;
-      showError = false;
       return async ({ result, update }) => {
         createPush = ""; createPull = ""; editPush = ""; editPull = "";
         try {
           await update({invalidateAll:false});
-          showError = result.type === "failure" || result.type === "error";
           if (result.type === "success" && operation === "create") closeCreate(false);
           if (result.type === "success" && operation === "delete") closeEdit(false);
           await refreshScope("app:connections", true);
@@ -69,23 +66,19 @@
 <div class="space-y-4">
   <div class="flex items-center justify-between gap-3">
     <h2 class="text-lg font-semibold">Connections</h2>
-    <Button onclick={() => { showError = false; createOpen = true; }} disabled={!available}>Add connection</Button>
+    <Button onclick={() => { createOpen = true; }} disabled={!available}>Add connection</Button>
   </div>
   {#if !available}<p role="status">Connection service unavailable. Retry when the control plane is ready.</p>{/if}
   {#if !connections.length}<p class="text-sm text-muted-foreground">Add a connection to store images for repository testing environments.</p>{/if}
   {#each connections as connection (connection.id)}
-    <section aria-label={connection.displayName} class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-      <div class="min-w-0 flex-1">
-        <h3 class="truncate font-medium">{connection.displayName}</h3>
-        <p class="truncate text-sm text-muted-foreground">ghcr.io/{connection.imageNamespace}</p>
-        {#if connection.managementSource === "admin"}<p class="text-xs text-muted-foreground">Managed by your administrator</p>{/if}
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <StatusBadge status={connection.enabled ? connection.status : "disabled"} tone={statusTone(connection.enabled ? connection.status : "disabled")} />
-        {#if connection.testCleanup === "failed"}<StatusBadge status="cleanup_required" tone="warning" />{/if}
-        <Button variant="outline" size="sm" onclick={() => openEdit(connection.id)}>{connection.managementSource === "admin" ? "Details" : "Edit"}</Button>
-      </div>
-    </section>
+    {#snippet cleanupStatus()}<StatusBadge status="cleanup_required" tone="warning" />{/snippet}
+    <InformationCard title={connection.displayName} status={connection.enabled ? connection.status : "disabled"} actions={[{ label: connection.managementSource === "admin" ? "Details" : "Edit", onSelect: () => openEdit(connection.id) }]}>
+      <InformationTable rows={[
+        { label: "Image namespace", value: `ghcr.io/${connection.imageNamespace}` },
+        ...(connection.testCleanup === "failed" ? [{ label: "Test cleanup", value: cleanupStatus }] : []),
+        ...(connection.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
+      ]} />
+    </InformationCard>
   {/each}
 </div>
 
@@ -95,7 +88,7 @@
       <Dialog.Title>Add GHCR connection</Dialog.Title>
       <Dialog.Description>Provide separate push and pull credentials for your image namespace.</Dialog.Description>
     </Dialog.Header>
-    {#if showError && error}<Feedback kind="error" title="Connection failed" message={error} />{/if}
+
     <form method="POST" action="?/create" use:enhance={submit("create")} class="space-y-4">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <div class="space-y-2"><Label for="registry-name">Connection name</Label><Input id="registry-name" name="displayName" required maxlength={128} /></div>
@@ -118,7 +111,7 @@
       <Dialog.Title>{selected?.managementSource === "admin" ? "Connection details" : "Edit connection"}</Dialog.Title>
       <Dialog.Description>{selected ? `${selected.displayName} · ghcr.io/${selected.imageNamespace}` : "This connection is no longer available."}</Dialog.Description>
     </Dialog.Header>
-    {#if showError && error}<Feedback kind="error" title="Connection update failed" message={error} />{/if}
+
     {#if selected}
       <div class="flex flex-wrap gap-2"><StatusBadge status={selected.enabled ? selected.status : "disabled"} tone={statusTone(selected.enabled ? selected.status : "disabled")} />{#if selected.testCleanup === "failed"}<StatusBadge status="cleanup_required" tone="warning" />{/if}</div>
       <dl class="grid grid-cols-2 gap-2 text-sm">

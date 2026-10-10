@@ -3,7 +3,7 @@
   import ThemedSection from "$lib/components/ui/collapsible/section.svelte";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
-  import { enhance } from "$app/forms";
+  import { enhance } from "$lib/forms.js";
   import type { PageData } from "../../routes/projects/[projectId]/$types";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
