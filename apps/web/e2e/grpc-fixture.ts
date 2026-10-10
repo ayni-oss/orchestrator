@@ -55,7 +55,7 @@ const profile: any = {
   resourceVersion: "2",
 };
 
-function snapshot(request = "Correct the bounded retry formula", sourceRevision = revision, model = "gpt-5"): any {
+function snapshot(request = "Correct the bounded retry formula", sourceRevision = revision, model = "gpt-5.6-sol"): any {
   return {
     limits: {codingTurns:24,qualityRepairLimit:3},
     repository: { repositoryConnectionId: repositoryId, repositorySnapshotId: "snapshot:1", revision: sourceRevision },
@@ -161,7 +161,7 @@ const runtimeProfileService: UntypedServiceImplementation = {
 };
 
 const providerService: UntypedServiceImplementation = {
-  listProviderModels(_call, callback) { callback(null, { provider: "openai", models: [{ id: "gpt-5", name: "GPT-5", ownedBy: "openai", contextLength: "400000", maxOutputTokens: "128000" }], observedAt: now, page }); },
+  listProviderModels(_call, callback) { callback(null, { provider: "openai", models: [{ id: "gpt-5.6-sol", name: "Sol", ownedBy: "openai", contextLength: "400000", maxOutputTokens: "128000" }], observedAt: now, page }); },
 };
 
 const taskService: UntypedServiceImplementation = {
@@ -180,7 +180,7 @@ const taskService: UntypedServiceImplementation = {
     const created = task(id, DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED, request.request);
     created.snapshot = {
       ...snapshot(request.request, request.repositoryRevision, request.agent.model),
-      limits:{codingTurns:24,qualityRepairLimit:3},
+      limits:{codingTurns:request.codingTurns ?? 24,qualityRepairLimit:3},
       publicationBaseBranch:"main",
       agent: request.agent,
       acceptanceCriteria: request.acceptanceCriteria,

@@ -344,6 +344,7 @@ mod tests {
         Ok(v1::CreateDevelopmentTaskRequest {
             idempotency_key: key.to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                coding_turns: None,
                 project_id,
                 repository_connection_id: repository_id.to_owned(),
                 repository_revision: REVISION.to_owned(),
@@ -351,7 +352,7 @@ mod tests {
                 agent: Some(v1::AgentSelection {
                     provider: "openai".to_owned(),
                     agent: "coding-agent".to_owned(),
-                    model: "gpt-5".to_owned(),
+                    model: "gpt-5.6-sol".to_owned(),
                 }),
                 request: "Make the bounded change".to_owned(),
                 acceptance_criteria: vec!["Tests pass".to_owned()],

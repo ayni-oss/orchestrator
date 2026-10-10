@@ -93,6 +93,9 @@ message DevelopmentTaskRequest {
   ChangeConstraints change_constraints = 7;
   // deadline is 1 second through 24 hours when present.
   optional google.protobuf.Duration deadline = 8;
+  // Total model iterations across implementation and quality repairs, 1 through 128.
+  // When absent, the deployment default applies for older clients.
+  optional uint32 coding_turns = 11;
 }
 
 // FrozenRepository freezes the source snapshot used by a task or attempt.

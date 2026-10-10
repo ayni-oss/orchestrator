@@ -225,7 +225,7 @@ impl TaskRepository for CleanStore {
                 .map(to_wire_time)
                 .or_else(|| Some(timestamp(now + 3600))),
             limits: Some(v1::WorkerLimits {
-                coding_turns: self.coding_turns,
+                coding_turns: frozen.coding_turns.unwrap_or(self.coding_turns),
                 quality_repair_limit: self.quality_repair_limit,
                 deadline_at: frozen
                     .deadline_at

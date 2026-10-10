@@ -36,7 +36,7 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
     let directory = tempfile::tempdir()?;
     let state = AppState::open(directory.path().join("orchestrator.sqlite"), 3)?
         .with_model_catalog(crate::ModelCatalog::fixed(vec![crate::AvailableModel {
-            id: "gpt-5".to_owned(),
+            id: "gpt-5.6-sol".to_owned(),
             name: None,
             owned_by: Some("openai".to_owned()),
             created_at: None,
@@ -86,7 +86,7 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
         .await?
         .into_inner();
     assert_eq!(models.models.len(), 1);
-    assert_eq!(models.models[0].id, "gpt-5");
+    assert_eq!(models.models[0].id, "gpt-5.6-sol");
 
     let mut reflection = ServerReflectionClient::new(channel);
     let request = ServerReflectionRequest {

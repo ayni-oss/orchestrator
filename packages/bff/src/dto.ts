@@ -165,6 +165,7 @@ export interface DevelopmentTaskInputDto {
   acceptanceCriteria: string[];
   changeConstraints: ChangeConstraintsDto;
   deadlineSeconds?: number;
+  codingTurns?: number;
 }
 
 export interface FrozenRepositoryDto {

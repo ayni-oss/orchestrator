@@ -89,3 +89,18 @@ procedure in [operations](operations.md). Existing source repositories,
 runtime images and GitHub pull requests are retained.
 
 Manage the GitHub App at `/source-control/github`. Use **Add GitHub App** to create an App in your organization or personal account, or import an existing App ID and private key. The compact connection card opens an **Edit** dialog for key rotation, testing, disablement, and deletion; administrator-managed Apps expose read-only **Details**. App installation stays in GitHub. Legacy `/setup/github` links redirect here, and existing Apps using `/setup/github/complete` retain callback compatibility.
+
+### Task instructions and budgets
+
+Task creation selects one project repository, its ready runtime, and a provider-available
+model from `gpt-5.6-luna`, `gpt-5.6-terra`, and `gpt-5.6-sol`. The request describes
+the work; acceptance criteria describe observable outcomes and guide the agent rather
+than replacing mandatory Ayni checks. Protected paths use exact repository-relative
+files or directory prefixes, not globs. Ayni policy and lock files remain protected.
+Test edits are enabled by default and can be disabled for a task.
+
+The Agent iterations field defaults to 24 and accepts 1–128 model turns across
+implementation and quality repairs. The selected value is frozen into the task and
+used by the worker, independently of subsequent deployment-default changes. API
+clients that omit `coding_turns` retain the deployment default. The deadline defaults
+to one hour from submission and includes queueing, coding, checks, and publication.

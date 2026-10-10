@@ -366,6 +366,7 @@ export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentT
       protectedPaths: value.changeConstraints.protectedPaths.map(String),
       allowTestEdits: value.changeConstraints.allowTestEdits,
     },
+    codingTurns: value.codingTurns,
     ...(deadlineSeconds === undefined
       ? {}
       : { deadline: { seconds: String(deadlineSeconds), nanos: 0 } }),

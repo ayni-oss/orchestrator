@@ -39,6 +39,7 @@ pub fn task_command(
                 protected_paths: c.protected_paths.clone(),
                 allow_test_edits: c.allow_test_edits,
             }),
+        coding_turns: requested.coding_turns,
         deadline: requested.deadline.as_ref().map(|d| DeadlineDuration {
             seconds: d.seconds,
             nanos: d.nanos,

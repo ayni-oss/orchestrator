@@ -63,3 +63,8 @@ corrupt resources and result-bound failures fail the RPC rather than returning
 partial success. Standard pagination freezes the entire summary projection;
 `snapshot_cursor` is the corresponding service cursor, not a cross-service watch
 cursor. Refresh by starting a new first-page query.
+
+`DevelopmentTaskRequest.coding_turns` optionally selects 1–128 total model turns
+for implementation and quality repairs. Admission freezes it into
+`DevelopmentSnapshot.limits.coding_turns`; clients omitting it retain the deployment
+default. The task form always submits an explicit task budget, defaulting to 24.

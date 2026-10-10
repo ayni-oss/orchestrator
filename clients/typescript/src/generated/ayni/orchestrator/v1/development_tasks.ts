@@ -591,7 +591,14 @@ export interface DevelopmentTaskRequest {
     | ChangeConstraints
     | undefined;
   /** deadline is 1 second through 24 hours when present. */
-  deadline?: Duration | undefined;
+  deadline?:
+    | Duration
+    | undefined;
+  /**
+   * Total model iterations across implementation and quality repairs, 1 through 128.
+   * When absent, the deployment default applies for older clients.
+   */
+  codingTurns?: number | undefined;
 }
 
 /** FrozenRepository freezes the source snapshot used by a task or attempt. */
@@ -1015,6 +1022,7 @@ function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
     acceptanceCriteria: [],
     changeConstraints: undefined,
     deadline: undefined,
+    codingTurns: undefined,
   };
 }
 
@@ -1046,6 +1054,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     }
     if (message.deadline !== undefined) {
       Duration.encode(message.deadline, writer.uint32(66).fork()).join();
+    }
+    if (message.codingTurns !== undefined) {
+      writer.uint32(88).uint32(message.codingTurns);
     }
     return writer;
   },
@@ -1135,6 +1146,14 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
             message.deadline = Duration.decode(reader, reader.uint32());
             continue;
           }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.codingTurns = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1182,6 +1201,11 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
         ? ChangeConstraints.fromJSON(object.change_constraints)
         : undefined,
       deadline: isSet(object.deadline) ? Duration.fromJSON(object.deadline) : undefined,
+      codingTurns: isSet(object.codingTurns)
+        ? globalThis.Number(object.codingTurns)
+        : isSet(object.coding_turns)
+        ? globalThis.Number(object.coding_turns)
+        : undefined,
     };
   },
 
@@ -1214,6 +1238,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     if (message.deadline !== undefined) {
       obj.deadline = Duration.toJSON(message.deadline);
     }
+    if (message.codingTurns !== undefined) {
+      obj.codingTurns = Math.round(message.codingTurns);
+    }
     return obj;
   },
 
@@ -1237,6 +1264,7 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     message.deadline = (object.deadline !== undefined && object.deadline !== null)
       ? Duration.fromPartial(object.deadline)
       : undefined;
+    message.codingTurns = object.codingTurns ?? undefined;
     return message;
   },
 };

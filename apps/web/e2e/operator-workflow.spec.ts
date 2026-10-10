@@ -19,7 +19,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await page.goto("/tasks");
   await choose(page, "Project", "Sandbox");
   await choose(page, "Runtime profile", "Ayni managed");
-  await choose(page, "Model", "GPT-5");
+  await choose(page, "Model", "gpt-5.6-sol");
   await page.getByLabel("Request").fill("Document the bounded retry behavior");
   await page.getByLabel("Acceptance criteria").fill("Retry count is explicit\nExisting behavior remains covered");
   await page.getByRole("button", { name: "Submit task" }).click();
@@ -33,7 +33,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 test("connected runtime and truthful worker draft delivery are visible", async ({ page }) => {
  await page.goto("/profiles/profile:1");
  await page.getByRole("link", {name:"New request",exact:true}).click();
- await choose(page, "Model", "GPT-5");
+ await choose(page, "Model", "gpt-5.6-sol");
  await page.getByLabel("Request", {exact:true}).fill("Add a bounded example");
  await page.getByLabel("Acceptance criteria").fill("The example is covered");
  await page.getByRole("button", {name:"Submit task",exact:true}).click();
@@ -106,11 +106,17 @@ test("projects select several repositories and tasks require one target",async({
  await expect(page.getByRole("button",{name:"Submit task",exact:true})).toBeDisabled();
  await choose(page, "Repository", "ayni-oss/sandbox");
  await choose(page, "Runtime profile", "Ayni managed");
- await choose(page, "Model", "GPT-5");
+ await choose(page, "Model", "gpt-5.6-sol");
+ await expect(page.getByLabel("Agent iterations",{exact:true})).toHaveValue("24");
+ await page.getByLabel("Agent iterations",{exact:true}).fill("17");
+ await page.getByRole("button",{name:"Constraints and deadline",exact:true}).click();
+ await expect(page.getByRole("checkbox",{name:"Allow test edits",exact:true})).toBeChecked();
  await page.getByLabel("Request",{exact:true}).fill("Work only in the selected repository");
  await page.getByLabel("Acceptance criteria",{exact:true}).fill("The other repository is unchanged");
  await page.getByRole("button",{name:"Submit task",exact:true}).click();
  await expect(page.getByRole("heading",{name:"Work only in the selected repository",exact:true})).toBeVisible();
+ await expect(page.getByText("Agent iterations: 17",{exact:true})).toBeVisible();
+ await expect(page.getByText("Test edits: authorized",{exact:true})).toBeVisible();
  await page.getByRole("button",{name:"Cancel",exact:true}).click();
  await expect(page).toHaveURL(/notice=cancelled/u);
 });

@@ -181,10 +181,12 @@ describe("clean-v1 browser DTO mappings", () => {
       acceptanceCriteria: ["three becomes eight"],
       changeConstraints: { protectedPaths: ["docs"], allowTestEdits: false },
       deadlineSeconds: 60,
+      codingTurns: 17,
     })).toEqual(expect.objectContaining({
       runtimeProfileId: "profile:1",
       agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },
       deadline: { seconds: "60", nanos: 0 },
+      codingTurns: 17,
     }));
   });
 });

@@ -102,6 +102,8 @@ export const actions: Actions = {
     const criteria = criteriaValue === undefined ? undefined : lines(criteriaValue, 20, 2_048);
     const pathsValue = form.get("protectedPaths");
     const protectedPaths = optionalLines(typeof pathsValue === "string" ? pathsValue : undefined, 100, 512);
+    const codingTurnsValue = form.get("codingTurns");
+    const codingTurns = typeof codingTurnsValue === "string" && codingTurnsValue.trim() !== "" ? Number(codingTurnsValue) : 24;
     const deadlineValue = typeof form.get("deadlineSeconds") === "string" ? String(form.get("deadlineSeconds")).trim() : "";
     const deadlineSeconds = deadlineValue === "" ? undefined : Number(deadlineValue);
     const pathsValid = protectedPaths !== undefined && new Set(protectedPaths).size === protectedPaths.length && protectedPaths.every((path) => !path.startsWith("/") && !path.endsWith("/") && !path.includes("\\") && path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
@@ -111,6 +113,7 @@ export const actions: Actions = {
       || repositoryConnectionId === undefined || !RESOURCE_ID.test(repositoryConnectionId)
       || runtimeProfileId === undefined || !RESOURCE_ID.test(runtimeProfileId)
       || provider === undefined || model === undefined
+      || !Number.isInteger(codingTurns) || codingTurns < 1 || codingTurns > 128
       || taskRequest === undefined || criteria === undefined || !pathsValid
       || (deadlineSeconds !== undefined && (!Number.isInteger(deadlineSeconds) || deadlineSeconds < 1 || deadlineSeconds > 86_400))
     ) {
@@ -132,6 +135,7 @@ export const actions: Actions = {
           agent: { provider, agent: "coding-agent", model },
           request: taskRequest,
           acceptanceCriteria: criteria,
+          codingTurns,
           changeConstraints: { protectedPaths, allowTestEdits: form.get("allowTestEdits") === "on" },
           ...(deadlineSeconds === undefined ? {} : { deadlineSeconds }),
         },

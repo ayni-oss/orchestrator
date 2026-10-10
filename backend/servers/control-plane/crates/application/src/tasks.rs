@@ -47,6 +47,7 @@ pub struct AdmitTask {
     pub acceptance_criteria: Vec<String>,
     pub constraints: Option<ChangeConstraints>,
     pub deadline: Option<DeadlineDuration>,
+    pub coding_turns: Option<u32>,
 }
 
 pub struct RuntimeBinding {
@@ -91,6 +92,7 @@ pub struct FrozenTask {
     pub acceptance_criteria: Vec<String>,
     pub constraints: Option<ChangeConstraints>,
     pub deadline_at: Option<TimePoint>,
+    pub coding_turns: Option<u32>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -191,6 +193,7 @@ pub fn admit<R: TaskRepository>(
         acceptance_criteria: command.acceptance_criteria,
         constraints: command.constraints,
         deadline_at,
+        coding_turns: command.coding_turns,
     };
     repository
         .commit_admission(command.identity, frozen, now)

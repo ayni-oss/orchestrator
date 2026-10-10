@@ -205,21 +205,7 @@ fn observed_now() -> Result<u64, ModelCatalogError> {
 }
 
 fn agent_compatible(id: &str) -> bool {
-    let supported_family = ["gpt-5", "gpt-4.1", "gpt-4o", "o1", "o3", "o4"]
-        .iter()
-        .any(|prefix| id.starts_with(prefix));
-    let unsupported_variant = [
-        "audio",
-        "realtime",
-        "transcribe",
-        "tts",
-        "image",
-        "search",
-        "instruct",
-    ]
-    .iter()
-    .any(|marker| id.contains(marker));
-    supported_family && !unsupported_variant
+    matches!(id, "gpt-5.6-luna" | "gpt-5.6-terra" | "gpt-5.6-sol")
 }
 
 fn normalize(models: Vec<AvailableModel>) -> Result<Vec<AvailableModel>, ModelCatalogError> {
@@ -276,11 +262,13 @@ mod tests {
     async fn fixed_catalog_is_sorted_deduplicated_and_searchable()
     -> Result<(), Box<dyn std::error::Error>> {
         let catalog = ModelCatalog::fixed(vec![
-            model("gpt-5"),
+            model("gpt-5.6-sol"),
             model("text-embedding-3-large"),
             model("gpt-4o-realtime-preview"),
-            model("gpt-4.1"),
+            model("gpt-5.6-terra"),
+            model("gpt-5.6-luna"),
             model("gpt-5"),
+            model("gpt-5.6-sol"),
         ]);
         let available = catalog.available().await?;
         assert_eq!(available.provider, "openai");
@@ -290,10 +278,12 @@ mod tests {
                 .iter()
                 .map(|model| model.id.as_str())
                 .collect::<Vec<_>>(),
-            ["gpt-4.1", "gpt-5"]
+            ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]
         );
-        assert!(catalog.contains("gpt-5").await?);
+        assert!(catalog.contains("gpt-5.6-sol").await?);
         assert!(!catalog.contains("luna").await?);
+        assert!(!catalog.contains("gpt-5").await?);
+        assert!(!catalog.contains("gpt-6-sol").await?);
         Ok(())
     }
 }
