@@ -55,7 +55,7 @@ const profile: any = {
   resourceVersion: "2",
 };
 
-function snapshot(request = "Correct the bounded retry formula", sourceRevision = revision, model = "gpt-5"): any {
+function snapshot(request = "Correct the bounded retry formula", sourceRevision = revision, model = "gpt-5.6-sol"): any {
   return {
     limits: {codingTurns:24,qualityRepairLimit:3},
     repository: { repositoryConnectionId: repositoryId, repositorySnapshotId: "snapshot:1", revision: sourceRevision },
@@ -161,14 +161,14 @@ const runtimeProfileService: UntypedServiceImplementation = {
 };
 
 const providerService: UntypedServiceImplementation = {
-  listProviderModels(_call, callback) { callback(null, { provider: "openai", models: [{ id: "gpt-5", name: "GPT-5", ownedBy: "openai", contextLength: "400000", maxOutputTokens: "128000" }], observedAt: now, page }); },
+  listProviderModels(_call, callback) { callback(null, { provider: "openai", models: [{ id: "gpt-5.6-sol", name: "Sol", ownedBy: "openai", contextLength: "400000", maxOutputTokens: "128000" }], observedAt: now, page }); },
 };
 
 const taskService: UntypedServiceImplementation = {
   listDevelopmentAttempts(call, callback) {
     const t = tasks.get(call.request.developmentTaskId);
     const publicationFailed = t?.id.endsWith("0044");
-    callback(null, { attempts: t ? [{publicationOnly:publicationRetries.has(t.id), id: `attempt:${t.id}`, developmentTaskId:t.id, attemptNumber:1, snapshot:t.snapshot, state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED, agentActivity:[], progress:{phase:8,codingTurnsConsumed:5,qualityRound:2,publication:3}, result:{execution:1,commit:"d".repeat(40),changedPaths:["src/main.rs"],quality:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[{kind:"test",passed:false}],findings:["Repair the failing test"],evidence:{artifactPath:".ayni/last/signals.json",signalsDigest:"e".repeat(64),sourceFingerprint:"f".repeat(64),commit:"d".repeat(40)}},publication:publicationFailed ? 4 : 3,codingTurnsConsumed:5,qualityRound:2,pullRequest:publicationFailed ? undefined : {repository:"ayni-oss/sandbox",number:"9",url:"https://github.com/ayni-oss/sandbox/pull/9",branch:"task/example",baseBranch:"main",headCommit:"d".repeat(40),draft:true}},createdAt:now,updatedAt:now,resourceVersion:"1"}] : [], page});
+    callback(null, { attempts: t ? [{publicationOnly:publicationRetries.has(t.id), id: `attempt:${t.id}`, developmentTaskId:t.id, attemptNumber:1, snapshot:t.snapshot, state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED, agentActivity:[], progress:{phase:8,codingTurnsConsumed:5,qualityRound:2,publication:3}, result:{execution:1,commit:"d".repeat(40),changedPaths:["src/main.rs"],quality:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[{kind:"test",passed:false,status:"fail",summary:"total=4 passed=3 failed=1",target:"rust (workspace)"},{kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"}],findings:["Repair the failing test"],evidence:{artifactPath:".ayni/last/signals.json",signalsDigest:"e".repeat(64),sourceFingerprint:"f".repeat(64),commit:"d".repeat(40)}},publication:publicationFailed ? 4 : 3,codingTurnsConsumed:5,qualityRound:2,pullRequest:publicationFailed ? undefined : {repository:"ayni-oss/sandbox",number:"9",url:"https://github.com/ayni-oss/sandbox/pull/9",branch:"task/example",baseBranch:"main",headCommit:"d".repeat(40),draft:true}},createdAt:now,updatedAt:now,resourceVersion:"1"}] : [], page});
   },
   retryTaskPublication(call, callback) { const t=tasks.get(call.request.developmentTaskId); publicationRetries.add(t.id); callback(null,{attempt:{id:"publication:retry",developmentTaskId:t.id,attemptNumber:2,snapshot:t.snapshot,state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_QUEUED,agentActivity:[],publicationOnly:true,createdAt:now,updatedAt:now,resourceVersion:"2"}}); },
 
@@ -180,7 +180,7 @@ const taskService: UntypedServiceImplementation = {
     const created = task(id, DevelopmentTaskState.DEVELOPMENT_TASK_STATE_QUEUED, request.request);
     created.snapshot = {
       ...snapshot(request.request, request.repositoryRevision, request.agent.model),
-      limits:{codingTurns:24,qualityRepairLimit:3},
+      limits:{codingTurns:request.codingTurns ?? 24,qualityRepairLimit:3},
       publicationBaseBranch:"main",
       agent: request.agent,
       acceptanceCriteria: request.acceptanceCriteria,
@@ -284,6 +284,14 @@ function connectionFixture(url: URL): void {
  if(url.pathname==="/admin-connection") connections=[{id:"admin:github",kind:url.searchParams.get("kind") ?? "github_app",managementSource:"admin",displayName:"Admin App",appId:"123",username:"",imageNamespace:url.searchParams.get("kind")==="ghcr" ? "admin-team" : "",secretName:"admin-ref",secretUid:"",desiredRevision:"1",observedRevision:"1",status:"ready",failureReason:"",enabled:true,resourceVersion:"1",pullSecretName:"",testAuthentication:"",testPush:"",testPull:"",testCleanup:"",testArtifactDigest:"",candidateSecretName:"",candidateSecretUid:"",candidatePullSecretName:"",candidatePullSecretUid:"",pullSecretUid:"",retiredSecretRevisions:[],testCleanupFailureReason:"",testArtifactRepository:""}];
 }
 function profileFixture(url: URL): void {
+ if(url.pathname==="/certificate-trust") {
+   const state=url.searchParams.get("state");
+   const href=url.searchParams.get("href");
+   profile.reconciliationMetadata=[
+     ...(state ? [{key:"certificate-trust-state",value:state}] : []),
+     ...(href ? [{key:"certificate-trust-pr",value:href}] : []),
+   ];
+ }
  if(url.pathname==="/preparation") {
    profile.preparationPhase=url.searchParams.get("phase") ?? "ready";
    const code=url.searchParams.get("code");

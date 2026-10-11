@@ -348,3 +348,5 @@ fn collect_usage(directory: &Path) -> io::Result<serde_json::Value> {
 mod tests;
 
 mod agent_runner;
+
+mod report;

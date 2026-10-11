@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 async function choose(page: Page, label: string, option: string): Promise<void> {
   await page.getByLabel(label, { exact: true }).click();
@@ -19,7 +20,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await page.goto("/tasks");
   await choose(page, "Project", "Sandbox");
   await choose(page, "Runtime profile", "Ayni managed");
-  await choose(page, "Model", "GPT-5");
+  await choose(page, "Model", "gpt-5.6-sol");
   await page.getByLabel("Request").fill("Document the bounded retry behavior");
   await page.getByLabel("Acceptance criteria").fill("Retry count is explicit\nExisting behavior remains covered");
   await page.getByRole("button", { name: "Submit task" }).click();
@@ -31,17 +32,37 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 
 // Provider operations are fixture-backed; this tests browser/BFF behavior, not live GitHub.
 test("connected runtime and truthful worker draft delivery are visible", async ({ page }) => {
- await page.goto("/profiles/profile:1");
- await page.getByRole("link", {name:"New request",exact:true}).click();
- await choose(page, "Model", "GPT-5");
- await page.getByLabel("Request", {exact:true}).fill("Add a bounded example");
- await page.getByLabel("Acceptance criteria").fill("The example is covered");
- await page.getByRole("button", {name:"Submit task",exact:true}).click();
+ await page.goto("/tasks/00000000-0000-4000-8000-000000000039");
+ await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
  await expect(page.getByRole("link", {name:"Open pull request #9",exact:true})).toHaveAttribute("href", "https://github.com/ayni-oss/sandbox/pull/9");
- await expect(page.getByText("Attempt 1 · Draft published · quality checks failed", {exact:true})).toBeVisible();
+ const delivery = page.getByRole("region",{name:"Pull request · attempt 1",exact:true});
+ await expect(delivery).toContainText("Failed");
+ await expect(delivery).toContainText("Published as a draft");
  await expect(page.getByText("Repair the failing test", {exact:true})).toBeVisible();
- await expect(page.getByText("Turns consumed: 5 / 24 · Quality round: 2 · Repair limit: 3", {exact:true})).toBeVisible();
- await page.screenshot({path:"/tmp/orchestrator-task-ui.png",fullPage:true});
+ const progress = page.getByRole("region",{name:"Attempt 1",exact:true});
+ await expect(progress).toContainText("5 / 24");
+ await expect(progress).toContainText("Quality round");
+ await expect(progress.locator("details")).not.toHaveAttribute("open");
+ await progress.getByText("Worker activity · 0 events",{exact:true}).click();
+ await expect(progress.getByText("No worker activity has been retained for this attempt yet.")).toBeVisible();
+ await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("Protected paths");
+ const warning = page.getByRole("button",{name:"size: warn · rust (workspace)",exact:true});
+ await expect(warning.getByRole("img",{name:"warn",exact:true})).toHaveAttribute("src","/icons/ayni/warn.svg");
+ await expect.poll(() => warning.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+ await warning.hover();
+ await expect(page.getByRole("tooltip")).toBeVisible();
+ await expect(page.getByRole("tooltip")).toContainText("max_lines=900 fail_count=0");
+ await page.mouse.move(0,0);
+ await page.getByRole("button",{name:"test: fail · rust (workspace)",exact:true}).focus();
+ await expect(page.getByRole("tooltip")).toContainText("total=4 passed=3 failed=1");
+ await page.getByRole("link",{name:"Development tasks",exact:true}).focus();
+ const accessibility = await new AxeBuilder({page}).include("main").analyze();
+ expect(accessibility.violations).toEqual([]);
+ await page.screenshot({path:"/tmp/orchestrator-task-design-desktop.png",fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await expect(page.getByRole("link",{name:"Open pull request #9",exact:true})).toBeVisible();
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+ await page.screenshot({path:"/tmp/orchestrator-task-design-mobile.png",fullPage:true});
 });
 
 test("every managed profile state explains the next step",async({page,request})=>{
@@ -65,9 +86,13 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await expect(page.getByRole("button",{name:"Done",exact:true})).toBeHidden();
   await page.getByRole("dialog").getByRole("button", { name: "Create project", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payments", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Payments project actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await page.getByLabel("Project name", { exact: true }).fill("Ledger");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Ledger", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ledger project actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
   await page.getByRole("button", { name: "Archive project", exact: true }).click();
   await expect(page.getByText("New tasks and retries are disabled for this archived project.", {exact:true})).toBeVisible();
   await expect(page.getByRole("link", { name: "New task", exact: true })).toHaveCount(0);
@@ -102,19 +127,48 @@ test("projects select several repositories and tasks require one target",async({
  await expect(page.getByRole("button",{name:"Submit task",exact:true})).toBeDisabled();
  await choose(page, "Repository", "ayni-oss/sandbox");
  await choose(page, "Runtime profile", "Ayni managed");
- await choose(page, "Model", "GPT-5");
+ await choose(page, "Model", "gpt-5.6-sol");
+ await expect(page.getByLabel("Agent iterations",{exact:true})).toHaveValue("24");
+ await page.getByLabel("Agent iterations",{exact:true}).fill("17");
+ await page.getByRole("button",{name:"Constraints and deadline",exact:true}).click();
+ await expect(page.getByRole("checkbox",{name:"Allow test edits",exact:true})).toBeChecked();
  await page.getByLabel("Request",{exact:true}).fill("Work only in the selected repository");
  await page.getByLabel("Acceptance criteria",{exact:true}).fill("The other repository is unchanged");
  await page.getByRole("button",{name:"Submit task",exact:true}).click();
  await expect(page.getByRole("heading",{name:"Work only in the selected repository",exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Cancel",exact:true}).click();
+ await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("17");
+ await expect(page.getByRole("region",{name:"Frozen request",exact:true})).toContainText("Authorized");
+ await page.getByRole("button",{name:"Task actions",exact:true}).click();
+ await page.getByRole("menuitem",{name:"Cancel task",exact:true}).click();
  await expect(page).toHaveURL(/notice=cancelled/u);
 });
 
 test("publication retry resumes retained final work and is distinct from task retry", async ({page}) => {
  await page.goto("/tasks/00000000-0000-4000-8000-000000000044");
- await expect(page.getByRole("button",{name:"Retry task · new attempt",exact:true})).toBeVisible();
- await page.getByRole("button",{name:"Retry publication",exact:true}).click();
+ await page.getByRole("button",{name:"Task actions",exact:true}).click();
+ await expect(page.getByRole("menuitem",{name:"Retry task · new attempt",exact:true})).toBeVisible();
+ await page.getByRole("menuitem",{name:"Retry publication",exact:true}).click();
  await expect(page).toHaveURL(/notice=publication-retried/u);
  await expect(page.getByText(/Attempt 1 · publication retry/u)).toBeVisible();
+});
+
+
+test("project overview puts tasks first and adapts the repository grid", async ({ page }) => {
+  await page.setViewportSize({ width: 1185, height: 1071 });
+  await page.goto("/projects/project:1");
+  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+  const sections = page.locator("main section");
+  await expect(sections.nth(0).getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
+  await expect(sections.nth(1).getByRole("heading", {name:"Repositories",exact:true})).toBeVisible();
+  const grid = sections.nth(1).locator(".grid");
+  expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(3);
+  await expect(page.getByRole("button", {name:"Save settings",exact:true})).toHaveCount(0);
+  await page.getByRole("button", {name:/project actions$/u}).click();
+  await page.getByRole("menuitem", {name:"Archive",exact:true}).click();
+  await expect(page.getByRole("dialog", {name:"Archive project",exact:true})).toBeVisible();
+  await page.getByRole("button", {name:"Cancel",exact:true}).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", {name:"New task",exact:true})).toBeVisible();
+  await page.setViewportSize({width:375,height:720});
+  expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
 });

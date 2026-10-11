@@ -194,6 +194,7 @@ fn task_request(profile: &RuntimeFixture, key: &str) -> v1::CreateDevelopmentTas
     v1::CreateDevelopmentTaskRequest {
         idempotency_key: key.into(),
         request: Some(v1::DevelopmentTaskRequest {
+            coding_turns: Some(12),
             project_id: profile.project.id.clone(),
             repository_connection_id: profile.repository.id.clone(),
             repository_revision: SOURCE.into(),
@@ -201,7 +202,7 @@ fn task_request(profile: &RuntimeFixture, key: &str) -> v1::CreateDevelopmentTas
             agent: Some(v1::AgentSelection {
                 provider: "openai".into(),
                 agent: "coding-agent".into(),
-                model: "gpt-5".into(),
+                model: "gpt-5.6-sol".into(),
             }),
             request: "Update the documented example".into(),
             acceptance_criteria: vec!["The example matches current behavior".into()],
@@ -290,6 +291,10 @@ fn assert_frozen_inputs(
             .change_constraints
     );
     assert!(frozen.deadline_at.is_some());
+    assert_eq!(
+        frozen.limits.as_ref().ok_or("limits missing")?.coding_turns,
+        12
+    );
     Ok(())
 }
 

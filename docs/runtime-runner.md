@@ -32,7 +32,18 @@ than being represented as source findings.
 Before delivery, freeze the full artifact, digest, source fingerprint, summary
 and final commit. A check that modifies publishable files requires another commit
 and full check. Failed or unavailable checks are disclosed truthfully in the
-draft, with completion counts and bounded actionable findings.
+draft, with completion counts and bounded actionable findings. The final check uses
+`ayni check --output markdown`; its generated report is bound to the same artifact
+digest and final commit, then retained outside the sandbox. After opening the draft,
+the worker posts that Markdown as an Ayni quality comment. Publication retries
+reuse the PR receipt and recover an uncertain comment response by matching the
+exact report, so they do not create another PR or duplicate its comment. Reports
+above GitHub's comment limit are explicitly truncated; the full report is retained.
+
+The task Quality section uses Ayni's pass, warning and failure icons. Hovering or
+focusing a signal reveals its generated summary and language/root. Legacy attempts
+retain their recorded pass/fail icons; summaries and report comments require a
+new final check and are not reconstructed from the agent's narrative.
 
 Atomic recovery preserves workspace changes, local commits, phase and budgets.
 Once publication starts, recovery resumes delivery without recoding. Persisted

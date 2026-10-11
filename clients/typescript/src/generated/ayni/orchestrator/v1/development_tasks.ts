@@ -591,7 +591,14 @@ export interface DevelopmentTaskRequest {
     | ChangeConstraints
     | undefined;
   /** deadline is 1 second through 24 hours when present. */
-  deadline?: Duration | undefined;
+  deadline?:
+    | Duration
+    | undefined;
+  /**
+   * Total model iterations across implementation and quality repairs, 1 through 128.
+   * When absent, the deployment default applies for older clients.
+   */
+  codingTurns?: number | undefined;
 }
 
 /** FrozenRepository freezes the source snapshot used by a task or attempt. */
@@ -769,6 +776,10 @@ export interface QualityEvidence {
 export interface QualityRow {
   kind: string;
   passed: boolean;
+  /** Ayni Markdown presentation; absent on legacy evidence. */
+  status: string;
+  summary: string;
+  target: string;
 }
 
 export interface QualityResult {
@@ -1015,6 +1026,7 @@ function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
     acceptanceCriteria: [],
     changeConstraints: undefined,
     deadline: undefined,
+    codingTurns: undefined,
   };
 }
 
@@ -1046,6 +1058,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     }
     if (message.deadline !== undefined) {
       Duration.encode(message.deadline, writer.uint32(66).fork()).join();
+    }
+    if (message.codingTurns !== undefined) {
+      writer.uint32(88).uint32(message.codingTurns);
     }
     return writer;
   },
@@ -1135,6 +1150,14 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
             message.deadline = Duration.decode(reader, reader.uint32());
             continue;
           }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.codingTurns = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1182,6 +1205,11 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
         ? ChangeConstraints.fromJSON(object.change_constraints)
         : undefined,
       deadline: isSet(object.deadline) ? Duration.fromJSON(object.deadline) : undefined,
+      codingTurns: isSet(object.codingTurns)
+        ? globalThis.Number(object.codingTurns)
+        : isSet(object.coding_turns)
+        ? globalThis.Number(object.coding_turns)
+        : undefined,
     };
   },
 
@@ -1214,6 +1242,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     if (message.deadline !== undefined) {
       obj.deadline = Duration.toJSON(message.deadline);
     }
+    if (message.codingTurns !== undefined) {
+      obj.codingTurns = Math.round(message.codingTurns);
+    }
     return obj;
   },
 
@@ -1237,6 +1268,7 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     message.deadline = (object.deadline !== undefined && object.deadline !== null)
       ? Duration.fromPartial(object.deadline)
       : undefined;
+    message.codingTurns = object.codingTurns ?? undefined;
     return message;
   },
 };
@@ -4022,7 +4054,7 @@ export const QualityEvidence: MessageFns<QualityEvidence> = {
 };
 
 function createBaseQualityRow(): QualityRow {
-  return { kind: "", passed: false };
+  return { kind: "", passed: false, status: "", summary: "", target: "" };
 }
 
 export const QualityRow: MessageFns<QualityRow> = {
@@ -4032,6 +4064,15 @@ export const QualityRow: MessageFns<QualityRow> = {
     }
     if (message.passed !== false) {
       writer.uint32(16).bool(message.passed);
+    }
+    if (message.status !== "") {
+      writer.uint32(26).string(message.status);
+    }
+    if (message.summary !== "") {
+      writer.uint32(34).string(message.summary);
+    }
+    if (message.target !== "") {
+      writer.uint32(42).string(message.target);
     }
     return writer;
   },
@@ -4065,6 +4106,30 @@ export const QualityRow: MessageFns<QualityRow> = {
             message.passed = reader.bool();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.status = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.summary = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.target = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -4081,6 +4146,9 @@ export const QualityRow: MessageFns<QualityRow> = {
     return {
       kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
       passed: isSet(object.passed) ? globalThis.Boolean(object.passed) : false,
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      summary: isSet(object.summary) ? globalThis.String(object.summary) : "",
+      target: isSet(object.target) ? globalThis.String(object.target) : "",
     };
   },
 
@@ -4092,6 +4160,15 @@ export const QualityRow: MessageFns<QualityRow> = {
     if (message.passed !== false) {
       obj.passed = message.passed;
     }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.summary !== "") {
+      obj.summary = message.summary;
+    }
+    if (message.target !== "") {
+      obj.target = message.target;
+    }
     return obj;
   },
 
@@ -4102,6 +4179,9 @@ export const QualityRow: MessageFns<QualityRow> = {
     const message = createBaseQualityRow();
     message.kind = object.kind ?? "";
     message.passed = object.passed ?? false;
+    message.status = object.status ?? "";
+    message.summary = object.summary ?? "";
+    message.target = object.target ?? "";
     return message;
   },
 };

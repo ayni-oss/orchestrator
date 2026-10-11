@@ -273,6 +273,15 @@ pub fn create_development_task(
             "acceptance_criteria",
         ));
     }
+    if request
+        .coding_turns
+        .is_some_and(|turns| !(1..=128).contains(&turns))
+    {
+        return Err(ValidationError::new(
+            v1::ErrorReason::BoundExceeded,
+            "coding_turns",
+        ));
+    }
     constraints(request.change_constraints.as_ref())?;
     if let Some(deadline) = request.deadline.as_ref()
         && (!(1..=86_400).contains(&deadline.seconds)
@@ -489,6 +498,7 @@ mod tests {
         v1::CreateDevelopmentTaskRequest {
             idempotency_key: "task:1".to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                coding_turns: Some(12),
                 project_id: "project:test".into(),
                 repository_connection_id: "repo:1".to_owned(),
                 repository_revision: "a".repeat(40),
@@ -509,6 +519,29 @@ mod tests {
                     nanos: 0,
                 }),
             }),
+        }
+    }
+
+    #[test]
+    fn task_iteration_budget_is_bounded_and_optional() {
+        for turns in [0, 129, u32::MAX] {
+            let mut request = task_request();
+            let Some(input) = request.request.as_mut() else {
+                panic!("fixture request missing");
+            };
+            input.coding_turns = Some(turns);
+            let Err(error) = create_development_task(&request) else {
+                panic!("invalid budget accepted");
+            };
+            assert_eq!(error.field, "coding_turns");
+        }
+        for turns in [None, Some(1), Some(24), Some(128)] {
+            let mut request = task_request();
+            let Some(input) = request.request.as_mut() else {
+                panic!("fixture request missing");
+            };
+            input.coding_turns = turns;
+            assert!(create_development_task(&request).is_ok());
         }
     }
 

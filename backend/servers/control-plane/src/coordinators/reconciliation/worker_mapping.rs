@@ -24,6 +24,9 @@ pub(super) fn quality(value: worker::QualityResult) -> v1::QualityResult {
             .map(|r| v1::QualityRow {
                 kind: r.kind,
                 passed: r.passed,
+                status: r.status,
+                summary: r.summary,
+                target: r.target,
             })
             .collect(),
         findings: value.findings,

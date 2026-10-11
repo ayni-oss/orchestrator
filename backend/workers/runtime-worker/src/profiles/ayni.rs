@@ -83,6 +83,27 @@ pub async fn invoke(
     full: bool,
     deadline: Duration,
 ) -> io::Result<VerificationReport> {
+    invoke_report(request, workspace, arguments, full, deadline, false)
+        .await
+        .map(|(report, _)| report)
+}
+
+pub(crate) async fn invoke_markdown(
+    request: &ExecutionRequest,
+    workspace: &Path,
+    deadline: Duration,
+) -> io::Result<(VerificationReport, Option<String>)> {
+    invoke_report(request, workspace, &["check".into()], true, deadline, true).await
+}
+
+async fn invoke_report(
+    request: &ExecutionRequest,
+    workspace: &Path,
+    arguments: &[String],
+    full: bool,
+    deadline: Duration,
+    markdown: bool,
+) -> io::Result<(VerificationReport, Option<String>)> {
     let expected_command = artifact_command(arguments, full)?;
     preflight(request, workspace)?;
     let lock = read_bounded(
@@ -121,11 +142,7 @@ pub async fn invoke(
         Err(error) => return Err(error),
     }
     let started = std::time::Instant::now();
-    let mut process = crate::operations::sandbox::command("/usr/local/bin/ayni", workspace)?;
-    process.args(arguments);
-    let status =
-        crate::operations::process::status(&mut tokio::process::Command::from(process), deadline)
-            .await?;
+    let (status, markdown) = execute(workspace, arguments, deadline, markdown).await?;
     let bytes = read_bounded(&signals, managed_runtime::MAX_SIGNALS_BYTES)?;
     let runtime = managed_runtime::verified_result(&metadata, &bytes, &request.expected)
         .map_err(verification_error)?;
@@ -161,20 +178,58 @@ pub async fn invoke(
             "verification changed protected source inputs",
         ));
     }
-    let quality = summarize(
+    let mut quality = summarize(
         &bytes,
         status.success(),
         full,
         expected_command,
         &git(workspace, &["rev-parse", "HEAD"])?,
     )?;
-    Ok(VerificationReport {
-        revision: request.revision.clone(),
-        lock_digest: format!("sha256:{:x}", Sha256::digest(lock)),
-        runtime,
-        check_exit_code: status.code().unwrap_or(-1),
-        quality,
-    })
+    if let Some(markdown) = &markdown {
+        report::decorate(&mut quality.rows, &artifact, markdown);
+    }
+    Ok((
+        VerificationReport {
+            revision: request.revision.clone(),
+            lock_digest: format!("sha256:{:x}", Sha256::digest(lock)),
+            runtime,
+            check_exit_code: status.code().unwrap_or(-1),
+            quality,
+        },
+        markdown,
+    ))
+}
+
+async fn execute(
+    workspace: &Path,
+    arguments: &[String],
+    deadline: Duration,
+    markdown: bool,
+) -> io::Result<(std::process::ExitStatus, Option<String>)> {
+    let mut process = crate::operations::sandbox::command("/usr/local/bin/ayni", workspace)?;
+    process.args(arguments);
+    if markdown {
+        process.args(["--output", "markdown"]);
+        let (status, output) = crate::operations::process::output(
+            &mut tokio::process::Command::from(process),
+            deadline,
+            1_048_576,
+        )
+        .await?;
+        Ok((
+            status,
+            Some(String::from_utf8(output).map_err(io::Error::other)?),
+        ))
+    } else {
+        Ok((
+            crate::operations::process::status(
+                &mut tokio::process::Command::from(process),
+                deadline,
+            )
+            .await?,
+            None,
+        ))
+    }
 }
 
 fn required_count(value: &Value, section: &str, field: &str) -> io::Result<u32> {
@@ -291,6 +346,9 @@ fn summarize(
                         .as_str()
                         .ok_or_else(|| io::Error::other("invalid row kind"))?
                         .into(),
+                    status: String::new(),
+                    summary: String::new(),
+                    target: String::new(),
                     passed: row["pass"]
                         .as_bool()
                         .ok_or_else(|| io::Error::other("invalid row outcome"))?,
@@ -577,3 +635,5 @@ pub(crate) async fn success(command: std::process::Command) -> io::Result<()> {
 mod tests;
 
 pub mod trust_lock;
+
+mod report;

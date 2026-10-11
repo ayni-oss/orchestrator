@@ -1,8 +1,9 @@
 <script lang="ts">
   import { Select } from "bits-ui";
   import { Check, ChevronDown } from "@lucide/svelte";
-  let { id, name, form, value = $bindable(""), options, placeholder = "Select an option", disabled = false, required = false, onValueChange }: {
+  let { id, descriptionId, name, form, value = $bindable(""), options, placeholder = "Select an option", disabled = false, required = false, onValueChange }: {
     id: string;
+    descriptionId?: string;
     name?: string;
     form?: string;
     value?: string;
@@ -16,7 +17,7 @@
 </script>
 
 <Select.Root type="single" bind:value {disabled} {required} items={options} onValueChange={next => onValueChange?.(next)}>
-  <Select.Trigger {id} class="border-input bg-background dark:bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-3 text-sm shadow-xs outline-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50">
+  <Select.Trigger {id} aria-describedby={descriptionId} class="border-input bg-background dark:bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-3 text-sm shadow-xs outline-none focus-visible:ring-3 disabled:cursor-not-allowed disabled:opacity-50">
     <span class={["truncate", !label && "text-muted-foreground"]}>{label ?? placeholder}</span>
     <ChevronDown class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
   </Select.Trigger>

@@ -119,7 +119,13 @@ Public certificate trust preparation runs in the pinned worker image with Ayni a
 the pinned lock resolver. It needs checkout access and the public key only, and
 proposes owner-reviewed policy/lock trust updates using the catalog-selected
 official builder and public certificate data. Missing engine infrastructure blocks
-subsequent runtime builds.
+subsequent runtime builds. Trust updates reuse `setup/certificate-trust` within each
+repository. An existing open managed proposal (including an earlier generated
+branch) is updated rather than duplicated. Updates preserve default-branch and
+proposal ancestry and refuse to overwrite unrelated branch changes. Closed
+unmerged proposals require an explicit retry to reopen; merged proposals retire
+the review link. Later required trust changes open a new PR on the same branch,
+since GitHub cannot reopen a merged PR.
 
 See [repository-selected official builders](repository-builders.md) for immutable
 version selection, attempt engines, security modes and recovery.

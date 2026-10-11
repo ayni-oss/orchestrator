@@ -101,6 +101,20 @@ pub struct VerifyArgs {
 }
 impl VerifyArgs {
     pub fn arguments(&self) -> io::Result<Vec<String>> {
+        let unsupported = match self.signal {
+            Signal::Test => false,
+            Signal::Size => self.package.is_some() || self.name.is_some(),
+            Signal::Complexity | Signal::Deps => self.name.is_some(),
+            Signal::Coverage | Signal::Mutation => {
+                self.file.is_some() || self.package.is_some() || self.name.is_some()
+            }
+        };
+        if unsupported {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unsupported verify selectors: test accepts file/package/name; size accepts file; complexity/deps accept file/package; coverage/mutation accept only language/root",
+            ));
+        }
         let token = |value: &serde_json::Value| {
             value
                 .as_str()
@@ -144,7 +158,14 @@ impl Tool for AyniVerify {
         "Run ayni verify <signal> with optional language/root/file/package/name selectors. Ayni validates adapter-specific combinations. Focused evidence is feedback, never the full quality gate.".into()
     }
     fn parameters(&self) -> serde_json::Value {
-        json!({"type":"object","properties":{"signal":{"type":"string","enum":["test","coverage","size","complexity","deps","mutation"]},"language":{"type":"string","enum":["rust","go","node","python","kotlin"]},"root":{"type":"string"},"file":{"type":"string"},"package":{"type":"string"},"name":{"type":"string"}},"required":["signal"],"additionalProperties":false})
+        json!({"type":"object","properties":{"signal":{"type":"string","enum":["test","coverage","size","complexity","deps","mutation"]},"language":{"type":"string","enum":["rust","go","node","python","kotlin"]},"root":{"type":"string"},"file":{"type":"string","description":"Only test, size, complexity, or deps."},"package":{"type":"string","description":"Only test, complexity, or deps."},"name":{"type":"string","description":"Only test."}},"required":["signal"],"additionalProperties":false})
+    }
+    fn map_error(&self, error: io::Error) -> rig_agent::tool::ToolExecutionError {
+        if error.kind() == io::ErrorKind::InvalidInput {
+            rig_agent::tool::ToolExecutionError::invalid_args(error.to_string())
+        } else {
+            rig_agent::tool::ToolExecutionError::from_error(error)
+        }
     }
     async fn call(&self, _: &mut ToolContext, args: VerifyArgs) -> io::Result<String> {
         let _guard = self.0.serial.lock().await;
@@ -161,9 +182,12 @@ impl Tool for AyniVerify {
 }
 #[derive(Clone)]
 pub struct AyniCheck(pub Context);
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckArgs {}
 impl Tool for AyniCheck {
     const NAME: &'static str = "ayni_check";
-    type Args = ();
+    type Args = CheckArgs;
     type Output = String;
     type Error = io::Error;
     fn description(&self) -> String {
@@ -172,7 +196,7 @@ impl Tool for AyniCheck {
     fn parameters(&self) -> serde_json::Value {
         json!({"type":"object","properties":{},"additionalProperties":false})
     }
-    async fn call(&self, _: &mut ToolContext, (): ()) -> io::Result<String> {
+    async fn call(&self, _: &mut ToolContext, _: CheckArgs) -> io::Result<String> {
         let _guard = self.0.serial.lock().await;
         let report = crate::profiles::ayni::invoke(
             &self.0.spec.execution,
@@ -241,6 +265,75 @@ async fn bounded_output(mut stream: impl tokio::io::AsyncRead + Unpin) -> io::Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn model_json_dispatch_reaches_check_runner_and_rejects_bad_selectors()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use rig_agent::tool::{ToolErrorKind, ToolSet};
+        use std::sync::Arc;
+        let root = tempfile::tempdir()?;
+        let workspace = root.path().join("workspace");
+        let context = Context {
+            spec: Arc::new(super::super::tests::fixture(&workspace)?),
+            workspace,
+            output: root.path().join("output"),
+            state: Arc::new(tokio::sync::Mutex::new(
+                crate::coding::sessions::SessionState::default(),
+            )),
+            serial: Arc::new(tokio::sync::Mutex::new(())),
+            activity: crate::coding::activity::ActivityLog::default(),
+        };
+        let mut tools = ToolSet::default();
+        tools.add_tool(AyniCheck(context.clone()));
+        tools.add_tool(AyniVerify(context));
+        let mut dispatch = ToolContext::new();
+        // No managed runtime exists in this fixture: valid arguments must reach
+        // preflight and fail there, rather than failing JSON decoding.
+        let check = tools.execute("ayni_check", "{}", &mut dispatch).await;
+        assert_eq!(
+            check.error().map(rig_agent::tool::ToolExecutionError::kind),
+            Some(ToolErrorKind::Other)
+        );
+        let extra = tools
+            .execute("ayni_check", r#"{"unexpected":true}"#, &mut dispatch)
+            .await;
+        assert_eq!(
+            extra.error().map(rig_agent::tool::ToolExecutionError::kind),
+            Some(ToolErrorKind::InvalidArgs)
+        );
+        for signal in ["test", "coverage", "size", "complexity", "deps", "mutation"] {
+            let result = tools
+                .execute(
+                    "ayni_verify",
+                    serde_json::json!({"signal":signal}).to_string(),
+                    &mut dispatch,
+                )
+                .await;
+            assert_eq!(
+                result
+                    .error()
+                    .map(rig_agent::tool::ToolExecutionError::kind),
+                Some(ToolErrorKind::Other)
+            );
+        }
+        for args in [
+            serde_json::json!({"signal":"coverage","file":"src/lib.rs"}),
+            serde_json::json!({"signal":"mutation","package":"crate"}),
+            serde_json::json!({"signal":"size","package":"crate"}),
+            serde_json::json!({"signal":"deps","name":"test"}),
+        ] {
+            let result = tools
+                .execute("ayni_verify", args.to_string(), &mut dispatch)
+                .await;
+            assert_eq!(
+                result
+                    .error()
+                    .map(rig_agent::tool::ToolExecutionError::kind),
+                Some(ToolErrorKind::InvalidArgs)
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn selectors_are_arguments_not_shell_fragments() -> io::Result<()> {
         let args = VerifyArgs {

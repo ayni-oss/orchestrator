@@ -39,15 +39,26 @@ trait Runner: Sync {
 struct NativeRunner;
 impl Runner for NativeRunner {
     async fn check(&self, context: &Context, deadline: Duration) -> io::Result<QualityResult> {
-        crate::profiles::ayni::invoke(
+        let (report, markdown) = crate::profiles::ayni::invoke_markdown(
             &context.spec.execution,
             &context.workspace,
-            &["check".into()],
-            true,
             deadline,
         )
-        .await
-        .map(|report| report.quality)
+        .await?;
+        let path = context.output.join("quality-report.pending.json");
+        if let (Some(evidence), Some(markdown)) = (&report.quality.evidence, markdown) {
+            recovery::write_json(
+                &path,
+                &super::report::Report {
+                    signals_digest: evidence.signals_digest.clone(),
+                    commit: evidence.commit.clone(),
+                    markdown,
+                },
+            )?;
+        } else if path.exists() {
+            std::fs::remove_file(path)?;
+        }
+        Ok(report.quality)
     }
     async fn repair(&self, context: &Context, findings: &str) -> io::Result<Option<String>> {
         super::sessions::run(context, Some(findings)).await
@@ -170,6 +181,10 @@ async fn coordinate_with(context: &Context, runner: &impl Runner) -> io::Result<
 async fn freeze(context: &Context, result: QualityResult) -> io::Result<QualityResult> {
     context.phase(WorkerPhase::Finalizing).await?;
     context.activity.record(Stage::Finalization);
+    let report_path = context.output.join("evidence/report.json");
+    if report_path.exists() {
+        std::fs::remove_file(&report_path)?;
+    }
     if let Some(evidence) = &result.evidence {
         let bytes = read_bounded(
             &context.workspace.join(".ayni/last/signals.json"),
@@ -184,6 +199,13 @@ async fn freeze(context: &Context, result: QualityResult) -> io::Result<QualityR
             ));
         }
         recovery::atomic_write(&context.output.join("evidence/signals.json"), &bytes)?;
+        let pending = context.output.join("quality-report.pending.json");
+        if pending.exists() {
+            let report: super::report::Report = super::report::Report::read(&pending)?;
+            if report.matches(evidence) {
+                recovery::write_json(&report_path, &report)?;
+            }
+        }
     }
     Ok(result)
 }

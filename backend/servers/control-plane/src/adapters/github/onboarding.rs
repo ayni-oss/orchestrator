@@ -232,17 +232,22 @@ impl SourceClient {
         lock: &str,
         token: &str,
     ) -> Result<(), &'static str> {
-        if let Some(existing) = self.setup_reference(github, branch, token).await? {
+        let existing = self.setup_reference(github, branch, token).await?;
+        if let Some(existing) = &existing {
+            let mut unchanged = true;
             for (path, expected) in [(".ayni.toml", policy), (".ayni.lock", lock)] {
-                if self
-                    .file(&github.owner, &github.name, &existing, path, token)
+                unchanged &= self
+                    .file(&github.owner, &github.name, existing, path, token)
                     .await?
-                    != expected.as_bytes()
-                {
-                    return Err("certificate_trust_branch_conflict");
-                }
+                    == expected.as_bytes();
             }
-            return Ok(());
+            if unchanged {
+                return Ok(());
+            }
+            let comparison = self
+                .setup_api(github, &format!("compare/{head}...{existing}"), token, None)
+                .await?;
+            super::trust::validate_branch_changes(&comparison)?;
         }
         let commit = self
             .setup_api(github, &format!("git/commits/{head}"), token, None)
@@ -258,7 +263,15 @@ impl SourceClient {
                 ]})),
             )
             .await?;
-        let commit = self.setup_api(github, "git/commits", token, Some(&json!({"message":"feat(ayni): update environment signing trust","tree":tree["sha"],"parents":[head]}))).await?;
+        // Both parents retain the latest default source and prior proposal history.
+        // Updating the reference remains a non-forced fast-forward.
+        let parents = super::trust::parents(head, existing.as_deref());
+        let commit = self.setup_api(github, "git/commits", token, Some(&json!({"message":"feat(ayni): update environment signing trust","tree":tree["sha"],"parents":parents}))).await?;
+        if existing.is_some() {
+            return self
+                .update_trust_reference(github, branch, &commit, token)
+                .await;
+        }
         self.setup_api(
             github,
             "git/refs",

@@ -1,4 +1,6 @@
 import {
+  QualityOutcome,
+  QualityResult,
   DevelopmentAttempt,
   DevelopmentAttemptState,
   DevelopmentTaskState,
@@ -11,7 +13,7 @@ import {
   type RepositoryConnection,
   type RuntimeProfile,
 } from "@ayni-orchestrator/grpc-bindings/server";
-import { mapDevelopmentAttempt } from "../src/mapping.js";
+import { mapDevelopmentAttempt, mapQuality } from "../src/mapping.js";
 import { describe, expect, it } from "vitest";
 import {
   BffMappingError,
@@ -181,10 +183,12 @@ describe("clean-v1 browser DTO mappings", () => {
       acceptanceCriteria: ["three becomes eight"],
       changeConstraints: { protectedPaths: ["docs"], allowTestEdits: false },
       deadlineSeconds: 60,
+      codingTurns: 17,
     })).toEqual(expect.objectContaining({
       runtimeProfileId: "profile:1",
       agent: { provider: "openai", agent: "coding-agent", model: "gpt-5" },
       deadline: { seconds: "60", nanos: 0 },
+      codingTurns: 17,
     }));
   });
 });
@@ -207,5 +211,34 @@ it("retains bounded activity on failed attempts for task polling and watch updat
   expect(mapped.agentActivity.at(-1)).toEqual({
     sequence: 300, observedAt: original.createdAt?.toISOString(),
     message: "Waiting for a model response", failed: true,
+  });
+});
+
+
+describe("worker quality evidence", () => {
+  it("preserves Ayni warning summaries and safely maps legacy or conflicting statuses", () => {
+    const quality = QualityResult.fromPartial({rows:[
+      {kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"},
+      {kind:"test",passed:true},
+      {kind:"complexity",passed:false,status:"pass",summary:"max_cyclo=32"},
+      {kind:"deps",passed:true,status:"https://untrusted.example/icon.svg"},
+    ]});
+    const rows = mapQuality(quality).rows;
+    expect(rows[0]).toEqual({kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"});
+    expect(rows.map(row => row.status)).toEqual(["warn","pass","fail","pass"]);
+    expect(rows[1]?.summary).toBe("");
+  });
+  it("preserves passing evidence with canonical sha256 prefixes and legacy hex digests", () => {
+    for (const prefix of ["sha256:", ""]) {
+      const evidence = {artifactPath:"evidence/signals.json",signalsDigest:prefix+"a".repeat(64),sourceFingerprint:prefix+"b".repeat(64),commit:"c".repeat(40)};
+      const quality = QualityResult.fromPartial({outcome:QualityOutcome.QUALITY_OUTCOME_PASSED,evidence});
+      expect(mapQuality(quality).outcome).toBe("passed");
+      expect(mapQuality(quality).evidence).toEqual({signalsDigest:evidence.signalsDigest,sourceFingerprint:evidence.sourceFingerprint,commit:evidence.commit});
+      for (const invalid of ["sha256:bad", "sha512:"+"a".repeat(64), "a".repeat(63)]) {
+        quality.evidence = {...evidence,signalsDigest:invalid};
+        expect(mapQuality(quality).outcome).toBe("unavailable");
+        expect(mapQuality(quality).evidence).toBeUndefined();
+      }
+    }
   });
 });

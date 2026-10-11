@@ -103,9 +103,31 @@ impl AgentHook for ActivityLog {
         self.record(Stage::ToolStarted);
         ToolCallAction::Run
     }
-    async fn on_tool_result(&self, _: &HookContext, _: ToolResultEvent<'_>) -> ToolResultAction {
+    async fn on_tool_result(
+        &self,
+        _: &HookContext,
+        event: ToolResultEvent<'_>,
+    ) -> ToolResultAction {
         self.record(Stage::ToolFinished);
+        self.record_tool_failure(event.raw_result);
         ToolResultAction::Keep
+    }
+}
+
+impl ActivityLog {
+    fn record_tool_failure(&self, result: &rig_agent::tool::ToolResult) {
+        use rig_agent::tool::ToolErrorKind;
+        if let Some(error) = result.error().or_else(|| result.refusal()) {
+            self.fail(match error.kind() {
+                ToolErrorKind::InvalidArgs => Failure::InvalidInput,
+                ToolErrorKind::Cancelled => Failure::Cancelled,
+                ToolErrorKind::NotFound => Failure::MissingFile,
+                ToolErrorKind::PermissionDenied => Failure::PermissionDenied,
+                ToolErrorKind::RateLimited => Failure::RateLimited,
+                ToolErrorKind::Network => Failure::Transport,
+                _ => Failure::Internal,
+            });
+        }
     }
 }
 
@@ -226,6 +248,28 @@ mod tests {
         assert!(matches!(events[0].stage, Stage::ModelRequest));
         assert!(matches!(events[1].failure, Some(Failure::ProviderRejected)));
         assert!(ayni_orchestrator_runtime::activity::valid(&events));
+        Ok(())
+    }
+
+    #[test]
+    fn tool_errors_are_classified_without_retaining_arguments_or_output()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use rig_agent::tool::{ToolExecutionError, ToolOutput, ToolResult};
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("activity.json");
+        let log = ActivityLog::new(Some(path.clone()));
+        log.record(Stage::ToolFinished);
+        log.record_tool_failure(&ToolResult::failed(ToolExecutionError::invalid_args(
+            "private arguments",
+        )));
+        log.record(Stage::ToolFinished);
+        log.record_tool_failure(&ToolResult::success(ToolOutput::text("private output")));
+        let bytes = fs::read_to_string(path)?;
+        let events: Vec<Activity> = serde_json::from_str(&bytes)?;
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[1].failure, Some(Failure::InvalidInput)));
+        assert!(!events[2].failed);
+        assert!(!bytes.contains("private"));
         Ok(())
     }
 

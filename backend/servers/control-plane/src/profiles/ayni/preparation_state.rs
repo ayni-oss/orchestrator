@@ -89,6 +89,15 @@ impl RuntimeCursorExt for RuntimeCursor {
 
     fn metadata(&self) -> Vec<v1::VerifiedMetadata> {
         let mut status = self.status.clone();
+        // Older cursors could persist verification before updating display metadata
+        // when asynchronous Job cleanup interrupted reconciliation.
+        if self
+            .trust
+            .as_ref()
+            .is_some_and(|trust| trust.state == "verified")
+        {
+            status.insert("certificate-trust-state".into(), "verified".into());
+        }
         if let Some(image) = &self.builder.image {
             status.insert("builder-image".into(), image.clone());
         }
@@ -203,12 +212,8 @@ impl TrustUpdate {
         self.state = "pending".into();
     }
 
-    pub fn branch(&self) -> String {
-        format!("setup/certificate-{}", &self.generation[..24])
-    }
-
-    pub fn after_merged_branch(&self, number: u64) -> String {
-        format!("{}-after-{number}", self.branch())
+    pub fn branch() -> String {
+        "setup/certificate-trust".into()
     }
 
     pub fn observe_pull(

@@ -52,6 +52,8 @@
             {/each}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
+      {:else}
+        <span class="size-7 shrink-0" aria-hidden="true"></span>
       {/if}
     </div>
   </Card.Header>

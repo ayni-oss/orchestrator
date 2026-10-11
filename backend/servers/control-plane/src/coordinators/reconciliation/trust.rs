@@ -131,16 +131,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         };
         // A previously generated/merged policy must still pin exactly the selected key.
         if trust.state == "verified" && pinned && trust.head == head {
-            self.kubernetes.cleanup(&trust.job).await?;
-            if default_head != head {
-                trust.merge_revision = None;
-                trust.reset(default_head);
-                cursor.trust = Some(trust);
-                self.save(id, cursor).await?;
-                return Ok(false);
-            }
-            return Ok(true);
+            return self
+                .complete_verified_trust(&context, default_head, &mut trust, cursor)
+                .await;
         }
+
         if trust.state == "verified" || (trust.head != head && trust.pull_number.is_none()) {
             self.kubernetes.cleanup(&trust.job).await?;
             trust.reset(head);
@@ -156,6 +151,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             cursor.trust = Some(trust);
             self.save(id, cursor).await?;
             return Ok(false);
+        }
+        if trust.state == "open" && trust.head != head {
+            self.kubernetes.cleanup(&trust.job).await?;
+            trust.reset(head);
+            cursor.status.remove("certificate-trust-pr");
         }
         self.retry_trust_update(&context, &mut trust, cursor)
             .await?;
@@ -175,6 +175,39 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Err("certificate_trust_pull_closed");
         }
         Ok(trust.state == "verified" && default_head == head)
+    }
+    async fn complete_verified_trust(
+        &self,
+        context: &TrustContext<'_>,
+        default_head: &str,
+        trust: &mut TrustUpdate,
+        cursor: &mut RuntimeCursor,
+    ) -> Result<bool, &'static str> {
+        let retired = cursor.status.remove("certificate-trust-pr").is_some();
+        if retired
+            || cursor
+                .status
+                .get("certificate-trust-state")
+                .map(String::as_str)
+                != Some("verified")
+        {
+            cursor
+                .status
+                .insert("certificate-trust-state".into(), "verified".into());
+            self.save(context.id, cursor).await?;
+        }
+        self.kubernetes.cleanup(&trust.job).await?;
+        if default_head != context.head {
+            trust.merge_revision = None;
+            trust.reset(default_head);
+            cursor
+                .status
+                .insert("certificate-trust-state".into(), trust.state.clone());
+            cursor.trust = Some(trust.clone());
+            self.save(context.id, cursor).await?;
+            return Ok(false);
+        }
+        Ok(true)
     }
     async fn retry_trust_update(
         &self,
@@ -271,6 +304,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             )?;
             if merged {
                 trust.merge_revision = merged_revision;
+                cursor.status.remove("certificate-trust-pr");
             }
             if merged {
                 cursor
@@ -349,9 +383,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     if result.policy.as_bytes() == policy && result.lock.as_bytes() == lock {
                         trust.state = "verified".into();
                         trust.result = None;
+                        cursor.status.remove("certificate-trust-pr");
                         // Preserve the verified no-op before asynchronous deletion;
                         // the next pass must finish cleanup, not recreate the Job.
                         cursor.trust = Some(trust.clone());
+                        cursor
+                            .status
+                            .insert("certificate-trust-state".into(), trust.state.clone());
                         self.save(id, cursor).await?;
                         self.kubernetes.cleanup(&trust.job).await?;
                     } else {
@@ -362,36 +400,6 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             }
         }
         Ok(())
-    }
-
-    async fn available_trust_pull(
-        &self,
-        github: &v1::GithubRepository,
-        base: &str,
-        trust: &TrustUpdate,
-        token: &str,
-    ) -> Result<(String, Option<serde_json::Value>), &'static str> {
-        let mut branch = trust.branch();
-        // Provider identity, rather than a runtime's local job retry count, deduplicates
-        // proposals shared by multiple profiles and survives policy reversion/restart.
-        for _ in 0..32 {
-            let pull = self
-                .source
-                .find_pull(&github.owner, &github.name, &branch, base, token)
-                .await?;
-            if let Some(ref merged) = pull
-                && merged["merged_at"].as_str().is_some()
-            {
-                branch = trust.after_merged_branch(
-                    merged["number"]
-                        .as_u64()
-                        .ok_or("certificate_trust_pull_invalid")?,
-                );
-                continue;
-            }
-            return Ok((branch, pull));
-        }
-        Err("certificate_trust_history_limit")
     }
 
     async fn propose_trust_pull(
@@ -418,21 +426,22 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .ok_or("certificate_trust_result_invalid")?;
             let write_token = self.source.trust_token(github).await?;
             let (owned_branch, existing) = self
-                .available_trust_pull(github, branch, trust, &write_token)
+                .source
+                .find_trust_pull(github, branch, &TrustUpdate::branch(), &write_token)
+                .await?;
+            self.source
+                .trust_branch(
+                    github,
+                    &owned_branch,
+                    &trust.head,
+                    &result.policy,
+                    &result.lock,
+                    &write_token,
+                )
                 .await?;
             let pull = if let Some(pull) = existing {
                 pull
             } else {
-                self.source
-                    .trust_branch(
-                        github,
-                        &owned_branch,
-                        &trust.head,
-                        &result.policy,
-                        &result.lock,
-                        &write_token,
-                    )
-                    .await?;
                 self.source.create_pull(&github.owner,&github.name,&write_token,&serde_json::json!({"head":owned_branch,"base":branch,"title":"feat(ayni): update environment signing trust","body":"Pin the selected environment signing public key and refresh the environment lock with the supported Ayni CLI. Review and merge to activate the signed runtime.","draft":true})).await?
             };
             let number = pull["number"]
@@ -733,29 +742,6 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn profiles_at_different_heads_share_the_desired_generation_proposal() {
-        let first = trust();
-        let mut later = first.clone();
-        later.reset(&"c".repeat(40));
-        assert_ne!(later.head, first.head);
-        assert_ne!(later.attempt, first.attempt);
-        assert_eq!(later.branch(), first.branch());
-        assert_eq!(later.after_merged_branch(17), first.after_merged_branch(17));
-    }
-    #[test]
-    fn merged_provider_identity_distinguishes_reversion_without_job_retry_duplicates() {
-        let mut trust = trust();
-        let old_branch = trust.branch();
-        trust.state = "verified".into();
-        trust.reset(&"b".repeat(40));
-        assert_eq!(trust.state, "pending");
-        assert_eq!(trust.pull_number, None);
-        assert_eq!(trust.branch(), old_branch);
-        assert_ne!(trust.after_merged_branch(17), old_branch);
-        assert_ne!(trust.after_merged_branch(17), trust.after_merged_branch(18));
-        assert_eq!(trust.attempt, 1);
-    }
-    #[test]
     fn restart_preserves_dedup_identity_and_closed_pull_observation()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut trust = trust();
@@ -763,11 +749,9 @@ mod tests {
         assert_eq!(trust.state, "closed");
         let saved = serde_json::to_string(&trust)?;
         let mut restarted: super::TrustUpdate = serde_json::from_str(&saved)?;
-        assert_eq!(restarted.branch(), trust.branch());
         restarted.observe_pull(false, true, false, &"b".repeat(40))?;
         assert_eq!(restarted.state, "open");
         assert_eq!(restarted.pull_number, Some(17));
-        assert_eq!(restarted.branch(), trust.branch());
         restarted.reset(&"b".repeat(40));
         assert_eq!(restarted.state, "pending");
         assert_ne!(restarted.job, trust.job);

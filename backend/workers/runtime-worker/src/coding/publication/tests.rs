@@ -12,6 +12,7 @@ fn journal() -> Journal {
         base_branch: "main".into(),
         head_commit: "a".repeat(40),
         receipt: None,
+        comment_digest: None,
     }
 }
 fn pull(journal: &Journal) -> Value {

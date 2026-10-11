@@ -92,6 +92,7 @@ fn command() -> AdmitTask {
             digest: vec![1],
             payload: vec![2],
         },
+        coding_turns: Some(12),
         project_id: "project".into(),
         repository_id: "repository".into(),
         repository_revision: "source".into(),
@@ -115,6 +116,7 @@ fn freezes_source_runtime_and_normalized_deadline() -> Result<(), AdmissionError
     assert_eq!(frozen.source_revision, "source");
     assert_eq!(frozen.runtime.digest, "sha256:frozen");
     assert_eq!(frozen.project_id, "project");
+    assert_eq!(frozen.coding_turns, Some(12));
     assert_eq!(
         frozen.deadline_at,
         Some(TimePoint {

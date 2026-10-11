@@ -37,8 +37,10 @@
     {#each data.summaries as summary (summary.project.id)}
       {@const project = summary.project}
       {@const latest = summary.tasksComplete ? summary.latestTask : undefined}
-      <Card.Root class="h-full"><Card.Header>
-        <Card.Title><a class="hover:underline" href={`/projects/${encodeURIComponent(project.id)}`}>{project.displayName}</a></Card.Title>
+      <Card.Root class="relative h-full transition-colors hover:bg-accent/30">
+        <a href={`/projects/${encodeURIComponent(project.id)}`} aria-label={project.displayName} class="absolute inset-0 z-10 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"></a>
+        <Card.Header>
+        <Card.Title>{project.displayName}</Card.Title>
         <Card.Description>{summary.repositoryNames.join(", ")}</Card.Description>
       </Card.Header><Card.Content class="space-y-4 text-sm">
         <div class="flex items-center justify-between"><span class="text-muted-foreground">Environment</span><span>{project.state === "archived" ? "Archived" : !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : "Setup required"}</span></div>
