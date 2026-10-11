@@ -40,6 +40,11 @@ Separate task-stage pods and independent assessment are research, not current ex
 
 - [Ayni product flow and object relationships](docs/ayni-product-flow.md)
 - [Architecture](docs/architecture.md)
+- [Control-plane events, evidence and streaming research](docs/control-plane-events.md)
+- [Observability and lifecycle events](docs/observability-and-events.md)
+- [CloudEvents lifecycle contract](docs/cloudevents-contract.md)
+- [Event platform implementation proposal](docs/event-platform-implementation.md)
+- [Event platform migration and retirement](docs/event-platform-migration.md)
 - [Assurance boundaries](docs/assurance.md)
 - [Reviewed environment changes](docs/environment-changes.md)
 - [Protocol contract](proto/README.md)
