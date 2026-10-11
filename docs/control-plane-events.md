@@ -6,6 +6,11 @@ The control plane should advance on validated application evidence and controlle
 
 The [flow inventory](control-plane-event-flows.md) maps all implemented flows, their current signals, transition gates and cleanup ordering. The [contract catalog](control-plane-event-contracts.csv) indexes current RPCs, state vocabularies, resource events and worker tools.
 
+[Observability and lifecycle events](observability-and-events.md) describes how
+OpenTelemetry traces, logs and metrics complement these application contracts.
+The [CloudEvents contract](cloudevents-contract.md) recommends a standard
+envelope and defines its relationship to JetStream routing and trace context.
+
 ## Findings that drive the design
 
 - The system already has transactional resource events and resumable gRPC streams. The missing contract is consistent producer reporting and accepted lifecycle events.
