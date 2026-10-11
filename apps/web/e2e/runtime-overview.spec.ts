@@ -119,3 +119,19 @@ test("repository analysis retains onboarding independently of connection access"
   await page.reload();
   await expect(onboarding).toContainText("Analyzing");
 });
+
+
+test("exhausted runtime offers explicit retry without an automatic timestamp", async ({page, request}) => {
+  try {
+    await request.post("http://127.0.0.1:50062/preparation?phase=verifying&retry=operator_required");
+    await page.goto("/profiles/profile:1");
+    await expect(page.getByText("Manual retry required", {exact:true})).toBeVisible();
+    await expect(page.getByText("runtime_verification_failed", {exact:true})).toBeVisible();
+    await expect(page.getByText("Next retry", {exact:true})).toHaveCount(0);
+    await page.getByRole("region", {name:"Current runtime identity",exact:true}).getByRole("button").click();
+    await page.getByRole("menuitem", {name:"Retry",exact:true}).click();
+    await expect(page.getByText("Reconciliation requested.", {exact:true})).toBeVisible();
+  } finally {
+    await request.post("http://127.0.0.1:50062/preparation");
+  }
+});

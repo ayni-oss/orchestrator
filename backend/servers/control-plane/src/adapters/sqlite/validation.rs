@@ -64,7 +64,7 @@ pub(super) fn validate_resource_tables(connection: &Connection) -> Result<(), Cl
                 && value.kind != v1::RuntimeProfileKind::Unspecified as i32
                 && value.support != v1::RuntimeProfileSupport::Unspecified as i32
                 && value.state != v1::RuntimeProfileState::Unspecified as i32
-                && safe_metadata(&value.reconciliation_metadata, 16, 8192)
+                && safe_metadata(&value.reconciliation_metadata, 24, 12288)
                 && v1::RuntimeProfileKind::try_from(value.kind).is_ok()
                 && v1::RuntimeProfileSupport::try_from(value.support).is_ok()
                 && v1::RuntimeProfileState::try_from(value.state).is_ok()
@@ -437,7 +437,7 @@ pub(super) fn valid_runtime_profile_event(
         && value.kind != v1::RuntimeProfileKind::Unspecified as i32
         && value.support != v1::RuntimeProfileSupport::Unspecified as i32
         && value.state != v1::RuntimeProfileState::Unspecified as i32
-        && safe_metadata(&value.reconciliation_metadata, 16, 8192)
+        && safe_metadata(&value.reconciliation_metadata, 24, 12288)
         && v1::RuntimeProfileKind::try_from(value.kind).is_ok()
         && v1::RuntimeProfileSupport::try_from(value.support).is_ok()
         && v1::RuntimeProfileState::try_from(value.state).is_ok()

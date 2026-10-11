@@ -1,5 +1,4 @@
 //! Existing-App repository onboarding. Provider credentials never enter the BFF.
-use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 use crate::{
     AppState, adapters::github::SourceClient, coordinators::with_store_async as with_store,
 };
@@ -398,11 +397,6 @@ impl AppState {
                 .list_runtime_profiles(Some(&request.repository_connection_id), None, None, None)?
                 .items;
             if !profiles.is_empty() {
-                for profile in profiles {
-                    let mut cursor = store.runtime_cursor(&profile.id)?;
-                    cursor.retry();
-                    store.save_runtime_cursor(&profile.id, &cursor)?;
-                }
                 return Ok(());
             }
             store

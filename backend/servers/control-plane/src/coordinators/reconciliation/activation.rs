@@ -157,6 +157,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         cursor.preparation = None;
         cursor.last_success = Some(time);
         cursor.failures = 0;
+        cursor.accounting.blocked = false;
+        cursor.accounting.operational.clear();
+        cursor.status.remove("error-class");
+        cursor.status.remove("last-error");
         cursor.status.remove("reason-code");
         cursor.status.insert("phase".into(), "ready".into());
         let jitter =

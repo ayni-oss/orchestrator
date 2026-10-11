@@ -97,5 +97,26 @@ Termination messages carry only a compact reference for new Jobs. Jobs without
 the reporting annotation keep their legacy termination-message reader; unknown
 contract versions fail closed. A record cannot be overwritten by a later Pod.
 Reporting, missing evidence, invalid identity and oversized records have separate
-reason codes. Failure-budget accounting and explicit operator retry are unchanged
-in this slice and remain follow-up work.
+reason codes.
+
+Runtime preparation records failed build, verification, publication and trust Jobs by their
+persisted execution name. Reobserving a terminal Job after restart counts it once.
+Build and verification retries wait for owned-resource cleanup before admitting a
+fresh Job identity; three failed executions exhaust the preparation budget. Trust
+failures require operator retry. Publication records outcomes while retaining its independent bounded
+attempt/readback protocol and requires retry when that budget is exhausted.
+Observation, evidence collection and cleanup errors have separate backoff counters
+and preserve the execution intent without spending this budget. Missing or
+unavailable reports remain reporting errors, never inferred verification failures.
+
+The profile exposes retry eligibility, failure class and recorded execution count.
+Exhaustion hides the automatic retry timestamp. Sync becomes Retry when attention
+is required; it uses the existing durable reconciliation action. An admission key
+is retained before acknowledgement so crash replay cannot replenish a used budget.
+Retry preserves failure history and does not authorize replacing a runtime image;
+Rebuild remains the explicit replacement action. Transient reporting retries reobserve the same retained evidence. Explicit Retry
+admits a fresh execution after missing or invalid terminal evidence; it first
+cleans the old owned workload. Repository analysis leaves preparation budgets unchanged;
+changed frozen source, policy, lock or infrastructure identity admits a new
+preparation. Legacy observation counters remain conservative budget values and
+are shown separately as legacy failures, without inventing execution history.

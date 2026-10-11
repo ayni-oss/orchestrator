@@ -294,6 +294,11 @@ function profileFixture(url: URL): void {
  }
  if(url.pathname==="/preparation") {
    profile.preparationPhase=url.searchParams.get("phase") ?? "ready";
+   const retry=url.searchParams.get("retry");
+   profile.reconciliationMetadata=retry ? [
+     {key:"retry-eligibility",value:retry}, {key:"error-class",value:"execution"},
+     {key:"last-error",value:"runtime_verification_failed"}, {key:"failed-executions",value:"3"},
+   ] : [];
    const code=url.searchParams.get("code");
    profile.findings=code ? [{code,message:"The image certificate is invalid.",remediation:"Review trust and rebuild."}] : [];
    profile.failure=code ? {reason:1,observedAt:now,message:code,remediation:"Review trust and rebuild."} : undefined;

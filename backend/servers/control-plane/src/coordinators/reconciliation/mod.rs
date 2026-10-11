@@ -254,8 +254,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if cursor.resume_cleanup() {
             self.save(id, &cursor).await?;
         }
-        if cursor.failures >= 3 {
-            return self.cleanup_exhausted_cursor(&cursor).await;
+        if cursor.retry_exhausted()
+            || cursor
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.failed)
+        {
+            // Terminal workload cleanup must progress even while source/provider observation is unavailable.
+            self.cleanup_exhausted_cursor(&cursor).await?;
         }
         if cursor.next_at > time {
             return Ok(());
@@ -312,6 +318,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             )
             .await?
         {
+            return Ok(());
+        }
+        if cursor.retry_exhausted() {
             return Ok(());
         }
         if cursor.pending.is_none()

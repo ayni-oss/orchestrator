@@ -14,6 +14,10 @@ describe("operator onboarding boundary",()=>{
   expect(JSON.stringify(result)).not.toContain("private");
   expect(safeText("a\u0000b")).toBe("a b");
  });
+ it("keeps safe retry classification and history in the operator projection",()=>{
+  const metadata=[{key:"retry-eligibility",value:"operator_required"},{key:"error-class",value:"reporting"},{key:"last-error",value:"runtime_report_missing"},{key:"failed-executions",value:"2"},{key:"legacy-failures",value:"3"}];
+  expect(safeReconciliation(metadata)).toEqual(metadata);
+ });
  it("reports trust-policy observation separately from compatibility",()=>{
   const inspection=mapInspection(InspectAyniRepositoryResponse.fromPartial({lockCompatible:true,trustPolicyPinned:false,reason:"trust_policy_missing"}));
   expect(inspection.lockCompatible).toBe(true);

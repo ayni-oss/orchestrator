@@ -13,6 +13,7 @@ struct Jobs {
     builds: BTreeSet<String>,
     publications: BTreeMap<String, String>,
     discovery: Option<ImageDiscovery>,
+    verification_failure: Option<&'static str>,
     candidate_missing: bool,
     cleanup_failed: bool,
     cleanup_pending: bool,
@@ -134,7 +135,12 @@ impl ExecutionBackend for Backend {
         Err("unexpected_credentials".into())
     }
     async fn observe(&self, _: &str) -> ExecutionResult<Observation> {
-        Ok(Observation::Missing)
+        Ok(self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .verification_failure
+            .map_or(Observation::Missing, Observation::Failed))
     }
     async fn coding_state(&self, name: &str) -> ExecutionResult<ExecutionState> {
         Ok(*self
@@ -848,7 +854,7 @@ fn persisted_cleanup_failure_recovers_without_authorizing_rebuild() {
         .status
         .insert("builder-image".into(), "frozen-builder".into());
     assert!(cursor.resume_cleanup());
-    assert_eq!(cursor.failures, 0);
+    assert_eq!(cursor.failures, 3);
     assert_eq!(cursor.next_at, 0);
     assert!(!cursor.force_rebuild);
     assert_eq!(
@@ -958,3 +964,5 @@ async fn repository_removal_cleanup_retries_after_restart_and_releases_credentia
     );
     Ok(())
 }
+
+mod retries;

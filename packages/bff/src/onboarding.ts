@@ -21,7 +21,7 @@ export function mapAttemptUsage(v: DevelopmentAttempt) {
   return { input:t?.inputTokens, output:t?.outputTokens, total:t?.totalTokens, interactions:t?.interactionCount };
 }
 
-const metadataKeys = new Set(["certificate-trust-pr", "certificate-trust-state", "default-sha", "fingerprint", "resolved-digest", "discovery-reference", "reason-code", "source_kind", "source_revision", "lock_fingerprint", "runtime_digest", "last_success", "next_retry", "reason", "platform", "source-kind", "source-revision", "lock-fingerprint", "runtime-digest", "last-success", "next-retry"]);
+const metadataKeys = new Set(["certificate-trust-pr", "certificate-trust-state", "default-sha", "fingerprint", "resolved-digest", "discovery-reference", "reason-code", "source_kind", "source_revision", "lock_fingerprint", "runtime_digest", "last_success", "next_retry", "reason", "platform", "source-kind", "source-revision", "lock-fingerprint", "runtime-digest", "last-success", "next-retry", "retry-eligibility", "error-class", "last-error", "failed-executions", "legacy-failures"]);
 export function safeReconciliation(values: Array<{key:string;value:string}>) {
-  return values.filter(v=>metadataKeys.has(v.key) && (v.key!=="certificate-trust-pr" || safeGithubLink(v.value)!==undefined)).slice(0,16).map(v=>({key:v.key,value:safeText(v.value,512)}));
+  return values.filter(v=>metadataKeys.has(v.key) && (v.key!=="certificate-trust-pr" || safeGithubLink(v.value)!==undefined)).slice(0,24).map(v=>({key:v.key,value:safeText(v.value,512)}));
 }

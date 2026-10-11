@@ -106,8 +106,13 @@ An interrupted or missing publication Job also triggers registry inspection befo
 its push can be reissued. If still absent, publication retries the same certified local image ID. If that
 candidate is evicted, the isolated builder rebuilds frozen inputs under a new Job
 identity. No unpublished-image retention is promised. Publication attempts are
-bounded at three; Jobs have execution deadlines and reconciliation failures back
-off, stopping after three until explicit retry or Rebuild.
+bounded at three, with registry readback before any repeated push. Failed build
+and verification executions are counted once per persisted Job identity, stopping
+after three until explicit Retry or Rebuild. Observation, reporting and cleanup
+errors back off independently and retain the same execution. Repository analysis
+does not replenish retries. Changed frozen preparation inputs admit a new budget;
+execution history survives both this change and explicit retry. See the
+[retry and reporting behavior](runtime-runner.md) for migration and recovery details.
 
 Owned Jobs, temporary checkout/configuration resources and transient credentials
 are cleaned after persisted outcomes. Exhausted operations retain bounded outcome metadata for diagnostics; their Jobs

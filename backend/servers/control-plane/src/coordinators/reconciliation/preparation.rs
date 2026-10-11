@@ -7,7 +7,7 @@ use super::{
 use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 use ayni_orchestrator_application::execution::ExecutionState;
 use ayni_orchestrator_application::image_build::{BuildObservation, observe_build};
-use ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase;
+use ayni_orchestrator_application::runtime_preparation::{FailureClass, ImagePreparationPhase};
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
     pub(super) async fn observe_pending(
@@ -32,7 +32,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
         if pending.failed {
             // Resume cleanup after a restart without recreating failed Jobs.
-            return self.cleanup_operation(&pending).await;
+            self.cleanup_operation(&pending).await?;
+            if !cursor.retry_exhausted() {
+                cursor.force_rebuild |= pending.force_rebuild;
+                cursor.pending = None;
+                self.save(id, cursor).await?;
+            }
+            return Ok(());
         }
         if let Some(report) = &pending.verification {
             return self
@@ -63,12 +69,25 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 self.start_verification(observation, &pending).await?;
             }
             VerificationAction::Wait => {}
-            VerificationAction::Timeout => return Err("runtime_verification_timeout"),
+            VerificationAction::Timeout => {
+                return self
+                    .fail_execution(id, cursor, &pending.name, "runtime_verification_timeout")
+                    .await;
+            }
             VerificationAction::Failure => {
                 let Observation::Failed(reason) = observation_result else {
                     return Err("runtime_result_invalid");
                 };
-                return Err(reason);
+                if matches!(
+                    reason,
+                    "runtime_reporting_failed"
+                        | "runtime_report_missing"
+                        | "runtime_request_invalid"
+                        | "runtime_pod_identity_invalid"
+                ) {
+                    return Err(reason);
+                }
+                return self.fail_execution(id, cursor, &pending.name, reason).await;
             }
             VerificationAction::Accept => {
                 let Observation::Completed { digest, report } = observation_result else {
@@ -86,53 +105,120 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         id: &str,
         reason: &'static str,
     ) -> Result<(), &'static str> {
-        if reason == "runtime_cleanup_pending" {
-            let id = id.to_owned();
-            return self
-                .with_database(move |store| {
-                    let mut cursor = store
-                        .runtime_cursor(&id)
-                        .map_err(|_| "runtime_cursor_invalid")?;
-                    cursor.resume_cleanup();
-                    // Deletion is asynchronous. Keep all frozen operation evidence and
-                    // retry on the next controller pass without spending failure budget.
-                    cursor.next_at = super::now()? + 1;
-                    cursor.status.insert("phase".into(), "cleaning_up".into());
-                    store
-                        .save_runtime_cursor(&id, &cursor)
-                        .map_err(|_| "runtime_cursor_invalid")
-                })
-                .await;
-        }
-        crate::process::metrics::record_runtime_failure("build", reason);
         let id = id.to_owned();
         let interval = self.configuration.interval_seconds;
-        let pending = self
-            .with_database(move |store| {
-                store
-                    .runtime_failure(&id, reason)
-                    .map_err(|_| "runtime_cursor_invalid")?;
-                let mut cursor = store
-                    .runtime_cursor(&id)
-                    .map_err(|_| "runtime_cursor_invalid")?;
-                cursor.failures = cursor.failures.saturating_add(1);
-                cursor.status.insert("reason-code".into(), reason.into());
-                cursor.next_at = super::now()? + super::retry_delay(interval, cursor.failures);
-                if cursor.failures >= 3
-                    && let Some(pending) = &mut cursor.pending
+        self.with_database(move |store| {
+            let mut cursor = store
+                .runtime_cursor(&id)
+                .map_err(|_| "runtime_cursor_invalid")?;
+            let execution = (cursor
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.failed)
+                || cursor
+                    .trust
+                    .as_ref()
+                    .is_some_and(|trust| trust.state == "failed"))
+                && cursor
+                    .status
+                    .get("reason-code")
+                    .is_some_and(|code| code == reason);
+            if !execution {
+                let class = if reason.starts_with("runtime_cleanup_") || reason == "cleanup_failed"
                 {
-                    pending.failed = true;
+                    FailureClass::Cleanup
+                } else if reason.starts_with("runtime_report")
+                    || reason.starts_with("runtime_result")
+                    || matches!(
+                        reason,
+                        "runtime_digest_unavailable"
+                            | "runtime_pod_identity_invalid"
+                            | "runtime_request_invalid"
+                            | "certificate_trust_result_invalid"
+                    )
+                {
+                    FailureClass::Reporting
+                } else if reason == "runtime_publication_failed" {
+                    FailureClass::Publication
+                } else {
+                    FailureClass::Observation
+                };
+                crate::process::metrics::record_runtime_failure(class.code(), reason);
+                let attempts = cursor.accounting.operational.entry(class).or_default();
+                *attempts = attempts.saturating_add(1);
+                cursor.next_at = super::now()?
+                    + if reason == "runtime_cleanup_pending" {
+                        1
+                    } else {
+                        super::retry_delay(interval, *attempts)
+                    };
+                cursor.status.insert("last-error".into(), reason.into());
+                cursor
+                    .status
+                    .insert("error-class".into(), class.code().into());
+                if class == FailureClass::Cleanup {
+                    cursor.status.insert("phase".into(), "cleaning_up".into());
+                } else {
+                    cursor.status.insert("reason-code".into(), reason.into());
+                    if matches!(
+                        reason,
+                        "runtime_publication_failed" | "engine_recovery_exhausted"
+                    ) {
+                        cursor.accounting.blocked = true;
+                        if let Some(pending) = &mut cursor.pending {
+                            pending.failed = true;
+                        }
+                    }
+                    store
+                        .runtime_failure(&id, reason)
+                        .map_err(|_| "runtime_cursor_invalid")?;
                 }
-                store
-                    .save_runtime_cursor(&id, &cursor)
-                    .map_err(|_| "runtime_cursor_invalid")?;
-                Ok(cursor.pending.filter(|pending| pending.failed))
-            })
-            .await?;
-        if let Some(pending) = pending {
-            self.cleanup_operation(&pending).await?;
+            }
+            store
+                .save_runtime_cursor(&id, &cursor)
+                .map_err(|_| "runtime_cursor_invalid")
+        })
+        .await
+    }
+
+    /// Persist a terminal execution once, before any cleanup or replacement.
+    pub(super) async fn fail_execution(
+        &self,
+        id: &str,
+        cursor: &mut RuntimeCursor,
+        execution: &str,
+        reason: &'static str,
+    ) -> Result<(), &'static str> {
+        if !cursor.accounting.executions.contains_key(execution) {
+            cursor
+                .accounting
+                .executions
+                .insert(execution.into(), reason.into());
+            cursor.failures = cursor.failures.saturating_add(1);
+            crate::process::metrics::record_runtime_failure("execution", reason);
         }
-        Ok(())
+        cursor.status.insert("last-error".into(), reason.into());
+        cursor.status.insert("reason-code".into(), reason.into());
+        cursor
+            .status
+            .insert("error-class".into(), "execution".into());
+        cursor.next_at = if cursor.failures >= 3 {
+            0
+        } else {
+            super::now()? + super::retry_delay(self.configuration.interval_seconds, cursor.failures)
+        };
+        if let Some(pending) = &mut cursor.pending {
+            pending.failed = true;
+        }
+        self.save(id, cursor).await?;
+        let id = id.to_owned();
+        self.with_database(move |store| {
+            store
+                .runtime_failure(&id, reason)
+                .map_err(|_| "runtime_cursor_invalid")
+        })
+        .await?;
+        Err(reason)
     }
 
     pub(super) async fn cleanup_exhausted_cursor(
@@ -400,7 +486,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     cursor.status.insert("phase".into(), "publishing".into());
                     self.save(id, cursor).await?;
                 }
-                BuildObservation::Failed(code) => return Err(build_error(&code)),
+                BuildObservation::Failed(code) => {
+                    return self
+                        .fail_execution(id, cursor, build_name, build_error(&code))
+                        .await;
+                }
                 BuildObservation::EngineLost => return Err("engine_lost"),
             }
             return Ok(());
@@ -476,6 +566,22 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                         .operation_failure(&publish_name, "publish")
                         .await?
                         == "runtime_candidate_missing";
+                if state == ExecutionState::Failed {
+                    // Publication already spends its separate admission budget before creation.
+                    // Retain the physical outcome without spending build/verification retries.
+                    cursor
+                        .accounting
+                        .executions
+                        .entry(publish_name.clone())
+                        .or_insert_with(|| {
+                            if candidate_missing {
+                                "runtime_candidate_missing"
+                            } else {
+                                "runtime_publication_failed"
+                            }
+                            .into()
+                        });
+                }
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
                 next.candidate_missing = candidate_missing;
                 next.phase = ImagePreparationPhase::PublicationReadback;

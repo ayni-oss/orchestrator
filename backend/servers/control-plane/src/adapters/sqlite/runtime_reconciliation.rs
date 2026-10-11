@@ -35,7 +35,7 @@ impl CleanStore {
         }
         let mut profile = self.runtime_profile(profile_id)?;
         let metadata = cursor.metadata();
-        if metadata.len() > 16 || metadata.iter().any(|m| m.value.len() > 512) {
+        if metadata.len() > 24 || metadata.iter().any(|m| m.value.len() > 512) {
             return Err(CleanStoreError::BoundExceeded);
         }
         let transaction = self

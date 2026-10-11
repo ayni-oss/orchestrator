@@ -178,7 +178,7 @@ fn runtime_cursor_and_status_survive_restart() -> Result<(), Box<dyn std::error:
     let cursor = store.runtime_cursor(&profile.id)?;
     store.save_runtime_cursor(&profile.id, &cursor)?;
     let metadata = store.runtime_profile(&profile.id)?.reconciliation_metadata;
-    assert!(metadata.iter().any(|m| m.key == "next-retry"));
+    assert!(metadata.iter().any(|m| m.key == "retry-eligibility"));
     drop(store);
     let store = CleanStore::open(path, 3)?;
     assert_eq!(store.runtime_cursor(&profile.id)?.metadata(), metadata);

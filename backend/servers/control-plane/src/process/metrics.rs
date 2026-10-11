@@ -27,7 +27,8 @@ pub fn record_grpc_completion(rpc: &'static str, code: Code) {
 static RUNTIME_FAILURES: OnceLock<Mutex<BTreeMap<(String, String), u64>>> = OnceLock::new();
 pub fn record_runtime_failure(stage: &str, reason: &str) {
     let stage = match stage {
-        "build" | "publish" | "discover" | "verify" | "cleanup" | "engine" => stage,
+        "build" | "publish" | "discover" | "verify" | "cleanup" | "engine" | "execution"
+        | "observation" | "reporting" | "publication" => stage,
         _ => "configuration",
     };
     let reason = match reason {

@@ -252,7 +252,7 @@ export interface RuntimeProfile {
   updatedAt?: Date | undefined;
   resourceVersion: string;
   /**
-   * reconciliation_metadata contains at most 16 credential-free observations.
+   * reconciliation_metadata contains at most 24 credential-free observations.
    * These are operational status, not artifact verification evidence.
    */
   reconciliationMetadata: VerifiedMetadata[];
