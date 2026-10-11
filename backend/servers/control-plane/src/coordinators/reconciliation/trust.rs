@@ -367,6 +367,20 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 }
                 ExecutionState::Running => {}
                 ExecutionState::Failed => {
+                    if !cursor.accounting.executions.contains_key(&trust.job) {
+                        cursor
+                            .accounting
+                            .executions
+                            .insert(trust.job.clone(), "certificate_trust_lock_failed".into());
+                        cursor.failures = cursor.failures.saturating_add(1);
+                    }
+                    cursor
+                        .status
+                        .insert("reason-code".into(), "certificate_trust_lock_failed".into());
+                    cursor
+                        .status
+                        .insert("error-class".into(), "execution".into());
+                    cursor.accounting.blocked = true;
                     trust.state = "failed".into();
                 }
                 ExecutionState::Succeeded => {

@@ -236,3 +236,26 @@ fn retained_verification_survives_upgrade_during_cleanup_and_failure_retry() -> 
     assert_eq!(pending.publish_remaining, 1);
     Ok(())
 }
+
+#[test]
+fn legacy_observation_counts_never_become_recorded_execution_history() -> TestResult {
+    let mut value = legacy_cursor();
+    value["failures"] = 3.into();
+    let mut cursor: RuntimeCursor = serde_json::from_value(value)?;
+    assert_eq!(cursor.failures, 3);
+    assert_eq!(cursor.accounting.legacy_failures, 3);
+    assert!(cursor.accounting.executions.is_empty());
+    assert!(cursor.retry_exhausted());
+    assert!(
+        !cursor
+            .metadata()
+            .iter()
+            .any(|entry| entry.key == "next-retry")
+    );
+    cursor.retry();
+    let restarted = roundtrip(&cursor)?;
+    assert_eq!(restarted.failures, 0);
+    assert_eq!(restarted.accounting.legacy_failures, 3);
+    assert!(restarted.accounting.executions.is_empty());
+    Ok(())
+}

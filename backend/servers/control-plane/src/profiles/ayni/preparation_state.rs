@@ -12,6 +12,7 @@ pub type RuntimeCursor = RuntimePreparation<PendingVerification, PreparationIden
 
 pub trait RuntimeCursorExt {
     fn retry(&mut self);
+    fn retry_exhausted(&self) -> bool;
     fn resume_cleanup(&mut self) -> bool;
     fn request_rebuild(&mut self, requested: bool);
     fn update_status(
@@ -22,12 +23,20 @@ pub trait RuntimeCursorExt {
     fn metadata(&self) -> Vec<v1::VerifiedMetadata>;
 }
 impl RuntimeCursorExt for RuntimeCursor {
+    fn retry_exhausted(&self) -> bool {
+        self.failures >= 3 || self.accounting.blocked
+    }
+
     fn retry(&mut self) {
         self.next_at = 0;
         self.failures = 0;
+        self.accounting.blocked = false;
         self.retry_trust = true;
         self.builder.started_at = None;
         self.status.remove("reason-code");
+        self.status.remove("error-class");
+        self.status.remove("last-error");
+        self.accounting.operational.clear();
         if let Some(pending) = &mut self.pending {
             pending.failed = false;
         }
@@ -39,11 +48,7 @@ impl RuntimeCursorExt for RuntimeCursor {
             return false;
         }
         self.status.remove("reason-code");
-        self.failures = 0;
         self.next_at = 0;
-        if let Some(pending) = &mut self.pending {
-            pending.failed = false;
-        }
         true
     }
 
@@ -101,7 +106,30 @@ impl RuntimeCursorExt for RuntimeCursor {
         if let Some(image) = &self.builder.image {
             status.insert("builder-image".into(), image.clone());
         }
-        status.insert("next-retry".into(), self.next_at.to_string());
+        status.insert(
+            "retry-eligibility".into(),
+            if self.retry_exhausted() {
+                "operator_required"
+            } else {
+                "automatic"
+            }
+            .into(),
+        );
+        status.insert(
+            "failed-executions".into(),
+            self.accounting.executions.len().to_string(),
+        );
+        if !self.retry_exhausted() && self.next_at > 0 {
+            status.insert("next-retry".into(), self.next_at.to_string());
+        } else {
+            status.remove("next-retry");
+        }
+        if self.accounting.legacy_failures > 0 {
+            status.insert(
+                "legacy-failures".into(),
+                self.accounting.legacy_failures.to_string(),
+            );
+        }
         if let Some(last) = self.last_success {
             status.insert("last-success".into(), last.to_string());
         }

@@ -25,6 +25,8 @@
       const timestamp = Number(value) * 1000;
       if (Number.isFinite(timestamp) && Math.abs(timestamp) <= 8.64e15) return formatDate(new Date(timestamp).toISOString());
     }
+    if (key === "retry-eligibility") return value === "operator_required" ? "Manual retry required" : "Automatic retries available";
+    if (key === "error-class") return words(value);
     return value;
   }
 </script>
@@ -48,7 +50,7 @@
         {#if trustUpdate}<a href={trustUpdate.value} target="_blank" rel="noreferrer" class="underline">Review certificate trust update</a>{/if}
       {/snippet}
       <InformationCard title="Current runtime identity" status={profile.state} actions={[
-        { label: "Sync", onSelect: () => syncForm?.requestSubmit(), disabled: busy },
+        { label: profile.reconciliation.some(entry => entry.key === "reason-code" || entry.key === "retry-eligibility" && entry.value === "operator_required") ? "Retry" : "Sync", onSelect: () => syncForm?.requestSubmit(), disabled: busy },
         { label: "Rebuild", onSelect: () => rebuildForm?.requestSubmit(), disabled: busy || !profile.rebuildAvailable },
       ]}>
         <InformationTable rows={[

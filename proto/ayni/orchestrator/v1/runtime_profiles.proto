@@ -72,7 +72,7 @@ message RuntimeProfile {
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   uint64 resource_version = 11;
-  // reconciliation_metadata contains at most 16 credential-free observations.
+  // reconciliation_metadata contains at most 24 credential-free observations.
   // These are operational status, not artifact verification evidence.
   repeated VerifiedMetadata reconciliation_metadata = 12;
   // Absent only for profiles stored before runtime-owned registry selection.

@@ -128,7 +128,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             let (_, desired_digest) =
                 super::normalized_runtime_source(&desired, &lock_identity.fingerprint)?;
             let desired_digest = super::certificate_source_digest(&desired_digest, certificate)?;
-            if desired_digest != pending.source_digest {
+            if desired_digest != pending.source_digest
+                || pending.request.revision != head
+                || cursor.preparation.as_ref().is_some_and(|identity| {
+                    identity.policy_digest != format!("sha256:{:x}", super::Sha256::digest(policy))
+                        || identity.lock_digest
+                            != format!("sha256:{:x}", super::Sha256::digest(lock))
+                })
+            {
                 self.cleanup_operation(pending).await?;
                 cursor.pending = None;
                 cursor.status.insert("phase".into(), "analyzing".into());
@@ -161,6 +168,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 if let Some(name) = cursor.builder.job.as_ref() {
                     self.kubernetes.cleanup(name).await?;
                 }
+                cursor.failures = 0;
+                cursor.accounting.blocked = false;
+                cursor.next_at = 0;
+                cursor.status.remove("reason-code");
+                cursor.status.remove("error-class");
+                cursor.status.remove("last-error");
                 cursor.preparation = Some(super::PreparationIdentity {
                     generation,
                     source_revision: head.to_owned(),

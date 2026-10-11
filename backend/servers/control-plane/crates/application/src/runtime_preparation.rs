@@ -9,6 +9,8 @@ pub struct RuntimePreparation<P, I, T> {
     pub next_at: u64,
     pub last_success: Option<u64>,
     pub failures: u32,
+    #[serde(default)]
+    pub accounting: FailureAccounting,
     pub pending: Option<P>,
     pub bindings: BTreeMap<String, String>,
     #[serde(default)]
@@ -30,6 +32,7 @@ impl<P, I, T> Default for RuntimePreparation<P, I, T> {
             next_at: 0,
             last_success: None,
             failures: 0,
+            accounting: FailureAccounting::default(),
             pending: None,
             bindings: BTreeMap::new(),
             preparation: None,
@@ -163,6 +166,8 @@ struct PreparationWire<P, I, T> {
     pub next_at: u64,
     pub last_success: Option<u64>,
     pub failures: u32,
+    #[serde(default)]
+    pub accounting: Option<FailureAccounting>,
     pub pending: Option<P>,
     pub bindings: BTreeMap<String, String>,
     #[serde(default)]
@@ -204,6 +209,10 @@ impl<'de, P: Deserialize<'de>, I: Deserialize<'de>, T: Deserialize<'de>> Deseria
             next_at: wire.next_at,
             last_success: wire.last_success,
             failures: wire.failures,
+            accounting: wire.accounting.unwrap_or_else(|| FailureAccounting {
+                legacy_failures: wire.failures,
+                ..FailureAccounting::default()
+            }),
             pending: wire.pending,
             bindings: wire.bindings,
             preparation: wire.preparation,
@@ -212,5 +221,39 @@ impl<'de, P: Deserialize<'de>, I: Deserialize<'de>, T: Deserialize<'de>> Deseria
             retry_trust: wire.retry_trust,
             trust: wire.trust,
         })
+    }
+}
+
+/// Execution outcomes survive new retry admissions; operational errors never spend that budget.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct FailureAccounting {
+    #[serde(default)]
+    pub blocked: bool,
+    #[serde(default)]
+    pub legacy_failures: u32,
+    pub executions: BTreeMap<String, String>,
+    pub admissions: BTreeSet<String>,
+    pub operational: BTreeMap<FailureClass, u32>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureClass {
+    Execution,
+    Publication,
+    Observation,
+    Reporting,
+    Cleanup,
+}
+impl FailureClass {
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Execution => "execution",
+            Self::Publication => "publication",
+            Self::Observation => "observation",
+            Self::Reporting => "reporting",
+            Self::Cleanup => "cleanup",
+        }
     }
 }

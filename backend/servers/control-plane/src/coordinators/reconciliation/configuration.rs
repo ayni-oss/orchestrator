@@ -150,28 +150,16 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 if request.runtime_profile_id != lookup_id {
                     continue;
                 }
-                cursor.next_at = 0;
-                cursor.failures = 0;
-                cursor.request_rebuild(request.force_rebuild);
-                // Explicit retry releases a failed verification for a fresh observation.
-                if let Some(pending) = &mut cursor.pending {
-                    pending.failed = false;
-                    if !request.force_rebuild
-                        && cursor
-                            .status
-                            .get("reason-code")
-                            .is_some_and(|reason| reason == "runtime_publication_failed")
-                    {
-                        pending.publish_remaining = publication_budget();
-                        pending.phase = ImagePreparationPhase::PublicationReadback;
-                        pending.started_at = now().map_err(|_| "runtime_clock_invalid")?;
-                    } else if request.force_rebuild || cursor.status.contains_key("reason-code") {
-                        pending.source_digest.clear();
-                    }
+                if !admit_retry(&mut cursor, &action.idempotency_key, request.force_rebuild)? {
+                    store
+                        .complete_external_action(
+                            "ReconcileRuntimeProfile",
+                            &action.idempotency_key,
+                        )
+                        .map_err(|_| "runtime_action_invalid")?;
+                    continue;
                 }
-                cursor.status.remove("reason-code");
-                // Persist the wake-up before acknowledging the action. Replaying
-                // after a crash is harmless and never resets build intent.
+                // The retained admission fences replay after a crash.
                 store
                     .save_runtime_cursor(&lookup_id, &cursor)
                     .map_err(|_| "runtime_cursor_invalid")?;
@@ -206,4 +194,54 @@ pub(super) fn github_identity(
         Some(v1::repository_provider::Provider::Github(github)) => Ok(github),
         _ => Err("repository_provider_unsupported"),
     }
+}
+
+/// Retain admission identity before acknowledgement, fencing crash replay of a used budget.
+fn admit_retry(
+    cursor: &mut RuntimeCursor,
+    key: &str,
+    force_rebuild: bool,
+) -> Result<bool, &'static str> {
+    if !cursor.accounting.admissions.insert(key.into()) {
+        return Ok(false);
+    }
+    let failed_execution = cursor.failures >= 3
+        || cursor
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.failed);
+    let prior_reason = cursor.status.get("reason-code").cloned();
+    let reporting_reexecution = cursor
+        .pending
+        .as_ref()
+        .is_some_and(|pending| pending.verification.is_none())
+        && prior_reason.as_deref().is_some_and(|reason| {
+            matches!(
+                reason,
+                "runtime_report_missing"
+                    | "runtime_reporting_failed"
+                    | "runtime_report_identity_invalid"
+                    | "runtime_report_oversized"
+                    | "runtime_result_invalid"
+                    | "runtime_pod_identity_invalid"
+            )
+        });
+    cursor.retry();
+    cursor.request_rebuild(force_rebuild);
+    if failed_execution {
+        cursor.force_rebuild |= cursor
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.force_rebuild);
+    }
+    if let Some(pending) = &mut cursor.pending {
+        if !force_rebuild && prior_reason.as_deref() == Some("runtime_publication_failed") {
+            pending.publish_remaining = publication_budget();
+            pending.phase = ImagePreparationPhase::PublicationReadback;
+            pending.started_at = now().map_err(|_| "runtime_clock_invalid")?;
+        } else if force_rebuild || failed_execution || reporting_reexecution {
+            pending.source_digest.clear();
+        }
+    }
+    Ok(true)
 }
