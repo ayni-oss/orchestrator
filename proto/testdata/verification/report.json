@@ -1,0 +1,35 @@
+{
+  "specversion": "1.0",
+  "id": "019a0000-0000-7000-8000-000000000001",
+  "source": "ayni://orchestrator/supervisors/local",
+  "type": "io.ayni.orchestrator.runtime.verification.result.available.v1",
+  "dataschema": "ayni://orchestrator/schemas/runtime-verification-result/v1",
+  "datacontenttype": "application/json",
+  "subject": "repositories/repo-1/runtime-profiles/runtime-1",
+  "operationid": "preparation-1",
+  "executionid": "verification-1",
+  "data": {
+    "binding": {
+      "repositoryConnectionId": "repo-1",
+      "runtimeProfileId": "runtime-1",
+      "runtimeProfileRevisionId": "revision-1",
+      "preparationId": "preparation-1",
+      "executionId": "verification-1",
+      "podUid": "f7390908-b8aa-4f11-963b-1c88a234ab88",
+      "requestDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lockDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "policyDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "platform": "linux/arm64",
+      "resolvedImageDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "reportAvailable": {
+      "evidence": {
+        "evidenceId": "record-1",
+        "sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "sizeBytes": "512",
+        "contract": "retained-v1"
+      }
+    }
+  }
+}

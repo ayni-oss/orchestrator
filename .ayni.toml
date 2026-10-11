@@ -38,6 +38,7 @@ fn_cyclomatic = { warn = 10, fail = 31 }
 fn_cognitive = { warn = 20, fail = 29 }
 
 [rust.deps.forbidden]
+"backend/libs/events" = ["backend/servers/*", "backend/workers/*", "backend/libs/runtime/*", "backend/libs/domain", "backend/libs/registry", "backend/libs/oci", "backend/libs/observability"]
 "backend/libs/oci" = ["backend/servers/*", "backend/workers/*", "backend/libs/domain", "backend/libs/registry", "backend/libs/runtime/*", "backend/libs/observability"]
 "backend/libs/registry" = ["backend/servers/*", "backend/workers/*", "backend/libs/runtime/*", "backend/libs/observability"]
 "backend/servers/control-plane/crates/application" = ["backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/*", "backend/libs/runtime/profiles/ayni", "backend/libs/observability"]

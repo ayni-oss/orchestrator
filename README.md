@@ -42,6 +42,7 @@ Separate task-stage pods and independent assessment are research, not current ex
 - [Architecture](docs/architecture.md)
 - [Control-plane events, evidence and streaming research](docs/control-plane-events.md)
 - [Observability and lifecycle events](docs/observability-and-events.md)
+- [Runtime verification event contract](docs/verification-events.md)
 - [CloudEvents lifecycle contract](docs/cloudevents-contract.md)
 - [Event platform implementation proposal](docs/event-platform-implementation.md)
 - [Event platform migration and retirement](docs/event-platform-migration.md)

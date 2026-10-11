@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package ayni.orchestrator.events.v1;
+
+// A supervisor observation. Neither outcome grants controller acceptance.
+message VerificationResultAvailable {
+  VerificationExecutionBinding binding = 1;
+  oneof outcome {
+    VerificationReportAvailable report_available = 2;
+    VerificationExecutionFailed execution_failed = 3;
+  }
+}
+
+// Frozen admission inputs plus the physical execution that produced the record.
+message VerificationExecutionBinding {
+  string repository_connection_id = 1;
+  string runtime_profile_id = 2;
+  string runtime_profile_revision_id = 3;
+  string preparation_id = 4;
+  string execution_id = 5;
+  string pod_uid = 6;
+  string request_digest = 7;
+  string source_revision = 8;
+  string lock_digest = 9;
+  string policy_digest = 10;
+  string platform = 11;
+  string resolved_image_digest = 12;
+}
+
+// Lookup through supervisor-owned retained storage, never a URL or path.
+message VerificationEvidenceReference {
+  string evidence_id = 1;
+  string sha256 = 2;
+  uint64 size_bytes = 3;
+  string contract = 4;
+}
+
+message VerificationReportAvailable {
+  VerificationEvidenceReference evidence = 1;
+}
+
+message VerificationExecutionFailed {
+  VerificationFailureCode code = 1;
+  // Absence means no retained diagnostic record exists.
+  VerificationEvidenceReference diagnostic = 2;
+}
+
+enum VerificationFailureCode {
+  VERIFICATION_FAILURE_CODE_UNSPECIFIED = 0;
+  VERIFICATION_FAILURE_CODE_REQUEST_INVALID = 1;
+  VERIFICATION_FAILURE_CODE_LOCK_MISMATCH = 2;
+  VERIFICATION_FAILURE_CODE_PLATFORM_MISMATCH = 3;
+  VERIFICATION_FAILURE_CODE_VERSION_UNSUPPORTED = 4;
+  VERIFICATION_FAILURE_CODE_CERTIFICATE_INVALID = 5;
+  VERIFICATION_FAILURE_CODE_EVIDENCE_UNAVAILABLE = 6;
+  VERIFICATION_FAILURE_CODE_SERIALIZATION_FAILED = 7;
+  VERIFICATION_FAILURE_CODE_REPORT_OVERSIZED = 8;
+  VERIFICATION_FAILURE_CODE_REPORTING_FAILED = 9;
+}

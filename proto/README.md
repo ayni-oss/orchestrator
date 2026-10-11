@@ -68,3 +68,12 @@ cursor. Refresh by starting a new first-page query.
 for implementation and quality repairs. Admission freezes it into
 `DevelopmentSnapshot.limits.coding_turns`; clients omitting it retain the deployment
 default. The task form always submits an explicit task budget, defaulting to 24.
+
+## Verification lifecycle payloads
+
+`ayni.orchestrator.events.v1` is an additive lifecycle payload package, separate
+from the resource API. Rust uses generated Prost/ProtoJSON codecs and the
+CloudEvents SDK in `backend/libs/events`; TypeScript bindings use the same schema.
+Shared fixtures in `testdata/verification` cover both languages. See the
+[verification event contract](../docs/verification-events.md) for authority, wire
+validation and recovery boundaries. There is no production reporting ingress yet.
