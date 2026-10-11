@@ -10,6 +10,8 @@ The [flow inventory](control-plane-event-flows.md) maps all implemented flows, t
 OpenTelemetry traces, logs and metrics complement these application contracts.
 The [CloudEvents contract](cloudevents-contract.md) recommends a standard
 envelope and defines its relationship to JetStream routing and trace context.
+The [implementation proposal](event-platform-implementation.md) develops this
+research into phased delivery with [retirement gates](event-platform-migration.md).
 
 ## Findings that drive the design
 
@@ -44,9 +46,10 @@ Sources: [Runtime evidence admission checks](<../backend/servers/control-plane/s
 flowchart TD
     I["Persist admitted intent and frozen identity"] --> E["Start one execution generation"]
     E --> W["Worker retains immutable result and evidence"]
-    W --> P["Publish result with durable acknowledgement"]
+    W --> P["Authenticated ingress retains inbox receipt"]
     P --> V["Controller validates identity and evidence"]
     V --> A["Commit accepted outcome and dependent intents"]
+    A --> O["Outbox publishes lifecycle facts to JetStream"]
     A --> N["Advance eligible application work"]
     A --> C["Request consequential cleanup"]
     C --> K["Observe execution stopped and resources removed"]
@@ -75,7 +78,7 @@ These names are proposals. A `ToolFinished` activity does not imply that the too
 ## Durability and trust rules
 
 1. Bind every event to an operation, attempt, execution generation, producer sequence and frozen-input identity. Producer identity determines which subjects and outcomes it can claim.
-2. Persist critical results locally before publication. Retain and retry unacknowledged events; reconcile accepted results from retained evidence after interruption.
+2. Persist critical results locally before submission. Retain and retry until authenticated ingress confirms durable receipt; reconcile accepted results from retained evidence after interruption.
 3. In one database transaction, deduplicate the incoming event, commit accepted state and append dependent command/event intents. Acknowledge consumption after commit.
 4. Publish controller events through an outbox committed with state changes. Existing resource snapshots remain client projections.
 5. Store full evidence in retained artifact storage. Result events contain bounded summaries, hashes and references; report size never changes a successful verification into a trust failure.
@@ -86,6 +89,11 @@ These names are proposals. A `ToolFinished` activity does not imply that the too
 The trusted worker supervisor publishes lifecycle evidence. Repository processes and agent tools must not obtain unrestricted publication credentials or impersonate another attempt.
 
 ## JetStream placement
+
+The implementation proposal starts worker reporting through authenticated
+control-plane ingress with retained inbox data. The transactional outbox
+distributes lifecycle facts to JetStream. Direct worker-to-broker publication
+would require a separately reviewed producer-authentication contract.
 
 Use JetStream for durable lifecycle/results and independently consumable notifications. Keep high-rate advisory activity on a separate retention policy so it cannot evict terminal evidence. Retain replayable history with an explicit limits policy; a work queue that deletes messages after processing is unsuitable as the only audit record.
 

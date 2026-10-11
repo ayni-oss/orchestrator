@@ -7,6 +7,9 @@ The [control-plane event research](control-plane-events.md) records implemented
 flows, signal authority, result collection and cleanup ordering, with a
 source-indexed contract catalog. Its streaming protocol and JetStream placement
 are proposals under evaluation, not current execution guarantees.
+The [implementation proposal](event-platform-implementation.md) and
+[migration gates](event-platform-migration.md) define the recommended adoption
+order for Protobuf, CloudEvents, JetStream and OpenTelemetry.
 
 The control plane admits tasks, freezes repository and runtime identity, model,
 constraints, total coding turns, quality repair limit and deadline. It schedules

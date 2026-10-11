@@ -98,6 +98,26 @@ bindings. The event references that evidence rather than carrying full Ayni
 findings, tool output or repository content. Resolve schema/evidence identifiers
 through controlled local mappings, never by blindly fetching producer URLs.
 
+## Typed payloads
+
+Define Orchestrator lifecycle payloads in versioned Protobuf messages. CloudEvents
+owns the common envelope; our messages define result fields, frozen-input
+bindings, evidence references and independent outcome vocabularies. Each event
+type maps to an installed payload descriptor and its producer/validator policy.
+Protobuf decoding does not establish that required business evidence is present.
+
+Generate Rust payload types and tested ProtoJSON codecs through repository
+tooling. Preserve optional presence and unspecified outcomes. Keep payload
+schemas separate from resource snapshots: a snapshot change does not
+automatically constitute a new lifecycle fact.
+
+CloudEvents has an official [Protobuf format](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/protobuf-format.md).
+The initial NATS contract below uses structured JSON with a ProtoJSON payload.
+Do not encode the entire envelope through an ordinary Protobuf JSON serializer;
+use the CloudEvents JSON representation for its context and extensions.
+JSON evolution needs checks beyond binary wire compatibility.
+[ProtoJSON mapping and compatibility](https://protobuf.dev/programming-guides/json/).
+
 ## NATS mapping
 
 Initially send the whole event as UTF-8 structured JSON in the NATS payload,
