@@ -87,6 +87,14 @@ async function taskSelection(projectId: string, repositoryConnectionId: string, 
   return {repositoryConnectionId, repositoryRevision: revision.repositoryRevision};
 }
 
+function validProtectedPaths(protectedPaths: string[] | undefined): protectedPaths is string[] {
+  return protectedPaths !== undefined && new Set(protectedPaths).size === protectedPaths.length && protectedPaths.every((path) => !path.startsWith("/") && !path.endsWith("/") && !path.includes("\\") && path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
+}
+
+function validDeadline(seconds: number | undefined): boolean {
+  return seconds === undefined || (Number.isInteger(seconds) && seconds >= 1 && seconds <= 86_400);
+}
+
 export const actions: Actions = {
   create: async ({ locals, request }) => {
     const form = await request.formData();
@@ -106,7 +114,7 @@ export const actions: Actions = {
     const codingTurns = typeof codingTurnsValue === "string" && codingTurnsValue.trim() !== "" ? Number(codingTurnsValue) : 24;
     const deadlineValue = typeof form.get("deadlineSeconds") === "string" ? String(form.get("deadlineSeconds")).trim() : "";
     const deadlineSeconds = deadlineValue === "" ? undefined : Number(deadlineValue);
-    const pathsValid = protectedPaths !== undefined && new Set(protectedPaths).size === protectedPaths.length && protectedPaths.every((path) => !path.startsWith("/") && !path.endsWith("/") && !path.includes("\\") && path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
+
     if (
       idempotencyKey === undefined || !isCanonicalIdentifier(idempotencyKey)
       || projectId === undefined || !RESOURCE_ID.test(projectId)
@@ -114,8 +122,8 @@ export const actions: Actions = {
       || runtimeProfileId === undefined || !RESOURCE_ID.test(runtimeProfileId)
       || provider === undefined || model === undefined
       || !Number.isInteger(codingTurns) || codingTurns < 1 || codingTurns > 128
-      || taskRequest === undefined || criteria === undefined || !pathsValid
-      || (deadlineSeconds !== undefined && (!Number.isInteger(deadlineSeconds) || deadlineSeconds < 1 || deadlineSeconds > 86_400))
+      || taskRequest === undefined || criteria === undefined || !validProtectedPaths(protectedPaths)
+      || !validDeadline(deadlineSeconds)
     ) {
       return fail(400, { action: "create", error: { status: 400, reason: "invalid_input", message: "Review the frozen repository, profile, agent/model, request, criteria, constraints, and deadline.", requestId: locals.requestId, retryable: false } });
     }

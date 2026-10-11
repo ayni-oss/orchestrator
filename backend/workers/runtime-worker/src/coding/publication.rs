@@ -248,14 +248,7 @@ fn reset_git_configuration(workspace: &Path) -> io::Result<()> {
     )
 }
 
-pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result<()> {
-    let path = context.output.join("publication.json");
-    let expected = intent(context, result)?;
-    let mut journal = if path.exists() {
-        recovery::read_json::<Journal>(&path)?
-    } else {
-        expected.clone()
-    };
+fn validate_journal(journal: &Journal, expected: &Journal) -> io::Result<()> {
     if journal.task_id != expected.task_id
         || journal.attempt_id != expected.attempt_id
         || journal.repository != expected.repository
@@ -282,6 +275,18 @@ pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result
     {
         return Err(io::Error::other("persisted receipt identity is invalid"));
     }
+    Ok(())
+}
+
+pub async fn deliver(context: &Context, result: &mut WorkerResult) -> io::Result<()> {
+    let path = context.output.join("publication.json");
+    let expected = intent(context, result)?;
+    let mut journal = if path.exists() {
+        recovery::read_json::<Journal>(&path)?
+    } else {
+        expected.clone()
+    };
+    validate_journal(&journal, &expected)?;
     recovery::write_json(&path, &journal)?;
     result.publication = PublicationOutcome::Publishing;
     context.state.lock().await.progress.publication = PublicationOutcome::Publishing;

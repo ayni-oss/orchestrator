@@ -131,32 +131,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         };
         // A previously generated/merged policy must still pin exactly the selected key.
         if trust.state == "verified" && pinned && trust.head == head {
-            let retired = cursor.status.remove("certificate-trust-pr").is_some();
-            if retired
-                || cursor
-                    .status
-                    .get("certificate-trust-state")
-                    .map(String::as_str)
-                    != Some("verified")
-            {
-                cursor
-                    .status
-                    .insert("certificate-trust-state".into(), "verified".into());
-                self.save(id, cursor).await?;
-            }
-            self.kubernetes.cleanup(&trust.job).await?;
-            if default_head != head {
-                trust.merge_revision = None;
-                trust.reset(default_head);
-                cursor
-                    .status
-                    .insert("certificate-trust-state".into(), trust.state.clone());
-                cursor.trust = Some(trust);
-                self.save(id, cursor).await?;
-                return Ok(false);
-            }
-            return Ok(true);
+            return self
+                .complete_verified_trust(&context, default_head, &mut trust, cursor)
+                .await;
         }
+
         if trust.state == "verified" || (trust.head != head && trust.pull_number.is_none()) {
             self.kubernetes.cleanup(&trust.job).await?;
             trust.reset(head);
@@ -196,6 +175,39 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Err("certificate_trust_pull_closed");
         }
         Ok(trust.state == "verified" && default_head == head)
+    }
+    async fn complete_verified_trust(
+        &self,
+        context: &TrustContext<'_>,
+        default_head: &str,
+        trust: &mut TrustUpdate,
+        cursor: &mut RuntimeCursor,
+    ) -> Result<bool, &'static str> {
+        let retired = cursor.status.remove("certificate-trust-pr").is_some();
+        if retired
+            || cursor
+                .status
+                .get("certificate-trust-state")
+                .map(String::as_str)
+                != Some("verified")
+        {
+            cursor
+                .status
+                .insert("certificate-trust-state".into(), "verified".into());
+            self.save(context.id, cursor).await?;
+        }
+        self.kubernetes.cleanup(&trust.job).await?;
+        if default_head != context.head {
+            trust.merge_revision = None;
+            trust.reset(default_head);
+            cursor
+                .status
+                .insert("certificate-trust-state".into(), trust.state.clone());
+            cursor.trust = Some(trust.clone());
+            self.save(context.id, cursor).await?;
+            return Ok(false);
+        }
+        Ok(true)
     }
     async fn retry_trust_update(
         &self,
