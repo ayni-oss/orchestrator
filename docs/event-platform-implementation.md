@@ -2,8 +2,9 @@
 
 Status: proposal, 11 October 2026. Application source audited at
 `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`; no implementation or cluster
-validation is claimed. Delivery requirements and status belong in GitHub issues
-after the repository publication boundary is resolved.
+validation is claimed. Delivery requirements and status belong in GitHub issues. The repository is
+public; [retained verification evidence](https://github.com/ayni-oss/orchestrator/issues/139)
+tracks the first slice of milestone A.
 
 ## What this proposes
 

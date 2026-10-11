@@ -6,3 +6,4 @@ pub mod runtime_contract;
 pub mod runtime_execution;
 
 pub mod image_build;
+pub mod verification;

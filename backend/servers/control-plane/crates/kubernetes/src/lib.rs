@@ -20,3 +20,5 @@ pub mod connections;
 mod trust_lock;
 
 pub mod engine;
+
+mod verification;

@@ -1,6 +1,6 @@
 # Ayni Orchestrator
 
-Ayni Orchestrator is a private control plane for worker-owned development tasks.
+Ayni Orchestrator is a control plane for worker-owned development tasks.
 Integrations manage provider access, repositories own shared runtimes, and projects
 organize repository work. Tasks freeze source, runtime digest, model, constraints,
 coding turns, quality repair limit and
@@ -69,7 +69,6 @@ documents:
 - [Orchestrator issues](https://github.com/ayni-oss/orchestrator/issues)
 - [Completed milestones](https://github.com/ayni-oss/orchestrator/milestones?state=closed)
 
-Repository development rules and the private boundary with Ayni are recorded in
-[AGENTS.md](AGENTS.md). Public Orchestrator announcements, documentation,
-releases, packages, images, or links from Ayni require an explicit publication
-decision.
+Repository development rules and the boundary with Ayni are recorded in
+[AGENTS.md](AGENTS.md). This repository is public. New releases, packages,
+images, sites and announcements require a separate maintainer decision.

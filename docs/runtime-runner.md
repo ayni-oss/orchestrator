@@ -66,7 +66,7 @@ or special Docker/Kubernetes privilege.
 The coordinator binds and retains final evidence outside the sandbox. Agent and
 repository processes cannot rewrite worker progress, publication intent, final
 evidence or receipts in the retained output directory. The Linux-only Landlock
-dependency belongs to this private worker; it does not change Ayni upstream.
+dependency belongs to this worker; it does not change Ayni upstream.
 
 
 Environment preparation runs separate registry-discovery, build/certification,
@@ -74,3 +74,28 @@ publication and verification Jobs. Every successful build publishes. Coding work
 receive only the frozen verified digest, source/model access and pull-only registry
 access. They have no signing key, push credential or engine/node socket. See
 [managed runtime execution](managed-runtime-execution.md) for phase recovery.
+
+## Retained runtime verification
+
+New verification Jobs select the `retained-v1` reporting contract in their Job
+annotation. The trusted launcher writes `verification.json` atomically in the
+Job's subdirectory of the existing runtime-output claim. The record is bounded
+to 128 KiB and binds the Job name, physical Pod UID and exact frozen-request
+bytes by SHA-256. It contains the complete `VerificationReport` or a safe typed
+failure classification; raw exceptions and command output are not retained.
+Repository children cannot access `/output`, and checkout does not mount it.
+
+The controller validates the owned Pod and request binding before interpreting
+the report, independently of Job success or process exit. Existing runtime
+certificate, source, lock and digest admission checks still apply. A failed
+source-quality check remains a quality outcome rather than a runtime-trust
+failure. Admitted evidence is persisted before resource cleanup. Retained files
+survive Job deletion; uncollected files without Kubernetes identity cannot grant
+readiness. They remain available for diagnostics in the claim after restart.
+
+Termination messages carry only a compact reference for new Jobs. Jobs without
+the reporting annotation keep their legacy termination-message reader; unknown
+contract versions fail closed. A record cannot be overwritten by a later Pod.
+Reporting, missing evidence, invalid identity and oversized records have separate
+reason codes. Failure-budget accounting and explicit operator retry are unchanged
+in this slice and remain follow-up work.

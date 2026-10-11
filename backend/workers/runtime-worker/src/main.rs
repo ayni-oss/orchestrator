@@ -1,6 +1,6 @@
 use ayni_orchestrator_profile_ayni::runtime_execution::ExecutionRequest;
 use ayni_orchestrator_runtime::{activity::Stage, runtime_execution::read_bounded};
-use ayni_orchestrator_worker::{operations::runtime::checkout, profiles::ayni::check};
+use ayni_orchestrator_worker::operations::runtime::checkout;
 use std::{env, fs, io, path::Path, process::ExitCode};
 use tracing::Instrument;
 
@@ -48,7 +48,12 @@ async fn main() -> ExitCode {
                         | "runtime_platform_mismatch"
                         | "runtime_version_unsupported"
                         | "runtime_certificate_invalid"
-                        | "engine_tls_or_startup_failed" => message.as_str(),
+                        | "engine_tls_or_startup_failed"
+                        | "runtime_request_invalid"
+                        | "runtime_evidence_unavailable"
+                        | "runtime_report_serialization_failed"
+                        | "runtime_report_oversized"
+                        | "runtime_reporting_failed" => message.as_str(),
                         _ => fallback,
                     };
                     let _ = fs::write("/dev/termination-log", code);
@@ -108,6 +113,10 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     if let Some(result) = trusted_image_operation(&operation).await {
         return result;
     }
+    if operation == "verify" {
+        activity.record(Stage::RuntimeVerification);
+        return ayni_orchestrator_worker::verification::run().await;
+    }
     let request: ExecutionRequest =
         serde_json::from_slice(&read_bounded(Path::new("/request/execution.json"), 65_536)?)
             .map_err(io::Error::other)?;
@@ -134,15 +143,6 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
             })
             .await
             .map_err(io::Error::other)?
-        }
-        "verify" => {
-            activity.record(Stage::RuntimeVerification);
-            let report = check(&request, Path::new("/workspace")).await?;
-            let bytes = serde_json::to_vec(&report).map_err(io::Error::other)?;
-            if bytes.len() > 4096 {
-                return Err(io::Error::other("runtime report oversized"));
-            }
-            fs::write("/dev/termination-log", bytes)
         }
         _ => Err(io::Error::other("unsupported runtime operation")),
     }

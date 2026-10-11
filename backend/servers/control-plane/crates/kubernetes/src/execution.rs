@@ -71,13 +71,23 @@ impl RuntimeKubernetes {
         request: &ExecutionRequest<Profile>,
         token: &str,
     ) -> Result<(), &'static str> {
-        let job = verification_job(name, &self.configuration, runtime)?;
+        let request = serde_json::to_string(request).map_err(|_| "runtime_request_invalid")?;
+        let mut job = verification_job(name, &self.configuration, runtime)?;
+        job.spec
+            .as_mut()
+            .and_then(|s| s.template.spec.as_mut())
+            .and_then(|pod| pod.containers.first_mut())
+            .ok_or("runtime_job_invalid")?
+            .env
+            .get_or_insert_default()
+            .push(k8s_openapi::api::core::v1::EnvVar {
+                name: "REQUEST_DIGEST".into(),
+                value: Some(format!("sha256:{:x}", Sha256::digest(request.as_bytes()))),
+                ..Default::default()
+            });
         self.create(
             name,
-            std::collections::BTreeMap::from([(
-                "execution.json".into(),
-                serde_json::to_string(request).map_err(|_| "runtime_request_invalid")?,
-            )]),
+            std::collections::BTreeMap::from([("execution.json".into(), request)]),
             token,
             &job,
         )
@@ -172,6 +182,19 @@ impl RuntimeKubernetes {
         else {
             return Ok(Observation::Missing);
         };
+        match job
+            .metadata
+            .annotations
+            .as_ref()
+            .and_then(|a| a.get("ayni.io/verification-report"))
+            .map(String::as_str)
+        {
+            Some(ayni_orchestrator_runtime::verification::CONTRACT) => {
+                return self.observe_retained(name, &job).await;
+            }
+            Some(_) => return Err("runtime_reporting_contract_unsupported"),
+            None => {}
+        }
         if job.status.as_ref().is_some_and(|s| {
             s.failed.unwrap_or(0) > 0
                 || s.conditions.as_ref().is_some_and(|conditions| {
@@ -310,16 +333,41 @@ pub fn verification_job(
     configuration: &ExecutionConfiguration,
     runtime: &WorkloadRuntime,
 ) -> Result<Job, &'static str> {
-    let container =
-        workload::worker_container("verify", &runtime.image, &workload::runtime_environment());
-    serde_json::from_value(workload::source_job(
+    use ayni_orchestrator_runtime::verification::{CONTRACT, valid_execution};
+    if !valid_execution(name) {
+        return Err("runtime_request_invalid");
+    }
+    let mut environment = workload::runtime_environment();
+    environment.extend([
+        json!({"name":"JOB_NAME","value":name}),
+        json!({"name":"POD_UID","valueFrom":{"fieldRef":{"fieldPath":"metadata.uid"}}}),
+    ]);
+    let mut container = workload::worker_container("verify", &runtime.image, &environment);
+    container["volumeMounts"]
+        .as_array_mut()
+        .ok_or("runtime_job_invalid")?
+        .push(json!({"name":"output","mountPath":"/output","subPath":name}));
+    let mut job = workload::source_job(
         name,
         configuration,
         runtime,
         &runtime.service_account,
         &container,
-    ))
-    .map_err(|_| "runtime_job_invalid")
+    );
+    job["metadata"]["annotations"]["ayni.io/verification-report"] = json!(CONTRACT);
+    let pod = &mut job["spec"]["template"]["spec"];
+    pod["initContainers"].as_array_mut().ok_or("runtime_job_invalid")?.push(json!({
+        "name":"output", "image":configuration.worker_image, "args":["prepare-output",name],
+        "securityContext":workload::container_security(), "resources":workload::container_resources(),
+        "volumeMounts":[{"name":"output","mountPath":"/outputs"}]
+    }));
+    pod["volumes"]
+        .as_array_mut()
+        .ok_or("runtime_job_invalid")?
+        .push(json!({
+            "name":"output","persistentVolumeClaim":{"claimName":configuration.output_claim}
+        }));
+    serde_json::from_value(job).map_err(|_| "runtime_job_invalid")
 }
 
 // Kubernetes omits an empty data map when returning a ConfigMap.
@@ -395,6 +443,28 @@ mod tests {
                 assert_eq!(mount.read_only, Some(true));
             }
         }
+        for container in pod
+            .init_containers
+            .iter()
+            .flatten()
+            .filter(|c| c.name != "output")
+        {
+            assert!(
+                container
+                    .volume_mounts
+                    .iter()
+                    .flatten()
+                    .all(|m| m.name != "output")
+            );
+        }
+        let mount = pod.containers[0]
+            .volume_mounts
+            .iter()
+            .flatten()
+            .find(|m| m.name == "output")
+            .ok_or("output_missing")?;
+        assert_eq!(mount.mount_path, "/output");
+        assert_eq!(mount.sub_path.as_deref(), Some("verify-test"));
         assert_eq!(pod.automount_service_account_token, Some(false));
         assert!(pod.containers[0].env.iter().flatten().any(|variable| {
             variable.name == "XDG_CACHE_HOME" && variable.value.as_deref() == Some("/scratch/cache")
@@ -404,7 +474,10 @@ mod tests {
             pod.containers[0]
                 .env
                 .as_ref()
-                .is_some_and(|env| env.iter().all(|e| e.value_from.is_none()))
+                .is_some_and(|env| env.iter().all(|e| e
+                    .value_from
+                    .as_ref()
+                    .is_none_or(|source| source.secret_key_ref.is_none())))
         );
         assert_eq!(pod.service_account_name.as_deref(), Some("runtime"));
         assert_eq!(

@@ -1,13 +1,12 @@
 # Ayni Orchestrator — Agent Rules
 
-## Private development boundary
+## Repository and publication boundary
 
-- This repository is private development and exploration. Keep its visibility
-  private until the user explicitly decides to publish it.
+- This repository is public. The maintainer has authorized publication of
+  orchestrator architecture, implementation, documentation, issues and pull requests.
 - Keep durable orchestrator architecture, operations, terminology, and examples
-  in this repository. Track requirements and delivery in the private Orchestrator
-  GitHub Project and linked issues. Do not expose private material through public
-  Ayni code, documentation, issues, PRs, commit messages, releases, or links.
+  in this repository. Track requirements and delivery in the Orchestrator GitHub
+  Project and linked issues. Never publish credentials or private operational data.
 - Ayni must remain independently useful as a local environment and quality tool.
   Orchestrator-driven discoveries may motivate Ayni fixes and improvements only when
   they have an independently justified Ayni use case and respect its boundaries.
@@ -16,14 +15,12 @@
   functionality behind generic wording; keep that functionality here.
 - Keep Kubernetes controllers, provider integrations, project/task lifecycle,
   agent orchestration, and orchestrator access policy here. Do not add a dependency
-  from Ayni to this private repository or require private fixtures for Ayni CI.
+  from Ayni to this repository or require private fixtures for Ayni CI.
 - Changes to Ayni belong in a separate issue, branch, and PR in its repository,
-  following its own AGENTS.md. A private Orchestrator issue may link the public
-  Ayni issue, but the public issue must not reference private material. Do not
-  silently edit Ayni as part of an Orchestrator change.
-- Verify remote visibility before pushing private material. Do not create public
-  packages, images, releases, sites, announcements, or publishing workflows
-  without a separate explicit publication decision.
+  following its own AGENTS.md. An Orchestrator issue may link the separate
+  Ayni issue. Do not silently edit Ayni as part of an Orchestrator change.
+- Repository publication does not authorize new package/image releases, sites,
+  announcements or publishing workflows; those require a separate maintainer decision.
 
 ## Implementation direction
 
