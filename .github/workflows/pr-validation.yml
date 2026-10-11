@@ -220,7 +220,7 @@ jobs:
           fi
 
       - name: Compile and test Rust bindings
-        run: cargo test -p ayni-orchestrator-api
+        run: cargo test -p ayni-orchestrator-api -p ayni-orchestrator-events
 
   ayni:
     name: Ayni

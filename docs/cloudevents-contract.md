@@ -176,3 +176,7 @@ same-identity conflicting evidence, unsupported schemas, stale execution,
 broker outage, restart, malformed tracing context and cleanup backlog.
 CloudEvents standardizes representation; those guarantees require our contracts
 and tests. Requirements and delivery status belong in linked GitHub issues.
+
+The [runtime verification event contract](verification-events.md) defines the
+first implemented payload and shared codec boundary. Its deployed reporting
+producer, durable ingress and controller acceptance remain future integration.

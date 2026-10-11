@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "backend/libs/events",
     "backend/servers/control-plane/crates/application",
     "backend/servers/control-plane/crates/grpc-contract",
     "backend/libs/domain",
@@ -23,6 +24,9 @@ repository = "https://github.com/ayni-oss/orchestrator"
 publish = false
 
 [workspace.dependencies]
+cloudevents-sdk = { version = "=0.9.0", default-features = false }
+pbjson = "=0.9.0"
+pbjson-build = "=0.9.0"
 async-stream = "0.3.6"
 axum = "0.8.8"
 http-body-util = "0.1.3"

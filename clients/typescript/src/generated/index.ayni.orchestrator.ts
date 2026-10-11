@@ -5,4 +5,5 @@
 
 /* eslint-disable */
 
+export * as events from "./index.ayni.orchestrator.events";
 export * as v1 from "./index.ayni.orchestrator.v1";
