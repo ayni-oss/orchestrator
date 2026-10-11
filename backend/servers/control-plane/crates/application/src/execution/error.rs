@@ -46,15 +46,24 @@ impl From<&'static str> for ExecutionError {
             | "runtime_job_invalid" => ExecutionErrorKind::InvalidRequest,
             "runtime_job_conflict"
             | "runtime_request_conflict"
-            | "runtime_pod_identity_invalid" => ExecutionErrorKind::IdentityConflict,
+            | "runtime_pod_identity_invalid"
+            | "runtime_report_identity_invalid" => ExecutionErrorKind::IdentityConflict,
             "kubernetes_unavailable"
             | "runtime_cleanup_failed"
             | "runtime_job_creation_failed"
-            | "runtime_source_credential_unavailable" => ExecutionErrorKind::Unavailable,
-            "runtime_digest_unavailable" | "runtime_result_invalid" | "runtime_result_missing" => {
-                ExecutionErrorKind::InvalidObservation
+            | "runtime_source_credential_unavailable"
+            | "runtime_report_unavailable"
+            | "runtime_reporting_failed" => ExecutionErrorKind::Unavailable,
+            "runtime_digest_unavailable"
+            | "runtime_result_invalid"
+            | "runtime_result_missing"
+            | "runtime_report_missing"
+            | "runtime_report_oversized"
+            | "runtime_report_serialization_failed"
+            | "runtime_reporting_contract_unsupported" => ExecutionErrorKind::InvalidObservation,
+            "runtime_verification_failed" | "runtime_evidence_unavailable" => {
+                ExecutionErrorKind::WorkloadFailed
             }
-            "runtime_verification_failed" => ExecutionErrorKind::WorkloadFailed,
             _ => ExecutionErrorKind::Unknown,
         };
         Self { kind, code }
