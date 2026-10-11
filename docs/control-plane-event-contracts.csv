@@ -1,0 +1,290 @@
+family,name,flow,role,source,line
+public_rpc,ListCertificates,certificates,query,proto/ayni/orchestrator/v1/certificates.proto,6
+public_rpc,GetCertificate,certificates,query,proto/ayni/orchestrator/v1/certificates.proto,7
+public_rpc,CreateCertificate,certificates,command,proto/ayni/orchestrator/v1/certificates.proto,8
+public_rpc,ReplaceCertificate,certificates,command,proto/ayni/orchestrator/v1/certificates.proto,9
+public_rpc,RenameCertificate,certificates,command,proto/ayni/orchestrator/v1/certificates.proto,10
+public_rpc,SetCertificateEnabled,certificates,command,proto/ayni/orchestrator/v1/certificates.proto,11
+public_rpc,SetDefaultCertificate,certificates,command,proto/ayni/orchestrator/v1/certificates.proto,12
+public_rpc,DeleteCertificate,certificates,command,proto/ayni/orchestrator/v1/certificates.proto,13
+public_rpc,ListConnections,connections,query,proto/ayni/orchestrator/v1/connections.proto,6
+public_rpc,GetConnection,connections,query,proto/ayni/orchestrator/v1/connections.proto,7
+public_rpc,CreateConnection,connections,command,proto/ayni/orchestrator/v1/connections.proto,8
+public_rpc,ReplaceConnectionCredentials,connections,command,proto/ayni/orchestrator/v1/connections.proto,9
+public_rpc,TestConnection,connections,command,proto/ayni/orchestrator/v1/connections.proto,10
+public_rpc,SetConnectionEnabled,connections,command,proto/ayni/orchestrator/v1/connections.proto,11
+public_rpc,DeleteConnection,connections,command,proto/ayni/orchestrator/v1/connections.proto,12
+public_rpc,CompleteGithubManifest,connections,command,proto/ayni/orchestrator/v1/connections.proto,13
+public_rpc,ListDevelopmentTasks,development_tasks,query,proto/ayni/orchestrator/v1/development_tasks.proto,12
+public_rpc,GetDevelopmentTask,development_tasks,query,proto/ayni/orchestrator/v1/development_tasks.proto,13
+public_rpc,CreateDevelopmentTask,development_tasks,command,proto/ayni/orchestrator/v1/development_tasks.proto,14
+public_rpc,CancelDevelopmentTask,development_tasks,command,proto/ayni/orchestrator/v1/development_tasks.proto,15
+public_rpc,RetryDevelopmentTask,development_tasks,command,proto/ayni/orchestrator/v1/development_tasks.proto,16
+public_rpc,ListDevelopmentAttempts,development_tasks,query,proto/ayni/orchestrator/v1/development_tasks.proto,17
+public_rpc,GetDevelopmentAttempt,development_tasks,query,proto/ayni/orchestrator/v1/development_tasks.proto,18
+public_rpc,RetryTaskPublication,development_tasks,command,proto/ayni/orchestrator/v1/development_tasks.proto,19
+public_rpc,WatchDevelopmentTask,development_tasks,subscription,proto/ayni/orchestrator/v1/development_tasks.proto,20
+public_enum_value,DEVELOPMENT_TASK_STATE_QUEUED,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,26
+public_enum_value,DEVELOPMENT_TASK_STATE_WAITING_FOR_RUNTIME,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,27
+public_enum_value,DEVELOPMENT_TASK_STATE_RUNNING,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,28
+public_enum_value,DEVELOPMENT_TASK_STATE_SUCCEEDED,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,29
+public_enum_value,DEVELOPMENT_TASK_STATE_FAILED,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,30
+public_enum_value,DEVELOPMENT_TASK_STATE_CANCELLED,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,31
+public_enum_value,DEVELOPMENT_TASK_STATE_DEADLINE_EXCEEDED,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,32
+public_enum_value,DEVELOPMENT_TASK_STATE_UNSUPPORTED,development_tasks,DevelopmentTaskState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,33
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_QUEUED,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,39
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_RUNNING,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,40
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_WAITING_FOR_INPUT,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,41
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,42
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_FAILED,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,43
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_CANCELLED,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,44
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_DEADLINE_EXCEEDED,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,45
+public_enum_value,DEVELOPMENT_ATTEMPT_STATE_UNSUPPORTED,development_tasks,DevelopmentAttemptState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,46
+public_enum_value,MODEL_USAGE_STAGE_CODING,development_tasks,ModelUsageStage schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,52
+public_enum_value,MODEL_INTERACTION_OUTCOME_SUCCEEDED,development_tasks,ModelInteractionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,58
+public_enum_value,MODEL_INTERACTION_OUTCOME_FAILED,development_tasks,ModelInteractionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,59
+public_enum_value,MODEL_INTERACTION_OUTCOME_CANCELLED,development_tasks,ModelInteractionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,60
+public_enum_value,MODEL_USAGE_COLLECTION_STATUS_UNAVAILABLE,development_tasks,ModelUsageCollectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,66
+public_enum_value,MODEL_USAGE_COLLECTION_STATUS_COLLECTING,development_tasks,ModelUsageCollectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,67
+public_enum_value,MODEL_USAGE_COLLECTION_STATUS_COMPLETE,development_tasks,ModelUsageCollectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,68
+public_enum_value,WORKER_PHASE_ADMISSION,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,263
+public_enum_value,WORKER_PHASE_CHECKOUT,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,264
+public_enum_value,WORKER_PHASE_CODING,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,265
+public_enum_value,WORKER_PHASE_CHECKING,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,266
+public_enum_value,WORKER_PHASE_REPAIRING,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,267
+public_enum_value,WORKER_PHASE_FINALIZING,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,268
+public_enum_value,WORKER_PHASE_PUBLISHING,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,269
+public_enum_value,WORKER_PHASE_COMPLETED,development_tasks,WorkerPhase schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,270
+public_enum_value,EXECUTION_OUTCOME_SUCCEEDED,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,274
+public_enum_value,EXECUTION_OUTCOME_FAILED,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,275
+public_enum_value,EXECUTION_OUTCOME_CANCELLED,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,276
+public_enum_value,EXECUTION_OUTCOME_DEADLINE_EXCEEDED,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,277
+public_enum_value,EXECUTION_OUTCOME_NO_CHANGES,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,278
+public_enum_value,EXECUTION_OUTCOME_INPUT_REQUIRED,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,279
+public_enum_value,EXECUTION_OUTCOME_ADMISSION_FAILED,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,280
+public_enum_value,EXECUTION_OUTCOME_UNSAFE_CHANGES,development_tasks,ExecutionOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,281
+public_enum_value,PUBLICATION_OUTCOME_PENDING,development_tasks,PublicationOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,285
+public_enum_value,PUBLICATION_OUTCOME_PUBLISHING,development_tasks,PublicationOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,286
+public_enum_value,PUBLICATION_OUTCOME_PUBLISHED,development_tasks,PublicationOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,287
+public_enum_value,PUBLICATION_OUTCOME_FAILED,development_tasks,PublicationOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,288
+public_enum_value,PUBLICATION_OUTCOME_CONFLICT,development_tasks,PublicationOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,289
+public_enum_value,PUBLICATION_OUTCOME_NOT_REQUIRED,development_tasks,PublicationOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,290
+public_enum_value,QUALITY_OUTCOME_PASSED,development_tasks,QualityOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,294
+public_enum_value,QUALITY_OUTCOME_FAILED,development_tasks,QualityOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,295
+public_enum_value,QUALITY_OUTCOME_UNAVAILABLE,development_tasks,QualityOutcome schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/development_tasks.proto,296
+public_enum_value,ERROR_REASON_INVALID_IDENTIFIER,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,8
+public_enum_value,ERROR_REASON_INVALID_INPUT,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,9
+public_enum_value,ERROR_REASON_IDEMPOTENCY_KEY_REUSED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,10
+public_enum_value,ERROR_REASON_RESOURCE_NOT_FOUND,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,11
+public_enum_value,ERROR_REASON_CONFLICT,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,12
+public_enum_value,ERROR_REASON_FAILED_PRECONDITION,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,13
+public_enum_value,ERROR_REASON_PROVIDER_UNAVAILABLE,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,14
+public_enum_value,ERROR_REASON_MODEL_UNAVAILABLE,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,15
+public_enum_value,ERROR_REASON_REPOSITORY_ACCESS,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,16
+public_enum_value,ERROR_REASON_CANCELLED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,17
+public_enum_value,ERROR_REASON_DEADLINE_EXCEEDED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,18
+public_enum_value,ERROR_REASON_INTERNAL,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,19
+public_enum_value,ERROR_REASON_INVALID_REPOSITORY_REVISION,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,20
+public_enum_value,ERROR_REASON_INVALID_PROFILE_REVISION,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,21
+public_enum_value,ERROR_REASON_INVALID_LOCK_FINGERPRINT,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,22
+public_enum_value,ERROR_REASON_INVALID_OCI_REFERENCE,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,23
+public_enum_value,ERROR_REASON_INVALID_OCI_DIGEST,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,24
+public_enum_value,ERROR_REASON_INVALID_PLATFORM,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,25
+public_enum_value,ERROR_REASON_PROFILE_UNSUPPORTED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,26
+public_enum_value,ERROR_REASON_PROFILE_NOT_READY,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,27
+public_enum_value,ERROR_REASON_RUNTIME_ARTIFACT_NOT_VERIFIED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,28
+public_enum_value,ERROR_REASON_AUTOMATION_NOT_READY,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,29
+public_enum_value,ERROR_REASON_TASK_NOT_ACTIONABLE,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,30
+public_enum_value,ERROR_REASON_TASK_DEADLINE_EXPIRED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,31
+public_enum_value,ERROR_REASON_BOUND_EXCEEDED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,32
+public_enum_value,ERROR_REASON_WATCH_CURSOR_EXPIRED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,33
+public_enum_value,ERROR_REASON_UNKNOWN_ENUM_VALUE,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,34
+public_enum_value,ERROR_REASON_NOT_IMPLEMENTED,errors,ErrorReason schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/errors.proto,35
+public_rpc,ListProjectSummaries,projects,query,proto/ayni/orchestrator/v1/projects.proto,12
+public_rpc,CreateProject,projects,command,proto/ayni/orchestrator/v1/projects.proto,13
+public_rpc,ListProjects,projects,query,proto/ayni/orchestrator/v1/projects.proto,14
+public_rpc,GetProject,projects,query,proto/ayni/orchestrator/v1/projects.proto,15
+public_rpc,UpdateProject,projects,command,proto/ayni/orchestrator/v1/projects.proto,16
+public_rpc,ArchiveProject,projects,command,proto/ayni/orchestrator/v1/projects.proto,17
+public_enum_value,PROJECT_STATE_ACTIVE,projects,ProjectState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/projects.proto,23
+public_enum_value,PROJECT_STATE_ARCHIVED,projects,ProjectState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/projects.proto,24
+public_rpc,ListProviderModels,provider_models,query,proto/ayni/orchestrator/v1/provider_models.proto,10
+public_rpc,ListRepositorySummaries,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,10
+public_rpc,AnalyzeRepository,repositories,command,proto/ayni/orchestrator/v1/repositories.proto,11
+public_rpc,ListGithubInstallations,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,12
+public_rpc,ListGithubInstallationRepositories,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,13
+public_rpc,ConnectGithubRepository,repositories,command,proto/ayni/orchestrator/v1/repositories.proto,14
+public_rpc,ListRepositoryConnections,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,15
+public_rpc,RemoveRepository,repositories,command,proto/ayni/orchestrator/v1/repositories.proto,16
+public_rpc,GetRepositoryConnection,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,17
+public_rpc,CreateRepositoryConnection,repositories,command,proto/ayni/orchestrator/v1/repositories.proto,18
+public_rpc,ListRepositorySnapshots,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,19
+public_rpc,GetRepositorySnapshot,repositories,query,proto/ayni/orchestrator/v1/repositories.proto,20
+public_rpc,SetRepositoryRegistry,repositories,command,proto/ayni/orchestrator/v1/repositories.proto,21
+public_rpc,WatchRepositories,repositories,subscription,proto/ayni/orchestrator/v1/repositories.proto,22
+public_enum_value,REPOSITORY_CONNECTION_STATUS_CONNECTING,repositories,RepositoryConnectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/repositories.proto,50
+public_enum_value,REPOSITORY_CONNECTION_STATUS_CONNECTED,repositories,RepositoryConnectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/repositories.proto,51
+public_enum_value,REPOSITORY_CONNECTION_STATUS_DEGRADED,repositories,RepositoryConnectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/repositories.proto,52
+public_enum_value,REPOSITORY_CONNECTION_STATUS_REVOKED,repositories,RepositoryConnectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/repositories.proto,53
+public_enum_value,REPOSITORY_CONNECTION_STATUS_FAILED,repositories,RepositoryConnectionStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/repositories.proto,54
+public_rpc,InspectAyniRepository,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,11
+public_rpc,ListRuntimeProfiles,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,12
+public_rpc,GetRuntimeProfile,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,13
+public_rpc,CreateRuntimeProfile,runtime_profiles,command,proto/ayni/orchestrator/v1/runtime_profiles.proto,14
+public_rpc,ListRuntimeProfileRevisions,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,15
+public_rpc,GetRuntimeProfileRevision,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,16
+public_rpc,ListRuntimeArtifacts,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,17
+public_rpc,GetRuntimeArtifact,runtime_profiles,query,proto/ayni/orchestrator/v1/runtime_profiles.proto,18
+public_rpc,ReconcileRuntimeProfile,runtime_profiles,command,proto/ayni/orchestrator/v1/runtime_profiles.proto,19
+public_rpc,SetRuntimeCertificate,runtime_profiles,command,proto/ayni/orchestrator/v1/runtime_profiles.proto,20
+public_rpc,SetRuntimeRegistry,runtime_profiles,command,proto/ayni/orchestrator/v1/runtime_profiles.proto,21
+public_rpc,WatchRuntimeProfiles,runtime_profiles,subscription,proto/ayni/orchestrator/v1/runtime_profiles.proto,22
+public_enum_value,RUNTIME_PROFILE_KIND_AYNI_MANAGED,runtime_profiles,RuntimeProfileKind schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,28
+public_enum_value,RUNTIME_PROFILE_KIND_CUSTOM_RUNTIME,runtime_profiles,RuntimeProfileKind schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,29
+public_enum_value,RUNTIME_PROFILE_SUPPORT_OPERATIONAL,runtime_profiles,RuntimeProfileSupport schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,35
+public_enum_value,RUNTIME_PROFILE_SUPPORT_UNSUPPORTED,runtime_profiles,RuntimeProfileSupport schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,36
+public_enum_value,RUNTIME_PROFILE_STATE_SETUP_REQUIRED,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,42
+public_enum_value,RUNTIME_PROFILE_STATE_SETUP_PR_OPEN,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,43
+public_enum_value,RUNTIME_PROFILE_STATE_AWAITING_ENVIRONMENT,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,44
+public_enum_value,RUNTIME_PROFILE_STATE_READY,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,45
+public_enum_value,RUNTIME_PROFILE_STATE_UPDATING,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,46
+public_enum_value,RUNTIME_PROFILE_STATE_DEGRADED,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,47
+public_enum_value,RUNTIME_PROFILE_STATE_FAILED,runtime_profiles,RuntimeProfileState schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,48
+public_enum_value,RUNTIME_ARTIFACT_STATUS_DISCOVERED,runtime_profiles,RuntimeArtifactStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,54
+public_enum_value,RUNTIME_ARTIFACT_STATUS_VERIFYING,runtime_profiles,RuntimeArtifactStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,55
+public_enum_value,RUNTIME_ARTIFACT_STATUS_VERIFIED,runtime_profiles,RuntimeArtifactStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,56
+public_enum_value,RUNTIME_ARTIFACT_STATUS_REJECTED,runtime_profiles,RuntimeArtifactStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,57
+public_enum_value,RUNTIME_ARTIFACT_STATUS_UNAVAILABLE,runtime_profiles,RuntimeArtifactStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,58
+public_enum_value,RUNTIME_ARTIFACT_STATUS_FAILED,runtime_profiles,RuntimeArtifactStatus schema vocabulary; operational support must be checked separately,proto/ayni/orchestrator/v1/runtime_profiles.proto,59
+internal_enum_value,Request,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,8
+internal_enum_value,Checkout,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,10
+internal_enum_value,Build,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,11
+internal_enum_value,Install,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,12
+internal_enum_value,RuntimeVerification,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,13
+internal_enum_value,OutputPreparation,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,14
+internal_enum_value,ModelCredentials,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,15
+internal_enum_value,ModelExecution,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,16
+internal_enum_value,ModelRequest,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,17
+internal_enum_value,ModelResponse,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,18
+internal_enum_value,ToolStarted,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,19
+internal_enum_value,ToolFinished,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,20
+internal_enum_value,Checkpoint,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,21
+internal_enum_value,Finalization,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,22
+internal_enum_value,ReportWrite,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,23
+internal_enum_value,Completed,Stage,advisory worker activity,backend/libs/runtime/contracts/src/activity.rs,24
+internal_enum_value,Authentication,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,76
+internal_enum_value,RateLimited,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,78
+internal_enum_value,ProviderUnavailable,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,79
+internal_enum_value,ProviderRejected,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,80
+internal_enum_value,Transport,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,81
+internal_enum_value,InvalidResponse,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,82
+internal_enum_value,InvalidRequest,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,83
+internal_enum_value,TurnLimit,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,84
+internal_enum_value,InvalidTool,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,85
+internal_enum_value,Cancelled,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,86
+internal_enum_value,MissingFile,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,87
+internal_enum_value,PermissionDenied,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,88
+internal_enum_value,InvalidInput,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,89
+internal_enum_value,Internal,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,90
+internal_enum_value,NoChanges,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,91
+internal_enum_value,ProtectedPath,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,92
+internal_enum_value,TestEdits,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,93
+internal_enum_value,RuntimeMismatch,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,94
+internal_enum_value,GitIndex,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,95
+internal_enum_value,GitStage,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,96
+internal_enum_value,GitDiff,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,97
+internal_enum_value,GitCommit,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,98
+internal_enum_value,GitSource,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,99
+internal_enum_value,GitIgnored,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,100
+internal_enum_value,GitIndexLocked,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,101
+internal_enum_value,GitIdentity,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,102
+internal_enum_value,GitPermissions,Failure,bounded diagnostic classification,backend/libs/runtime/contracts/src/activity.rs,103
+internal_enum_value,Admission,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,41
+internal_enum_value,Checkout,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,43
+internal_enum_value,Coding,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,44
+internal_enum_value,Checking,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,45
+internal_enum_value,Repairing,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,46
+internal_enum_value,Finalizing,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,47
+internal_enum_value,Publishing,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,48
+internal_enum_value,Completed,WorkerPhase,worker progress state,backend/libs/runtime/contracts/src/coding.rs,49
+internal_enum_value,Succeeded,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,53
+internal_enum_value,Failed,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,55
+internal_enum_value,Cancelled,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,56
+internal_enum_value,DeadlineExceeded,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,57
+internal_enum_value,AdmissionFailed,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,58
+internal_enum_value,UnsafeChanges,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,59
+internal_enum_value,NoChanges,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,60
+internal_enum_value,InputRequired,ExecutionOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,61
+internal_enum_value,Passed,QualityOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,65
+internal_enum_value,Failed,QualityOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,67
+internal_enum_value,Unavailable,QualityOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,68
+internal_enum_value,Pending,PublicationOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,72
+internal_enum_value,Publishing,PublicationOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,74
+internal_enum_value,Published,PublicationOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,75
+internal_enum_value,Failed,PublicationOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,76
+internal_enum_value,Conflict,PublicationOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,77
+internal_enum_value,NotRequired,PublicationOutcome,worker outcome,backend/libs/runtime/contracts/src/coding.rs,78
+internal_enum_value,Discovering,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,49
+internal_enum_value,DiscoveringStarted,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,50
+internal_enum_value,Building,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,51
+internal_enum_value,BuildingStarted,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,52
+internal_enum_value,Publishing,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,53
+internal_enum_value,PublicationReadback,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,54
+internal_enum_value,PublicationReadbackStarted,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,55
+internal_enum_value,Verifying,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,56
+internal_enum_value,Activating,ImagePreparationPhase,durable controller phase,backend/servers/control-plane/crates/application/src/runtime_preparation.rs,57
+internal_enum_value,Start,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,5
+internal_enum_value,LostExecution,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,7
+internal_enum_value,WorkerFailed,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,8
+internal_enum_value,WorkerInterrupted,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,9
+internal_enum_value,CollectAndCleanup,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,10
+internal_enum_value,ConfirmRetainedResult,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,11
+internal_enum_value,Cleanup,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,12
+internal_enum_value,Wait,CodingAction,controller decision,backend/servers/control-plane/crates/application/src/reconciliation.rs,13
+internal_enum_value,DiscardStale,PendingPhase,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,13
+internal_enum_value,ObserveBuild,PendingPhase,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,15
+internal_enum_value,ObserveVerification,PendingPhase,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,16
+internal_enum_value,Start,VerificationAction,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,36
+internal_enum_value,Wait,VerificationAction,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,38
+internal_enum_value,Timeout,VerificationAction,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,39
+internal_enum_value,Failure,VerificationAction,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,40
+internal_enum_value,Accept,VerificationAction,controller decision,backend/servers/control-plane/crates/application/src/runtime_reconciliation.rs,41
+stored_resource_event,project,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/projects.rs,178
+stored_resource_event,repository_connection,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/repository_connections.rs,65
+stored_resource_event,repository_snapshot,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/repository_connections.rs,251
+stored_resource_event,runtime_profile_removed,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/repository_removal.rs,60
+stored_resource_event,repository_removed,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/repository_removal.rs,77
+stored_resource_event,runtime_profile_revision,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/runtime_certificate.rs,190
+stored_resource_event,runtime_profile,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/runtime_certificate.rs,203
+stored_resource_event,runtime_artifact,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/runtime_profiles.rs,536
+stored_resource_event,development_task,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/task_admission.rs,285
+stored_resource_event,development_attempt,resource projection,versioned snapshot or removal notification,backend/servers/control-plane/src/adapters/sqlite/task_admission.rs,323
+agent_tool,run_command,coding,local worker action; generic activity hooks expose start and finish,backend/workers/runtime-worker/src/coding/tools.rs,19
+agent_tool,ayni_verify,coding,local worker action; generic activity hooks expose start and finish,backend/workers/runtime-worker/src/coding/tools.rs,153
+agent_tool,ayni_check,coding,local worker action; generic activity hooks expose start and finish,backend/workers/runtime-worker/src/coding/tools.rs,189
+agent_tool,commit_changes,coding,local worker action; generic activity hooks expose start and finish,backend/workers/runtime-worker/src/coding/tools.rs,223
+internal_enum_value,Missing,ExecutionState,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,98
+internal_enum_value,Running,ExecutionState,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,99
+internal_enum_value,Succeeded,ExecutionState,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,100
+internal_enum_value,Failed,ExecutionState,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,101
+internal_enum_value,Missing,Observation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,105
+internal_enum_value,Running,Observation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,106
+internal_enum_value,Completed,Observation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,107
+internal_enum_value,Failed,Observation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution.rs,108
+internal_enum_value,Configuration,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,6
+internal_enum_value,InvalidRequest,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,7
+internal_enum_value,IdentityConflict,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,8
+internal_enum_value,Unavailable,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,9
+internal_enum_value,InvalidObservation,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,10
+internal_enum_value,WorkloadFailed,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,11
+internal_enum_value,Unknown,ExecutionErrorKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/execution/error.rs,12
+internal_enum_value,RepositoryRuntime,ImageBuildKind,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/image_build.rs,8
+internal_enum_value,Missing,BuildObservation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/image_build.rs,19
+internal_enum_value,Running,BuildObservation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/image_build.rs,20
+internal_enum_value,Completed,BuildObservation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/image_build.rs,21
+internal_enum_value,Failed,BuildObservation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/image_build.rs,22
+internal_enum_value,EngineLost,BuildObservation,execution observation or error; not a published domain event,backend/servers/control-plane/crates/application/src/image_build.rs,23
+internal_enum_value,Pending,ImageDiscovery,execution observation or error; not a published domain event,backend/libs/runtime/contracts/src/image_discovery.rs,7
+internal_enum_value,Missing,ImageDiscovery,execution observation or error; not a published domain event,backend/libs/runtime/contracts/src/image_discovery.rs,8
+internal_enum_value,Resolved,ImageDiscovery,execution observation or error; not a published domain event,backend/libs/runtime/contracts/src/image_discovery.rs,9
+internal_enum_value,Failed,ImageDiscovery,execution observation or error; not a published domain event,backend/libs/runtime/contracts/src/image_discovery.rs,10
