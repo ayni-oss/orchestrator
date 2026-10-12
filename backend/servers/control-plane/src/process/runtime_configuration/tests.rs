@@ -1,6 +1,7 @@
 use super::*;
 fn configuration() -> RuntimeConfiguration {
     RuntimeConfiguration {
+        reporting: None,
         namespace: "test".into(),
         output_claim: "output".into(),
         model_secret: "model".into(),

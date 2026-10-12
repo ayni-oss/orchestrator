@@ -76,4 +76,5 @@ from the resource API. Rust uses generated Prost/ProtoJSON codecs and the
 CloudEvents SDK in `backend/libs/events`; TypeScript bindings use the same schema.
 Shared fixtures in `testdata/verification` cover both languages. See the
 [verification event contract](../docs/verification-events.md) for authority, wire
-validation and recovery boundaries. There is no production reporting ingress yet.
+validation and recovery boundaries. Authenticated receipt is opt-in and shadow-only; controller acceptance remains
+separate from receipt.

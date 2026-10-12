@@ -14,15 +14,16 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Deploying schema 10 upgrades retained schema-9 runtime preparation in one
-transaction. The migration preserves frozen source and runtime identities,
+Deploying schema 11 adds the verification receipt inbox after the ordered
+preparation migrations. The schema-9 to schema-10 migration upgrades retained
+runtime preparation in one transaction. The migration preserves frozen source and runtime identities,
 operation names, retained verification evidence and remaining publication budget.
 It also indexes immutable task creation timestamps for project summaries. An
 invalid cursor or task aborts the transaction; repair the invalid retained record
 from a trusted backup before retrying, rather than deleting pending work.
 
 Back up the database before upgrading and run one control-plane writer during the
-upgrade. Earlier binaries reject schema 10, so rollback requires restoring the
+upgrade. Earlier binaries reject schema 11, so rollback requires restoring the
 pre-upgrade backup while preserving and reconciling any external work performed
 since the backup. Do not run an earlier binary against the upgraded database.
 After restart, uncertain publication still reads the registry before retrying, and
@@ -157,3 +158,8 @@ kubelet-owned. Retry analysis and Rebuild never purge node caches or registry im
 
 See [repository-selected official builders](repository-builders.md) for immutable
 version selection, attempt engines, security modes and recovery.
+
+Opt-in verification receipt and safe delivery recovery are described in the
+[verification event contract](verification-events.md). Keep reporting off until
+the supervisor image, ingress/RBAC and transport boundary have been validated
+together; receipt alone does not activate runtimes.

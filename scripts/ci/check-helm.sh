@@ -60,6 +60,19 @@ helm template runtime "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true --set runtime.serviceAccounts.create=false \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >"$scratch/runtime-existing-accounts.yaml"
+# TokenReview authority exists only for opt-in shadow verification reporting.
+helm template runtime-reporting "$application_chart" --namespace runtime-test \
+  --set runtime.enabled=true \
+  --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set-string runtime.reporting.endpoint=http://control-plane:8080/events/verification \
+  --set-string runtime.reporting.source=ayni://orchestrator/supervisors/test \
+  >"$scratch/runtime-reporting.yaml"
+grep -q 'resources: \[tokenreviews\]' "$scratch/runtime-reporting.yaml"
+grep -q 'runtime-test-runtime-reporting-verification-review' "$scratch/runtime-reporting.yaml"
+if grep -q 'resources: \[tokenreviews\]' "$scratch/runtime.yaml" "$scratch/application.yaml"; then
+  echo "reporting-disabled control plane rendered token review authority" >&2
+  exit 1
+fi
 # Managed onboarding inherits deployment policy without a repository allowlist.
 helm template runtime-defaults "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true \

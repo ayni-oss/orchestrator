@@ -70,6 +70,7 @@ impl RuntimeKubernetes {
         runtime: &WorkloadRuntime,
         request: &ExecutionRequest<Profile>,
         token: &str,
+        reporting: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
     ) -> Result<(), &'static str> {
         let request = serde_json::to_string(request).map_err(|_| "runtime_request_invalid")?;
         let mut job = verification_job(name, &self.configuration, runtime)?;
@@ -85,13 +86,19 @@ impl RuntimeKubernetes {
                 value: Some(format!("sha256:{:x}", Sha256::digest(request.as_bytes()))),
                 ..Default::default()
             });
-        self.create(
-            name,
-            std::collections::BTreeMap::from([("execution.json".into(), request)]),
-            token,
-            &job,
-        )
-        .await
+        let mut data =
+            std::collections::BTreeMap::from([("execution.json".into(), request.clone())]);
+        if let Some(reporting) = reporting {
+            let mut admission = reporting.clone();
+            admission.configuration.validate()?;
+            admission.binding.request_digest =
+                format!("sha256:{:x}", Sha256::digest(request.as_bytes()));
+            let manifest =
+                serde_json::to_string(&admission).map_err(|_| "runtime_request_invalid")?;
+            data.insert("reporting.json".into(), manifest);
+            crate::reporting::configure_job(&mut job)?;
+        }
+        self.create(name, data, token, &job).await
     }
 
     pub(crate) async fn create(

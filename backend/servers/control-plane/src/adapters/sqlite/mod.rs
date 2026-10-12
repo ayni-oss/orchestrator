@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 10;
+pub(crate) const SCHEMA_VERSION: i64 = 11;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -61,6 +61,7 @@ const CLEAN_TABLES: &[&str] = &[
     "runtime_artifacts",
     "runtime_profile_revisions",
     "runtime_profiles",
+    "verification_inbox",
 ];
 
 pub(crate) const PROJECT_SERVICE: &str = "projects";
@@ -181,6 +182,7 @@ mod summaries;
 pub(crate) mod task_admission;
 mod task_lifecycle;
 mod validation;
+pub(crate) mod verification_inbox;
 use validation::{
     collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
     query_payloads, valid_version_and_cursor, validate_durable_actions, validate_indexed_rows,

@@ -66,7 +66,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let observation_result = self.kubernetes.observe(&pending.name).await?;
         match verification_action(&observation_result, time.saturating_sub(pending.started_at)) {
             VerificationAction::Start => {
-                self.start_verification(observation, &pending).await?;
+                self.start_verification(observation, cursor, &pending)
+                    .await?;
             }
             VerificationAction::Wait => {}
             VerificationAction::Timeout => {
@@ -262,6 +263,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     async fn start_verification(
         &self,
         observation: &ProfileObservation<'_>,
+        cursor: &RuntimeCursor,
         pending: &PendingVerification,
     ) -> Result<(), &'static str> {
         let runtime = observation.runtime;
@@ -278,12 +280,59 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .ok_or("runtime_digest_unavailable")?
         );
         verification_runtime.build = None;
+        let reporting_repository = if self.configuration.reporting.is_some() {
+            let profile_id = observation.id.to_owned();
+            self.with_database(move |store| {
+                store
+                    .runtime_profile(&profile_id)
+                    .map(|profile| profile.repository_connection_id)
+                    .map_err(|_| "runtime_profile_missing")
+            })
+            .await?
+        } else {
+            String::new()
+        };
+        let reporting = self
+            .configuration
+            .reporting
+            .as_ref()
+            .map(|configuration| {
+                let identity = cursor
+                    .preparation
+                    .as_ref()
+                    .ok_or("runtime_cursor_invalid")?;
+                let repository = reporting_repository.clone();
+                Ok::<_, &'static str>(
+                    ayni_orchestrator_runtime::verification::ReportingAdmission {
+                        configuration: configuration.clone(),
+                        binding: ayni_orchestrator_events::v1::VerificationExecutionBinding {
+                            repository_connection_id: repository,
+                            runtime_profile_id: observation.id.into(),
+                            runtime_profile_revision_id: pending.profile_revision.clone(),
+                            preparation_id: identity.generation.clone(),
+                            execution_id: pending.name.clone(),
+                            pod_uid: String::new(),
+                            request_digest: String::new(),
+                            source_revision: pending.request.revision.clone(),
+                            lock_digest: pending.lock_digest.clone(),
+                            policy_digest: identity.policy_digest.clone(),
+                            platform: runtime.platform.clone(),
+                            resolved_image_digest: pending
+                                .resolved_digest
+                                .clone()
+                                .ok_or("runtime_digest_unavailable")?,
+                        },
+                    },
+                )
+            })
+            .transpose()?;
         self.kubernetes
             .start(
                 &pending.name,
                 &verification_runtime,
                 &pending.request,
                 token,
+                reporting.as_ref(),
             )
             .await?;
         Ok(())

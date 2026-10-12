@@ -113,6 +113,22 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     if let Some(result) = trusted_image_operation(&operation).await {
         return result;
     }
+    if operation == "report-verification" {
+        let admission = serde_json::from_slice(&read_bounded(
+            Path::new("/request/reporting.json"),
+            ayni_orchestrator_events::MAX_EVENT_BYTES,
+        )?)
+        .map_err(io::Error::other)?;
+        let pod_uid =
+            env::var("POD_UID").map_err(|_| io::Error::other("runtime_request_invalid"))?;
+        return ayni_orchestrator_worker::verification::reporting::deliver(
+            Path::new("/output"),
+            &admission,
+            &pod_uid,
+            Path::new("/reporting/token"),
+        )
+        .await;
+    }
     if operation == "verify" {
         activity.record(Stage::RuntimeVerification);
         return ayni_orchestrator_worker::verification::run().await;

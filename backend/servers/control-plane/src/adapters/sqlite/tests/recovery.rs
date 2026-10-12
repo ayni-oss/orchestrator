@@ -536,7 +536,7 @@ fn schema_seven_cutover_retires_image_automation_and_preserves_frozen_work()
         "task",
         &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
-    store.connection.execute_batch("CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
+    store.connection.execute_batch("DROP TABLE verification_inbox; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
     store.connection.execute(
         "INSERT INTO automation_installations(id) VALUES('obsolete')",
         [],
@@ -545,7 +545,10 @@ fn schema_seven_cutover_retires_image_automation_and_preserves_frozen_work()
     store.connection.execute("INSERT INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES(?1,?2,1,1)", params![format!("managed:{}",profile.id),r#"{"sequence":4,"next_at":0,"failures":3,"pending":{"old":"combined-build-push"},"bindings":{},"status":{},"last_success":null}"#])?;
     drop(store);
     let store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 10);
+    assert_eq!(
+        store.schema_version()?,
+        crate::adapters::sqlite::SCHEMA_VERSION
+    );
     assert_eq!(store.repository_connection(&repository.id)?, repository);
     assert_eq!(store.development_task(&task.id)?.snapshot, task.snapshot);
     assert_eq!(

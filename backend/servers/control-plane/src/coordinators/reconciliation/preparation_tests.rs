@@ -62,6 +62,7 @@ impl ExecutionBackend for Backend {
         _: &WorkloadRuntime,
         _: &GenericRequest<P>,
         _: &str,
+        _: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
     ) -> ExecutionResult<()> {
         Err("unexpected_verification".into())
     }
@@ -267,6 +268,7 @@ impl Fixture {
             ),
         };
         let configuration = RuntimeConfiguration {
+            reporting: None,
             namespace: "test".into(),
             worker_image: format!("ghcr.io/team/worker@sha256:{}", "d".repeat(64)),
             output_claim: "outputs".into(),

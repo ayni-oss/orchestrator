@@ -252,6 +252,28 @@
             "dedicated-builder"
           ],
           "default": "external-isolated"
+        },
+        "reporting": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "endpoint",
+            "source"
+          ],
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^https?://[^@?# ]+/events/verification$"
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^ayni://orchestrator/supervisors/[A-Za-z0-9_-]{1,128}$"
+            }
+          }
         }
       }
     },

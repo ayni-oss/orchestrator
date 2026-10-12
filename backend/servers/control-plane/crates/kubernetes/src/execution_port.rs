@@ -77,8 +77,9 @@ impl ExecutionBackend for RuntimeKubernetes {
         runtime: &WorkloadRuntime,
         request: &ExecutionRequest<P>,
         token: &str,
+        reporting: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
     ) -> ExecutionResult<()> {
-        self.start(name, runtime, request, token)
+        self.start(name, runtime, request, token, reporting)
             .await
             .map_err(ExecutionError::from)
     }

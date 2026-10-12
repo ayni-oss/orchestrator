@@ -201,7 +201,12 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
         if version == 6 {
             let expected = CLEAN_TABLES
                 .iter()
-                .filter(|name| !matches!(**name, "certificates" | "certificate_operations"))
+                .filter(|name| {
+                    !matches!(
+                        **name,
+                        "certificates" | "certificate_operations" | "verification_inbox"
+                    )
+                })
                 .map(ToString::to_string)
                 .collect::<Vec<_>>();
             let mut expected = expected;
@@ -216,6 +221,7 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
         if version == 7 {
             let mut expected = CLEAN_TABLES
                 .iter()
+                .filter(|name| **name != "verification_inbox")
                 .map(ToString::to_string)
                 .collect::<Vec<_>>();
             expected.push("automation_installations".into());
@@ -233,6 +239,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
         if version == 9 {
             super::preparation_migration::migrate(connection)?;
             version = 10;
+        }
+        if version == 10 {
+            super::verification_inbox::migrate(connection)?;
+            version = 11;
         }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
@@ -275,7 +285,13 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',10,unixepoch());
+VALUES ('control_plane',11,unixepoch());
+CREATE TABLE verification_inbox(
+ source TEXT NOT NULL, event_id TEXT NOT NULL, execution_id TEXT NOT NULL, pod_uid TEXT NOT NULL,
+ payload BLOB NOT NULL, received_at INTEGER NOT NULL, decision TEXT NOT NULL CHECK(decision='pending'),
+ PRIMARY KEY(source,event_id), UNIQUE(execution_id,pod_uid)
+);
+CREATE INDEX verification_inbox_pending ON verification_inbox(received_at,source,event_id);
 CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL);
 CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1;
 CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL);

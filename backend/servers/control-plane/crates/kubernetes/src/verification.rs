@@ -65,6 +65,50 @@ impl RuntimeKubernetes {
             .ok_or("runtime_request_invalid")?;
         let status =
             observation::container_status(&pod, "verify").ok_or("runtime_result_missing")?;
+        if job
+            .metadata
+            .annotations
+            .as_ref()
+            .is_some_and(|annotations| {
+                annotations
+                    .get("ayni.io/verification-events")
+                    .map(String::as_str)
+                    == Some("shadow-v1")
+            })
+        {
+            if status
+                .state
+                .as_ref()
+                .and_then(|state| state.terminated.as_ref())
+                .is_none()
+            {
+                return Ok(Observation::Running);
+            }
+            let receipt = read_bounded(
+                &Path::new("/runtime-outputs")
+                    .join(name)
+                    .join(ayni_orchestrator_runtime::verification::RECEIPT_FILE),
+                1024,
+            )
+            .map_err(|_| "runtime_reporting_failed")?;
+            let receipt: ayni_orchestrator_runtime::verification::ReportingReceipt =
+                serde_json::from_slice(&receipt).map_err(|_| "runtime_reporting_failed")?;
+            let event = read_bounded(
+                &Path::new("/runtime-outputs")
+                    .join(name)
+                    .join(ayni_orchestrator_runtime::verification::EVENT_FILE),
+                ayni_orchestrator_events::MAX_EVENT_BYTES,
+            )
+            .map_err(|_| "runtime_reporting_failed")?;
+            let (identity, _) =
+                ayni_orchestrator_events::decode(&event).map_err(|_| "runtime_reporting_failed")?;
+            if receipt.status != "stored"
+                || receipt.source != identity.source
+                || receipt.id != identity.id
+            {
+                return Err("runtime_reporting_failed");
+            }
+        }
         decode(
             &bytes,
             name,

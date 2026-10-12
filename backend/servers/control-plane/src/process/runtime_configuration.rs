@@ -7,6 +7,8 @@ use std::{collections::BTreeMap, env, fs};
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimeConfiguration {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reporting: Option<ayni_orchestrator_runtime::verification::ReportingConfiguration>,
     pub namespace: String,
     pub worker_image: String,
     pub output_claim: String,
@@ -139,6 +141,9 @@ impl RuntimeConfiguration {
 
     fn validate(&self) -> Result<(), &'static str> {
         self.execution_configuration().validate()?;
+        if let Some(reporting) = &self.reporting {
+            reporting.validate()?;
+        }
         if !(10..=3600).contains(&self.interval_seconds)
             || !(1..=120).contains(&self.request_timeout_seconds)
             || !(1..=128).contains(&self.coding_turns)
