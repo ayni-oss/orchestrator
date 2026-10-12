@@ -25,6 +25,7 @@ ALTER TABLE verification_outbox ADD COLUMN next_attempt_at INTEGER NOT NULL DEFA
 ALTER TABLE verification_outbox ADD COLUMN broker_sequence INTEGER;
 ALTER TABLE verification_outbox ADD COLUMN last_error TEXT NOT NULL DEFAULT '';
 CREATE INDEX verification_outbox_pending ON verification_outbox(next_attempt_at,journal_id) WHERE stored_at IS NULL;
+CREATE INDEX verification_outbox_stored ON verification_outbox(stored_at,journal_id) WHERE stored_at IS NOT NULL;
 UPDATE clean_schema SET version=14 WHERE component='control_plane'; COMMIT;")
         .map_err(CleanStoreError::Database)
 }

@@ -94,7 +94,7 @@ fn schema_thirteen_migration_keeps_immutable_pending_bytes() -> TestResult {
         &accepted(&cursor, &report)?,
     )?;
     let pending = store.unpublished_verification_events()?;
-    store.connection.execute_batch("DROP INDEX verification_outbox_pending; ALTER TABLE verification_outbox DROP COLUMN next_attempt_at; ALTER TABLE verification_outbox DROP COLUMN broker_sequence; ALTER TABLE verification_outbox DROP COLUMN last_error; UPDATE clean_schema SET version=13;")?;
+    store.connection.execute_batch("DROP INDEX verification_outbox_pending; DROP INDEX verification_outbox_stored; ALTER TABLE verification_outbox DROP COLUMN next_attempt_at; ALTER TABLE verification_outbox DROP COLUMN broker_sequence; ALTER TABLE verification_outbox DROP COLUMN last_error; UPDATE clean_schema SET version=13;")?;
     drop(store);
     let mut store = CleanStore::open(path, 3)?;
     assert_eq!(store.schema_version()?, 14);
