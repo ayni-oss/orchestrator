@@ -84,14 +84,7 @@ impl CleanStore {
             let reason: String = row.get(7).map_err(CleanStoreError::Database)?;
             let retry: i64 = row.get(8).map_err(CleanStoreError::Database)?;
             let attempts: i64 = row.get(9).map_err(CleanStoreError::Database)?;
-            if reason.len() > 64
-                || !reason.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
-                || retry < 0
-                || !(0..=1_000_000).contains(&attempts)
-                || (decision != "pending" && (retry != 0 || reason.is_empty()))
-            {
-                return Err(CleanStoreError::CorruptState);
-            }
+            validate_decision(&decision, &reason, retry, attempts)?;
             if count > 100_000
                 || bytes.len() > ayni_orchestrator_events::MAX_EVENT_BYTES
                 || received < 0
@@ -140,6 +133,23 @@ impl CleanStore {
             })
             .collect()
     }
+}
+
+fn validate_decision(
+    decision: &str,
+    reason: &str,
+    retry: i64,
+    attempts: i64,
+) -> Result<(), CleanStoreError> {
+    if reason.len() > 64
+        || !reason.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        || retry < 0
+        || !(0..=1_000_000).contains(&attempts)
+        || (decision != "pending" && (retry != 0 || reason.is_empty()))
+    {
+        return Err(CleanStoreError::CorruptState);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
