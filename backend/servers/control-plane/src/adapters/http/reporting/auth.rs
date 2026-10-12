@@ -14,7 +14,6 @@ use kube::{Api, Client, api::PostParams};
 pub(super) struct KubernetesAuthority {
     pub client: Client,
     pub namespace: String,
-    pub source: String,
 }
 
 impl KubernetesAuthority {
@@ -38,7 +37,7 @@ impl KubernetesAuthority {
         let status = review.status.ok_or(ReceiptError::Unauthorized)?;
         let (pod_name, pod_uid) = pod_identity(&status)?;
         let binding = payload.binding.as_ref().ok_or(ReceiptError::Invalid)?;
-        if identity.source != self.source || binding.pod_uid != pod_uid {
+        if binding.pod_uid != pod_uid {
             return Err(ReceiptError::Unauthorized);
         }
         let pod = Api::<Pod>::namespaced(self.client.clone(), &self.namespace)
@@ -55,7 +54,6 @@ impl KubernetesAuthority {
             .map_err(authority_lookup)?;
         validate_authority(
             &self.namespace,
-            &self.source,
             &status,
             &pod,
             &job,
@@ -108,7 +106,6 @@ fn pod_identity(status: &TokenReviewStatus) -> Result<(String, String), ReceiptE
 )]
 fn validate_authority(
     namespace: &str,
-    source: &str,
     status: &TokenReviewStatus,
     pod: &Pod,
     job: &Job,
@@ -128,7 +125,6 @@ fn validate_authority(
         || pod.metadata.name.as_deref() != Some(name.as_str())
         || pod.metadata.uid.as_deref() != Some(uid.as_str())
         || binding.pod_uid != uid
-        || identity.source != source
         || job.metadata.name.as_deref() != Some(binding.execution_id.as_str())
         || job.metadata.uid.is_none()
         || !pod
@@ -158,7 +154,7 @@ fn validate_authority(
     let mut admission: ReportingAdmission =
         serde_json::from_str(raw).map_err(|_| ReceiptError::Unauthorized)?;
     admission.binding.pod_uid = uid;
-    if admission.configuration.source != source || admission.binding != *binding {
+    if admission.configuration.source != identity.source || admission.binding != *binding {
         return Err(ReceiptError::Unauthorized);
     }
     Ok(())
@@ -194,80 +190,22 @@ mod tests {
         let map: ConfigMap = serde_json::from_value(
             json!({"metadata":{"name":job.metadata.name},"immutable":true,"data":{"reporting.json":serde_json::to_string(&admission)?}}),
         )?;
-        assert!(
-            validate_authority(
-                "test",
-                &identity.source,
-                &status,
-                &pod,
-                &job,
-                &map,
-                &identity,
-                &payload
-            )
-            .is_ok()
-        );
+        assert!(validate_authority("test", &status, &pod, &job, &map, &identity, &payload).is_ok());
         let mut bad = status.clone();
         bad.audiences = Some(vec!["kubernetes".into()]);
-        assert!(
-            validate_authority(
-                "test",
-                &identity.source,
-                &bad,
-                &pod,
-                &job,
-                &map,
-                &identity,
-                &payload
-            )
-            .is_err()
-        );
+        assert!(validate_authority("test", &bad, &pod, &job, &map, &identity, &payload).is_err());
         let mut bad = pod.clone();
         bad.metadata.owner_references = None;
         assert!(
-            validate_authority(
-                "test",
-                &identity.source,
-                &status,
-                &bad,
-                &job,
-                &map,
-                &identity,
-                &payload
-            )
-            .is_err()
+            validate_authority("test", &status, &bad, &job, &map, &identity, &payload).is_err()
         );
         let mut bad = payload.clone();
         bad.binding.as_mut().ok_or("binding")?.preparation_id = "other".into();
-        assert!(
-            validate_authority(
-                "test",
-                &identity.source,
-                &status,
-                &pod,
-                &job,
-                &map,
-                &identity,
-                &bad
-            )
-            .is_err()
-        );
+        assert!(validate_authority("test", &status, &pod, &job, &map, &identity, &bad).is_err());
         let mut bad = status;
         bad.user.as_mut().ok_or("user")?.username =
             Some("system:serviceaccount:other:runtime-coding".into());
-        assert!(
-            validate_authority(
-                "test",
-                &identity.source,
-                &bad,
-                &pod,
-                &job,
-                &map,
-                &identity,
-                &payload
-            )
-            .is_err()
-        );
+        assert!(validate_authority("test", &bad, &pod, &job, &map, &identity, &payload).is_err());
         Ok(())
     }
 }

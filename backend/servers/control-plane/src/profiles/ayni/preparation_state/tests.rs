@@ -163,6 +163,8 @@ fn preparation_retains_credentials_before_jobs_and_releases_them_after_completio
     let mut cursor: RuntimeCursor = serde_json::from_value(legacy_cursor())?;
     let pending = cursor.pending.take().ok_or("pending missing")?;
     cursor.preparation = Some(PreparationIdentity {
+        verification_authority:
+            crate::profiles::ayni::preparation_state::VerificationAuthority::Retained,
         generation: "frozen".into(),
         source_revision: pending.request.revision,
         policy_digest: "policy".into(),

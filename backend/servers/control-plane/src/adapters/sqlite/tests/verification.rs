@@ -11,7 +11,7 @@ use ayni_orchestrator_events::{
 };
 use ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport;
 
-fn prepared(
+pub(super) fn prepared(
     store: &mut CleanStore,
 ) -> Result<(String, RuntimeCursor, VerificationReport, ActivateRuntime), Box<dyn std::error::Error>>
 {
@@ -56,7 +56,7 @@ fn prepared(
     Ok((profile.id, cursor, report, command))
 }
 
-fn accepted(
+pub(super) fn accepted(
     cursor: &RuntimeCursor,
     report: &VerificationReport,
 ) -> Result<RuntimeCursor, Box<dyn std::error::Error>> {
@@ -69,7 +69,7 @@ fn accepted(
     Ok(next)
 }
 
-fn count(store: &CleanStore, table: &str) -> Result<i64, CleanStoreError> {
+pub(super) fn count(store: &CleanStore, table: &str) -> Result<i64, CleanStoreError> {
     store
         .connection
         .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
@@ -235,7 +235,7 @@ fn selection_generation_cancellation_and_deadline_races_cannot_commit()
     Ok(())
 }
 
-fn receipt(
+pub(super) fn receipt(
     store: &CleanStore,
     profile: &str,
     cursor: &RuntimeCursor,
@@ -286,10 +286,10 @@ fn shadows_are_durable_but_never_activate_and_unavailable_evidence_is_deferred()
     let before = store.runtime_profile(&profile)?;
     let watermark = store.event_watermark()?;
     store
-        .decide_shadow_verification(&identity, &payload, &Evidence::Unavailable)
+        .decide_verification(&identity, &payload, &Evidence::Unavailable)
         .map_err(|e| std::io::Error::other(format!("shadow unavailable: {e:?}")))?;
     assert!(store.pending_verifications()?.is_empty());
-    store.decide_shadow_verification(&identity, &payload, &Evidence::Report(Box::new(report)))?;
+    store.decide_verification(&identity, &payload, &Evidence::Report(Box::new(report)))?;
     store.receive_verification(&identity, &payload)?;
     assert_eq!(store.runtime_profile(&profile)?, before);
     assert_eq!(store.event_watermark()?, watermark);
@@ -314,7 +314,7 @@ fn shadow_rejection_survives_restart_and_delivery_replay() -> Result<(), Box<dyn
     cursor.pending.as_mut().ok_or("pending")?.failed = true;
     store.save_runtime_cursor(&profile, &cursor)?;
     let watermark = store.event_watermark()?;
-    store.decide_shadow_verification(&identity, &payload, &Evidence::Report(Box::new(report)))?;
+    store.decide_verification(&identity, &payload, &Evidence::Report(Box::new(report)))?;
     drop(store);
     let mut store = CleanStore::open(path, 3)?;
     store.receive_verification(&identity, &payload)?;
@@ -429,7 +429,7 @@ DROP TABLE inbox_new; CREATE INDEX verification_inbox_pending ON verification_in
 UPDATE clean_schema SET version=11 WHERE component='control_plane';")?;
     drop(store);
     let mut store = CleanStore::open(path, 3)?;
-    assert_eq!(store.schema_version()?, 12);
+    assert_eq!(store.schema_version()?, SCHEMA_VERSION);
     assert_eq!(
         store.pending_verifications()?,
         vec![(identity.clone(), payload.clone())]

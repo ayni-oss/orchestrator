@@ -35,7 +35,6 @@ async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_rest
     let authority = KubernetesAuthority {
         client: kube::Client::try_from(config)?,
         namespace: "test".into(),
-        source: event["source"].as_str().ok_or("source")?.into(),
     };
     let service = Router::new()
         .route("/events/verification", post(receive))

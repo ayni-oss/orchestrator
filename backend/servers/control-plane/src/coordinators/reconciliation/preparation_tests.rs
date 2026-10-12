@@ -14,6 +14,7 @@ struct Jobs {
     publications: BTreeMap<String, String>,
     discovery: Option<ImageDiscovery>,
     verification_failure: Option<&'static str>,
+    verification_reads: usize,
     candidate_missing: bool,
     cleanup_failed: bool,
     cleanup_pending: bool,
@@ -136,10 +137,12 @@ impl ExecutionBackend for Backend {
         Err("unexpected_credentials".into())
     }
     async fn observe(&self, _: &str) -> ExecutionResult<Observation> {
-        Ok(self
+        let mut jobs = self
             .0
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        jobs.verification_reads += 1;
+        Ok(jobs
             .verification_failure
             .map_or(Observation::Missing, Observation::Failed))
     }
@@ -268,6 +271,7 @@ impl Fixture {
             ),
         };
         let configuration = RuntimeConfiguration {
+            verification_mode: crate::process::runtime_configuration::VerificationMode::Shadow,
             reporting: None,
             namespace: "test".into(),
             worker_image: format!("ghcr.io/team/worker@sha256:{}", "d".repeat(64)),
@@ -286,6 +290,7 @@ impl Fixture {
         };
         let cursor = RuntimeCursor {
             pending: Some(PendingVerification {
+                observation: None,
                 name: "verify-frozen".into(),
                 profile_revision: revision,
                 request: GenericRequest {
@@ -686,6 +691,8 @@ async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> Tes
     let mut fixture = Fixture::new().await?;
     fixture.cursor.pending = None;
     fixture.cursor.preparation = Some(PreparationIdentity {
+        verification_authority:
+            crate::profiles::ayni::preparation_state::VerificationAuthority::Retained,
         generation: "approved-generation".into(),
         source_revision: "a".repeat(40),
         policy_digest: "policy".into(),
@@ -968,3 +975,5 @@ async fn repository_removal_cleanup_retries_after_restart_and_releases_credentia
 }
 
 mod retries;
+
+mod cutover;

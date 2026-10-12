@@ -44,13 +44,12 @@ impl IntoResponse for ReceiptError {
 pub fn router(
     state: AppState,
     namespace: String,
-    configuration: &ReportingConfiguration,
+    _configuration: &ReportingConfiguration,
 ) -> Result<Router, &'static str> {
     let config = kube::Config::incluster().map_err(|_| "kubernetes_incluster_required")?;
     let authority = KubernetesAuthority {
         client: kube::Client::try_from(config).map_err(|_| "kubernetes_unavailable")?,
         namespace,
-        source: configuration.source.clone(),
     };
     Ok(Router::new()
         .route("/events/verification", post(receive))

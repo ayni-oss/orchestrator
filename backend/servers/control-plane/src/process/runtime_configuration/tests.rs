@@ -1,6 +1,7 @@
 use super::*;
 fn configuration() -> RuntimeConfiguration {
     RuntimeConfiguration {
+        verification_mode: crate::process::runtime_configuration::VerificationMode::Shadow,
         reporting: None,
         namespace: "test".into(),
         output_claim: "output".into(),
@@ -102,7 +103,8 @@ fn operator_document() -> serde_json::Value {
     serde_json::json!({
         "namespace": "runtime-test",
         "worker_image": format!("registry.test/worker@sha256:{}", "a".repeat(64)),
-        "output_claim": "outputs", "model_secret": "model", "allow_emulation": true, "engine_mode": "external-isolated",
+        "output_claim": "outputs", "model_secret": "model", "allow_emulation": true,
+        "verification_mode": "shadow", "engine_mode": "external-isolated",
         "interval_seconds": 42, "request_timeout_seconds": 12, "coding_turns": 17, "quality_repair_limit": 3, "concurrency": 3,
         "profiles": {
             "project-profile": {
@@ -351,5 +353,41 @@ fn infrastructure_only_managed_engine_does_not_require_repository_credentials()
         format!("docker.io/library/docker@sha256:{}", "b".repeat(64)).into();
     let configuration: RuntimeConfiguration = serde_json::from_value(document)?;
     configuration.validate()?;
+    Ok(())
+}
+
+#[test]
+fn verification_default_changes_leave_frozen_authority_and_transport_unchanged()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut config = configuration();
+    config.reporting = Some(
+        ayni_orchestrator_runtime::verification::ReportingConfiguration {
+            endpoint: "http://control-plane/events/verification".into(),
+            source: "ayni://orchestrator/supervisors/original".into(),
+        },
+    );
+    config.verification_mode = VerificationMode::Events;
+    config.validate()?;
+    let admitted = serde_json::to_string(&config.verification_authority())?;
+    config.verification_mode = VerificationMode::Shadow;
+    config.reporting.as_mut().ok_or("reporting")?.source =
+        "ayni://orchestrator/supervisors/replacement".into();
+    let frozen: crate::profiles::ayni::preparation_state::VerificationAuthority =
+        serde_json::from_str(&admitted)?;
+    assert!(frozen.events());
+    assert_eq!(
+        frozen.reporting().ok_or("frozen reporting")?.source,
+        "ayni://orchestrator/supervisors/original"
+    );
+    assert!(!config.verification_authority().events());
+    config.reporting = None;
+    config.verification_mode = VerificationMode::Events;
+    assert_eq!(config.validate(), Err("runtime_reporting_required"));
+    assert!(
+        serde_json::from_str::<crate::profiles::ayni::preparation_state::VerificationAuthority>(
+            r#"{"mode":"unsupported"}"#
+        )
+        .is_err()
+    );
     Ok(())
 }

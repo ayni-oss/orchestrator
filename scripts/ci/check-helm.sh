@@ -60,7 +60,7 @@ helm template runtime "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true --set runtime.serviceAccounts.create=false \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >"$scratch/runtime-existing-accounts.yaml"
-# TokenReview authority exists only for opt-in shadow verification reporting.
+# TokenReview authority exists only for opt-in verification reporting.
 helm template runtime-reporting "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
@@ -73,6 +73,18 @@ if grep -q 'resources: \[tokenreviews\]' "$scratch/runtime.yaml" "$scratch/appli
   echo "reporting-disabled control plane rendered token review authority" >&2
   exit 1
 fi
+# Event authority requires transport and renders the explicit admission default.
+if helm template missing-reporting "$application_chart" --set runtime.verificationMode=events >"$scratch/missing-reporting.yaml" 2>"$scratch/missing-reporting.err"; then
+  echo "event verification accepted without reporting transport" >&2
+  exit 1
+fi
+helm template event-reporting "$application_chart" --namespace runtime-test \
+  --set runtime.enabled=true --set runtime.verificationMode=events \
+  --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set-string runtime.reporting.endpoint=http://control-plane:8080/events/verification \
+  --set-string runtime.reporting.source=ayni://orchestrator/supervisors/test \
+  >"$scratch/event-reporting.yaml"
+grep -Fq '\"verification_mode\":\"events\"' "$scratch/event-reporting.yaml"
 # Managed onboarding inherits deployment policy without a repository allowlist.
 helm template runtime-defaults "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true \

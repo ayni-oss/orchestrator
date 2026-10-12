@@ -175,6 +175,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 cursor.status.remove("error-class");
                 cursor.status.remove("last-error");
                 cursor.preparation = Some(super::PreparationIdentity {
+                    verification_authority: self.configuration.verification_authority(),
                     generation,
                     source_revision: head.to_owned(),
                     policy_digest,

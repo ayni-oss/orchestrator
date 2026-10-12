@@ -20,7 +20,9 @@ runtime:
   # Deployment-wide policy for connected managed repositories; no repository map.
   # The local chart supplies this policy automatically.
   managedRuntime: null
-  # Shadow receipt only; retained evidence still controls activation.
+  # Authority applies only to new preparation generations. Keep reporting during drain.
+  verificationMode: shadow
+  # Authenticated reporting transport; null retains the legacy reader.
   reporting: null
   serviceAccounts:
     create: true

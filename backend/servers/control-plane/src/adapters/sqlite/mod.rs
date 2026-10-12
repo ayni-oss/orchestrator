@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 12;
+pub(crate) const SCHEMA_VERSION: i64 = 13;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -185,6 +185,7 @@ pub(crate) mod task_admission;
 mod task_lifecycle;
 mod validation;
 mod verification_acceptance;
+mod verification_cutover;
 pub(crate) mod verification_inbox;
 use validation::{
     collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
@@ -370,6 +371,7 @@ mod tests {
         })
     }
 
+    mod cutover;
     mod lifecycle;
     mod projects;
     mod recovery;

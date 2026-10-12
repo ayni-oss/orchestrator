@@ -90,7 +90,7 @@ impl CleanStore {
                 || received < 0
                 || !matches!(
                     decision.as_str(),
-                    "pending" | "shadow_accepted" | "rejected"
+                    "pending" | "shadow_accepted" | "accepted" | "rejected"
                 )
             {
                 return Err(CleanStoreError::CorruptState);

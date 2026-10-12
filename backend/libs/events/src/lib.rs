@@ -24,7 +24,8 @@ pub const MAX_EVENT_BYTES: usize = 16_384;
 pub const MAX_EVIDENCE_BYTES: u64 = 131_072;
 
 /// Durable producer identity, supplied by the supervisor and reused for delivery retries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct EventIdentity {
     pub source: String,
     pub id: String,

@@ -274,8 +274,40 @@
               "pattern": "^ayni://orchestrator/supervisors/[A-Za-z0-9_-]{1,128}$"
             }
           }
+        },
+        "verificationMode": {
+          "type": "string",
+          "enum": [
+            "shadow",
+            "events"
+          ],
+          "default": "shadow"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verificationMode": {
+                "const": "events"
+              }
+            },
+            "required": [
+              "verificationMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reporting": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "reporting"
+            ]
+          }
+        }
+      ]
     },
     "global": {
       "type": "object"
