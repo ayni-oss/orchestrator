@@ -11,7 +11,7 @@ args = parser.parse_args()
 connection = sqlite3.connect(args.database.resolve().as_uri() + "?mode=ro", uri=True)
 connection.execute("BEGIN")
 version = connection.execute("SELECT version FROM clean_schema WHERE component='control_plane'").fetchone()[0]
-if version != 13:
+if version not in (13, 14):
     raise SystemExit("unsupported database schema; use a matching drain tool")
 rows = connection.execute("SELECT name,value FROM reconciliation_cursors WHERE name LIKE 'managed:%' ORDER BY name LIMIT 10001").fetchall()
 if len(rows) > 10000:

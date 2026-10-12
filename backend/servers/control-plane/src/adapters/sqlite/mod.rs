@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 13;
+pub(crate) const SCHEMA_VERSION: i64 = 14;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -187,6 +187,7 @@ mod validation;
 mod verification_acceptance;
 mod verification_cutover;
 pub(crate) mod verification_inbox;
+pub(crate) mod verification_outbox;
 mod verification_tracing;
 use validation::{
     collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
@@ -194,9 +195,10 @@ use validation::{
     validate_page_snapshot_rows, validate_resource_events, validate_resource_tables,
 };
 mod transitions_schema;
+pub(crate) use transitions_schema::unix_seconds;
 use transitions_schema::{
     action_row, decode, initialize_schema, is_terminal_attempt, map_constraint, resource_id,
-    task_state_for_attempt, timestamp, unix_seconds, unix_timestamp, valid_attempt_transition,
+    task_state_for_attempt, timestamp, unix_timestamp, valid_attempt_transition,
     valid_profile_transition, valid_repository_transition,
 };
 mod payloads;
@@ -374,6 +376,7 @@ mod tests {
 
     mod cutover;
     mod lifecycle;
+    mod outbox;
     mod projects;
     mod recovery;
     mod runtime;

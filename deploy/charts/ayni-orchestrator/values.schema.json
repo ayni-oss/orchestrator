@@ -437,6 +437,42 @@
           "pattern": "^(|[a-z0-9]([-a-z0-9]*[a-z0-9])?)$"
         }
       }
+    },
+    "outbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "natsUrl",
+        "localDevelopment"
+      ],
+      "properties": {
+        "natsUrl": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^$|^nats://[a-zA-Z0-9.-]+:[1-9][0-9]{0,4}/?$"
+        },
+        "localDevelopment": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "natsUrl": {
+                "minLength": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "localDevelopment": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "definitions": {

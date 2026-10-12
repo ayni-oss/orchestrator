@@ -166,3 +166,9 @@ Database schema changes reject old state rather than migrate it. Inventory the
 exact retained claims and obtain explicit approval before deleting application
 data; runtime outputs and administrator Secrets are separate retained resources.
 Use an isolated Docker Desktop namespace to validate fresh onboarding safely.
+
+
+To exercise the accepted-event publisher, load the current production control-plane
+image and an existing web image, then run `dev/tests/outbox.sh CONTROL_PLANE_IMAGE WEB_IMAGE`.
+The fixed disposable namespace and its PVCs are removed on success or failure.
+Test-only image tags should also be removed from the host and Docker Desktop node.

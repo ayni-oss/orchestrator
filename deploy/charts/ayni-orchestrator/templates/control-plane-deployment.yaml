@@ -20,6 +20,9 @@ spec:
         checksum/telemetry: {{ toJson .Values.telemetry | sha256sum }}
         checksum/runtime: {{ toJson .Values.runtime | sha256sum }}
       labels:
+        {{- if .Values.outbox.natsUrl }}
+        orchestrator.ayni.dev/jetstream-client: "true"
+        {{- end }}
         app.kubernetes.io/name: ayni-orchestrator-control-plane
         app.kubernetes.io/part-of: ayni-orchestrator
     spec:

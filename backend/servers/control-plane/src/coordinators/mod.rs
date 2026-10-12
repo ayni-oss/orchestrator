@@ -6,4 +6,6 @@ pub use state::{AppState, ReconciliationError};
 pub mod onboarding;
 pub mod reconciliation;
 
+pub mod outbox;
 mod verification;
+pub use outbox::OutboxPublisher;

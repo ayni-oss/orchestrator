@@ -247,3 +247,18 @@ fi
 
 helm package "$application_chart" --destination "$scratch" >/dev/null
 helm package "$local_chart" --destination "$scratch" >/dev/null
+
+# Publisher opt-in must be explicit; reusable deployments remain disabled.
+if grep -q 'ORCHESTRATOR_OUTBOX_NATS_URL' "$scratch/application.yaml"; then
+  echo 'Reusable chart enabled the local publisher by default' >&2; exit 1
+fi
+grep -q 'ORCHESTRATOR_OUTBOX_NATS_URL: "nats://jetstream:4222"' "$scratch/local.yaml"
+grep -q 'orchestrator.ayni.dev/jetstream-client: "true"' "$scratch/local.yaml"
+if helm template test "$application_chart" --set-string outbox.natsUrl=nats://jetstream:4222 --set outbox.localDevelopment=false >"$scratch/invalid.yaml" 2>"$scratch/invalid.err"; then
+  echo 'Chart accepted publisher without trusted local opt-in' >&2; exit 1
+fi
+for endpoint in 'nats://user:password@jetstream:4222' 'tls://jetstream:4222' 'nats://jetstream:4222?token=fixture'; do
+  if helm template test "$application_chart" --set-string "outbox.natsUrl=$endpoint" --set outbox.localDevelopment=true >"$scratch/invalid.yaml" 2>"$scratch/invalid.err"; then
+    echo 'Chart accepted unsupported publisher endpoint' >&2; exit 1
+  fi
+done

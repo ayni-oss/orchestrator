@@ -11,7 +11,8 @@ fi
 worker_image=$2
 mode=${4:-shadow}
 if [[ "$mode" != shadow && "$mode" != events ]]; then echo "unsupported validation mode" >&2; exit 2; fi
-namespace="ayni-reporting-validation-$(date +%s)"
+namespace=ayni-orchestrator-reporting-test
+created_namespace=false
 job="verification-receipt-smoke"
 temporary=$(mktemp -d)
 tracing_test=${VERIFICATION_TRACING_TEST:-false}
@@ -30,13 +31,24 @@ finish_fixture() {
       kubectl --context docker-desktop -n "$namespace" apply -f "$temporary/$role.json" >/dev/null 2>&1 || true
     fi
   done
+  if [[ "$created_namespace" == true ]]; then
+    helm uninstall reporting-validation --kube-context docker-desktop --namespace "$namespace" --ignore-not-found || status=1
+    kubectl --context docker-desktop delete namespace "$namespace" --wait=false || status=1
+    kubectl --context docker-desktop wait --for=delete "namespace/$namespace" --timeout=50s || status=1
+  fi
   rm -rf "$temporary"
   exit "$status"
 }
 trap finish_fixture EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 source "$root/dev/lib/common.sh"
 dev_build_chart_dependencies
+if kubectl --context docker-desktop get namespace "$namespace" >/dev/null 2>&1; then
+  echo "Test namespace already exists: $namespace; inspect and clean it before rerunning" >&2; exit 1
+fi
 kubectl --context docker-desktop create namespace "$namespace"
+created_namespace=true
 # Fixture credential only, never a copied operator/provider credential.
 kubectl --context docker-desktop -n "$namespace" create secret generic openai-api --from-literal=api-key=validation-placeholder
 helm upgrade --install reporting-validation "$root/dev/charts/ayni-orchestrator-local" \
@@ -227,7 +239,7 @@ kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-insp
 python3 - "$temporary/synthetic.sqlite" "$mode" <<'PYSQL'
 import json,sqlite3,sys
 connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
-assert connection.execute("SELECT version FROM clean_schema").fetchone()==(13,)
+assert connection.execute("SELECT version FROM clean_schema").fetchone()==(14,)
 if sys.argv[2]=='events':
     assert connection.execute("SELECT execution_id,decision FROM verification_inbox").fetchall()==[('verification-receipt-smoke','accepted')]
     cursor=json.loads(connection.execute("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%'").fetchone()[0])
@@ -307,7 +319,7 @@ kubectl --context docker-desktop -n "$namespace" wait --for=condition=complete "
 kubectl --context docker-desktop -n "$namespace" logs "job/$job" -c verify | tail -1
 # Allow the bounded periodic consumer to decide the synthetic unselected receipt.
 sleep 6
-# Keep the synthetic database and evidence for inspection; stop the idle deployment.
+# Stop the deployment before inspecting the disposable synthetic database.
 kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
 kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
 inspect_state
@@ -326,4 +338,4 @@ if [[ "$tracing_test" == true && "$collector_outage" == false ]]; then
   grafana_forward=$!
   python3 "$root/dev/tests/inspect-verification-trace.py" "$jaeger_port" "$temporary/traceparent" "$grafana_port"
 fi
-printf 'reporting validation passed; retained synthetic state namespace=%s\n' "$namespace"
+printf 'reporting validation passed; cleaning disposable namespace=%s\n' "$namespace"

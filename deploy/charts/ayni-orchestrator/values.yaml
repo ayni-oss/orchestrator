@@ -28,6 +28,11 @@ runtime:
     create: true
     imagePullSecrets: []
 
+# Opt-in trusted local JetStream publisher. Production authentication is separate.
+outbox:
+  natsUrl: ""
+  localDevelopment: false
+
 # Optional verification traces. Empty endpoint keeps JSON logs only.
 telemetry:
   tracesEndpoint: ""
