@@ -451,6 +451,14 @@ pub async fn build(request: &ExecutionRequest, workspace: &Path) -> io::Result<(
     if !image_id(id) || platform != request.expected.platform {
         return Err(io::Error::other("runtime_platform_mismatch"));
     }
+    if crate::operation::enabled() {
+        return crate::operation::complete(
+            ayni_orchestrator_runtime::operation::OperationOutcome::Built {
+                candidate_image_id: id.into(),
+            },
+        )
+        .await;
+    }
     fs::write("/dev/termination-log", id)
 }
 
@@ -559,6 +567,12 @@ pub async fn publish(
     success(push)
         .await
         .map_err(|_| io::Error::other("runtime_publication_failed"))?;
+    if crate::operation::enabled() {
+        return crate::operation::complete(
+            ayni_orchestrator_runtime::operation::OperationOutcome::Published,
+        )
+        .await;
+    }
     fs::write("/dev/termination-log", "published")
 }
 

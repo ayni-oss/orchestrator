@@ -120,7 +120,7 @@ fn read_record(
     }
     let bytes = ayni_orchestrator_runtime::runtime_execution::read_bounded(
         &directory.join(RECORD_FILE),
-        operations::MAX_RECORD_BYTES as usize,
+        operations::MAX_RECORD_BYTES,
     )
     .map_err(|_| "runtime_report_unavailable")?;
     if bytes.len() as u64 != e.size_bytes
@@ -139,4 +139,111 @@ fn read_record(
         return Err("runtime_result_invalid");
     }
     Ok(record.outcome)
+}
+
+impl<E: ExecutionBackend> RuntimeReconciler<E> {
+    pub(super) async fn discover_operation(
+        &self,
+        id: &str,
+        cursor: &mut RuntimeCursor,
+        runtime: WorkloadRuntime,
+        name: &str,
+    ) -> Result<super::ImageDiscovery, &'static str> {
+        let workload = self
+            .operation_runtime(id, cursor, runtime, name, RuntimeOperationKind::Discovery)
+            .await?;
+        self.kubernetes.start_discovery(name, &workload).await?;
+        if workload.operation_reporting.is_none() {
+            return Ok(self.kubernetes.discover(name).await?);
+        }
+        match self
+            .operation_result(cursor, name, RuntimeOperationKind::Discovery)
+            .await?
+        {
+            Some(OperationOutcome::Discovery { result }) => {
+                if matches!(result, super::ImageDiscovery::Failed { .. }) {
+                    self.save(id, cursor).await?;
+                }
+                Ok(result)
+            }
+            Some(OperationOutcome::Failed { reason }) => {
+                self.save(id, cursor).await?;
+                Ok(super::ImageDiscovery::Failed { reason })
+            }
+            Some(_) => Err("runtime_result_invalid"),
+            None => Ok(super::ImageDiscovery::Pending),
+        }
+    }
+    pub(super) async fn runtime_operation_state(
+        &self,
+        cursor: &mut RuntimeCursor,
+        name: &str,
+        kind: RuntimeOperationKind,
+    ) -> Result<
+        (
+            ayni_orchestrator_application::execution::ExecutionState,
+            Option<OperationOutcome>,
+        ),
+        &'static str,
+    > {
+        use ayni_orchestrator_application::execution::ExecutionState as S;
+        let result = self.operation_result(cursor, name, kind).await?;
+        let state = match &result {
+            Some(OperationOutcome::Failed { .. }) => S::Failed,
+            Some(_) => S::Succeeded,
+            None => self.kubernetes.coding_state(name).await?,
+        };
+        if result.is_none()
+            && matches!(state, S::Succeeded | S::Failed)
+            && kind != RuntimeOperationKind::Publication
+        {
+            return Err("runtime_report_missing");
+        }
+        Ok((state, result))
+    }
+}
+
+impl<E: ExecutionBackend> RuntimeReconciler<E> {
+    pub(super) async fn operation_build_state(
+        &self,
+        cursor: &mut RuntimeCursor,
+        pending: &crate::profiles::ayni::preparation_state::PendingVerification,
+        name: &str,
+        workload: &WorkloadRuntime,
+    ) -> Result<ayni_orchestrator_application::image_build::BuildObservation, &'static str> {
+        use ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase;
+        use ayni_orchestrator_application::{
+            execution::ExecutionState, image_build::BuildObservation,
+        };
+        if workload.operation_reporting.is_none() {
+            return Ok(ayni_orchestrator_application::image_build::observe_build(
+                &self.kubernetes,
+                name,
+                workload,
+                pending.phase.build_started(),
+            )
+            .await?);
+        }
+        if pending.phase.build_started() && !self.kubernetes.engine_alive(name, workload).await? {
+            return Ok(BuildObservation::EngineLost);
+        }
+        if pending.phase == ImagePreparationPhase::Publishing {
+            return Ok(BuildObservation::Running);
+        }
+        match self
+            .operation_result(cursor, name, RuntimeOperationKind::Build)
+            .await?
+        {
+            Some(OperationOutcome::Built { candidate_image_id }) => {
+                Ok(BuildObservation::Completed(candidate_image_id))
+            }
+            Some(OperationOutcome::Failed { reason }) => Ok(BuildObservation::Failed(reason)),
+            Some(_) => Err("runtime_result_invalid"),
+            None => match self.kubernetes.coding_state(name).await? {
+                ExecutionState::Missing => Ok(BuildObservation::Missing),
+                ExecutionState::Running => Ok(BuildObservation::Running),
+                _ => Err("runtime_report_missing"),
+            },
+        }
+    }
 }
