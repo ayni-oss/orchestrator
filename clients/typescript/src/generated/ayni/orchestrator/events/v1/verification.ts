@@ -131,6 +131,22 @@ export interface VerificationExecutionFailed {
   diagnostic?: VerificationEvidenceReference | undefined;
 }
 
+/**
+ * A controller decision, emitted only after its database transaction commits.
+ * Shadow decisions remain internal and are never runtime activation events.
+ */
+export interface VerificationDecisionRecorded {
+  repositoryConnectionId: string;
+  runtimeProfileId: string;
+  runtimeProfileRevisionId: string;
+  preparationId: string;
+  executionId: string;
+  aggregateRevision: string;
+  reportSha256: string;
+  observationSource?: string | undefined;
+  observationId?: string | undefined;
+}
+
 function createBaseVerificationResultAvailable(): VerificationResultAvailable {
   return { binding: undefined, outcome: undefined };
 }
@@ -845,6 +861,249 @@ export const VerificationExecutionFailed: MessageFns<VerificationExecutionFailed
     message.diagnostic = (object.diagnostic !== undefined && object.diagnostic !== null)
       ? VerificationEvidenceReference.fromPartial(object.diagnostic)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseVerificationDecisionRecorded(): VerificationDecisionRecorded {
+  return {
+    repositoryConnectionId: "",
+    runtimeProfileId: "",
+    runtimeProfileRevisionId: "",
+    preparationId: "",
+    executionId: "",
+    aggregateRevision: "0",
+    reportSha256: "",
+    observationSource: undefined,
+    observationId: undefined,
+  };
+}
+
+export const VerificationDecisionRecorded: MessageFns<VerificationDecisionRecorded> = {
+  encode(message: VerificationDecisionRecorded, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.repositoryConnectionId !== "") {
+      writer.uint32(10).string(message.repositoryConnectionId);
+    }
+    if (message.runtimeProfileId !== "") {
+      writer.uint32(18).string(message.runtimeProfileId);
+    }
+    if (message.runtimeProfileRevisionId !== "") {
+      writer.uint32(26).string(message.runtimeProfileRevisionId);
+    }
+    if (message.preparationId !== "") {
+      writer.uint32(34).string(message.preparationId);
+    }
+    if (message.executionId !== "") {
+      writer.uint32(42).string(message.executionId);
+    }
+    if (message.aggregateRevision !== "0") {
+      writer.uint32(48).uint64(message.aggregateRevision);
+    }
+    if (message.reportSha256 !== "") {
+      writer.uint32(58).string(message.reportSha256);
+    }
+    if (message.observationSource !== undefined) {
+      writer.uint32(66).string(message.observationSource);
+    }
+    if (message.observationId !== undefined) {
+      writer.uint32(74).string(message.observationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): VerificationDecisionRecorded {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseVerificationDecisionRecorded();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.repositoryConnectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.runtimeProfileId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.runtimeProfileRevisionId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.preparationId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.executionId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.aggregateRevision = reader.uint64().toString();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.reportSha256 = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.observationSource = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.observationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): VerificationDecisionRecorded {
+    return {
+      repositoryConnectionId: isSet(object.repositoryConnectionId)
+        ? globalThis.String(object.repositoryConnectionId)
+        : isSet(object.repository_connection_id)
+        ? globalThis.String(object.repository_connection_id)
+        : "",
+      runtimeProfileId: isSet(object.runtimeProfileId)
+        ? globalThis.String(object.runtimeProfileId)
+        : isSet(object.runtime_profile_id)
+        ? globalThis.String(object.runtime_profile_id)
+        : "",
+      runtimeProfileRevisionId: isSet(object.runtimeProfileRevisionId)
+        ? globalThis.String(object.runtimeProfileRevisionId)
+        : isSet(object.runtime_profile_revision_id)
+        ? globalThis.String(object.runtime_profile_revision_id)
+        : "",
+      preparationId: isSet(object.preparationId)
+        ? globalThis.String(object.preparationId)
+        : isSet(object.preparation_id)
+        ? globalThis.String(object.preparation_id)
+        : "",
+      executionId: isSet(object.executionId)
+        ? globalThis.String(object.executionId)
+        : isSet(object.execution_id)
+        ? globalThis.String(object.execution_id)
+        : "",
+      aggregateRevision: isSet(object.aggregateRevision)
+        ? globalThis.String(object.aggregateRevision)
+        : isSet(object.aggregate_revision)
+        ? globalThis.String(object.aggregate_revision)
+        : "0",
+      reportSha256: isSet(object.reportSha256)
+        ? globalThis.String(object.reportSha256)
+        : isSet(object.report_sha256)
+        ? globalThis.String(object.report_sha256)
+        : "",
+      observationSource: isSet(object.observationSource)
+        ? globalThis.String(object.observationSource)
+        : isSet(object.observation_source)
+        ? globalThis.String(object.observation_source)
+        : undefined,
+      observationId: isSet(object.observationId)
+        ? globalThis.String(object.observationId)
+        : isSet(object.observation_id)
+        ? globalThis.String(object.observation_id)
+        : undefined,
+    };
+  },
+
+  toJSON(message: VerificationDecisionRecorded): unknown {
+    const obj: any = {};
+    if (message.repositoryConnectionId !== "") {
+      obj.repositoryConnectionId = message.repositoryConnectionId;
+    }
+    if (message.runtimeProfileId !== "") {
+      obj.runtimeProfileId = message.runtimeProfileId;
+    }
+    if (message.runtimeProfileRevisionId !== "") {
+      obj.runtimeProfileRevisionId = message.runtimeProfileRevisionId;
+    }
+    if (message.preparationId !== "") {
+      obj.preparationId = message.preparationId;
+    }
+    if (message.executionId !== "") {
+      obj.executionId = message.executionId;
+    }
+    if (message.aggregateRevision !== "0") {
+      obj.aggregateRevision = message.aggregateRevision;
+    }
+    if (message.reportSha256 !== "") {
+      obj.reportSha256 = message.reportSha256;
+    }
+    if (message.observationSource !== undefined) {
+      obj.observationSource = message.observationSource;
+    }
+    if (message.observationId !== undefined) {
+      obj.observationId = message.observationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<VerificationDecisionRecorded>): VerificationDecisionRecorded {
+    return VerificationDecisionRecorded.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<VerificationDecisionRecorded>): VerificationDecisionRecorded {
+    const message = createBaseVerificationDecisionRecorded();
+    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
+    message.runtimeProfileId = object.runtimeProfileId ?? "";
+    message.runtimeProfileRevisionId = object.runtimeProfileRevisionId ?? "";
+    message.preparationId = object.preparationId ?? "";
+    message.executionId = object.executionId ?? "";
+    message.aggregateRevision = object.aggregateRevision ?? "0";
+    message.reportSha256 = object.reportSha256 ?? "";
+    message.observationSource = object.observationSource ?? undefined;
+    message.observationId = object.observationId ?? undefined;
     return message;
   },
 };

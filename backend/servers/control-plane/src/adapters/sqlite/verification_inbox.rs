@@ -67,7 +67,7 @@ impl CleanStore {
     }
 
     pub(super) fn validate_verification_inbox(&self) -> Result<(), CleanStoreError> {
-        let mut statement = self.connection.prepare("SELECT source,event_id,execution_id,pod_uid,payload,received_at,decision FROM verification_inbox").map_err(CleanStoreError::Database)?;
+        let mut statement = self.connection.prepare("SELECT source,event_id,execution_id,pod_uid,payload,received_at,decision,reason,next_attempt_at,attempts FROM verification_inbox").map_err(CleanStoreError::Database)?;
         let mut rows = statement.query([]).map_err(CleanStoreError::Database)?;
         let mut count = 0;
         while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
@@ -81,10 +81,17 @@ impl CleanStore {
             let bytes: Vec<u8> = row.get(4).map_err(CleanStoreError::Database)?;
             let received: i64 = row.get(5).map_err(CleanStoreError::Database)?;
             let decision: String = row.get(6).map_err(CleanStoreError::Database)?;
+            let reason: String = row.get(7).map_err(CleanStoreError::Database)?;
+            let retry: i64 = row.get(8).map_err(CleanStoreError::Database)?;
+            let attempts: i64 = row.get(9).map_err(CleanStoreError::Database)?;
+            validate_decision(&decision, &reason, retry, attempts)?;
             if count > 100_000
                 || bytes.len() > ayni_orchestrator_events::MAX_EVENT_BYTES
                 || received < 0
-                || decision != "pending"
+                || !matches!(
+                    decision.as_str(),
+                    "pending" | "shadow_accepted" | "rejected"
+                )
             {
                 return Err(CleanStoreError::CorruptState);
             }
@@ -103,14 +110,10 @@ impl CleanStore {
         Ok(())
     }
 
-    #[allow(
-        dead_code,
-        reason = "bounded durable read for the subsequent acceptance consumer"
-    )]
     pub(crate) fn pending_verifications(
         &self,
     ) -> Result<Vec<(EventIdentity, VerificationResultAvailable)>, CleanStoreError> {
-        let mut statement = self.connection.prepare("SELECT source,event_id,payload FROM verification_inbox WHERE decision='pending' ORDER BY received_at,source,event_id LIMIT 128").map_err(CleanStoreError::Database)?;
+        let mut statement = self.connection.prepare("SELECT source,event_id,payload FROM verification_inbox WHERE decision='pending' AND next_attempt_at<=unixepoch() ORDER BY next_attempt_at,received_at,source,event_id LIMIT 128").map_err(CleanStoreError::Database)?;
         statement
             .query_map([], |row| {
                 Ok((
@@ -130,6 +133,23 @@ impl CleanStore {
             })
             .collect()
     }
+}
+
+fn validate_decision(
+    decision: &str,
+    reason: &str,
+    retry: i64,
+    attempts: i64,
+) -> Result<(), CleanStoreError> {
+    if reason.len() > 64
+        || !reason.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        || retry < 0
+        || !(0..=1_000_000).contains(&attempts)
+        || (decision != "pending" && (retry != 0 || reason.is_empty()))
+    {
+        return Err(CleanStoreError::CorruptState);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

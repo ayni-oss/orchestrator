@@ -224,7 +224,7 @@ impl CleanStore {
         resource.resource_version = resource.resource_version.saturating_add(1);
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         let cursor = append_event(
             &transaction,
@@ -531,7 +531,7 @@ impl CleanStore {
         }
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         let cursor = append_event(
             &transaction,

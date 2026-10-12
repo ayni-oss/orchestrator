@@ -37,9 +37,10 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 11 adds a bounded authenticated verification inbox while
-preserving active runtime preparation and the explicit phases introduced in
-schema 10. Recognized schema versions 6 through 10 upgrade through ordered migrations; the earlier builder
+and pull request receipts. SQLite schema version 12 adds guarded verification decisions, an accepted journal
+and an unpublished transactional outbox to the authenticated inbox introduced in
+schema 11. It preserves active runtime preparation and the explicit phases
+introduced in schema 10. Recognized schema versions 6 through 11 upgrade through ordered migrations; the earlier builder
 cutover still retires obsolete global operations. Older and unknown versions are
 rejected. Connectors, projects, repositories and runtime profiles remain
 control-plane resources. Credentials are separate inputs and are never worker output.

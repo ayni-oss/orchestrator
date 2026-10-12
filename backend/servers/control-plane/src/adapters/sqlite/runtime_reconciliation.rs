@@ -40,7 +40,7 @@ impl CleanStore {
         }
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         transaction.execute("INSERT INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES (?1,?2,1,?3) ON CONFLICT(name) DO UPDATE SET value=excluded.value,resource_version=resource_version+1,updated_at=excluded.updated_at", params![format!("managed:{profile_id}"), value, unix_seconds()?]).map_err(CleanStoreError::Database)?;
         let resume = !metadata.iter().any(|m| m.key == "reason-code") && profile.failure.is_some();

@@ -1,8 +1,9 @@
 # CloudEvents for Orchestrator lifecycle events
 
 Research snapshot: 11 October 2026. This recommends an envelope for the proposed
-[event architecture](control-plane-events.md); no event transport or runtime
-behavior is changed. Specification references use the released CloudEvents
+[event architecture](control-plane-events.md). Verification now implements
+authenticated receipt and transactional retained-reader acceptance; the research
+proposals below do not by themselves change another flow. Specification references use the released CloudEvents
 1.0.2 documents, rather than the work-in-progress main branch.
 
 Use CloudEvents for lifecycle facts exchanged between workers, the control plane

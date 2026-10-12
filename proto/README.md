@@ -77,4 +77,8 @@ CloudEvents SDK in `backend/libs/events`; TypeScript bindings use the same schem
 Shared fixtures in `testdata/verification` cover both languages. See the
 [verification event contract](../docs/verification-events.md) for authority, wire
 validation and recovery boundaries. Authenticated receipt is opt-in and shadow-only; controller acceptance remains
-separate from receipt.
+separate from receipt. `VerificationDecisionRecorded` carries the accepted runtime
+report decision and aggregate revision. Its CloudEvent is stored atomically with
+the runtime projection in the journal/outbox; broker publication comes later.
+Resource bindings accept the resource API’s typed UUID identifiers as well as
+bounded simple identifiers used in fixtures.

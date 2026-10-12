@@ -22,6 +22,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let head = observation.head.as_str();
         let token = observation.token.as_str();
         let source_digest = observation.source_digest.as_str();
+        let expected_cursor =
+            serde_json::to_string(cursor).map_err(|_| "runtime_cursor_invalid")?;
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
         if let Some(certificate) = &pending.certificate {
             if report.runtime.certificate_key_id != certificate.key_id {
@@ -80,8 +82,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         cursor
             .status
             .insert("resolved-digest".into(), digest.clone());
-        // Retain the immutable binding before activation; retries can only replay it.
-        self.save(id, cursor).await?;
+
         let mut command = crate::profiles::ayni::runtime_activation::command(
             id,
             &pending.profile_revision,
@@ -145,14 +146,22 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .phase =
             ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase::Activating;
         cursor.status.insert("phase".into(), "cleanup".into());
-        self.save(id, cursor).await?;
+        let next = cursor.clone();
+        let cleanup_profile = id.to_owned();
+        let cleanup_expected = self
+            .with_database(move |store| {
+                store
+                    .commit_verification(&command, &expected_cursor, &next)
+                    .map_err(|_| "runtime_activation_rejected")?;
+                serde_json::to_string(
+                    &store
+                        .runtime_cursor(&cleanup_profile)
+                        .map_err(|_| "runtime_cursor_invalid")?,
+                )
+                .map_err(|_| "runtime_cursor_invalid")
+            })
+            .await?;
         self.cleanup_operation(&pending).await?;
-        self.with_database(move |store| {
-            ayni_orchestrator_application::runtime_activation::activate(store, &command)
-                .map_err(crate::adapters::sqlite::runtime_activation::activation_error)
-                .map_err(|_| "runtime_activation_rejected")
-        })
-        .await?;
         cursor.pending = None;
         cursor.preparation = None;
         cursor.last_success = Some(time);
@@ -166,7 +175,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let jitter =
             u64::from(Sha256::digest(id)[0]) % (self.configuration.interval_seconds / 5 + 1);
         cursor.next_at = time + self.configuration.interval_seconds + jitter;
-        self.save(id, cursor).await?;
+        let profile = id.to_owned();
+        let completed = cursor.clone();
+        self.with_database(move |store| {
+            store
+                .complete_verification_cleanup(&profile, &cleanup_expected, &completed)
+                .map_err(|_| "runtime_cleanup_changed")
+        })
+        .await?;
         Ok(())
     }
 }

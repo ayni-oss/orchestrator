@@ -137,6 +137,46 @@ kubectl --context docker-desktop -n "$namespace" rollout status deployment/contr
 kubectl --context docker-desktop -n "$namespace" exec "$pod" -c verify -- touch /output/replay-after-restart
 kubectl --context docker-desktop -n "$namespace" wait --for=condition=complete "job/$job" --timeout=120s
 kubectl --context docker-desktop -n "$namespace" logs "job/$job" -c verify | tail -1
+# Allow the bounded periodic consumer to decide the synthetic unselected receipt.
+sleep 6
 # Keep the synthetic database and evidence for inspection; stop the idle deployment.
 kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
+kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
+cat > "$temporary/inspect.yaml" <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reporting-inbox-inspector
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext: {runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
+  containers:
+    - name: inspector
+      image: $2
+      imagePullPolicy: Never
+      command: [/bin/sh, -c, sleep 120]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+      volumeMounts:
+        - {name: state, mountPath: /state, readOnly: true}
+  volumes:
+    - name: state
+      persistentVolumeClaim: {claimName: control-plane-state, readOnly: true}
+YAML
+kubectl --context docker-desktop -n "$namespace" create -f "$temporary/inspect.yaml"
+kubectl --context docker-desktop -n "$namespace" wait --for=condition=Ready pod/reporting-inbox-inspector --timeout=60s
+kubectl --context docker-desktop -n "$namespace" cp reporting-inbox-inspector:/state/orchestrator.sqlite "$temporary/synthetic.sqlite"
+kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-inspector
+python3 - "$temporary/synthetic.sqlite" <<'PYSQL'
+import sqlite3,sys
+connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+assert connection.execute("SELECT version FROM clean_schema").fetchone()==(12,)
+assert connection.execute("SELECT execution_id,decision,reason FROM verification_inbox").fetchall()==[('verification-receipt-smoke','rejected','verification_authority_stale')]
+assert connection.execute("SELECT COUNT(*) FROM verification_journal").fetchone()==(0,)
+assert connection.execute("SELECT COUNT(*) FROM verification_outbox").fetchone()==(0,)
+print('shadow decision survives restart and duplicate delivery without activation or outgoing events')
+PYSQL
 printf 'reporting validation passed; retained synthetic state namespace=%s\n' "$namespace"

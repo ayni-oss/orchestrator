@@ -5,7 +5,9 @@ one runtime verification execution. The shared Rust library in
 `backend/libs/events` validates and encodes structured CloudEvents 1.0 JSON with
 generated ProtoJSON payloads. TypeScript bindings come from the same schema.
 The retained verification reader remains authoritative. Opt-in shadow reporting
-adds authenticated durable receipt; receipt does not activate a runtime.
+adds authenticated durable receipt; receipt does not activate a runtime. The
+control plane now evaluates those receipts in shadow mode and records authoritative
+retained-reader acceptance atomically with its runtime projection and outbox.
 
 ## Flow and authority
 
@@ -89,9 +91,10 @@ CloudEvents extensions do not create new observations. Conflicting content or a
 second terminal identity for one physical execution returns 409. A matching
 duplicate gets the same 202 `stored` receipt. The acknowledgement follows commit,
 including when a disconnected caller causes delivery replay. Stored payloads are
-validated on reopen and exposed through a bounded 128-row pending read; there is
-no acceptance consumer yet. Inbox operations produce no resource events or
-runtime transitions. The inbox retains at most 100000 observations and rejects
+validated on reopen and drained in batches of at most 128 on startup and every
+five seconds. Receipt and shadow decisions produce no resource events or runtime
+transitions. Unavailable evidence is deferred for thirty seconds, so it cannot
+starve other receipts. The inbox retains at most 100000 observations and rejects
 new receipts under pressure; it never evicts unprocessed evidence. Ingress limits
 body size to 16384 bytes and concurrent authenticated requests to 32.
 
@@ -114,16 +117,45 @@ reader behavior. Reporting failures are operational errors, separate from the
 retained verification outcome. Evidence and inbox retention still require a
 subsequent acceptance/retention policy; the receipt slice does not delete them.
 
-Evidence reads stay outside the SQLite acceptance transaction; current generation, selection, cancellation
-and deadline must be rechecked inside it. Acceptance decision, state transition,
-resource projection, dependent durable actions and outbox writes belong in one
-transaction using the existing preparation cursor and action mechanisms.
+Evidence is read outside the SQLite write transaction. The shadow consumer checks
+its bounded retained record, exact size/hash, evidence contract, Pod/request binding
+and outcome before applying current Ayni evidence policy. Inside the transaction
+it rechecks the selected revision, frozen generation, request, source, lock,
+policy, platform, digest, failure/cancellation authority and execution deadline.
+A valid shadow result becomes `shadow_accepted`; invalid or stale results become
+`rejected` with a bounded reason. Both are durable internal decisions, without
+activation, failure accounting or outgoing accepted events. Matching delivery
+replays still receive the original stored acknowledgement after processing.
+
+Schema 12 adds `verification_journal` and `verification_outbox`. The existing
+retained reader remains the activation authority. Its admitted report commits
+runtime/artifact projection, client resource events, immutable accepted decision,
+stable CloudEvents outbox bytes and the retained cleanup intent together under
+one immediate SQLite transaction. Resource mutations use nested savepoints inside
+that transaction. The existing preparation cursor retains the report and pending
+cleanup; there is no additional scheduler. Cleanup runs after commit, and its
+completion compares the cursor again so it cannot overwrite a replacement
+generation. A crash resumes the same cleanup intent and journal/outbox identity.
+A failed quality check can still establish a valid signed runtime under the
+existing policy; shadow processing never counts a physical failure.
+
+The accepted event is
+`io.ayni.orchestrator.runtime.verification.accepted.v1`, with generated
+`VerificationDecisionRecorded` ProtoJSON, a controller-owned source, selected
+revision, preparation/execution identity, aggregate revision and canonical report
+SHA256. Optional observation causation is absent for retained-reader admission.
+Accepted journal and outbox each retain at most 100000 rows; capacity rejects
+acceptance atomically and never evicts unpublished evidence. Startup validates
+indexed identities, typed payloads and the journal/outbox relationship. A bounded
+128-row unpublished read is ready for the later publisher. No NATS publication,
+publish acknowledgement, broker consumer or receipt-authoritative activation is
+implemented yet.
 
 Each execution has one terminal observation, so verification needs no streaming
 sequence protocol or second scheduler. Bounded payloads and separate evidence
 allow ingress and consumers to scale independently; partitioning can follow the
-execution/resource key without inventing broker ordering authority. Acceptance decisions, retention and quarantine remain subsequent controller
-integration concerns. A later rollout must
+execution/resource key without inventing broker ordering authority. Receipt-authoritative activation, retention and quarantine remain subsequent
+controlled-rollout concerns. A later rollout must
 freeze the reporting contract at admission, keep old executions on the retained
 reader while they drain, and ensure shadow observations never advance state.
 NATS deployment and other flow migrations are outside this contract.
@@ -147,7 +179,8 @@ controlled cutover, late cancelled receipts and shadow acceptance auditing remai
 later integration work.
 
 `dev/tests/verification-reporting.sh` runs the local chart in a separate synthetic
-namespace with Docker Desktop, tests real projected-token reporting and supervisor
+namespace with Docker Desktop, tests real projected-token reporting, durable shadow
+rejection for an unselected synthetic execution, and supervisor
 replay across a control-plane restart against its retained SQLite store, using
 the same physical Pod and forcing a duplicate HTTP delivery. It
 stops the deployment and preserves its synthetic database/evidence for inspection.
