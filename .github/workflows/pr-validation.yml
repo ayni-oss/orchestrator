@@ -250,6 +250,9 @@ jobs:
           node-version: 24.14.0
           cache: pnpm
 
+      - name: Test NATS fault injector framing
+        run: node --test dev/tests/nats-fault-proxy.test.mjs
+
       - name: Prepare host quality tools
         run: |
           rustup toolchain install 1.94.0 --profile minimal --component clippy --component rustfmt

@@ -8,6 +8,11 @@ context=$(dev_context)
 consumer=false
 namespace=ayni-orchestrator-outbox-test
 if [[ "${AYNI_CONSUMER_FIXTURE:-false}" == true ]]; then consumer=true; namespace=ayni-orchestrator-consumer-test; fi
+initial_consumer=$consumer
+if [[ "${AYNI_RECOVERY_FIXTURE:-false}" == true ]]; then
+  namespace=ayni-orchestrator-recovery-test
+  initial_consumer=false
+fi
 created_namespace=false
 scratch=$(mktemp -d)
 mkdir -p "$scratch/plugins"
@@ -37,7 +42,7 @@ created_namespace=true
 kubectl --context "$context" label namespace "$namespace" orchestrator.ayni.dev/environment=local
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --kube-context "$context" --namespace "$namespace" \
   --wait --timeout=5m --set observability.enabled=false --set jetstream.lifecycle.maxMessages=1 \
-  --set "ayni-orchestrator.outbox.consumerEnabled=$consumer" \
+  --set "ayni-orchestrator.outbox.consumerEnabled=$initial_consumer" \
   --set ayni-orchestrator.runtime.enabled=false --set-string "ayni-orchestrator.images.controlPlane=$1" \
   --set-string "ayni-orchestrator.images.web=$2" --set ayni-orchestrator.images.pullPolicy=Never
 k() { kubectl --context "$context" --namespace "$namespace" "$@"; }
@@ -90,7 +95,9 @@ stream=ORCHESTRATOR_LIFECYCLE
 nats pub --jetstream "$subject" filler --header=Nats-Msg-Id:outbox-fixture-filler
 wait_metric() {
   local expression=$1
-  for attempt in {1..35}; do
+  local limit=35
+  if [[ "${AYNI_RECOVERY_FIXTURE:-false}" == true ]]; then limit=60; fi
+  for ((attempt=1; attempt<=limit; attempt++)); do
     curl -fsS --max-time 3 http://127.0.0.1:19080/metrics >"$scratch/metrics" || true
     if grep -Eq "$expression" "$scratch/metrics"; then return; fi
     sleep 1
@@ -116,6 +123,11 @@ start
 wait_metric 'orchestrator_verification_outbox_publications_total\{outcome="failed"\} [1-9]'
 stop
 inspect pending
+if [[ "${AYNI_RECOVERY_FIXTURE:-false}" == true ]]; then
+  source "$root/dev/tests/recovery-cases.sh"
+  recovery_cases "$2"
+  exit 0
+fi
 # Model the broker-store/local-ACK-write crash window: store the event while its
 # durable outbox is still pending. The production publisher must get a duplicate ACK.
 nats stream edit "$stream" --max-msgs=2 --force
@@ -166,7 +178,7 @@ p=Path(sys.argv[1]); info=json.loads((p/'info.json').read_text())
 assert info['state']['messages']==2 and info['state']['last_seq']==2, info
 message=json.loads((p/'message.json').read_text()); message=message.get('message',message)
 assert base64.b64decode(message['data'])==(p/'event.json').read_bytes()
-print('Production publisher: outage, saturation, lost ACK, restart, identity and bytes passed.')
+print('Production publisher: outage, saturation, pre-stored retry, restart, identity and bytes passed.')
 PY
 
 if [[ "$consumer" == true ]]; then
