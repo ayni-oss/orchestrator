@@ -66,10 +66,11 @@ impl Database {
     ) -> Result<T, CleanStoreError> {
         let (reply, response) = oneshot::channel();
         let committed = self.committed.clone();
+        let span = tracing::Span::current();
         self.requests
             .send(Request::Execute(Box::new(move |store| {
                 let before = store.event_watermark();
-                let result = operation(store);
+                let result = span.in_scope(|| operation(store));
                 let after = store.event_watermark();
                 if before.ok() != after.ok() {
                     committed.notify_waiters();

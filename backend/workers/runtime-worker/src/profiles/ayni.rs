@@ -40,6 +40,11 @@ fn verification_error(error: managed_runtime::RuntimeVerificationError) -> io::E
 /// Verify checkout and runtime identity before exposing coding tools.
 /// # Errors
 /// Rejects a changed source revision or missing protected policy inputs.
+#[tracing::instrument(
+    name = "verification.artifact_metadata",
+    target = "ayni_orchestrator_observability::verification",
+    skip_all
+)]
 pub fn preflight(request: &ExecutionRequest, workspace: &Path) -> io::Result<()> {
     attest(request)?;
     git(
@@ -200,6 +205,11 @@ async fn invoke_report(
     ))
 }
 
+#[tracing::instrument(
+    name = "verification.ayni",
+    target = "ayni_orchestrator_observability::verification",
+    skip_all
+)]
 async fn execute(
     workspace: &Path,
     arguments: &[String],
@@ -257,6 +267,11 @@ fn artifact_command(arguments: &[String], full: bool) -> io::Result<&'static str
     }
 }
 
+#[tracing::instrument(
+    name = "verification.artifact_validation",
+    target = "ayni_orchestrator_observability::verification",
+    skip_all
+)]
 fn summarize(
     bytes: &[u8],
     success: bool,

@@ -419,6 +419,24 @@
           "maxLength": 253
         }
       }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tracesEndpoint",
+        "endpointConfigMap"
+      ],
+      "properties": {
+        "tracesEndpoint": {
+          "type": "string",
+          "pattern": "^(|https?://[^\\s@?#]+)$"
+        },
+        "endpointConfigMap": {
+          "type": "string",
+          "pattern": "^(|[a-z0-9]([-a-z0-9]*[a-z0-9])?)$"
+        }
+      }
     }
   },
   "definitions": {

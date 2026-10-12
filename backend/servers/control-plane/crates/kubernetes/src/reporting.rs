@@ -31,9 +31,91 @@ pub fn configure_job(job: &mut Job) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Only trusted verifier inputs receive exporter configuration and launch context.
+pub fn configure_telemetry(job: &mut Job) {
+    let Some(endpoint) = ayni_orchestrator_observability::exporter_endpoint() else {
+        return;
+    };
+    let context = ayni_orchestrator_observability::current_context();
+    apply_telemetry(job, endpoint, context);
+}
+
+fn apply_telemetry(
+    job: &mut Job,
+    endpoint: String,
+    context: Option<ayni_orchestrator_observability::TraceContext>,
+) {
+    let Some(verifier) = job
+        .spec
+        .as_mut()
+        .and_then(|s| s.template.spec.as_mut())
+        .and_then(|pod| pod.containers.iter_mut().find(|c| c.name == "verify"))
+    else {
+        return;
+    };
+    let env = verifier.env.get_or_insert_default();
+    env.push(k8s_openapi::api::core::v1::EnvVar {
+        name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT".into(),
+        value: Some(endpoint),
+        ..Default::default()
+    });
+    if let Some(context) = context {
+        env.push(k8s_openapi::api::core::v1::EnvVar {
+            name: "TRACEPARENT".into(),
+            value: Some(context.traceparent),
+            ..Default::default()
+        });
+        if let Some(state) = context.tracestate {
+            env.push(k8s_openapi::api::core::v1::EnvVar {
+                name: "TRACESTATE".into(),
+                value: Some(state),
+                ..Default::default()
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn telemetry_inputs_are_isolated_from_checkout_and_repository_children()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut job: Job = serde_json::from_value(
+            json!({"metadata":{},"spec":{"template":{"spec":{"initContainers":[{"name":"checkout","image":"trusted"}],"containers":[{"name":"verify","image":"pinned"},{"name":"repository","image":"pinned"}]}}}}),
+        )?;
+        let context = ayni_orchestrator_observability::TraceContext::parse(
+            "00-7431fc7927bb4f208986f2a4f2418dba-3f49c016c2df402b-01",
+            None,
+        )
+        .ok_or("context")?;
+        apply_telemetry(
+            &mut job,
+            "http://collector:4318/v1/traces".into(),
+            Some(context.clone()),
+        );
+        let pod = job
+            .spec
+            .as_ref()
+            .and_then(|s| s.template.spec.as_ref())
+            .ok_or("pod")?;
+        assert!(
+            pod.init_containers.as_ref().ok_or("checkout")?[0]
+                .env
+                .is_none()
+        );
+        assert!(pod.containers[1].env.is_none());
+        let env = pod.containers[0].env.as_ref().ok_or("env")?;
+        assert!(
+            env.iter().any(|e| e.name == "TRACEPARENT"
+                && e.value.as_deref() == Some(context.traceparent.as_str()))
+        );
+        assert!(
+            env.iter()
+                .any(|e| e.name == "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        );
+        Ok(())
+    }
     #[test]
     fn reporting_identity_is_projected_only_to_the_supervisor()
     -> Result<(), Box<dyn std::error::Error>> {

@@ -248,17 +248,6 @@
           "legendFormat": "{{persistentvolumeclaim}}",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "kube_persistentvolumeclaim_resource_requests_storage_bytes{namespace=\"__AYNI_NAMESPACE__\"}",
-          "legendFormat": "{{persistentvolumeclaim}} \u00b7 provisioned",
-          "range": true,
-          "refId": "B"
         }
       ],
       "options": {
@@ -272,7 +261,7 @@
           "sort": "desc"
         }
       },
-      "description": "Uses per-PVC kubelet volume stats when Docker Desktop exports them; otherwise shows Docker Desktop root-disk usage, which includes retained local PVC data. Provisioned PVC sizes are shown separately."
+      "description": "Uses per-PVC kubelet volume stats when Docker Desktop exports them; otherwise shows Docker Desktop root-disk usage, which includes retained local PVC data."
     },
     {
       "id": 19,

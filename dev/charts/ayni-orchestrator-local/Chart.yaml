@@ -14,10 +14,6 @@ dependencies:
     version: 27.38.0
     repository: https://prometheus-community.github.io/helm-charts
     condition: observability.enabled
-  - name: kube-state-metrics
-    version: 6.1.5
-    repository: https://prometheus-community.github.io/helm-charts
-    condition: observability.enabled
   - name: grafana
     version: 10.0.0
     repository: https://grafana.github.io/helm-charts

@@ -187,6 +187,7 @@ mod validation;
 mod verification_acceptance;
 mod verification_cutover;
 pub(crate) mod verification_inbox;
+mod verification_tracing;
 use validation::{
     collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
     query_payloads, valid_version_and_cursor, validate_durable_actions, validate_indexed_rows,

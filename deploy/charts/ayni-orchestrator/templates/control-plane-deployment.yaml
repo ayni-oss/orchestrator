@@ -17,6 +17,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/control-plane-config.yaml") . | sha256sum }}
+        checksum/telemetry: {{ toJson .Values.telemetry | sha256sum }}
         checksum/runtime: {{ toJson .Values.runtime | sha256sum }}
       labels:
         app.kubernetes.io/name: ayni-orchestrator-control-plane
@@ -70,6 +71,17 @@ spec:
             - configMapRef:
                 name: control-plane-config
           env:
+            {{- if .Values.telemetry.tracesEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ .Values.telemetry.tracesEndpoint | quote }}
+            {{- else if .Values.telemetry.endpointConfigMap }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.telemetry.endpointConfigMap | quote }}
+                  key: traces-endpoint
+                  optional: true
+            {{- end }}
             {{- if .Values.runtime.enabled }}
             - name: ORCHESTRATOR_RUNTIME_CONFIG_PATH
               value: /runtime-config/runtime.json

@@ -6,9 +6,20 @@ use std::{env, fs, io, process::ExitCode, time::Duration};
 use tokio::{net::TcpListener, signal, sync::watch};
 use tracing::{Instrument, debug, error, info, warn};
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    ayni_orchestrator_observability::init("control-plane");
+fn main() -> ExitCode {
+    let telemetry = ayni_orchestrator_observability::init("control-plane");
+    let result = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_or_else(
+            |_| ExitCode::FAILURE,
+            |runtime| runtime.block_on(control_plane_main()),
+        );
+    telemetry.shutdown();
+    result
+}
+
+async fn control_plane_main() -> ExitCode {
     let process_span = ayni_orchestrator_observability::process_span("control-plane");
     match Box::pin(run().instrument(process_span)).await {
         Ok(()) => ExitCode::SUCCESS,

@@ -74,3 +74,18 @@ Exercise missing-image onboarding, verified reuse, explicit mismatch Rebuild,
 uncertain push recovery, and task admission by immutable digest. Inspect workload
 specifications for hostPath, privileged access, engine/signing/push credentials in
 task or verification Jobs. Never delete retained task data to make validation pass.
+
+## Metrics and verification traces
+
+The local observability stack uses Prometheus for application and kubelet/cAdvisor
+metrics, plus an OpenTelemetry Collector and Jaeger for verification traces.
+Grafana provides the shared UI: select the Jaeger datasource in Explore for traces
+and Prometheus for metrics. The chart no longer deploys kube-state-metrics or
+plots provisioned PVC requests; kubelet volume measurements and the existing
+Docker Desktop disk fallback remain available.
+
+Tracing is optional diagnostic output. Exporter queues, request timeouts and
+shutdown flushes are bounded; Collector outage does not change execution outcomes.
+Jaeger stores at most 1,000 traces in memory locally. Logs remain JSON on stdout;
+a centralized log backend is not included. See [observability](observability-and-events.md)
+for configuration, propagation, privacy and the Docker Desktop validation command.

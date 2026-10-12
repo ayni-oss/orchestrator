@@ -6,7 +6,6 @@
     "ayni-orchestrator",
     "observability",
     "prometheus",
-    "kube-state-metrics",
     "grafana"
   ],
   "properties": {
@@ -17,18 +16,25 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "enabled"
+        "enabled",
+        "collectorImage",
+        "jaegerImage"
       ],
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "collectorImage": {
+          "type": "string",
+          "pattern": "^.+@sha256:[a-f0-9]{64}$"
+        },
+        "jaegerImage": {
+          "type": "string",
+          "pattern": "^.+@sha256:[a-f0-9]{64}$"
         }
       }
     },
     "prometheus": {
-      "type": "object"
-    },
-    "kube-state-metrics": {
       "type": "object"
     },
     "grafana": {

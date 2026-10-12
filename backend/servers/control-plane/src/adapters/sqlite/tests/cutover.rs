@@ -294,6 +294,9 @@ fn export_verification_cutover_fixture() -> TestResult {
     )?;
     std::fs::write(directory.join("profile-id"), profile.as_bytes())?;
     assert_eq!(store.runtime_cursor(&profile)?.failures, 0);
+    if std::env::var("AYNI_VERIFICATION_FIXTURE_TRACING").as_deref() == Ok("true") {
+        fixture_trace(&store, &directory)?;
+    }
     drop(store);
     let store = CleanStore::open(directory.join("orchestrator.sqlite"), 3)?;
     assert!(
@@ -303,5 +306,22 @@ fn export_verification_cutover_fixture() -> TestResult {
             .as_ref()
             .is_some_and(|p| p.verification_authority.events())
     );
+    Ok(())
+}
+
+fn fixture_trace(store: &CleanStore, directory: &std::path::Path) -> TestResult {
+    let guard = ayni_orchestrator_observability::init("verification-test-launcher");
+    let span = ayni_orchestrator_observability::verification_span(
+        "fixture_launch",
+        "verification-receipt-smoke",
+        None,
+    );
+    let context = span
+        .in_scope(ayni_orchestrator_observability::current_context)
+        .ok_or("fixture trace context")?;
+    store.retain_verification_trace("verification-receipt-smoke", &context);
+    std::fs::write(directory.join("traceparent"), context.traceparent)?;
+    drop(span);
+    guard.shutdown();
     Ok(())
 }

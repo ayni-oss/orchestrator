@@ -1,6 +1,7 @@
 //! Restart repair for authenticated observations under their frozen authority.
 use super::{AppState, ReconciliationError};
 use std::path::PathBuf;
+use tracing::Instrument;
 
 impl AppState {
     /// Processes a bounded batch of durable observations without holding the DB
@@ -26,18 +27,47 @@ impl AppState {
             .await
             .map_err(|_| ReconciliationError::Store)?;
         for (identity, payload) in pending {
+            let execution = payload
+                .binding
+                .as_ref()
+                .map(|b| b.execution_id.clone())
+                .unwrap_or_default();
+            let context = self
+                .database
+                .execute(move |store| Ok(store.verification_trace_context(&execution)))
+                .await
+                .ok()
+                .flatten();
             let path = root.clone();
             let observation = payload.clone();
+            let evidence_span = ayni_orchestrator_observability::verification_span(
+                "evidence",
+                observation
+                    .binding
+                    .as_ref()
+                    .map_or("", |b| b.execution_id.as_str()),
+                context.as_ref(),
+            );
             let evidence = tokio::task::spawn_blocking(move || {
-                crate::profiles::ayni::verification::read(&path, &observation)
+                evidence_span
+                    .in_scope(|| crate::profiles::ayni::verification::read(&path, &observation))
             })
             .await
             .map_err(|_| ReconciliationError::Store)?;
+            let span = ayni_orchestrator_observability::verification_span(
+                "decision",
+                payload
+                    .binding
+                    .as_ref()
+                    .map_or("", |b| b.execution_id.as_str()),
+                context.as_ref(),
+            );
             self.database
                 .execute(move |store| {
                     store
                         .decide_verification_with_interval(&identity, &payload, &evidence, interval)
                 })
+                .instrument(span)
                 .await
                 .map_err(|_| ReconciliationError::Store)?;
         }

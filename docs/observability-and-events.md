@@ -1,10 +1,58 @@
 # Observability and lifecycle events
 
-Research snapshot: 11 October 2026, application source at commit
-`1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`. This is a proposed approach;
-OpenTelemetry integration was not implemented or exercised.
+Verification tracing extends the shared Rust subscriber with an optional
+OpenTelemetry bridge and OTLP/HTTP protobuf exporter. JSON logs and Prometheus
+metrics remain enabled independently. Other flow instrumentation and broker
+integration remain proposed.
 
-Add OpenTelemetry tracing alongside the [event architecture research](control-plane-events.md).
+## Verification tracing
+
+Set `telemetry.tracesEndpoint` in the reusable application chart to an
+administrator-controlled OTLP trace URL, including `/v1/traces`. An empty endpoint
+keeps structured logging without trace export. The local chart supplies the
+endpoint through an optional ConfigMap while `observability.enabled` is true;
+turning local observability off also omits that endpoint on newly started Pods.
+Changing exporter configuration requires a control-plane restart. Existing Jobs
+retain their launch configuration.
+
+The local stack sends verification traces through an OpenTelemetry Collector to
+Jaeger. Grafana provisions both Prometheus and Jaeger: use Explore and select
+Jaeger to search `runtime-worker` or `control-plane` traces. Jaeger retains up to
+1,000 traces in memory; a Jaeger restart loses them. Jaeger 2.20 retains the HTTP search endpoints required by pinned Grafana 12.1.1;
+Jaeger 2.21 and later require a compatible datasource upgrade. These diagnostic limits are
+for local evaluation and do not define production retention or availability.
+
+Verification spans cover launch, worker execution, runtime metadata validation,
+Ayni invocation, artifact validation, report writing, delivery, authenticated
+receipt, evidence reads, decisions, acceptance transactions and cleanup. The
+worker receives optional W3C context in trusted launch inputs. Its persisted event
+keeps originating context across delivery retries without changing source/ID,
+request digests or payload bindings. Recovery creates new spans linked to retained
+originating context. Missing or malformed context does not reject an application
+result.
+
+Optional context uses `trace:verification:<execution>` records in the existing
+SQLite cursor store. These records confer no authority, do not advance resource
+versions or client events, and preserve the first originating context. Diagnostic
+read/write errors are ignored by the application handlers. Older executions
+without context continue normally.
+
+Only allowlisted verification instrumentation enters the exporter. Parameters,
+repository command output and unrelated log events are excluded. Export buffers
+hold at most 512 spans, batches at most 128, and requests have a two-second
+timeout. Normal worker/control-plane exit attempts a three-second bounded flush
+after spans close. Collector loss or abrupt Pod termination can lose traces;
+neither changes accepted results, retry accounting or cleanup decisions.
+
+`dev/tests/verification-tracing.sh CONTROL_PLANE_IMAGE PINNED_WORKER_IMAGE WEB_IMAGE`
+uses the existing reporting harness in disposable Docker Desktop namespaces. It
+checks connected worker/receipt/decision/recovery spans and the same acceptance
+with the Collector stopped. Its synthetic launch is labeled
+`verification-test-launcher`; provider admission and signed Ready acceptance are
+separate from that fixture.
+
+## Architecture and remaining instrumentation
+
 Durable results and accepted transitions establish what happened and authorize
 the next action. Telemetry explains execution paths, elapsed time and failures.
 Tracing can improve diagnosis before introducing a message broker.
@@ -31,7 +79,7 @@ Control-plane decisions must remain valid during a telemetry outage.
 [Sampling](https://opentelemetry.io/docs/concepts/sampling/),
 [Collector resiliency](https://opentelemetry.io/docs/collector/resiliency/).
 
-## Existing implementation
+## Original source audit (11 October 2026)
 
 The shared [observability library](../backend/libs/observability/src/lib.rs#L24)
 initializes JSON `tracing` logs, includes span context and emits span-close
@@ -46,8 +94,9 @@ records stages and failure classifications. The [metrics endpoint](../backend/se
 exposes bounded gRPC and runtime-failure counters. The [local chart](../dev/charts/ayni-orchestrator-local/values.yaml#L196)
 already configures a Prometheus datasource in Grafana.
 
-The audited [workspace dependencies](../Cargo.toml#L59) contain `tracing` and
-`tracing-subscriber`, with no OpenTelemetry SDK, OTLP exporter or tracing bridge.
+At the audit commit `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`, the [workspace dependencies](../Cargo.toml#L59) contained `tracing` and
+`tracing-subscriber` without an OpenTelemetry exporter. Verification now adds
+that bridge; the audit findings below explain the remaining flow coverage.
 Existing generic errors and discarded subprocess output remain information
 gaps; installing an exporter alone cannot recover their missing detail.
 
@@ -100,7 +149,7 @@ covering days of review or the control-plane process lifetime. Messaging span
 links support asynchronous, batched and independently consumed work.
 [Messaging conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/).
 
-## First instrumentation targets
+## Instrumentation targets and remaining flows
 
 | Flow | Useful spans and measurements | Durable fact kept separately |
 | --- | --- | --- |
@@ -112,8 +161,9 @@ links support asynchronous, batched and independently consumed work.
 For the verification issue, instrument Ayni execution, artifact validation and
 report serialization separately. Record safe error class and report byte count;
 retain detailed diagnostics outside Pod lifetime. This can distinguish a failed
-check from failed reporting. The existing [4 KiB report limit](../backend/workers/runtime-worker/src/main.rs#L138)
-is a source-level finding, not a proven diagnosis of the historical attempt.
+check from failed reporting. The 4 KiB termination-message report limit found in the original source audit
+was not a proven diagnosis of the historical attempt. Current verification retains
+bounded evidence separately; instrumentation reports its size and classified outcome.
 
 Use histograms for stage duration and observation/acceptance delay; counters for
 classified failures and physical executions; gauges for queue age and cleanup
@@ -122,17 +172,17 @@ Heartbeat age and time since meaningful progress require separate measurements.
 
 ## Integration and operational boundaries
 
-Extend the shared Rust subscriber with `tracing-opentelemetry` and an OTLP trace
-exporter, preserving the existing JSON log output. The bridge does not export
+Verification extends the shared Rust subscriber with `tracing-opentelemetry` and
+an OTLP trace exporter, preserving the existing JSON log output. The bridge does not export
 logs automatically; retain stdout collection or deliberately add a log exporter.
-Pin compatible crates and test shutdown/flush behavior for short-lived Jobs.
+Compatible crates are pinned; shutdown/flush behavior is tested for short-lived Jobs.
 [Tracing bridge](https://docs.rs/tracing-opentelemetry/latest/tracing_opentelemetry/).
 
-For the requested CNCF direction, use an OTLP Collector and Jaeger as the proposed
-tracing path, retaining existing Prometheus metrics. Jaeger is a
+The local tracing path uses an OTLP Collector and Jaeger, retaining existing
+Prometheus metrics. Jaeger is a
 [CNCF Graduated project](https://www.cncf.io/projects/jaeger/).
 Its [all-in-one setup](https://www.jaegertracing.io/docs/2.22/getting-started/)
-provides a local evaluation path with transient in-memory storage. Production
+provides the local evaluation path with bounded in-memory storage. Production
 retention, storage and availability need a separate deployment decision.
 
 Initially retain all traces for the selected low-volume diagnostic flows, within
