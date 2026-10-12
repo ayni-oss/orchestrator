@@ -27,14 +27,16 @@ impl RuntimeKubernetes {
         public_key: &str,
     ) -> Result<(), &'static str> {
         let job = trust_lock_job(name, &self.configuration, runtime, key_id, public_key)?;
-        self.create(
+        self.create_operation(
             name,
             BTreeMap::from([(
                 "execution.json".into(),
                 serde_json::to_string(request).map_err(|_| "trust_lock_request_invalid")?,
             )]),
             token,
-            &job,
+            job,
+            runtime.operation_reporting.as_ref(),
+            "trust-lock",
         )
         .await
     }

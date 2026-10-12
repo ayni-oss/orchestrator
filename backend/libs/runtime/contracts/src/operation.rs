@@ -43,6 +43,7 @@ pub enum OperationOutcome {
     },
 }
 impl OperationOutcome {
+    #[must_use]
     pub fn matches(&self, kind: RuntimeOperationKind) -> bool {
         match self {
             Self::Failed { reason } => {

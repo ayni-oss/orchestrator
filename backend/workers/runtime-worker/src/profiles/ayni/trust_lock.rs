@@ -56,14 +56,12 @@ pub async fn run(request: &ExecutionRequest, workspace: &Path) -> io::Result<()>
         .and_then(toml_edit::Item::as_str)
         == Some(public.as_str())
     {
-        println!(
-            "AYNI_TRUST_RESULT={}",
-            serde_json::json!({
-                "revision":request.revision,
-                "policy":std::str::from_utf8(&original_policy).map_err(io::Error::other)?,
-                "lock":std::str::from_utf8(&original_lock).map_err(io::Error::other)?
-            })
-        );
+        emit_result(serde_json::json!({
+            "revision":request.revision,
+            "policy":std::str::from_utf8(&original_policy).map_err(io::Error::other)?,
+            "lock":std::str::from_utf8(&original_lock).map_err(io::Error::other)?
+        }))
+        .await?;
         return Ok(());
     }
     policy["environment"]["certificate"]["trusted_keys"][&key] = toml_edit::value(&public);
@@ -75,10 +73,7 @@ pub async fn run(request: &ExecutionRequest, workspace: &Path) -> io::Result<()>
     let second = read_bounded(&workspace.join(".ayni.lock"), 1_048_576)?;
     validate_lock(&old, &first, &second)?;
     let expected = request.revision.clone();
-    println!(
-        "AYNI_TRUST_RESULT={}",
-        serde_json::json!({"revision":expected,"policy":policy,"lock":String::from_utf8(first).map_err(io::Error::other)?})
-    );
+    emit_result(serde_json::json!({"revision":expected,"policy":policy,"lock":String::from_utf8(first).map_err(io::Error::other)?})).await?;
     Ok(())
 }
 
@@ -156,6 +151,28 @@ async fn cli(workspace: &Path, args: &[&str]) -> io::Result<()> {
         return Err(io::Error::other("Ayni trust lock validation failed"));
     }
     Ok(())
+}
+
+async fn emit_result(result: Value) -> io::Result<()> {
+    if crate::operation::enabled() {
+        let field = |name| {
+            result[name]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| io::Error::other("runtime_result_invalid"))
+        };
+        crate::operation::complete(
+            ayni_orchestrator_runtime::operation::OperationOutcome::Trust {
+                revision: field("revision")?,
+                policy: field("policy")?,
+                lock: field("lock")?,
+            },
+        )
+        .await
+    } else {
+        println!("AYNI_TRUST_RESULT={result}");
+        Ok(())
+    }
 }
 
 #[cfg(test)]

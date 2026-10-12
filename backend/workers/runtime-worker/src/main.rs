@@ -69,6 +69,29 @@ async fn worker_main() -> ExitCode {
                     };
                     let _ = fs::write("/dev/termination-log", code);
                 }
+                if ayni_orchestrator_worker::operation::enabled()
+                    && !Path::new("/output/runtime-operation.json").exists()
+                {
+                    let reason = match error.to_string().as_str() {
+                        "runtime_candidate_missing" => "runtime_candidate_missing",
+                        "runtime_lock_mismatch" => "runtime_lock_mismatch",
+                        "runtime_platform_mismatch" => "runtime_platform_mismatch",
+                        "runtime_version_unsupported" => "runtime_version_unsupported",
+                        "engine_tls_or_startup_failed" => "engine_tls_or_startup_failed",
+                        _ => match env::args().nth(1).as_deref() {
+                            Some("trust-lock") => "certificate_trust_lock_failed",
+                            Some("build") => "runtime_build_failed",
+                            Some("publish") => "runtime_publication_failed",
+                            _ => "runtime_execution_failed",
+                        },
+                    };
+                    let _ = ayni_orchestrator_worker::operation::complete(
+                        ayni_orchestrator_runtime::operation::OperationOutcome::Failed {
+                            reason: reason.into(),
+                        },
+                    )
+                    .await;
+                }
                 activity.fail(ayni_orchestrator_worker::coding::activity::io_failure(
                     &error,
                 ));
@@ -87,32 +110,16 @@ async fn run(activity: &ayni_orchestrator_worker::coding::activity::ActivityLog)
     let operation = env::args()
         .nth(1)
         .ok_or_else(|| io::Error::other("missing operation"))?;
+    if ayni_orchestrator_worker::operation::enabled()
+        && (operation == "report-operation" || Path::new("/output/runtime-operation.json").exists())
+    {
+        return ayni_orchestrator_worker::operation::resume().await;
+    }
     if operation == "registry-discover" {
         return ayni_orchestrator_worker::operations::image_discovery::run().await;
     }
-    if operation == "install" {
-        activity.record(Stage::Install);
-        fs::copy(env::current_exe()?, "/launcher/runtime-worker")?;
-        fs::copy("/usr/local/bin/mise", "/launcher/mise")?;
-        return Ok(());
-    }
-    if operation == "prepare-output" {
-        activity.record(Stage::OutputPreparation);
-        let name = env::args()
-            .nth(2)
-            .filter(|name| {
-                name.len() <= 63
-                    && name
-                        .bytes()
-                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-            })
-            .ok_or_else(|| io::Error::other("invalid output identity"))?;
-        let path = Path::new("/outputs").join(name);
-        fs::create_dir_all(&path)?;
-        if !fs::symlink_metadata(&path)?.is_dir() {
-            return Err(io::Error::other("unsafe output"));
-        }
-        return Ok(());
+    if let Some(result) = utility_operation(&operation, activity) {
+        return result;
     }
     if operation == "code" {
         let request =
@@ -188,4 +195,40 @@ async fn trusted_image_operation(operation: &str) -> Option<io::Result<()>> {
         },
         _ => return None,
     })
+}
+
+fn utility_operation(
+    operation: &str,
+    activity: &ayni_orchestrator_worker::coding::activity::ActivityLog,
+) -> Option<io::Result<()>> {
+    if !matches!(operation, "install" | "prepare-output") {
+        return None;
+    }
+    Some((|| {
+        if operation == "install" {
+            activity.record(Stage::Install);
+            fs::copy(env::current_exe()?, "/launcher/runtime-worker")?;
+            fs::copy("/usr/local/bin/mise", "/launcher/mise")?;
+            return Ok(());
+        }
+        if operation == "prepare-output" {
+            activity.record(Stage::OutputPreparation);
+            let name = env::args()
+                .nth(2)
+                .filter(|name| {
+                    name.len() <= 63
+                        && name
+                            .bytes()
+                            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                })
+                .ok_or_else(|| io::Error::other("invalid output identity"))?;
+            let path = Path::new("/outputs").join(name);
+            fs::create_dir_all(&path)?;
+            if !fs::symlink_metadata(&path)?.is_dir() {
+                return Err(io::Error::other("unsafe output"));
+            }
+            return Ok(());
+        }
+        Err(io::Error::other("unsupported utility operation"))
+    })())
 }

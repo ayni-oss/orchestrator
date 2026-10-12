@@ -51,29 +51,8 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_ref()
             .and_then(|trust| trust.merge_revision.clone());
         let head = merged_head.as_deref().unwrap_or(head);
-        let policy = self
-            .source
-            .file(&github.owner, &github.name, head, ".ayni.toml", token)
-            .await
-            .map_err(|reason| {
-                if reason == "github_not_found" {
-                    "policy_missing"
-                } else {
-                    reason
-                }
-            })?;
+        let (policy, lock) = self.repository_inputs(github, head, token).await?;
         let pinned = policy_matches(&policy, certificate)?;
-        let lock = self
-            .source
-            .lock(&github.owner, &github.name, head, token)
-            .await
-            .map_err(|reason| {
-                if reason == "github_not_found" {
-                    "lock_missing"
-                } else {
-                    reason
-                }
-            })?;
         crate::profiles::ayni::environment::parse_lock(&lock)
             .map_err(|_| "repository_lock_invalid")?;
         let generation = format!(
@@ -324,7 +303,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let TrustContext {
             id,
             runtime,
-            github,
+            github: _,
             branch: _,
             head,
             token,
@@ -333,31 +312,32 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             lock,
         } = *context;
         if trust.state == "pending" {
-            match self.kubernetes.coding_state(&trust.job).await? {
+            let workload = self
+                .operation_runtime(
+                    id,
+                    cursor,
+                    runtime.execution_runtime(),
+                    &trust.job,
+                    ayni_orchestrator_events::v1::RuntimeOperationKind::Trust,
+                )
+                .await?;
+            let (state, outcome) = if workload.operation_reporting.is_some() {
+                self.runtime_operation_state(
+                    cursor,
+                    &trust.job,
+                    ayni_orchestrator_events::v1::RuntimeOperationKind::Trust,
+                )
+                .await?
+            } else {
+                (self.kubernetes.coding_state(&trust.job).await?, None)
+            };
+            match state {
                 ExecutionState::Missing => {
-                    let request = ExecutionRequest {
-                        repository_url: format!(
-                            "https://github.com/{}/{}.git",
-                            github.owner, github.name
-                        ),
-                        revision: trust.head.clone(),
-                        expected: RuntimeExpectation {
-                            lock_fingerprint: format!(
-                                "sha256:{}",
-                                crate::profiles::ayni::environment::parse_lock(lock)
-                                    .map_err(|_| "repository_lock_invalid")?
-                                    .fingerprint
-                            ),
-                            platform: runtime.platform.clone(),
-                            ayni_version: crate::profiles::ayni::environment::parse_lock(lock)
-                                .map_err(|_| "repository_lock_invalid")?
-                                .ayni_version,
-                        },
-                    };
+                    let request = trust_request(context, trust)?;
                     self.kubernetes
                         .start_trust_lock(
                             &trust.job,
-                            &runtime.execution_runtime(),
+                            &workload,
                             &request,
                             token,
                             &certificate.key_id,
@@ -367,26 +347,25 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 }
                 ExecutionState::Running => {}
                 ExecutionState::Failed => {
-                    if !cursor.accounting.executions.contains_key(&trust.job) {
-                        cursor
-                            .accounting
-                            .executions
-                            .insert(trust.job.clone(), "certificate_trust_lock_failed".into());
-                        cursor.failures = cursor.failures.saturating_add(1);
-                    }
-                    cursor
-                        .status
-                        .insert("reason-code".into(), "certificate_trust_lock_failed".into());
-                    cursor
-                        .status
-                        .insert("error-class".into(), "execution".into());
-                    cursor.accounting.blocked = true;
-                    trust.state = "failed".into();
+                    record_trust_failure(trust, cursor);
                 }
                 ExecutionState::Succeeded => {
-                    let result: TrustResult =
-                        serde_json::from_str(&self.kubernetes.trust_lock_result(&trust.job).await?)
-                            .map_err(|_| "certificate_trust_result_invalid")?;
+                    let result: TrustResult = match outcome {
+                        Some(ayni_orchestrator_runtime::operation::OperationOutcome::Trust {
+                            revision,
+                            policy,
+                            lock,
+                        }) => TrustResult {
+                            revision,
+                            policy,
+                            lock,
+                        },
+                        Some(_) => return Err("runtime_result_invalid"),
+                        None => serde_json::from_str(
+                            &self.kubernetes.trust_lock_result(&trust.job).await?,
+                        )
+                        .map_err(|_| "certificate_trust_result_invalid")?,
+                    };
                     validate_result(&result, &trust.head, certificate, policy, lock)?;
                     if head != trust.head {
                         self.kubernetes.cleanup(&trust.job).await?;
@@ -611,6 +590,50 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         }
         Ok(true)
     }
+}
+
+fn record_trust_failure(trust: &mut TrustUpdate, cursor: &mut RuntimeCursor) {
+    if !cursor.accounting.executions.contains_key(&trust.job) {
+        cursor
+            .accounting
+            .executions
+            .insert(trust.job.clone(), "certificate_trust_lock_failed".into());
+        cursor.failures = cursor.failures.saturating_add(1);
+    }
+    cursor
+        .status
+        .insert("reason-code".into(), "certificate_trust_lock_failed".into());
+    cursor
+        .status
+        .insert("error-class".into(), "execution".into());
+    cursor.accounting.blocked = true;
+    trust.state = "failed".into();
+}
+
+fn trust_request(
+    context: &TrustContext<'_>,
+    trust: &TrustUpdate,
+) -> Result<ExecutionRequest, &'static str> {
+    let github = context.github;
+    let runtime = context.runtime;
+    let lock = context.lock;
+    let request = ExecutionRequest {
+        repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
+        revision: trust.head.clone(),
+        expected: RuntimeExpectation {
+            lock_fingerprint: format!(
+                "sha256:{}",
+                crate::profiles::ayni::environment::parse_lock(lock)
+                    .map_err(|_| "repository_lock_invalid")?
+                    .fingerprint
+            ),
+            platform: runtime.platform.clone(),
+            ayni_version: crate::profiles::ayni::environment::parse_lock(lock)
+                .map_err(|_| "repository_lock_invalid")?
+                .ayni_version,
+        },
+    };
+    Ok(request)
 }
 
 #[cfg(test)]

@@ -57,6 +57,7 @@ fn configure(
         .as_mut()
         .and_then(|s| s.template.spec.as_mut())
         .ok_or("runtime_job_invalid")?;
+    pod.security_context.get_or_insert_default().fs_group = Some(10001);
     let supervisor = pod
         .containers
         .iter_mut()
@@ -93,4 +94,77 @@ fn configure(
     volumes.push(serde_json::from_value(json!({"name":"operation-reporting","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":ayni_orchestrator_runtime::verification::REPORTING_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}})).map_err(|_| "runtime_job_invalid")?);
     pod.init_containers.get_or_insert_default().insert(0, serde_json::from_value(json!({"name":"operation-output","image":configuration.worker_image,"args":["prepare-output",name],"securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"runAsNonRoot":true,"capabilities":{"drop":["ALL"]}},"volumeMounts":[{"name":"operation-output","mountPath":"/outputs"}]})).map_err(|_| "runtime_job_invalid")?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ayni_orchestrator_events::v1::{RuntimeOperationBinding, RuntimeOperationKind};
+    #[test]
+    fn operation_identity_and_output_mounts_are_supervisor_only()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let configuration = ExecutionConfiguration {
+            namespace: "test".into(),
+            worker_image: "registry.test/worker:fixture".into(),
+            output_claim: "outputs".into(),
+            model_secret: "model".into(),
+            allow_emulation: false,
+            engine_mode: "external-isolated".into(),
+        };
+        let reporting = OperationAdmission {
+            configuration: ayni_orchestrator_runtime::verification::ReportingConfiguration {
+                source: "ayni://orchestrator/supervisors/test".into(),
+                endpoint: "http://control-plane:8080/events/verification".into(),
+            },
+            binding: RuntimeOperationBinding {
+                execution_id: "operation-one".into(),
+                ..Default::default()
+            },
+            kind: RuntimeOperationKind::Trust,
+        };
+        let mut original: Job = serde_json::from_value(json!({"spec":{"template":{"spec":{
+            "containers":[{"name":"supervisor","image":"fixture"},{"name":"repository","image":"fixture"}],
+            "automountServiceAccountToken":false,"restartPolicy":"Never"
+        }}}}))?;
+        let mut job = original.clone();
+        let mut data = BTreeMap::from([("execution.json".into(), "first".into())]);
+        configure(
+            &configuration,
+            "operation-one",
+            &mut data,
+            &mut job,
+            &reporting,
+            "supervisor",
+        )?;
+        let admission: OperationAdmission =
+            serde_json::from_str(&data["operation-reporting.json"])?;
+        let pod = job.spec.ok_or("spec")?.template.spec.ok_or("pod")?;
+        assert_eq!(pod.automount_service_account_token, Some(false));
+        let supervisor = serde_json::to_string(&pod.containers[0])?;
+        assert!(supervisor.contains("/reporting") && supervisor.contains("/output"));
+        let repository = serde_json::to_string(&pod.containers[1])?;
+        assert!(!repository.contains("/reporting") && !repository.contains("/output"));
+        assert!(repository.contains("fixture"));
+        assert_eq!(
+            pod.security_context.ok_or("security")?.fs_group,
+            Some(10001)
+        );
+        let mut second = BTreeMap::from([("execution.json".into(), "second".into())]);
+        configure(
+            &configuration,
+            "operation-one",
+            &mut second,
+            &mut original,
+            &reporting,
+            "supervisor",
+        )?;
+        let changed: OperationAdmission =
+            serde_json::from_str(&second["operation-reporting.json"])?;
+        assert_ne!(
+            admission.binding.request_digest,
+            changed.binding.request_digest
+        );
+        assert_eq!(admission.kind, RuntimeOperationKind::Trust);
+        Ok(())
+    }
 }
