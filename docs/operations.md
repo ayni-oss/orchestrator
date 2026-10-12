@@ -14,9 +14,11 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Deploying schema 13 preserves the schema-11 receipt inbox and schema-12
+Deploying schema 14 preserves the schema-11 receipt inbox and schema-12
 verification journal/outbox, adds authoritative receipt decisions, and freezes
-reporting authority per preparation. Runtime acceptance and cursor cleanup intent
+reporting authority per preparation. It also adds durable outbox retry scheduling
+and broker acknowledgement bookkeeping without changing accepted event bytes.
+The schema-13 to schema-14 migration preserves pending events. Runtime acceptance and cursor cleanup intent
 remain in one transaction. Earlier schema migrations run in order before this upgrade. The schema-9 to schema-10 migration upgrades retained
 runtime preparation in one transaction. The migration preserves frozen source and runtime identities,
 operation names, retained verification evidence and remaining publication budget.
@@ -25,7 +27,7 @@ invalid cursor or task aborts the transaction; repair the invalid retained recor
 from a trusted backup before retrying, rather than deleting pending work.
 
 Back up the database before upgrading and run one control-plane writer during the
-upgrade. Earlier binaries reject schema 13, so rollback requires restoring the
+upgrade. Earlier binaries reject schema 14, so rollback requires restoring the
 pre-upgrade backup while preserving and reconciling any external work performed
 since the backup. Do not run an earlier binary against the upgraded database.
 After restart, uncertain publication still reads the registry before retrying, and

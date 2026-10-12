@@ -86,10 +86,7 @@ impl CleanStore {
             if store.verification_replay(command,next,&report_digest)? { return Ok(()); }
             store.admit_verification_command(command,expected_cursor,next)?;
             store.admit_verification_observation(&command.profile_id, next)?;
-            for table in ["verification_journal", "verification_outbox"] {
-                let count: i64 = store.connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).map_err(CleanStoreError::Database)?;
-                if count >= 100_000 { return Err(CleanStoreError::BoundExceeded); }
-            }
+            store.admit_outbox_capacity()?;
             ayni_orchestrator_application::runtime_activation::activate(store, command).map_err(super::runtime_activation::activation_error)?;
             store.save_runtime_cursor(&command.profile_id, next)?;
             let profile = store.runtime_profile(&command.profile_id)?;
@@ -103,7 +100,7 @@ impl CleanStore {
             let identity = EventIdentity { source: "ayni://orchestrator/controllers/verification".into(),id: uuid::Uuid::now_v7().to_string() };
             let bytes = ayni_orchestrator_events::decisions::encode(&identity,&decision).map_err(|_| CleanStoreError::CorruptState)?;
             store.connection.execute("INSERT INTO verification_journal(id,profile_id,preparation_id,execution_id,report_sha256,aggregate_revision,payload,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", params![identity.id,command.profile_id,preparation.generation,pending.name,report_digest,i64::try_from(profile.resource_version).map_err(|_| CleanStoreError::CorruptState)?,decision.encode_to_vec(),unix_seconds()?]).map_err(CleanStoreError::Database)?;
-            store.connection.execute("INSERT INTO verification_outbox(journal_id,source,event_id,payload) VALUES(?1,?2,?1,?3)",params![identity.id,identity.source,bytes]).map_err(CleanStoreError::Database)?;
+            store.connection.execute("INSERT INTO verification_outbox(journal_id,source,event_id,payload,next_attempt_at) VALUES(?1,?2,?1,?3,?4)",params![identity.id,identity.source,bytes,unix_seconds()?]).map_err(CleanStoreError::Database)?;
             if let Some(observation) = &pending.observation { store.accept_verification_receipt(observation)?; }
             Ok(())
         })
@@ -388,14 +385,12 @@ impl CleanStore {
     pub(super) fn validate_verification_journal(&self) -> Result<(), CleanStoreError> {
         let mut statement = self.connection.prepare("SELECT j.id,j.profile_id,j.preparation_id,j.execution_id,j.report_sha256,j.aggregate_revision,j.payload,o.source,o.event_id,o.payload,o.attempts,o.stored_at,j.created_at FROM verification_journal j LEFT JOIN verification_outbox o ON o.journal_id=j.id").map_err(CleanStoreError::Database)?;
         let mut rows = statement.query([]).map_err(CleanStoreError::Database)?;
-        let mut count = 0;
         while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
-            count += 1;
             let id: String = row.get(0).map_err(CleanStoreError::Database)?;
             let payload: Vec<u8> = row.get(6).map_err(CleanStoreError::Database)?;
             let bytes: Option<Vec<u8>> = row.get(9).map_err(CleanStoreError::Database)?;
             let bytes = bytes.ok_or(CleanStoreError::CorruptState)?;
-            if payload.len() > ayni_orchestrator_events::MAX_EVENT_BYTES || count > 100_000 {
+            if payload.len() > ayni_orchestrator_events::MAX_EVENT_BYTES {
                 return Err(CleanStoreError::CorruptState);
             }
             let decision = VerificationDecisionRecorded::decode(payload.as_slice())
@@ -417,7 +412,7 @@ impl CleanStore {
                 return Err(CleanStoreError::CorruptState);
             }
         }
-        Ok(())
+        self.validate_outbox_delivery()
     }
 }
 

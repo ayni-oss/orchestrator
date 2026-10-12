@@ -37,7 +37,8 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 13 freezes verification authority per preparation and stores
+and pull request receipts. SQLite schema version 14 freezes verification authority per preparation, tracks
+accepted-event publication acknowledgements and stores
 accepted receipts alongside the schema-12 decision journal and transactional outbox
 and the authenticated inbox introduced in schema 11. It preserves active runtime preparation and the explicit phases
 introduced in schema 10. Recognized schema versions 6 through 12 upgrade through ordered migrations; the earlier builder

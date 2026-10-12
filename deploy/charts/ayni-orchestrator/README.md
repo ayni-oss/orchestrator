@@ -83,3 +83,11 @@ restart the control plane. Empty disables export. The reusable chart does not
 install a Collector or trace store; the Docker Desktop umbrella chart supplies
 Collector, Jaeger and a Grafana datasource. Existing JSON logs and Prometheus
 metrics remain independent. See [observability](../../../docs/observability-and-events.md).
+
+
+Accepted-event publication is disabled by default. The trusted local profile may
+set `outbox.natsUrl: nats://jetstream:4222` with `outbox.localDevelopment: true`.
+The chart labels only the control-plane Pod as a broker client and supplies the
+publisher configuration; it does not deploy a broker or give workers credentials.
+Production authenticated transport remains separate. See
+[publisher operations](../../../docs/local-development.md#persistent-local-jetstream).

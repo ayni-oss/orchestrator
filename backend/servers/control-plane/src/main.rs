@@ -1,6 +1,6 @@
 use ayni_orchestrator_control_plane::{
-    AppState, BackgroundTasks, Configuration, ModelCatalog, RuntimeReconciler, router,
-    serve_custom_grpc, serve_grpc,
+    AppState, BackgroundTasks, Configuration, ModelCatalog, OutboxPublisher, RuntimeReconciler,
+    router, serve_custom_grpc, serve_grpc,
 };
 use std::{env, fs, io, process::ExitCode, time::Duration};
 use tokio::{net::TcpListener, signal, sync::watch};
@@ -75,6 +75,7 @@ async fn run() -> Result<(), io::Error> {
 
     state = state.with_github_onboarding();
     let runtimes = RuntimeReconciler::from_environment(state.clone()).map_err(io::Error::other)?;
+    let publisher = OutboxPublisher::from_environment(state.clone()).map_err(io::Error::other)?;
     let listener = TcpListener::bind(configuration.bind_address()).await?;
     debug!(address = %configuration.bind_address(), "HTTP control plane started");
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
@@ -89,6 +90,7 @@ async fn run() -> Result<(), io::Error> {
         database_monitor.wait_for_database_exit().await;
     });
     spawn_background_loops(&mut background, state.clone(), runtimes, &shutdown_receiver);
+    spawn_outbox_loop(&mut background, publisher, &shutdown_receiver);
     let http_shutdown = shutdown_receiver.clone();
     let mut http_router = router(state.clone());
     if let Some(runtime) =
@@ -172,6 +174,32 @@ async fn shutdown_signal() {
     interrupt.await;
 
     info!("control plane received shutdown signal");
+}
+
+fn spawn_outbox_loop(
+    background: &mut BackgroundTasks,
+    publisher: Option<OutboxPublisher>,
+    shutdown: &watch::Receiver<bool>,
+) {
+    if let Some(publisher) = publisher {
+        let publisher = std::sync::Arc::new(publisher);
+        background.spawn_periodic(
+            "outbox",
+            Duration::from_secs(5),
+            shutdown.clone(),
+            move || {
+                let publisher = publisher.clone();
+                async move {
+                    if publisher.publish_once().await.is_err() {
+                        warn!(
+                            reason_code = "outbox_persistence_unavailable",
+                            "outbox delivery deferred"
+                        );
+                    }
+                }
+            },
+        );
+    }
 }
 
 fn spawn_runtime_loops(

@@ -147,11 +147,21 @@ The accepted event is
 revision, preparation/execution identity, aggregate revision and canonical report
 SHA256. Observation causation links event-owned acceptance to the original stored
 source/ID; it is absent for retained-reader admission.
-Accepted journal and outbox each retain at most 100000 rows; capacity rejects
-acceptance atomically and never evicts unpublished evidence. Startup validates
-indexed identities, typed payloads and the journal/outbox relationship. A bounded
-128-row unpublished read is ready for the later publisher. No NATS publication,
-publish acknowledgement, broker consumer is implemented yet.
+Schema 14 persists retry scheduling, bounded attempts, acknowledgement timestamp
+and broker sequence in the outbox. Acceptance rejects atomically at 100000 pending
+publications; acknowledged history no longer consumes that admission budget.
+Startup validates indexed identities, typed payloads, delivery bookkeeping and
+the journal/outbox relationship. The opt-in local publisher sends at most eight
+due immutable events per pass and waits for the expected stream's ACK before
+marking delivery. Broker failures never reverse accepted decisions.
+
+Acknowledged journal/outbox pairs expire after 30 days, in batches of 128, only
+once their preparation and execution are absent from the active cursor. Pending
+publications and reachable cleanup remain retained. Pruned verification replays
+still fail stale cursor/generation guards. Inbox retention remains separately
+bounded at 100000 observations. See [publisher operations](local-development.md#persistent-local-jetstream)
+for retry timing, metrics and the finite broker deduplication window. Durable
+broker consumers are not implemented yet.
 
 Each execution has one terminal observation, so verification needs no streaming
 sequence protocol or second scheduler. Bounded payloads and separate evidence
@@ -208,7 +218,7 @@ store or a quiesced backup to enumerate reachable generation dependencies and
 receipt counts. Zero active Pods is insufficient: resumable preparations without
 a Pod still appear. Zero legacy dependencies does not authorize deletion of
 historical evidence or readers; audit historical decoding before retirement.
-Older binaries reject schema 13, so rollback requires a compatible binary.
+Older binaries reject schema 14, so rollback requires a compatible binary.
 
 `dev/tests/verification-reporting.sh` runs the local chart in a separate synthetic
 namespace with Docker Desktop, tests real projected-token reporting, durable shadow
@@ -221,3 +231,5 @@ running, durable once-only failure accounting and restart replay. It
 stops the deployment and preserves its synthetic database/evidence for inspection.
 The authentication design follows the Kubernetes
 [bound service-account token and TokenReview contract](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/).
+
+The reporting fixture now removes its synthetic namespace and PVCs on success or failure.

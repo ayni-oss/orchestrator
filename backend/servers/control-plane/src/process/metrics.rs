@@ -89,6 +89,7 @@ pub fn render_clean_metrics() -> String {
             );
         }
     }
+    output.push_str(&render_outbox_metrics());
     output
 }
 
@@ -112,6 +113,60 @@ const fn grpc_code(code: Code) -> &'static str {
         Code::DataLoss => "data_loss",
         Code::Unauthenticated => "unauthenticated",
     }
+}
+
+static OUTBOX_STATS: OnceLock<Mutex<crate::adapters::sqlite::verification_outbox::OutboxStats>> =
+    OnceLock::new();
+static OUTBOX_PUBLICATIONS: OnceLock<Mutex<BTreeMap<&'static str, u64>>> = OnceLock::new();
+pub fn set_outbox_stats(stats: crate::adapters::sqlite::verification_outbox::OutboxStats) {
+    if let Ok(mut current) = OUTBOX_STATS
+        .get_or_init(|| {
+            Mutex::new(crate::adapters::sqlite::verification_outbox::OutboxStats::default())
+        })
+        .lock()
+    {
+        *current = stats;
+    }
+}
+pub fn record_outbox_publication(outcome: &'static str) {
+    if let Ok(mut counts) = OUTBOX_PUBLICATIONS
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+    {
+        *counts.entry(outcome).or_default() += 1;
+    }
+}
+fn render_outbox_metrics() -> String {
+    let mut output = String::new();
+    if let Some(stats) = OUTBOX_STATS.get().and_then(|v| v.lock().ok()) {
+        let now = crate::adapters::sqlite::unix_seconds().unwrap_or(0);
+        let age = if stats.pending == 0 {
+            0
+        } else {
+            now.saturating_sub(stats.oldest_at).max(0)
+        };
+        for (name, value) in [
+            ("pending", stats.pending),
+            ("pending_bytes", stats.bytes),
+            ("oldest_pending_age_seconds", age),
+            ("retained_published", stats.retained),
+        ] {
+            let _ = writeln!(
+                output,
+                "# TYPE orchestrator_verification_outbox_{name} gauge\norchestrator_verification_outbox_{name} {value}"
+            );
+        }
+    }
+    output.push_str("# TYPE orchestrator_verification_outbox_publications_total counter\n");
+    if let Some(counts) = OUTBOX_PUBLICATIONS.get().and_then(|v| v.lock().ok()) {
+        for (outcome, count) in counts.iter() {
+            let _ = writeln!(
+                output,
+                "orchestrator_verification_outbox_publications_total{{outcome=\"{outcome}\"}} {count}"
+            );
+        }
+    }
+    output
 }
 
 #[cfg(test)]

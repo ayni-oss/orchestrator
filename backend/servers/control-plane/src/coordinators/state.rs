@@ -91,9 +91,14 @@ impl AppState {
     /// Returns an error when durable state cannot be queued or reconciled safely.
     pub async fn reconcile_once(&self) -> Result<(), ReconciliationError> {
         self.database
-            .execute(CleanStore::reconcile_once)
+            .execute(|store| {
+                store.reconcile_once()?;
+                store.prune_verification_history()?;
+                Ok(())
+            })
             .await
-            .map_err(|_| ReconciliationError::Store)
+            .map_err(|_| ReconciliationError::Store)?;
+        self.refresh_outbox_metrics().await
     }
 }
 

@@ -9,6 +9,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+async-nats.workspace = true
+url.workspace = true
 ayni-orchestrator-events = { path = "../../libs/events" }
 kube.workspace = true
 k8s-openapi.workspace = true

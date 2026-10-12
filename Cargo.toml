@@ -24,6 +24,7 @@ repository = "https://github.com/ayni-oss/orchestrator"
 publish = false
 
 [workspace.dependencies]
+async-nats = { version = "=0.50.0", default-features = false, features = ["jetstream", "aws-lc-rs"] }
 url = "=2.5.8"
 cloudevents-sdk = { version = "=0.9.0", default-features = false }
 pbjson = "=0.9.0"

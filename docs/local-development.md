@@ -20,7 +20,7 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-SQLite schema version 13 migrates recognized versions 6–12 before reconciliation.
+SQLite schema version 14 migrates recognized versions 6–13 before reconciliation.
 The migration preserves connections, certificates, registries, runtime history
 and retained tasks, and records obsolete installation resources for restartable
 cleanup. Follow [operations](operations.md) and upgrade with cleaned values and
@@ -105,8 +105,8 @@ The initial routing subject is `orchestrator.runtime.verification.accepted.v1`,
 carrying the structured CloudEvent type
 `io.ayni.orchestrator.runtime.verification.accepted.v1` defined in the
 [verification contract](verification-events.md). This subject is distinct from
-the CloudEvents resource `subject`. D1 provisions transport only; the outbox
-publisher and application consumers are subsequent work.
+the CloudEvents resource `subject`. The local chart enables the accepted-event
+outbox publisher; durable application consumers are subsequent work.
 
 The stream uses file storage, one replica and Limits retention. Defaults are
 512 MiB, 100,000 messages, seven days of message age, a 16 KiB message size,
@@ -118,11 +118,38 @@ The database journal and retained evidence remain authoritative beyond this
 replay window. A consumer that falls behind it needs an explicit rebuild path;
 broker sequence does not establish application acceptance or execution authority.
 
-JetStream deduplication covers only its configured window. The publisher must
-preserve source/ID and immutable bytes across retries; application consumers
-must durably deduplicate even after that window. Published outbox and journal
-retention must be designed separately from broker retention. No database cap or
-acceptance behavior changes in this deployment slice.
+JetStream deduplication covers only its configured window. The publisher preserves
+source/ID and immutable bytes across retries, with a SHA256 message ID derived from
+an eight-byte big-endian source length, source bytes and event ID bytes. A retry
+outside the broker window can create another stream record; application consumers
+must durably deduplicate by source/ID. This is at-least-once delivery.
+
+The reusable chart leaves `outbox.natsUrl` empty. The local chart sets it to
+`nats://jetstream:4222` and requires `outbox.localDevelopment: true`. These map to
+`ORCHESTRATOR_OUTBOX_NATS_URL` and `ORCHESTRATOR_OUTBOX_LOCAL_DEVELOPMENT=true`.
+URLs with credentials, paths, query strings or unsupported schemes are rejected.
+Unset the URL to disable publication, including when disabling local JetStream.
+This opt-in is suitable only for trusted development under the access limits below.
+
+The publisher runs every five seconds, claiming at most eight due records in a
+short SQLite transaction before any network wait. Each attempt has a two-second
+connect/publish/ACK budget, with persisted exponential retry delay capped at five
+minutes. It publishes only the accepted subject and requires an acknowledgement
+from `ORCHESTRATOR_LIFECYCLE` with a positive sequence. The outbox stores that
+sequence and acknowledgement timestamp. An outage, rejected publication or lost
+ACK leaves the accepted result and immutable event pending. A crash after broker
+storage but before the SQLite acknowledgement write retries the same message ID.
+Database failure is reported with a bounded reason code; broker availability is
+independent of readiness and verification acceptance.
+
+Acceptance permits up to 100,000 **pending** outbox records. Published records no
+longer consume that admission budget. Reconciliation prunes at most 128 matched
+journal/outbox pairs per pass, 30 days after acknowledgement, only after their
+preparation and execution are absent from the active cursor. Unpublished events
+and active cleanup are never pruned. After pruning, stale cursor/generation checks
+reject old verification replays. SQLite can reuse freed pages; pruning does not
+shrink the database file. The receipt inbox still has its separate 100,000 retained
+observation cap; its retention is not changed by the publisher.
 
 Stream deletion, purge and rollup are disabled. Helm provisioning edits existing
 configuration without recreating the stream. Lowering limits or message age can
@@ -149,8 +176,8 @@ requires TLS, replicated storage, backup/restore and availability validation.
 Grafana provisions **Ayni Orchestrator JetStream** alongside the existing overview.
 It shows exporter reachability, JetStream enablement, broker storage budget and
 stream message/byte occupancy. Consumer pending/unacknowledged panels populate
-when consumers exist. Outbox age and application handling metrics arrive with
-the publisher and consumer. Logical message bytes are not physical PVC usage;
+when consumers exist. Publisher panels show pending count, pending bytes, oldest
+pending age, publication outcomes and retained acknowledged decisions. Logical message bytes are not physical PVC usage;
 the existing kubelet volume metrics remain useful for filesystem overhead.
 
 Run `dev/ctl test jetstream` on the explicit Docker Desktop context. It creates
@@ -161,3 +188,14 @@ the provisioned Grafana dashboard. It uses one fixed disposable test namespace, 
 environment, and deletes that namespace and its test PVC on success or failure.
 Normal development release PVCs remain retained. This is broker process-restart evidence, not node/disk-loss,
 publisher crash-window or application exactly-once evidence.
+
+
+Run `dev/tests/outbox.sh CONTROL_PLANE_IMAGE WEB_IMAGE` with the current production
+control-plane image and an existing local web image loaded into Docker Desktop.
+It deploys the local chart in the fixed `ayni-orchestrator-outbox-test` namespace,
+seeds a synthetic accepted SQLite decision, and checks broker outage, saturation,
+a broker-store/local-ACK-write crash window, broker/control-plane restart and
+exact event bytes. It verifies the accepted projection remains intact, then
+removes the release, namespace and disposable PVCs on success or failure. It
+refuses to overwrite a pre-existing fixture. The harness does not delete supplied
+image tags; remove test-only host and node tags after its namespace has gone.

@@ -126,7 +126,7 @@ python3 - "$scratch/dashboard.json" <<'PY'
 import json, sys
 x = json.load(open(sys.argv[1]))
 assert x['dashboard']['uid'] == 'ayni-orchestrator-jetstream'
-assert len(x['dashboard']['panels']) == 8
+assert len(x['dashboard']['panels']) == 13
 with open(sys.argv[1] + '.queries', 'w') as f:
     for panel in x['dashboard']['panels'][:6]:
         f.write(panel['targets'][0]['expr'] + '\n')

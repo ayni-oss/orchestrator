@@ -199,46 +199,11 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             )
             .map_err(CleanStoreError::Database)?;
         if version == 6 {
-            let expected = CLEAN_TABLES
-                .iter()
-                .filter(|name| {
-                    !matches!(
-                        **name,
-                        "certificates"
-                            | "certificate_operations"
-                            | "verification_inbox"
-                            | "verification_journal"
-                            | "verification_outbox"
-                    )
-                })
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
-            let mut expected = expected;
-            expected.push("automation_installations".into());
-            expected.sort();
-            if tables != expected {
-                return Err(CleanStoreError::CorruptState);
-            }
-            connection.execute_batch("BEGIN IMMEDIATE; CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL); CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1; CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL); UPDATE clean_schema SET version=7 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
+            migrate_schema_six(connection, &tables)?;
             version = 7;
         }
         if version == 7 {
-            let mut expected = CLEAN_TABLES
-                .iter()
-                .filter(|name| {
-                    !matches!(
-                        **name,
-                        "verification_inbox" | "verification_journal" | "verification_outbox"
-                    )
-                })
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
-            expected.push("automation_installations".into());
-            expected.sort();
-            if existing_tables(connection)? != expected {
-                return Err(CleanStoreError::CorruptState);
-            }
-            connection.execute_batch("BEGIN IMMEDIATE; DROP TABLE automation_installations; DELETE FROM durable_actions WHERE operation='InstallRepositoryAutomation'; DELETE FROM resource_events WHERE resource_type='automation_installation'; DELETE FROM page_snapshots; UPDATE reconciliation_cursors SET value=json_set(value,'$.pending',null,'$.next_at',0,'$.failures',0,'$.status',json('{}')) WHERE name LIKE 'managed:%' AND json_valid(value); UPDATE clean_schema SET version=8 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
+            migrate_schema_seven(connection)?;
             version = 8;
         }
         if version == 8 {
@@ -261,6 +226,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             super::verification_cutover::migrate(connection)?;
             version = 13;
         }
+        if version == 13 {
+            super::verification_outbox::migrate(connection)?;
+            version = 14;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -277,6 +246,51 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
     connection
         .execute_batch(CLEAN_SCHEMA)
         .map_err(CleanStoreError::Database)?;
+    Ok(())
+}
+
+fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), CleanStoreError> {
+    let expected = CLEAN_TABLES
+        .iter()
+        .filter(|name| {
+            !matches!(
+                **name,
+                "certificates"
+                    | "certificate_operations"
+                    | "verification_inbox"
+                    | "verification_journal"
+                    | "verification_outbox"
+            )
+        })
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let mut expected = expected;
+    expected.push("automation_installations".into());
+    expected.sort();
+    if tables != expected.as_slice() {
+        return Err(CleanStoreError::CorruptState);
+    }
+    connection.execute_batch("BEGIN IMMEDIATE; CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL); CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1; CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL); UPDATE clean_schema SET version=7 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
+    Ok(())
+}
+
+fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> {
+    let mut expected = CLEAN_TABLES
+        .iter()
+        .filter(|name| {
+            !matches!(
+                **name,
+                "verification_inbox" | "verification_journal" | "verification_outbox"
+            )
+        })
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    expected.push("automation_installations".into());
+    expected.sort();
+    if existing_tables(connection)? != expected {
+        return Err(CleanStoreError::CorruptState);
+    }
+    connection.execute_batch("BEGIN IMMEDIATE; DROP TABLE automation_installations; DELETE FROM durable_actions WHERE operation='InstallRepositoryAutomation'; DELETE FROM resource_events WHERE resource_type='automation_installation'; DELETE FROM page_snapshots; UPDATE reconciliation_cursors SET value=json_set(value,'$.pending',null,'$.next_at',0,'$.failures',0,'$.status',json('{}')) WHERE name LIKE 'managed:%' AND json_valid(value); UPDATE clean_schema SET version=8 WHERE component='control_plane'; COMMIT;").map_err(CleanStoreError::Database)?;
     Ok(())
 }
 
@@ -302,7 +316,7 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',13,unixepoch());
+VALUES ('control_plane',14,unixepoch());
 CREATE TABLE verification_inbox(
  source TEXT NOT NULL, event_id TEXT NOT NULL, execution_id TEXT NOT NULL, pod_uid TEXT NOT NULL,
  payload BLOB NOT NULL, received_at INTEGER NOT NULL, decision TEXT NOT NULL CHECK(decision IN ('pending','shadow_accepted','accepted','rejected')),
@@ -316,7 +330,10 @@ CREATE TABLE verification_journal(
  UNIQUE(profile_id,preparation_id,execution_id));
 CREATE TABLE verification_outbox(
  journal_id TEXT PRIMARY KEY REFERENCES verification_journal(id), source TEXT NOT NULL, event_id TEXT NOT NULL,
- payload BLOB NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, stored_at INTEGER, UNIQUE(source,event_id));
+ payload BLOB NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, stored_at INTEGER,
+ next_attempt_at INTEGER NOT NULL DEFAULT 0, broker_sequence INTEGER, last_error TEXT NOT NULL DEFAULT '', UNIQUE(source,event_id));
+CREATE INDEX verification_outbox_pending ON verification_outbox(next_attempt_at,journal_id) WHERE stored_at IS NULL;
+CREATE INDEX verification_outbox_stored ON verification_outbox(stored_at,journal_id) WHERE stored_at IS NOT NULL;
 CREATE TABLE certificates(id TEXT PRIMARY KEY, is_default INTEGER NOT NULL CHECK(is_default IN (0,1)), payload BLOB NOT NULL);
 CREATE UNIQUE INDEX single_default_certificate ON certificates(is_default) WHERE is_default=1;
 CREATE TABLE certificate_operations(operation_key TEXT PRIMARY KEY, certificate_id TEXT NOT NULL, operation TEXT NOT NULL, revision INTEGER NOT NULL, fingerprint BLOB NOT NULL);
@@ -428,7 +445,7 @@ CREATE INDEX page_snapshots_created_idx ON page_snapshots(created_at);
 COMMIT;
 ";
 
-pub(super) fn unix_seconds() -> Result<i64, CleanStoreError> {
+pub(crate) fn unix_seconds() -> Result<i64, CleanStoreError> {
     unix_timestamp().map(|value| value.seconds)
 }
 
