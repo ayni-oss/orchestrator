@@ -190,6 +190,23 @@ assert connection.execute("SELECT COUNT(*) FROM verification_outbox").fetchone()
 print('durable verification decision and failure accounting verified')
 PYSQL
 }
+if [[ "$mode" == events ]]; then
+  # Hold foreground cleanup before receipt processing, only in this disposable
+  # namespace. Reporting authentication and normal reconciliation stay enabled.
+  for role in connection-controller runtime-controller; do
+    kubectl --context docker-desktop -n "$namespace" get role "$role" -o json \
+      | python3 -c 'import json,sys; o=json.load(sys.stdin); o["metadata"].pop("resourceVersion",None); o["metadata"].pop("managedFields",None); print(json.dumps(o))' > "$temporary/$role.json"
+    python3 - "$temporary/$role.json" <<'PYROLE' | kubectl --context docker-desktop -n "$namespace" apply -f -
+import json,sys
+role=json.load(open(sys.argv[1]))
+role['metadata'].pop('managedFields',None)
+for rule in role['rules']:
+    if 'jobs' in rule['resources']:
+        rule['verbs']=[verb for verb in rule['verbs'] if verb!='delete']
+print(json.dumps(role))
+PYROLE
+  done
+fi
 kubectl --context docker-desktop -n "$namespace" create -f "$temporary/job.yaml"
 # Keep the original physical Pod alive across the control-plane restart. The
 # fixture preserves its first receipt, then forces a real duplicate HTTP replay.
@@ -222,20 +239,6 @@ if [[ "$mode" == events ]]; then
   test "$(kubectl --context docker-desktop -n "$namespace" get pod "$pod" -o jsonpath='{.status.phase}')" = Running
   inspect_state
   echo authoritative-failure-accepted-before-supervisor-exit
-  # Hold foreground cleanup during duplicate replay, only in this disposable
-  # namespace. Reporting authentication and normal reconciliation stay enabled.
-  for role in connection-controller runtime-controller; do
-    kubectl --context docker-desktop -n "$namespace" get role "$role" -o json > "$temporary/$role.json"
-    python3 - "$temporary/$role.json" <<'PYROLE' | kubectl --context docker-desktop -n "$namespace" apply -f -
-import json,sys
-role=json.load(open(sys.argv[1]))
-role['metadata'].pop('managedFields',None)
-for rule in role['rules']:
-    if 'jobs' in rule['resources']:
-        rule['verbs']=[verb for verb in rule['verbs'] if verb!='delete']
-print(json.dumps(role))
-PYROLE
-  done
   # Roll back admission defaults without rewriting the frozen generation or
   # disabling its transport. Its original producer must still authenticate.
   kubectl --context docker-desktop -n "$namespace" get configmap runtime-config -o json \
