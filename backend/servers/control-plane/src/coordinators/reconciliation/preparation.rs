@@ -427,10 +427,36 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             self.save(id, cursor).await?;
         }
         // Creation is idempotent: adopt a Job after a controller crash.
-        self.kubernetes
-            .start_discovery(&discovery_name, &runtime.execution_runtime())
+        let discovery_runtime = self
+            .operation_runtime(
+                id,
+                cursor,
+                runtime.execution_runtime(),
+                &discovery_name,
+                ayni_orchestrator_events::v1::RuntimeOperationKind::Discovery,
+            )
             .await?;
-        let discovery = self.kubernetes.discover(&discovery_name).await?;
+        self.kubernetes
+            .start_discovery(&discovery_name, &discovery_runtime)
+            .await?;
+        let discovery = if discovery_runtime.operation_reporting.is_some() {
+            match self
+                .operation_result(
+                    cursor,
+                    &discovery_name,
+                    ayni_orchestrator_events::v1::RuntimeOperationKind::Discovery,
+                )
+                .await?
+            {
+                Some(ayni_orchestrator_runtime::operation::OperationOutcome::Discovery {
+                    result,
+                }) => result,
+                Some(_) => return Err("runtime_result_invalid"),
+                None => ImageDiscovery::Pending,
+            }
+        } else {
+            self.kubernetes.discover(&discovery_name).await?
+        };
         let discovery = publication_readback(
             discovery,
             pending

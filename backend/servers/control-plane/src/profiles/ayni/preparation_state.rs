@@ -149,6 +149,12 @@ impl RuntimeCursorExt for RuntimeCursor {
 /// Complete public input identity retained before any repository preparation Job.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct PreparationIdentity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_reporting:
+        Option<ayni_orchestrator_runtime::verification::ReportingConfiguration>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub operation_observations:
+        std::collections::BTreeMap<String, ayni_orchestrator_events::EventIdentity>,
     #[serde(default)]
     pub verification_authority: VerificationAuthority,
     pub generation: String,

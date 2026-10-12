@@ -234,6 +234,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             super::verification_consumer::migrate(connection)?;
             version = 15;
         }
+        if version == 15 {
+            super::runtime_operations::migrate(connection)?;
+            version = 16;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -262,6 +266,7 @@ fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), 
                 "certificates"
                     | "certificate_operations"
                     | "verification_consumer"
+                    | "runtime_operation_inbox"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -286,6 +291,7 @@ fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> 
             !matches!(
                 **name,
                 "verification_consumer"
+                    | "runtime_operation_inbox"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -324,7 +330,8 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',15,unixepoch());
+VALUES ('control_plane',16,unixepoch());
+CREATE TABLE runtime_operation_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,execution_id TEXT NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL CHECK(decision IN ('pending','accepted','rejected')),PRIMARY KEY(source,event_id),UNIQUE(execution_id));
 CREATE TABLE verification_consumer(
  delivery_key TEXT PRIMARY KEY CHECK(length(delivery_key) IN (64,66)),
  digest BLOB NOT NULL CHECK(length(digest)=32),

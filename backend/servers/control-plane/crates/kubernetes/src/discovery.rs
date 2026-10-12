@@ -68,8 +68,15 @@ impl RuntimeKubernetes {
                 }
             }}
         })).map_err(|_| "runtime_job_invalid")?;
-        self.create(name, std::collections::BTreeMap::new(), "", &job)
-            .await
+        self.create_operation(
+            name,
+            std::collections::BTreeMap::new(),
+            "",
+            job,
+            runtime.operation_reporting.as_ref(),
+            "discover",
+        )
+        .await
     }
 
     /// Read the owned registry lookup outcome.

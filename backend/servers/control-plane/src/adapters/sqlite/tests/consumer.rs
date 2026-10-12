@@ -111,7 +111,7 @@ fn schema_fourteen_migration_preserves_outbox_and_bounded_retention() -> TestRes
     let (_, bytes) = seed(&mut store)?;
     store
         .connection
-        .execute_batch("DROP TABLE verification_consumer; UPDATE clean_schema SET version=14;")?;
+        .execute_batch("DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; UPDATE clean_schema SET version=14;")?;
     drop(store);
     let mut store = CleanStore::open(path, 3)?;
     assert_eq!(store.schema_version()?, SCHEMA_VERSION);

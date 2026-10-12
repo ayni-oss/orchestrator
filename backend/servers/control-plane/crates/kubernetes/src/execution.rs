@@ -424,6 +424,7 @@ mod tests {
             engine_mode: "external-isolated".into(),
         };
         let runtime = WorkloadRuntime {
+            operation_reporting: None,
             image: "registry/runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime".into(),
@@ -515,6 +516,7 @@ mod tests {
             engine_mode: "external-isolated".into(),
         };
         let runtime = WorkloadRuntime {
+            operation_reporting: None,
             image: "registry/runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime".into(),

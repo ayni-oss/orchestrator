@@ -8,6 +8,8 @@ async fn frozen_event_generation_does_not_fall_back_when_default_rolls_back() ->
     pending.resolved_digest = Some(format!("sha256:{}", "b".repeat(64)));
     let name = pending.name.clone();
     fixture.cursor.preparation = Some(PreparationIdentity {
+        operation_reporting: None,
+        operation_observations: std::collections::BTreeMap::new(),
         verification_authority: VerificationAuthority::Events {
             reporting: ayni_orchestrator_runtime::verification::ReportingConfiguration {
                 source: "ayni://orchestrator/supervisors/frozen".into(),

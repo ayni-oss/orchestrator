@@ -50,8 +50,35 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         discovery.image = contract.builder_reference.into();
         discovery.build = None;
         discovery.pull_secret = None;
+        let discovery = self
+            .operation_runtime(
+                id,
+                cursor,
+                discovery,
+                &name,
+                ayni_orchestrator_events::v1::RuntimeOperationKind::Discovery,
+            )
+            .await?;
         self.kubernetes.start_discovery(&name, &discovery).await?;
-        let image = match self.kubernetes.discover(&name).await? {
+        let result = if discovery.operation_reporting.is_some() {
+            match self
+                .operation_result(
+                    cursor,
+                    &name,
+                    ayni_orchestrator_events::v1::RuntimeOperationKind::Discovery,
+                )
+                .await?
+            {
+                Some(ayni_orchestrator_runtime::operation::OperationOutcome::Discovery {
+                    result,
+                }) => result,
+                Some(_) => return Err("runtime_result_invalid"),
+                None => ImageDiscovery::Pending,
+            }
+        } else {
+            self.kubernetes.discover(&name).await?
+        };
+        let image = match result {
             ImageDiscovery::Pending => {
                 let started = cursor
                     .builder
@@ -175,6 +202,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 cursor.status.remove("error-class");
                 cursor.status.remove("last-error");
                 cursor.preparation = Some(super::PreparationIdentity {
+                    operation_reporting: self
+                        .configuration
+                        .verification_authority()
+                        .events()
+                        .then(|| self.configuration.reporting.clone())
+                        .flatten(),
+                    operation_observations: std::collections::BTreeMap::new(),
                     verification_authority: self.configuration.verification_authority(),
                     generation,
                     source_revision: head.to_owned(),

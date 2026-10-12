@@ -11,6 +11,7 @@ fn fixture() -> (ExecutionConfiguration, WorkloadRuntime) {
             engine_mode: "external-isolated".into(),
         },
         WorkloadRuntime {
+            operation_reporting: None,
             image: "registry.test/team/runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime-coding".into(),

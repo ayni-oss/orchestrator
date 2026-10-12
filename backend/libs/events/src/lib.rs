@@ -17,6 +17,7 @@ pub mod v1 {
 }
 
 pub mod decisions;
+pub mod operations;
 
 pub const EVENT_TYPE: &str = "io.ayni.orchestrator.runtime.verification.result.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-verification-result/v1";

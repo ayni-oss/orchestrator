@@ -220,7 +220,7 @@ fn schema_twelve_upgrade_preserves_receipts_and_legacy_authority() -> TestResult
     let (profile, cursor, _, _) = prepared(&mut store)?;
     let (identity, payload) = receipt(&store, &profile, &cursor)?;
     store.receive_verification(&identity, &payload)?;
-    store.connection.execute_batch("DROP TABLE verification_consumer; DROP INDEX verification_outbox_pending; DROP INDEX verification_outbox_stored; ALTER TABLE verification_outbox DROP COLUMN next_attempt_at; ALTER TABLE verification_outbox DROP COLUMN broker_sequence; ALTER TABLE verification_outbox DROP COLUMN last_error; UPDATE clean_schema SET version=12; UPDATE verification_inbox SET decision='shadow_accepted',reason='shadow_only'; UPDATE reconciliation_cursors SET value=json_remove(value,'$.preparation.verification_authority') WHERE name LIKE 'managed:%';")?;
+    store.connection.execute_batch("DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP INDEX verification_outbox_pending; DROP INDEX verification_outbox_stored; ALTER TABLE verification_outbox DROP COLUMN next_attempt_at; ALTER TABLE verification_outbox DROP COLUMN broker_sequence; ALTER TABLE verification_outbox DROP COLUMN last_error; UPDATE clean_schema SET version=12; UPDATE verification_inbox SET decision='shadow_accepted',reason='shadow_only'; UPDATE reconciliation_cursors SET value=json_remove(value,'$.preparation.verification_authority') WHERE name LIKE 'managed:%';")?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
     assert_eq!(store.schema_version()?, SCHEMA_VERSION);

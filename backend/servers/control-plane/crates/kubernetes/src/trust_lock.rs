@@ -144,6 +144,7 @@ mod tests {
     }
     fn runtime() -> WorkloadRuntime {
         WorkloadRuntime {
+            operation_reporting: None,
             image: "runtime:lock".into(),
             platform: "linux/amd64".into(),
             service_account: "runtime-coding".into(),
