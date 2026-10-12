@@ -8,6 +8,7 @@ if [[ $# != 3 && $# != 4 ]]; then
   echo 'usage: dev/tests/verification-reporting.sh CONTROL_PLANE_IMAGE PINNED_WORKER_IMAGE WEB_IMAGE [events]' >&2
   exit 2
 fi
+worker_image=$2
 mode=${4:-shadow}
 if [[ "$mode" != shadow && "$mode" != events ]]; then echo "unsupported validation mode" >&2; exit 2; fi
 namespace="ayni-reporting-validation-$(date +%s)"
@@ -32,7 +33,7 @@ helm upgrade --install reporting-validation "$root/dev/charts/ayni-orchestrator-
   --set-string 'ayni-orchestrator.runtime.reporting.source=ayni://orchestrator/supervisors/validation'
 kubectl --context docker-desktop -n "$namespace" rollout status deployment/control-plane --timeout=180s
 if [[ "$mode" == events ]]; then
-  AYNI_VERIFICATION_FIXTURE_DIRECTORY="$temporary" AYNI_VERIFICATION_FIXTURE_WORKER="$2"     cargo test --locked -p ayni-orchestrator-control-plane export_verification_cutover_fixture -- --ignored
+  AYNI_VERIFICATION_FIXTURE_DIRECTORY="$temporary" AYNI_VERIFICATION_FIXTURE_WORKER="$worker_image"     cargo test --locked -p ayni-orchestrator-control-plane export_verification_cutover_fixture -- --ignored
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
   kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
   cat > "$temporary/seed.yaml" <<YAML
@@ -45,7 +46,7 @@ spec:
   securityContext: {runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
   containers:
     - name: seed
-      image: $2
+      image: $worker_image
       imagePullPolicy: Never
       command: [/bin/sh, -c, sleep 120]
       securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
@@ -60,7 +61,7 @@ YAML
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=1
   kubectl --context docker-desktop -n "$namespace" rollout status deployment/control-plane --timeout=180s
 else
-python3 - "$root" "$temporary" "$job" "$2" <<'PY'
+python3 - "$root" "$temporary" "$job" "$worker_image" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
 root,out,job,image=sys.argv[1:]
@@ -98,14 +99,14 @@ spec:
         fsGroup: 10001
       initContainers:
         - name: output
-          image: $2
+          image: $worker_image
           imagePullPolicy: Never
           args: [prepare-output, $job]
           volumeMounts:
             - {name: output, mountPath: /outputs}
       containers:
         - name: verify
-          image: $2
+          image: $worker_image
           imagePullPolicy: Never
           command: [/bin/sh, -c]
           args:
@@ -157,7 +158,7 @@ spec:
   securityContext: {runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
   containers:
     - name: inspector
-      image: $2
+      image: $worker_image
       imagePullPolicy: Never
       command: [/bin/sh, -c, sleep 120]
       securityContext:
