@@ -6,7 +6,8 @@
     "ayni-orchestrator",
     "observability",
     "prometheus",
-    "grafana"
+    "grafana",
+    "jetstream"
   ],
   "properties": {
     "ayni-orchestrator": {
@@ -39,6 +40,87 @@
     },
     "grafana": {
       "type": "object"
+    },
+    "jetstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "serverImage",
+        "toolingImage",
+        "exporterImage",
+        "storageClassName",
+        "storageSize",
+        "maxFileBytes",
+        "lifecycle"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "serverImage": {
+          "type": "string",
+          "pattern": "^.+@sha256:[a-f0-9]{64}$"
+        },
+        "toolingImage": {
+          "type": "string",
+          "pattern": "^.+@sha256:[a-f0-9]{64}$"
+        },
+        "exporterImage": {
+          "type": "string",
+          "pattern": "^.+@sha256:[a-f0-9]{64}$"
+        },
+        "storageClassName": {
+          "type": "string"
+        },
+        "storageSize": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 1048576,
+          "maximum": 1073741824
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxBytes",
+            "maxMessages",
+            "maxAgeSeconds",
+            "duplicateWindowSeconds",
+            "maxConsumers"
+          ],
+          "properties": {
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 536870912
+            },
+            "maxMessages": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "maxAgeSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 604800
+            },
+            "duplicateWindowSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400
+            },
+            "maxConsumers": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -109,6 +109,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl purge ayni-orchestrator-dev` | Permanently remove the labeled namespace and all local state |
 | `dev/ctl render CP WORKER_DIGEST WEB` | Render the complete Helm composition for inspection |
 | `dev/ctl dependencies` | Rebuild ignored chart archives from `Chart.lock` |
+| `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
 
 `purge` is deliberately explicit because it deletes credentials and retained
 product data. None of these commands changes the current Kubernetes context,
@@ -139,6 +140,11 @@ reproducible from its commit alone.
 Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/local-development.md`](../docs/local-development.md) and
 [`docs/operations.md`](../docs/operations.md).
+
+The local stack includes persistent NATS JetStream and its Grafana dashboard.
+Normal cleanup retains `jetstream-data`; `jetstream.enabled=false` disables the
+transport independently. See [persistent local JetStream](../docs/local-development.md#persistent-local-jetstream)
+for limits, replay expiry, trusted-development access and recovery boundaries.
 
 ### Connection onboarding and rotation
 

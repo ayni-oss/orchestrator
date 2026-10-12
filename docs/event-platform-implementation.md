@@ -152,6 +152,11 @@ its admission and retained history. The analysis UI can offer that action.
 
 ## Operational rollout
 
+The local Helm chart now provisions a persistent, bounded lifecycle JetStream
+stream and Grafana metrics. It has no application publisher or consumer yet;
+see [local broker operations](local-development.md#persistent-local-jetstream)
+for implemented limits, replay expiry, access boundaries and recovery checks.
+
 Evaluate on the explicit Docker Desktop Kubernetes context with the existing
 local Helm chart. Use one persistent NATS instance locally. A production profile
 needs replicated storage, failure-domain placement, authenticated subjects,

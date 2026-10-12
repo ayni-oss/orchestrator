@@ -6,6 +6,14 @@ namespace {{ .Release.Namespace }}.
 Forward the local web application with:
   kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/web 18080:8080
 {{- end }}
+{{- if .Values.jetstream.enabled }}
+
+JetStream uses the retained jetstream-data PVC and internal service jetstream:4222.
+The lifecycle stream is bounded; full streams reject publication and messages
+expire after the configured replay window. Application publication is separate.
+Do not delete the claim to resolve saturation. This is a trusted local profile;
+NetworkPolicy isolation requires a CNI that enforces it.
+{{- end }}
 {{- if .Values.observability.enabled }}
 
 Forward the local Grafana dashboard with:
