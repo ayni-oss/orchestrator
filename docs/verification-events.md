@@ -168,7 +168,7 @@ sequence protocol or second scheduler. Bounded payloads and separate evidence
 allow ingress and consumers to scale independently; partitioning can follow the
 execution/resource key without inventing broker ordering authority. Retained and shadow generations keep their reader while they drain. Retention,
 broker quarantine and removal of compatibility readers require separate gates.
-NATS deployment and other flow migrations are outside this contract.
+Other runtime preparation flows use the [runtime operation contract](runtime-operation-events.md).
 
 See [CloudEvents boundaries](cloudevents-contract.md),
 [implementation proposal](event-platform-implementation.md) and
@@ -218,7 +218,7 @@ store or a quiesced backup to enumerate reachable generation dependencies and
 receipt counts. Zero active Pods is insufficient: resumable preparations without
 a Pod still appear. Zero legacy dependencies does not authorize deletion of
 historical evidence or readers; audit historical decoding before retirement.
-Older binaries reject schema 15, so rollback requires a compatible binary.
+Older binaries reject schema 16, so rollback requires a compatible binary.
 
 `dev/tests/verification-reporting.sh` runs the local chart in a separate synthetic
 namespace with Docker Desktop, tests real projected-token reporting, durable shadow

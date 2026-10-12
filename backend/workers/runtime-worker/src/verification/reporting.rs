@@ -171,7 +171,7 @@ pub(crate) async fn deliver_event(
     receipt_file: &str,
 ) -> io::Result<()> {
     match read_bounded(&output.join(receipt_file), 1024) {
-        Ok(receipt) => return validate_receipt(&receipt, &identity),
+        Ok(receipt) => return validate_receipt(&receipt, identity),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(_) => return Err(failed()),
     }
@@ -216,7 +216,7 @@ pub(crate) async fn deliver_event(
                     delay = (delay * 2).min(30);
                     continue;
                 }
-                validate_receipt(&receipt, &identity)?;
+                validate_receipt(&receipt, identity)?;
                 persist(output, receipt_file, &receipt)?;
                 return Ok(());
             }

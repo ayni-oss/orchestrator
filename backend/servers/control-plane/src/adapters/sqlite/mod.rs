@@ -385,6 +385,7 @@ mod tests {
     mod recovery;
     mod runtime;
     mod runtime_certificate;
+    mod runtime_operations;
     mod runtime_registry;
     mod summaries;
     mod verification;

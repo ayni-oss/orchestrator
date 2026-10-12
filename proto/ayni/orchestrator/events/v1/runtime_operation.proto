@@ -39,3 +39,11 @@ message RuntimeOperationEvidenceReference {
   uint64 size_bytes = 3;
   string contract = 4;
 }
+
+// Controller-owned accepted observation with its resulting cursor revision.
+message RuntimeOperationDecisionRecorded {
+  RuntimeOperationResultAvailable observation = 1;
+  string observation_source = 2;
+  string observation_id = 3;
+  uint64 aggregate_revision = 4;
+}

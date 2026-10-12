@@ -88,6 +88,14 @@ export interface RuntimeOperationEvidenceReference {
   contract: string;
 }
 
+/** Controller-owned accepted observation with its resulting cursor revision. */
+export interface RuntimeOperationDecisionRecorded {
+  observation?: RuntimeOperationResultAvailable | undefined;
+  observationSource: string;
+  observationId: string;
+  aggregateRevision: string;
+}
+
 function createBaseRuntimeOperationResultAvailable(): RuntimeOperationResultAvailable {
   return { binding: undefined, kind: 0, evidence: undefined };
 }
@@ -595,6 +603,137 @@ export const RuntimeOperationEvidenceReference: MessageFns<RuntimeOperationEvide
     message.sha256 = object.sha256 ?? "";
     message.sizeBytes = object.sizeBytes ?? "0";
     message.contract = object.contract ?? "";
+    return message;
+  },
+};
+
+function createBaseRuntimeOperationDecisionRecorded(): RuntimeOperationDecisionRecorded {
+  return { observation: undefined, observationSource: "", observationId: "", aggregateRevision: "0" };
+}
+
+export const RuntimeOperationDecisionRecorded: MessageFns<RuntimeOperationDecisionRecorded> = {
+  encode(message: RuntimeOperationDecisionRecorded, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.observation !== undefined) {
+      RuntimeOperationResultAvailable.encode(message.observation, writer.uint32(10).fork()).join();
+    }
+    if (message.observationSource !== "") {
+      writer.uint32(18).string(message.observationSource);
+    }
+    if (message.observationId !== "") {
+      writer.uint32(26).string(message.observationId);
+    }
+    if (message.aggregateRevision !== "0") {
+      writer.uint32(32).uint64(message.aggregateRevision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RuntimeOperationDecisionRecorded {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRuntimeOperationDecisionRecorded();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.observation = RuntimeOperationResultAvailable.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.observationSource = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.observationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.aggregateRevision = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RuntimeOperationDecisionRecorded {
+    return {
+      observation: isSet(object.observation) ? RuntimeOperationResultAvailable.fromJSON(object.observation) : undefined,
+      observationSource: isSet(object.observationSource)
+        ? globalThis.String(object.observationSource)
+        : isSet(object.observation_source)
+        ? globalThis.String(object.observation_source)
+        : "",
+      observationId: isSet(object.observationId)
+        ? globalThis.String(object.observationId)
+        : isSet(object.observation_id)
+        ? globalThis.String(object.observation_id)
+        : "",
+      aggregateRevision: isSet(object.aggregateRevision)
+        ? globalThis.String(object.aggregateRevision)
+        : isSet(object.aggregate_revision)
+        ? globalThis.String(object.aggregate_revision)
+        : "0",
+    };
+  },
+
+  toJSON(message: RuntimeOperationDecisionRecorded): unknown {
+    const obj: any = {};
+    if (message.observation !== undefined) {
+      obj.observation = RuntimeOperationResultAvailable.toJSON(message.observation);
+    }
+    if (message.observationSource !== "") {
+      obj.observationSource = message.observationSource;
+    }
+    if (message.observationId !== "") {
+      obj.observationId = message.observationId;
+    }
+    if (message.aggregateRevision !== "0") {
+      obj.aggregateRevision = message.aggregateRevision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RuntimeOperationDecisionRecorded>): RuntimeOperationDecisionRecorded {
+    return RuntimeOperationDecisionRecorded.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RuntimeOperationDecisionRecorded>): RuntimeOperationDecisionRecorded {
+    const message = createBaseRuntimeOperationDecisionRecorded();
+    message.observation = (object.observation !== undefined && object.observation !== null)
+      ? RuntimeOperationResultAvailable.fromPartial(object.observation)
+      : undefined;
+    message.observationSource = object.observationSource ?? "";
+    message.observationId = object.observationId ?? "";
+    message.aggregateRevision = object.aggregateRevision ?? "0";
     return message;
   },
 };

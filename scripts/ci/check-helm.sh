@@ -154,7 +154,7 @@ grep -q '^  name: jetstream-data$' "$scratch/local.yaml"
 grep -q '"discard": "new"' "$scratch/local.yaml"
 grep -q '"max_msg_size": 16384' "$scratch/local.yaml"
 grep -q '"retention": "limits"' "$scratch/local.yaml"
-grep -q '"subjects": \["orchestrator.runtime.verification.accepted.v1"\]' "$scratch/local.yaml"
+grep -q '"subjects": \["orchestrator.runtime.verification.accepted.v1", "orchestrator.runtime.operation.accepted.v1"\]' "$scratch/local.yaml"
 grep -q 'job_name: ayni-orchestrator-jetstream' "$scratch/local.yaml"
 grep -q 'jetstream.json:' "$scratch/local.yaml"
 if grep -q 'name: exporter' "$scratch/no-observability.yaml"; then

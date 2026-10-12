@@ -10,7 +10,7 @@ use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};
 pub const EVENT_TYPE: &str = "io.ayni.orchestrator.runtime.operation.result.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-operation-result/v1";
 pub const CONTRACT: &str = "runtime-operation-v1";
-pub const MAX_RECORD_BYTES: u64 = 2_200_000;
+pub const MAX_RECORD_BYTES: usize = 2_200_000;
 
 fn validate(
     payload: &RuntimeOperationResultAvailable,
@@ -48,7 +48,7 @@ fn validate(
     if e.evidence_id != "runtime-operation-json"
         || !digest(&e.sha256)
         || e.size_bytes == 0
-        || e.size_bytes > MAX_RECORD_BYTES
+        || e.size_bytes > MAX_RECORD_BYTES as u64
         || e.contract != CONTRACT
     {
         return Err(ContractError::Invalid("operation evidence"));

@@ -354,9 +354,11 @@ impl Fixture {
             registry: v1::RuntimeRegistrySelection::default(),
             certificate: None,
         };
-        self.reconciler
-            .observe_pending(&observation, &mut self.cursor)
-            .await
+        Box::pin(
+            self.reconciler
+                .observe_pending(&observation, &mut self.cursor),
+        )
+        .await
     }
     fn discovery(&self, outcome: ImageDiscovery) {
         self.reconciler

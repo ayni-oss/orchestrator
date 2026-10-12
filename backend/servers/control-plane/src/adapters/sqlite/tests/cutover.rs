@@ -276,6 +276,9 @@ fn export_verification_cutover_fixture() -> TestResult {
         reporting: reporting.clone(),
     };
     store.save_runtime_cursor(&profile, &cursor)?;
+    if std::env::var("AYNI_RUNTIME_OPERATION_FIXTURE").as_deref() == Ok("true") {
+        super::runtime_operations::seed_publication(&mut store, &profile, &mut cursor, &reporting)?;
+    }
     let (_, mut payload) = receipt(&store, &profile, &cursor)?;
     let binding = payload.binding.as_mut().ok_or("binding")?;
     binding.resolved_image_digest = digest.into();

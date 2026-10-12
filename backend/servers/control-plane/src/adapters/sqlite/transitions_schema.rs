@@ -331,7 +331,7 @@ CREATE TABLE clean_schema(
 );
 INSERT INTO clean_schema(component,version,created_at)
 VALUES ('control_plane',16,unixepoch());
-CREATE TABLE runtime_operation_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,execution_id TEXT NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL CHECK(decision IN ('pending','accepted','rejected')),PRIMARY KEY(source,event_id),UNIQUE(execution_id));
+CREATE TABLE runtime_operation_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,execution_id TEXT NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL CHECK(decision IN ('pending','accepted','rejected')),accepted_source TEXT,accepted_id TEXT,accepted_payload BLOB,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,stored_at INTEGER,broker_sequence INTEGER,PRIMARY KEY(source,event_id),UNIQUE(execution_id));
 CREATE TABLE verification_consumer(
  delivery_key TEXT PRIMARY KEY CHECK(length(delivery_key) IN (64,66)),
  digest BLOB NOT NULL CHECK(length(digest)=32),

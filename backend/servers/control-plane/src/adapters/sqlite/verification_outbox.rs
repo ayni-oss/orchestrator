@@ -32,14 +32,7 @@ UPDATE clean_schema SET version=14 WHERE component='control_plane'; COMMIT;")
 
 impl CleanStore {
     pub(super) fn admit_outbox_capacity(&self) -> Result<(), CleanStoreError> {
-        let pending: i64 = self
-            .connection
-            .query_row(
-                "SELECT COUNT(*) FROM verification_outbox WHERE stored_at IS NULL",
-                [],
-                |r| r.get(0),
-            )
-            .map_err(CleanStoreError::Database)?;
+        let pending = self.outbox_stats()?.pending;
         if pending >= MAX_PENDING {
             Err(CleanStoreError::BoundExceeded)
         } else {
@@ -48,12 +41,20 @@ impl CleanStore {
     }
 
     pub(crate) fn outbox_stats(&self) -> Result<OutboxStats, CleanStoreError> {
-        self.connection.query_row(
+        let mut stats = self.connection.query_row(
             "SELECT COUNT(*), COALESCE(SUM(length(o.payload)),0), COALESCE(MIN(j.created_at),0),
              (SELECT COUNT(*) FROM verification_outbox WHERE stored_at IS NOT NULL)
              FROM verification_outbox o JOIN verification_journal j ON j.id=o.journal_id WHERE o.stored_at IS NULL",
             [], |r| Ok(OutboxStats {pending:r.get(0)?, bytes:r.get(1)?, oldest_at:r.get(2)?, retained:r.get(3)?}),
-        ).map_err(CleanStoreError::Database)
+        ).map_err(CleanStoreError::Database)?;
+        let runtime = self.connection.query_row("SELECT COUNT(*),COALESCE(SUM(length(accepted_payload)),0),COALESCE(MIN(received_at),0),(SELECT COUNT(*) FROM runtime_operation_inbox WHERE stored_at IS NOT NULL) FROM runtime_operation_inbox WHERE decision='accepted' AND stored_at IS NULL",[],|r| Ok(OutboxStats {pending:r.get(0)?,bytes:r.get(1)?,oldest_at:r.get(2)?,retained:r.get(3)?})).map_err(CleanStoreError::Database)?;
+        stats.pending += runtime.pending;
+        stats.bytes += runtime.bytes;
+        stats.retained += runtime.retained;
+        if runtime.oldest_at > 0 && (stats.oldest_at == 0 || runtime.oldest_at < stats.oldest_at) {
+            stats.oldest_at = runtime.oldest_at;
+        }
+        Ok(stats)
     }
 
     // Persist retry scheduling before any network wait, including process crashes.
@@ -132,7 +133,9 @@ impl CleanStore {
     }
 
     pub(crate) fn prune_verification_history(&mut self) -> Result<(), CleanStoreError> {
-        self.prune_verification_history_at(unix_seconds()?)
+        let now = unix_seconds()?;
+        self.prune_verification_history_at(now)?;
+        self.prune_runtime_operation_history(now)
     }
 
     pub(crate) fn prune_verification_history_at(
