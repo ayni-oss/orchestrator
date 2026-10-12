@@ -32,6 +32,7 @@ runtime:
 outbox:
   natsUrl: ""
   localDevelopment: false
+  consumerEnabled: false
 
 # Optional verification traces. Empty endpoint keeps JSON logs only.
 telemetry:

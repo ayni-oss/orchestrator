@@ -3,6 +3,7 @@ ayni-orchestrator:
   outbox:
     natsUrl: nats://jetstream:4222
     localDevelopment: true
+    consumerEnabled: true
   telemetry:
     endpointConfigMap: telemetry-config
   runtime:

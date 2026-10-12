@@ -230,6 +230,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             super::verification_outbox::migrate(connection)?;
             version = 14;
         }
+        if version == 14 {
+            super::verification_consumer::migrate(connection)?;
+            version = 15;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -257,6 +261,7 @@ fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), 
                 **name,
                 "certificates"
                     | "certificate_operations"
+                    | "verification_consumer"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -280,7 +285,10 @@ fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> 
         .filter(|name| {
             !matches!(
                 **name,
-                "verification_inbox" | "verification_journal" | "verification_outbox"
+                "verification_consumer"
+                    | "verification_inbox"
+                    | "verification_journal"
+                    | "verification_outbox"
             )
         })
         .map(ToString::to_string)
@@ -316,7 +324,14 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',14,unixepoch());
+VALUES ('control_plane',15,unixepoch());
+CREATE TABLE verification_consumer(
+ delivery_key TEXT PRIMARY KEY CHECK(length(delivery_key) IN (64,66)),
+ digest BLOB NOT NULL CHECK(length(digest)=32),
+ outcome TEXT NOT NULL CHECK(outcome IN ('woken','unchanged','rejected')),
+ processed_at INTEGER NOT NULL CHECK(processed_at>=0),
+ journal_id TEXT REFERENCES verification_journal(id) ON DELETE SET NULL);
+CREATE INDEX verification_consumer_retention ON verification_consumer(processed_at,delivery_key);
 CREATE TABLE verification_inbox(
  source TEXT NOT NULL, event_id TEXT NOT NULL, execution_id TEXT NOT NULL, pod_uid TEXT NOT NULL,
  payload BLOB NOT NULL, received_at INTEGER NOT NULL, decision TEXT NOT NULL CHECK(decision IN ('pending','shadow_accepted','accepted','rejected')),

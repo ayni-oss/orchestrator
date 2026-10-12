@@ -153,8 +153,8 @@ its admission and retained history. The analysis UI can offer that action.
 ## Operational rollout
 
 The local Helm chart now provisions a persistent, bounded lifecycle JetStream
-stream, an accepted-event outbox publisher and Grafana backlog metrics. Durable
-application consumers remain subsequent work;
+stream, an accepted-event outbox publisher, a durable verification cleanup consumer
+and Grafana backlog metrics;
 see [local broker operations](local-development.md#persistent-local-jetstream)
 for implemented limits, replay expiry, access boundaries and recovery checks.
 

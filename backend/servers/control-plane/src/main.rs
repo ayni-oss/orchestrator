@@ -1,6 +1,6 @@
 use ayni_orchestrator_control_plane::{
     AppState, BackgroundTasks, Configuration, ModelCatalog, OutboxPublisher, RuntimeReconciler,
-    router, serve_custom_grpc, serve_grpc,
+    VerificationConsumer, router, serve_custom_grpc, serve_grpc,
 };
 use std::{env, fs, io, process::ExitCode, time::Duration};
 use tokio::{net::TcpListener, signal, sync::watch};
@@ -76,6 +76,8 @@ async fn run() -> Result<(), io::Error> {
     state = state.with_github_onboarding();
     let runtimes = RuntimeReconciler::from_environment(state.clone()).map_err(io::Error::other)?;
     let publisher = OutboxPublisher::from_environment(state.clone()).map_err(io::Error::other)?;
+    let consumer =
+        VerificationConsumer::from_environment(state.clone()).map_err(io::Error::other)?;
     let listener = TcpListener::bind(configuration.bind_address()).await?;
     debug!(address = %configuration.bind_address(), "HTTP control plane started");
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
@@ -91,6 +93,7 @@ async fn run() -> Result<(), io::Error> {
     });
     spawn_background_loops(&mut background, state.clone(), runtimes, &shutdown_receiver);
     spawn_outbox_loop(&mut background, publisher, &shutdown_receiver);
+    spawn_consumer_loop(&mut background, consumer, &shutdown_receiver);
     let http_shutdown = shutdown_receiver.clone();
     let mut http_router = router(state.clone());
     if let Some(runtime) =
@@ -291,4 +294,25 @@ fn spawn_background_loops(
         },
     );
     spawn_runtime_loops(background, runtimes, shutdown);
+}
+
+fn spawn_consumer_loop(
+    background: &mut BackgroundTasks,
+    consumer: Option<VerificationConsumer>,
+    shutdown: &watch::Receiver<bool>,
+) {
+    if let Some(consumer) = consumer {
+        let consumer = std::sync::Arc::new(consumer);
+        background.spawn_periodic(
+            "verification-consumer",
+            Duration::from_secs(5),
+            shutdown.clone(),
+            move || {
+                let consumer = consumer.clone();
+                async move {
+                    consumer.consume_once().await;
+                }
+            },
+        );
+    }
 }

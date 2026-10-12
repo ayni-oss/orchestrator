@@ -411,6 +411,90 @@
         }
       ],
       "options": {}
+    },
+    {
+      "id": 14,
+      "title": "Verification consumer pending",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "orchestrator_verification_consumer_pending",
+          "refId": "A",
+          "legendFormat": "Verification consumer pending"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "title": "Verification consumer awaiting ACK",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 56,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "orchestrator_verification_consumer_unacknowledged",
+          "refId": "A",
+          "legendFormat": "Verification consumer awaiting ACK"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 16,
+      "title": "Verification consumer handling outcomes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 56,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(orchestrator_verification_consumer_deliveries_total[5m])",
+          "refId": "A",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     }
   ]
 }

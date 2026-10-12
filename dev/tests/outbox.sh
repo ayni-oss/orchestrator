@@ -5,7 +5,9 @@ root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$root/dev/lib/common.sh"
 if [[ $# != 2 ]]; then echo 'usage: dev/tests/outbox.sh CONTROL_PLANE_IMAGE WEB_IMAGE' >&2; exit 2; fi
 context=$(dev_context)
+consumer=false
 namespace=ayni-orchestrator-outbox-test
+if [[ "${AYNI_CONSUMER_FIXTURE:-false}" == true ]]; then consumer=true; namespace=ayni-orchestrator-consumer-test; fi
 created_namespace=false
 scratch=$(mktemp -d)
 mkdir -p "$scratch/plugins"
@@ -35,6 +37,7 @@ created_namespace=true
 kubectl --context "$context" label namespace "$namespace" orchestrator.ayni.dev/environment=local
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --kube-context "$context" --namespace "$namespace" \
   --wait --timeout=5m --set observability.enabled=false --set jetstream.lifecycle.maxMessages=1 \
+  --set "ayni-orchestrator.outbox.consumerEnabled=$consumer" \
   --set ayni-orchestrator.runtime.enabled=false --set-string "ayni-orchestrator.images.controlPlane=$1" \
   --set-string "ayni-orchestrator.images.web=$2" --set ayni-orchestrator.images.pullPolicy=Never
 k() { kubectl --context "$context" --namespace "$namespace" "$@"; }
@@ -121,13 +124,37 @@ k exec outbox-test -- sh -c 'nats --server=nats://jetstream:4222 pub --jetstream
 start
 wait_metric '^orchestrator_verification_outbox_pending 0$'
 wait_metric 'orchestrator_verification_outbox_publications_total\{outcome="duplicate"\} 1$'
+if [[ "$consumer" == true ]]; then
+  wait_metric 'orchestrator_verification_consumer_deliveries_total\{outcome="woken"\} 1$'
+  wait_metric '^orchestrator_verification_consumer_unacknowledged 0$'
+fi
 stop
 inspect stored
+if [[ "$consumer" == true ]]; then
+  python3 - "$scratch/observed.sqlite" <<'PYFIXTURE'
+import sqlite3,sys,json
+c=sqlite3.connect(sys.argv[1]); row=c.execute("SELECT name,value FROM reconciliation_cursors WHERE name LIKE 'managed:%'").fetchone()
+cursor=json.loads(row[1]); assert cursor['next_at']==0
+assert c.execute("SELECT outcome,COUNT(*) FROM verification_consumer GROUP BY outcome ORDER BY outcome").fetchall()==[('rejected',1),('woken',1)]
+# Later reconciliation backoff must survive application-level duplicate replay.
+cursor['next_at']=9876543210
+c.execute("UPDATE reconciliation_cursors SET value=? WHERE name=?",(json.dumps(cursor),row[0])); c.commit(); c.close()
+PYFIXTURE
+  k cp "$scratch/observed.sqlite" outbox-test:/state/orchestrator.sqlite
+  # Reset only the disposable broker cursor, forcing replay independently of
+  # its deduplication window and the persisted application receipt.
+  nats consumer rm "$stream" verification-cleanup-v1 --force
+fi
 # Restarts retain the recorded ACK and bytes without a new publication.
 k rollout restart statefulset/jetstream
 k rollout status statefulset/jetstream --timeout=120s
 start
 wait_metric '^orchestrator_verification_outbox_retained_published 1$'
+if [[ "$consumer" == true ]]; then
+  wait_metric 'orchestrator_verification_consumer_deliveries_total\{outcome="duplicate"\} 1$'
+  wait_metric '^orchestrator_verification_consumer_unacknowledged 0$'
+  nats consumer info "$stream" verification-cleanup-v1 --json >"$scratch/consumer.json"
+fi
 stop
 inspect stored
 nats stream info "$stream" --json >"$scratch/info.json"
@@ -141,3 +168,21 @@ message=json.loads((p/'message.json').read_text()); message=message.get('message
 assert base64.b64decode(message['data'])==(p/'event.json').read_bytes()
 print('Production publisher: outage, saturation, lost ACK, restart, identity and bytes passed.')
 PY
+
+if [[ "$consumer" == true ]]; then
+  python3 - "$scratch" <<'PYCONSUMER'
+import sqlite3,json,sys
+from pathlib import Path
+p=Path(sys.argv[1]); c=sqlite3.connect(p/'observed.sqlite')
+cursor=json.loads(c.execute("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%'").fetchone()[0])
+assert cursor['next_at']==9876543210, cursor
+assert c.execute("SELECT outcome,COUNT(*) FROM verification_consumer GROUP BY outcome ORDER BY outcome").fetchall()==[('rejected',1),('woken',1)]
+info=json.loads((p/'consumer.json').read_text())
+assert info['num_ack_pending']==0 and info['num_pending']==0, info
+assert info['ack_floor']['stream_seq']==2, info
+before=sqlite3.connect(p/'orchestrator.sqlite')
+for table in ['runtime_profiles','resource_events','verification_journal','runtime_artifacts']:
+    assert before.execute(f'SELECT * FROM {table}').fetchall()==c.execute(f'SELECT * FROM {table}').fetchall(), table
+print('Production consumer: committed cleanup wake, durable rejection, cursor replay, restart, unchanged projections and budgets passed.')
+PYCONSUMER
+fi

@@ -20,7 +20,7 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-SQLite schema version 14 migrates recognized versions 6–13 before reconciliation.
+SQLite schema version 15 migrates recognized versions 6–14 before reconciliation.
 The migration preserves connections, certificates, registries, runtime history
 and retained tasks, and records obsolete installation resources for restartable
 cleanup. Follow [operations](operations.md) and upgrade with cleaned values and
@@ -106,7 +106,7 @@ carrying the structured CloudEvent type
 `io.ayni.orchestrator.runtime.verification.accepted.v1` defined in the
 [verification contract](verification-events.md). This subject is distinct from
 the CloudEvents resource `subject`. The local chart enables the accepted-event
-outbox publisher; durable application consumers are subsequent work.
+outbox publisher and the durable verification cleanup consumer.
 
 The stream uses file storage, one replica and Limits retention. Defaults are
 512 MiB, 100,000 messages, seven days of message age, a 16 KiB message size,
@@ -128,7 +128,8 @@ The reusable chart leaves `outbox.natsUrl` empty. The local chart sets it to
 `nats://jetstream:4222` and requires `outbox.localDevelopment: true`. These map to
 `ORCHESTRATOR_OUTBOX_NATS_URL` and `ORCHESTRATOR_OUTBOX_LOCAL_DEVELOPMENT=true`.
 URLs with credentials, paths, query strings or unsupported schemes are rejected.
-Unset the URL to disable publication, including when disabling local JetStream.
+Disable `outbox.consumerEnabled` and unset the URL to disable delivery, including
+when disabling local JetStream.
 This opt-in is suitable only for trusted development under the access limits below.
 
 The publisher runs every five seconds, claiming at most eight due records in a
@@ -199,3 +200,51 @@ exact event bytes. It verifies the accepted projection remains intact, then
 removes the release, namespace and disposable PVCs on success or failure. It
 refuses to overwrite a pre-existing fixture. The harness does not delete supplied
 image tags; remove test-only host and node tags after its namespace has gone.
+
+### Durable verification cleanup consumer
+
+The local chart enables `outbox.consumerEnabled`; the reusable chart defaults it
+to false. This maps to `ORCHESTRATOR_VERIFICATION_CONSUMER_ENABLED=true` and
+requires the explicitly trusted local publisher endpoint. Disable this flag before
+unsetting the endpoint. SQLite schema 15 migrates existing acceptance and outbox
+records unchanged; older binaries cannot open it.
+
+The `verification-cleanup-v1` durable pull consumer filters only the accepted
+verification subject, starts at all retained messages, and uses explicit ACKs.
+It permits eight outstanding deliveries, one waiting pull, batches of eight or
+128 KiB, a two-second maximum pull expiry and a thirty-second ACK deadline.
+Processing runs every five seconds with a twelve-second pass budget. Consumer
+state uses broker file storage with no inactivity expiry; unlimited redelivery
+preserves transient database failure recovery. Existing incompatible consumer
+configuration is refused without silently replacing its cursor.
+
+Each typed source/ID is checked against the accepted SQLite journal/outbox.
+Within one transaction, the handler persists semantic-content deduplication and
+sets the matching accepted cleanup cursor eligible (`next_at=0`), using the
+existing committed-cleanup guard. The existing runtime reconciler performs the
+cleanup; this consumer never activates a runtime, resets retries or recreates
+Jobs. Periodic reconciliation continues even during broker outage or replay
+expiry. Superseded or drained cleanup records are committed no-ops.
+
+Only after commit does the consumer send a confirmed ACK. Lost ACK or broker
+cursor replay encounters the durable receipt and cannot wake cleanup again.
+Malformed, conflicting or unrecognized messages record only a SHA256 fingerprint
+and rejection outcome before ACK, without retaining untrusted payloads. Rejection
+storage and valid receipts share a 100,000-record cap: when full, delivery pauses
+without ACK rather than losing diagnostics. Completed receipts expire after
+thirty days, at most 128 per pass, once their accepted preparation and cleanup
+have drained. Active cleanup keeps its receipt. Replays after expiry still require the original
+accepted journal and current matching cleanup; pruned/unrecognized facts cannot
+create work. This retention is not indefinite exactly-once delivery.
+
+Grafana includes application pending, awaiting-ACK and outcome panels. Lag gauges
+represent the last successful broker sample; the `deferred` outcome counter
+exposes unavailable transport or persistence.
+
+`dev/tests/consumer.sh CONTROL_PLANE_IMAGE WEB_IMAGE` uses the production image,
+real SQLite and JetStream in a fixed disposable Docker Desktop namespace. It
+checks outage, saturation, committed cleanup wake, malformed rejection, broker
+cursor replay and restart while preserving resource projections and later
+cleanup backoff. No provider or worker execution is enabled in this fixture.
+The namespace, PVCs and release are removed on success or failure; callers must
+remove their test-only host and node image tags after the run.

@@ -161,7 +161,7 @@ publications and reachable cleanup remain retained. Pruned verification replays
 still fail stale cursor/generation guards. Inbox retention remains separately
 bounded at 100000 observations. See [publisher operations](local-development.md#persistent-local-jetstream)
 for retry timing, metrics and the finite broker deduplication window. Durable
-broker consumers are not implemented yet.
+the first durable broker consumer wakes committed verification cleanup through the existing reconciler.
 
 Each execution has one terminal observation, so verification needs no streaming
 sequence protocol or second scheduler. Bounded payloads and separate evidence
@@ -218,7 +218,7 @@ store or a quiesced backup to enumerate reachable generation dependencies and
 receipt counts. Zero active Pods is insufficient: resumable preparations without
 a Pod still appear. Zero legacy dependencies does not authorize deletion of
 historical evidence or readers; audit historical decoding before retirement.
-Older binaries reject schema 14, so rollback requires a compatible binary.
+Older binaries reject schema 15, so rollback requires a compatible binary.
 
 `dev/tests/verification-reporting.sh` runs the local chart in a separate synthetic
 namespace with Docker Desktop, tests real projected-token reporting, durable shadow

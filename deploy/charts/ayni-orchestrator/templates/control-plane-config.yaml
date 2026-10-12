@@ -1,4 +1,7 @@
 {{- if .Values.enabled }}
+{{- if and .Values.outbox.consumerEnabled (not .Values.outbox.natsUrl) }}
+{{- fail "outbox.consumerEnabled requires trusted local outbox transport" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,6 +9,7 @@ metadata:
   labels:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
 data:
+  ORCHESTRATOR_VERIFICATION_CONSUMER_ENABLED: {{ .Values.outbox.consumerEnabled | quote }}
   {{- if .Values.outbox.natsUrl }}
   ORCHESTRATOR_OUTBOX_NATS_URL: {{ .Values.outbox.natsUrl | quote }}
   ORCHESTRATOR_OUTBOX_LOCAL_DEVELOPMENT: {{ .Values.outbox.localDevelopment | quote }}

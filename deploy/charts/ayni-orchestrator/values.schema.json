@@ -453,6 +453,9 @@
         },
         "localDevelopment": {
           "type": "boolean"
+        },
+        "consumerEnabled": {
+          "type": "boolean"
         }
       },
       "allOf": [

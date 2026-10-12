@@ -9,7 +9,7 @@ deadline. Ayni remains independently useful as a local CLI.
 The trusted operator UI onboards one GitHub App, multiple GHCR connections, and
 global Ed25519 signing certificates. Ayni runtimes select a certificate or follow
 the global default; projects inherit their repositories’ runtime selections.
-Kubernetes Secrets hold credentials; SQLite schema version 14 stores safe metadata
+Kubernetes Secrets hold credentials; SQLite schema version 15 stores safe metadata
 and references, preserving retained history and migrating active runtime preparation to typed phases.
 Administrator-managed connections remain read-only, while
 validated UI replacements activate without restarting the control plane. Registry

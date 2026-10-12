@@ -262,3 +262,10 @@ for endpoint in 'nats://user:password@jetstream:4222' 'tls://jetstream:4222' 'na
     echo 'Chart accepted unsupported publisher endpoint' >&2; exit 1
   fi
 done
+
+# Application delivery defaults and required trusted-local transport.
+grep -q 'ORCHESTRATOR_VERIFICATION_CONSUMER_ENABLED: "false"' "$scratch/application.yaml"
+grep -q 'ORCHESTRATOR_VERIFICATION_CONSUMER_ENABLED: "true"' "$scratch/local.yaml"
+if helm template invalid "$application_chart" --set outbox.consumerEnabled=true >"$scratch/invalid-consumer.yaml" 2>"$scratch/invalid-consumer.err"; then
+  echo "consumer accepted without trusted local transport" >&2; exit 1
+fi

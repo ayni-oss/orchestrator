@@ -13,7 +13,7 @@ const TIMEOUT: Duration = Duration::from_secs(2);
 /// Opt-in local transport; no connection is attempted during application startup.
 pub struct OutboxPublisher {
     state: AppState,
-    endpoint: String,
+    pub(super) endpoint: String,
     connection: Mutex<Option<jetstream::Context>>,
 }
 
