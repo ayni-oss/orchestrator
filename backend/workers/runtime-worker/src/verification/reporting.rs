@@ -98,7 +98,7 @@ const fn code(reason: VerificationFailure) -> VerificationFailureCode {
     }
 }
 
-fn persist(output: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn persist(output: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
     use io::Write as _;
     if !fs::symlink_metadata(output)?.is_dir() {
         return Err(failed());
@@ -151,8 +151,27 @@ async fn deliver_inner(
     admission.configuration.validate().map_err(|_| failed())?;
     let bytes = event(output, admission, pod_uid)?;
     let (identity, _) = ayni_orchestrator_events::decode(&bytes).map_err(|_| failed())?;
-    match read_bounded(&output.join(RECEIPT_FILE), 1024) {
-        Ok(receipt) => return validate_receipt(&receipt, &identity),
+    deliver_event(
+        output,
+        &admission.configuration,
+        token_path,
+        &identity,
+        bytes,
+        RECEIPT_FILE,
+    )
+    .await
+}
+
+pub(crate) async fn deliver_event(
+    output: &Path,
+    configuration: &ayni_orchestrator_runtime::verification::ReportingConfiguration,
+    token_path: &Path,
+    identity: &EventIdentity,
+    bytes: Vec<u8>,
+    receipt_file: &str,
+) -> io::Result<()> {
+    match read_bounded(&output.join(receipt_file), 1024) {
+        Ok(receipt) => return validate_receipt(&receipt, identity),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(_) => return Err(failed()),
     }
@@ -166,7 +185,7 @@ async fn deliver_inner(
         // Reopen the projected file for each attempt so token rotation works.
         let token = read_token(token_path)?;
         let result = client
-            .post(&admission.configuration.endpoint)
+            .post(&configuration.endpoint)
             .bearer_auth(token)
             .header("content-type", "application/cloudevents+json")
             .body(bytes.clone())
@@ -197,8 +216,8 @@ async fn deliver_inner(
                     delay = (delay * 2).min(30);
                     continue;
                 }
-                validate_receipt(&receipt, &identity)?;
-                persist(output, RECEIPT_FILE, &receipt)?;
+                validate_receipt(&receipt, identity)?;
+                persist(output, receipt_file, &receipt)?;
                 return Ok(());
             }
             if !status.is_server_error() && !matches!(status.as_u16(), 408 | 429) {

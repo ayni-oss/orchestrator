@@ -354,9 +354,11 @@ impl Fixture {
             registry: v1::RuntimeRegistrySelection::default(),
             certificate: None,
         };
-        self.reconciler
-            .observe_pending(&observation, &mut self.cursor)
-            .await
+        Box::pin(
+            self.reconciler
+                .observe_pending(&observation, &mut self.cursor),
+        )
+        .await
     }
     fn discovery(&self, outcome: ImageDiscovery) {
         self.reconciler
@@ -691,6 +693,8 @@ async fn builder_resolution_freezes_manifest_before_restartable_cleanup() -> Tes
     let mut fixture = Fixture::new().await?;
     fixture.cursor.pending = None;
     fixture.cursor.preparation = Some(PreparationIdentity {
+        operation_reporting: None,
+        operation_observations: std::collections::BTreeMap::new(),
         verification_authority:
             crate::profiles::ayni::preparation_state::VerificationAuthority::Retained,
         generation: "approved-generation".into(),

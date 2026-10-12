@@ -262,7 +262,7 @@ async fn failed_kubernetes_job_retains_one_outcome_across_restart() -> TestResul
         certificate: None,
     };
     assert_eq!(
-        reconciler.observe_pending(&observation, &mut cursor).await,
+        Box::pin(reconciler.observe_pending(&observation, &mut cursor)).await,
         Err("runtime_lock_mismatch")
     );
     let id = fixture.profile.clone();
@@ -280,7 +280,7 @@ async fn failed_kubernetes_job_retains_one_outcome_across_restart() -> TestResul
             .is_some_and(|pending| pending.failed)
     );
     // A restarted reconciler resumes cleanup, never observes this as a new failure.
-    match reconciler.observe_pending(&observation, &mut cursor).await {
+    match Box::pin(reconciler.observe_pending(&observation, &mut cursor)).await {
         Ok(()) | Err("runtime_cleanup_pending") => {}
         Err(reason) => return Err(reason.into()),
     }

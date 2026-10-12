@@ -6,7 +6,7 @@ use super::{
 };
 use crate::profiles::ayni::preparation_state::RuntimeCursorExt;
 use ayni_orchestrator_application::execution::ExecutionState;
-use ayni_orchestrator_application::image_build::{BuildObservation, observe_build};
+use ayni_orchestrator_application::image_build::BuildObservation;
 use ayni_orchestrator_application::runtime_preparation::{FailureClass, ImagePreparationPhase};
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
@@ -19,7 +19,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let time = observation.time;
 
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        if Box::pin(self.resume_accepted_cleanup(observation, cursor)).await? {
+        if Box::pin(self.resume_accepted_cleanup(id, time, cursor)).await? {
             return Ok(());
         }
         let phase = self
@@ -226,6 +226,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .preparation
             .as_ref()
             .is_some_and(|p| p.verification_authority.events())
+            && cursor
+                .pending
+                .as_ref()
+                .is_some_and(|p| p.name == execution && p.phase == ImagePreparationPhase::Verifying)
         {
             let profile = id.to_owned();
             let next = cursor.clone();
@@ -427,10 +431,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             self.save(id, cursor).await?;
         }
         // Creation is idempotent: adopt a Job after a controller crash.
-        self.kubernetes
-            .start_discovery(&discovery_name, &runtime.execution_runtime())
+        let discovery = self
+            .discover_operation(id, cursor, runtime.execution_runtime(), &discovery_name)
             .await?;
-        let discovery = self.kubernetes.discover(&discovery_name).await?;
         let discovery = publication_readback(
             discovery,
             pending
@@ -556,13 +559,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let id = observation.id;
         let runtime = observation.runtime;
         let token = observation.token.as_str();
-        let build_state = observe_build(
-            &self.kubernetes,
-            build_name,
-            &runtime.execution_runtime(),
-            pending.phase.build_started(),
-        )
-        .await?;
+        let workload = self
+            .operation_runtime(
+                id,
+                cursor,
+                runtime.execution_runtime(),
+                build_name,
+                ayni_orchestrator_events::v1::RuntimeOperationKind::Build,
+            )
+            .await?;
+        let build_state = self
+            .operation_build_state(cursor, pending, build_name, &workload)
+            .await?;
         if matches!(build_state, BuildObservation::EngineLost) {
             // Cleanup is retried against the old durable identity before advancing it.
             self.cleanup_operation(pending).await?;
@@ -585,7 +593,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     self.kubernetes
                         .start_image_build(
                             build_name,
-                            &runtime.execution_runtime(),
+                            &workload,
                             &pending.request,
                             token,
                             &ayni_orchestrator_application::image_build::ImageBuildKind::RepositoryRuntime,
@@ -612,19 +620,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         self.observe_publication(observation, cursor, pending).await
     }
 
-    async fn observe_publication(
+    async fn admit_publication(
         &self,
-        observation: &ProfileObservation<'_>,
+        id: &str,
         cursor: &mut RuntimeCursor,
         pending: &PendingVerification,
-    ) -> Result<(), &'static str> {
-        let id = observation.id;
-        let runtime = observation.runtime;
-        let time = observation.time;
-        let image_id = pending
-            .candidate_image_id
-            .as_deref()
-            .ok_or("runtime_build_result_missing")?;
+    ) -> Result<String, &'static str> {
         let publish_name = if let Some(name) = &pending.publish_name {
             name.clone()
         } else {
@@ -646,7 +647,51 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             self.save(id, cursor).await?;
             name
         };
-        match self.kubernetes.coding_state(&publish_name).await? {
+        Ok(publish_name)
+    }
+
+    async fn observe_publication(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+        pending: &PendingVerification,
+    ) -> Result<(), &'static str> {
+        let id = observation.id;
+        let runtime = observation.runtime;
+        let time = observation.time;
+        let image_id = pending
+            .candidate_image_id
+            .as_deref()
+            .ok_or("runtime_build_result_missing")?;
+        let publish_name = self.admit_publication(id, cursor, pending).await?;
+        let workload = self
+            .operation_runtime(
+                id,
+                cursor,
+                ayni_orchestrator_kubernetes::engine::bind(
+                    &runtime.execution_runtime(),
+                    pending
+                        .build_name
+                        .as_deref()
+                        .ok_or("runtime_build_result_missing")?,
+                ),
+                &publish_name,
+                ayni_orchestrator_events::v1::RuntimeOperationKind::Publication,
+            )
+            .await?;
+        let (state, result) = if workload.operation_reporting.is_some() {
+            self.runtime_operation_state(
+                cursor,
+                &publish_name,
+                ayni_orchestrator_events::v1::RuntimeOperationKind::Publication,
+            )
+            .await?
+        } else {
+            (self.kubernetes.coding_state(&publish_name).await?, None)
+        };
+        // An uncertain exit still goes to independent registry readback. No worker
+        // success or missing report can establish publication or runtime readiness.
+        match state {
             ExecutionState::Missing if pending.publish_name.is_some() => {
                 // A persisted publisher may have pushed before its Job disappeared.
                 let next = cursor.pending.as_mut().ok_or("runtime_cursor_invalid")?;
@@ -659,13 +704,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 self.kubernetes
                     .start_publish(
                         &publish_name,
-                        &ayni_orchestrator_kubernetes::engine::bind(
-                            &runtime.execution_runtime(),
-                            pending
-                                .build_name
-                                .as_deref()
-                                .ok_or("runtime_build_result_missing")?,
-                        ),
+                        &workload,
                         &pending.request,
                         image_id,
                         pending.force_rebuild,
@@ -674,12 +713,22 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             }
             ExecutionState::Running => {}
             state @ (ExecutionState::Succeeded | ExecutionState::Failed) => {
-                let candidate_missing = state == ExecutionState::Failed
-                    && self
-                        .kubernetes
-                        .operation_failure(&publish_name, "publish")
-                        .await?
-                        == "runtime_candidate_missing";
+                let failure = match result {
+                    Some(ayni_orchestrator_runtime::operation::OperationOutcome::Failed {
+                        reason,
+                    }) => reason,
+                    _ if workload.operation_reporting.is_some() => {
+                        "runtime_publication_uncertain".into()
+                    }
+                    _ if state == ExecutionState::Failed => {
+                        self.kubernetes
+                            .operation_failure(&publish_name, "publish")
+                            .await?
+                    }
+                    _ => String::new(),
+                };
+                let candidate_missing =
+                    state == ExecutionState::Failed && failure == "runtime_candidate_missing";
                 if state == ExecutionState::Failed {
                     // Publication already spends its separate admission budget before creation.
                     // Retain the physical outcome without spending build/verification retries.

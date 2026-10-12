@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package ayni.orchestrator.events.v1;
+
+// One terminal supervisor observation. Receipt does not authorize progression.
+message RuntimeOperationResultAvailable {
+  RuntimeOperationBinding binding = 1;
+  RuntimeOperationKind kind = 2;
+  RuntimeOperationEvidenceReference evidence = 3;
+}
+
+// Frozen preparation plus physical execution identity; no producer-selected URLs.
+message RuntimeOperationBinding {
+  string repository_connection_id = 1;
+  string runtime_profile_id = 2;
+  string runtime_profile_revision_id = 3;
+  string preparation_id = 4;
+  string execution_id = 5;
+  string pod_uid = 6;
+  string request_digest = 7;
+  string source_revision = 8;
+  string lock_digest = 9;
+  string policy_digest = 10;
+  string platform = 11;
+}
+
+enum RuntimeOperationKind {
+  RUNTIME_OPERATION_KIND_UNSPECIFIED = 0;
+  RUNTIME_OPERATION_KIND_DISCOVERY = 1;
+  RUNTIME_OPERATION_KIND_TRUST = 2;
+  RUNTIME_OPERATION_KIND_BUILD = 3;
+  RUNTIME_OPERATION_KIND_PUBLICATION = 4;
+}
+
+// Large trust policy/lock documents stay outside the bounded event envelope.
+message RuntimeOperationEvidenceReference {
+  string evidence_id = 1;
+  string sha256 = 2;
+  uint64 size_bytes = 3;
+  string contract = 4;
+}
+
+// Controller-owned accepted observation with its resulting cursor revision.
+message RuntimeOperationDecisionRecorded {
+  RuntimeOperationResultAvailable observation = 1;
+  string observation_source = 2;
+  string observation_id = 3;
+  uint64 aggregate_revision = 4;
+}

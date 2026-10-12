@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 15;
+pub(crate) const SCHEMA_VERSION: i64 = 16;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -59,6 +59,7 @@ const CLEAN_TABLES: &[&str] = &[
     "repository_snapshots",
     "resource_events",
     "runtime_artifacts",
+    "runtime_operation_inbox",
     "runtime_profile_revisions",
     "runtime_profiles",
     "verification_consumer",
@@ -178,6 +179,7 @@ mod projects;
 mod repository_connections;
 mod repository_removal;
 mod runtime_certificate;
+mod runtime_operations;
 mod runtime_profiles;
 mod runtime_registry;
 mod store;
@@ -383,6 +385,7 @@ mod tests {
     mod recovery;
     mod runtime;
     mod runtime_certificate;
+    mod runtime_operations;
     mod runtime_registry;
     mod summaries;
     mod verification;

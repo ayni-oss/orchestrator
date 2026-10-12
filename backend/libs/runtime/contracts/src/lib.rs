@@ -7,3 +7,5 @@ pub mod runtime_execution;
 
 pub mod image_build;
 pub mod verification;
+
+pub mod operation;

@@ -33,7 +33,7 @@ impl RuntimeKubernetes {
             image_id,
             overwrite_authorized,
         )?;
-        self.create(
+        self.create_operation(
             name,
             std::collections::BTreeMap::from([(
                 "execution.json".into(),
@@ -45,7 +45,9 @@ impl RuntimeKubernetes {
                 .map_err(|_| "runtime_request_invalid")?,
             )]),
             "",
-            &job,
+            job,
+            runtime.operation_reporting.as_ref(),
+            "publish",
         )
         .await
     }
@@ -63,7 +65,15 @@ impl RuntimeKubernetes {
         self.ensure_engine(name, runtime).await?;
         let bound = crate::engine::bind(runtime, name);
         let job = image_build_job(name, &self.configuration, &bound, kind)?;
-        self.create(name, data, token, &job).await
+        self.create_operation(
+            name,
+            data,
+            token,
+            job,
+            runtime.operation_reporting.as_ref(),
+            "build",
+        )
+        .await
     }
 
     /// Starts or adopts a coding Job using the attempt's verified image digest.

@@ -52,7 +52,7 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("preparation.sqlite");
         let store = CleanStore::open(&path, 3)?;
-        store.connection.execute_batch("DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=9;")?;
+        store.connection.execute_batch("DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=9;")?;
         let original = legacy_cursor();
         let expected: RuntimeCursor = serde_json::from_value(original.clone())?;
         store.connection.execute(

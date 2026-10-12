@@ -81,7 +81,7 @@ if [[ "$mode" == events ]]; then
     done
     fixture_endpoint="http://127.0.0.1:$trace_port/v1/traces"
   fi
-  AYNI_VERIFICATION_FIXTURE_TRACING="$tracing_test" OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$fixture_endpoint" AYNI_VERIFICATION_FIXTURE_DIRECTORY="$temporary" AYNI_VERIFICATION_FIXTURE_WORKER="$worker_image"     cargo test --locked -p ayni-orchestrator-control-plane export_verification_cutover_fixture -- --ignored
+  AYNI_RUNTIME_OPERATION_FIXTURE=true AYNI_VERIFICATION_FIXTURE_TRACING="$tracing_test" OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$fixture_endpoint" AYNI_VERIFICATION_FIXTURE_DIRECTORY="$temporary" AYNI_VERIFICATION_FIXTURE_WORKER="$worker_image"     cargo test --locked -p ayni-orchestrator-control-plane export_verification_cutover_fixture -- --ignored
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
   kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
   cat > "$temporary/seed.yaml" <<YAML
@@ -239,7 +239,7 @@ kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-insp
 python3 - "$temporary/synthetic.sqlite" "$mode" <<'PYSQL'
 import json,sqlite3,sys
 connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
-assert connection.execute("SELECT version FROM clean_schema").fetchone()==(15,)
+assert connection.execute("SELECT version FROM clean_schema").fetchone()==(16,)
 if sys.argv[2]=='events':
     assert connection.execute("SELECT execution_id,decision FROM verification_inbox").fetchall()==[('verification-receipt-smoke','accepted')]
     cursor=json.loads(connection.execute("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%'").fetchone()[0])
@@ -317,12 +317,14 @@ kubectl --context docker-desktop -n "$namespace" rollout status deployment/contr
 kubectl --context docker-desktop -n "$namespace" exec "$pod" -c verify -- touch /output/replay-after-restart
 kubectl --context docker-desktop -n "$namespace" wait --for=condition=complete "job/$job" --timeout=120s
 kubectl --context docker-desktop -n "$namespace" logs "job/$job" -c verify | tail -1
+python3 "$root/dev/tests/runtime-operation-reporting.py" "$root" "$worker_image"
 # Allow the bounded periodic consumer to decide the synthetic unselected receipt.
 sleep 6
 # Stop the deployment before inspecting the disposable synthetic database.
 kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
 kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
 inspect_state
+python3 "$root/dev/tests/runtime-operation-reporting.py" --inspect "$temporary/synthetic.sqlite"
 if [[ "$mode" == events ]]; then
   for role in connection-controller runtime-controller; do
     kubectl --context docker-desktop -n "$namespace" apply -f "$temporary/$role.json"

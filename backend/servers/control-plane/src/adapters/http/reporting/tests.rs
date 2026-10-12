@@ -3,21 +3,41 @@ use axum::{body::Body, extract::Json as ExtractJson, http::Request};
 use serde_json::{Value, json};
 use tower::ServiceExt as _;
 
-#[tokio::test]
 #[allow(
     clippy::too_many_lines,
     reason = "one receipt scenario owns authentication API fixtures and durable restart"
 )]
-async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_restart()
--> Result<(), Box<dyn std::error::Error>> {
-    let event: Value = serde_json::from_slice(include_bytes!(
+async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let mut event: Value = serde_json::from_slice(include_bytes!(
         "../../../../../../../proto/testdata/verification/report.json"
     ))?;
+    if operation {
+        event["type"] = json!(ayni_orchestrator_events::operations::EVENT_TYPE);
+        event["dataschema"] = json!(ayni_orchestrator_events::operations::DATA_SCHEMA);
+        event["data"]["binding"]
+            .as_object_mut()
+            .ok_or("binding")?
+            .remove("resolvedImageDigest");
+        let evidence = event["data"]["reportAvailable"]["evidence"].clone();
+        let binding = event["data"]["binding"].clone();
+        event["data"] = json!({"binding":binding,"kind":"RUNTIME_OPERATION_KIND_DISCOVERY","evidence":evidence});
+        event["data"]["evidence"]["evidenceId"] = json!("runtime-operation-json");
+        event["data"]["evidence"]["contract"] =
+            json!(ayni_orchestrator_events::operations::CONTRACT);
+    }
     let binding = &event["data"]["binding"];
-    let admission = json!({"configuration":{"endpoint":"http://control-plane/events/verification","source":event["source"]},"binding":binding});
+    let mut admission = json!({"configuration":{"endpoint":"http://control-plane/events/verification","source":event["source"]},"binding":binding});
+    if operation {
+        admission["kind"] = event["data"]["kind"].clone();
+    }
+    let manifest_key = if operation {
+        "operation-reporting.json"
+    } else {
+        "reporting.json"
+    };
     let pod = json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":"pod-1","uid":binding["podUid"],"ownerReferences":[{"apiVersion":"batch/v1","kind":"Job","name":binding["executionId"],"uid":"job-uid","controller":true}]},"spec":{"containers":[],"serviceAccountName":"runtime-coding"}});
     let job = json!({"apiVersion":"batch/v1","kind":"Job","metadata":{"name":binding["executionId"],"uid":"job-uid"}});
-    let map = json!({"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":binding["executionId"]},"immutable":true,"data":{"reporting.json":admission.to_string()}});
+    let map = json!({"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":binding["executionId"]},"immutable":true,"data":{(manifest_key):admission.to_string()}});
     let uid = binding["podUid"].clone();
     let api = Router::new()
         .route("/apis/authentication.k8s.io/v1/tokenreviews",post(move |ExtractJson(body): ExtractJson<Value>| {
@@ -65,9 +85,8 @@ async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_rest
     assert_eq!(
         state
             .database
-            .execute(|store| store.pending_verifications())
-            .await?
-            .len(),
+            .execute(move |store| receipt_count(store, operation))
+            .await?,
         0
     );
     assert_eq!(
@@ -100,8 +119,12 @@ async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_rest
         StatusCode::UNAUTHORIZED
     );
     let mut conflict = event.clone();
-    conflict["data"]["reportAvailable"]["evidence"]["sha256"] =
-        json!(format!("sha256:{}", "f".repeat(64)));
+    let evidence = if operation {
+        &mut conflict["data"]["evidence"]
+    } else {
+        &mut conflict["data"]["reportAvailable"]["evidence"]
+    };
+    evidence["sha256"] = json!(format!("sha256:{}", "f".repeat(64)));
     assert_eq!(
         service
             .clone()
@@ -115,12 +138,34 @@ async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_rest
     assert_eq!(
         reopened
             .database
-            .execute(|store| store.pending_verifications())
-            .await?
-            .len(),
+            .execute(move |store| receipt_count(store, operation))
+            .await?,
         1
     );
     reopened.shutdown_database().await?;
     server.abort();
     Ok(())
+}
+
+fn receipt_count(
+    store: &crate::adapters::sqlite::CleanStore,
+    operation: bool,
+) -> Result<usize, CleanStoreError> {
+    if operation {
+        Ok(usize::from(
+            store.runtime_operation_receipt("verification-1")?.is_some(),
+        ))
+    } else {
+        Ok(store.pending_verifications()?.len())
+    }
+}
+#[tokio::test]
+async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_restart()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_ingress_contract(false).await
+}
+#[tokio::test]
+async fn operation_ingress_checks_manifest_binding_and_conflicts_across_restart()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_ingress_contract(true).await
 }

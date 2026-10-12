@@ -20,7 +20,7 @@ data:
     {
       "name": "ORCHESTRATOR_LIFECYCLE",
       "description": "Accepted controller facts; database and retained evidence remain authoritative",
-      "subjects": ["orchestrator.runtime.verification.accepted.v1"],
+      "subjects": ["orchestrator.runtime.verification.accepted.v1", "orchestrator.runtime.operation.accepted.v1"],
       "retention": "limits",
       "storage": "file",
       "num_replicas": 1,

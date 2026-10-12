@@ -251,6 +251,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         else {
             return Ok(());
         };
+        if self.resume_accepted_cleanup(id, time, &mut cursor).await? {
+            return Ok(());
+        }
         self.resume_profile_cleanup(id, &mut cursor).await?;
         if cursor.next_at > time {
             return Ok(());
@@ -522,7 +525,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let cursor = cursor.clone();
         self.with_database(move |store| {
             store
-                .save_runtime_cursor(&profile, &cursor)
+                .save_runtime_operation_cursor(&profile, &cursor)
                 .map_err(|_| "runtime_store_failed")
         })
         .await
@@ -634,3 +637,5 @@ use configuration::{ProfileSelection, configured_managed_profile};
 mod activation;
 mod verification_events;
 mod verification_tracing;
+
+mod runtime_operations;

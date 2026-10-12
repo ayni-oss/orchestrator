@@ -67,12 +67,20 @@ impl OutboxPublisher {
     pub async fn publish_once(&self) -> Result<(), ReconciliationError> {
         let now =
             crate::adapters::sqlite::unix_seconds().map_err(|_| ReconciliationError::Store)?;
-        let publications = self
+        let mut publications = self
             .state
             .database
             .execute(move |s| s.claim_publications(now))
             .await
             .map_err(|_| ReconciliationError::Store)?;
+        let remaining = 8_usize.saturating_sub(publications.len());
+        publications.extend(
+            self.state
+                .database
+                .execute(move |s| s.claim_runtime_publications(now, remaining))
+                .await
+                .map_err(|_| ReconciliationError::Store)?,
+        );
         self.state.refresh_outbox_metrics().await?;
         let mut connection = self.connection.lock().await;
         for publication in publications {
@@ -93,7 +101,15 @@ impl OutboxPublisher {
             crate::process::metrics::record_outbox_publication(metric);
             self.state
                 .database
-                .execute(move |s| s.record_publication(&publication, sequence))
+                .execute(move |s| {
+                    if ayni_orchestrator_events::operation_decisions::decode(&publication.bytes)
+                        .is_ok()
+                    {
+                        s.record_runtime_publication(&publication, sequence)
+                    } else {
+                        s.record_publication(&publication, sequence)
+                    }
+                })
                 .await
                 .map_err(|_| ReconciliationError::Store)?;
         }
@@ -107,7 +123,16 @@ impl OutboxPublisher {
         publication: &Publication,
     ) -> Option<(u64, bool)> {
         // Validate the persisted envelope without serializing it again.
-        let (identity, _) = ayni_orchestrator_events::decisions::decode(&publication.bytes).ok()?;
+        let (identity, subject) =
+            match ayni_orchestrator_events::decisions::decode(&publication.bytes) {
+                Ok((identity, _)) => (identity, SUBJECT),
+                Err(_) => (
+                    ayni_orchestrator_events::operation_decisions::decode(&publication.bytes)
+                        .ok()?
+                        .0,
+                    "orchestrator.runtime.operation.accepted.v1",
+                ),
+            };
         if identity != publication.identity {
             return None;
         }
@@ -129,7 +154,7 @@ impl OutboxPublisher {
         headers.insert("Nats-Expected-Stream", STREAM);
         let ack = connection
             .as_ref()?
-            .publish_with_headers(SUBJECT, headers, publication.bytes.clone().into())
+            .publish_with_headers(subject, headers, publication.bytes.clone().into())
             .await
             .ok()?
             .await

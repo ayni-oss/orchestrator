@@ -263,6 +263,7 @@ mod tests {
     use ayni_orchestrator_application::execution_settings::{BuildRuntime, EngineRuntime};
     fn runtime(mode: &str) -> WorkloadRuntime {
         WorkloadRuntime {
+            operation_reporting: None,
             image: "ghcr.io/test/sandbox:lock".into(),
             platform: "linux/arm64".into(),
             service_account: "runtime-coding".into(),

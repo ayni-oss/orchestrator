@@ -23,6 +23,12 @@ pub async fn run() -> io::Result<()> {
             reason: reason.into(),
         },
     };
+    if crate::operation::enabled() {
+        return crate::operation::complete(
+            ayni_orchestrator_runtime::operation::OperationOutcome::Discovery { result },
+        )
+        .await;
+    }
     fs::write(
         "/dev/termination-log",
         serde_json::to_vec(&result).map_err(io::Error::other)?,

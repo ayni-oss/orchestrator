@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 /// Runtime settings used to construct one isolated workload.
 #[derive(Clone)]
 pub struct WorkloadRuntime {
+    pub operation_reporting: Option<ayni_orchestrator_runtime::operation::OperationAdmission>,
     pub image: String,
     pub platform: String,
     pub service_account: String,
@@ -165,6 +166,7 @@ impl ProfileRuntime {
     #[must_use]
     pub fn execution_runtime(&self) -> WorkloadRuntime {
         WorkloadRuntime {
+            operation_reporting: None,
             image: self.image.clone(),
             platform: self.platform.clone(),
             service_account: self.service_account.clone(),

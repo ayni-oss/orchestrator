@@ -76,6 +76,9 @@ async fn receive(
     {
         return Err(ReceiptError::Invalid);
     }
+    if let Ok((identity, payload)) = ayni_orchestrator_events::operations::decode(&bytes) {
+        return receive_operation(state, headers, identity, payload).await;
+    }
     let context = ayni_orchestrator_observability::event_context(&bytes);
     let span = ayni_orchestrator_observability::verification_span("receipt", "", context.as_ref());
     async {
@@ -129,3 +132,45 @@ async fn receive(
 
 #[cfg(test)]
 mod tests;
+
+async fn receive_operation(
+    state: ReportingState,
+    headers: HeaderMap,
+    identity: ayni_orchestrator_events::EventIdentity,
+    payload: ayni_orchestrator_events::v1::RuntimeOperationResultAvailable,
+) -> Result<(StatusCode, Json<ReportingReceipt>), ReceiptError> {
+    let _permit = state
+        .capacity
+        .try_acquire()
+        .map_err(|_| ReceiptError::Unavailable)?;
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .filter(|t| !t.is_empty() && t.len() <= 8192)
+        .ok_or(ReceiptError::Unauthorized)?
+        .to_owned();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        state
+            .authority
+            .authorize_operation(token, &identity, &payload),
+    )
+    .await
+    .map_err(|_| ReceiptError::Unavailable)??;
+    let receipt = ReportingReceipt {
+        source: identity.source.clone(),
+        id: identity.id.clone(),
+        status: "stored".into(),
+    };
+    state
+        .state
+        .database
+        .execute(move |store| store.receive_runtime_operation(&identity, &payload))
+        .await
+        .map_err(|e| match e {
+            CleanStoreError::IdempotencyConflict => ReceiptError::Conflict,
+            _ => ReceiptError::Unavailable,
+        })?;
+    Ok((StatusCode::ACCEPTED, Json(receipt)))
+}

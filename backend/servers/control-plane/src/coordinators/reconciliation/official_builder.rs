@@ -50,8 +50,10 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         discovery.image = contract.builder_reference.into();
         discovery.build = None;
         discovery.pull_secret = None;
-        self.kubernetes.start_discovery(&name, &discovery).await?;
-        let image = match self.kubernetes.discover(&name).await? {
+        let result = self
+            .discover_operation(id, cursor, discovery, &name)
+            .await?;
+        let image = match result {
             ImageDiscovery::Pending => {
                 let started = cursor
                     .builder
@@ -175,6 +177,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 cursor.status.remove("error-class");
                 cursor.status.remove("last-error");
                 cursor.preparation = Some(super::PreparationIdentity {
+                    operation_reporting: self
+                        .configuration
+                        .verification_authority()
+                        .events()
+                        .then(|| self.configuration.reporting.clone())
+                        .flatten(),
+                    operation_observations: std::collections::BTreeMap::new(),
                     verification_authority: self.configuration.verification_authority(),
                     generation,
                     source_revision: head.to_owned(),

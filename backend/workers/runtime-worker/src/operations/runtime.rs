@@ -241,7 +241,20 @@ pub(crate) fn validate_source<P>(request: &ExecutionRequest<P>) -> io::Result<()
 }
 
 pub(crate) fn command(program: &str, workspace: &Path) -> Command {
-    let mut command = Command::new(program);
+    let mut command = if crate::operation::enabled()
+        && std::env::args().nth(1).as_deref() == Some("trust-lock")
+    {
+        // Trust preparation needs no engine or registry authority. Use the
+        // existing repository sandbox to keep reporting credentials and output
+        // inaccessible to policy/lock tool descendants.
+        let launcher =
+            std::env::current_exe().unwrap_or_else(|_| "/unavailable-runtime-launcher".into());
+        let mut launcher = Command::new(launcher);
+        launcher.args(["sandbox", program]);
+        launcher
+    } else {
+        Command::new(program)
+    };
     command
         .current_dir(workspace)
         .env_clear()
