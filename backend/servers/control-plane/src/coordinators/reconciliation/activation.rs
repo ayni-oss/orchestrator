@@ -155,13 +155,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .map_err(|_| "runtime_cursor_invalid")
             })
             .await?;
-        self.finish_verification_cleanup(observation, cursor, cleanup_expected)
+        self.finish_verification_cleanup(observation.id, observation.time, cursor, cleanup_expected)
             .await
     }
 
     pub(super) async fn resume_accepted_cleanup(
         &self,
-        observation: &ProfileObservation<'_>,
+        id: &str,
+        time: u64,
         cursor: &mut RuntimeCursor,
     ) -> Result<bool, &'static str> {
         if cursor
@@ -171,7 +172,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         {
             return Ok(false);
         }
-        let profile = observation.id.to_owned();
+        let profile = id.to_owned();
         let snapshot = cursor.clone();
         let committed = self
             .with_database(move |store| {
@@ -184,19 +185,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             return Ok(false);
         }
         let expected = serde_json::to_string(cursor).map_err(|_| "runtime_cursor_invalid")?;
-        self.finish_verification_cleanup(observation, cursor, expected)
+        self.finish_verification_cleanup(id, time, cursor, expected)
             .await?;
         Ok(true)
     }
 
     pub(super) async fn finish_verification_cleanup(
         &self,
-        observation: &ProfileObservation<'_>,
+        id: &str,
+        time: u64,
         cursor: &mut RuntimeCursor,
         cleanup_expected: String,
     ) -> Result<(), &'static str> {
-        let id = observation.id;
-        let time = observation.time;
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
         self.cleanup_operation(&pending).await?;
         cursor.pending = None;

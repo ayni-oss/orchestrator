@@ -251,6 +251,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         else {
             return Ok(());
         };
+        if self.resume_accepted_cleanup(id, time, &mut cursor).await? {
+            return Ok(());
+        }
         self.resume_profile_cleanup(id, &mut cursor).await?;
         if cursor.next_at > time {
             return Ok(());

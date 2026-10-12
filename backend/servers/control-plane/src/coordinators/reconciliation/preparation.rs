@@ -19,7 +19,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let time = observation.time;
 
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
-        if Box::pin(self.resume_accepted_cleanup(observation, cursor)).await? {
+        if Box::pin(self.resume_accepted_cleanup(id, time, cursor)).await? {
             return Ok(());
         }
         let phase = self
