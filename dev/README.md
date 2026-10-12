@@ -172,3 +172,28 @@ To exercise the accepted-event publisher, load the current production control-pl
 image and an existing web image, then run `dev/tests/outbox.sh CONTROL_PLANE_IMAGE WEB_IMAGE`.
 The fixed disposable namespace and its PVCs are removed on success or failure.
 Test-only image tags should also be removed from the host and Docker Desktop node.
+
+For the transport recovery gate, run `dev/ctl test recovery CONTROL_PLANE_IMAGE WEB_IMAGE`
+with both current production images loaded into Docker Desktop. It shares the
+publisher fixture and uses a separate `ayni-orchestrator-recovery-test` namespace.
+A bounded test-only NATS proxy uses the web image's Node runtime to suppress actual
+publisher storage replies and the accepted fact's consumer ACK before it reaches
+NATS. Proxy counters must prove both faults occurred. Production configuration
+has no fault switches.
+
+The gate verifies accepted SQLite state through stream saturation, lost publisher
+ACK retry, committed consumer receipt with lost ACK, retained durable cursor across
+broker/application restart, and identical-byte replay after broker deduplication
+expires. Filling the real receipt table must leave at most eight broker deliveries
+in flight; releasing only synthetic fixture diagnostics must drain all deliveries.
+Every stopped-state inspection compares retained acceptance, projections, action
+counts, execution identity and failure budgets. No broker consumer is deleted to
+force this gate's replay. The fixture disables runtime/provider execution; it
+validates delivery cannot create actions or reset existing cleanup/backoff, rather
+than claiming provider-side exactly-once effects. Provider recovery remains a
+separate per-flow cutover gate.
+
+The proxy parser has standalone segmentation, selective-drop and buffer-budget
+tests (`node --test dev/tests/nats-fault-proxy.test.mjs`), also run by PR validation.
+Namespace/PVC cleanup runs on failure as well as success. Remove the gate's own
+host and node image tags after use; avoid broad Docker pruning.
