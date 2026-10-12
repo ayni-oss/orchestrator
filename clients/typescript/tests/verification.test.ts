@@ -16,3 +16,9 @@ const decision = VerificationDecisionRecorded.fromJSON(accepted.data);
 assert.deepEqual(VerificationDecisionRecorded.toJSON(decision), accepted.data);
 assert.equal(decision.observationId, undefined);
 assert.deepEqual(VerificationDecisionRecorded.decode(VerificationDecisionRecorded.encode(decision).finish()), decision);
+
+const coding = JSON.parse(readFileSync(new URL('../../../proto/testdata/coding/final.json', import.meta.url), 'utf8'));
+const { CodingReportAvailable } = await import('../src/generated/ayni/orchestrator/events/v1/coding.ts');
+const codingPayload = CodingReportAvailable.fromJSON(coding.data);
+assert.deepEqual(CodingReportAvailable.toJSON(codingPayload), coding.data);
+assert.deepEqual(CodingReportAvailable.decode(CodingReportAvailable.encode(codingPayload).finish()), codingPayload);

@@ -81,6 +81,14 @@ impl OutboxPublisher {
                 .await
                 .map_err(|_| ReconciliationError::Store)?,
         );
+        let remaining = 8_usize.saturating_sub(publications.len());
+        publications.extend(
+            self.state
+                .database
+                .execute(move |s| s.claim_coding_publications(now, remaining))
+                .await
+                .map_err(|_| ReconciliationError::Store)?,
+        );
         self.state.refresh_outbox_metrics().await?;
         let mut connection = self.connection.lock().await;
         for publication in publications {
@@ -102,8 +110,14 @@ impl OutboxPublisher {
             self.state
                 .database
                 .execute(move |s| {
-                    if ayni_orchestrator_events::operation_decisions::decode(&publication.bytes)
+                    if ayni_orchestrator_events::coding_decisions::decode(&publication.bytes)
                         .is_ok()
+                    {
+                        s.record_coding_publication(&publication, sequence)
+                    } else if ayni_orchestrator_events::operation_decisions::decode(
+                        &publication.bytes,
+                    )
+                    .is_ok()
                     {
                         s.record_runtime_publication(&publication, sequence)
                     } else {
@@ -123,16 +137,22 @@ impl OutboxPublisher {
         publication: &Publication,
     ) -> Option<(u64, bool)> {
         // Validate the persisted envelope without serializing it again.
-        let (identity, subject) =
-            match ayni_orchestrator_events::decisions::decode(&publication.bytes) {
-                Ok((identity, _)) => (identity, SUBJECT),
-                Err(_) => (
-                    ayni_orchestrator_events::operation_decisions::decode(&publication.bytes)
-                        .ok()?
-                        .0,
-                    "orchestrator.runtime.operation.accepted.v1",
-                ),
-            };
+        let (identity, subject) = if let Ok((identity, _)) =
+            ayni_orchestrator_events::decisions::decode(&publication.bytes)
+        {
+            (identity, SUBJECT)
+        } else if let Ok((identity, _)) =
+            ayni_orchestrator_events::operation_decisions::decode(&publication.bytes)
+        {
+            (identity, "orchestrator.runtime.operation.accepted.v1")
+        } else {
+            (
+                ayni_orchestrator_events::coding_decisions::decode(&publication.bytes)
+                    .ok()?
+                    .0,
+                "orchestrator.coding.accepted.v1",
+            )
+        };
         if identity != publication.identity {
             return None;
         }

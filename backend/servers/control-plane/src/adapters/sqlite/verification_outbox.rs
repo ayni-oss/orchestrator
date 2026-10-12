@@ -54,6 +54,13 @@ impl CleanStore {
         if runtime.oldest_at > 0 && (stats.oldest_at == 0 || runtime.oldest_at < stats.oldest_at) {
             stats.oldest_at = runtime.oldest_at;
         }
+        let coding=self.connection.query_row("SELECT COUNT(*),COALESCE(SUM(length(accepted_payload)),0),COALESCE(MIN(received_at),0),(SELECT COUNT(*) FROM coding_inbox WHERE stored_at IS NOT NULL) FROM coding_inbox WHERE decision='accepted' AND stored_at IS NULL",[],|r|Ok(OutboxStats{pending:r.get(0)?,bytes:r.get(1)?,oldest_at:r.get(2)?,retained:r.get(3)?})).map_err(CleanStoreError::Database)?;
+        stats.pending += coding.pending;
+        stats.bytes += coding.bytes;
+        stats.retained += coding.retained;
+        if coding.oldest_at > 0 && (stats.oldest_at == 0 || coding.oldest_at < stats.oldest_at) {
+            stats.oldest_at = coding.oldest_at;
+        }
         Ok(stats)
     }
 
@@ -135,7 +142,8 @@ impl CleanStore {
     pub(crate) fn prune_verification_history(&mut self) -> Result<(), CleanStoreError> {
         let now = unix_seconds()?;
         self.prune_verification_history_at(now)?;
-        self.prune_runtime_operation_history(now)
+        self.prune_runtime_operation_history(now)?;
+        self.prune_coding_history(now)
     }
 
     pub(crate) fn prune_verification_history_at(

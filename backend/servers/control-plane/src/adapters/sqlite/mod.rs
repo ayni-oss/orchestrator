@@ -19,7 +19,7 @@ use ayni_orchestrator_api::{v1, validation as api_validation};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use prost::Message;
 use prost_types::Timestamp;
-use rusqlite::{Connection, OptionalExtension, Transaction, params, types::ValueRef};
+use rusqlite::{Connection, OptionalExtension, params, types::ValueRef};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 16;
+pub(crate) const SCHEMA_VERSION: i64 = 17;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -45,6 +45,8 @@ const CLEAN_TABLES: &[&str] = &[
     "certificate_operations",
     "certificates",
     "clean_schema",
+    "coding_executions",
+    "coding_inbox",
     "connection_operations",
     "connections",
     "development_attempts",
@@ -214,6 +216,7 @@ use pagination_events::{
     append_event, decode_page_token, encode_filter, encode_page_token, page_items_decode,
     page_size, page_token_proof, provider_key,
 };
+mod coding_events;
 mod coding_reconciliation;
 mod runtime_reconciliation;
 
@@ -377,6 +380,7 @@ mod tests {
         })
     }
 
+    mod coding_events;
     mod consumer;
     mod cutover;
     mod lifecycle;

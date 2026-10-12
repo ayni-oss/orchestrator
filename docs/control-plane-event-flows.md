@@ -137,17 +137,17 @@ Sources: [Runtime preparation, failure counting, publication and cleanup](<../ba
 | --- | --- | --- |
 | Create task | Active project membership, operational Ready profile, verified matching artifact and source bindings | Freeze source, runtime revision/digest, model, constraints, budgets and absolute deadline; persist task, attempt and events |
 | Schedule coding | Queued attempt with absent Job | Create deterministic immutable specification and Kubernetes Job; transition attempt to Running after creation |
-| Infrastructure running | Job present without terminal result | Poll activity/progress and refresh credentials; pending and active execution are largely collapsed into Running |
-| Live worker progress | Valid `progress.json` under 65,536-byte read bound | Save worker phase, consumed turns, repair round, latest full check and publication state; budget counters cannot regress |
-| Live activity | Valid `activity.json`, at most 256 records, under 65,536-byte read bound | Save advisory activity on attempt; identical snapshots do not generate another update |
-| Job succeeded | Triggers final result collection | Read and validate result, usage and evidence; success state comes from result.execution, not Kubernetes exit alone |
+| Infrastructure running | Job present without terminal result | Accept advisory coding snapshots (legacy attempts poll activity/progress) and refresh credentials; pending and active execution are largely collapsed into Running |
+| Live worker progress | Accepted retained snapshot for event generations; bounded `progress.json` for legacy | Save worker phase, consumed turns, repair round, latest full check and publication state; budget counters cannot regress |
+| Live activity | Accepted safe activity snapshot for event generations; bounded `activity.json` for legacy | Save advisory activity on attempt; identical snapshots do not generate another update |
+| Job succeeded | Legacy result collection or event-mode retained-envelope recovery | Read and validate result, usage and evidence; success state comes from result.execution, not Kubernetes exit alone |
 | Job failed | Try final result first, then retained recovery, otherwise mark failure | Failure fallback uses last activity or generic diagnostic; result may establish application outcome even when Job failed |
 | Job missing after Running | Retained recovery plus unexpired deadline | Stop old resources before recreating same logical attempt; no recovery means lost-execution failure |
 | Final result accepted | Artifact hash/scope, commit, receipt destination and frozen budget checks | Transaction updates attempt and active task plus resource events; then cleanup and coding-done marker |
 
 The worker returns normally after writing many failed application outcomes. A Kubernetes-successful worker can therefore report `Failed`, `NoChanges`, `InputRequired` or failed publication. Conversely, a failed Job can still have a valid retained result.
 
-While a Job is Running, the current collector does not accept a final `result.json` as the terminal outcome. Kubernetes completion currently decides when final collection starts. Streaming could move that trigger to a validated, final worker result while keeping stop confirmation separate.
+New event-mode coding generations accept authenticated retained terminal reports while the Job is running. Legacy generations retain completion-triggered file collection. Execution stop remains a separate replacement gate; see [coding lifecycle reporting](coding-events.md).
 
 Sources: [Task admission and frozen identities](<../backend/servers/control-plane/crates/application/src/tasks.rs#L150>); [Coding result collection, recovery and cleanup](<../backend/servers/control-plane/src/coordinators/reconciliation/coding.rs#L25>); [Decisions from task state and Kubernetes execution state](<../backend/servers/control-plane/crates/application/src/reconciliation.rs#L18>); [Worker validation, state transitions and publication retry](<../backend/servers/control-plane/src/adapters/sqlite/coding_reconciliation.rs#L165>); [Worker execution and independent result outcomes](<../backend/workers/runtime-worker/src/coding/mod.rs#L27>); [Worker progress and result contracts](<../backend/libs/runtime/contracts/src/coding.rs#L41>).
 

@@ -607,7 +607,7 @@ pub(super) fn query_payloads(
 }
 
 pub(super) fn persist_task_update(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     task: &v1::DevelopmentTask,
     expected_version: u64,
 ) -> Result<(), CleanStoreError> {
@@ -650,7 +650,7 @@ pub(super) fn persist_task_update(
 }
 
 pub(super) fn persist_attempt_update(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     attempt: &v1::DevelopmentAttempt,
     expected_version: u64,
     task: &v1::DevelopmentTask,

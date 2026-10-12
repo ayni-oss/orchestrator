@@ -16,6 +16,8 @@ pub mod v1 {
     ));
 }
 
+pub mod coding;
+pub mod coding_decisions;
 pub mod decisions;
 pub mod operations;
 

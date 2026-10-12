@@ -536,7 +536,7 @@ fn schema_seven_cutover_retires_image_automation_and_preserves_frozen_work()
         "task",
         &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
-    store.connection.execute_batch("DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
+    store.connection.execute_batch("DROP TABLE coding_inbox; DROP TABLE coding_executions; DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
     store.connection.execute(
         "INSERT INTO automation_installations(id) VALUES('obsolete')",
         [],

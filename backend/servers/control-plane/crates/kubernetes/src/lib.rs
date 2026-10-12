@@ -5,6 +5,7 @@
 //! only as scoped request inputs or Kubernetes secret references.
 
 mod coding;
+mod coding_reporting;
 pub mod configuration;
 mod discovery;
 pub mod execution;

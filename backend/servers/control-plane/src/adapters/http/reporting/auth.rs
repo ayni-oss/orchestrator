@@ -140,6 +140,79 @@ impl KubernetesAuthority {
         Ok(())
     }
 }
+impl KubernetesAuthority {
+    pub async fn authorize_coding(
+        &self,
+        token: String,
+        identity: &EventIdentity,
+        payload: &ayni_orchestrator_events::v1::CodingReportAvailable,
+    ) -> Result<(), ReceiptError> {
+        let review = TokenReview {
+            spec: TokenReviewSpec {
+                token: Some(token),
+                audiences: Some(vec![REPORTING_AUDIENCE.into()]),
+            },
+            ..Default::default()
+        };
+        let review = Api::<TokenReview>::all(self.client.clone())
+            .create(&PostParams::default(), &review)
+            .await
+            .map_err(|_| ReceiptError::Unavailable)?;
+        let status = review.status.ok_or(ReceiptError::Unauthorized)?;
+        let (name, uid) = pod_identity(&status)?;
+        let b = payload.binding.as_ref().ok_or(ReceiptError::Invalid)?;
+        let pod = Api::<Pod>::namespaced(self.client.clone(), &self.namespace)
+            .get(&name)
+            .await
+            .map_err(authority_lookup)?;
+        let job = Api::<Job>::namespaced(self.client.clone(), &self.namespace)
+            .get(&b.execution_id)
+            .await
+            .map_err(authority_lookup)?;
+        let map = Api::<ConfigMap>::namespaced(self.client.clone(), &self.namespace)
+            .get(&b.execution_id)
+            .await
+            .map_err(authority_lookup)?;
+        let account = pod
+            .spec
+            .as_ref()
+            .and_then(|s| s.service_account_name.as_deref())
+            .ok_or(ReceiptError::Unauthorized)?;
+        if b.pod_uid != uid
+            || pod.metadata.uid.as_deref() != Some(uid.as_str())
+            || status.user.as_ref().and_then(|u| u.username.as_deref())
+                != Some(format!("system:serviceaccount:{}:{account}", self.namespace).as_str())
+            || job.metadata.uid.is_none()
+            || job.metadata.name.as_deref() != Some(b.execution_id.as_str())
+            || !pod.metadata.owner_references.as_ref().is_some_and(|refs| {
+                refs.iter().any(|o| {
+                    o.controller == Some(true)
+                        && o.kind == "Job"
+                        && o.api_version == "batch/v1"
+                        && o.name == b.execution_id
+                        && Some(&o.uid) == job.metadata.uid.as_ref()
+                })
+            })
+            || map.immutable != Some(true)
+            || map.metadata.name != job.metadata.name
+        {
+            return Err(ReceiptError::Unauthorized);
+        }
+        let raw = map
+            .data
+            .as_ref()
+            .and_then(|d| d.get("coding-reporting.json"))
+            .filter(|v| v.len() <= ayni_orchestrator_events::MAX_EVENT_BYTES)
+            .ok_or(ReceiptError::Unauthorized)?;
+        let mut admission: ayni_orchestrator_runtime::coding_events::CodingAdmission =
+            serde_json::from_str(raw).map_err(|_| ReceiptError::Unauthorized)?;
+        admission.binding.pod_uid = uid;
+        if admission.configuration.source != identity.source || admission.binding != *b {
+            return Err(ReceiptError::Unauthorized);
+        }
+        Ok(())
+    }
+}
 
 fn authority_lookup(error: kube::Error) -> ReceiptError {
     match error {

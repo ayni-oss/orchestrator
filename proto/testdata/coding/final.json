@@ -1,0 +1,27 @@
+{
+  "specversion": "1.0",
+  "id": "019a3b66-2436-7000-8000-000000000001",
+  "source": "ayni://orchestrator/supervisors/test",
+  "type": "io.ayni.orchestrator.coding.report.available.v1",
+  "subject": "tasks/task-one/attempts/attempt-one",
+  "operationid": "generation-one",
+  "executionid": "coding-one",
+  "datacontenttype": "application/json",
+  "dataschema": "ayni://orchestrator/schemas/coding-report/v1",
+  "data": {
+    "binding": {
+      "taskId": "task-one",
+      "attemptId": "attempt-one",
+      "generation": "generation-one",
+      "executionId": "coding-one",
+      "podUid": "pod-one",
+      "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "requestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "kind": "CODING_REPORT_KIND_FINAL",
+    "sequence": "257",
+    "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "sizeBytes": "100",
+    "contract": "coding-report-v1"
+  }
+}

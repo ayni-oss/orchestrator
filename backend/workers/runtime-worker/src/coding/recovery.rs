@@ -150,6 +150,7 @@ pub fn restore(
 fn identity(spec: &WorkerSpec) -> io::Result<String> {
     let mut frozen = spec.clone();
     frozen.publication_only = false;
+    frozen.reporting = None;
     Ok(ayni_orchestrator_domain::digest::sha256(
         &serde_json::to_vec(&frozen)?,
     ))

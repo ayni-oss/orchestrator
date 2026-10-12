@@ -20,7 +20,7 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-SQLite schema version 16 migrates recognized versions 6–15 before reconciliation.
+SQLite schema version 17 migrates recognized versions 6–16 before reconciliation.
 The migration preserves connections, certificates, registries, runtime history
 and retained tasks, and records obsolete installation resources for restartable
 cleanup. Follow [operations](operations.md) and upgrade with cleaned values and
@@ -248,3 +248,7 @@ cursor replay and restart while preserving resource projections and later
 cleanup backoff. No provider or worker execution is enabled in this fixture.
 The namespace, PVCs and release are removed on success or failure; callers must
 remove their test-only host and node image tags after the run.
+
+Coding event acceptance and restart can be exercised with
+`dev/tests/coding-reporting.sh CONTROL_PLANE_IMAGE PINNED_WORKER_IMAGE WEB_IMAGE`; see
+[the coding event contract](coding-events.md) for its precise validation scope.

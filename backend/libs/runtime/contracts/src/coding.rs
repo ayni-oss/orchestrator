@@ -34,6 +34,8 @@ pub struct WorkerSpec<Profile> {
     pub limits: WorkerLimits,
     pub publication: PublicationDestination,
     pub publication_only: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reporting: Option<crate::coding_events::CodingAdmission>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

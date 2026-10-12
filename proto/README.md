@@ -83,3 +83,11 @@ report decision and aggregate revision. Its CloudEvent is stored atomically with
 the runtime projection in the journal/outbox; broker publication comes later.
 Resource bindings accept the resource API’s typed UUID identifiers as well as
 bounded simple identifiers used in fixtures.
+
+## Coding lifecycle payloads
+
+`CodingReportAvailable` binds retained progress/final snapshots to a physical
+writer generation and exact worker request. `CodingDecisionRecorded` includes
+causation, aggregate revision and whether the observation changed task state.
+See [coding lifecycle reporting](../docs/coding-events.md) for authenticated
+ingestion, independent outcomes, writer fencing and retained-envelope recovery.

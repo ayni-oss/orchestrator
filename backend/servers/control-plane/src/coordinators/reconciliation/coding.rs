@@ -30,11 +30,61 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let name = operation_name(&attempt.id, 0);
         // Read output after observing Job status, so terminal records are collected
         // before any cleanup. The same path also collects live progress.
+        // Publication retry must stop the prior writer before changing its generation.
+        if attempt.state == v1::DevelopmentAttemptState::Queued as i32
+            && attempt.publication_only
+            && attempt.result.is_some()
+        {
+            self.kubernetes.cleanup(&name).await?;
+            if self.kubernetes.coding_stopped(&name).await? {
+                let id = attempt.id.clone();
+                self.with_database(move |s| {
+                    s.stop_coding_execution(&id)
+                        .map_err(|_| "coding_state_invalid")
+                })
+                .await?;
+                self.start_coding_attempt(&attempt, profile_id, &name)
+                    .await?;
+            }
+            return Ok(());
+        }
+        let lookup = attempt.id.clone();
+        let admission = self
+            .with_database(move |s| {
+                s.coding_admission(&lookup)
+                    .map_err(|_| "coding_authority_invalid")
+            })
+            .await?;
+        let (attempt, interrupted) = if admission.is_some() {
+            let (terminal, interrupted) = self.consume_coding_reports(&attempt, &name).await?;
+            let id = attempt.id.clone();
+            let fresh = self
+                .with_database(move |s| {
+                    s.development_attempt(&id)
+                        .map_err(|_| "coding_state_invalid")
+                })
+                .await?;
+            if terminal
+                || ![
+                    v1::DevelopmentAttemptState::Queued as i32,
+                    v1::DevelopmentAttemptState::Running as i32,
+                ]
+                .contains(&fresh.state)
+            {
+                self.cleanup_coding_attempt(&fresh, &name).await?;
+                return Ok(());
+            }
+            (fresh, interrupted)
+        } else {
+            let attempt = self.collect_activity(attempt, &name).await?;
+            (
+                self.collect_progress(attempt, &name).await?,
+                worker_interrupted(&name).await?,
+            )
+        };
         let job_state = self.kubernetes.coding_state(&name).await?;
-        let attempt = self.collect_activity(attempt, &name).await?;
-        let attempt = self.collect_progress(attempt, &name).await?;
         let current = attempt_state(attempt.state)?;
-        let interrupted = worker_interrupted(&name).await?;
+
         let action = coding_result_action(current, job_state, interrupted);
         if action == CodingAction::Cleanup {
             self.cleanup_coding_attempt(&attempt, &name).await?;
@@ -166,7 +216,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         profile_id: &str,
         name: &str,
     ) -> Result<(), &'static str> {
-        if self.finish_coding_attempt(attempt, name).await.is_ok() {
+        let finish = self.finish_coding_attempt(attempt, name).await;
+        if finish == Err("coding_report_pending") {
+            return Err("coding_report_pending");
+        }
+        if finish.is_ok() {
             let id = attempt.id.clone();
             let fresh = self
                 .with_database(move |store| {
@@ -416,7 +470,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .change_constraints
             .as_ref()
             .ok_or("coding_constraints_missing")?;
-        let request = WorkerSpec {
+        let mut request = WorkerSpec {
             execution: ExecutionRequest {
                 repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
                 revision: source.revision.clone(),
@@ -462,11 +516,37 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 branch: format!("task/{}", attempt.id.replace(':', "-")),
             },
             publication_only: attempt.publication_only,
+            reporting: None,
             constraints: ayni_orchestrator_domain::ChangeConstraints {
                 protected_paths: constraints.protected_paths.clone(),
                 allow_test_edits: constraints.allow_test_edits,
             },
         };
+        // Select authority before Kubernetes creation; crash replay adopts the same generation.
+        let id = attempt.id.clone();
+        let execution = name.to_owned();
+        let configuration = (self.configuration.verification_mode
+            == crate::process::runtime_configuration::VerificationMode::Events)
+            .then(|| self.configuration.reporting.clone())
+            .flatten();
+        request.reporting = self
+            .with_database(move |s| {
+                s.select_coding_execution(&id, &execution, configuration)
+                    .map_err(|_| "coding_authority_invalid")
+            })
+            .await?;
+        if let Some(admission) = &request.reporting {
+            let digest = ayni_orchestrator_domain::digest::sha256(
+                &serde_json::to_vec(&request).map_err(|_| "coding_request_invalid")?,
+            );
+            let generation = admission.binding.generation.clone();
+            let id = attempt.id.clone();
+            self.with_database(move |s| {
+                s.bind_coding_request(&id, &generation, &digest)
+                    .map_err(|_| "coding_authority_invalid")
+            })
+            .await?;
+        }
         let remaining = coding_seconds_remaining(snapshot);
         if remaining == 0 {
             return Ok(());
@@ -511,6 +591,23 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         attempt: &v1::DevelopmentAttempt,
         name: &str,
     ) -> Result<(), &'static str> {
+        let id = attempt.id.clone();
+        if self
+            .with_database(move |s| {
+                s.coding_admission(&id)
+                    .map_err(|_| "coding_authority_invalid")
+            })
+            .await?
+            .is_some()
+        {
+            self.recover_coding_receipt(name).await?;
+            let (terminal, _) = self.consume_coding_reports(attempt, name).await?;
+            return if terminal {
+                Ok(())
+            } else {
+                Err("coding_report_pending")
+            };
+        }
         let directory = std::path::Path::new("/runtime-outputs").join(name);
         let (result, usage) = tokio::task::spawn_blocking(move || {
             let result = collect_worker_result(&directory)?;
@@ -576,6 +673,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if !self.kubernetes.coding_stopped(name).await? {
             return Ok(true);
         }
+        let id = attempt.id.clone();
+        self.with_database(move |s| {
+            s.stop_coding_execution(&id)
+                .map_err(|_| "coding_state_invalid")
+        })
+        .await?;
         self.start_coding_attempt(attempt, profile_id, name).await?;
         Ok(true)
     }
@@ -614,8 +717,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
 pub(super) fn collect_worker_result(
     directory: &std::path::Path,
 ) -> Result<ayni_orchestrator_runtime::coding::WorkerResult, &'static str> {
-    use ayni_orchestrator_runtime::coding::{QualityOutcome, WorkerResult};
-    use sha2::{Digest, Sha256};
+    use ayni_orchestrator_runtime::coding::WorkerResult;
     let bytes = ayni_orchestrator_runtime::runtime_execution::read_bounded(
         &directory.join("result.json"),
         262_144,
@@ -623,6 +725,15 @@ pub(super) fn collect_worker_result(
     .map_err(|_| "worker_result_unavailable")?;
     let result: WorkerResult =
         serde_json::from_slice(&bytes).map_err(|_| "worker_result_invalid")?;
+    validate_worker_evidence(directory, &result)?;
+    Ok(result)
+}
+pub(super) fn validate_worker_evidence(
+    directory: &std::path::Path,
+    result: &ayni_orchestrator_runtime::coding::WorkerResult,
+) -> Result<(), &'static str> {
+    use ayni_orchestrator_runtime::coding::QualityOutcome;
+    use sha2::{Digest, Sha256};
     if let Some(ref evidence) = result.quality.evidence {
         if evidence.artifact_path != "evidence/signals.json"
             || Some(&evidence.commit) != result.commit.as_ref()
@@ -647,14 +758,14 @@ pub(super) fn collect_worker_result(
     } else if result.quality.outcome == QualityOutcome::Passed {
         return Err("worker_evidence_missing");
     }
-    Ok(result)
+    Ok(())
 }
 
 pub(super) fn collect_coding_usage(
     directory: &std::path::Path,
 ) -> Result<v1::AttemptModelUsage, &'static str> {
-    use ayni_orchestrator_domain::{ModelInteractionOutcome, ModelUsageReport};
-    let mut interactions = Vec::new();
+    use ayni_orchestrator_domain::ModelUsageReport;
+    let mut reports = Vec::new();
     if std::fs::symlink_metadata(directory.join("usage")).is_ok_and(|meta| !meta.is_dir()) {
         return Err("coding_usage_invalid");
     }
@@ -668,6 +779,19 @@ pub(super) fn collect_coding_usage(
                 .map_err(|_| "coding_usage_invalid")?,
         )
         .map_err(|_| "coding_usage_invalid")?;
+        reports.push(report);
+    }
+    coding_usage_reports(reports)
+}
+pub(super) fn coding_usage_reports(
+    reports: Vec<ayni_orchestrator_domain::ModelUsageReport>,
+) -> Result<v1::AttemptModelUsage, &'static str> {
+    use ayni_orchestrator_domain::ModelInteractionOutcome;
+    if reports.len() > 64 {
+        return Err("coding_usage_invalid");
+    }
+    let mut interactions = Vec::new();
+    for report in reports {
         interactions.push(v1::ModelUsageInteraction {
             call_id: report.call_id,
             stage: v1::ModelUsageStage::Coding as i32,

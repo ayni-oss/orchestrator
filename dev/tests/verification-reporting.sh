@@ -239,7 +239,7 @@ kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-insp
 python3 - "$temporary/synthetic.sqlite" "$mode" <<'PYSQL'
 import json,sqlite3,sys
 connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
-assert connection.execute("SELECT version FROM clean_schema").fetchone()==(16,)
+assert connection.execute("SELECT version FROM clean_schema").fetchone()==(17,)
 if sys.argv[2]=='events':
     assert connection.execute("SELECT execution_id,decision FROM verification_inbox").fetchall()==[('verification-receipt-smoke','accepted')]
     cursor=json.loads(connection.execute("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%'").fetchone()[0])

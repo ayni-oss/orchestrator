@@ -69,6 +69,7 @@ pub(super) fn fixture(workspace: &Path) -> io::Result<WorkerSpec> {
             branch: "task/attempt-test".into(),
         },
         publication_only: false,
+        reporting: None,
     })
 }
 
@@ -134,7 +135,19 @@ fn atomic_recovery_retains_history_source_and_consumed_budget_without_commits() 
     recovery::write_json(&output.join("session.json"), &newer)?;
     fs::write(workspace.join("feature.txt"), "lost edits\n")?;
     fs::remove_file(workspace.join("untracked.txt"))?;
-    let restored = recovery::restore(&spec, &workspace, &output)?.ok_or("recovery missing")?;
+    let mut replacement = spec.clone();
+    replacement.reporting = Some(ayni_orchestrator_runtime::coding_events::CodingAdmission {
+        configuration: ayni_orchestrator_runtime::verification::ReportingConfiguration {
+            source: "ayni://orchestrator/supervisors/replacement".into(),
+            endpoint: "http://controller/events/verification".into(),
+        },
+        binding: ayni_orchestrator_events::v1::CodingExecutionBinding {
+            generation: "replacement-generation".into(),
+            ..Default::default()
+        },
+    });
+    let restored =
+        recovery::restore(&replacement, &workspace, &output)?.ok_or("recovery missing")?;
     assert_eq!(git(&workspace, &["rev-parse", "HEAD"])?, head);
     assert_eq!(
         git(&workspace, &["rev-parse", "HEAD^"])?,

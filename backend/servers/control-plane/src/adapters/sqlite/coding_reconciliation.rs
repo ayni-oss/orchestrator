@@ -29,7 +29,7 @@ impl CleanStore {
         attempt.updated_at = Some(timestamp(unix_seconds()?));
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         persist_attempt_update(&transaction, &attempt, previous, &task)?;
         transaction.commit().map_err(CleanStoreError::Database)?;
@@ -40,7 +40,7 @@ impl CleanStore {
         &self,
         profile_id: &str,
     ) -> Result<Vec<v1::DevelopmentAttempt>, CleanStoreError> {
-        let mut statement = self.connection.prepare("SELECT a.payload FROM development_attempts a JOIN development_tasks t ON t.id=a.development_task_id WHERE t.runtime_profile_id=?1 AND NOT EXISTS (SELECT 1 FROM reconciliation_cursors c WHERE c.name='coding-done:'||a.id) ORDER BY a.id LIMIT 128").map_err(CleanStoreError::Database)?;
+        let mut statement = self.connection.prepare("SELECT a.payload FROM development_attempts a JOIN development_tasks t ON t.id=a.development_task_id WHERE t.runtime_profile_id=?1 AND (NOT EXISTS (SELECT 1 FROM reconciliation_cursors c WHERE c.name='coding-done:'||a.id) OR EXISTS (SELECT 1 FROM coding_inbox i WHERE i.attempt_id=a.id AND i.decision='pending')) ORDER BY a.id LIMIT 128").map_err(CleanStoreError::Database)?;
         let mut rows = statement
             .query([profile_id])
             .map_err(CleanStoreError::Database)?;
@@ -54,6 +54,7 @@ impl CleanStore {
         &mut self,
         attempt_id: &str,
     ) -> Result<(), CleanStoreError> {
+        self.stop_coding_execution(attempt_id)?;
         self.connection.execute("INSERT OR IGNORE INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES (?1,'{}',1,?2)", params![format!("coding-done:{attempt_id}"),unix_seconds()?]).map_err(CleanStoreError::Database)?;
         Ok(())
     }
@@ -85,7 +86,7 @@ impl CleanStore {
         attempt.updated_at = Some(timestamp(unix_seconds()?));
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         persist_attempt_update(&transaction, &attempt, previous, &task)?;
         transaction.commit().map_err(CleanStoreError::Database)
@@ -108,6 +109,10 @@ impl CleanStore {
             .ok_or(CleanStoreError::CorruptState)?;
         if value.coding_turns_consumed > limits.coding_turns
             || value.quality_round > limits.quality_repair_limit
+            || attempt.progress.as_ref().is_some_and(|p| {
+                p.coding_turns_consumed > value.coding_turns_consumed
+                    || p.quality_round > value.quality_round
+            })
             || value.changed_paths.len() > 256
             || value.changed_paths.iter().any(|p| {
                 p.is_empty()
@@ -218,7 +223,7 @@ impl CleanStore {
         attempt.updated_at = Some(timestamp(unix_seconds()?));
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         persist_attempt_update(&transaction, &attempt, previous, &task)?;
         if task.active_attempt_id.as_deref() == Some(id) {
@@ -286,7 +291,7 @@ impl CleanStore {
         attempt.updated_at = Some(timestamp(unix_seconds()?));
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         persist_attempt_update(&transaction, &attempt, previous, &task)?;
         let previous = task.resource_version;
