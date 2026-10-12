@@ -57,7 +57,7 @@ YAML
   kubectl --context docker-desktop -n "$namespace" wait --for=condition=Ready pod/reporting-state-seed --timeout=60s
   # Only this new disposable namespace's empty state is replaced by admitted fixtures.
   kubectl --context docker-desktop -n "$namespace" cp "$temporary/orchestrator.sqlite" reporting-state-seed:/state/orchestrator.sqlite
-  kubectl --context docker-desktop -n "$namespace" delete pod reporting-state-seed
+  kubectl --context docker-desktop -n "$namespace" delete pod reporting-state-seed --grace-period=1
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=1
   kubectl --context docker-desktop -n "$namespace" rollout status deployment/control-plane --timeout=180s
 else
@@ -174,7 +174,7 @@ YAML
 kubectl --context docker-desktop -n "$namespace" create -f "$temporary/inspect.yaml"
 kubectl --context docker-desktop -n "$namespace" wait --for=condition=Ready pod/reporting-inbox-inspector --timeout=60s
 kubectl --context docker-desktop -n "$namespace" cp reporting-inbox-inspector:/state/orchestrator.sqlite "$temporary/synthetic.sqlite"
-kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-inspector
+kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-inspector --grace-period=1
 python3 - "$temporary/synthetic.sqlite" "$mode" <<'PYSQL'
 import json,sqlite3,sys
 connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
@@ -222,6 +222,25 @@ if [[ "$mode" == events ]]; then
   test "$(kubectl --context docker-desktop -n "$namespace" get pod "$pod" -o jsonpath='{.status.phase}')" = Running
   inspect_state
   echo authoritative-failure-accepted-before-supervisor-exit
+  # Hold foreground cleanup during duplicate replay, only in this disposable
+  # namespace. Reporting authentication and normal reconciliation stay enabled.
+  for role in connection-controller runtime-controller; do
+    kubectl --context docker-desktop -n "$namespace" get role "$role" -o json > "$temporary/$role.json"
+    python3 - "$temporary/$role.json" <<'PYROLE' | kubectl --context docker-desktop -n "$namespace" apply -f -
+import json,sys
+role=json.load(open(sys.argv[1]))
+role['metadata'].pop('managedFields',None)
+for rule in role['rules']:
+    if 'jobs' in rule['resources']:
+        rule['verbs']=[verb for verb in rule['verbs'] if verb!='delete']
+print(json.dumps(role))
+PYROLE
+  done
+  # Roll back admission defaults without rewriting the frozen generation or
+  # disabling its transport. Its original producer must still authenticate.
+  kubectl --context docker-desktop -n "$namespace" get configmap runtime-config -o json \
+    | python3 -c 'import json,sys; o=json.load(sys.stdin); c=json.loads(o["data"]["runtime.json"]); c["verification_mode"]="shadow"; c["reporting"]["source"]="ayni://orchestrator/supervisors/rolled-back"; o["data"]["runtime.json"]=json.dumps(c); o["metadata"].pop("managedFields",None); print(json.dumps(o))' \
+    | kubectl --context docker-desktop -n "$namespace" apply -f -
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=1
 fi
 kubectl --context docker-desktop -n "$namespace" rollout restart deployment/control-plane
@@ -235,4 +254,9 @@ sleep 6
 kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
 kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
 inspect_state
+if [[ "$mode" == events ]]; then
+  for role in connection-controller runtime-controller; do
+    kubectl --context docker-desktop -n "$namespace" apply -f "$temporary/$role.json"
+  done
+fi
 printf 'reporting validation passed; retained synthetic state namespace=%s\n' "$namespace"

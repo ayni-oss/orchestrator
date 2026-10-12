@@ -249,6 +249,18 @@ fn export_verification_cutover_fixture() -> TestResult {
     std::fs::create_dir_all(&directory)?;
     let mut store = CleanStore::open(directory.join("orchestrator.sqlite"), 3)?;
     let (profile, mut cursor, _, _, _, _) = event_generation(&mut store)?;
+    // This fixture starts after onboarding; no real provider is configured in
+    // the disposable chart deployment. Keep background onboarding from
+    // invalidating the synthetic admitted generation.
+    let repository =
+        store.repository_connection(&store.runtime_profile(&profile)?.repository_connection_id)?;
+    store.transition_repository_connection(
+        &repository.id,
+        repository.resource_version,
+        v1::RepositoryConnectionStatus::Connected,
+        None,
+    )?;
+    store.record_onboarding(&repository.id, "ready", "", SECOND_REVISION)?;
     let pending = cursor.pending.as_mut().ok_or("pending")?;
     pending.name = "verification-receipt-smoke".into();
     pending.resolved_digest = Some(digest.into());
