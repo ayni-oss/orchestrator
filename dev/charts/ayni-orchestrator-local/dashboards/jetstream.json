@@ -1,0 +1,266 @@
+{
+  "uid": "ayni-orchestrator-jetstream",
+  "title": "Ayni Orchestrator JetStream",
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": false,
+  "tags": [
+    "ayni",
+    "jetstream"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Broker and exporter health",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Exporter reachable and NATS monitoring reports a healthy broker.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"ayni-orchestrator-jetstream\"} * on(job, instance) group_left(value) gnatsd_healthz_status_value{value=\"ok\"}",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "JetStream enabled",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Broker reports JetStream enabled.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - jetstream_server_jetstream_disabled",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Broker stored bytes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Logical stored message bytes; PVC usage also includes metadata and filesystem overhead.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jetstream_server_total_message_bytes",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Broker storage budget",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Configured server file-storage ceiling.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jetstream_server_max_storage",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Lifecycle stored messages",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Messages within the bounded replay window; this is not unpublished database work.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jetstream_stream_total_messages{stream_name=\"ORCHESTRATOR_LIFECYCLE\"}",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Lifecycle storage occupancy",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Stream logical storage. Full streams reject new publications; age expiry removes old messages.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jetstream_stream_total_bytes{stream_name=\"ORCHESTRATOR_LIFECYCLE\"} / jetstream_stream_limit_bytes{stream_name=\"ORCHESTRATOR_LIFECYCLE\"}",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Consumer pending messages",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Populates when D3 creates durable consumers; no consumer is provisioned in D1.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jetstream_consumer_num_pending",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Consumer unacknowledged messages",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Populates when consumers exist; application commit must precede acknowledgement.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jetstream_consumer_num_ack_pending",
+          "legendFormat": "{{stream_name}} {{consumer_name}}",
+          "range": true
+        }
+      ],
+      "options": {}
+    }
+  ]
+}

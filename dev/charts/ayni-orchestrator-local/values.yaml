@@ -200,3 +200,20 @@ grafana:
   extraLabels:
     app.kubernetes.io/part-of: ayni-orchestrator-observability
     orchestrator.ayni.dev/stack: observability
+
+# Local transport only; application acceptance does not depend on this broker.
+jetstream:
+  enabled: true
+  serverImage: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
+  toolingImage: natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295
+  exporterImage: natsio/prometheus-nats-exporter:0.20.2@sha256:c623b608e148e31e1c1c878673a197f1828e58ce90de4f01d22f1baa84c8fee9
+  storageClassName: ""
+  # 2 GiB claim, 1 GiB broker budget, 512 MiB lifecycle budget leave overhead.
+  storageSize: 2Gi
+  maxFileBytes: 1073741824
+  lifecycle:
+    maxBytes: 536870912
+    maxMessages: 100000
+    maxAgeSeconds: 604800
+    duplicateWindowSeconds: 120
+    maxConsumers: 8

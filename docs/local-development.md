@@ -89,3 +89,75 @@ shutdown flushes are bounded; Collector outage does not change execution outcome
 Jaeger stores at most 1,000 traces in memory locally. Logs remain JSON on stdout;
 a centralized log backend is not included. See [observability](observability-and-events.md)
 for configuration, propagation, privacy and the Docker Desktop validation command.
+
+## Persistent local JetStream
+
+The local chart deploys one NATS 2.15.0 instance with file-backed JetStream.
+Its `jetstream-data` PVC requests 2 GiB and survives Helm uninstall; the broker
+has a 1 GiB logical storage budget. `jetstream.enabled=false` disables the broker
+independently of observability. `observability.enabled=false` removes its exporter
+and scrape/dashboard configuration while retaining the broker. The reusable
+application chart has no NATS dependency, and application readiness and accepted
+results do not depend on broker availability.
+
+A post-install/post-upgrade Job creates or edits `ORCHESTRATOR_LIFECYCLE` in place.
+The initial routing subject is `orchestrator.runtime.verification.accepted.v1`,
+carrying the structured CloudEvent type
+`io.ayni.orchestrator.runtime.verification.accepted.v1` defined in the
+[verification contract](verification-events.md). This subject is distinct from
+the CloudEvents resource `subject`. D1 provisions transport only; the outbox
+publisher and application consumers are subsequent work.
+
+The stream uses file storage, one replica and Limits retention. Defaults are
+512 MiB, 100,000 messages, seven days of message age, a 16 KiB message size,
+a two-minute deduplication window and at most eight consumers. These are bounded
+local development settings, not measured production targets. New publications
+are rejected at byte/message capacity rather than evicting retained messages.
+Age expiry still removes old messages, including messages a consumer has not read.
+The database journal and retained evidence remain authoritative beyond this
+replay window. A consumer that falls behind it needs an explicit rebuild path;
+broker sequence does not establish application acceptance or execution authority.
+
+JetStream deduplication covers only its configured window. The publisher must
+preserve source/ID and immutable bytes across retries; application consumers
+must durably deduplicate even after that window. Published outbox and journal
+retention must be designed separately from broker retention. No database cap or
+acceptance behavior changes in this deployment slice.
+
+Stream deletion, purge and rollup are disabled. Helm provisioning edits existing
+configuration without recreating the stream. Lowering limits or message age can
+affect retained history, so review such changes before applying them. PVC
+expansion depends on the storage class; shrinking claims is unsupported.
+`dev/ctl cleanup` preserves the broker claim. Never purge a namespace or delete
+its claim to recover from saturation. First stop new publishers, inspect capacity
+and replay requirements, then review a retention or capacity adjustment. Restart
+the broker with `kubectl --context docker-desktop --namespace NAMESPACE rollout
+restart statefulset/jetstream`.
+
+The broker client Service is cluster-internal on port 4222. Its unauthenticated
+HTTP monitoring endpoint binds only to Pod loopback; the colocated exporter
+exposes metrics on 7777. A NetworkPolicy permits same-namespace Pods labeled
+`orchestrator.ayni.dev/jetstream-client=true` to connect and Prometheus to scrape.
+Workers receive no broker credentials or trusted-client label. Enforcement
+depends on the CNI: Docker Desktop's kindnet setup used for validation does not
+provide this isolation. This unauthenticated local profile is for trusted
+development only; it does not establish hostile-worker isolation. Before enabling
+publishers in an environment that runs untrusted repository code, require tested
+network enforcement and authenticated, subject-scoped clients. Production also
+requires TLS, replicated storage, backup/restore and availability validation.
+
+Grafana provisions **Ayni Orchestrator JetStream** alongside the existing overview.
+It shows exporter reachability, JetStream enablement, broker storage budget and
+stream message/byte occupancy. Consumer pending/unacknowledged panels populate
+when consumers exist. Outbox age and application handling metrics arrive with
+the publisher and consumer. Logical message bytes are not physical PVC usage;
+the existing kubelet volume metrics remain useful for filesystem overhead.
+
+Run `dev/ctl test jetstream` on the explicit Docker Desktop context. It creates
+an isolated namespace without application workers or credentials, exercises
+repeat provisioning, Pod restart, stable-ID deduplication, saturation rejection
+and recovery by expanding a tiny test message cap, then checks Prometheus and
+the provisioned Grafana dashboard. It uses one fixed disposable test namespace, refuses to overwrite an existing
+environment, and deletes that namespace and its test PVC on success or failure.
+Normal development release PVCs remain retained. This is broker process-restart evidence, not node/disk-loss,
+publisher crash-window or application exactly-once evidence.

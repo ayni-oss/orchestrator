@@ -133,12 +133,40 @@ helm template hot-reload "$local_chart" \
   --set-string ayni-orchestrator.images.web=local/ayni-orchestrator-web-dev:test \
   >"$scratch/hot-reload.yaml"
 
+helm template no-broker "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
+  --set jetstream.enabled=false >"$scratch/no-broker.yaml"
+if grep -Eq '^  name: jetstream(-data|-config|-clients|-provision)?$|job_name: ayni-orchestrator-jetstream|jetstream.json:' "$scratch/no-broker.yaml"; then
+  echo "JetStream-disabled render still contains broker resources" >&2; exit 1
+fi
+for invalid in jetstream.lifecycle.maxMessages=0 jetstream.serverImage=nats:latest \
+  jetstream.lifecycle.maxBytes=1073741824 jetstream.maxFileBytes=0; do
+  if helm template invalid "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
+    --set "$invalid" >"$scratch/invalid.yaml" 2>"$scratch/invalid.err"; then
+    echo "invalid JetStream configuration accepted: $invalid" >&2; exit 1
+  fi
+done
+if helm template invalid "$local_chart" --set ayni-orchestrator.runtime.enabled=false \
+  --set jetstream.lifecycle.maxAgeSeconds=1 >"$scratch/invalid.yaml" 2>"$scratch/invalid.err"; then
+  echo "duplicate window exceeded replay horizon" >&2; exit 1
+fi
+grep -q '^kind: StatefulSet$' "$scratch/local.yaml"
+grep -q '^  name: jetstream-data$' "$scratch/local.yaml"
+grep -q '"discard": "new"' "$scratch/local.yaml"
+grep -q '"max_msg_size": 16384' "$scratch/local.yaml"
+grep -q '"retention": "limits"' "$scratch/local.yaml"
+grep -q '"subjects": \["orchestrator.runtime.verification.accepted.v1"\]' "$scratch/local.yaml"
+grep -q 'job_name: ayni-orchestrator-jetstream' "$scratch/local.yaml"
+grep -q 'jetstream.json:' "$scratch/local.yaml"
+if grep -q 'name: exporter' "$scratch/no-observability.yaml"; then
+  echo "monitoring-disabled broker rendered exporter" >&2; exit 1
+fi
+
 # The reusable chart must render independently; runtime placement follows its namespace.
 grep -Fq '\"namespace\":\"runtime-test\"' "$scratch/runtime.yaml"
 grep -q 'registry.example/control-plane:test' "$scratch/application.yaml"
 grep -q '^  name: control-plane$' "$scratch/application.yaml"
 grep -q '^  name: web$' "$scratch/application.yaml"
-if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics|otel-collector|jaeger)$' "$scratch/application.yaml"; then
+if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics|otel-collector|jaeger|jetstream)$' "$scratch/application.yaml"; then
   echo "reusable application chart rendered local monitoring resources" >&2
   exit 1
 fi
@@ -190,8 +218,8 @@ grep -Fq '\"secretName\":\"environment-producer\"' "$scratch/registered-certific
 grep -Fq 'ORCHESTRATOR_ADMIN_CERTIFICATES: "[]"' "$scratch/application.yaml"
 [[ "$(grep -c '^kind: ClusterRole$' "$scratch/local.yaml")" -eq 1 ]]
 [[ "$(grep -c '^kind: ClusterRoleBinding$' "$scratch/local.yaml")" -eq 1 ]]
-[[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 1 ]]
-for claim in control-plane-state; do
+[[ "$(grep -c '^    helm.sh/resource-policy: keep$' "$scratch/local.yaml")" -eq 2 ]]
+for claim in control-plane-state jetstream-data; do
   grep -q "^  name: $claim$" "$scratch/local.yaml"
 done
 if grep -Eq '^  name: (development-checkpoints|prepared-environments)$' "$scratch/local.yaml"; then
