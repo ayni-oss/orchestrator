@@ -79,7 +79,16 @@ async fn run() -> Result<(), io::Error> {
     });
     spawn_background_loops(&mut background, state.clone(), runtimes, &shutdown_receiver);
     let http_shutdown = shutdown_receiver.clone();
-    let http = axum::serve(listener, router(state.clone())).with_graceful_shutdown(async move {
+    let mut http_router = router(state.clone());
+    if let Some(runtime) =
+        ayni_orchestrator_control_plane::reporting_configuration().map_err(io::Error::other)?
+    {
+        http_router = http_router.merge(
+            ayni_orchestrator_control_plane::reporting_router(state.clone(), runtime.0, &runtime.1)
+                .map_err(io::Error::other)?,
+        );
+    }
+    let http = axum::serve(listener, http_router).with_graceful_shutdown(async move {
         wait_for_shutdown(http_shutdown).await;
     });
     let grpc = serve_grpc(

@@ -63,3 +63,65 @@ pub fn valid_execution(value: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
+
+/// Dedicated Kubernetes `TokenReview` audience; not a Kubernetes API credential.
+pub const REPORTING_AUDIENCE: &str = "ayni-orchestrator-verification";
+pub const EVENT_FILE: &str = "verification-event.json";
+pub const RECEIPT_FILE: &str = "verification-receipt.json";
+
+/// Operator-owned shadow reporting settings.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReportingConfiguration {
+    pub endpoint: String,
+    pub source: String,
+}
+
+/// Immutable admission manifest; Pod UID is populated from the downward API.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReportingAdmission {
+    pub configuration: ReportingConfiguration,
+    pub binding: ayni_orchestrator_events::v1::VerificationExecutionBinding,
+}
+
+/// Durable receipt is distinct from controller acceptance.
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReportingReceipt {
+    pub source: String,
+    pub id: String,
+    pub status: String,
+}
+
+impl ReportingConfiguration {
+    /// Validate bounded operator-owned endpoint/source settings.
+    /// # Errors
+    /// Rejects unsupported URLs and malformed producer identity.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        let endpoint = url::Url::parse(&self.endpoint)
+            .map_err(|_| "runtime_reporting_configuration_invalid")?;
+        if self.endpoint.len() > 512
+            || !matches!(endpoint.scheme(), "http" | "https")
+            || endpoint.host_str().is_none()
+            || !endpoint.username().is_empty()
+            || endpoint.password().is_some()
+            || endpoint.query().is_some()
+            || endpoint.fragment().is_some()
+            || endpoint.path() != "/events/verification"
+            || !self
+                .source
+                .strip_prefix("ayni://orchestrator/supervisors/")
+                .is_some_and(|id| {
+                    !id.is_empty()
+                        && id.len() <= 128
+                        && id
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                })
+        {
+            return Err("runtime_reporting_configuration_invalid");
+        }
+        Ok(())
+    }
+}

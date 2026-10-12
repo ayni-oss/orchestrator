@@ -22,3 +22,5 @@ mod trust_lock;
 pub mod engine;
 
 mod verification;
+
+mod reporting;

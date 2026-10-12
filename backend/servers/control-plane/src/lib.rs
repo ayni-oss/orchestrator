@@ -7,6 +7,7 @@ pub mod registry_probe;
 
 pub use adapters::grpc::access::{AccessConfigurationError, CustomClientAccess};
 pub use adapters::grpc::{serve as serve_grpc, serve_custom as serve_custom_grpc};
+pub use adapters::http::reporting::router as reporting_router;
 pub use adapters::http::router;
 pub use adapters::models::{AvailableModel, ModelCatalog, ModelCatalogError};
 pub use ayni_orchestrator_application::execution::ExecutionBackend;
@@ -23,3 +24,24 @@ pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> String {
 }
 
 pub use process::supervision::BackgroundTasks;
+
+/// Internal shadow reporting configuration, independent from product transports.
+/// # Errors
+/// Returns a safe configuration error for malformed runtime settings.
+pub fn reporting_configuration() -> Result<
+    Option<(
+        String,
+        ayni_orchestrator_runtime::verification::ReportingConfiguration,
+    )>,
+    &'static str,
+> {
+    Ok(
+        process::runtime_configuration::RuntimeConfiguration::from_environment()?.and_then(
+            |runtime| {
+                runtime
+                    .reporting
+                    .map(|reporting| (runtime.namespace, reporting))
+            },
+        ),
+    )
+}

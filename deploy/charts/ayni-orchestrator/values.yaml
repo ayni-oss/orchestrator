@@ -20,6 +20,8 @@ runtime:
   # Deployment-wide policy for connected managed repositories; no repository map.
   # The local chart supplies this policy automatically.
   managedRuntime: null
+  # Shadow receipt only; retained evidence still controls activation.
+  reporting: null
   serviceAccounts:
     create: true
     imagePullSecrets: []

@@ -24,6 +24,7 @@ repository = "https://github.com/ayni-oss/orchestrator"
 publish = false
 
 [workspace.dependencies]
+url = "=2.5.8"
 cloudevents-sdk = { version = "=0.9.0", default-features = false }
 pbjson = "=0.9.0"
 pbjson-build = "=0.9.0"

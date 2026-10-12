@@ -8,6 +8,7 @@ use ayni_orchestrator_runtime::{
     },
 };
 use std::{fs, io, path::Path};
+pub mod reporting;
 
 /// Run verification and commit its result before writing a compact Pod reference.
 /// # Errors
@@ -19,6 +20,31 @@ pub async fn run() -> io::Result<()> {
         std::env::var("POD_UID").map_err(|_| failure(VerificationFailure::RequestInvalid))?;
     let request_digest = std::env::var("REQUEST_DIGEST")
         .map_err(|_| failure(VerificationFailure::RequestInvalid))?;
+    let admission = match read_bounded(
+        Path::new("/request/reporting.json"),
+        ayni_orchestrator_events::MAX_EVENT_BYTES,
+    ) {
+        Ok(bytes) => Some(
+            serde_json::from_slice::<ayni_orchestrator_runtime::verification::ReportingAdmission>(
+                &bytes,
+            )
+            .map_err(|_| failure(VerificationFailure::RequestInvalid))?,
+        ),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(_) => return Err(failure(VerificationFailure::RequestInvalid)),
+    };
+    if let Some(admission) = &admission
+        && Path::new("/output/verification.json").exists()
+    {
+        reporting::deliver(
+            Path::new("/output"),
+            admission,
+            &pod_uid,
+            Path::new("/reporting/token"),
+        )
+        .await?;
+        return retained_result(Path::new("/output"));
+    }
     let result = match read_bounded(Path::new("/request/execution.json"), 65_536) {
         Ok(bytes) if ayni_orchestrator_domain::digest::sha256(&bytes) == request_digest => {
             match serde_json::from_slice::<ExecutionRequest>(&bytes) {
@@ -30,14 +56,34 @@ pub async fn run() -> io::Result<()> {
         }
         _ => Err(VerificationFailure::RequestInvalid),
     };
-    retain(
+    let retained = retain(
         Path::new("/output"),
         Path::new("/dev/termination-log"),
         &execution,
         &pod_uid,
         request_digest,
         result,
-    )
+    );
+    if let Some(admission) = &admission {
+        reporting::deliver(
+            Path::new("/output"),
+            admission,
+            &pod_uid,
+            Path::new("/reporting/token"),
+        )
+        .await?;
+    }
+    retained
+}
+
+fn retained_result(output: &Path) -> io::Result<()> {
+    let record: VerificationRecord<serde_json::Value> =
+        serde_json::from_slice(&read_bounded(&output.join(RECORD_FILE), MAX_RECORD_BYTES)?)
+            .map_err(|_| failure(VerificationFailure::RequestInvalid))?;
+    match record.outcome {
+        VerificationOutcome::Report { .. } => Ok(()),
+        VerificationOutcome::Failed { reason } => Err(failure(reason)),
+    }
 }
 
 fn classify(error: &io::Error) -> VerificationFailure {

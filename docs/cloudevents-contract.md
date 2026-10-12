@@ -178,5 +178,5 @@ CloudEvents standardizes representation; those guarantees require our contracts
 and tests. Requirements and delivery status belong in linked GitHub issues.
 
 The [runtime verification event contract](verification-events.md) defines the
-first implemented payload and shared codec boundary. Its deployed reporting
-producer, durable ingress and controller acceptance remain future integration.
+first implemented payload and shared codec boundary. Its opt-in supervisor and authenticated inbox implement durable receipt;
+transactional controller acceptance remains subsequent integration.

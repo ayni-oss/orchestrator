@@ -36,7 +36,9 @@ impl CleanStore {
             return Err(CleanStoreError::InvalidTransition);
         }
         connection
-            .execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")
+            .execute_batch(
+                "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;",
+            )
             .map_err(CleanStoreError::Database)?;
         initialize_schema(&connection)?;
         let store = Self {
@@ -88,6 +90,7 @@ impl CleanStore {
     }
 
     pub(super) fn validate_durable_state(&self) -> Result<(), CleanStoreError> {
+        self.validate_verification_inbox()?;
         validate_resource_tables(&self.connection)?;
         validate_durable_actions(&self.connection)?;
         validate_resource_events(&self.connection)?;

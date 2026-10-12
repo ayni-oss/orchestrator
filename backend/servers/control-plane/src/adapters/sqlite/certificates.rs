@@ -168,10 +168,10 @@ mod tests {
             "INSERT INTO connections(id,kind,payload) VALUES(?1,?2,?3)",
             params![connection.id, connection.kind, connection.encode_to_vec()],
         )?;
-        store.connection.execute_batch("DROP TABLE certificate_operations; DROP TABLE certificates; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=6;")?;
+        store.connection.execute_batch("DROP TABLE certificate_operations; DROP TABLE verification_inbox; DROP TABLE certificates; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=6;")?;
         drop(store);
         let store = CleanStore::open(&path, 3)?;
-        assert_eq!(store.schema_version()?, 10);
+        assert_eq!(store.schema_version()?, super::SCHEMA_VERSION);
         assert_eq!(store.get_connection("existing")?, connection);
         assert!(store.list_certificates()?.is_empty());
         drop(store);

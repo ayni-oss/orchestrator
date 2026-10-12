@@ -221,6 +221,7 @@ dependencies = [
  "ayni-orchestrator-api",
  "ayni-orchestrator-application",
  "ayni-orchestrator-domain",
+ "ayni-orchestrator-events",
  "ayni-orchestrator-kubernetes",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
@@ -231,6 +232,8 @@ dependencies = [
  "getrandom 0.3.4",
  "http-body-util",
  "jsonwebtoken",
+ "k8s-openapi",
+ "kube",
  "prost",
  "prost-types",
  "rcgen",
@@ -287,6 +290,7 @@ name = "ayni-orchestrator-kubernetes"
 version = "0.1.0"
 dependencies = [
  "ayni-orchestrator-application",
+ "ayni-orchestrator-events",
  "ayni-orchestrator-runtime",
  "k8s-openapi",
  "kube",
@@ -337,9 +341,11 @@ name = "ayni-orchestrator-runtime"
 version = "0.1.0"
 dependencies = [
  "ayni-orchestrator-domain",
+ "ayni-orchestrator-events",
  "serde",
  "serde_json",
  "thiserror",
+ "url",
 ]
 
 [[package]]
@@ -347,6 +353,7 @@ name = "ayni-orchestrator-worker"
 version = "0.1.0"
 dependencies = [
  "ayni-orchestrator-domain",
+ "ayni-orchestrator-events",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
  "ayni-orchestrator-registry",
@@ -365,6 +372,7 @@ dependencies = [
  "tokio",
  "toml_edit",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

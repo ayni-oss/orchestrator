@@ -1,6 +1,7 @@
 //! Server-owned operational HTTP endpoints, separate from the product gRPC API.
 
 mod health;
+pub mod reporting;
 
 use crate::{AppState, adapters::models::ModelCatalog, process::metrics as application_metrics};
 use axum::{
