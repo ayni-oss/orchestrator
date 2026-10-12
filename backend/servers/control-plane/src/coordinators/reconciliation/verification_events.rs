@@ -108,8 +108,20 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .ok_or("runtime_result_invalid")?
                     .resolved_image_digest
                     .clone();
-                self.accept_report(observation, cursor, digest, Some(identity), &report)
-                    .await
+                let result = self
+                    .accept_report(observation, cursor, digest, Some(identity.clone()), &report)
+                    .await;
+                if let Err(reason) = result
+                    && terminal_evidence_rejection(reason)
+                {
+                    self.with_database(move |store| {
+                        store
+                            .reject_verification_receipt(&identity, reason)
+                            .map_err(|_| "runtime_store_failed")
+                    })
+                    .await?;
+                }
+                result
             }
             Evidence::Failed => {
                 let Some(Outcome::ExecutionFailed(failure)) = &payload.outcome else {
@@ -138,4 +150,18 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             }
         }
     }
+}
+
+// Provider/SQLite outages defer the same receipt. A permanently invalid report
+// cannot become valid by rereading its immutable evidence after a restart.
+fn terminal_evidence_rejection(reason: &str) -> bool {
+    matches!(
+        reason,
+        "certificate_verification_mismatch"
+            | "runtime_result_mismatch"
+            | "runtime_digest_mismatch"
+            | "runtime_source_changed"
+            | "runtime_tag_drift"
+            | "runtime_preparation_mismatch"
+    )
 }
