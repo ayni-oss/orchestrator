@@ -15,11 +15,36 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .await
     }
 
+    pub(super) async fn accept_report(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+        digest: String,
+        receipt: Option<ayni_orchestrator_events::EventIdentity>,
+        report: &ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport,
+    ) -> Result<(), &'static str> {
+        use tracing::Instrument;
+        let execution = cursor
+            .pending
+            .as_ref()
+            .map(|p| p.name.clone())
+            .unwrap_or_default();
+        let span = self.verification_span("acceptance", &execution).await;
+        let result = self
+            .accept_report_inner(observation, cursor, digest, receipt, report)
+            .instrument(span.clone())
+            .await;
+        if let Err(reason) = result {
+            ayni_orchestrator_observability::record_failure(&span, reason);
+        }
+        result
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "evidence admission, durable cleanup and guarded activation are one ordered transaction protocol"
     )]
-    pub(super) async fn accept_report(
+    pub(super) async fn accept_report_inner(
         &self,
         observation: &ProfileObservation<'_>,
         cursor: &mut RuntimeCursor,

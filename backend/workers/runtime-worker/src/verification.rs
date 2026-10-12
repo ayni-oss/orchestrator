@@ -14,6 +14,29 @@ pub mod reporting;
 /// # Errors
 /// Returns safe classification codes; the retained record survives termination-log failure.
 pub async fn run() -> io::Result<()> {
+    use tracing::Instrument;
+    let context = std::env::var("TRACEPARENT").ok().and_then(|parent| {
+        ayni_orchestrator_observability::TraceContext::parse(
+            &parent,
+            std::env::var("TRACESTATE").ok().as_deref(),
+        )
+    });
+    let execution = std::env::var("JOB_NAME").unwrap_or_default();
+    let span =
+        ayni_orchestrator_observability::verification_span("worker", &execution, context.as_ref());
+    let result = run_verification().instrument(span.clone()).await;
+    if let Err(error) = &result {
+        ayni_orchestrator_observability::record_failure(&span, trace_failure(error).code());
+    }
+    result
+}
+
+#[tracing::instrument(
+    name = "verification.execution",
+    target = "ayni_orchestrator_observability::verification",
+    skip_all
+)]
+async fn run_verification() -> io::Result<()> {
     let execution =
         std::env::var("JOB_NAME").map_err(|_| failure(VerificationFailure::RequestInvalid))?;
     let pod_uid =
@@ -86,6 +109,24 @@ fn retained_result(output: &Path) -> io::Result<()> {
     }
 }
 
+fn trace_failure(error: &io::Error) -> VerificationFailure {
+    let code = error.to_string();
+    [
+        VerificationFailure::RequestInvalid,
+        VerificationFailure::LockMismatch,
+        VerificationFailure::PlatformMismatch,
+        VerificationFailure::VersionUnsupported,
+        VerificationFailure::CertificateInvalid,
+        VerificationFailure::EvidenceUnavailable,
+        VerificationFailure::SerializationFailed,
+        VerificationFailure::ReportOversized,
+        VerificationFailure::ReportingFailed,
+    ]
+    .into_iter()
+    .find(|reason| reason.code() == code)
+    .unwrap_or(VerificationFailure::EvidenceUnavailable)
+}
+
 fn classify(error: &io::Error) -> VerificationFailure {
     match error.to_string().as_str() {
         "runtime_lock_mismatch" => VerificationFailure::LockMismatch,
@@ -100,6 +141,7 @@ fn failure(reason: VerificationFailure) -> io::Error {
     io::Error::other(reason.code())
 }
 
+#[tracing::instrument(name="verification.report", target="ayni_orchestrator_observability::verification", skip_all, fields(report_bytes = tracing::field::Empty))]
 fn retain(
     output: &Path,
     termination: &Path,
@@ -135,6 +177,7 @@ fn retain(
                 .map_err(|_| failure(VerificationFailure::SerializationFailed))?
         }
     };
+    tracing::Span::current().record("report_bytes", bytes.len());
     persist(output, &bytes).map_err(|_| failure(VerificationFailure::ReportingFailed))?;
     fs::write(termination, format!("{CONTRACT}:{RECORD_FILE}"))
         .map_err(|_| failure(VerificationFailure::ReportingFailed))?;

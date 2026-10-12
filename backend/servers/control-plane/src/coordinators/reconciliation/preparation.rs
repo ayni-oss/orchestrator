@@ -268,6 +268,23 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         &self,
         pending: &PendingVerification,
     ) -> Result<(), &'static str> {
+        use tracing::Instrument;
+        let execution = pending.name.clone();
+        let span = self.verification_span("cleanup", &execution).await;
+        let result = self
+            .cleanup_operation_inner(pending)
+            .instrument(span.clone())
+            .await;
+        if let Err(reason) = result {
+            ayni_orchestrator_observability::record_failure(&span, reason);
+        }
+        result
+    }
+
+    pub(super) async fn cleanup_operation_inner(
+        &self,
+        pending: &PendingVerification,
+    ) -> Result<(), &'static str> {
         let discovery = operation_name(
             &format!("discover:{}", pending.name),
             u64::from(pending.publish_attempts),
@@ -287,6 +304,25 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     }
 
     pub(super) async fn start_verification(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &RuntimeCursor,
+        pending: &PendingVerification,
+    ) -> Result<(), &'static str> {
+        use tracing::Instrument;
+        let execution = pending.name.clone();
+        let span = self.verification_span("launch", &execution).await;
+        let result = self
+            .start_verification_inner(observation, cursor, pending)
+            .instrument(span.clone())
+            .await;
+        if let Err(reason) = result {
+            ayni_orchestrator_observability::record_failure(&span, reason);
+        }
+        result
+    }
+
+    pub(super) async fn start_verification_inner(
         &self,
         observation: &ProfileObservation<'_>,
         cursor: &RuntimeCursor,

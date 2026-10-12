@@ -106,3 +106,13 @@ and [Ayni integration contract](../ayni-integration.md).
   views.
 - Multi-node storage, hostile tenancy, cloud deployment, and public distribution
   require separate designs and validation.
+
+## Current observability composition
+
+The local chart now retains Prometheus and Grafana, adds a bounded OpenTelemetry
+Collector and Jaeger, and provisions Jaeger as a Grafana datasource. It removes
+kube-state-metrics, its scrape and dedicated RBAC, and the provisioned-PVC-size
+series. Existing kubelet/cAdvisor metrics remain. The versions listed above
+record the original decision; current pinned images are in the local chart values.
+See [observability](../observability-and-events.md) for verification tracing and
+its independent failure behavior.

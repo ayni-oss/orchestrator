@@ -28,6 +28,12 @@ runtime:
     create: true
     imagePullSecrets: []
 
+# Optional verification traces. Empty endpoint keeps JSON logs only.
+telemetry:
+  tracesEndpoint: ""
+  # The local umbrella chart supplies an optional endpoint ConfigMap.
+  endpointConfigMap: ""
+
 images:
   controlPlane: local/ayni-orchestrator-control-plane:replace-me
   web: local/ayni-orchestrator-web:replace-me

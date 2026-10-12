@@ -1,4 +1,5 @@
 //! Authenticated bounded receipt, separate from controller acceptance.
+use tracing::Instrument;
 mod auth;
 use crate::{AppState, adapters::sqlite::CleanStoreError};
 use auth::KubernetesAuthority;
@@ -75,40 +76,55 @@ async fn receive(
     {
         return Err(ReceiptError::Invalid);
     }
-    let _permit = state
-        .capacity
-        .try_acquire()
-        .map_err(|_| ReceiptError::Unavailable)?;
-    let token = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .filter(|token| !token.is_empty() && token.len() <= 8192)
-        .ok_or(ReceiptError::Unauthorized)?
-        .to_owned();
-    let (identity, payload) =
-        ayni_orchestrator_events::decode(&bytes).map_err(|_| ReceiptError::Invalid)?;
-    tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        state.authority.authorize(token, &identity, &payload),
-    )
-    .await
-    .map_err(|_| ReceiptError::Unavailable)??;
-    let receipt = ReportingReceipt {
-        source: identity.source.clone(),
-        id: identity.id.clone(),
-        status: "stored".into(),
-    };
-    state
-        .state
-        .database
-        .execute(move |store| store.receive_verification(&identity, &payload))
+    let context = ayni_orchestrator_observability::event_context(&bytes);
+    let span = ayni_orchestrator_observability::verification_span("receipt", "", context.as_ref());
+    async {
+        let _permit = state
+            .capacity
+            .try_acquire()
+            .map_err(|_| ReceiptError::Unavailable)?;
+        let token = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .filter(|token| !token.is_empty() && token.len() <= 8192)
+            .ok_or(ReceiptError::Unauthorized)?
+            .to_owned();
+        let (identity, payload) =
+            ayni_orchestrator_events::decode(&bytes).map_err(|_| ReceiptError::Invalid)?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            state.authority.authorize(token, &identity, &payload),
+        )
         .await
-        .map_err(|error| match error {
-            CleanStoreError::IdempotencyConflict => ReceiptError::Conflict,
-            _ => ReceiptError::Unavailable,
-        })?;
-    Ok((StatusCode::ACCEPTED, Json(receipt)))
+        .map_err(|_| ReceiptError::Unavailable)??;
+        let receipt = ReportingReceipt {
+            source: identity.source.clone(),
+            id: identity.id.clone(),
+            status: "stored".into(),
+        };
+        state
+            .state
+            .database
+            .execute(move |store| {
+                let result = store.receive_verification(&identity, &payload);
+                if result.is_ok()
+                    && let Some(context) = context
+                    && let Some(binding) = &payload.binding
+                {
+                    store.retain_verification_trace(&binding.execution_id, &context);
+                }
+                result
+            })
+            .await
+            .map_err(|error| match error {
+                CleanStoreError::IdempotencyConflict => ReceiptError::Conflict,
+                _ => ReceiptError::Unavailable,
+            })?;
+        Ok((StatusCode::ACCEPTED, Json(receipt)))
+    }
+    .instrument(span)
+    .await
 }
 
 #[cfg(test)]

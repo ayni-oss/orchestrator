@@ -13,7 +13,27 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         cursor: &mut RuntimeCursor,
         pending: &PendingVerification,
     ) -> Result<(), &'static str> {
+        use tracing::Instrument;
         let execution = pending.name.clone();
+        let span = self.verification_span("reconcile", &execution).await;
+        let result = self
+            .observe_event_verification_inner(observation, cursor, pending)
+            .instrument(span.clone())
+            .await;
+        if let Err(reason) = result {
+            ayni_orchestrator_observability::record_failure(&span, reason);
+        }
+        result
+    }
+
+    pub(super) async fn observe_event_verification_inner(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+        pending: &PendingVerification,
+    ) -> Result<(), &'static str> {
+        let execution = pending.name.clone();
+        let evidence_execution = execution.clone();
         let receipt = self
             .with_database(move |store| {
                 store
@@ -22,7 +42,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             })
             .await?;
         if let Some((identity, payload)) = receipt {
+            let evidence_span = ayni_orchestrator_observability::verification_span(
+                "evidence",
+                &evidence_execution,
+                None,
+            );
             let evidence = tokio::task::spawn_blocking(move || {
+                let _entered = evidence_span.enter();
                 let evidence = read(std::path::Path::new("/runtime-outputs"), &payload);
                 (payload, evidence)
             })

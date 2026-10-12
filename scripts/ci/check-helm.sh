@@ -138,7 +138,7 @@ grep -Fq '\"namespace\":\"runtime-test\"' "$scratch/runtime.yaml"
 grep -q 'registry.example/control-plane:test' "$scratch/application.yaml"
 grep -q '^  name: control-plane$' "$scratch/application.yaml"
 grep -q '^  name: web$' "$scratch/application.yaml"
-if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics)$' "$scratch/application.yaml"; then
+if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics|otel-collector|jaeger)$' "$scratch/application.yaml"; then
   echo "reusable application chart rendered local monitoring resources" >&2
   exit 1
 fi
@@ -146,12 +146,17 @@ fi
 # The local chart composes the reusable chart and version-locked upstream charts.
 grep -q '# Source: ayni-orchestrator-local/charts/ayni-orchestrator/' "$scratch/local.yaml"
 grep -q '# Source: ayni-orchestrator-local/charts/prometheus/' "$scratch/local.yaml"
-grep -q '# Source: ayni-orchestrator-local/charts/kube-state-metrics/' "$scratch/local.yaml"
+if grep -q 'name: kube-state-metrics' "$scratch/local.yaml"; then
+  echo "local chart still deploys kube-state-metrics" >&2; exit 1
+fi
+grep -q '^  name: otel-collector$' "$scratch/local.yaml"
+grep -q '^  name: jaeger$' "$scratch/local.yaml"
+grep -q 'uid: jaeger' "$scratch/local.yaml"
+grep -q 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' "$scratch/local.yaml"
 grep -q '# Source: ayni-orchestrator-local/charts/grafana/' "$scratch/local.yaml"
 grep -q '^  name: prometheus$' "$scratch/local.yaml"
 grep -q '^  name: grafana$' "$scratch/local.yaml"
 grep -q '^  name: grafana-dashboard$' "$scratch/local.yaml"
-grep -q -- '--namespaces=ayni-orchestrator-dev' "$scratch/local.yaml"
 grep -q 'prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996' "$scratch/local.yaml"
 grep -q 'prometheus-config-reloader@sha256:ebb560bcb6bd3ab728a7ab61d77d22a001cc0c7a67f0531e7f92e20ce004de38' "$scratch/local.yaml"
 grep -q 'grafana/grafana:12.1.1@sha256:a1701c2180249361737a99a01bc770db39381640e4d631825d38ff4535efa47d' "$scratch/local.yaml"
@@ -207,7 +212,7 @@ if grep -Eq '^kind: Ingress$|^  type: (LoadBalancer|NodePort)$|nodes/proxy' "$sc
   echo "local chart rendered a forbidden public service or node-proxy permission" >&2
   exit 1
 fi
-if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics)$' "$scratch/no-observability.yaml"; then
+if grep -Eq '^  name: (prometheus|grafana|kube-state-metrics|otel-collector|jaeger|telemetry-config|tracing-config)$' "$scratch/no-observability.yaml"; then
   echo "observability-disabled render still contains monitoring resources" >&2
   exit 1
 fi

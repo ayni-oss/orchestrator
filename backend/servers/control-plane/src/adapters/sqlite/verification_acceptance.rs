@@ -67,6 +67,11 @@ impl CleanStore {
 
     /// The retained reader remains authoritative. Acceptance precedes cleanup and
     /// commits its projection, cursor cleanup intent, journal and outbox together.
+    #[tracing::instrument(
+        name = "verification.commit",
+        target = "ayni_orchestrator_observability::verification",
+        skip_all
+    )]
     pub(crate) fn commit_verification(
         &mut self,
         command: &ActivateRuntime,

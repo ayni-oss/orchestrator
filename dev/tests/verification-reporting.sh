@@ -14,7 +14,26 @@ if [[ "$mode" != shadow && "$mode" != events ]]; then echo "unsupported validati
 namespace="ayni-reporting-validation-$(date +%s)"
 job="verification-receipt-smoke"
 temporary=$(mktemp -d)
-trap 'rm -rf "$temporary"' EXIT
+tracing_test=${VERIFICATION_TRACING_TEST:-false}
+collector_outage=${VERIFICATION_COLLECTOR_OUTAGE:-false}
+collector_forward=""
+jaeger_forward=""
+grafana_forward=""
+finish_fixture() {
+  status=$?
+  for forward in "$collector_forward" "$jaeger_forward" "$grafana_forward"; do
+    if [[ -n "$forward" ]]; then kill "$forward" 2>/dev/null || true; wait "$forward" 2>/dev/null || true; fi
+  done
+  for role in connection-controller runtime-controller; do
+    if [[ -f "$temporary/$role.json" ]]; then
+      kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0 >/dev/null 2>&1 || true
+      kubectl --context docker-desktop -n "$namespace" apply -f "$temporary/$role.json" >/dev/null 2>&1 || true
+    fi
+  done
+  rm -rf "$temporary"
+  exit "$status"
+}
+trap finish_fixture EXIT
 source "$root/dev/lib/common.sh"
 dev_build_chart_dependencies
 kubectl --context docker-desktop create namespace "$namespace"
@@ -22,7 +41,7 @@ kubectl --context docker-desktop create namespace "$namespace"
 kubectl --context docker-desktop -n "$namespace" create secret generic openai-api --from-literal=api-key=validation-placeholder
 helm upgrade --install reporting-validation "$root/dev/charts/ayni-orchestrator-local" \
   --kube-context docker-desktop --namespace "$namespace" \
-  --set observability.enabled=false \
+  --set "observability.enabled=$tracing_test" \
   --set ayni-orchestrator.runtime.enabled=true \
   --set-string "ayni-orchestrator.runtime.verificationMode=$mode" \
   --set-string "ayni-orchestrator.images.controlPlane=$1" \
@@ -33,7 +52,24 @@ helm upgrade --install reporting-validation "$root/dev/charts/ayni-orchestrator-
   --set-string 'ayni-orchestrator.runtime.reporting.source=ayni://orchestrator/supervisors/validation'
 kubectl --context docker-desktop -n "$namespace" rollout status deployment/control-plane --timeout=180s
 if [[ "$mode" == events ]]; then
-  AYNI_VERIFICATION_FIXTURE_DIRECTORY="$temporary" AYNI_VERIFICATION_FIXTURE_WORKER="$worker_image"     cargo test --locked -p ayni-orchestrator-control-plane export_verification_cutover_fixture -- --ignored
+  fixture_endpoint=""
+  if [[ "$tracing_test" == true ]]; then
+    kubectl --context docker-desktop -n "$namespace" rollout status deployment/otel-collector --timeout=180s
+    kubectl --context docker-desktop -n "$namespace" rollout status deployment/jaeger --timeout=180s
+    # Begin the connected fixture after the backend is ready, without a gRPC
+    # reconnect backoff inherited from a slow first image pull.
+    kubectl --context docker-desktop -n "$namespace" rollout restart deployment/otel-collector
+    kubectl --context docker-desktop -n "$namespace" rollout status deployment/otel-collector --timeout=180s
+    trace_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
+    kubectl --context docker-desktop -n "$namespace" port-forward service/otel-collector "$trace_port:4318" > "$temporary/collector-forward.log" 2>&1 &
+    collector_forward=$!
+    for attempt in $(seq 1 30); do
+      if curl --silent "http://127.0.0.1:$trace_port/" >/dev/null; then break; fi
+      sleep 1
+    done
+    fixture_endpoint="http://127.0.0.1:$trace_port/v1/traces"
+  fi
+  AYNI_VERIFICATION_FIXTURE_TRACING="$tracing_test" OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="$fixture_endpoint" AYNI_VERIFICATION_FIXTURE_DIRECTORY="$temporary" AYNI_VERIFICATION_FIXTURE_WORKER="$worker_image"     cargo test --locked -p ayni-orchestrator-control-plane export_verification_cutover_fixture -- --ignored
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
   kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
   cat > "$temporary/seed.yaml" <<YAML
@@ -71,6 +107,18 @@ admission={'configuration':{'source':'ayni://orchestrator/supervisors/validation
 (Path(out)/'reporting.json').write_text(json.dumps(admission))
 (Path(out)/'execution.json').write_text('{}')
 PY
+fi
+tracing_env=""
+if [[ "$tracing_test" == true ]]; then
+  traceparent=$(cat "$temporary/traceparent")
+  tracing_env="            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://otel-collector:4318/v1/traces
+            - name: TRACEPARENT
+              value: $traceparent"
+  if [[ "$collector_outage" == true ]]; then
+    kubectl --context docker-desktop -n "$namespace" scale deployment/otel-collector --replicas=0
+    kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=otel-collector --timeout=60s
+  fi
 fi
 request_digest=$(python3 - "$temporary/reporting.json" <<'PYDIGEST'
 import json,sys
@@ -130,6 +178,7 @@ spec:
               valueFrom: {fieldRef: {fieldPath: metadata.uid}}
             - name: REQUEST_DIGEST
               value: $request_digest
+$tracing_env
           volumeMounts:
             - {name: request, mountPath: /request/execution.json, subPath: execution.json, readOnly: true}
             - {name: request, mountPath: /request/reporting.json, subPath: reporting.json, readOnly: true}
@@ -244,6 +293,11 @@ if [[ "$mode" == events ]]; then
   kubectl --context docker-desktop -n "$namespace" get configmap runtime-config -o json \
     | python3 -c 'import json,sys; o=json.load(sys.stdin); c=json.loads(o["data"]["runtime.json"]); c["verification_mode"]="shadow"; c["reporting"]["source"]="ayni://orchestrator/supervisors/rolled-back"; o["data"]["runtime.json"]=json.dumps(c); o["metadata"].pop("managedFields",None); print(json.dumps(o))' \
     | kubectl --context docker-desktop -n "$namespace" apply -f -
+  if [[ "$collector_outage" == true ]]; then
+    kubectl --context docker-desktop -n "$namespace" scale deployment/otel-collector --replicas=1
+    kubectl --context docker-desktop -n "$namespace" rollout status deployment/otel-collector --timeout=180s
+    echo collector-outage-preserved-acceptance-and-accounting
+  fi
   kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=1
 fi
 kubectl --context docker-desktop -n "$namespace" rollout restart deployment/control-plane
@@ -261,5 +315,15 @@ if [[ "$mode" == events ]]; then
   for role in connection-controller runtime-controller; do
     kubectl --context docker-desktop -n "$namespace" apply -f "$temporary/$role.json"
   done
+fi
+if [[ "$tracing_test" == true && "$collector_outage" == false ]]; then
+  jaeger_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
+  kubectl --context docker-desktop -n "$namespace" port-forward service/jaeger "$jaeger_port:16686" > "$temporary/jaeger-forward.log" 2>&1 &
+  jaeger_forward=$!
+  kubectl --context docker-desktop -n "$namespace" rollout status deployment/grafana --timeout=180s
+  grafana_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
+  kubectl --context docker-desktop -n "$namespace" port-forward service/grafana "$grafana_port:3000" > "$temporary/grafana-forward.log" 2>&1 &
+  grafana_forward=$!
+  python3 "$root/dev/tests/inspect-verification-trace.py" "$jaeger_port" "$temporary/traceparent" "$grafana_port"
 fi
 printf 'reporting validation passed; retained synthetic state namespace=%s\n' "$namespace"

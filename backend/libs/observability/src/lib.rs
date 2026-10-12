@@ -1,6 +1,12 @@
 //! Shared, fail-closed structured logging for control-plane and worker processes.
 
 use std::env;
+use tracing_subscriber::{Layer, prelude::*};
+mod telemetry;
+pub use telemetry::{
+    TelemetryGuard, TraceContext, current_context, event_context, exporter_endpoint,
+    record_failure, verification_span, with_event_context,
+};
 use tracing::{Span, field, info};
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
@@ -22,18 +28,31 @@ const SENSITIVE_ENVIRONMENT_KEYS: &[&str] = &[
 ];
 
 /// Initializes newline-delimited JSON logs on stdout.
-pub fn init(service: &'static str) {
-    tracing_subscriber::fmt()
-        .with_env_filter(configured_filter())
-        .json()
-        .flatten_event(true)
-        .with_current_span(true)
-        .with_span_list(true)
-        .with_span_events(FmtSpan::CLOSE)
-        .with_target(true)
-        .with_writer(std::io::stdout)
+pub fn init(service: &'static str) -> TelemetryGuard {
+    let guard = telemetry::provider(service);
+    let bridge = guard.tracer().map(|tracer| {
+        tracing_opentelemetry::layer()
+            .with_tracer(tracer)
+            .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+                metadata.target() == telemetry::TRACE_TARGET
+            }))
+    });
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .flatten_event(true)
+                .with_current_span(true)
+                .with_span_list(true)
+                .with_span_events(FmtSpan::CLOSE)
+                .with_target(true)
+                .with_writer(std::io::stdout)
+                .with_filter(configured_filter()),
+        )
+        .with(bridge)
         .init();
     info!(service, log_format = "json", "logging initialized");
+    guard
 }
 
 fn configured_level(value: Option<&str>) -> &str {

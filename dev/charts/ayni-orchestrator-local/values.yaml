@@ -1,5 +1,7 @@
 ayni-orchestrator:
   enabled: true
+  telemetry:
+    endpointConfigMap: telemetry-config
   runtime:
     # Native Apple Silicon validation; override explicitly on Intel hosts.
     allowEmulation: false
@@ -20,6 +22,9 @@ ayni-orchestrator:
     pullPolicy: Never
 observability:
   enabled: true
+  collectorImage: otel/opentelemetry-collector:0.162.0@sha256:310a800ad69ee430e7c541796852a242c9c7db97aaad4daa5ccf843c525fbdb2
+  # Retains the HTTP search API required by pinned Grafana 12.1.1.
+  jaegerImage: cr.jaegertracing.io/jaegertracing/jaeger:2.20.0@sha256:46a886260e04002d8f45e213fc39063fa11a50446048fdaa64786fc0840cb9f8
 
 prometheus:
   rbac:
@@ -97,38 +102,6 @@ prometheus:
         drop: [ALL]
       readOnlyRootFilesystem: true
 
-kube-state-metrics:
-  fullnameOverride: kube-state-metrics
-  image:
-    registry: registry.k8s.io
-    repository: kube-state-metrics/kube-state-metrics
-    tag: v2.16.0
-    sha: sha256:e750cd4b43f782e3106537026c2995cac85d921aedea334e1d16caad7877c360
-    pullPolicy: IfNotPresent
-  rbac:
-    create: false
-  serviceAccount:
-    create: false
-    name: kube-state-metrics
-    automountServiceAccountToken: true
-  releaseNamespace: true
-  collectors:
-    - jobs
-    - persistentvolumeclaims
-    - pods
-  metricLabelsAllowlist:
-    - pods=[app.kubernetes.io/name,app.kubernetes.io/part-of,orchestrator.ayni.dev/development-task-id,orchestrator.ayni.dev/task-id,orchestrator.ayni.dev/development-stage]
-    - jobs=[app.kubernetes.io/name,app.kubernetes.io/part-of,orchestrator.ayni.dev/development-task-id,orchestrator.ayni.dev/task-id,orchestrator.ayni.dev/development-stage]
-  resources:
-    requests:
-      cpu: 25m
-      memory: 48Mi
-    limits:
-      cpu: 100m
-      memory: 128Mi
-  customLabels:
-    orchestrator.ayni.dev/stack: observability
-
 grafana:
   fullnameOverride: grafana
   rbac:
@@ -202,6 +175,12 @@ grafana:
           access: proxy
           url: http://prometheus:9090
           isDefault: true
+          editable: false
+        - name: Jaeger
+          uid: jaeger
+          type: jaeger
+          access: proxy
+          url: http://jaeger:16686
           editable: false
   dashboardProviders:
     dashboardproviders.yaml:

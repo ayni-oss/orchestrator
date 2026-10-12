@@ -18,9 +18,6 @@ data:
         metrics_path: /metrics
         static_configs:
           - targets: ["control-plane:8080"]
-      - job_name: ayni-orchestrator-kube-state-metrics
-        static_configs:
-          - targets: ["kube-state-metrics:8080"]
       - job_name: ayni-orchestrator-cadvisor
         scheme: https
         authorization:

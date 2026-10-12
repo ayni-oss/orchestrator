@@ -15,6 +15,11 @@ pub enum Evidence {
     Unavailable,
 }
 
+#[tracing::instrument(
+    name = "verification.evidence",
+    target = "ayni_orchestrator_observability::verification",
+    skip_all
+)]
 pub fn read(root: &Path, payload: &VerificationResultAvailable) -> Evidence {
     let Some(binding) = &payload.binding else {
         return Evidence::Invalid("binding_missing");

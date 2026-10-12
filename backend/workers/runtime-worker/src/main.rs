@@ -4,8 +4,7 @@ use ayni_orchestrator_worker::operations::runtime::checkout;
 use std::{env, fs, io, path::Path, process::ExitCode};
 use tracing::Instrument;
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     if env::args().nth(1).as_deref() == Some("sandbox") {
         let arguments = env::args().skip(2).collect::<Vec<_>>();
         let Some((program, arguments)) = arguments.split_first() else {
@@ -19,7 +18,19 @@ async fn main() -> ExitCode {
         }
         return ExitCode::FAILURE;
     }
-    ayni_orchestrator_observability::init("runtime-worker");
+    let telemetry = ayni_orchestrator_observability::init("runtime-worker");
+    let result = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_or_else(
+            |_| ExitCode::FAILURE,
+            |runtime| runtime.block_on(worker_main()),
+        );
+    telemetry.shutdown();
+    result
+}
+
+async fn worker_main() -> ExitCode {
     let activity = ayni_orchestrator_worker::coding::activity::ActivityLog::new(
         (env::args().nth(1).as_deref() == Some("code"))
             .then(|| Path::new("/output/activity.json").to_path_buf()),

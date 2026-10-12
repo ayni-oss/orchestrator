@@ -98,6 +98,7 @@ impl RuntimeKubernetes {
             data.insert("reporting.json".into(), manifest);
             crate::reporting::configure_job(&mut job)?;
         }
+        crate::reporting::configure_telemetry(&mut job);
         self.create(name, data, token, &job).await
     }
 

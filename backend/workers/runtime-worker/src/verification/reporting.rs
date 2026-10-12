@@ -76,6 +76,10 @@ fn event(output: &Path, admission: &ReportingAdmission, pod_uid: &str) -> io::Re
         id: uuid::Uuid::now_v7().to_string(),
     };
     let bytes = ayni_orchestrator_events::encode(&identity, &payload).map_err(|_| failed())?;
+    let bytes = ayni_orchestrator_observability::with_event_context(
+        bytes,
+        ayni_orchestrator_events::MAX_EVENT_BYTES,
+    );
     persist(output, EVENT_FILE, &bytes)?;
     Ok(bytes)
 }
@@ -112,6 +116,33 @@ fn persist(output: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
 /// # Errors
 /// Fails closed for invalid retained state, terminal rejection or local persistence failure.
 pub async fn deliver(
+    output: &Path,
+    admission: &ReportingAdmission,
+    pod_uid: &str,
+    token_path: &Path,
+) -> io::Result<()> {
+    use tracing::Instrument;
+    let context = read_bounded(
+        &output.join(EVENT_FILE),
+        ayni_orchestrator_events::MAX_EVENT_BYTES,
+    )
+    .ok()
+    .and_then(|bytes| ayni_orchestrator_observability::event_context(&bytes));
+    let span = ayni_orchestrator_observability::verification_span(
+        "delivery",
+        &admission.binding.execution_id,
+        context.as_ref(),
+    );
+    let result = deliver_inner(output, admission, pod_uid, token_path)
+        .instrument(span.clone())
+        .await;
+    if result.is_err() {
+        ayni_orchestrator_observability::record_failure(&span, "runtime_reporting_failed");
+    }
+    result
+}
+
+async fn deliver_inner(
     output: &Path,
     admission: &ReportingAdmission,
     pod_uid: &str,

@@ -633,3 +633,4 @@ use configuration::{ProfileSelection, configured_managed_profile};
 
 mod activation;
 mod verification_events;
+mod verification_tracing;
