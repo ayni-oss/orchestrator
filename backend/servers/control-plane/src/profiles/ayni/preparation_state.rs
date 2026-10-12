@@ -94,6 +94,12 @@ impl RuntimeCursorExt for RuntimeCursor {
 
     fn metadata(&self) -> Vec<v1::VerifiedMetadata> {
         let mut status = self.status.clone();
+        if let Some(preparation) = &self.preparation {
+            status.insert(
+                "verification-authority".into(),
+                preparation.verification_authority.code().into(),
+            );
+        }
         // Older cursors could persist verification before updating display metadata
         // when asynchronous Job cleanup interrupted reconciliation.
         if self
@@ -143,6 +149,8 @@ impl RuntimeCursorExt for RuntimeCursor {
 /// Complete public input identity retained before any repository preparation Job.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct PreparationIdentity {
+    #[serde(default)]
+    pub verification_authority: VerificationAuthority,
     pub generation: String,
     pub source_revision: String,
     pub policy_digest: String,
@@ -154,8 +162,44 @@ pub struct PreparationIdentity {
     pub runtime: ProfileRuntime,
 }
 
+/// Frozen per preparation; operator defaults never reinterpret admitted work.
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum VerificationAuthority {
+    #[default]
+    Retained,
+    Shadow {
+        reporting: ayni_orchestrator_runtime::verification::ReportingConfiguration,
+    },
+    Events {
+        reporting: ayni_orchestrator_runtime::verification::ReportingConfiguration,
+    },
+}
+impl VerificationAuthority {
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::Retained => "retained",
+            Self::Shadow { .. } => "shadow",
+            Self::Events { .. } => "events",
+        }
+    }
+    pub const fn events(&self) -> bool {
+        matches!(self, Self::Events { .. })
+    }
+    pub const fn reporting(
+        &self,
+    ) -> Option<&ayni_orchestrator_runtime::verification::ReportingConfiguration> {
+        match self {
+            Self::Retained => None,
+            Self::Shadow { reporting } | Self::Events { reporting } => Some(reporting),
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 pub struct PendingVerification {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation: Option<ayni_orchestrator_events::EventIdentity>,
     pub name: String,
     pub profile_revision: String,
     pub request: ExecutionRequest,
@@ -274,6 +318,8 @@ pub struct TrustResult {
 struct PendingWire {
     #[serde(flatten)]
     legacy: LegacyProgress,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation: Option<ayni_orchestrator_events::EventIdentity>,
     pub name: String,
     pub profile_revision: String,
     pub request: ExecutionRequest,
@@ -380,6 +426,7 @@ impl<'de> Deserialize<'de> for PendingVerification {
         }
         Ok(Self {
             phase,
+            observation: wire.observation,
             name: wire.name,
             profile_revision: wire.profile_revision,
             request: wire.request,

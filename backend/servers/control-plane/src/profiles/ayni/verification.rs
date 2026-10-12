@@ -89,3 +89,21 @@ const fn failure_code(reason: ayni_orchestrator_runtime::verification::Verificat
         F::ReportingFailed => C::ReportingFailed,
     }) as i32
 }
+
+pub fn failure_reason(code: i32) -> Result<&'static str, &'static str> {
+    use ayni_orchestrator_events::v1::VerificationFailureCode as Code;
+    Ok(
+        match Code::try_from(code).map_err(|_| "runtime_result_invalid")? {
+            Code::RequestInvalid => "runtime_request_invalid",
+            Code::LockMismatch => "runtime_lock_mismatch",
+            Code::PlatformMismatch => "runtime_platform_mismatch",
+            Code::VersionUnsupported => "runtime_version_unsupported",
+            Code::CertificateInvalid => "runtime_certificate_invalid",
+            Code::EvidenceUnavailable => "runtime_evidence_unavailable",
+            Code::SerializationFailed => "runtime_report_serialization_failed",
+            Code::ReportOversized => "runtime_report_oversized",
+            Code::ReportingFailed => "runtime_reporting_failed",
+            Code::Unspecified => return Err("runtime_result_invalid"),
+        },
+    )
+}

@@ -4,10 +4,6 @@ use super::{
 };
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
-    #[allow(
-        clippy::too_many_lines,
-        reason = "evidence admission, durable cleanup and guarded activation are one ordered transaction protocol"
-    )]
     pub(super) async fn accept(
         &self,
         observation: &ProfileObservation<'_>,
@@ -15,9 +11,24 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         digest: String,
         report: &ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport,
     ) -> Result<(), &'static str> {
+        self.accept_report(observation, cursor, digest, None, report)
+            .await
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "evidence admission, durable cleanup and guarded activation are one ordered transaction protocol"
+    )]
+    pub(super) async fn accept_report(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+        digest: String,
+        receipt: Option<ayni_orchestrator_events::EventIdentity>,
+        report: &ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport,
+    ) -> Result<(), &'static str> {
         let id = observation.id;
         let runtime = observation.runtime;
-        let time = observation.time;
         let github = &observation.github;
         let head = observation.head.as_str();
         let token = observation.token.as_str();
@@ -83,56 +94,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .status
             .insert("resolved-digest".into(), digest.clone());
 
-        let mut command = crate::profiles::ayni::runtime_activation::command(
-            id,
-            &pending.profile_revision,
-            &runtime.image,
-            &digest,
-            report,
-        )
-        .map_err(|_| "runtime_activation_rejected")?;
-        let identity = cursor
-            .preparation
-            .as_ref()
-            .ok_or("runtime_preparation_missing")?;
-        if identity.source_revision != pending.request.revision
-            || identity.lock_digest != pending.lock_digest
-        {
-            return Err("runtime_preparation_mismatch");
-        }
-        let certificate = pending
-            .certificate
-            .as_ref()
-            .ok_or("certificate_setup_required")?;
-        let builder = pending
-            .frozen_runtime
-            .as_ref()
-            .and_then(|runtime| runtime.build.as_ref())
-            .ok_or("runtime_builder_missing")?;
-        let contract =
-            ayni_orchestrator_profile_ayni::compatibility::contract(&identity.contract_version)?;
-        command.artifact.metadata.extend([
-            ("ayni-contract".into(), identity.contract_version.clone()),
-            ("contract-lock-schema".into(), contract.lock_schema.into()),
-            ("contract-recipe".into(), contract.recipe_version.into()),
-            (
-                "contract-metadata-schema".into(),
-                contract.metadata_schema.into(),
-            ),
-            (
-                "contract-signals-schema".into(),
-                contract.signals_schema.into(),
-            ),
-            ("builder-image".into(), builder.image.clone()),
-            ("source-revision".into(), identity.source_revision.clone()),
-            (
-                "source-policy-digest".into(),
-                identity.policy_digest.clone(),
-            ),
-            ("preparation-generation".into(), identity.generation.clone()),
-            ("certificate-id".into(), certificate.id.clone()),
-            ("certificate-revision".into(), certificate.revision.clone()),
-        ]);
+        let command = activation_command(id, runtime, cursor, &digest, report)?;
         // Retain evidence before cleanup so a crash cannot discard admission authority.
         cursor
             .pending
@@ -145,6 +107,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .ok_or("runtime_cursor_invalid")?
             .phase =
             ayni_orchestrator_application::runtime_preparation::ImagePreparationPhase::Activating;
+        if let Some(receipt) = receipt {
+            cursor
+                .pending
+                .as_mut()
+                .ok_or("runtime_cursor_invalid")?
+                .observation = Some(receipt);
+        }
         cursor.status.insert("phase".into(), "cleanup".into());
         let next = cursor.clone();
         let cleanup_profile = id.to_owned();
@@ -161,6 +130,49 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .map_err(|_| "runtime_cursor_invalid")
             })
             .await?;
+        self.finish_verification_cleanup(observation, cursor, cleanup_expected)
+            .await
+    }
+
+    pub(super) async fn resume_accepted_cleanup(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+    ) -> Result<bool, &'static str> {
+        if cursor
+            .pending
+            .as_ref()
+            .is_none_or(|p| p.verification.is_none())
+        {
+            return Ok(false);
+        }
+        let profile = observation.id.to_owned();
+        let snapshot = cursor.clone();
+        let committed = self
+            .with_database(move |store| {
+                store
+                    .verification_cleanup_committed(&profile, &snapshot)
+                    .map_err(|_| "runtime_cursor_invalid")
+            })
+            .await?;
+        if !committed {
+            return Ok(false);
+        }
+        let expected = serde_json::to_string(cursor).map_err(|_| "runtime_cursor_invalid")?;
+        self.finish_verification_cleanup(observation, cursor, expected)
+            .await?;
+        Ok(true)
+    }
+
+    pub(super) async fn finish_verification_cleanup(
+        &self,
+        observation: &ProfileObservation<'_>,
+        cursor: &mut RuntimeCursor,
+        cleanup_expected: String,
+    ) -> Result<(), &'static str> {
+        let id = observation.id;
+        let time = observation.time;
+        let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
         self.cleanup_operation(&pending).await?;
         cursor.pending = None;
         cursor.preparation = None;
@@ -185,4 +197,65 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         .await?;
         Ok(())
     }
+}
+
+fn activation_command(
+    id: &str,
+    runtime: &super::ProfileRuntime,
+    cursor: &RuntimeCursor,
+    digest: &str,
+    report: &ayni_orchestrator_profile_ayni::runtime_execution::VerificationReport,
+) -> Result<ayni_orchestrator_application::runtime_activation::ActivateRuntime, &'static str> {
+    let pending = cursor.pending.as_ref().ok_or("runtime_cursor_invalid")?;
+    let mut command = crate::profiles::ayni::runtime_activation::command(
+        id,
+        &pending.profile_revision,
+        &runtime.image,
+        digest,
+        report,
+    )
+    .map_err(|_| "runtime_activation_rejected")?;
+    let identity = cursor
+        .preparation
+        .as_ref()
+        .ok_or("runtime_preparation_missing")?;
+    if identity.source_revision != pending.request.revision
+        || identity.lock_digest != pending.lock_digest
+    {
+        return Err("runtime_preparation_mismatch");
+    }
+    let certificate = pending
+        .certificate
+        .as_ref()
+        .ok_or("certificate_setup_required")?;
+    let builder = pending
+        .frozen_runtime
+        .as_ref()
+        .and_then(|runtime| runtime.build.as_ref())
+        .ok_or("runtime_builder_missing")?;
+    let contract =
+        ayni_orchestrator_profile_ayni::compatibility::contract(&identity.contract_version)?;
+    command.artifact.metadata.extend([
+        ("ayni-contract".into(), identity.contract_version.clone()),
+        ("contract-lock-schema".into(), contract.lock_schema.into()),
+        ("contract-recipe".into(), contract.recipe_version.into()),
+        (
+            "contract-metadata-schema".into(),
+            contract.metadata_schema.into(),
+        ),
+        (
+            "contract-signals-schema".into(),
+            contract.signals_schema.into(),
+        ),
+        ("builder-image".into(), builder.image.clone()),
+        ("source-revision".into(), identity.source_revision.clone()),
+        (
+            "source-policy-digest".into(),
+            identity.policy_digest.clone(),
+        ),
+        ("preparation-generation".into(), identity.generation.clone()),
+        ("certificate-id".into(), certificate.id.clone()),
+        ("certificate-revision".into(), certificate.revision.clone()),
+    ]);
+    Ok(command)
 }

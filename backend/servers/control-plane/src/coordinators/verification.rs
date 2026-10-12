@@ -1,4 +1,4 @@
-//! Restart repair for authenticated observations. Shadows never invoke activation.
+//! Restart repair for authenticated observations under their frozen authority.
 use super::{AppState, ReconciliationError};
 use std::path::PathBuf;
 
@@ -16,6 +16,10 @@ impl AppState {
         &self,
         root: PathBuf,
     ) -> Result<(), ReconciliationError> {
+        let interval =
+            crate::process::runtime_configuration::RuntimeConfiguration::from_environment()
+                .map_err(|_| ReconciliationError::Store)?
+                .map_or(60, |c| c.interval_seconds);
         let pending = self
             .database
             .execute(|store| store.pending_verifications())
@@ -31,7 +35,8 @@ impl AppState {
             .map_err(|_| ReconciliationError::Store)?;
             self.database
                 .execute(move |store| {
-                    store.decide_shadow_verification(&identity, &payload, &evidence)
+                    store
+                        .decide_verification_with_interval(&identity, &payload, &evidence, interval)
                 })
                 .await
                 .map_err(|_| ReconciliationError::Store)?;

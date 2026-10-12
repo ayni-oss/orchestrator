@@ -38,7 +38,7 @@ UPDATE clean_schema SET version=12 WHERE component='control_plane'; COMMIT;")
 
 impl CleanStore {
     // Savepoint-backed resource mutations participate in this single outer transaction.
-    fn verification_transaction<T>(
+    pub(super) fn verification_transaction<T>(
         &mut self,
         operation: impl FnOnce(&mut Self) -> Result<T, CleanStoreError>,
     ) -> Result<T, CleanStoreError> {
@@ -80,6 +80,7 @@ impl CleanStore {
             let report_digest = ayni_orchestrator_domain::digest::sha256(&serde_json::to_vec(report).map_err(|_| CleanStoreError::CorruptState)?);
             if store.verification_replay(command,next,&report_digest)? { return Ok(()); }
             store.admit_verification_command(command,expected_cursor,next)?;
+            store.admit_verification_observation(&command.profile_id, next)?;
             for table in ["verification_journal", "verification_outbox"] {
                 let count: i64 = store.connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).map_err(CleanStoreError::Database)?;
                 if count >= 100_000 { return Err(CleanStoreError::BoundExceeded); }
@@ -92,17 +93,18 @@ impl CleanStore {
                 runtime_profile_id: command.profile_id.clone(),runtime_profile_revision_id: command.revision_id.clone(),
                 preparation_id: preparation.generation.clone(),execution_id: pending.name.clone(),
                 aggregate_revision: profile.resource_version,report_sha256: report_digest.clone(),
-                observation_source: None,observation_id: None,
+                observation_source: pending.observation.as_ref().map(|o| o.source.clone()),observation_id: pending.observation.as_ref().map(|o| o.id.clone()),
             };
             let identity = EventIdentity { source: "ayni://orchestrator/controllers/verification".into(),id: uuid::Uuid::now_v7().to_string() };
             let bytes = ayni_orchestrator_events::decisions::encode(&identity,&decision).map_err(|_| CleanStoreError::CorruptState)?;
             store.connection.execute("INSERT INTO verification_journal(id,profile_id,preparation_id,execution_id,report_sha256,aggregate_revision,payload,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", params![identity.id,command.profile_id,preparation.generation,pending.name,report_digest,i64::try_from(profile.resource_version).map_err(|_| CleanStoreError::CorruptState)?,decision.encode_to_vec(),unix_seconds()?]).map_err(CleanStoreError::Database)?;
             store.connection.execute("INSERT INTO verification_outbox(journal_id,source,event_id,payload) VALUES(?1,?2,?1,?3)",params![identity.id,identity.source,bytes]).map_err(CleanStoreError::Database)?;
+            if let Some(observation) = &pending.observation { store.accept_verification_receipt(observation)?; }
             Ok(())
         })
     }
 
-    fn verification_replay(
+    pub(super) fn verification_replay(
         &self,
         command: &ActivateRuntime,
         next: &RuntimeCursor,
@@ -170,6 +172,7 @@ impl CleanStore {
         let mut admitted_next = admitted.clone();
         admitted_next.verification.clone_from(&pending.verification);
         admitted_next.phase = pending.phase;
+        admitted_next.observation.clone_from(&pending.observation);
         if serde_json::to_vec(frozen).map_err(|_| CleanStoreError::CorruptState)?
             != serde_json::to_vec(preparation).map_err(|_| CleanStoreError::CorruptState)?
             || serde_json::to_vec(&admitted_next).map_err(|_| CleanStoreError::CorruptState)?
@@ -223,7 +226,7 @@ impl CleanStore {
         })
     }
 
-    fn current_verification(
+    pub(super) fn current_verification(
         &self,
         profile_id: &str,
         cursor: &RuntimeCursor,
@@ -265,11 +268,22 @@ impl CleanStore {
         Ok(())
     }
 
-    pub(crate) fn decide_shadow_verification(
+    #[cfg(test)]
+    pub(crate) fn decide_verification(
         &mut self,
         identity: &EventIdentity,
         payload: &VerificationResultAvailable,
         evidence: &Evidence,
+    ) -> Result<(), CleanStoreError> {
+        self.decide_verification_with_interval(identity, payload, evidence, 60)
+    }
+
+    pub(crate) fn decide_verification_with_interval(
+        &mut self,
+        identity: &EventIdentity,
+        payload: &VerificationResultAvailable,
+        evidence: &Evidence,
+        interval: u64,
     ) -> Result<(), CleanStoreError> {
         self.verification_transaction(|store| {
             let (decision, retained): (String, Vec<u8>) = store.connection.query_row("SELECT decision,payload FROM verification_inbox WHERE source=?1 AND event_id=?2",params![identity.source,identity.id], |r| Ok((r.get(0)?,r.get(1)?))).map_err(CleanStoreError::Database)?;
@@ -298,12 +312,13 @@ impl CleanStore {
                 Err(CleanStoreError::NotFound { .. } | CleanStoreError::StaleVersion) => Some("verification_authority_stale"),
                 Err(error) => return Err(error),
             };
+            if reason.is_none() && store.process_authoritative_receipt(identity, payload, evidence, time, interval)? { return Ok(()); }
             store.connection.execute("UPDATE verification_inbox SET decision=?3,reason=?4,next_attempt_at=0 WHERE source=?1 AND event_id=?2",params![identity.source,identity.id,if reason.is_some() {"rejected"} else {"shadow_accepted"},reason.unwrap_or("shadow_only")]).map_err(CleanStoreError::Database)?;
             Ok(())
         })
     }
 
-    fn shadow_authority(
+    pub(super) fn shadow_authority(
         &self,
         payload: &VerificationResultAvailable,
         time: i64,
@@ -386,7 +401,7 @@ impl CleanStore {
                 || identity.id != id
                 || identity.id != row.get::<_, String>(8).map_err(CleanStoreError::Database)?
                 || identity.source != row.get::<_, String>(7).map_err(CleanStoreError::Database)?
-                || !journal_indices_match(row, &decision)?
+                || !journal_indices_match(row, &decision, &self.connection)?
                 || row.get::<_, i64>(10).map_err(CleanStoreError::Database)? < 0
                 || row
                     .get::<_, Option<i64>>(11)
@@ -404,7 +419,11 @@ impl CleanStore {
 fn journal_indices_match(
     row: &rusqlite::Row<'_>,
     decision: &VerificationDecisionRecorded,
+    connection: &Connection,
 ) -> Result<bool, CleanStoreError> {
+    if !super::verification_cutover::valid_causation(connection, decision)? {
+        return Ok(false);
+    }
     Ok(!(decision.runtime_profile_id
         != row.get::<_, String>(1).map_err(CleanStoreError::Database)?
         || decision.preparation_id

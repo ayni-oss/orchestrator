@@ -19,6 +19,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         let time = observation.time;
 
         let pending = cursor.pending.clone().ok_or("runtime_cursor_invalid")?;
+        if Box::pin(self.resume_accepted_cleanup(observation, cursor)).await? {
+            return Ok(());
+        }
         let phase = self
             .pending_verification_phase(observation, &pending)
             .await?;
@@ -62,6 +65,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             self.observe_build(observation, cursor, &pending, build_name)
                 .await?;
             return Ok(());
+        }
+        if cursor
+            .preparation
+            .as_ref()
+            .is_some_and(|p| p.verification_authority.events())
+        {
+            return Box::pin(self.observe_event_verification(observation, cursor, &pending)).await;
         }
         let observation_result = self.kubernetes.observe(&pending.name).await?;
         match verification_action(&observation_result, time.saturating_sub(pending.started_at)) {
@@ -190,6 +200,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         execution: &str,
         reason: &'static str,
     ) -> Result<(), &'static str> {
+        let expected = serde_json::to_string(cursor).map_err(|_| "runtime_cursor_invalid")?;
         if !cursor.accounting.executions.contains_key(execution) {
             cursor
                 .accounting
@@ -210,6 +221,21 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         };
         if let Some(pending) = &mut cursor.pending {
             pending.failed = true;
+        }
+        if cursor
+            .preparation
+            .as_ref()
+            .is_some_and(|p| p.verification_authority.events())
+        {
+            let profile = id.to_owned();
+            let next = cursor.clone();
+            self.with_database(move |store| {
+                store
+                    .commit_verification_failure(&profile, &expected, &next, reason)
+                    .map_err(|_| "runtime_failure_changed")
+            })
+            .await?;
+            return Err(reason);
         }
         self.save(id, cursor).await?;
         let id = id.to_owned();
@@ -260,7 +286,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         Ok(())
     }
 
-    async fn start_verification(
+    pub(super) async fn start_verification(
         &self,
         observation: &ProfileObservation<'_>,
         cursor: &RuntimeCursor,
@@ -280,7 +306,13 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 .ok_or("runtime_digest_unavailable")?
         );
         verification_runtime.build = None;
-        let reporting_repository = if self.configuration.reporting.is_some() {
+        let frozen_reporting = cursor
+            .preparation
+            .as_ref()
+            .ok_or("runtime_preparation_missing")?
+            .verification_authority
+            .reporting();
+        let reporting_repository = if frozen_reporting.is_some() {
             let profile_id = observation.id.to_owned();
             self.with_database(move |store| {
                 store
@@ -292,10 +324,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         } else {
             String::new()
         };
-        let reporting = self
-            .configuration
-            .reporting
-            .as_ref()
+        let reporting = frozen_reporting
             .map(|configuration| {
                 let identity = cursor
                     .preparation

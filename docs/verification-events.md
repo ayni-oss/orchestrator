@@ -4,10 +4,10 @@ The `ayni.orchestrator.events.v1` contract describes a supervisor observation fo
 one runtime verification execution. The shared Rust library in
 `backend/libs/events` validates and encodes structured CloudEvents 1.0 JSON with
 generated ProtoJSON payloads. TypeScript bindings come from the same schema.
-The retained verification reader remains authoritative. Opt-in shadow reporting
-adds authenticated durable receipt; receipt does not activate a runtime. The
-control plane now evaluates those receipts in shadow mode and records authoritative
-retained-reader acceptance atomically with its runtime projection and outbox.
+Reporting authority is frozen per preparation generation. Legacy and shadow
+generations retain their reader; new event-owned generations use authenticated
+receipts for acceptance. Receipt alone does not activate a runtime. Both acceptance
+paths share the guarded transaction for runtime projection, journal and outbox.
 
 ## Flow and authority
 
@@ -123,12 +123,14 @@ and outcome before applying current Ayni evidence policy. Inside the transaction
 it rechecks the selected revision, frozen generation, request, source, lock,
 policy, platform, digest, failure/cancellation authority and execution deadline.
 A valid shadow result becomes `shadow_accepted`; invalid or stale results become
-`rejected` with a bounded reason. Both are durable internal decisions, without
-activation, failure accounting or outgoing accepted events. Matching delivery
+`rejected` with a bounded reason. For retained and shadow generations, both are durable internal decisions without
+activation, failure accounting or outgoing accepted events. Event-owned receipts
+remain pending for source-aware reconciliation; valid physical failures are
+accepted with guarded failure accounting in the inbox transaction. Matching delivery
 replays still receive the original stored acknowledgement after processing.
 
-Schema 12 adds `verification_journal` and `verification_outbox`. The existing
-retained reader remains the activation authority. Its admitted report commits
+Schema 12 adds `verification_journal` and `verification_outbox`. The retained reader owns legacy/shadow activation; event-owned generations use
+their authenticated receipt. Its admitted report commits
 runtime/artifact projection, client resource events, immutable accepted decision,
 stable CloudEvents outbox bytes and the retained cleanup intent together under
 one immediate SQLite transaction. Resource mutations use nested savepoints inside
@@ -143,21 +145,19 @@ The accepted event is
 `io.ayni.orchestrator.runtime.verification.accepted.v1`, with generated
 `VerificationDecisionRecorded` ProtoJSON, a controller-owned source, selected
 revision, preparation/execution identity, aggregate revision and canonical report
-SHA256. Optional observation causation is absent for retained-reader admission.
+SHA256. Observation causation links event-owned acceptance to the original stored
+source/ID; it is absent for retained-reader admission.
 Accepted journal and outbox each retain at most 100000 rows; capacity rejects
 acceptance atomically and never evicts unpublished evidence. Startup validates
 indexed identities, typed payloads and the journal/outbox relationship. A bounded
 128-row unpublished read is ready for the later publisher. No NATS publication,
-publish acknowledgement, broker consumer or receipt-authoritative activation is
-implemented yet.
+publish acknowledgement, broker consumer is implemented yet.
 
 Each execution has one terminal observation, so verification needs no streaming
 sequence protocol or second scheduler. Bounded payloads and separate evidence
 allow ingress and consumers to scale independently; partitioning can follow the
-execution/resource key without inventing broker ordering authority. Receipt-authoritative activation, retention and quarantine remain subsequent
-controlled-rollout concerns. A later rollout must
-freeze the reporting contract at admission, keep old executions on the retained
-reader while they drain, and ensure shadow observations never advance state.
+execution/resource key without inventing broker ordering authority. Retained and shadow generations keep their reader while they drain. Retention,
+broker quarantine and removal of compatibility readers require separate gates.
 NATS deployment and other flow migrations are outside this contract.
 
 See [CloudEvents boundaries](cloudevents-contract.md),
@@ -173,16 +173,51 @@ example uses `http://control-plane:8080/events/verification`; production transpo
 must protect the projected bearer credential, using HTTPS or a trusted encrypted
 cluster network. Endpoint and source are operator-owned, never repository input.
 The Helm chart adds only `create tokenreviews` cluster authority when enabled.
-Keep the producer source stable while opted-in executions are pending. The
-manifest freezes reporting at Job creation; admission-time generation selection,
-controlled cutover, late cancelled receipts and shadow acceptance auditing remain
-later integration work.
+Set `runtime.verificationMode` to `events` to select event authority for newly
+admitted preparation generations; it defaults to `shadow`. Event mode requires
+reporting transport. Schema 13 freezes mode, endpoint and producer source in each
+preparation identity before worker admission. Missing fields in older cursors
+mean retained authority. Updating mode, source or worker defaults never changes
+admitted work, including retries in the same generation. Authenticated ingress
+uses the immutable admission manifest's source so old producer identities can drain.
+Keep the original endpoint reachable and reporting RBAC enabled until its work
+has drained. Disabling the transport is not a rollback procedure.
+
+Event-owned verification looks for stored authenticated evidence before inspecting
+Job completion. It reads and validates retained evidence outside the write
+transaction and preserves existing fresh-source, certificate, lock, platform and
+image checks. The final transaction rechecks the selected revision and generation,
+accepts the inbox receipt, commits Ready and stores the causally linked journal and
+outbox with cleanup intent. Missing receipts after process exit remain reporting
+errors; this handler never falls back to the retained reader. The existing deadline
+can still terminate an execution. Invalid requests and reporting-delivery failures
+retain their operational retry classification without consuming the physical
+execution budget. Physical failure events count once and record
+their accepted receipt and cleanup intent atomically without creating a Ready fact.
+
+Committed verification resumes cleanup without reinterpreting the accepted report
+under new provider observations. Foreground deletion must finish before the intent
+is cleared or another operation starts. Cleanup failure keeps the accepted Ready
+state visible, and completion uses the cursor comparison guard. Late cancelled,
+superseded or expired receipts are rejected and cannot reactivate work.
+
+For rollback, restore `runtime.verificationMode: shadow` for subsequent generation
+admission while event-owned generations finish under their frozen authority. Run
+`python3 scripts/operations/verification-drain.py DATABASE` against the operator
+store or a quiesced backup to enumerate reachable generation dependencies and
+receipt counts. Zero active Pods is insufficient: resumable preparations without
+a Pod still appear. Zero legacy dependencies does not authorize deletion of
+historical evidence or readers; audit historical decoding before retirement.
+Older binaries reject schema 13, so rollback requires a compatible binary.
 
 `dev/tests/verification-reporting.sh` runs the local chart in a separate synthetic
 namespace with Docker Desktop, tests real projected-token reporting, durable shadow
 rejection for an unselected synthetic execution, and supervisor
 replay across a control-plane restart against its retained SQLite store, using
-the same physical Pod and forcing a duplicate HTTP delivery. It
+the same physical Pod and forcing a duplicate HTTP delivery. Its optional `events`
+argument seeds only a new disposable namespace with synthetic admitted state,
+then verifies authoritative failure acceptance while the supervisor is still
+running, durable once-only failure accounting and restart replay. It
 stops the deployment and preserves its synthetic database/evidence for inspection.
 The authentication design follows the Kubernetes
 [bound service-account token and TokenReview contract](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/).

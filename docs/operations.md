@@ -14,9 +14,10 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Deploying schema 12 preserves the schema 11 receipt inbox, adds durable shadow
-decisions and the accepted verification journal/outbox, and keeps runtime acceptance
-and its cursor cleanup intent in one transaction. Earlier schema migrations run in order before this upgrade. The schema-9 to schema-10 migration upgrades retained
+Deploying schema 13 preserves the schema-11 receipt inbox and schema-12
+verification journal/outbox, adds authoritative receipt decisions, and freezes
+reporting authority per preparation. Runtime acceptance and cursor cleanup intent
+remain in one transaction. Earlier schema migrations run in order before this upgrade. The schema-9 to schema-10 migration upgrades retained
 runtime preparation in one transaction. The migration preserves frozen source and runtime identities,
 operation names, retained verification evidence and remaining publication budget.
 It also indexes immutable task creation timestamps for project summaries. An
@@ -24,7 +25,7 @@ invalid cursor or task aborts the transaction; repair the invalid retained recor
 from a trusted backup before retrying, rather than deleting pending work.
 
 Back up the database before upgrading and run one control-plane writer during the
-upgrade. Earlier binaries reject schema 12, so rollback requires restoring the
+upgrade. Earlier binaries reject schema 13, so rollback requires restoring the
 pre-upgrade backup while preserving and reconciling any external work performed
 since the backup. Do not run an earlier binary against the upgraded database.
 After restart, uncertain publication still reads the registry before retrying, and
@@ -165,3 +166,13 @@ Opt-in verification receipt and safe delivery recovery are described in the
 [verification event contract](verification-events.md). Keep reporting off until
 the supervisor image, ingress/RBAC and transport boundary have been validated
 together; receipt alone does not activate runtimes.
+
+Verification reporting defaults to shadow authority. Set `runtime.verificationMode:
+events` only with configured reporting transport; this selects new preparation
+generations. Roll back future admission with `shadow`, keeping reporting transport
+and original endpoints available while frozen event generations drain. Use
+`python3 scripts/operations/verification-drain.py DATABASE` on the operator store
+or quiesced backup to enumerate active and resumable dependencies. Existing
+generations, including their retries, retain their original authority. Historical
+reader/evidence retirement requires a separate audit; never delete retained PVCs
+as a rollout shortcut. See [verification operations](verification-events.md).

@@ -473,6 +473,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                     .checked_add(1)
                     .ok_or("runtime_sequence_exhausted")?;
                 cursor.pending = Some(PendingVerification {
+                    observation: None,
                     name: operation_name(&id, cursor.sequence),
                     profile_revision: revision,
                     image: runtime.image.clone(),
@@ -631,3 +632,4 @@ mod official_builder;
 use configuration::{ProfileSelection, configured_managed_profile};
 
 mod activation;
+mod verification_events;

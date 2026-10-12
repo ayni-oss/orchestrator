@@ -7,6 +7,8 @@ use std::{collections::BTreeMap, env, fs};
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimeConfiguration {
+    #[serde(default)]
+    pub verification_mode: VerificationMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reporting: Option<ayni_orchestrator_runtime::verification::ReportingConfiguration>,
     pub namespace: String,
@@ -37,6 +39,30 @@ pub struct RuntimeConfiguration {
     /// and the committed lock rather than configured repository by repository.
     #[serde(default)]
     pub managed_runtime: Option<ManagedRuntime>,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationMode {
+    #[default]
+    Shadow,
+    Events,
+}
+impl RuntimeConfiguration {
+    pub(crate) fn verification_authority(
+        &self,
+    ) -> crate::profiles::ayni::preparation_state::VerificationAuthority {
+        use crate::profiles::ayni::preparation_state::VerificationAuthority;
+        match (&self.reporting, self.verification_mode) {
+            (None, _) => VerificationAuthority::Retained,
+            (Some(reporting), VerificationMode::Shadow) => VerificationAuthority::Shadow {
+                reporting: reporting.clone(),
+            },
+            (Some(reporting), VerificationMode::Events) => VerificationAuthority::Events {
+                reporting: reporting.clone(),
+            },
+        }
+    }
 }
 
 pub use ayni_orchestrator_application::execution_settings::{
@@ -141,6 +167,9 @@ impl RuntimeConfiguration {
 
     fn validate(&self) -> Result<(), &'static str> {
         self.execution_configuration().validate()?;
+        if self.verification_mode == VerificationMode::Events && self.reporting.is_none() {
+            return Err("runtime_reporting_required");
+        }
         if let Some(reporting) = &self.reporting {
             reporting.validate()?;
         }

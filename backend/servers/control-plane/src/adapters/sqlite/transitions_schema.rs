@@ -257,6 +257,10 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             super::verification_acceptance::migrate(connection)?;
             version = 12;
         }
+        if version == 12 {
+            super::verification_cutover::migrate(connection)?;
+            version = 13;
+        }
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -298,10 +302,10 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',12,unixepoch());
+VALUES ('control_plane',13,unixepoch());
 CREATE TABLE verification_inbox(
  source TEXT NOT NULL, event_id TEXT NOT NULL, execution_id TEXT NOT NULL, pod_uid TEXT NOT NULL,
- payload BLOB NOT NULL, received_at INTEGER NOT NULL, decision TEXT NOT NULL CHECK(decision IN ('pending','shadow_accepted','rejected')),
+ payload BLOB NOT NULL, received_at INTEGER NOT NULL, decision TEXT NOT NULL CHECK(decision IN ('pending','shadow_accepted','accepted','rejected')),
  reason TEXT NOT NULL DEFAULT '', next_attempt_at INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(source,event_id), UNIQUE(execution_id,pod_uid)
 );
