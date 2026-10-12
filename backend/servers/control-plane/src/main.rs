@@ -219,6 +219,23 @@ fn spawn_background_loops(
             }
         },
     );
+    let verification_state = state.clone();
+    background.spawn_periodic(
+        "verification-observations",
+        Duration::from_secs(5),
+        shutdown.clone(),
+        move || {
+            let state = verification_state.clone();
+            async move {
+                if state.reconcile_verification_observations().await.is_err() {
+                    warn!(
+                        reason_code = "verification_acceptance_unavailable",
+                        "verification observations deferred"
+                    );
+                }
+            }
+        },
+    );
     let reconciliation_state = state;
     background.spawn_periodic(
         "retention",

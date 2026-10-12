@@ -8,7 +8,12 @@ const DIAGNOSTIC: &[u8] = include_bytes!("../../../../proto/testdata/verificatio
 #[test]
 fn shared_protojson_fixtures_round_trip_and_replay_identity()
 -> Result<(), Box<dyn std::error::Error>> {
-    for fixture in [REPORT, FAILURE, DIAGNOSTIC] {
+    for fixture in [
+        REPORT,
+        FAILURE,
+        DIAGNOSTIC,
+        include_bytes!("../../../../proto/testdata/verification/resource-ids.json"),
+    ] {
         let (identity, payload) = decode(fixture)?;
         let encoded = encode(&identity, &payload)?;
         assert_eq!(decode(&encoded)?, (identity.clone(), payload.clone()));
@@ -133,5 +138,45 @@ fn encoding_enforces_the_same_contract_as_decoding() -> Result<(), Box<dyn std::
     let (identity, _) = decode(REPORT)?;
     payload.outcome = None;
     assert!(encode(&identity, &payload).is_err());
+    Ok(())
+}
+
+#[test]
+fn accepted_decisions_have_controller_identity_and_preserve_optional_causation()
+-> Result<(), Box<dyn std::error::Error>> {
+    use ayni_orchestrator_events::decisions;
+    let fixture = include_bytes!("../../../../proto/testdata/verification/accepted.json");
+    let (identity, payload) = decisions::decode(fixture)?;
+    let encoded = decisions::encode(&identity, &payload)?;
+    assert_eq!(
+        serde_json::from_slice::<Value>(&encoded)?,
+        serde_json::from_slice::<Value>(fixture)?
+    );
+    assert!(payload.observation_id.is_none());
+    for (pointer, value) in [
+        (
+            "/source",
+            json!("ayni://orchestrator/supervisors/verification"),
+        ),
+        (
+            "/type",
+            json!("io.ayni.orchestrator.runtime.verification.result.available.v1"),
+        ),
+        ("/data/aggregateRevision", json!("0")),
+        ("/data/reportSha256", json!("bad")),
+        ("/subject", json!("wrong")),
+    ] {
+        let mut event: Value = serde_json::from_slice(fixture)?;
+        *event.pointer_mut(pointer).ok_or("field")? = value;
+        assert!(decisions::decode(&serde_json::to_vec(&event)?).is_err());
+    }
+    let mut payload = payload;
+    payload.observation_source = Some("ayni://orchestrator/supervisors/verification".into());
+    assert!(decisions::encode(&identity, &payload).is_err());
+    payload.observation_id = Some("0199d5a1-1000-7000-8000-000000000001".into());
+    assert_eq!(
+        decisions::decode(&decisions::encode(&identity, &payload)?)?,
+        (identity, payload)
+    );
     Ok(())
 }

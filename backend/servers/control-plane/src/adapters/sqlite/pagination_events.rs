@@ -85,7 +85,7 @@ pub(super) fn page_size(page: Option<&v1::PageRequest>) -> usize {
 }
 
 pub(super) fn append_event<M: Message>(
-    transaction: &Transaction<'_>,
+    transaction: &Connection,
     service: &str,
     resource_type: &str,
     resource_id: &str,
@@ -117,10 +117,7 @@ pub(super) fn append_event<M: Message>(
     u64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)
 }
 
-pub(super) fn prune_events(
-    transaction: &Transaction<'_>,
-    service: &str,
-) -> Result<(), CleanStoreError> {
+pub(super) fn prune_events(transaction: &Connection, service: &str) -> Result<(), CleanStoreError> {
     let offset =
         i64::try_from(MAX_EVENTS_PER_SERVICE).map_err(|_| CleanStoreError::CorruptState)?;
     let cutoff: Option<i64> = transaction

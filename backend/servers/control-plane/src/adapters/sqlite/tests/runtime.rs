@@ -5,7 +5,7 @@ use ayni_orchestrator_profile_ayni::{
 };
 use ayni_orchestrator_runtime::coding::{QualityOutcome, QualityResult};
 
-fn report(revision: &str) -> VerificationReport {
+pub(super) fn report(revision: &str) -> VerificationReport {
     VerificationReport {
         revision: revision.into(),
         lock_digest: DIGEST.into(),
@@ -243,7 +243,7 @@ fn activate(
         .map_err(super::super::runtime_activation::activation_error)
 }
 
-fn select(
+pub(super) fn select(
     store: &mut CleanStore,
     profile: &str,
     revision: &str,

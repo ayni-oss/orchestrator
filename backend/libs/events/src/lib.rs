@@ -16,6 +16,8 @@ pub mod v1 {
     ));
 }
 
+pub mod decisions;
+
 pub const EVENT_TYPE: &str = "io.ayni.orchestrator.runtime.verification.result.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-verification-result/v1";
 pub const MAX_EVENT_BYTES: usize = 16_384;
@@ -124,6 +126,14 @@ fn identifier(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+fn resource_identifier(value: &str) -> bool {
+    identifier(value)
+        || (value.len() <= 128
+            && value.split_once(':').is_some_and(|(prefix, id)| {
+                identifier(prefix) && id.len() == 36 && uuid::Uuid::parse_str(id).is_ok()
+            }))
+}
+
 fn digest(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|hex| {
         hex.len() == 64
@@ -169,12 +179,16 @@ fn validate_payload(
         &binding.repository_connection_id,
         &binding.runtime_profile_id,
         &binding.runtime_profile_revision_id,
-        &binding.preparation_id,
-        &binding.execution_id,
-        &binding.pod_uid,
     ]
     .into_iter()
-    .all(|id| identifier(id))
+    .all(|id| resource_identifier(id))
+        || ![
+            &binding.preparation_id,
+            &binding.execution_id,
+            &binding.pod_uid,
+        ]
+        .into_iter()
+        .all(|id| identifier(id))
         || ![
             &binding.request_digest,
             &binding.lock_digest,

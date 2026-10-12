@@ -12,3 +12,5 @@ pub mod inspection;
 pub mod findings;
 
 pub mod preparation_state;
+
+pub mod verification;

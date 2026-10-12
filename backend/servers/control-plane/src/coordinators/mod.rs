@@ -5,3 +5,5 @@ pub use state::{AppState, ReconciliationError};
 
 pub mod onboarding;
 pub mod reconciliation;
+
+mod verification;

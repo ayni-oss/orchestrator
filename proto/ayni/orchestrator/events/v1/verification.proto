@@ -57,3 +57,17 @@ enum VerificationFailureCode {
   VERIFICATION_FAILURE_CODE_REPORT_OVERSIZED = 8;
   VERIFICATION_FAILURE_CODE_REPORTING_FAILED = 9;
 }
+
+// A controller decision, emitted only after its database transaction commits.
+// Shadow decisions remain internal and are never runtime activation events.
+message VerificationDecisionRecorded {
+  string repository_connection_id = 1;
+  string runtime_profile_id = 2;
+  string runtime_profile_revision_id = 3;
+  string preparation_id = 4;
+  string execution_id = 5;
+  uint64 aggregate_revision = 6;
+  string report_sha256 = 7;
+  optional string observation_source = 8;
+  optional string observation_id = 9;
+}

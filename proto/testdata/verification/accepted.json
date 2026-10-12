@@ -1,0 +1,18 @@
+{
+  "specversion": "1.0",
+  "id": "0199d5a1-1000-7000-8000-000000000004",
+  "source": "ayni://orchestrator/controllers/verification",
+  "type": "io.ayni.orchestrator.runtime.verification.accepted.v1",
+  "subject": "repositories/repo-1/runtime-profiles/profile-1",
+  "datacontenttype": "application/json",
+  "dataschema": "ayni://orchestrator/schemas/runtime-verification-accepted/v1",
+  "data": {
+    "repositoryConnectionId": "repo-1",
+    "runtimeProfileId": "profile-1",
+    "runtimeProfileRevisionId": "revision-1",
+    "preparationId": "preparation-1",
+    "executionId": "verification-1",
+    "aggregateRevision": "8",
+    "reportSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}
