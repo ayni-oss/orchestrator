@@ -148,7 +148,8 @@ later integration work.
 
 `dev/tests/verification-reporting.sh` runs the local chart in a separate synthetic
 namespace with Docker Desktop, tests real projected-token reporting and supervisor
-replay, then restarts the control plane against its retained SQLite store. It
+replay across a control-plane restart against its retained SQLite store, using
+the same physical Pod and forcing a duplicate HTTP delivery. It
 stops the deployment and preserves its synthetic database/evidence for inspection.
 The authentication design follows the Kubernetes
 [bound service-account token and TokenReview contract](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/).

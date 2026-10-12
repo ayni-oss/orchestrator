@@ -251,18 +251,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         else {
             return Ok(());
         };
-        if cursor.resume_cleanup() {
-            self.save(id, &cursor).await?;
-        }
-        if cursor.retry_exhausted()
-            || cursor
-                .pending
-                .as_ref()
-                .is_some_and(|pending| pending.failed)
-        {
-            // Terminal workload cleanup must progress even while source/provider observation is unavailable.
-            self.cleanup_exhausted_cursor(&cursor).await?;
-        }
+        self.resume_profile_cleanup(id, &mut cursor).await?;
         if cursor.next_at > time {
             return Ok(());
         }
@@ -371,6 +360,26 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         } else {
             self.begin_observation(&observation, &mut cursor).await
         }
+    }
+
+    async fn resume_profile_cleanup(
+        &self,
+        id: &str,
+        cursor: &mut RuntimeCursor,
+    ) -> Result<(), &'static str> {
+        if cursor.resume_cleanup() {
+            self.save(id, cursor).await?;
+        }
+        if cursor.retry_exhausted()
+            || cursor
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.failed)
+        {
+            // Terminal workload cleanup must progress even while source/provider observation is unavailable.
+            self.cleanup_exhausted_cursor(cursor).await?;
+        }
+        Ok(())
     }
 
     async fn pending_verification_phase(
