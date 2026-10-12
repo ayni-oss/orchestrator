@@ -4,7 +4,7 @@ import sys
 
 before = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 after = sqlite3.connect(f"file:{sys.argv[2]}?mode=ro", uri=True)
-assert after.execute("SELECT version FROM clean_schema").fetchone() == (14,)
+assert after.execute("SELECT version FROM clean_schema").fetchone() == (15,)
 for table in ("verification_journal", "runtime_artifacts"):
     assert before.execute(f"SELECT * FROM {table}").fetchall() == after.execute(f"SELECT * FROM {table}").fetchall(), table
 original = before.execute("SELECT source,event_id,payload FROM verification_outbox").fetchone()

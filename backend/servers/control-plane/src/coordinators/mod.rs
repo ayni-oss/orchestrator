@@ -9,3 +9,6 @@ pub mod reconciliation;
 pub mod outbox;
 mod verification;
 pub use outbox::OutboxPublisher;
+
+mod consumer;
+pub use consumer::VerificationConsumer;

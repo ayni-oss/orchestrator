@@ -62,8 +62,12 @@ fn retention_keeps_unpublished_and_active_cleanup_and_rejects_pruned_replay() ->
     assert_eq!(count(&store, "verification_journal")?, 1);
     // The drained old generation remains replay-safe until its retention expires.
     let mut drained = next.clone();
-    drained.pending = None;
-    drained.preparation = None;
+    if std::env::var("AYNI_CONSUMER_FIXTURE").as_deref() == Ok("true") {
+        drained.next_at = u64::MAX;
+    } else {
+        drained.pending = None;
+        drained.preparation = None;
+    }
     store.save_runtime_cursor(&profile, &drained)?;
     store.prune_verification_history_at(unix_seconds()?)?;
     assert_eq!(count(&store, "verification_journal")?, 1);
@@ -94,10 +98,10 @@ fn schema_thirteen_migration_keeps_immutable_pending_bytes() -> TestResult {
         &accepted(&cursor, &report)?,
     )?;
     let pending = store.unpublished_verification_events()?;
-    store.connection.execute_batch("DROP INDEX verification_outbox_pending; DROP INDEX verification_outbox_stored; ALTER TABLE verification_outbox DROP COLUMN next_attempt_at; ALTER TABLE verification_outbox DROP COLUMN broker_sequence; ALTER TABLE verification_outbox DROP COLUMN last_error; UPDATE clean_schema SET version=13;")?;
+    store.connection.execute_batch("DROP TABLE verification_consumer; DROP INDEX verification_outbox_pending; DROP INDEX verification_outbox_stored; ALTER TABLE verification_outbox DROP COLUMN next_attempt_at; ALTER TABLE verification_outbox DROP COLUMN broker_sequence; ALTER TABLE verification_outbox DROP COLUMN last_error; UPDATE clean_schema SET version=13;")?;
     drop(store);
     let mut store = CleanStore::open(path, 3)?;
-    assert_eq!(store.schema_version()?, 14);
+    assert_eq!(store.schema_version()?, SCHEMA_VERSION);
     assert_eq!(store.unpublished_verification_events()?, pending);
     assert_eq!(store.claim_publications(0)?.len(), 1);
     Ok(())
@@ -116,8 +120,12 @@ fn export_outbox_fixture() -> TestResult {
     )?;
     // The fixture contains an accepted decision, with no live provider or runtime work.
     let mut drained = accepted(&cursor, &report)?;
-    drained.pending = None;
-    drained.preparation = None;
+    if std::env::var("AYNI_CONSUMER_FIXTURE").as_deref() == Ok("true") {
+        drained.next_at = u64::MAX;
+    } else {
+        drained.pending = None;
+        drained.preparation = None;
+    }
     store.save_runtime_cursor(&command.profile_id, &drained)?;
     let repository = store.repository_connection(
         &store

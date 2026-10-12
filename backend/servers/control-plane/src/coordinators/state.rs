@@ -94,6 +94,7 @@ impl AppState {
             .execute(|store| {
                 store.reconcile_once()?;
                 store.prune_verification_history()?;
+                store.prune_verification_deliveries()?;
                 Ok(())
             })
             .await

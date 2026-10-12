@@ -90,6 +90,7 @@ pub fn render_clean_metrics() -> String {
         }
     }
     output.push_str(&render_outbox_metrics());
+    output.push_str(&render_consumer_metrics());
     output
 }
 
@@ -163,6 +164,46 @@ fn render_outbox_metrics() -> String {
             let _ = writeln!(
                 output,
                 "orchestrator_verification_outbox_publications_total{{outcome=\"{outcome}\"}} {count}"
+            );
+        }
+    }
+    output
+}
+
+static CONSUMER_LAG: OnceLock<Mutex<(u64, usize)>> = OnceLock::new();
+static CONSUMER_DELIVERIES: OnceLock<Mutex<BTreeMap<&'static str, u64>>> = OnceLock::new();
+pub fn set_consumer_lag(pending: u64, unacknowledged: usize) {
+    if let Ok(mut lag) = CONSUMER_LAG.get_or_init(|| Mutex::new((0, 0))).lock() {
+        *lag = (pending, unacknowledged);
+    }
+}
+pub fn record_consumer_delivery(outcome: &'static str) {
+    if let Ok(mut counts) = CONSUMER_DELIVERIES
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+    {
+        *counts.entry(outcome).or_default() += 1;
+    }
+}
+fn render_consumer_metrics() -> String {
+    let mut output = String::new();
+    if let Some(lag) = CONSUMER_LAG.get().and_then(|v| v.lock().ok()) {
+        for (name, value) in [
+            ("pending", lag.0),
+            ("unacknowledged", u64::try_from(lag.1).unwrap_or(u64::MAX)),
+        ] {
+            let _ = writeln!(
+                output,
+                "# TYPE orchestrator_verification_consumer_{name} gauge\norchestrator_verification_consumer_{name} {value}"
+            );
+        }
+    }
+    output.push_str("# TYPE orchestrator_verification_consumer_deliveries_total counter\n");
+    if let Some(counts) = CONSUMER_DELIVERIES.get().and_then(|v| v.lock().ok()) {
+        for (outcome, count) in &*counts {
+            let _ = writeln!(
+                output,
+                "orchestrator_verification_consumer_deliveries_total{{outcome=\"{outcome}\"}} {count}"
             );
         }
     }

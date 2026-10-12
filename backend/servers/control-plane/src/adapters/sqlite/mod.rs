@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 14;
+pub(crate) const SCHEMA_VERSION: i64 = 15;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -61,6 +61,7 @@ const CLEAN_TABLES: &[&str] = &[
     "runtime_artifacts",
     "runtime_profile_revisions",
     "runtime_profiles",
+    "verification_consumer",
     "verification_inbox",
     "verification_journal",
     "verification_outbox",
@@ -374,6 +375,7 @@ mod tests {
         })
     }
 
+    mod consumer;
     mod cutover;
     mod lifecycle;
     mod outbox;
@@ -410,3 +412,5 @@ mod builder_cutover;
 mod preparation_migration;
 
 mod summary_index;
+
+mod verification_consumer;

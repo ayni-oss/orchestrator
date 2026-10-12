@@ -12,7 +12,7 @@ pub use adapters::http::router;
 pub use adapters::models::{AvailableModel, ModelCatalog, ModelCatalogError};
 pub use ayni_orchestrator_application::execution::ExecutionBackend;
 pub use coordinators::reconciliation::RuntimeReconciler;
-pub use coordinators::{AppState, OutboxPublisher, ReconciliationError};
+pub use coordinators::{AppState, OutboxPublisher, ReconciliationError, VerificationConsumer};
 pub use process::configuration::{Configuration, ConfigurationError, CustomGrpcConfiguration};
 
 pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> String {

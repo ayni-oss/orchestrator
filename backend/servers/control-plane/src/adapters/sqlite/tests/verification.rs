@@ -421,7 +421,7 @@ fn schema_eleven_migration_preserves_pending_receipts() -> Result<(), Box<dyn st
     let (profile, cursor, _, _) = prepared(&mut store)?;
     let (identity, payload) = receipt(&store, &profile, &cursor)?;
     store.receive_verification(&identity, &payload)?;
-    store.connection.execute_batch("DROP TABLE verification_outbox; DROP TABLE verification_journal;
+    store.connection.execute_batch("DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal;
 ALTER TABLE verification_inbox RENAME TO inbox_new; DROP INDEX verification_inbox_pending;
 CREATE TABLE verification_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,execution_id TEXT NOT NULL,pod_uid TEXT NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL CHECK(decision='pending'),PRIMARY KEY(source,event_id),UNIQUE(execution_id,pod_uid));
 INSERT INTO verification_inbox SELECT source,event_id,execution_id,pod_uid,payload,received_at,decision FROM inbox_new;
