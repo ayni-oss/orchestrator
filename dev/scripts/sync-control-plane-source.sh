@@ -14,4 +14,4 @@ COPYFILE_DISABLE=1 tar -C "$repository_root" -cf - \
       exec -i deployment/control-plane -c control-plane -- tar -xf - -C /opt/source
 kubectl --context docker-desktop --namespace "$namespace" \
   exec deployment/control-plane -c control-plane -- \
-  sh -c 'cd /opt/source && cargo build --locked --package ayni-orchestrator-control-plane --bins && sh dev/scripts/restart-control-plane.sh'
+  sh -c 'cd /opt/source && cargo build --locked --jobs 1 --package ayni-orchestrator-control-plane --bins && sh dev/scripts/restart-control-plane.sh'

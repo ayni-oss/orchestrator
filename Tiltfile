@@ -43,7 +43,8 @@ attach(
         sync('Cargo.lock', '/opt/source/Cargo.lock'),
         sync('rust-toolchain.toml', '/opt/source/rust-toolchain.toml'),
         sync('dev/scripts/restart-control-plane.sh', '/opt/source/dev/scripts/restart-control-plane.sh'),
-        run('cargo build --locked --package ayni-orchestrator-control-plane --bins'),
+        # Compilation shares the container's memory budget with the running server.
+        run('cargo build --locked --jobs 1 --package ayni-orchestrator-control-plane --bins'),
         run('sh dev/scripts/restart-control-plane.sh'),
     ],
     port_forwards=['18081:8080'],
