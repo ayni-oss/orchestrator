@@ -1,4 +1,4 @@
-# Orchestrator UI design system
+# Ayni Orchestrator UI design system
 
 Use the existing shadcn-svelte components and theme tokens. Product components
 compose these primitives; they do not introduce a separate visual framework.
@@ -102,7 +102,9 @@ is the only removal action and requires repository-name confirmation.
 ## Icons and status
 
 Use Lucide icons for interface actions and the shared theme-aware Ayni SVG for
-Ayni-specific items. The Orchestrator header retains its own icon. Do not add
+Ayni-specific items and the Ayni Orchestrator header. The application, documentation
+site and repository README share the Ayni mark and the full product name
+**Ayni Orchestrator**. Ayni by itself refers to the CLI or its runtime configuration. Do not add
 decorative arrows to navigation buttons. Keep dropdown indicators and explicit
 external-link icons where they communicate behavior.
 

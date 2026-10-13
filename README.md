@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/public/ayni-logo-dark.svg">
+  <img src="docs/public/ayni-logo.svg" alt="Ayni icon" width="64" height="64">
+</picture>
+
 # Ayni Orchestrator
 
 Ayni Orchestrator is a control plane for worker-owned development tasks.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Boxes, FolderGit2, BookOpen, GitBranch, Container, Settings } from "@lucide/svelte";
+  import { FolderGit2, BookOpen, GitBranch, Container, Settings } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { subscribeRefresh } from "$lib/refresh.js";
   import AyniIcon from "$lib/components/ayni-icon.svelte";
@@ -26,8 +26,8 @@
 
 <Sidebar.Root collapsible="icon" class="shrink-0">
   <Sidebar.Header>
-    <a onclick={() => sidebar.setOpenMobile(false)} href="/projects" class="flex h-10 items-center gap-2 px-2 font-semibold no-underline">
-      <Boxes class="size-5 shrink-0" aria-hidden="true" />
+    <a onclick={() => sidebar.setOpenMobile(false)} href="/projects" aria-label="Ayni Orchestrator home" class="flex h-10 items-center gap-2 px-2 font-semibold no-underline">
+      <AyniIcon class="size-5 shrink-0" aria-hidden="true" />
       <span class="group-data-[collapsible=icon]:hidden">Ayni Orchestrator</span>
     </a>
   </Sidebar.Header>
