@@ -1,5 +1,6 @@
 import { navigating } from "$app/state";
 import { invalidate } from "$app/navigation";
+import { createResourceWatch } from "./resource-watch.js";
 
 export type RefreshScope = "app:runtimes" | "app:tasks" | "app:connections" | "app:certificates" | "app:projects" | "app:repositories";
 type Subscriber = { intervalMs: number; onResult?: ((ok: boolean) => void) | undefined };
@@ -70,33 +71,10 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
 
 // Instantiated on the server too, but only mounted browser consumers subscribe.
 // Avoid replacing resource versions or form defaults while an editor is active.
+const resourceWatch = createResourceWatch(() => new EventSource("/updates/all"));
 export function watchRefreshScope(scope: RefreshScope, changed: () => void, status: (ok: boolean) => void): () => void {
   if (scope === "app:tasks") return () => {};
-  let source: EventSource | undefined;
-  let retry: ReturnType<typeof setTimeout> | undefined;
-  let stopped = false;
-  function connect() {
-    if (stopped) return;
-    source = new EventSource(`/updates/${scope.slice(4)}`);
-    source.onopen = () => status(true);
-    source.addEventListener("changed", changed);
-    source.addEventListener("error", event => {
-      status(false);
-      if (event instanceof MessageEvent) {
-        try {
-          const error = JSON.parse(event.data) as { reason?: string };
-          if (error.reason === "watch_cursor_expired") {
-            // Closing and creating a fresh EventSource clears Last-Event-ID.
-            source?.close();
-            changed();
-            retry = setTimeout(connect, 1_000);
-          }
-        } catch { /* Native transport errors reconnect with Last-Event-ID. */ }
-      }
-    });
-  }
-  connect();
-  return () => { stopped = true; clearTimeout(retry); source?.close(); };
+  return resourceWatch(scope, changed, status);
 }
 
 const coordinator = createRefreshCoordinator(invalidate, () =>

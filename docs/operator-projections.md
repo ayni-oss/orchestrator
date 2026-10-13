@@ -45,10 +45,13 @@ cursor; a cursor outside retained history requires a fresh snapshot. Clients
 retain cursors per service because replay and retention bounds are service-specific.
 Resource-event replay is separate from accepted-fact retention.
 
-The browser's scope streams send cursor notifications and invalidate the
-existing loaders; SSE carries no resource or credential payload. Expiry closes
-the old EventSource and obtains a fresh snapshot. Each subscribed operator scope
-shares one EventSource and a 120-second repair timer.
+The browser shares one EventSource across its five operator resource scopes;
+notifications identify the changed scope and invalidate existing loaders without
+carrying resource or credential payloads. On reconnect, each upstream watch takes
+a fresh snapshot because independently versioned scopes cannot share a replay
+cursor. Dedicated scoped subscriptions retain cursor replay. Each scope keeps
+a 120-second repair timer. Sharing the browser connection leaves HTTP/1.1 slots
+available for navigation and the separate task stream.
 
 Deferred updates refresh within one second after editing or hidden state ends.
 Background refresh also pauses during submissions and navigation so a lifecycle

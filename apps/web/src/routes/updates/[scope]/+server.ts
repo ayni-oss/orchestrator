@@ -19,11 +19,15 @@ function errorDto(error: unknown, requestId: string): BrowserErrorDto {
 
 export const GET: RequestHandler = ({ locals, params, request }) => {
   const scope = params.scope;
-  if (scope !== "connections" && scope !== "certificates" && scope !== "projects" && scope !== "runtimes" && scope !== "repositories") return new Response("invalid resource scope", { status: 404 });
+  const scopes = ["connections", "certificates", "projects", "runtimes", "repositories"] as const;
+  if (scope !== "all" && !scopes.some(value => value === scope)) return new Response("invalid resource scope", { status: 404 });
   const cursor = request.headers.get("last-event-id") ?? undefined;
   if (cursor !== undefined && cursor !== "0" && !isResourceVersion(cursor)) {
     return new Response("the resource update cursor is invalid", { status: 400 });
   }
+  // The combined stream resynchronizes each scope on reconnect. A single cursor
+  // cannot represent five independently versioned resource streams.
+  if (scope === "all" && cursor !== undefined) return new Response("combined resource streams do not accept a cursor", { status: 400 });
 
   const cancellation = new AbortController();
   const abort = (): void => cancellation.abort();
@@ -31,7 +35,7 @@ export const GET: RequestHandler = ({ locals, params, request }) => {
   else locals.requestSignal.addEventListener("abort", abort, { once: true });
   let closed = false;
   let changedTimer: ReturnType<typeof setTimeout> | undefined;
-  let pendingCursor: string | undefined;
+  const pending = new Map<string, string>();
   let heartbeat: ReturnType<typeof setInterval> | undefined;
 
   const body = new ReadableStream<Uint8Array>({
@@ -68,10 +72,12 @@ export const GET: RequestHandler = ({ locals, params, request }) => {
       };
       const flush = (): void => {
         changedTimer = undefined;
-        if (pendingCursor === undefined) return;
-        const nextCursor = pendingCursor;
-        pendingCursor = undefined;
-        enqueue(`id: ${nextCursor}\nevent: changed\ndata: {}\n\n`);
+        for (const [changedScope, nextCursor] of pending) {
+          enqueue(scope === "all"
+            ? `event: changed\ndata: ${JSON.stringify({ scope: changedScope })}\n\n`
+            : `id: ${nextCursor}\nevent: changed\ndata: {}\n\n`);
+        }
+        pending.clear();
       };
       heartbeat = setInterval(() => {
         enqueue("event: heartbeat\ndata: {}\n\n");
@@ -79,16 +85,18 @@ export const GET: RequestHandler = ({ locals, params, request }) => {
 
       void (async () => {
         try {
-          await getBff().watchResources(scope, cursor,
+          const selected = scope === "all" ? scopes : scopes.filter(value => value === scope);
+          await Promise.all(selected.map(selectedScope => getBff().watchResources(selectedScope, cursor,
             { requestId: locals.requestId, signal: cancellation.signal },
             (nextCursor: string) => {
-              pendingCursor = nextCursor;
+              pending.set(selectedScope, nextCursor);
               changedTimer ??= setTimeout(flush, 30);
             },
-          );
+          )));
         } catch (error) {
           if (!cancellation.signal.aborted) enqueue(`event: error\ndata: ${JSON.stringify(errorDto(error, locals.requestId))}\n\n`);
         } finally {
+          cancellation.abort();
           flush();
           finish();
         }

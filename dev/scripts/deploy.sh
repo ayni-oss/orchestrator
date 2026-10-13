@@ -88,10 +88,12 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
 
 # Runtime output storage binds when the first worker Job consumes it.
 # Wait for the application stack without requiring that claim to bind yet.
-for deployment in control-plane prometheus kube-state-metrics grafana; do
+for deployment in control-plane prometheus grafana otel-collector jaeger; do
   kubectl --context "$context" --namespace "$namespace" rollout status \
     "deployment/$deployment" --timeout=5m
 done
+kubectl --context "$context" --namespace "$namespace" rollout status \
+  statefulset/jetstream --timeout=5m
 
 pod=""
 actual_control_plane_image=""

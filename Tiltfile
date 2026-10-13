@@ -3,6 +3,9 @@
 
 allow_k8s_contexts('docker-desktop')
 
+# Initial attachment includes an in-container Rust build, not just kubectl apply.
+update_settings(k8s_upsert_timeout_secs=300)
+
 namespace = os.getenv('AYNI_ORCHESTRATOR_NAMESPACE', 'ayni-orchestrator-dev')
 
 def attach(name, container, deps, live_update, port_forwards=[], sync_web=False, sync_control_plane=False):
@@ -43,7 +46,8 @@ attach(
         sync('Cargo.lock', '/opt/source/Cargo.lock'),
         sync('rust-toolchain.toml', '/opt/source/rust-toolchain.toml'),
         sync('dev/scripts/restart-control-plane.sh', '/opt/source/dev/scripts/restart-control-plane.sh'),
-        run('cargo build --locked --package ayni-orchestrator-control-plane --bins'),
+        # Compilation shares the container's memory budget with the running server.
+        run('cargo build --locked --jobs 1 --package ayni-orchestrator-control-plane --bins'),
         run('sh dev/scripts/restart-control-plane.sh'),
     ],
     port_forwards=['18081:8080'],
