@@ -2,6 +2,20 @@ use super::{GrpcApi, Request, Response, Status, api_validation, page_response, v
 
 #[tonic::async_trait]
 impl v1::project_service_server::ProjectService for GrpcApi {
+    type WatchProjectsStream = super::BoxGrpcStream<v1::WatchProjectsResponse>;
+    async fn watch_projects(
+        &self,
+        request: Request<v1::WatchProjectsRequest>,
+    ) -> Result<Response<Self::WatchProjectsStream>, Status> {
+        let context = self.context(&request, "WatchProjects")?;
+        Ok(context.response(Box::pin(super::resource_watch::projects(
+            self.state.clone(),
+            self.shutdown.clone(),
+            request.into_inner(),
+            context.request_id.clone(),
+        ))))
+    }
+
     async fn list_project_summaries(
         &self,
         request: Request<v1::ListProjectSummariesRequest>,

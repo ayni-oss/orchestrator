@@ -1,0 +1,15 @@
+syntax = "proto3";
+package ayni.orchestrator.events.v1;
+
+// Committed controller fact. Public resource streams carry the full projection;
+// this bounded fact never includes credential material or secret-bearing requests.
+message LifecycleDecisionRecorded {
+  string resource_type = 1;
+  string resource_id = 2;
+  uint64 aggregate_revision = 3;
+  uint64 event_cursor = 4;
+  string projection_sha256 = 5;
+  string status = 6;
+  string reason = 7;
+  string active_revision = 8;
+}

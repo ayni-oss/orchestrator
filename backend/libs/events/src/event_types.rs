@@ -3,13 +3,14 @@ use crate::{ContractError, MAX_EVENT_BYTES};
 
 const LEGACY_PREFIXES: [&str; 1] = ["io.ayni."];
 const PREFIX: &str = "build.ayni.";
-const TYPES: [&str; 6] = [
+const TYPES: [&str; 7] = [
     crate::EVENT_TYPE,
     crate::decisions::EVENT_TYPE,
     crate::operations::EVENT_TYPE,
     crate::operation_decisions::EVENT_TYPE,
     crate::coding::EVENT_TYPE,
     crate::coding_decisions::EVENT_TYPE,
+    crate::lifecycle::EVENT_TYPE,
 ];
 
 pub(crate) fn matches(actual: &str, expected: &str) -> bool {

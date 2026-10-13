@@ -40,6 +40,9 @@ impl CleanStore {
             .optional()
             .map_err(CleanStoreError::Database)?;
         if let Some(previous) = previous {
+            if previous == value.encode_to_vec() {
+                return Ok(());
+            }
             let previous = v1::Connection::decode(previous.as_slice())
                 .map_err(|_| CleanStoreError::CorruptState)?;
             if value.resource_version < previous.resource_version
@@ -49,6 +52,16 @@ impl CleanStore {
             }
         }
         tx.execute("INSERT INTO connections(id,kind,payload) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",params![value.id,value.kind,value.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+        append_event(
+            &tx,
+            "connections",
+            "connection",
+            &value.id,
+            value.resource_version,
+            None,
+            None,
+            value,
+        )?;
         tx.commit().map_err(CleanStoreError::Database)?;
         Ok(())
     }
@@ -92,6 +105,16 @@ impl CleanStore {
         )
         .map_err(CleanStoreError::Database)?;
         tx.execute("INSERT INTO connections(id,kind,payload) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",params![value.id,value.kind,value.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+        append_event(
+            &tx,
+            "connections",
+            "connection",
+            &value.id,
+            value.resource_version,
+            None,
+            None,
+            value,
+        )?;
         tx.commit().map_err(CleanStoreError::Database)?;
         Ok(true)
     }
@@ -135,9 +158,29 @@ impl CleanStore {
     }
     pub(crate) fn delete_connection(&mut self, id: &str) -> Result<(), CleanStoreError> {
         self.check_connection_deletion(id)?;
-        self.connection
-            .execute("DELETE FROM connections WHERE id=?1", [id])
+        let mut value = self.get_connection(id)?;
+        value.resource_version = value
+            .resource_version
+            .checked_add(1)
+            .ok_or(CleanStoreError::BoundExceeded)?;
+        value.status = "deleted".into();
+        let tx = self
+            .connection
+            .transaction()
             .map_err(CleanStoreError::Database)?;
+        append_event(
+            &tx,
+            "connections",
+            "connection_deleted",
+            id,
+            value.resource_version,
+            None,
+            None,
+            &value,
+        )?;
+        tx.execute("DELETE FROM connections WHERE id=?1", [id])
+            .map_err(CleanStoreError::Database)?;
+        tx.commit().map_err(CleanStoreError::Database)?;
         Ok(())
     }
 }

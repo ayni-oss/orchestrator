@@ -3,6 +3,7 @@ package ayni.orchestrator.v1;
 
 // Trusted operator API. Never registered on the custom-client listener.
 service ConnectionService {
+  rpc WatchConnections(WatchConnectionsRequest) returns (stream WatchConnectionsResponse);
   rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
   rpc GetConnection(GetConnectionRequest) returns (GetConnectionResponse);
   rpc CreateConnection(CreateConnectionRequest) returns (CreateConnectionResponse);
@@ -125,4 +126,17 @@ message ConnectionSecretRevision {
   string secret_uid = 2;
   string pull_secret_name = 3;
   string pull_secret_uid = 4;
+}
+
+// Omit after_cursor for a current snapshot followed by durable replay. Expired
+// cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
+message WatchConnectionsRequest {
+  optional uint64 after_cursor = 1;
+}
+message WatchConnectionsResponse {
+  uint64 cursor = 1;
+  Connection connection = 2;
+  bool deleted = 3;
+  // Marks the snapshot boundary, including an empty snapshot.
+  bool snapshot_complete = 4;
 }

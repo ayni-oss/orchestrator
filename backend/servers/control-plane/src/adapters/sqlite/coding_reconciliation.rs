@@ -1,6 +1,6 @@
 use super::{
-    CleanStore, CleanStoreError, collect_bounded_payloads, decode, params, persist_attempt_update,
-    timestamp, unix_seconds, v1, valid_model_usage,
+    CleanStore, CleanStoreError, OptionalExtension, collect_bounded_payloads, decode, params,
+    persist_attempt_update, timestamp, unix_seconds, v1, valid_model_usage,
 };
 
 impl CleanStore {
@@ -50,13 +50,69 @@ impl CleanStore {
             .collect()
     }
 
+    pub(super) fn refresh_coding_status(
+        &mut self,
+        attempt_id: &str,
+    ) -> Result<(), CleanStoreError> {
+        let (admission, stopped, terminal): (Option<String>, bool, bool) = self
+            .connection
+            .query_row(
+                "SELECT admission,stopped,terminal FROM coding_executions WHERE attempt_id=?1",
+                [attempt_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(CleanStoreError::Database)?
+            .unwrap_or((None, false, false));
+        let complete: bool = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM reconciliation_cursors WHERE name=?1)",
+                [format!("coding-done:{attempt_id}")],
+                |row| row.get(0),
+            )
+            .map_err(CleanStoreError::Database)?;
+        let accepted: bool = self.connection.query_row("SELECT EXISTS(SELECT 1 FROM coding_inbox WHERE attempt_id=?1 AND decision='accepted' AND json_extract(accepted_payload,'$.data.applied')=1 AND generation=json_extract(?2,'$.binding.generation'))", params![attempt_id,admission], |row| row.get(0)).map_err(CleanStoreError::Database)?;
+        let reporting = if admission.is_none() {
+            "legacy"
+        } else if accepted {
+            "accepted"
+        } else {
+            "awaiting"
+        };
+        let cleanup = if complete {
+            "complete"
+        } else if stopped {
+            "stopping"
+        } else if terminal {
+            "pending"
+        } else {
+            ""
+        };
+        let mut attempt = self.development_attempt(attempt_id)?;
+        if attempt.reporting_state == reporting && attempt.cleanup_state == cleanup {
+            return Ok(());
+        }
+        let task = self.development_task(&attempt.development_task_id)?;
+        let previous = attempt.resource_version;
+        attempt.resource_version = previous
+            .checked_add(1)
+            .ok_or(CleanStoreError::BoundExceeded)?;
+        attempt.reporting_state = reporting.into();
+        attempt.cleanup_state = cleanup.into();
+        attempt.updated_at = Some(timestamp(unix_seconds()?));
+        persist_attempt_update(&self.connection, &attempt, previous, &task)
+    }
+
     pub(crate) fn coding_cleanup_complete(
         &mut self,
         attempt_id: &str,
     ) -> Result<(), CleanStoreError> {
-        self.stop_coding_execution(attempt_id)?;
-        self.connection.execute("INSERT OR IGNORE INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES (?1,'{}',1,?2)", params![format!("coding-done:{attempt_id}"),unix_seconds()?]).map_err(CleanStoreError::Database)?;
-        Ok(())
+        self.verification_transaction(|store| {
+            store.connection.execute("UPDATE coding_executions SET stopped=1 WHERE attempt_id=?1", [attempt_id]).map_err(CleanStoreError::Database)?;
+            store.connection.execute("INSERT OR IGNORE INTO reconciliation_cursors(name,value,resource_version,updated_at) VALUES (?1,'{}',1,?2)", params![format!("coding-done:{attempt_id}"),unix_seconds()?]).map_err(CleanStoreError::Database)?;
+            store.refresh_coding_status(attempt_id)
+        })
     }
 
     pub(crate) fn coding_details(

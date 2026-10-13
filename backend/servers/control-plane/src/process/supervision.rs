@@ -61,6 +61,42 @@ impl BackgroundTasks {
         });
     }
 
+    /// Combine bounded observation hints with periodic repair, in a single serialized lane.
+    pub fn spawn_observed<F, Fut>(
+        &mut self,
+        name: &'static str,
+        period: Duration,
+        mut shutdown: watch::Receiver<bool>,
+        wake: std::sync::Arc<tokio::sync::Notify>,
+        operation: F,
+    ) where
+        F: Fn() -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send,
+    {
+        self.tasks.spawn(async move {
+            let mut ticker = tokio::time::interval(period);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                if *shutdown.borrow() {
+                    return Some(name);
+                }
+                tokio::select! {
+                    biased;
+                    _ = shutdown.changed() => return Some(name),
+                    _ = ticker.tick() => {},
+                    () = wake.notified() => {},
+                }
+                operation().await;
+                // Coalesce a hot stream without starving shutdown or periodic repair.
+                tokio::select! {
+                    biased;
+                    _ = shutdown.changed() => return Some(name),
+                    () = tokio::time::sleep(Duration::from_secs(1)) => {},
+                }
+            }
+        });
+    }
+
     /// Wait for a loop to exit while the server should still be running.
     pub async fn unexpected_exit(&mut self, shutdown: watch::Receiver<bool>) -> io::Error {
         loop {
@@ -126,6 +162,50 @@ mod tests {
             .recv()
             .await
             .ok_or_else(|| io::Error::other("pass missing"))?;
+        shutdown.send(true).map_err(io::Error::other)?;
+        tasks.shutdown(Duration::from_secs(1)).await;
+        assert!(passes.recv().await.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn observed_passes_coalesce_bursts_and_keep_periodic_repair() -> io::Result<()> {
+        let (shutdown, receiver) = watch::channel(false);
+        let (started, mut passes) = mpsc::unbounded_channel();
+        let wake = std::sync::Arc::new(tokio::sync::Notify::new());
+        let mut tasks = BackgroundTasks::default();
+        tasks.spawn_observed(
+            "observed",
+            Duration::from_secs(2),
+            receiver,
+            wake.clone(),
+            move || {
+                let started = started.clone();
+                async move {
+                    let _ = started.send(());
+                }
+            },
+        );
+        passes
+            .recv()
+            .await
+            .ok_or_else(|| io::Error::other("initial pass missing"))?;
+        for _ in 0..10000 {
+            wake.notify_one();
+        }
+        tokio::time::timeout(Duration::from_secs(2), passes.recv())
+            .await
+            .map_err(io::Error::other)?
+            .ok_or_else(|| io::Error::other("observation pass missing"))?;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), passes.recv())
+                .await
+                .is_err()
+        );
+        tokio::time::timeout(Duration::from_secs(3), passes.recv())
+            .await
+            .map_err(io::Error::other)?
+            .ok_or_else(|| io::Error::other("periodic repair missing"))?;
         shutdown.send(true).map_err(io::Error::other)?;
         tasks.shutdown(Duration::from_secs(1)).await;
         assert!(passes.recv().await.is_none());

@@ -229,6 +229,8 @@ pub(super) fn decode_event<M: Message + Default>(payload: &[u8]) -> Result<M, Cl
 pub(super) fn stream_status(error: &CleanStoreError, request_id: &str) -> Status {
     let (code, reason) = if matches!(error, CleanStoreError::WatchCursorExpired) {
         (Code::OutOfRange, v1::ErrorReason::WatchCursorExpired)
+    } else if matches!(error, CleanStoreError::BoundExceeded) {
+        (Code::ResourceExhausted, v1::ErrorReason::BoundExceeded)
     } else {
         (Code::Internal, v1::ErrorReason::Internal)
     };

@@ -268,6 +268,8 @@ impl TaskRepository for CleanStore {
             progress: None,
             result: None,
             pull_request: None,
+            reporting_state: String::new(),
+            cleanup_state: String::new(),
             publication_only: false,
         };
         let transaction = self

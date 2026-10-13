@@ -15,13 +15,13 @@ rules:
   # Kubernetes RBAC cannot restrict Secret access by ownership labels.
   - apiGroups: [""]
     resources: [secrets]
-    verbs: [get, create, patch, delete]
+    verbs: [get, list, watch, create, patch, delete]
   - apiGroups: [""]
     resources: [pods]
-    verbs: [get, list]
+    verbs: [get, list, watch]
   - apiGroups: [batch]
     resources: [jobs]
-    verbs: [get, list, create, delete]
+    verbs: [get, list, watch, create, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

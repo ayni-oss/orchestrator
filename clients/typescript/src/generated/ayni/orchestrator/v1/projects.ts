@@ -11,7 +11,9 @@ import {
   type ChannelCredentials,
   Client,
   type ClientOptions,
+  type ClientReadableStream,
   type ClientUnaryCall,
+  type handleServerStreamingCall,
   type handleUnaryCall,
   makeGenericClientConstructor,
   type Metadata,
@@ -155,6 +157,22 @@ export interface ListProjectSummariesRequest {
 export interface ListProjectSummariesResponse {
   summaries: ProjectSummary[];
   page?: PageResponse | undefined;
+}
+
+/**
+ * Omit after_cursor for a current snapshot followed by durable replay. Expired
+ * cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
+ */
+export interface WatchProjectsRequest {
+  afterCursor?: string | undefined;
+}
+
+export interface WatchProjectsResponse {
+  cursor: string;
+  project?: Project | undefined;
+  deleted: boolean;
+  /** Marks the snapshot boundary, including an empty snapshot. */
+  snapshotComplete: boolean;
 }
 
 function createBaseProject(): Project {
@@ -1708,9 +1726,215 @@ export const ListProjectSummariesResponse: MessageFns<ListProjectSummariesRespon
   },
 };
 
+function createBaseWatchProjectsRequest(): WatchProjectsRequest {
+  return { afterCursor: undefined };
+}
+
+export const WatchProjectsRequest: MessageFns<WatchProjectsRequest> = {
+  encode(message: WatchProjectsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.afterCursor !== undefined) {
+      writer.uint32(8).uint64(message.afterCursor);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchProjectsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWatchProjectsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.afterCursor = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WatchProjectsRequest {
+    return {
+      afterCursor: isSet(object.afterCursor)
+        ? globalThis.String(object.afterCursor)
+        : isSet(object.after_cursor)
+        ? globalThis.String(object.after_cursor)
+        : undefined,
+    };
+  },
+
+  toJSON(message: WatchProjectsRequest): unknown {
+    const obj: any = {};
+    if (message.afterCursor !== undefined) {
+      obj.afterCursor = message.afterCursor;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WatchProjectsRequest>): WatchProjectsRequest {
+    return WatchProjectsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WatchProjectsRequest>): WatchProjectsRequest {
+    const message = createBaseWatchProjectsRequest();
+    message.afterCursor = object.afterCursor ?? undefined;
+    return message;
+  },
+};
+
+function createBaseWatchProjectsResponse(): WatchProjectsResponse {
+  return { cursor: "0", project: undefined, deleted: false, snapshotComplete: false };
+}
+
+export const WatchProjectsResponse: MessageFns<WatchProjectsResponse> = {
+  encode(message: WatchProjectsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cursor !== "0") {
+      writer.uint32(8).uint64(message.cursor);
+    }
+    if (message.project !== undefined) {
+      Project.encode(message.project, writer.uint32(18).fork()).join();
+    }
+    if (message.deleted !== false) {
+      writer.uint32(24).bool(message.deleted);
+    }
+    if (message.snapshotComplete !== false) {
+      writer.uint32(32).bool(message.snapshotComplete);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchProjectsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWatchProjectsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.cursor = reader.uint64().toString();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.project = Project.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.deleted = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.snapshotComplete = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WatchProjectsResponse {
+    return {
+      cursor: isSet(object.cursor) ? globalThis.String(object.cursor) : "0",
+      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
+      deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
+      snapshotComplete: isSet(object.snapshotComplete)
+        ? globalThis.Boolean(object.snapshotComplete)
+        : isSet(object.snapshot_complete)
+        ? globalThis.Boolean(object.snapshot_complete)
+        : false,
+    };
+  },
+
+  toJSON(message: WatchProjectsResponse): unknown {
+    const obj: any = {};
+    if (message.cursor !== "0") {
+      obj.cursor = message.cursor;
+    }
+    if (message.project !== undefined) {
+      obj.project = Project.toJSON(message.project);
+    }
+    if (message.deleted !== false) {
+      obj.deleted = message.deleted;
+    }
+    if (message.snapshotComplete !== false) {
+      obj.snapshotComplete = message.snapshotComplete;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WatchProjectsResponse>): WatchProjectsResponse {
+    return WatchProjectsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WatchProjectsResponse>): WatchProjectsResponse {
+    const message = createBaseWatchProjectsResponse();
+    message.cursor = object.cursor ?? "0";
+    message.project = (object.project !== undefined && object.project !== null)
+      ? Project.fromPartial(object.project)
+      : undefined;
+    message.deleted = object.deleted ?? false;
+    message.snapshotComplete = object.snapshotComplete ?? false;
+    return message;
+  },
+};
+
 /** Projects are user-facing workspaces with shared, editable repository membership. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
+  watchProjects: {
+    path: "/ayni.orchestrator.v1.ProjectService/WatchProjects" as const,
+    requestStream: false as const,
+    responseStream: true as const,
+    requestSerialize: (value: WatchProjectsRequest): Buffer => Buffer.from(WatchProjectsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): WatchProjectsRequest => WatchProjectsRequest.decode(value),
+    responseSerialize: (value: WatchProjectsResponse): Buffer =>
+      Buffer.from(WatchProjectsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): WatchProjectsResponse => WatchProjectsResponse.decode(value),
+  },
   listProjectSummaries: {
     path: "/ayni.orchestrator.v1.ProjectService/ListProjectSummaries" as const,
     requestStream: false as const,
@@ -1775,6 +1999,7 @@ export const ProjectServiceService = {
 } as const;
 
 export interface ProjectServiceServer extends UntypedServiceImplementation {
+  watchProjects: handleServerStreamingCall<WatchProjectsRequest, WatchProjectsResponse>;
   listProjectSummaries: handleUnaryCall<ListProjectSummariesRequest, ListProjectSummariesResponse>;
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
   listProjects: handleUnaryCall<ListProjectsRequest, ListProjectsResponse>;
@@ -1784,6 +2009,15 @@ export interface ProjectServiceServer extends UntypedServiceImplementation {
 }
 
 export interface ProjectServiceClient extends Client {
+  watchProjects(
+    request: WatchProjectsRequest,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<WatchProjectsResponse>;
+  watchProjects(
+    request: WatchProjectsRequest,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<WatchProjectsResponse>;
   listProjectSummaries(
     request: ListProjectSummariesRequest,
     callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,

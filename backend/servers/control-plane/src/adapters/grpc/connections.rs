@@ -1,6 +1,25 @@
 use super::*;
 #[tonic::async_trait]
 impl v1::connection_service_server::ConnectionService for GrpcApi {
+    type WatchConnectionsStream = super::BoxGrpcStream<v1::WatchConnectionsResponse>;
+    async fn watch_connections(
+        &self,
+        request: Request<v1::WatchConnectionsRequest>,
+    ) -> Result<Response<Self::WatchConnectionsStream>, Status> {
+        let context = self.context(&request, "WatchConnections")?;
+        if context.client_id.is_some() {
+            return Err(Status::permission_denied("trusted_operator_required"));
+        }
+        Ok(
+            context.response(Box::pin(super::resource_watch::connections(
+                self.state.clone(),
+                self.shutdown.clone(),
+                request.into_inner(),
+                context.request_id.clone(),
+            ))),
+        )
+    }
+
     async fn list_connections(
         &self,
         _: Request<v1::ListConnectionsRequest>,

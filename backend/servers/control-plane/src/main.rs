@@ -2,6 +2,7 @@ use ayni_orchestrator_control_plane::{
     AppState, BackgroundTasks, Configuration, ModelCatalog, OutboxPublisher, RuntimeReconciler,
     VerificationConsumer, router, serve_custom_grpc, serve_grpc,
 };
+use ayni_orchestrator_kubernetes::notifications::{KubernetesNotifications, ObservationWakes};
 use std::{env, fs, io, process::ExitCode, time::Duration};
 use tokio::{net::TcpListener, signal, sync::watch};
 use tracing::{Instrument, debug, error, info, warn};
@@ -205,10 +206,50 @@ fn spawn_outbox_loop(
     }
 }
 
+fn spawn_observation_loops(
+    background: &mut BackgroundTasks,
+    runtime: Option<&RuntimeReconciler>,
+    shutdown: &watch::Receiver<bool>,
+) -> ObservationWakes {
+    let wakes = ObservationWakes::default();
+    if let Some(runtime) = runtime {
+        match KubernetesNotifications::new(runtime.observation_namespace().to_owned()) {
+            Ok(observations) => {
+                background.spawn_required(
+                    "runtime-observations",
+                    shutdown.clone(),
+                    observations.runtime(wakes.clone()),
+                );
+            }
+            Err(reason) => warn!(
+                reason_code = reason,
+                "runtime observation acceleration unavailable"
+            ),
+        }
+    }
+    if let Ok(namespace) = env::var("ORCHESTRATOR_CONNECTION_NAMESPACE") {
+        match KubernetesNotifications::new(namespace) {
+            Ok(observations) => {
+                background.spawn_required(
+                    "connection-observations",
+                    shutdown.clone(),
+                    observations.connections(wakes.clone()),
+                );
+            }
+            Err(reason) => warn!(
+                reason_code = reason,
+                "connection observation acceleration unavailable"
+            ),
+        }
+    }
+    wakes
+}
+
 fn spawn_runtime_loops(
     background: &mut BackgroundTasks,
     runtimes: Option<std::sync::Arc<RuntimeReconciler>>,
     shutdown: &watch::Receiver<bool>,
+    wakes: &ObservationWakes,
 ) {
     let Some(runtimes) = runtimes else {
         return;
@@ -219,15 +260,25 @@ fn spawn_runtime_loops(
             0 => "runtime-verification",
             _ => "coding",
         };
-        background.spawn_periodic(name, Duration::from_secs(5), shutdown.clone(), move || {
-            let runtimes = runtimes.clone();
-            async move {
-                match operation {
-                    0 => runtimes.reconcile().await,
-                    _ => runtimes.reconcile_coding().await,
+        background.spawn_observed(
+            name,
+            Duration::from_secs(5),
+            shutdown.clone(),
+            if operation == 0 {
+                wakes.runtime.clone()
+            } else {
+                wakes.coding.clone()
+            },
+            move || {
+                let runtimes = runtimes.clone();
+                async move {
+                    match operation {
+                        0 => runtimes.reconcile().await,
+                        _ => runtimes.reconcile_coding().await,
+                    }
                 }
-            }
-        });
+            },
+        );
     }
 }
 
@@ -237,11 +288,13 @@ fn spawn_background_loops(
     runtimes: Option<std::sync::Arc<RuntimeReconciler>>,
     shutdown: &watch::Receiver<bool>,
 ) {
+    let wakes = spawn_observation_loops(background, runtimes.as_deref(), shutdown);
     let connection_state = state.clone();
-    background.spawn_periodic(
+    background.spawn_observed(
         "connections",
         Duration::from_secs(30),
         shutdown.clone(),
+        wakes.connections.clone(),
         move || {
             let state = connection_state.clone();
             async move {
@@ -293,7 +346,7 @@ fn spawn_background_loops(
             }
         },
     );
-    spawn_runtime_loops(background, runtimes, shutdown);
+    spawn_runtime_loops(background, runtimes, shutdown, &wakes);
 }
 
 fn spawn_consumer_loop(

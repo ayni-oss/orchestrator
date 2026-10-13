@@ -41,7 +41,7 @@ fn admitted(
         size_bytes: 100,
         contract: coding::CONTRACT.into(),
     };
-    Ok((task, attempt, report))
+    Ok((task, store.development_attempt(&attempt.id)?, report))
 }
 fn identity() -> EventIdentity {
     EventIdentity {
@@ -180,10 +180,11 @@ fn authority_rotates_only_after_stop_and_old_generations_cannot_complete_replace
         .select_coding_execution(&attempt.id, "coding-one", None)?
         .ok_or("admission")?;
     assert_ne!(first.binding.generation, replacement.binding.generation);
+    let before = store.development_attempt(&attempt.id)?;
     let id = identity();
     store.receive_coding(&id, &old)?;
     assert!(!accept(&mut store, &id, &old)?);
-    assert_eq!(store.development_attempt(&attempt.id)?, attempt);
+    assert_eq!(store.development_attempt(&attempt.id)?, before);
     Ok(())
 }
 #[test]
@@ -245,7 +246,7 @@ fn schema_sixteen_migration_freezes_existing_attempts_on_legacy_reader() -> Test
     let mut store = CleanStore::open(&path, 3)?;
     let (_, attempt, _) = admitted(&mut store)?;
     store.connection.execute_batch(
-        "DROP TABLE coding_inbox;DROP TABLE coding_executions;UPDATE clean_schema SET version=16;",
+        "DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; DROP TABLE coding_inbox;DROP TABLE coding_executions;UPDATE clean_schema SET version=16;",
     )?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
@@ -325,5 +326,35 @@ fn export_coding_cutover_fixture() -> TestResult {
         v1::DevelopmentAttemptState::Running,
         None,
     )?;
+    Ok(())
+}
+
+#[test]
+fn reporting_and_cleanup_projections_survive_restart_and_notify_watches() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("status.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (_, attempt, report) = admitted(&mut store)?;
+    assert_eq!(attempt.reporting_state, "awaiting");
+    assert!(attempt.cleanup_state.is_empty());
+    let identity = identity();
+    store.receive_coding(&identity, &report)?;
+    assert!(accept(&mut store, &identity, &report)?);
+    let accepted = store.development_attempt(&attempt.id)?;
+    assert_eq!(accepted.reporting_state, "accepted");
+    assert_eq!(accepted.cleanup_state, "pending");
+    let cursor = store.current_cursor(DEVELOPMENT_SERVICE)?;
+    store.coding_cleanup_complete(&attempt.id)?;
+    let cleaned = store.development_attempt(&attempt.id)?;
+    assert_eq!(cleaned.reporting_state, "accepted");
+    assert_eq!(cleaned.cleanup_state, "complete");
+    assert!(cleaned.resource_version > accepted.resource_version);
+    assert!(store.current_cursor(DEVELOPMENT_SERVICE)? > cursor);
+    let cleaned_cursor = store.current_cursor(DEVELOPMENT_SERVICE)?;
+    store.coding_cleanup_complete(&attempt.id)?;
+    assert_eq!(store.current_cursor(DEVELOPMENT_SERVICE)?, cleaned_cursor);
+    drop(store);
+    let store = CleanStore::open(&path, 3)?;
+    assert_eq!(store.development_attempt(&attempt.id)?, cleaned);
     Ok(())
 }

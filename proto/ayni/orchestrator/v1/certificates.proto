@@ -3,6 +3,7 @@ package ayni.orchestrator.v1;
 
 // Trusted operator API; never exposed on the custom-client listener.
 service CertificateService {
+  rpc WatchCertificates(WatchCertificatesRequest) returns (stream WatchCertificatesResponse);
   rpc ListCertificates(ListCertificatesRequest) returns (ListCertificatesResponse);
   rpc GetCertificate(GetCertificateRequest) returns (GetCertificateResponse);
   rpc CreateCertificate(CreateCertificateRequest) returns (CreateCertificateResponse);
@@ -101,3 +102,16 @@ message DeleteCertificateRequest {
   uint64 expected_resource_version = 3;
 }
 message DeleteCertificateResponse {}
+
+// Omit after_cursor for a current snapshot followed by durable replay. Expired
+// cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
+message WatchCertificatesRequest {
+  optional uint64 after_cursor = 1;
+}
+message WatchCertificatesResponse {
+  uint64 cursor = 1;
+  Certificate certificate = 2;
+  bool deleted = 3;
+  // Marks the snapshot boundary, including an empty snapshot.
+  bool snapshot_complete = 4;
+}

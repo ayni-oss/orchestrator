@@ -225,7 +225,7 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
 type SchemaMigration = fn(&Connection) -> Result<(), CleanStoreError>;
 
 fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64, CleanStoreError> {
-    let migrations: [(i64, SchemaMigration); 10] = [
+    let migrations: [(i64, SchemaMigration); 11] = [
         (7, migrate_schema_seven),
         (8, super::builder_cutover::migrate),
         (9, super::preparation_migration::migrate),
@@ -236,6 +236,7 @@ fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64
         (14, super::verification_consumer::migrate),
         (15, super::runtime_operations::migrate),
         (16, super::coding_events::migrate),
+        (17, super::lifecycle_events::migrate),
     ];
     for (source_version, migrate) in migrations {
         if version == source_version {
@@ -258,6 +259,8 @@ fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), 
                     | "runtime_operation_inbox"
                     | "coding_executions"
                     | "coding_inbox"
+                    | "lifecycle_journal"
+                    | "lifecycle_outbox"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -285,6 +288,8 @@ fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> 
                     | "runtime_operation_inbox"
                     | "coding_executions"
                     | "coding_inbox"
+                    | "lifecycle_journal"
+                    | "lifecycle_outbox"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -323,7 +328,10 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',17,unixepoch());
+VALUES ('control_plane',18,unixepoch());
+CREATE TABLE lifecycle_journal(id TEXT PRIMARY KEY,resource_id TEXT NOT NULL,resource_type TEXT NOT NULL,event_cursor INTEGER NOT NULL,projection_sha256 TEXT NOT NULL,aggregate_revision INTEGER NOT NULL,payload BLOB NOT NULL,created_at INTEGER NOT NULL,UNIQUE(resource_type,resource_id,event_cursor));
+CREATE TABLE lifecycle_outbox(journal_id TEXT PRIMARY KEY REFERENCES lifecycle_journal(id),source TEXT NOT NULL,event_id TEXT NOT NULL,payload BLOB NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,stored_at INTEGER,next_attempt_at INTEGER NOT NULL DEFAULT 0,broker_sequence INTEGER,last_error TEXT NOT NULL DEFAULT '',UNIQUE(source,event_id));
+CREATE INDEX lifecycle_outbox_pending ON lifecycle_outbox(next_attempt_at,journal_id) WHERE stored_at IS NULL;
 CREATE TABLE coding_executions(attempt_id TEXT PRIMARY KEY,admission TEXT,stopped INTEGER NOT NULL DEFAULT 0,last_sequence INTEGER NOT NULL DEFAULT 0,pod_uid TEXT,terminal INTEGER NOT NULL DEFAULT 0,request_digest TEXT NOT NULL DEFAULT '');
 CREATE TABLE coding_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,attempt_id TEXT NOT NULL,generation TEXT NOT NULL,pod_uid TEXT NOT NULL,sequence INTEGER NOT NULL,kind INTEGER NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL DEFAULT 'pending',accepted_source TEXT,accepted_id TEXT,accepted_payload BLOB,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,stored_at INTEGER,broker_sequence INTEGER,PRIMARY KEY(source,event_id),UNIQUE(attempt_id,generation,pod_uid,sequence));
 CREATE UNIQUE INDEX coding_terminal ON coding_inbox(attempt_id,generation,pod_uid) WHERE kind=2;

@@ -437,7 +437,7 @@ fn operation(rpc: &'static str) -> Option<Operation> {
         | "GetRepositoryConnection"
         | "ListRepositorySnapshots"
         | "GetRepositorySnapshot" => (REPOSITORIES_READ, MAX_UNARY_DEADLINE),
-        "WatchRepositories" => (REPOSITORIES_READ, MAX_WATCH_DEADLINE),
+        "WatchRepositories" | "WatchProjects" => (REPOSITORIES_READ, MAX_WATCH_DEADLINE),
         "CreateProject"
         | "UpdateProject"
         | "ArchiveProject"
