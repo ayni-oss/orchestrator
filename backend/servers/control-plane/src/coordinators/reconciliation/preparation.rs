@@ -402,6 +402,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
                 &pending.request,
                 token,
                 reporting.as_ref(),
+                cursor
+                    .preparation
+                    .as_ref()
+                    .ok_or("runtime_preparation_missing")?
+                    .verification_authority
+                    .events(),
             )
             .await?;
         Ok(())

@@ -9,9 +9,13 @@
     const projects = subscribeRefresh("app:projects", { intervalMs: 120_000 });
     const repositories = subscribeRefresh("app:repositories", { intervalMs: 120_000 });
     const runtimes = subscribeRefresh("app:runtimes", { intervalMs: 120_000 });
-    const tasks = subscribeRefresh("app:tasks", { intervalMs: 30_000 });
-    return () => { projects(); repositories(); runtimes(); tasks(); };
+    return () => { projects(); repositories(); runtimes(); };
   });
+  // Task details already receive resumable updates; retain list discovery repair
+  // without shortening the detail stream's low-frequency safety read.
+  $effect(() => subscribeRefresh("app:tasks", {
+    intervalMs: page.route.id === "/tasks/[taskId]" ? 120_000 : 30_000,
+  }));
   const events = createNotificationEvents();
   $effect(() => events.action(page.form));
   $effect(() => events.load(page.url.pathname, page.data));

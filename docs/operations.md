@@ -178,3 +178,49 @@ or quiesced backup to enumerate active and resumable dependencies. Existing
 generations, including their retries, retain their original authority. Historical
 reader/evidence retirement requires a separate audit; never delete retained PVCs
 as a rollout shortcut. See [verification operations](verification-events.md).
+
+
+## Compatibility drain inventory
+
+Run `python3 scripts/operations/verification-drain.py DATABASE` against an
+operator-owned SQLite database or quiesced backup. The tool opens the existing
+database read-only and reads one transaction snapshot, without migrations or
+cleanup. It supports schemas 13–18; an unsupported schema, missing table, malformed
+cursor, unknown authority/phase/state, orphaned coding state or exceeded 10,000-row
+inventory bound fails the command without producing a partial report. JSON cursor
+size is bounded at 4 MiB. Reporting configuration and evidence bytes are not
+validated by this inventory.
+
+`reachable_generations` includes managed preparations, pending verification,
+trust review continuations, official-builder operations and removed-repository
+cleanup. Failed, paused and Pod-less continuations stay visible. Missing frozen
+reporting selection counts as legacy; shadow verification still depends on the
+legacy authoritative reader. The report shows retained verification and legacy
+phase/builder reader dependencies and preserved legacy failure counters without printing frozen requests, credential
+references, evidence bytes or trust diagnostics.
+
+`coding_attempts` includes historical attempts as well as attempts with incomplete
+cleanup, queued/running/input states or pending receipts. Schemas before 17 and
+missing coding-admission rows count conservatively as legacy. Completed cleanup
+does not remove a publication recovery dependency: the active succeeded/failed
+attempt remains a `publication_recovery_candidate`. This deliberately overcounts
+until the versioned application reader checks its frozen Protobuf result, commit,
+publication outcome and deadline. It does not claim a retry is currently eligible.
+Historical legacy attempt counts remain separate from live collector counts.
+
+`retained_history_rows` counts runtime revisions/artifacts, attempt history,
+resource events, page snapshots, action receipts and event journals/outboxes.
+These counts identify retained representations to audit; they do not determine
+which payloads use a legacy encoding. Check historical API/snapshot reads with a
+compatible binary and inspect retained PVC recovery/evidence files, Kubernetes
+workloads and provider readback separately. An empty SQLite inventory cannot
+prove those external dependencies have drained.
+
+The report always sets `historical_reader_and_evidence_audit_required: true` and
+`compatibility_reader_removal_safe: false`. Zero live dependencies never authorizes
+reader removal, retained-data deletion or a rollback to an incompatible schema.
+Keep versioned historical readers and publication recovery until an explicit
+migration and external evidence audit establish that they are unnecessary.
+
+Verify the report with
+`python3 -m unittest discover -s scripts/operations -p 'test_*.py'`.

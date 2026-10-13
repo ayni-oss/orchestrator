@@ -58,9 +58,12 @@ Background refresh also pauses during submissions and navigation so a lifecycle
 update cannot cancel a redirect. Mutation-triggered refresh uses the same
 coordinator and can refresh explicitly after saving.
 
-Task details retain their stream through reporting and cleanup. Task lists keep
-their existing repair interval; project task summaries have a 30-second repair
-subscription. Repository onboarding retains its own stream cursor independently
+Task details retain their stream through reporting and cleanup with a 120-second
+repair interval. Global subscriptions do not shorten that interval. Task lists
+and project task summaries keep 30-second discovery reads because no global task
+watch API exists. The task-list loader declares task, project and runtime
+dependencies so these reads refresh its data. Stream interruption remains visible
+after a successful repair read; a read does not establish stream health. Repository onboarding retains its own stream cursor independently
 from runtime-profile updates.
 
 Task attempt projections expose the retained producer generation's reporting

@@ -10,9 +10,9 @@ use ayni_orchestrator_runtime::{
 use std::{fs, io, path::Path};
 pub mod reporting;
 
-/// Run verification and commit its result before writing a compact Pod reference.
+/// Run verification and retain its result before delivering the selected report.
 /// # Errors
-/// Returns safe classification codes; the retained record survives termination-log failure.
+/// Returns safe classification codes; legacy termination-log failure preserves the record.
 pub async fn run() -> io::Result<()> {
     use tracing::Instrument;
     let context = std::env::var("TRACEPARENT").ok().and_then(|parent| {
@@ -81,7 +81,13 @@ async fn run_verification() -> io::Result<()> {
     };
     let retained = retain(
         Path::new("/output"),
-        Path::new("/dev/termination-log"),
+        legacy_termination_reference(
+            admission.is_some(),
+            std::env::var("VERIFICATION_REPORTING_AUTHORITY")
+                .ok()
+                .as_deref(),
+            Path::new("/dev/termination-log"),
+        ),
         &execution,
         &pod_uid,
         request_digest,
@@ -97,6 +103,14 @@ async fn run_verification() -> io::Result<()> {
         .await?;
     }
     retained
+}
+
+fn legacy_termination_reference<'a>(
+    reporting: bool,
+    authority: Option<&str>,
+    termination: &'a Path,
+) -> Option<&'a Path> {
+    (!(reporting && authority == Some("events"))).then_some(termination)
 }
 
 fn retained_result(output: &Path) -> io::Result<()> {
@@ -144,7 +158,7 @@ fn failure(reason: VerificationFailure) -> io::Error {
 #[tracing::instrument(name="verification.report", target="ayni_orchestrator_observability::verification", skip_all, fields(report_bytes = tracing::field::Empty))]
 fn retain(
     output: &Path,
-    termination: &Path,
+    termination: Option<&Path>,
     execution: &str,
     pod_uid: &str,
     request_digest: String,
@@ -179,8 +193,12 @@ fn retain(
     };
     tracing::Span::current().record("report_bytes", bytes.len());
     persist(output, &bytes).map_err(|_| failure(VerificationFailure::ReportingFailed))?;
-    fs::write(termination, format!("{CONTRACT}:{RECORD_FILE}"))
-        .map_err(|_| failure(VerificationFailure::ReportingFailed))?;
+    // Event-selected generations use the retained receipt as their only normal
+    // reporting path. Legacy generations still need the compact Pod reference.
+    if let Some(termination) = termination {
+        fs::write(termination, format!("{CONTRACT}:{RECORD_FILE}"))
+            .map_err(|_| failure(VerificationFailure::ReportingFailed))?;
+    }
     match record.outcome {
         VerificationOutcome::Report { .. } => Ok(()),
         VerificationOutcome::Failed { reason } => Err(failure(reason)),

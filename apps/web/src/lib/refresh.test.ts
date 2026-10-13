@@ -99,6 +99,31 @@ it("shares an event stream and uses a low-frequency repair timer", async () => {
   expect(stopStream).toHaveBeenCalledTimes(1);
 });
 
+it("keeps stream interruption visible after a successful repair read", async () => {
+  vi.useFakeTimers();
+  let status!: (ok: boolean) => void;
+  const invalidate = vi.fn().mockResolvedValue(undefined);
+  const onResult = vi.fn();
+  const refresh = createRefreshCoordinator(invalidate, () => true, (_scope, _changed, onStatus) => {
+    status = onStatus;
+    return () => {};
+  });
+  const first = refresh.subscribe("app:runtimes", { intervalMs: 10_000, onResult });
+  status(true);
+  status(false);
+  const lateResult = vi.fn();
+  const second = refresh.subscribe("app:runtimes", { intervalMs: 30_000, onResult: lateResult });
+  expect(lateResult).toHaveBeenLastCalledWith(false);
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith("app:runtimes");
+  expect(onResult).toHaveBeenLastCalledWith(false);
+  expect(lateResult).toHaveBeenLastCalledWith(false);
+  status(true);
+  expect(onResult).toHaveBeenLastCalledWith(true);
+  expect(lateResult).toHaveBeenLastCalledWith(true);
+  first(); second();
+});
+
 it("retains an event deferred while editing and refreshes once editing ends", async () => {
   vi.useFakeTimers();
   let editing = true;

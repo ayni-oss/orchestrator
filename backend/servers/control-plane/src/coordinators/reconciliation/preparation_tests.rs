@@ -64,6 +64,7 @@ impl ExecutionBackend for Backend {
         _: &GenericRequest<P>,
         _: &str,
         _: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
+        _: bool,
     ) -> ExecutionResult<()> {
         Err("unexpected_verification".into())
     }

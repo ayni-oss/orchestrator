@@ -207,12 +207,15 @@ test("live connection updates retain ready identity and surface rejected replace
   await expect(page.locator("body")).not.toContainText("push-only-value");
 });
 
-test("expired operator cursor opens a fresh snapshot stream without Last-Event-ID", async ({ page, request }) => {
+test("operator stream reconnect opens fresh snapshots without a shared Last-Event-ID", async ({ page, request }) => {
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
   const headers: Array<Record<string, string>> = [];
-  await page.route("**/updates/connections", async route => {
+  await page.route("**/updates/all", async route => {
     headers.push(route.request().headers());
-    if (headers.length === 1) return route.fulfill({ status: 200, contentType: "text/event-stream", body: 'id: 999\nevent: error\ndata: {"reason":"watch_cursor_expired"}\n\n' });
+    // Combined streams cannot emit one cursor for independently versioned
+    // scopes. A failed upstream watch closes the relay and every scope takes
+    // a new snapshot when the browser reconnects.
+    if (headers.length === 1) return route.fulfill({ status: 200, contentType: "text/event-stream", body: 'event: error\ndata: {"reason":"watch_cursor_expired"}\n\n' });
     return route.continue();
   });
   await page.goto("/container-registries/github");

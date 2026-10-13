@@ -78,10 +78,18 @@ impl ExecutionBackend for RuntimeKubernetes {
         request: &ExecutionRequest<P>,
         token: &str,
         reporting: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
+        event_authoritative: bool,
     ) -> ExecutionResult<()> {
-        self.start(name, runtime, request, token, reporting)
-            .await
-            .map_err(ExecutionError::from)
+        self.start(
+            name,
+            runtime,
+            request,
+            token,
+            reporting,
+            event_authoritative,
+        )
+        .await
+        .map_err(ExecutionError::from)
     }
     async fn start_trust_lock<P: Serialize + Sync>(
         &self,

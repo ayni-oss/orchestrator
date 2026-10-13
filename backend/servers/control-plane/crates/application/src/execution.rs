@@ -56,6 +56,7 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         request: &ExecutionRequest<P>,
         token: &str,
         reporting: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
+        event_authoritative: bool,
     ) -> impl Future<Output = ExecutionResult<()>> + Send;
     fn start_trust_lock<P: Serialize + Sync>(
         &self,

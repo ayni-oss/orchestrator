@@ -1,6 +1,6 @@
 <script lang="ts">
   import { notify } from "$lib/notifications.js";
-  import { onMount, tick } from "svelte";
+  import { tick } from "svelte";
   import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { PageData } from "../../routes/repositories/[repositoryId]/$types";
@@ -52,17 +52,14 @@
       if(result.type==="success" && registrySave) editVersion=selected?.resourceVersion ?? "";
     };
   };
-  onMount(()=>{
-    let previous=new Map(profiles.map(profile=>[profile.id,profile.state]));
-    const timer=setInterval(()=>{
-      for (const profile of profiles) {
-        if (previous.has(profile.id) && previous.get(profile.id) !== profile.state) {
-          notify(["failed", "degraded"].includes(profile.state) ? "warning" : "info", "Runtime update", `${words(profile.kind)} runtime is ${words(profile.state).toLowerCase()}.`);
-        }
+  let previous: Map<string, string> | undefined;
+  $effect(()=>{
+    for (const profile of profiles) {
+      if (previous?.has(profile.id) && previous.get(profile.id) !== profile.state) {
+        notify(["failed", "degraded"].includes(profile.state) ? "warning" : "info", "Runtime update", `${words(profile.kind)} runtime is ${words(profile.state).toLowerCase()}.`);
       }
-      previous=new Map(profiles.map(profile=>[profile.id,profile.state]));
-    },1000);
-    return ()=>clearInterval(timer);
+    }
+    previous=new Map(profiles.map(profile=>[profile.id,profile.state]));
   });
 </script>
 
