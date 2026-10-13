@@ -13,7 +13,7 @@ permissions: {}
 
 jobs:
   github-security:
-    name: GitHub security boundary
+    name: GitHub security
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -29,7 +29,7 @@ jobs:
         run: scripts/ci/check-github-security.sh
 
   metadata:
-    name: conventional title and label
+    name: PR metadata
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -42,7 +42,7 @@ jobs:
           kind-labels: true
 
   cncf:
-    name: CNCF requirements
+    name: Project requirements
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -81,7 +81,7 @@ jobs:
       - run: pnpm docs:check
 
   deployment:
-    name: Helm charts
+    name: Deployment charts
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -115,7 +115,7 @@ jobs:
         run: scripts/ci/check-helm.sh
 
   protobuf:
-    name: protobuf contract
+    name: API contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -166,7 +166,7 @@ jobs:
         run: cargo test -p ayni-orchestrator-api -p ayni-orchestrator-events
 
   integration:
-    name: Infrastructure integration tests
+    name: Tests and tooling
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -187,7 +187,7 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/operations -p 'test_*.py'
 
   ayni:
-    name: Ayni
+    name: Ayni quality
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -246,7 +246,7 @@ jobs:
           if-no-files-found: warn
 
   report:
-    name: Ayni PR comment
+    name: Ayni report
     needs: ayni
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
