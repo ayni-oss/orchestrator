@@ -1,6 +1,6 @@
 # Decision 0009: connectors, projects, and internal assessments
 
-> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture/architecture.md). They do not require compatibility code.
 - Status: accepted; membership, initialization, and registry configuration amended
   by [Decision 0011](0011-project-centered-ui-and-onboarding.md)
 - Date: 2026-10-04

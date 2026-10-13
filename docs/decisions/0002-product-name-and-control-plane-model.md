@@ -5,7 +5,7 @@
 
 ## Historical scope
 
-The product name and application-API-first boundary remain accepted. References to pilot preparation and its resource model are historical; [current architecture](../architecture.md) defines implemented behavior.
+The product name and application-API-first boundary remain accepted. References to pilot preparation and its resource model are historical; [current architecture](../architecture/architecture.md) defines implemented behavior.
 
 ## Decision
 

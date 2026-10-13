@@ -1,9 +1,8 @@
-# Event platform migration and retirement
+# Event reporting compatibility and recovery
 
-Status: proposal, 11 October 2026. This supplements the
-[implementation proposal](event-platform-implementation.md). Milestones below
-define migration dependencies; they do not record completed work or replace
-GitHub delivery issues.
+Current reporting behavior is defined by the [event platform](../architecture/event-platform.md)
+and its flow contracts. This guide records the compatibility gates for retained
+generations and requirements for future reader retirement. GitHub owns delivery status.
 
 ## One authority during migration
 
@@ -22,11 +21,12 @@ validated contents to detect conflicts; do not mint another event on each poll.
 Evidence hashes cover retained bytes. Protobuf serialization must not be treated
 as a canonical representation for event identity.
 
-## Flow cutover order
+## Compatibility invariants by flow
 
-All new event names and payloads remain proposed until contract review.
+The implemented contracts define supported event names and payloads. Preserve
+these invariants when changing readers or admitting a new reporting contract.
 
-| Flow | New behavior | Preserve at cutover |
+| Flow | Reporting responsibility | Preserve across upgrades |
 | --- | --- | --- |
 | Runtime verification | Receive retained report before Pod termination; accept frozen evidence; enqueue cleanup independently | Certificate, lock, source, platform and image bindings; source quality stays separate from runtime trust |
 | Registry probes and image discovery | Typed access, missing-image and digest observations with retained diagnostics | Access failure cannot become image absence; owned probe cleanup follows collection |
@@ -46,7 +46,7 @@ features or move worker tool sequencing into the control plane.
 
 ## What retires, and when
 
-| Current mechanism | Intended replacement | Removal gate |
+| Retained mechanism | Event-selected behavior | Removal gate |
 | --- | --- | --- |
 | Full verification JSON in termination messages | Retained evidence reference and typed result ingestion | Every reachable legacy verification generation has drained; large-report tests pass |
 | Trust outcome scraped from Pod logs | Retained typed trust result | Legacy trust generations and review continuations can resume; diagnostics remain accessible |

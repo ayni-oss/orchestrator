@@ -2,8 +2,8 @@
 
 Verification tracing extends the shared Rust subscriber with an optional
 OpenTelemetry bridge and OTLP/HTTP protobuf exporter. JSON logs and Prometheus
-metrics remain enabled independently. Other flow instrumentation and broker
-integration remain proposed.
+metrics remain enabled independently. Runtime-operation and coding supervision also propagate diagnostic context.
+Accepted facts use the independent lifecycle outbox and JetStream transport.
 
 ## Verification tracing
 
@@ -79,32 +79,6 @@ Control-plane decisions must remain valid during a telemetry outage.
 [Sampling](https://opentelemetry.io/docs/concepts/sampling/),
 [Collector resiliency](https://opentelemetry.io/docs/collector/resiliency/).
 
-## Original source audit (11 October 2026)
-
-The shared [observability library](../backend/libs/observability/src/lib.rs#L24)
-initializes JSON `tracing` logs, includes span context and emits span-close
-records. Its [process span](../backend/libs/observability/src/lib.rs#L60) accepts
-bounded task, attempt, preparation, stage, Job, provider and model fields.
-This is process-local diagnostic context; it does not propagate distributed
-OpenTelemetry context.
-
-The [gRPC boundary](../backend/servers/control-plane/src/adapters/grpc/mod.rs#L215)
-records request identity, completion status and latency. [Worker activity](../backend/workers/runtime-worker/src/coding/activity.rs#L42)
-records stages and failure classifications. The [metrics endpoint](../backend/servers/control-plane/src/process/metrics.rs#L51)
-exposes bounded gRPC and runtime-failure counters. The [local chart](../dev/charts/ayni-orchestrator-local/values.yaml#L196)
-already configures a Prometheus datasource in Grafana.
-
-At the audit commit `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`, the [workspace dependencies](../Cargo.toml#L59) contained `tracing` and
-`tracing-subscriber` without an OpenTelemetry exporter. Verification now adds
-that bridge; the audit findings below explain the remaining flow coverage.
-Existing generic errors and discarded subprocess output remain information
-gaps; installing an exporter alone cannot recover their missing detail.
-
-Instrument trusted worker supervision of subprocesses to expose their duration,
-exit and diagnostic classification. Internal child-process steps require their
-own instrumentation. Neither Kubernetes observation nor an OpenTelemetry
-exporter automatically explains arbitrary repository processes.
-
 ## Separate execution and telemetry paths
 
 ```mermaid
@@ -112,15 +86,15 @@ flowchart LR
     W["Trusted worker"] --> R["Retained result and evidence"]
     R --> C["Controller validation"]
     C --> D["Database: accepted state and outbox"]
-    D --> J["Proposed JetStream delivery"]
+    D --> J["JetStream delivery"]
     C --> K["Consequential Kubernetes cleanup"]
     W -. "Diagnostic spans and logs" .-> O["OpenTelemetry Collector"]
     C -. "Diagnostic spans and logs" .-> O
     O --> T["Trace backend and operator view"]
 ```
 
-JetStream would transport application contracts under their own durability and
-acknowledgement rules. OTLP would export diagnostic signals to the Collector.
+JetStream transports application contracts under their own durability and
+acknowledgement rules. OTLP exports diagnostic signals to the Collector.
 Keep these pipelines independent; telemetry export failure must not consume a
 runtime retry budget or prevent result acceptance, publication or cleanup.
 
@@ -128,7 +102,7 @@ runtime retry budget or prevent result acceptance, publication or cleanup.
 
 Retain task, attempt, operation/preparation and physical execution-generation
 identities in events, evidence and telemetry. Add event and causation identities
-to the proposed durable envelope. Trace/span IDs provide diagnostic links;
+to the durable envelope. Trace/span IDs provide diagnostic links;
 they must not become idempotency keys, admission authority or execution fences.
 
 Propagate W3C `traceparent` and optional `tracestate` through request metadata,
@@ -138,7 +112,7 @@ a restart. Context is optional and untrusted; malformed or missing trace context
 must not invalidate an otherwise valid application result.
 [Context propagation](https://opentelemetry.io/docs/concepts/context-propagation/).
 
-The proposed [CloudEvents contract](cloudevents-contract.md) retains originating
+The [CloudEvents contract](cloudevents-contract.md) retains originating
 trace context in event extensions. Protocol headers can describe individual
 delivery hops; the immutable event keeps its original context.
 

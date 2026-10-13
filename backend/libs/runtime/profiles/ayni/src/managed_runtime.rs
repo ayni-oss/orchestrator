@@ -173,9 +173,7 @@ fn hex(value: &str, length: usize) -> bool {
 }
 
 fn digest(value: &str) -> bool {
-    value
-        .strip_prefix("sha256:")
-        .is_some_and(|value| hex(value, 64))
+    ayni_orchestrator_runtime::runtime_contract::Sha256Digest::parse(value).is_ok()
 }
 
 #[cfg(test)]

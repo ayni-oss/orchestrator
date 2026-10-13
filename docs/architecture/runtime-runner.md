@@ -2,7 +2,7 @@
 
 This is the implemented worker contract. Optional independent assessment and separate task-stage pods remain
 [execution-isolation research](https://github.com/ayni-oss/orchestrator/issues/128).
-Ordinary lock protections remain until the [environment-change flow](environment-changes.md) is implemented.
+Ordinary lock protections remain until the [environment-change flow](../guides/environment-changes.md) is implemented.
 
 One worker owns runtime admission, checkout, coding, commits, full quality
 checking, repair, push and draft creation. Kubernetes fixes the image digest,
@@ -56,7 +56,7 @@ New event-mode physical executions report retained progress, activity, usage,
 publication journal milestones and final results through authenticated ingress.
 Final acceptance can precede process exit. Replacement writers and publication
 retries still wait for observed stop. Migrated attempts retain their original
-reader; see [coding lifecycle reporting](coding-events.md).
+reader; see [coding lifecycle reporting](../reference/coding-events.md).
 
 ## Worker sandbox
 
@@ -81,7 +81,7 @@ Environment preparation runs separate registry-discovery, build/certification,
 publication and verification Jobs. Every successful build publishes. Coding workers
 receive only the frozen verified digest, source/model access and pull-only registry
 access. They have no signing key, push credential or engine/node socket. See
-[managed runtime execution](managed-runtime-execution.md) for phase recovery.
+[managed runtime execution](../guides/managed-runtime-execution.md) for phase recovery.
 
 ## Retained runtime verification
 

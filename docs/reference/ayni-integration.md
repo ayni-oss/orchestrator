@@ -18,8 +18,7 @@ cannot satisfy the full gate. The runtime must pin a CLI release that supports
 these commands and provenance checks; runtime-version changes require actual
 managed-topology verification.
 
-Environment build uses `ayni env build --executor-image <approved digest> --tag
-<candidate>` with selected trusted signing identity. Certification is performed by
+Environment build uses `ayni env build --executor-image <approved digest> --tag <candidate>` with selected trusted signing identity. Certification is performed by
 that supported build contract after dependencies are prepared; an unsigned result
 cannot become Ready. Separate publication pushes the certified candidate and
 separate verification consumes Ayni’s signed metadata and fresh managed signals.
@@ -30,5 +29,5 @@ it asserts `execution_mode: host` and does not build repository environment imag
 
 
 The official builder identity is resolved through the [supported builder catalog](repository-builders.md).
-Builder provenance, environment certification, and task evidence have different subjects; see [assurance boundaries](assurance.md).
-The [environment-change flow](environment-changes.md) is planned work and does not relax current task lock protection.
+Builder provenance, environment certification, and task evidence have different subjects; see [assurance boundaries](../architecture/assurance.md).
+The [environment-change flow](../guides/environment-changes.md) is planned work and does not relax current task lock protection.

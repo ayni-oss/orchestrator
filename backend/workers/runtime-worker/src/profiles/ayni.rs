@@ -486,11 +486,7 @@ pub(crate) fn build_target() -> io::Result<String> {
 }
 
 pub(crate) fn image_id(value: &str) -> bool {
-    value.len() == 71
-        && value.starts_with("sha256:")
-        && value[7..]
-            .bytes()
-            .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
+    ayni_orchestrator_domain::digest::digest(value)
 }
 
 pub(crate) fn build_environment(signing: bool) -> io::Result<Vec<(&'static str, String)>> {

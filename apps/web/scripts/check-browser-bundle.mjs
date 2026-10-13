@@ -22,6 +22,7 @@ const sourceRoot = resolve(root, "src");
 for (const path of await files(sourceRoot)) {
   if (!/\.(?:svelte|ts)$/u.test(path)) continue;
   const name = relative(sourceRoot, path).split(sep).join("/");
+  if (name.startsWith("tests/") || /\.(?:test|spec)\.ts$/u.test(name)) continue;
   const serverOnly = name.includes("/server/") || name.endsWith(".server.ts") || name.endsWith("/+server.ts");
   const contents = await readFile(path, "utf8");
   if (!serverOnly && ["@ayni-orchestrator/bff", "@ayni-orchestrator/grpc-bindings"]

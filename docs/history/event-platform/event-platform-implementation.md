@@ -1,5 +1,7 @@
 # Event platform implementation proposal
 
+> Historical research from 11 October 2026. Start with the [current event platform](../../architecture/event-platform.md) for implemented behavior. The proposal and source inventory below preserve provenance.
+
 Status: proposal, 11 October 2026. Application source audited at
 `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`; no implementation or cluster
 validation is claimed. Delivery requirements and status belong in GitHub issues. The repository is
@@ -80,7 +82,7 @@ Existing client snapshots remain projections rather than a replacement journal.
 ### Contracts and encoding
 
 Add versioned lifecycle payloads alongside the existing
-[protocol tooling](../proto/README.md). A registry maps each event type to its
+[protocol tooling](../../../proto/README.md). A registry maps each event type to its
 payload descriptor, producer role, validator, ordering scope and progression
 gate. CloudEvents context carries identity and correlation; typed payloads carry
 frozen bindings and operation-specific evidence.
@@ -88,7 +90,7 @@ frozen bindings and operation-specific evidence.
 Use generated ProtoJSON codecs inside structured CloudEvents JSON for the initial
 NATS contract. Test optional presence, unknown enums and supported schema versions.
 Enforce JSON compatibility alongside Buf checks; binary compatibility alone is
-insufficient. See the [payload and envelope contract](cloudevents-contract.md#typed-payloads).
+insufficient. See the [payload and envelope contract](../../reference/cloudevents-contract.md#typed-payloads).
 
 Separate activity sequence from authoritative aggregate revision. Missing advisory
 updates cannot block a final result; terminal acceptance uses current state and
@@ -112,7 +114,7 @@ Add OpenTelemetry at the shared Rust logging boundary and instrument verificatio
 first. Propagate creation context, link retries and flush short-lived workers
 within a bounded timeout. Collector failure does not consume execution retries.
 Keep JSON logs and Prometheus; use the separate
-[observability proposal](observability-and-events.md) for instrumentation boundaries.
+[observability proposal](../../reference/observability-and-events.md) for instrumentation boundaries.
 
 ## Implementation order
 
@@ -155,7 +157,7 @@ its admission and retained history. The analysis UI can offer that action.
 The local Helm chart now provisions a persistent, bounded lifecycle JetStream
 stream, an accepted-event outbox publisher, a durable verification cleanup consumer
 and Grafana backlog metrics;
-see [local broker operations](local-development.md#persistent-local-jetstream)
+see [local broker operations](../../operations/local-development.md#persistent-local-jetstream)
 for implemented limits, replay expiry, access boundaries and recovery checks.
 
 Evaluate on the explicit Docker Desktop Kubernetes context with the existing
@@ -176,7 +178,7 @@ tests pass. [Kubernetes watch semantics](https://kubernetes.io/docs/reference/us
 
 ## Where the detail lives
 
-- [Migration and retirement](event-platform-migration.md) defines per-flow cutover, compatibility gates and rollback.
+- [Migration and retirement](../../operations/event-compatibility.md) defines per-flow cutover, compatibility gates and rollback.
 - [Flow inventory](control-plane-event-flows.md) records current behavior and its source locations.
-- [CloudEvents contract](cloudevents-contract.md) defines identity, encoding and tracing metadata.
-- [Observability approach](observability-and-events.md) defines signals, instrumentation and diagnostic limits.
+- [CloudEvents contract](../../reference/cloudevents-contract.md) defines identity, encoding and tracing metadata.
+- [Observability approach](../../reference/observability-and-events.md) defines signals, instrumentation and diagnostic limits.

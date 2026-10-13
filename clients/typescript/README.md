@@ -21,5 +21,5 @@ not a browser entrypoint.
 
 This package is not published. Approved clients receive the canonical private
 proto/descriptor bundle described in the
-[custom-client guide](../../docs/custom-client-access.md); generated SDK
+[custom-client guide](../../docs/reference/custom-client-access.md); generated SDK
 distribution still requires a separate publication decision.

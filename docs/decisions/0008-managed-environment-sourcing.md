@@ -1,7 +1,7 @@
 # Decision 0008: managed environment sourcing
 
-> Superseded in part (2026-10-07): repository images now always publish to the selected registry and pass separate pull-only verification. Optional registry and unpublished/node-local distribution paths are removed. See [product flow](../ayni-product-flow.md). Original decision provenance follows unchanged.
-> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
+> Superseded in part (2026-10-07): repository images now always publish to the selected registry and pass separate pull-only verification. Optional registry and unpublished/node-local distribution paths are removed. See [product flow](../guides/ayni-product-flow.md). Original decision provenance follows unchanged.
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture/architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-10-02
 - Supersedes: the Ayni Managed GHCR publication and GitHub Actions build model in Decision 0007

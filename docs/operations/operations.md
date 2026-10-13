@@ -14,32 +14,31 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Deploying schema 14 preserves the schema-11 receipt inbox and schema-12
-verification journal/outbox, adds authoritative receipt decisions, and freezes
-reporting authority per preparation. It also adds durable outbox retry scheduling
-and broker acknowledgement bookkeeping without changing accepted event bytes.
-The schema-13 to schema-14 migration preserves pending events. Runtime acceptance and cursor cleanup intent
-remain in one transaction. Earlier schema migrations run in order before this upgrade. The schema-9 to schema-10 migration upgrades retained
-runtime preparation in one transaction. The migration preserves frozen source and runtime identities,
-operation names, retained verification evidence and remaining publication budget.
-It also indexes immutable task creation timestamps for project summaries. An
-invalid cursor or task aborts the transaction; repair the invalid retained record
-from a trusted backup before retrying, rather than deleting pending work.
+Schema 18 is the current database format. Recognized schemas 6–17 migrate in
+order before reconciliation. It retains typed preparation, authenticated
+verification/runtime-operation/coding inboxes, accepted decisions, outbox retry
+and acknowledgement state, and operator lifecycle journal/outbox records.
 
-Back up the database before upgrading and run one control-plane writer during the
-upgrade. Earlier binaries reject schema 14, so rollback requires restoring the
-pre-upgrade backup while preserving and reconciling any external work performed
-since the backup. Do not run an earlier binary against the upgraded database.
+The schema-9 to schema-10 migration converts retained preparation cursors in one
+transaction while preserving frozen source/runtime identity, operation names,
+evidence, credentials and remaining publication budget. Later migrations preserve
+pending receipts and events. Malformed retained state aborts the upgrade; repair
+from a trusted backup rather than deleting pending work.
+
+Back up the database and run one control-plane writer during upgrade. Earlier
+binaries may reject the upgraded schema. Rollback requires a compatible binary
+or a quiesced backup restoration that reconciles external work performed since
+the backup. Do not run an earlier binary against an unsupported schema.
 After restart, uncertain publication still reads the registry before retrying, and
 accepted runtime activation and its durable cleanup intent now precede workload
 cleanup; cleanup completion cannot overwrite a replacement generation. Credential cleanup retains revisions
 referenced by preparation as well as pending Jobs, then releases preparation
 references once activation and workload cleanup complete.
 
-## Breaking cutover
+## Historical builder cutover
 
 Use the explicit `docker-desktop` context for local deployment. Back up the private
-database and stop obsolete global operations before deploying schema 9. Upgrade server,
+database and stop obsolete global operations when crossing the schema-9 builder cutover. Upgrade server,
 worker, generated clients, BFF and UI together. Migration retires obsolete global
 settings and operations while preserving connections, certificates, registries,
 runtime history, published images and retained tasks. Cleanup is limited to
@@ -155,17 +154,17 @@ A TLS Docker endpoint is authenticated transport, not proof of isolation.
 `build.isolated_engine`. Disposable engines require the configured local-development
 or dedicated-builder mode and retain their scheduling and network constraints.
 Never point external-engine settings at the Docker Desktop host/node daemon.
-See [engine boundaries](repository-builders.md#engines-and-security).
+See [engine boundaries](../reference/repository-builders.md#engines-and-security).
 
 Builder candidates are disposable engine state. No artifact PVC or manual
 unpublished-image cleanup flow is needed. Normal Kubernetes image caching remains
 kubelet-owned. Retry analysis and Rebuild never purge node caches or registry images.
 
-See [repository-selected official builders](repository-builders.md) for immutable
+See [repository-selected official builders](../reference/repository-builders.md) for immutable
 version selection, attempt engines, security modes and recovery.
 
 Opt-in verification receipt and safe delivery recovery are described in the
-[verification event contract](verification-events.md). Keep reporting off until
+[verification event contract](../reference/verification-events.md). Keep reporting off until
 the supervisor image, ingress/RBAC and transport boundary have been validated
 together; receipt alone does not activate runtimes.
 
@@ -177,7 +176,7 @@ and original endpoints available while frozen event generations drain. Use
 or quiesced backup to enumerate active and resumable dependencies. Existing
 generations, including their retries, retain their original authority. Historical
 reader/evidence retirement requires a separate audit; never delete retained PVCs
-as a rollout shortcut. See [verification operations](verification-events.md).
+as a rollout shortcut. See [verification operations](../reference/verification-events.md).
 
 
 ## Compatibility drain inventory

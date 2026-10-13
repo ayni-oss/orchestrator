@@ -1,13 +1,13 @@
 # Decision 0006: Reusable application chart and local Helm composition
 
-> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture/architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-09-28
 - Supersedes: [Decision 0001](0001-local-kubernetes-deployment.md)
 
 ## Historical scope
 
-The Helm composition, explicit Docker Desktop context, and loopback deployment boundary remain accepted. Its pilot storage and Docker-in-Docker worker descriptions are historical; [current architecture](../architecture.md) defines the resource and runner model.
+The Helm composition, explicit Docker Desktop context, and loopback deployment boundary remain accepted. Its pilot storage and Docker-in-Docker worker descriptions are historical; [current architecture](../architecture/architecture.md) defines the resource and runner model.
 
 ## Decision
 
@@ -89,8 +89,8 @@ A Kubernetes pod cannot be assumed to contain a container engine. Coding and
 assessment containers pull a controller-admitted digest and start it through
 the platform launcher; they do not build an Ayni environment, use
 Docker-in-Docker, or mount a Docker socket. The worker remains non-root and has
-no Kubernetes service-account token. See the [shared runtime runner](../runtime-runner.md)
-and [Ayni integration contract](../ayni-integration.md).
+no Kubernetes service-account token. See the [shared runtime runner](../architecture/runtime-runner.md)
+and [Ayni integration contract](../reference/ayni-integration.md).
 
 ## Consequences
 
@@ -114,5 +114,5 @@ Collector and Jaeger, and provisions Jaeger as a Grafana datasource. It removes
 kube-state-metrics, its scrape and dedicated RBAC, and the provisioned-PVC-size
 series. Existing kubelet/cAdvisor metrics remain. The versions listed above
 record the original decision; current pinned images are in the local chart values.
-See [observability](../observability-and-events.md) for verification tracing and
+See [observability](../reference/observability-and-events.md) for verification tracing and
 its independent failure behavior.

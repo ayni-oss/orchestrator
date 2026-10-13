@@ -99,8 +99,8 @@ SQLite schema 18 adds lifecycle journal/outbox storage and preserves schema-17
 verification, runtime operation and coding facts. Existing generations retain
 their selected readers. Older binaries cannot open the upgraded database.
 Legacy collector and polling retirement remains governed by
-[the migration gates](event-platform-migration.md#what-retires-and-when).
+[the migration gates](../operations/event-compatibility.md#what-retires-and-when).
 
-See the [protocol contract](../proto/README.md),
-[local development](local-development.md) and
-[event platform implementation proposal](event-platform-implementation.md).
+See the [protocol contract](../../proto/README.md),
+[local development](../operations/local-development.md) and
+[event platform implementation proposal](../history/event-platform/event-platform-implementation.md).

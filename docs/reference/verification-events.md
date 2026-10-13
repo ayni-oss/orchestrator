@@ -170,7 +170,7 @@ Acknowledged journal/outbox pairs expire after 30 days, in batches of 128, only
 once their preparation and execution are absent from the active cursor. Pending
 publications and reachable cleanup remain retained. Pruned verification replays
 still fail stale cursor/generation guards. Inbox retention remains separately
-bounded at 100000 observations. See [publisher operations](local-development.md#persistent-local-jetstream)
+bounded at 100000 observations. See [publisher operations](../operations/local-development.md#persistent-local-jetstream)
 for retry timing, metrics and the finite broker deduplication window. Durable
 the first durable broker consumer wakes committed verification cleanup through the existing reconciler.
 
@@ -182,8 +182,8 @@ broker quarantine and removal of compatibility readers require separate gates.
 Other runtime preparation flows use the [runtime operation contract](runtime-operation-events.md).
 
 See [CloudEvents boundaries](cloudevents-contract.md),
-[implementation proposal](event-platform-implementation.md) and
-[migration requirements](event-platform-migration.md).
+[implementation proposal](../history/event-platform/event-platform-implementation.md) and
+[migration requirements](../operations/event-compatibility.md).
 
 ## Operator configuration
 

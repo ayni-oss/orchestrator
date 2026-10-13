@@ -1,6 +1,6 @@
 # Decision 0005: native gRPC product API
 
-> Resource and execution history is superseded. See the [current architecture](../architecture.md) and [API access contract](../custom-client-access.md).
+> Resource and execution history is superseded. See the [current architecture](../architecture/architecture.md) and [API access contract](../reference/custom-client-access.md).
 
 - Status: superseded in resource/compatibility scope by [Decision 0007](0007-clean-v1-runtime-profiles.md)
 - Date: 2026-09-27

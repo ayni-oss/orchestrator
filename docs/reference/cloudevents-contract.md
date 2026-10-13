@@ -1,10 +1,9 @@
 # CloudEvents for Orchestrator lifecycle events
 
-Research snapshot: 11 October 2026. This recommends an envelope for the proposed
-[event architecture](control-plane-events.md). Verification now implements
-authenticated receipt and transactional retained-reader acceptance; the research
-proposals below do not by themselves change another flow. Specification references use the released CloudEvents
-1.0.2 documents, rather than the work-in-progress main branch.
+The shared envelope applies to implemented verification, runtime-operation,
+coding and accepted controller facts. Each flow contract defines its payload,
+producer authority and acceptance rules. Illustrative examples below do not
+introduce additional event types. Specification links use CloudEvents 1.0.2.
 
 Use CloudEvents for lifecycle facts exchanged between workers, the control plane
 and independent consumers. It standardizes the common envelope while
@@ -22,7 +21,7 @@ There is no additional CloudEvents server to deploy.
 
 The database and retained evidence still own accepted state. CloudEvents does
 not define workflow policy, event persistence, authentication or payload
-semantics. The existing [authority levels](control-plane-event-flows.md#signal-levels)
+semantics. The existing [authority levels](../history/event-platform/control-plane-event-flows.md#signal-levels)
 remain necessary. [CloudEvents primer](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/primer.md).
 
 ## Adoption scope
@@ -42,7 +41,7 @@ separate contracts. A CloudEvents envelope does not make their replay permanent
 or replace attempt evidence. High-rate advisory activity has independent
 retention from critical results.
 
-## Proposed envelope
+## Envelope
 
 CloudEvents requires `specversion`, `id`, `source` and `type`. The released
 1.0.2 specification uses `specversion: "1.0"`; it does not version our payloads.
@@ -64,7 +63,7 @@ Current envelopes remain byte-identical across retries. Historical retained
 bytes remain unchanged for audit and replay; normalization does not grant any
 additional authority or repeat a state transition.
 
-The following values and event type are illustrative proposals:
+The following values illustrate the envelope; consult the flow contracts for exact producer bindings:
 
 ```json
 {
@@ -89,7 +88,7 @@ The following values and event type are illustrative proposals:
 }
 ```
 
-These Orchestrator extensions are proposals:
+Flow contracts define supported Orchestrator extensions:
 
 | Extension | Meaning |
 | --- | --- |

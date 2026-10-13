@@ -42,7 +42,7 @@ and managed-check-evidence claims are not created. Claims carry
 
 `customClients.enabled=true` adds the reviewed private TLS listener and requires
 the Secret named by `customClients.secretName`; see
-[`docs/custom-client-access.md`](../../../docs/custom-client-access.md). Each
+[`docs/reference/custom-client-access.md`](../../../docs/reference/custom-client-access.md). Each
 namespace supports one installation because application resource names are
 stable rather than release-prefixed.
 
@@ -70,7 +70,7 @@ Use separate pull and push Secrets; labels cannot substitute for explicit regist
 Builder identity is resolved from the committed lock through the official compatibility
 catalog. Selected certificates supply immutable signing references; selected registry
 connections supply separate push and pull references. `runtime.engineMode` controls
-the explicit engine boundary. See [repository builders](../../../docs/repository-builders.md).
+the explicit engine boundary. See [repository builders](../../../docs/reference/repository-builders.md).
 
 Every successful environment build publishes and is independently verified before
 Ready. Application and worker images remain deployment components. Upgrade using
@@ -82,7 +82,7 @@ administrator-controlled OTLP/HTTP protobuf endpoint including `/v1/traces` and
 restart the control plane. Empty disables export. The reusable chart does not
 install a Collector or trace store; the Docker Desktop umbrella chart supplies
 Collector, Jaeger and a Grafana datasource. Existing JSON logs and Prometheus
-metrics remain independent. See [observability](../../../docs/observability-and-events.md).
+metrics remain independent. See [observability](../../../docs/reference/observability-and-events.md).
 
 
 Accepted-event publication is disabled by default. The trusted local profile may
@@ -90,4 +90,4 @@ set `outbox.natsUrl: nats://jetstream:4222` with `outbox.localDevelopment: true`
 The chart labels only the control-plane Pod as a broker client and supplies the
 publisher configuration; it does not deploy a broker or give workers credentials.
 Production authenticated transport remains separate. See
-[publisher operations](../../../docs/local-development.md#persistent-local-jetstream).
+[publisher operations](../../../docs/operations/local-development.md#persistent-local-jetstream).

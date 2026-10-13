@@ -55,7 +55,7 @@ Node separation reduces co-location risk but does not remove cluster-credential 
 A writable shared volume can carry hostile Git configuration, hooks, symlinks, and modified evidence between stages.
 Stage separation therefore requires validated immutable handoffs and narrowly scoped authority.
 
-The existing privileged build-engine limitations remain in [repository builders](repository-builders.md).
+The existing privileged build-engine limitations remain in [repository builders](../reference/repository-builders.md).
 Operators still own infrastructure isolation, access control, egress restrictions, patching, and disposal.
 No research proposal authorizes a fallback onto trusted nodes or relaxes current worker sandboxing.
 

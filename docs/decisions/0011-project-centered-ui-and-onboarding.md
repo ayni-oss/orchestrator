@@ -1,6 +1,6 @@
 # Decision 0011: project-centered UI and onboarding
 
-> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture/architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-10-05
 - Amends: Decision 0009 membership, initialization, and registry configuration.
@@ -81,7 +81,7 @@ the original project-foundation boundary recorded by this decision. Project
 protobuf APIs retain single-member creation for native callers and repeated
 creation/update fields. An empty update membership list preserves membership;
 nonempty replaces it. Use isolated new storage for validation and the exact
-retained-data cutover procedure in [operations](../operations.md).
+retained-data cutover procedure in [operations](../operations/operations.md).
 
 ## Runtime overview refinement (2026-10-07)
 
@@ -99,5 +99,5 @@ using that runtime. Existing schema-6 profiles without a runtime selection inher
 the legacy repository default until edited. The additive metadata requires no
 state reset. Destination changes invalidate that runtime's admission authority
 until verified, while already admitted work retains its frozen destination and
-credential revision. See the current [architecture](../architecture.md) and
-[onboarding flow](../operator-onboarding.md).
+credential revision. See the current [architecture](../architecture/architecture.md) and
+[onboarding flow](../guides/operator-onboarding.md).

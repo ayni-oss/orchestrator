@@ -33,7 +33,7 @@ runtime; an empty ID follows the global default. Profile reads expose the select
 and effective safe certificate metadata. Custom runtimes reject certificate
 assignment. Signing seeds never appear in runtime profile or frozen task DTOs.
 
-Workflow installation RPCs, resources and fields were intentionally removed. Removed field numbers/names are reserved. Runtime reads expose structured findings, preparation phase and guarded rebuild availability. Upgrade clients and server together; see [cutover operations](../docs/operations.md).
+Workflow installation RPCs, resources and fields were intentionally removed. Removed field numbers/names are reserved. Runtime reads expose structured findings, preparation phase and guarded rebuild availability. Upgrade clients and server together; see [cutover operations](../docs/operations/operations.md).
 
 Repository connections expose durable onboarding status, reason and inspected commit.
 `ConnectGithubRepository` and `CreateRepositoryConnection` accept optional
@@ -75,7 +75,7 @@ default. The task form always submits an explicit task budget, defaulting to 24.
 from the resource API. Rust uses generated Prost/ProtoJSON codecs and the
 CloudEvents SDK in `backend/libs/events`; TypeScript bindings use the same schema.
 Shared fixtures in `testdata/verification` cover both languages. See the
-[verification event contract](../docs/verification-events.md) for authority, wire
+[verification event contract](../docs/reference/verification-events.md) for authority, wire
 validation and recovery boundaries. Authenticated receipt is opt-in and separate from acceptance. Authority is frozen
 per preparation: retained/shadow generations keep the reader, and opted-in event
 generations accept authenticated receipts. `VerificationDecisionRecorded` carries the accepted runtime
@@ -89,7 +89,7 @@ bounded simple identifiers used in fixtures.
 `CodingReportAvailable` binds retained progress/final snapshots to a physical
 writer generation and exact worker request. `CodingDecisionRecorded` includes
 causation, aggregate revision and whether the observation changed task state.
-See [coding lifecycle reporting](../docs/coding-events.md) for authenticated
+See [coding lifecycle reporting](../docs/reference/coding-events.md) for authenticated
 ingestion, independent outcomes, writer fencing and retained-envelope recovery.
 
 ## Operator lifecycle and watch contracts
@@ -105,4 +105,4 @@ accepted-fact delivery mechanism. It cannot authorize a mutation through broker 
 snapshots. Updates carry their cursor and deletions set `deleted`. An expired
 cursor requires a fresh snapshot; cursors cannot move across services. Connections
 and certificates remain trusted-operator APIs. See
-[operator lifecycle facts and streams](../docs/operator-projections.md).
+[operator lifecycle facts and streams](../docs/reference/operator-projections.md).

@@ -48,5 +48,5 @@ The UI must expose the failing preparation stage, shared impact, and corrective 
 ## Design dependencies
 
 - [Execution isolation research #128](https://github.com/ayni-oss/orchestrator/issues/128) defines safe candidate execution and handoff options.
-- [Assurance boundaries](assurance.md) separates environment certification, quality evidence, independent assessment, and merge approval.
+- [Assurance boundaries](../architecture/assurance.md) separates environment certification, quality evidence, independent assessment, and merge approval.
 - [Managed runtime execution](managed-runtime-execution.md) remains the current build and activation contract.

@@ -108,4 +108,4 @@ stop obsolete operations, and supply cleaned Helm values with `--reset-values`.
 Removed deployment fields are rejected rather than imported into active settings.
 Migration preserves repository connections, certificates, registry selections,
 runtime history and retained tasks while retiring obsolete global operations.
-Retries and restarts resume durable onboarding and cleanup. See [operations](operations.md).
+Retries and restarts resume durable onboarding and cleanup. See [operations](../operations/operations.md).

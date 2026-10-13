@@ -1,24 +1,27 @@
 # Roadmap
 
-Current requirements and delivery status live in the private
-[Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2) and linked issues.
-The [Polish Ayni development flow milestone](https://github.com/ayni-oss/orchestrator/milestone/8)
-collects the current documentation, execution-isolation research, and environment-change work.
+Requirements and delivery status live in the
+[Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2) and
+[repository issues](https://github.com/ayni-oss/orchestrator/issues).
+Use those records to track milestones and acceptance criteria.
+
+The remaining open work at this consolidation is:
 
 | Work | Source of truth |
 | --- | --- |
-| Product model and assurance documentation | [#127](https://github.com/ayni-oss/orchestrator/issues/127) |
-| Disposable execution, stage separation, and independent assessment research | [#128](https://github.com/ayni-oss/orchestrator/issues/128) |
-| Reviewed environment changes, candidate validation, and shared runtime reconciliation | [#129](https://github.com/ayni-oss/orchestrator/issues/129) |
+| Disposable execution, stage separation and independent assessment research | [#128](https://github.com/ayni-oss/orchestrator/issues/128) |
+| Reviewed environment changes and candidate validation | [#129](https://github.com/ayni-oss/orchestrator/issues/129) |
 
-The [product flow](docs/ayni-product-flow.md) explains ownership and user behavior.
-The [architecture](docs/architecture.md) describes implemented execution.
-Research issues do not authorize changes to the current worker or trust boundaries.
+The [product flow](docs/guides/ayni-product-flow.md) and
+[architecture](docs/architecture/architecture.md) describe current behavior.
+[Reviewed environment changes](docs/guides/environment-changes.md) records accepted
+direction that is not yet implemented. Custom Runtime and coordinated
+multi-repository tasks also remain unsupported.
 
-Completed delivery remains in [closed milestones](https://github.com/ayni-oss/orchestrator/milestones?state=closed),
-merged pull requests, and the [historical decision index](docs/decisions/README.md).
-Historical assessment pipelines and environment workflow installation are not the active plan.
+Completed work remains in closed issues, merged pull requests and
+[closed milestones](https://github.com/ayni-oss/orchestrator/milestones?state=closed).
+[Decision records](docs/decisions/README.md) and
+[dated event-platform research](docs/history/event-platform/index.md) preserve
+design history without becoming a second delivery plan.
 
-Ayni remains independently useful and publicly planned in its own repository.
-[Public builder-attestation feature #75](https://github.com/ayni-oss/ayni/issues/75)
-is an upstream dependency to evaluate, not a capability already available to Orchestrator.
+Ayni's independent CLI roadmap belongs in its own repository.

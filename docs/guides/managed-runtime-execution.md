@@ -18,7 +18,7 @@ The Helm runtime configuration exposes `codingTurns: 24`,
 attempt limits remain unchanged after restart.
 
 Local execution uses the Docker Desktop umbrella chart described in
-[local development](local-development.md). Production retains platform node
+[local development](../operations/local-development.md). Production retains platform node
 selection, digest pinning and resource limits; emulation is a local policy.
 
 ## Worker sandbox
@@ -43,8 +43,7 @@ revision, destination and immutable credential Secret references. Idempotent Job
 names adopt existing resources after controller restart. Exact source checkout
 uses repository-scoped access confined to the checkout init container.
 
-The build Job invokes the pinned `ayni env build --executor-image <digest> --tag
-<candidate>` contract. Ayni validates committed policy and lock consistency,
+The build Job invokes the pinned `ayni env build --executor-image <digest> --tag <candidate>` contract. Ayni validates committed policy and lock consistency,
 prepares dependencies and certifies protected environment content. The orchestrator
 checks the frozen envelope and resulting local image identity/platform; it does
 not implement Ayni policy evaluation. Certification failure stops publication.
@@ -112,7 +111,7 @@ after three until explicit Retry or Rebuild. Observation, reporting and cleanup
 errors back off independently and retain the same execution. Repository analysis
 does not replenish retries. Changed frozen preparation inputs admit a new budget;
 execution history survives both this change and explicit retry. See the
-[retry and reporting behavior](runtime-runner.md) for migration and recovery details.
+[retry and reporting behavior](../architecture/runtime-runner.md) for migration and recovery details.
 
 Owned Jobs, temporary checkout/configuration resources and transient credentials
 are cleaned after persisted outcomes. Exhausted operations retain bounded outcome metadata for diagnostics; their Jobs
@@ -132,5 +131,5 @@ unmerged proposals require an explicit retry to reopen; merged proposals retire
 the review link. Later required trust changes open a new PR on the same branch,
 since GitHub cannot reopen a merged PR.
 
-See [repository-selected official builders](repository-builders.md) for immutable
+See [repository-selected official builders](../reference/repository-builders.md) for immutable
 version selection, attempt engines, security modes and recovery.

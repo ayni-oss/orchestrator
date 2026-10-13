@@ -35,7 +35,7 @@ Repository owners commit missing configuration and review any certificate-trust 
 Preparation progresses through **Analyzing → Building → Publishing → Verifying → Ready**.
 The repository lock selects supported official builder tooling; the control plane freezes its platform digest.
 The builder creates a separate repository image containing locked tools and prepared dependencies.
-See [official builders](repository-builders.md) for execution and credential boundaries.
+See [official builders](../reference/repository-builders.md) for execution and credential boundaries.
 
 - An authenticated missing image triggers a build. Access failures and outages remain failures.
 - Successful builds publish automatically, then undergo separate pull-only verification.
@@ -71,7 +71,7 @@ cancellation, a new attempt, and retrying retained publication distinct.
 Environment certification, quality results, and merge approval are separate claims.
 Verification checks expected identity and trusted signatures, not just the presence of a certificate.
 Quality depends on Ayni, the selected tools, and the repository's policy and tests.
-See [assurance boundaries](assurance.md) for what evidence establishes and what it cannot establish.
+See [assurance boundaries](../architecture/assurance.md) for what evidence establishes and what it cannot establish.
 
 An optional independent CI assessment is an agreed direction for customers requiring separate assessment authority.
 It must use a fresh candidate checkout and policy, credentials, and retained evidence outside coding authority.
@@ -101,7 +101,7 @@ The current coding adapter uses Rig and OpenAI; broader harness and provider int
 ## Related documentation
 
 - [Operator onboarding](operator-onboarding.md): available setup and task operations.
-- [Architecture](architecture.md): implemented lifecycle and trust boundaries.
-- [Runtime worker](runtime-runner.md): budgets, repair, evidence, and delivery.
-- [Ayni integration contract](ayni-integration.md): supported CLI and artifact boundaries.
-- [Roadmap](../ROADMAP.md): current milestone and issue links.
+- [Architecture](../architecture/architecture.md): implemented lifecycle and trust boundaries.
+- [Runtime worker](../architecture/runtime-runner.md): budgets, repair, evidence, and delivery.
+- [Ayni integration contract](../reference/ayni-integration.md): supported CLI and artifact boundaries.
+- [Roadmap](../../ROADMAP.md): remaining work and issue links.

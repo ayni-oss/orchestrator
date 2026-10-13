@@ -1,6 +1,6 @@
 # Decision 0010: orchestration interface boundaries
 
-> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture.md). They do not require compatibility code.
+> Historical record: task-pipeline and quality/publication ownership in this decision are superseded by the [worker-owned architecture](../architecture/architecture.md). They do not require compatibility code.
 - Status: accepted
 - Date: 2026-10-04
 - Complements: [Decision 0007](0007-clean-v1-runtime-profiles.md) and
@@ -59,6 +59,6 @@ gRPC behavior. Enforce crate direction with the existing managed dependency
 checks and regenerate the environment lock using Ayni. Runtime changes still
 require the explicit Docker Desktop deployment validation boundary.
 
-The [architecture](../architecture.md) documents current ownership and remaining
+The [architecture](../architecture/architecture.md) documents current ownership and remaining
 coupling. Implementation acceptance is tracked in
 [issue #98](https://github.com/ayni-oss/orchestrator/issues/98).

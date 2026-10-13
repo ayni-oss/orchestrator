@@ -87,7 +87,7 @@ Docker Desktop disk fallback remain available.
 Tracing is optional diagnostic output. Exporter queues, request timeouts and
 shutdown flushes are bounded; Collector outage does not change execution outcomes.
 Jaeger stores at most 1,000 traces in memory locally. Logs remain JSON on stdout;
-a centralized log backend is not included. See [observability](observability-and-events.md)
+a centralized log backend is not included. See [observability](../reference/observability-and-events.md)
 for configuration, propagation, privacy and the Docker Desktop validation command.
 
 ## Persistent local JetStream
@@ -104,7 +104,7 @@ A post-install/post-upgrade Job creates or edits `ORCHESTRATOR_LIFECYCLE` in pla
 The initial routing subject is `orchestrator.runtime.verification.accepted.v1`,
 carrying the structured CloudEvent type
 `build.ayni.orchestrator.runtime.verification.accepted.v1` defined in the
-[verification contract](verification-events.md). This subject is distinct from
+[verification contract](../reference/verification-events.md). This subject is distinct from
 the CloudEvents resource `subject`. The local chart enables the accepted-event
 outbox publisher and the durable verification cleanup consumer.
 
@@ -251,7 +251,7 @@ remove their test-only host and node image tags after the run.
 
 Coding event acceptance and restart can be exercised with
 `dev/tests/coding-reporting.sh CONTROL_PLANE_IMAGE PINNED_WORKER_IMAGE WEB_IMAGE`; see
-[the coding event contract](coding-events.md) for its precise validation scope.
+[the coding event contract](../reference/coding-events.md) for its precise validation scope.
 
 ### Kubernetes observation acceleration
 

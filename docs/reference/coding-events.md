@@ -76,7 +76,7 @@ interruption and can resume retained work after stop confirmation.
 
 Legacy file collection remains selected for migrated attempts. Recovery files,
 final evidence and provider readback remain necessary. Their retirement requires
-[the migration drain gates](event-platform-migration.md), including historical
+[the migration drain gates](../operations/event-compatibility.md), including historical
 reads and publication-only retries; zero running Pods alone is insufficient.
 An older binary cannot read schema 17. Roll back with a compatible binary while
 preserving the reporting selection of admitted executions.

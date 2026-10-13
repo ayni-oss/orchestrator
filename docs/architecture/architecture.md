@@ -1,15 +1,11 @@
 # Architecture
 
-The [product flow](ayni-product-flow.md) defines shared repository/runtime ownership.
-[Assurance](assurance.md) and [environment changes](environment-changes.md) distinguish accepted direction from current execution.
+The [product flow](../guides/ayni-product-flow.md) defines shared repository/runtime ownership.
+[Assurance](assurance.md) and [environment changes](../guides/environment-changes.md) distinguish accepted direction from current execution.
 
-The [control-plane event research](control-plane-events.md) records implemented
-flows, signal authority, result collection and cleanup ordering, with a
-source-indexed contract catalog. Its streaming protocol and JetStream placement
-are proposals under evaluation, not current execution guarantees.
-The [implementation proposal](event-platform-implementation.md) and
-[migration gates](event-platform-migration.md) define the recommended adoption
-order for Protobuf, CloudEvents, JetStream and OpenTelemetry.
+The [event platform](event-platform.md) describes implemented authenticated reporting,
+transactional acceptance, JetStream delivery and diagnostic tracing.
+[Code organization](code-organization.md) defines library ownership and dependency direction.
 
 The control plane admits tasks, freezes repository and runtime identity, model,
 constraints, total coding turns, quality repair limit and deadline. It schedules
@@ -37,14 +33,12 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 14 freezes verification authority per preparation, tracks
-accepted-event publication acknowledgements and stores
-accepted receipts alongside the schema-12 decision journal and transactional outbox
-and the authenticated inbox introduced in schema 11. It preserves active runtime preparation and the explicit phases
-introduced in schema 10. Recognized schema versions 6 through 12 upgrade through ordered migrations; the earlier builder
-cutover still retires obsolete global operations. Older and unknown versions are
-rejected. Connectors, projects, repositories and runtime profiles remain
-control-plane resources. Credentials are separate inputs and are never worker output.
+and pull request receipts. SQLite schema version 18 retains preparation state,
+authenticated result inboxes, accepted decisions, transactional outboxes and
+operator lifecycle facts. Recognized versions 6–17 migrate in order before
+reconciliation; malformed retained state aborts the upgrade. Older and unknown
+versions are rejected. See [operations](../operations/operations.md) for upgrade
+and rollback requirements. Credentials remain separate inputs and are never worker output.
 
 ## Connection credentials
 
@@ -81,7 +75,7 @@ change creates a new selected revision and removes active admission authority.
 Already admitted work retains its frozen destination and credentials; superseded
 builds can finish but cannot activate the new selection. Secret retention follows
 these frozen references, as described
-in [operations](operations.md).
+in [operations](../operations/operations.md).
 
 
 ## Signing certificates
@@ -148,7 +142,7 @@ activated by a superseded Job. Tasks retain their frozen image digests.
 Discovery uses `ayni-<arch>-<full-lock-hash>` on the approved repository path.
 Source owners are retained beneath a different registry namespace. A tag is a
 lookup key; only independently verified immutable manifest digests authorize work.
-[Managed runtime execution](managed-runtime-execution.md) defines recovery and
+[Managed runtime execution](../guides/managed-runtime-execution.md) defines recovery and
 credential boundaries. No GitHub workflow installation participates in readiness.
 
 ### Product overview reads and browser refresh
@@ -175,7 +169,7 @@ transactional lifecycle journal/outbox alongside repository onboarding and sourc
 synchronization.
 Ownership-scoped Kubernetes metadata watches wake existing reconciliation lanes;
 periodic repair and guarded readback remain active. See
-[operator lifecycle facts and resource streams](operator-projections.md) for
+[operator lifecycle facts and resource streams](../reference/operator-projections.md) for
 authority, privacy, replay and recovery boundaries.
 
 
@@ -196,7 +190,7 @@ another publication attempt. Activation retains verified evidence before cleanup
 and source/configuration guards prevent stale operations from restoring readiness.
 Failure and retry budgets remain separate from execution phase. Cleanup progress
 still uses the existing coordinator result boundary and never consumes a failure
-budget; a broader typed coordinator error API is not part of this consolidation.
+budget. Coordinator errors remain separate from persisted execution outcomes.
 
 Schema 10 decodes each retained schema-9 cursor and writes its typed equivalent in
 one transaction, including builder lookup identity and timestamp. It preserves

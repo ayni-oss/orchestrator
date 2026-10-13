@@ -34,7 +34,7 @@ Ayni and its official builder always use the version in the repository’s commi
 
 Administrator-managed connections show **Managed by your administrator** and
 cannot be edited or deleted through the UI. Register them explicitly using the
-Helm connection references described in the [deployment chart](../deploy/charts/ayni-orchestrator/README.md).
+Helm connection references described in the [deployment chart](../../deploy/charts/ayni-orchestrator/README.md).
 UI-managed connections support replacement, testing, disabling and deletion when
 unreferenced. Credential inputs clear after submission and read APIs never return
 them. Validated replacements activate automatically; no reload button, deployment
@@ -85,7 +85,7 @@ against retained final work without coding again. Ordinary retry creates a new
 attempt.
 
 Before a breaking deployment, follow the exact-resource inventory and migration
-procedure in [operations](operations.md). Existing source repositories,
+procedure in [operations](../operations/operations.md). Existing source repositories,
 runtime images and GitHub pull requests are retained.
 
 Manage the GitHub App at `/source-control/github`. Use **Add GitHub App** to create an App in your organization or personal account, or import an existing App ID and private key. The compact connection card opens an **Edit** dialog for key rotation, testing, disablement, and deletion; administrator-managed Apps expose read-only **Details**. App installation stays in GitHub. Legacy `/setup/github` links redirect here, and existing Apps using `/setup/github/complete` retain callback compatibility.

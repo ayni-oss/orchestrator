@@ -1,17 +1,19 @@
 # Control-plane events and evidence
 
+> Historical research from 11 October 2026. Start with the [current event platform](../../architecture/event-platform.md) for implemented behavior. The proposal and source inventory below preserve provenance.
+
 Research snapshot: 11 October 2026, orchestrator commit `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`. Source analysis; deployed runtime behavior was not exercised. Current behavior is recorded in the linked inventory. The event protocol and JetStream placement below are research proposals, not an accepted architecture decision or implemented transport.
 
 The control plane should advance on validated application evidence and controller policy. Kubernetes observations should establish execution availability, failure and stop confirmation. Cleanup should have its own durable state so it cannot erase evidence or masquerade as a failed task.
 
 The [flow inventory](control-plane-event-flows.md) maps all implemented flows, their current signals, transition gates and cleanup ordering. The [contract catalog](control-plane-event-contracts.csv) indexes current RPCs, state vocabularies, resource events and worker tools.
 
-[Observability and lifecycle events](observability-and-events.md) describes how
+[Observability and lifecycle events](../../reference/observability-and-events.md) describes how
 OpenTelemetry traces, logs and metrics complement these application contracts.
-The [CloudEvents contract](cloudevents-contract.md) recommends a standard
+The [CloudEvents contract](../../reference/cloudevents-contract.md) recommends a standard
 envelope and defines its relationship to JetStream routing and trace context.
 The [implementation proposal](event-platform-implementation.md) develops this
-research into phased delivery with [retirement gates](event-platform-migration.md).
+research into phased delivery with [retirement gates](../../operations/event-compatibility.md).
 
 ## Findings that drive the design
 
@@ -22,7 +24,7 @@ research into phased delivery with [retirement gates](event-platform-migration.m
 - Three runtime failures count reconciliation errors, not necessarily three fresh worker executions. Retry exhaustion and display metadata disagree.
 - Cleanup is consequential in several flows, but runtime Ready currently waits for cleanup. Replacement execution correctly waits for prior Pods to stop.
 
-Sources: [Transactional resource events and bounded retention](<../backend/servers/control-plane/src/adapters/sqlite/pagination_events.rs#L87>); [Runtime preparation, failure counting, publication and cleanup](<../backend/servers/control-plane/src/coordinators/reconciliation/preparation.rs#L13>); [Evidence retention, cleanup and guarded activation ordering](<../backend/servers/control-plane/src/coordinators/reconciliation/activation.rs#L11>); [Coding result collection, recovery and cleanup](<../backend/servers/control-plane/src/coordinators/reconciliation/coding.rs#L25>); [Publication intent, provider readback and receipts](<../backend/workers/runtime-worker/src/coding/publication.rs#L281>); [Verification reporting and the 4 KiB limit](<../backend/workers/runtime-worker/src/main.rs#L138>).
+Sources: [Transactional resource events and bounded retention](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/adapters/sqlite/pagination_events.rs#L87); [Runtime preparation, failure counting, publication and cleanup](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/coordinators/reconciliation/preparation.rs#L13); [Evidence retention, cleanup and guarded activation ordering](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/coordinators/reconciliation/activation.rs#L11); [Coding result collection, recovery and cleanup](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/coordinators/reconciliation/coding.rs#L25); [Publication intent, provider readback and receipts](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/workers/runtime-worker/src/coding/publication.rs#L281); [Verification reporting and the 4 KiB limit](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/workers/runtime-worker/src/main.rs#L138).
 
 ## Current functionality and expected authority
 
@@ -38,7 +40,7 @@ Sources: [Transactional resource events and bounded retention](<../backend/serve
 
 A result can arrive before Kubernetes termination. Infrastructure failure can also happen before a worker reports anything. Both arrival orders must be supported without manufacturing successful work or waiting forever for an absent result.
 
-Sources: [Runtime evidence admission checks](<../backend/servers/control-plane/src/profiles/ayni/evidence_policy.rs#L21>); [Task admission and frozen identities](<../backend/servers/control-plane/crates/application/src/tasks.rs#L150>); [Coding result collection, recovery and cleanup](<../backend/servers/control-plane/src/coordinators/reconciliation/coding.rs#L25>); [Decisions from task state and Kubernetes execution state](<../backend/servers/control-plane/crates/application/src/reconciliation.rs#L18>); [Task server-sent events and connection heartbeat](<../apps/web/src/routes/tasks/[taskId]/updates/+server.ts#L68>).
+Sources: [Runtime evidence admission checks](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/profiles/ayni/evidence_policy.rs#L21); [Task admission and frozen identities](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/crates/application/src/tasks.rs#L150); [Coding result collection, recovery and cleanup](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/coordinators/reconciliation/coding.rs#L25); [Decisions from task state and Kubernetes execution state](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/crates/application/src/reconciliation.rs#L18); [Task server-sent events and connection heartbeat](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/apps/web/src/routes/tasks/[taskId]/updates/+server.ts#L68).
 
 ## Proposed ordering
 
