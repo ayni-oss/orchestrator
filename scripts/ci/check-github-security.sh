@@ -21,11 +21,15 @@ if grep -En 'packages:[[:space:]]*write' "$workflows/pr-validation.yml"; then
 fi
 
 while IFS= read -r use; do
-  action="${use#*uses: }"
-  if [[ ! "$action" =~ @[0-9a-f]{40}([[:space:]]*#[[:space:]]*v[0-9][^[:space:]]*)?$ ]]; then
-    fail "third-party Action is not pinned to a full SHA with a release comment: $use"
+  action="${use##*uses: }"
+  [[ "$action" == ./* ]] && continue
+  if [[ "$action" =~ ^ayni-oss/ayni/\.github/actions/[a-z-]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]shared[[:space:]]CI$ ]]; then
+    continue
   fi
-done < <(grep -RhE --include='*.yml' --include='*.yaml' '^[[:space:]]*uses:' "$workflows")
+  if [[ ! "$action" =~ @[0-9a-f]{40}[[:space:]]+#[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    fail "external Action requires an immutable SHA and exact release or shared CI comment: $use"
+  fi
+done < <(grep -RhE --include='*.yml' --include='*.yaml' '^[[:space:]]*(-[[:space:]]+)?uses:' "$workflows")
 
 python3 - "$app_setup" <<'PYTHON'
 import json

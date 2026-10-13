@@ -21,14 +21,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up locked documentation dependencies
+        uses: ayni-oss/ayni/.github/actions/node-project@82966446499f11f5668dd314a432c8ab74788c3d # shared CI
         with:
-          version: 10.31.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
+          package-manager: pnpm
           node-version: 24.14.0
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
       - run: pnpm docs:check
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
