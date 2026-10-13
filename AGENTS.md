@@ -29,6 +29,15 @@
   `ayni.build`. Preserve historical `io.ayni` stored envelopes through
   compatibility readers and canonicalize their type names at delivery.
 
+## Documentation audiences
+
+- `docs/site/` is the human-facing user guide published at orchestrator.ayni.build.
+  Keep pages short, explain user actions and outcomes, and use diagrams for flows.
+- `docs/technical/` holds architecture, protocols, deployment internals, contributor
+  rules and research for maintainers and coding agents. It is excluded from the site.
+- Keep detailed implementation content out of user flows. Link each audience's index
+  from the repository documentation index and validate the publication boundary.
+
 ## Implementation direction
 
 - Prefer Rust for orchestrator-owned application code, including controllers and
@@ -36,7 +45,7 @@
   controller runtime; pin tested dependencies when implementation begins.
 - Rust does not require reimplementing infrastructure, language tools, or external
   agents. Keep those integrations behind explicit boundaries.
-- Read README.md, the linked issue, and relevant durable documents in docs/
+- Read README.md, the linked issue, and relevant durable documents in docs/technical/
   before implementation. The issue owns the outcome and acceptance criteria;
   repository documents describe current behavior and accepted decisions.
 - Start each change from updated main on a focused branch and link its pull
@@ -44,7 +53,7 @@
 - Exercise deployable behavior on Docker Desktop Kubernetes when the change
   affects runtime behavior. Use the `dev/charts/ayni-orchestrator-local` Helm chart and the
   explicit `docker-desktop` context as defined in
-  docs/decisions/0006-local-helm-chart.md. Never fall back
+  docs/technical/decisions/0006-local-helm-chart.md. Never fall back
   to another current cluster when the local context is absent. Local deployment
   is authorized; destructive cluster resets and retained-data deletion are separate.
 - Keep each issue small and end-to-end. Define its observable outcome and
