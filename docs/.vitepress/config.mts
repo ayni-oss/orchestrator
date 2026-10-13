@@ -17,7 +17,7 @@ export default withMermaid(defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   sitemap: { hostname: 'https://orchestrator.ayni.build' },
-  head: [['link', { rel: 'icon', href: '/ayni-logo.svg' }]],
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }]],
   themeConfig: {
     siteTitle: false,
     nav: [
@@ -28,7 +28,8 @@ export default withMermaid(defineConfig({
     ],
     sidebar: [
       { text: 'Ayni Orchestrator', items: [
-        { text: 'Introduction', link: '/' },
+        { text: 'Home', link: '/' },
+        { text: 'How it works', link: '/how-it-works' },
         { text: 'Get started', link: '/getting-started' },
         { text: 'Repositories and runtimes', link: '/repositories-and-runtimes' },
         { text: 'Projects and tasks', link: '/projects-and-tasks' },

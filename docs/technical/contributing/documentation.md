@@ -58,7 +58,10 @@ pnpm docs:preview
 `docs:check` validates repository Markdown targets, builds the human guide with
 dead-link detection, and checks that the output contains only human-source pages.
 It also checks the custom domain. PR validation runs a frozen dependency install;
-PRs do not deploy. External service availability is not part of the link check.
+PRs do not deploy. Both projects use Ayni’s shared `node-project` composite action
+for a pinned Node/package-manager setup and a locked dependency install; the
+repository keeps its own `docs:check` command and publication trigger. External
+service availability is not part of the link check.
 
 The Pages workflow deploys main after merge and supports manual recovery.
 GitHub Pages uses Actions with the `orchestrator.ayni.build` domain. The maintainer

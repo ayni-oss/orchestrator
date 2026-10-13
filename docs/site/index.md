@@ -1,53 +1,45 @@
-# Ayni Orchestrator
-
-Turn a development request into a reviewable pull request. Connect a repository,
-prepare its Ayni environment, and give a task a clear goal. Ayni Orchestrator
-runs the work, checks the result and creates a draft for you to review.
-
-```mermaid
 ---
-config:
-  theme: neutral
-  look: classic
-  layout: elk
+layout: home
+hero:
+  name: Ayni Orchestrator
+  text: Development tasks you can review
+  tagline: Connect a repository, give a task a clear goal, and review a draft backed by quality evidence.
+  actions:
+    - theme: brand
+      text: Get started
+      link: /getting-started
+    - theme: alt
+      text: How it works
+      link: /how-it-works
+    - theme: alt
+      text: Run a task
+      link: /projects-and-tasks
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/ayni-oss/orchestrator
+features:
+  - title: Shared repository runtimes
+    details: Prepare a verified Ayni environment once and use it across projects that share the repository.
+    link: /repositories-and-runtimes
+  - title: Clear task limits
+    details: Choose the request, model, protected paths and deadline. Each task keeps its admitted inputs and limits.
+    link: /projects-and-tasks
+  - title: Quality with context
+    details: See execution, full repository checks and publication as separate outcomes, with unavailable evidence shown honestly.
+    link: /results-and-recovery
+  - title: Reviewable delivery
+    details: Inspect the draft and its quality report before deciding to merge. Retry retained publication without starting coding again.
+    link: /trust-and-quality
 ---
-flowchart TD
-    R[Connect and prepare a repository] --> T[Run a task and its quality checks]
-    T --> P[Review the draft pull request]
-```
 
-## What you can do
+## From request to review
 
-- [Get started](getting-started.md): connect source control, a registry and a signing certificate.
-- [Prepare a repository](repositories-and-runtimes.md): understand runtime readiness and repairs.
-- [Run a task](projects-and-tasks.md): organize projects, write instructions and set limits.
-- [Read results](results-and-recovery.md): understand quality and recover a failed delivery.
-- [Understand trust](trust-and-quality.md): distinguish environment certification, checks and approval.
-- [Troubleshoot](troubleshooting.md): choose the next action when setup or execution stalls.
+Start by [connecting your repository](getting-started.md) and preparing its runtime.
+Add it to a project, describe the work, then follow progress and checks until a
+reviewable result is available. Ayni Orchestrator leaves the merge decision with you.
 
-## How repositories and projects fit together
-
-```mermaid
----
-config:
-  theme: neutral
-  look: classic
-  layout: elk
----
-flowchart TD
-    R[Repository] --> E[Shared runtime]
-    R --> P1[Project A]
-    R --> P2[Project B]
-    P1 --> T1[Task A]
-    P2 --> T2[Task B]
-    E -. selected at task creation .-> T1
-    E -. selected at task creation .-> T2
-```
-
-Projects organize work. The repository owns its runtime, so preparing one runtime
-makes it available to every project using that repository. Each task keeps the
-source, runtime and limits selected when it was admitted.
+[Explore the complete flow](how-it-works.md) or
+[find the next recovery action](troubleshooting.md).
 
 The current task works on one repository with an Ayni Managed runtime. Custom
-runtimes and coordinated tasks across repositories are not available yet.
-[Ayni CLI documentation](https://cli.ayni.build) covers local environment and quality commands.
+runtimes and coordinated work across repositories remain future capabilities.

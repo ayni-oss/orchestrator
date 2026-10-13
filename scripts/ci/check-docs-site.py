@@ -13,4 +13,10 @@ if missing or unexpected:
     raise SystemExit(f'Site audience boundary failed: missing={sorted(map(str, missing))}, unexpected={sorted(map(str, unexpected))}')
 if (output / 'CNAME').read_text().strip() != 'orchestrator.ayni.build':
     raise SystemExit('Site CNAME must be orchestrator.ayni.build')
+home = (output / 'index.html').read_text()
+for required in ['ayni-brand-mark', '<svg', 'favicon.svg', 'Development tasks you can review', 'Shared repository runtimes']:
+    if required not in home:
+        raise SystemExit(f'Homepage branding/content is missing: {required}')
+if not (output / 'favicon.svg').is_file():
+    raise SystemExit('The favicon must be included in published assets')
 print(f'Human-facing site boundary is valid: {len(expected)} pages; no technical pages published.')

@@ -9,7 +9,7 @@ const { frontmatter } = useData()
 <template>
   <DefaultTheme.Layout>
     <template #nav-bar-title-before>
-      <AyniBrand /> <span class="orchestrator-name">Orchestrator</span>
+      <AyniBrand />
     </template>
     <template #home-hero-info>
       <h1 class="ayni-home-heading">
@@ -20,7 +20,3 @@ const { frontmatter } = useData()
     </template>
   </DefaultTheme.Layout>
 </template>
-
-<style scoped>
-.orchestrator-name { margin-left: 0.4em; }
-</style>

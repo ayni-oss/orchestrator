@@ -54,6 +54,15 @@ Run affected protocol, Helm and repository quality checks described by
 `.github/workflows/pr-validation.yml` and `.ayni.toml`. Runtime behavior changes
 also require the explicit Docker Desktop Kubernetes topology.
 
+## Shared CI
+
+CI consumes the public composite actions from `ayni-oss/ayni/.github/actions/`,
+pinned to an immutable source revision with a `shared CI` comment. They provide
+locked Node installs, public project file checks, title classification, managed
+Ayni execution and PR quality feedback. Metadata and report jobs do not check out
+PR code; only those jobs receive write permissions. Protocol, Helm, security and
+integration checks remain specific to this repository.
+
 ## Documentation
 
 Use [the documentation index](docs/index.md) to find current guides.
