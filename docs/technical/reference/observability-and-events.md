@@ -82,6 +82,12 @@ Control-plane decisions must remain valid during a telemetry outage.
 ## Separate execution and telemetry paths
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart LR
     W["Trusted worker"] --> R["Retained result and evidence"]
     R --> C["Controller validation"]

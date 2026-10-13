@@ -22,6 +22,12 @@ runtime changes do not rewrite those choices.
 ## Follow execution
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     A[Task admitted] --> W[Wait for execution]
     W --> C[Code and commit]

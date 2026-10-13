@@ -5,6 +5,12 @@ prepare its Ayni environment, and give a task a clear goal. Ayni Orchestrator
 runs the work, checks the result and creates a draft for you to review.
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     R[Connect and prepare a repository] --> T[Run a task and its quality checks]
     T --> P[Review the draft pull request]
@@ -22,6 +28,12 @@ flowchart TD
 ## How repositories and projects fit together
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     R[Repository] --> E[Shared runtime]
     R --> P1[Project A]

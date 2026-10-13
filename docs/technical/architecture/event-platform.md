@@ -5,6 +5,12 @@ Receipt, controller acceptance, broker delivery and physical cleanup are separat
 states. Accepted application decisions remain valid during broker or telemetry outages.
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart LR
     W[Supervisor retains evidence] --> I[Authenticated ingress]
     I --> R[Durable receipt inbox]

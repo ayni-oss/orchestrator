@@ -45,6 +45,12 @@ Sources: [Runtime evidence admission checks](https://github.com/ayni-oss/orchest
 ## Proposed ordering
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     I["Persist admitted intent and frozen identity"] --> E["Start one execution generation"]
     E --> W["Worker retains immutable result and evidence"]

@@ -4,6 +4,12 @@ Start with the finding on the affected repository, runtime or task. Repair its
 cause before retrying, and keep the recorded result available for review.
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     S[Where is the problem?] --> I[Integration access]
     S --> R[Runtime not Ready]

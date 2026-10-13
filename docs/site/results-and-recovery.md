@@ -13,6 +13,12 @@ approving the change.
 ## Choose the next action
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     R[Review task result] --> D{Draft available?}
     D -- yes --> Q[Inspect changes and quality evidence]

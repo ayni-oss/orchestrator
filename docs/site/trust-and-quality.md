@@ -4,6 +4,12 @@ Environment certification, repository checks and merge approval answer different
 questions. Review each before relying on a delivered change.
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     E[Certified environment] --> A[Matches trusted repository configuration]
     Q[Repository quality checks] --> B[Checks assess the final commit]
@@ -32,6 +38,12 @@ for infrastructure access and isolation.
 ## Certificate changes
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     S[Select or rotate certificate] --> P[Review trust-update pull request]
     P --> M[Repository owner merges]

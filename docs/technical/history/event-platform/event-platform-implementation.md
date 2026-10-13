@@ -35,6 +35,12 @@ levels and recovery behavior that each migration must preserve.
 ## Proposed execution path
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     W["Supervisor retains immutable evidence and report"] --> I["Authenticated reporting ingress"]
     I --> B["Database inbox: durable receipt"]

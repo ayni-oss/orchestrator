@@ -8,10 +8,16 @@ from urllib.parse import unquote
 root = Path(__file__).resolve().parents[2]
 files = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], cwd=root, text=True).splitlines()
 errors = []
+diagram_count = 0
 for filename in sorted(set(files)):
     source = root / filename
     if source.suffix != '.md' or not source.is_file():
         continue
+    contents = source.read_text()
+    for diagram in re.findall(r'```mermaid\n(.*?)```', contents, flags=re.S):
+        diagram_count += 1
+        if not diagram.startswith('---\nconfig:\n  theme: neutral\n  look: classic\n  layout: elk\n---\n'):
+            errors.append(f'{source.relative_to(root)}: diagram must use neutral/classic/elk')
     text = re.sub(r'```.*?```', '', source.read_text(), flags=re.S)
     for match in re.finditer(r'\]\((<[^>]+>|[^\s)]+)(?:\s+"[^"]*")?\)', text):
         target = match.group(1).strip('<>')
@@ -24,3 +30,4 @@ for filename in sorted(set(files)):
 if errors:
     raise SystemExit('\n'.join(errors))
 print('Repository Markdown link targets are valid.')
+print(f'Mermaid styling is valid: {diagram_count} diagrams use neutral/classic/elk.')

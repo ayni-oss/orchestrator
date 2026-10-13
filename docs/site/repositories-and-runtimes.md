@@ -7,6 +7,12 @@ repository can still need runtime setup before tasks can start.
 ## Prepare a runtime
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     A[Analyze repository configuration] --> S{Setup complete?}
     S -- no --> F[Show corrective action]

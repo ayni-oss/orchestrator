@@ -76,6 +76,12 @@ record with idempotency identity and pending/completed/failed state precedes an
 externally effective operation.
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart LR
   rc[Repository connection] --> pr[Profile revision]
   pr --> ai[Automation installation]
@@ -155,6 +161,12 @@ act only on a current successful exact-head assessment.
 ## Delivery and acceptance mapping
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
   d52[#52 decision] --> d53[#53 Ayni OCI proof]
   d52 --> d54[#54 API]

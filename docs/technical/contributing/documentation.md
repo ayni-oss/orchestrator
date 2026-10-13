@@ -21,6 +21,21 @@ directory is `docs/site/`; technical documents are excluded from rendering,
 navigation, search and the sitemap. Public assets live in `docs/site/public/`.
 Navigation is defined in `docs/.vitepress/config.mts`.
 
+Every Mermaid fence starts with this configuration, also enforced by the link check:
+
+```yaml
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
+```
+
+The theme registers the ELK layout loader before rendering. SVG text labels size
+nodes naturally with padding; wide diagrams scroll rather than shrinking text.
+Review labels inside both rectangles and decision diamonds after changing a flow.
+
 ## Technical sources
 
 Document current contracts precisely and keep canonical code, schema and command

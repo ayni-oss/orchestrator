@@ -5,6 +5,12 @@ model access is available; model-backed tasks need that access before they can s
 If you do not have a deployment, ask the person managing your installation to provide one.
 
 ```mermaid
+---
+config:
+  theme: neutral
+  look: classic
+  layout: elk
+---
 flowchart TD
     G[Connect GitHub] --> R[Connect repository]
     C[Connect container registry] --> E[Prepare runtime]
