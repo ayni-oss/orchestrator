@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BffError } from "@ayni-orchestrator/bff/server";
 
 const bff = vi.hoisted(() => ({ watchResources: vi.fn() }));
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
@@ -52,6 +53,24 @@ describe("combined resource update relay", () => {
     bff.watchResources.mock.calls[0]![3]("9");
     await vi.advanceTimersByTimeAsync(30);
     expect(new TextDecoder().decode((await next).value)).toBe("id: 9\nevent: changed\ndata: {}\n\n");
+    await reader.cancel();
+  });
+
+  it("reports expired dedicated cursors and allows a fresh snapshot request", async () => {
+    bff.watchResources.mockRejectedValueOnce(new BffError({
+      status: 409, reason: "watch_cursor_expired", message: "take a fresh resource snapshot",
+      requestId: "resource-stream", retryable: true,
+    }));
+    const expired = await request("connections", "999");
+    expect(bff.watchResources).toHaveBeenCalledWith("connections", "999", expect.any(Object), expect.any(Function));
+    expect(await expired.text()).toContain('"reason":"watch_cursor_expired"');
+    const snapshot = await request("connections");
+    expect(bff.watchResources).toHaveBeenLastCalledWith("connections", undefined, expect.any(Object), expect.any(Function));
+    const reader = snapshot.body!.getReader();
+    const first = reader.read();
+    bff.watchResources.mock.calls.at(-1)![3]("1");
+    await vi.advanceTimersByTimeAsync(30);
+    expect(new TextDecoder().decode((await first).value)).toBe('id: 1\nevent: changed\ndata: {}\n\n');
     await reader.cancel();
   });
 });
