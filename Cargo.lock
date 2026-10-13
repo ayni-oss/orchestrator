@@ -261,6 +261,7 @@ dependencies = [
  "ayni-orchestrator-kubernetes",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
+ "ayni-orchestrator-providers",
  "ayni-orchestrator-registry",
  "ayni-orchestrator-runtime",
  "base64 0.22.1",
@@ -373,6 +374,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ayni-orchestrator-providers"
+version = "0.1.0"
+dependencies = [
+ "rig-core",
+]
+
+[[package]]
 name = "ayni-orchestrator-registry"
 version = "0.1.0"
 dependencies = [
@@ -391,6 +399,7 @@ dependencies = [
  "ayni-orchestrator-events",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "url",
 ]
@@ -403,6 +412,7 @@ dependencies = [
  "ayni-orchestrator-events",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-profile-ayni",
+ "ayni-orchestrator-providers",
  "ayni-orchestrator-registry",
  "ayni-orchestrator-runtime",
  "base64 0.22.1",

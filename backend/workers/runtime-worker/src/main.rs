@@ -30,7 +30,39 @@ fn main() -> ExitCode {
     result
 }
 
+async fn project_worker_main() -> ExitCode {
+    let result = async {
+        let bytes = read_bounded(Path::new("/request/project-agent.json"), 512 * 1024)?;
+        let request: ayni_orchestrator_runtime::project_agent::ProjectAgentRequest =
+            serde_json::from_slice(&bytes).map_err(io::Error::other)?;
+        if env::args().nth(1).as_deref() == Some("project-checkout") {
+            ayni_orchestrator_worker::project_agent::checkout(&request).await?;
+        } else {
+            let result = ayni_orchestrator_worker::project_agent::run(request).await?;
+            println!(
+                "AYNI_PROJECT_RESULT:{}",
+                serde_json::to_string(&result).map_err(io::Error::other)?
+            );
+        }
+        Ok::<(), io::Error>(())
+    }
+    .await;
+    if result.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        eprintln!("project_agent_failed");
+        ExitCode::FAILURE
+    }
+}
+
 async fn worker_main() -> ExitCode {
+    if matches!(
+        env::args().nth(1).as_deref(),
+        Some("project-agent" | "project-checkout")
+    ) {
+        return project_worker_main().await;
+    }
+
     let activity = ayni_orchestrator_worker::coding::activity::ActivityLog::new(
         (env::args().nth(1).as_deref() == Some("code"))
             .then(|| Path::new("/output/activity.json").to_path_buf()),

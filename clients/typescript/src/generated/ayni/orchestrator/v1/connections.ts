@@ -24,7 +24,7 @@ import {
 /** Safe metadata only. Secret contents are never returned. */
 export interface Connection {
   id: string;
-  /** github_app or ghcr */
+  /** github_app, ghcr, or openai */
   kind: string;
   /** admin or ui */
   managementSource: string;
@@ -72,6 +72,7 @@ export interface ConnectionCredentials {
   privateKey: string;
   token: string;
   pullToken: string;
+  apiKey: string;
 }
 
 export interface CreateConnectionRequest {
@@ -1001,7 +1002,7 @@ export const GetConnectionRequest: MessageFns<GetConnectionRequest> = {
 };
 
 function createBaseConnectionCredentials(): ConnectionCredentials {
-  return { privateKey: "", token: "", pullToken: "" };
+  return { privateKey: "", token: "", pullToken: "", apiKey: "" };
 }
 
 export const ConnectionCredentials: MessageFns<ConnectionCredentials> = {
@@ -1014,6 +1015,9 @@ export const ConnectionCredentials: MessageFns<ConnectionCredentials> = {
     }
     if (message.pullToken !== "") {
       writer.uint32(26).string(message.pullToken);
+    }
+    if (message.apiKey !== "") {
+      writer.uint32(34).string(message.apiKey);
     }
     return writer;
   },
@@ -1055,6 +1059,14 @@ export const ConnectionCredentials: MessageFns<ConnectionCredentials> = {
             message.pullToken = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.apiKey = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1080,6 +1092,11 @@ export const ConnectionCredentials: MessageFns<ConnectionCredentials> = {
         : isSet(object.pull_token)
         ? globalThis.String(object.pull_token)
         : "",
+      apiKey: isSet(object.apiKey)
+        ? globalThis.String(object.apiKey)
+        : isSet(object.api_key)
+        ? globalThis.String(object.api_key)
+        : "",
     };
   },
 
@@ -1094,6 +1111,9 @@ export const ConnectionCredentials: MessageFns<ConnectionCredentials> = {
     if (message.pullToken !== "") {
       obj.pullToken = message.pullToken;
     }
+    if (message.apiKey !== "") {
+      obj.apiKey = message.apiKey;
+    }
     return obj;
   },
 
@@ -1105,6 +1125,7 @@ export const ConnectionCredentials: MessageFns<ConnectionCredentials> = {
     message.privateKey = object.privateKey ?? "";
     message.token = object.token ?? "";
     message.pullToken = object.pullToken ?? "";
+    message.apiKey = object.apiKey ?? "";
     return message;
   },
 };

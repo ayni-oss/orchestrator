@@ -36,6 +36,7 @@ fn project_summary_uses_complete_history_and_preserves_member_readiness()
     store.update_project(
         "add-member",
         &v1::UpdateProjectRequest {
+            agent_defaults: None,
             idempotency_key: "add-member".into(),
             project_id: project.id,
             expected_resource_version: project.resource_version,

@@ -157,14 +157,15 @@ test("publication retry resumes retained final work and is distinct from task re
 });
 
 
-test("project overview puts tasks first and adapts the repository grid", async ({ page }) => {
+test("project overview starts with conversations and retains tasks and responsive repository grid", async ({ page }) => {
   await page.setViewportSize({ width: 1185, height: 1071 });
   await page.goto("/projects/project:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   const sections = page.locator("main section");
-  await expect(sections.nth(0).getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
-  await expect(sections.nth(1).getByRole("heading", {name:"Repositories",exact:true})).toBeVisible();
-  const grid = sections.nth(1).locator(".grid");
+  await expect(sections.nth(0).getByRole("heading", {name:"Conversations",exact:true})).toBeVisible();
+  await expect(sections.nth(1).getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
+  await expect(sections.nth(2).getByRole("heading", {name:"Repositories",exact:true})).toBeVisible();
+  const grid = sections.nth(2).locator(".grid");
   expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(3);
   await expect(page.getByRole("button", {name:"Save settings",exact:true})).toHaveCount(0);
   await page.getByRole("button", {name:/project actions$/u}).click();

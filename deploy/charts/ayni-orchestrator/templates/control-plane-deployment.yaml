@@ -89,6 +89,8 @@ spec:
             - name: ORCHESTRATOR_RUNTIME_CONFIG_PATH
               value: /runtime-config/runtime.json
             {{- end }}
+            - name: ORCHESTRATOR_OPENAI_SECRET_NAME
+              value: {{ .Values.runtime.modelSecret | quote }}
             - name: OPENAI_API_KEY_PATH
               value: /run/secrets/openai/api-key
           startupProbe:
@@ -220,7 +222,7 @@ spec:
             sizeLimit: 64Mi
         - name: openai-api-key
           secret:
-            secretName: openai-api
+            secretName: {{ .Values.runtime.modelSecret | quote }}
             defaultMode: 288
             optional: true
         {{- if .Values.customClients.enabled }}

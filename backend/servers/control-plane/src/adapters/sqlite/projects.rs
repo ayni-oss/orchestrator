@@ -91,6 +91,7 @@ impl CleanStore {
             created_at: Some(timestamp(now)),
             updated_at: Some(timestamp(now)),
             resource_version: 1,
+            agent_defaults: None,
         };
         self.save_project("CreateProject", key, request, &project, true)?;
         Ok(project)
@@ -116,6 +117,25 @@ impl CleanStore {
             project
                 .repository_connection_ids
                 .clone_from(&request.repository_connection_ids);
+        }
+        if let Some(defaults) = &request.agent_defaults {
+            for (connection, model) in [
+                (&defaults.project_connection_id, &defaults.project_model),
+                (&defaults.coding_connection_id, &defaults.coding_model),
+            ] {
+                if connection.is_empty() && model.is_empty() {
+                    continue;
+                }
+                let selected = self.get_connection(connection)?;
+                if selected.kind != "openai"
+                    || !selected.enabled
+                    || selected.status != "ready"
+                    || model.is_empty()
+                {
+                    return Err(CleanStoreError::InvalidTransition);
+                }
+            }
+            project.agent_defaults = Some(defaults.clone());
         }
         self.save_project("UpdateProject", key, request, &project, false)?;
         Ok(project)

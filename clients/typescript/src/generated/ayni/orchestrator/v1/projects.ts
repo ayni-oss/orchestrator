@@ -74,6 +74,7 @@ export interface Project {
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   resourceVersion: string;
+  agentDefaults?: ProjectAgentDefaults | undefined;
 }
 
 export interface CreateProjectRequest {
@@ -115,6 +116,8 @@ export interface UpdateProjectRequest {
   displayName: string;
   /** A nonempty list replaces current membership; empty preserves membership. */
   repositoryConnectionIds: string[];
+  /** Omitted preserves defaults; an empty message clears them. */
+  agentDefaults?: ProjectAgentDefaults | undefined;
 }
 
 export interface UpdateProjectResponse {
@@ -175,6 +178,14 @@ export interface WatchProjectsResponse {
   snapshotComplete: boolean;
 }
 
+/** Separate connection and model selections for research and implementation. */
+export interface ProjectAgentDefaults {
+  projectConnectionId: string;
+  projectModel: string;
+  codingConnectionId: string;
+  codingModel: string;
+}
+
 function createBaseProject(): Project {
   return {
     id: "",
@@ -184,6 +195,7 @@ function createBaseProject(): Project {
     createdAt: undefined,
     updatedAt: undefined,
     resourceVersion: "0",
+    agentDefaults: undefined,
   };
 }
 
@@ -209,6 +221,9 @@ export const Project: MessageFns<Project> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(56).uint64(message.resourceVersion);
+    }
+    if (message.agentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -282,6 +297,14 @@ export const Project: MessageFns<Project> = {
             message.resourceVersion = reader.uint64().toString();
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -323,6 +346,11 @@ export const Project: MessageFns<Project> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
+      agentDefaults: isSet(object.agentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
+        : isSet(object.agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
+        : undefined,
     };
   },
 
@@ -349,6 +377,9 @@ export const Project: MessageFns<Project> = {
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
     }
+    if (message.agentDefaults !== undefined) {
+      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
+    }
     return obj;
   },
 
@@ -364,6 +395,9 @@ export const Project: MessageFns<Project> = {
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
+    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
+      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
+      : undefined;
     return message;
   },
 };
@@ -893,6 +927,7 @@ function createBaseUpdateProjectRequest(): UpdateProjectRequest {
     expectedResourceVersion: "0",
     displayName: "",
     repositoryConnectionIds: [],
+    agentDefaults: undefined,
   };
 }
 
@@ -912,6 +947,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     }
     for (const v of message.repositoryConnectionIds) {
       writer.uint32(42).string(v!);
+    }
+    if (message.agentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -969,6 +1007,14 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
             message.repositoryConnectionIds.push(reader.string());
             continue;
           }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1008,6 +1054,11 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
         : globalThis.Array.isArray(object?.repository_connection_ids)
         ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
         : [],
+      agentDefaults: isSet(object.agentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
+        : isSet(object.agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
+        : undefined,
     };
   },
 
@@ -1028,6 +1079,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     if (message.repositoryConnectionIds?.length) {
       obj.repositoryConnectionIds = message.repositoryConnectionIds;
     }
+    if (message.agentDefaults !== undefined) {
+      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
+    }
     return obj;
   },
 
@@ -1041,6 +1095,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
     message.displayName = object.displayName ?? "";
     message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
+    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
+      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
+      : undefined;
     return message;
   },
 };
@@ -1918,6 +1975,139 @@ export const WatchProjectsResponse: MessageFns<WatchProjectsResponse> = {
       : undefined;
     message.deleted = object.deleted ?? false;
     message.snapshotComplete = object.snapshotComplete ?? false;
+    return message;
+  },
+};
+
+function createBaseProjectAgentDefaults(): ProjectAgentDefaults {
+  return { projectConnectionId: "", projectModel: "", codingConnectionId: "", codingModel: "" };
+}
+
+export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
+  encode(message: ProjectAgentDefaults, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectConnectionId !== "") {
+      writer.uint32(10).string(message.projectConnectionId);
+    }
+    if (message.projectModel !== "") {
+      writer.uint32(18).string(message.projectModel);
+    }
+    if (message.codingConnectionId !== "") {
+      writer.uint32(26).string(message.codingConnectionId);
+    }
+    if (message.codingModel !== "") {
+      writer.uint32(34).string(message.codingModel);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectAgentDefaults {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectAgentDefaults();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.projectConnectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectModel = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.codingConnectionId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.codingModel = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectAgentDefaults {
+    return {
+      projectConnectionId: isSet(object.projectConnectionId)
+        ? globalThis.String(object.projectConnectionId)
+        : isSet(object.project_connection_id)
+        ? globalThis.String(object.project_connection_id)
+        : "",
+      projectModel: isSet(object.projectModel)
+        ? globalThis.String(object.projectModel)
+        : isSet(object.project_model)
+        ? globalThis.String(object.project_model)
+        : "",
+      codingConnectionId: isSet(object.codingConnectionId)
+        ? globalThis.String(object.codingConnectionId)
+        : isSet(object.coding_connection_id)
+        ? globalThis.String(object.coding_connection_id)
+        : "",
+      codingModel: isSet(object.codingModel)
+        ? globalThis.String(object.codingModel)
+        : isSet(object.coding_model)
+        ? globalThis.String(object.coding_model)
+        : "",
+    };
+  },
+
+  toJSON(message: ProjectAgentDefaults): unknown {
+    const obj: any = {};
+    if (message.projectConnectionId !== "") {
+      obj.projectConnectionId = message.projectConnectionId;
+    }
+    if (message.projectModel !== "") {
+      obj.projectModel = message.projectModel;
+    }
+    if (message.codingConnectionId !== "") {
+      obj.codingConnectionId = message.codingConnectionId;
+    }
+    if (message.codingModel !== "") {
+      obj.codingModel = message.codingModel;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectAgentDefaults>): ProjectAgentDefaults {
+    return ProjectAgentDefaults.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectAgentDefaults>): ProjectAgentDefaults {
+    const message = createBaseProjectAgentDefaults();
+    message.projectConnectionId = object.projectConnectionId ?? "";
+    message.projectModel = object.projectModel ?? "";
+    message.codingConnectionId = object.codingConnectionId ?? "";
+    message.codingModel = object.codingModel ?? "";
     return message;
   },
 };

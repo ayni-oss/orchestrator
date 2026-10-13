@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-providers = { path = "../../libs/providers" }
 ayni-orchestrator-events = { path = "../../libs/events" }
 uuid.workspace = true
 ayni-orchestrator-registry = { path = "../../libs/registry" }

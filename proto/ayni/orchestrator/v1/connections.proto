@@ -16,7 +16,7 @@ service ConnectionService {
 // Safe metadata only. Secret contents are never returned.
 message Connection {
   string id = 1;
-  string kind = 2; // github_app or ghcr
+  string kind = 2; // github_app, ghcr, or openai
   string management_source = 3; // admin or ui
   string display_name = 4;
   string app_id = 5;
@@ -57,6 +57,7 @@ message ConnectionCredentials {
   string private_key = 1;
   string token = 2;
   string pull_token = 3;
+  string api_key = 4;
 }
 message CreateConnectionRequest {
   string idempotency_key = 1;

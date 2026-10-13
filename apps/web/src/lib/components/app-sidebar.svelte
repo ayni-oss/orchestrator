@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FolderGit2, BookOpen, GitBranch, Container, Settings } from "@lucide/svelte";
+  import { FolderGit2, BookOpen, GitBranch, Container, Settings, BrainCircuit } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { subscribeRefresh } from "$lib/refresh.js";
   import AyniIcon from "$lib/components/ayni-icon.svelte";
@@ -65,6 +65,12 @@
               <Sidebar.MenuSubButton class="translate-x-0" href="/container-registries" isActive={registriesActive} aria-current={registriesActive ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}>
                 <Container aria-hidden="true" /><span>Container registries</span>
                 <SidebarStatus status={registryConfiguration ?? { status: "warning", description: "Container registry permission status is unavailable." }} />
+              </Sidebar.MenuSubButton>
+            </Sidebar.MenuSubItem>
+            <Sidebar.MenuSubItem>
+              <Sidebar.MenuSubButton class="translate-x-0" href="/llm-providers" isActive={page.url.pathname.startsWith("/llm-providers")} onclick={() => sidebar.setOpenMobile(false)}>
+                <BrainCircuit aria-hidden="true" /><span>LLM providers</span>
+                <SidebarStatus status={page.data.llmConfiguration ?? {status:"warning",description:"LLM provider status is unavailable."}} />
               </Sidebar.MenuSubButton>
             </Sidebar.MenuSubItem>
             <Sidebar.MenuSubItem>

@@ -4,6 +4,7 @@ import {
   CertificateServiceService, Certificate,
   ConnectionServiceService, type Connection,
   ProjectServiceService, ProjectState,
+  ProjectConversationServiceService, ProjectConversation,
   DevelopmentAttemptState,
   DevelopmentTaskServiceService,
   DevelopmentTaskState,
@@ -161,7 +162,7 @@ const runtimeProfileService: UntypedServiceImplementation = {
 };
 
 const providerService: UntypedServiceImplementation = {
-  listProviderModels(_call, callback) { callback(null, { provider: "openai", models: [{ id: "gpt-5.6-sol", name: "Sol", ownedBy: "openai", contextLength: "400000", maxOutputTokens: "128000" }], observedAt: now, page }); },
+  listProviderModels(_call, callback) { callback(null, {connectionId:_call.request.connectionId, provider: "openai", models: [{ id: "gpt-5.6-sol", name: "Sol", ownedBy: "openai", contextLength: "400000", maxOutputTokens: "128000" },{id:"gpt-5.6-luna",name:"Luna",ownedBy:"openai"}], observedAt: now, page }); },
 };
 
 const taskService: UntypedServiceImplementation = {
@@ -295,8 +296,42 @@ grpc.addService(ProjectServiceService, {
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
   getProject(_call:any,callback:any){callback(null,{project});},
   createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
-  updateProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+  updateProject(call:any,callback:any){project={...project,...(call.request.agentDefaults ? {agentDefaults:call.request.agentDefaults} : {}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
   archiveProject(_call:any,callback:any){project={...project,state:ProjectState.PROJECT_STATE_ARCHIVED,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+});
+// Conversation fixtures exercise real generated gRPC and browser/BFF boundaries.
+// LLM and Kubernetes behavior is validated by native and cluster tests.
+let conversations:ProjectConversation[]=[];
+const proposalTasks=new Map<string,string>();
+function changedConversation(c:ProjectConversation){c.updateCursor=String(Number(c.updateCursor)+1);}
+grpc.addService(ProjectConversationServiceService,{
+  createProjectConversation(call:any,callback:any){const c=ProjectConversation.fromPartial({id:`conversation:${conversations.length+1}`,projectId:call.request.projectId,title:call.request.title,repositoryConnectionIds:call.request.repositoryConnectionIds,updateCursor:"1",createdAt:now});conversations.push(c);callback(null,{conversation:c});},
+  listProjectConversations(_call:any,callback:any){callback(null,{conversations:conversations.map(c=>ProjectConversation.fromPartial({id:c.id,projectId:c.projectId,title:c.title,repositoryConnectionIds:c.repositoryConnectionIds,updateCursor:c.updateCursor,createdAt:c.createdAt}))});},
+  getProjectConversation(call:any,callback:any){const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:c});},
+  sendProjectMessage(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId)!;
+    c.messages.push({id:`message:${c.messages.length+1}`,role:"user",content:call.request.content,createdAt:now,runId:""});
+    const runId=`run:${c.runs.length+1}`;
+    c.runs.push({id:runId,state:"completed",model:project.agentDefaults.projectModel,connectionId:project.agentDefaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
+    c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"I read the repository instructions and implementation. Review the complete task plan below.",createdAt:now,runId});
+    c.proposals.push({id:`proposal:${c.proposals.length+1}`,runId,state:"pending",action:"create_task",targetTaskId:"",taskId:"",attemptId:"",failure:"",request:{projectId:project.id,repositoryConnectionId:c.repositoryConnectionIds[0]!,repositoryRevision:revision,runtimeProfileId:profileId,connectionId:project.agentDefaults.codingConnectionId,agent:{provider:"openai",agent:"coding-agent",model:call.request.content.includes("model gpt-5.6-luna")?"gpt-5.6-luna":project.agentDefaults.codingModel},request:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],codingTurns:24,changeConstraints:{protectedPaths:["policy.toml"],allowTestEdits:true},deadline:{seconds:"3600",nanos:0}}});
+    changedConversation(c);callback(null,{conversation:c});
+  },
+  decideProjectProposal(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId)!,p=c.proposals.find(p=>p.id===call.request.proposalId)!;
+    if(p.state!=="pending")return callback(null,{conversation:c});
+    if(call.request.decision==="approve"){
+      p.state="approved";const id=proposalTasks.get(p.id)??`00000000-0000-4000-8000-${String(50+proposalTasks.size).padStart(12,"0")}`;proposalTasks.set(p.id,id);
+      const created=task(id,DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED,p.request!.request);tasks.set(id,created);p.taskId=id;p.attemptId=`attempt:${id}`;
+      c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"Execution succeeded. Quality checks failed. A draft PR was published; review its findings before merging.",createdAt:now,runId:p.runId});
+    }else p.state=call.request.decision==="reject"?"rejected":"revise";
+    changedConversation(c);callback(null,{conversation:c});
+  },
+  watchProjectConversation(call:any){
+    let cursor=call.request.afterCursor;
+    const timer=setInterval(()=>{const c=conversations.find(c=>c.id===call.request.conversationId);if(c&&BigInt(c.updateCursor)>BigInt(cursor)){cursor=c.updateCursor;call.write({conversation:c});}},100);
+    call.on("cancelled",()=>clearInterval(timer));call.on("close",()=>clearInterval(timer));
+  },
 });
 grpc.addService(RepositoryServiceService, repositoryService);
 grpc.addService(RuntimeProfileServiceService, runtimeProfileService);
@@ -349,6 +384,7 @@ const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
+   if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();}
    if (url.pathname === "/reset-project") project = {id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
    certificateFixture(url.pathname);
    connectionFixture(url);

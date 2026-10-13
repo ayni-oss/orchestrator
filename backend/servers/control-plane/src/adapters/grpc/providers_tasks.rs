@@ -9,16 +9,20 @@ impl v1::provider_service_server::ProviderService for GrpcApi {
         let context = self.context(&request, "ListProviderModels")?;
         api_validation::page(request.get_ref().page.as_ref())
             .map_err(|error| context.validation(&error))?;
-        let catalog = self.state.model_catalog().ok_or_else(|| {
-            context.status(
-                Code::Unavailable,
-                v1::ErrorReason::ProviderUnavailable,
-                "the provider catalog is unavailable",
-                None,
-                None,
-                None,
-            )
-        })?;
+        let catalog = self
+            .state
+            .catalog_for_connection(&request.get_ref().connection_id)
+            .await
+            .map_err(|_| {
+                context.status(
+                    Code::Unavailable,
+                    v1::ErrorReason::ProviderUnavailable,
+                    "the provider catalog is unavailable",
+                    None,
+                    None,
+                    None,
+                )
+            })?;
         let available = catalog.available().await.map_err(|_| {
             context.status(
                 Code::Unavailable,
@@ -54,6 +58,7 @@ impl v1::provider_service_server::ProviderService for GrpcApi {
             .collect();
         Ok(context.response(v1::ListProviderModelsResponse {
             provider: available.provider.to_owned(),
+            connection_id: request.get_ref().connection_id.clone(),
             models,
             page: Some(v1::PageResponse {
                 next_page_token: String::new(),
@@ -149,6 +154,53 @@ impl v1::development_task_service_server::DevelopmentTaskService for GrpcApi {
             .map_err(|error| context.validation(&error))?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
+        let _connection_guard = self.state.connection_lock.lock().await;
+        let replay_command = task_mapping::task_command(&key, &message)
+            .map_err(|error| context.store_error(&error))?;
+        let replay = with_store(&self.state, move |store| {
+            ayni_orchestrator_application::tasks::TaskRepository::replay(
+                store,
+                &replay_command.identity,
+            )
+        })
+        .await
+        .map_err(|error| context.store_error(&error))?;
+        if let Some(receipt) = replay {
+            let (task, attempt) = with_store(&self.state, move |store| {
+                Ok((
+                    store.development_task(&receipt.task_id)?,
+                    store.development_attempt(&receipt.attempt_id)?,
+                ))
+            })
+            .await
+            .map_err(|error| context.store_error(&error))?;
+            return Ok(context.response(v1::CreateDevelopmentTaskResponse {
+                development_task: Some(task),
+                initial_attempt: Some(attempt),
+            }));
+        }
+        if let Some(requested) = message.request.as_ref() {
+            let project_id = requested.project_id.clone();
+            let selected_connection = requested.connection_id.clone();
+            let connection_id = with_store(&self.state, move |store| {
+                let project = store.project(&project_id)?;
+                store.resolve_task_provider(&project, &selected_connection)
+            })
+            .await
+            .map_err(|error| context.store_error(&error))?;
+            if !connection_id.is_empty() {
+                let agent = requested
+                    .agent
+                    .as_ref()
+                    .ok_or_else(|| Status::invalid_argument("agent_required"))?;
+                if agent.provider != "openai" {
+                    return Err(Status::failed_precondition("provider_not_available"));
+                }
+                self.state
+                    .freeze_provider_credentials(&connection_id, &agent.model)
+                    .await?;
+            }
+        }
         let command = task_mapping::task_command(&key, &message)
             .map_err(|error| context.store_error(&error))?;
         let (task, attempt) = with_store(&self.state, move |store| {

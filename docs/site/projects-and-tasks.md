@@ -1,7 +1,35 @@
 # Projects and tasks
 
 A project groups repositories around a purpose. Add a connected repository to a
-project, then create a task using one of its **Ready** runtimes.
+project, then describe work in a project conversation or create a task using one of
+its **Ready** runtimes.
+
+## Work through a project conversation
+
+Under **Config → LLM providers**, configure and test an OpenAI connection. In the
+project settings, choose separate models for repository research and coding.
+Anthropic Claude and AWS Bedrock are shown as unavailable.
+
+Start a conversation and choose the repositories it can research. Describe the
+outcome you want. The project agent reads an immutable checkout, asks for missing
+requirements, and prepares a task for each target repository. It cannot edit the
+checkout or execute repository code. Research can begin before a coding runtime
+is ready; starting a task requires a ready runtime.
+
+Review the repository revision, runtime, coding model, request, acceptance criteria,
+constraints and limits on the proposal card. **Approve** starts the exact task
+shown; **Reject** discards the proposal, and a new message can request revisions.
+If the source or runtime changed, refresh the proposal before approving it.
+
+Conversations and task links survive reconnects. Task cards show progress and
+results, with an automatic summary when an attempt finishes or needs your input.
+A summary does not start further work. To cancel or retry, name the task in your
+request and confirm the resulting action card. You can still use the task detail
+page directly.
+
+One interaction prepares at most one task per repository. Tasks across repositories
+run independently; coordinate dependent changes after reviewing the earlier result.
+A failed task submission does not undo another repository's admitted task.
 
 ## Describe the work
 
@@ -48,5 +76,5 @@ Unsafe changes, cancellation, admission failures and no-change outcomes do not
 publish a draft. Ayni Orchestrator does not merge pull requests automatically.
 
 Use [results and recovery](results-and-recovery.md) to choose between a new attempt,
-publication retry or cancellation. Tasks that change the Ayni environment and
-coordinated work across multiple repositories remain future capabilities.
+publication retry or cancellation. Tasks that change the Ayni environment and dependency orchestration across
+repositories remain future capabilities.

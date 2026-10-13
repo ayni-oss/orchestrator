@@ -246,7 +246,7 @@ fn schema_sixteen_migration_freezes_existing_attempts_on_legacy_reader() -> Test
     let mut store = CleanStore::open(&path, 3)?;
     let (_, attempt, _) = admitted(&mut store)?;
     store.connection.execute_batch(
-        "DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; DROP TABLE coding_inbox;DROP TABLE coding_executions;UPDATE clean_schema SET version=16;",
+        "DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; DROP TABLE coding_inbox;DROP TABLE coding_executions;UPDATE clean_schema SET version=16;",
     )?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;

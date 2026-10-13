@@ -1,6 +1,7 @@
 use ayni_orchestrator_control_plane::{
-    AppState, BackgroundTasks, Configuration, ModelCatalog, OutboxPublisher, RuntimeReconciler,
-    VerificationConsumer, router, serve_custom_grpc, serve_grpc,
+    AppState, BackgroundTasks, Configuration, ModelCatalog, OutboxPublisher,
+    ProjectAgentReconciler, RuntimeReconciler, VerificationConsumer, router, serve_custom_grpc,
+    serve_grpc,
 };
 use ayni_orchestrator_kubernetes::notifications::{KubernetesNotifications, ObservationWakes};
 use std::{env, fs, io, process::ExitCode, time::Duration};
@@ -64,15 +65,7 @@ async fn run() -> Result<(), io::Error> {
     };
     let mut state = AppState::open(configuration.database_path(), configuration.max_attempts())
         .map_err(io::Error::other)?;
-    if let Some(catalog) = model_catalog {
-        let warmup = catalog.clone();
-        background.spawn_once(async move {
-            if let Err(error) = warmup.available().await {
-                warn!(reason_code = "model_catalog_refresh_failed", %error, "model discovery failed");
-            }
-        });
-        state = state.with_model_catalog(catalog);
-    }
+    state = attach_model_catalog(state, model_catalog, &mut background);
 
     state = state.with_github_onboarding();
     let runtimes = RuntimeReconciler::from_environment(state.clone()).map_err(io::Error::other)?;
@@ -93,6 +86,7 @@ async fn run() -> Result<(), io::Error> {
         database_monitor.wait_for_database_exit().await;
     });
     spawn_background_loops(&mut background, state.clone(), runtimes, &shutdown_receiver);
+    spawn_project_agent_loop(&mut background, state.clone(), &shutdown_receiver)?;
     spawn_outbox_loop(&mut background, publisher, &shutdown_receiver);
     spawn_consumer_loop(&mut background, consumer, &shutdown_receiver);
     let http_shutdown = shutdown_receiver.clone();
@@ -368,4 +362,43 @@ fn spawn_consumer_loop(
             },
         );
     }
+}
+
+fn attach_model_catalog(
+    mut state: AppState,
+    catalog: Option<ModelCatalog>,
+    background: &mut BackgroundTasks,
+) -> AppState {
+    if let Some(catalog) = catalog {
+        let warmup = catalog.clone();
+        background.spawn_once(async move {
+            if let Err(error) = warmup.available().await {
+                warn!(reason_code="model_catalog_refresh_failed",%error,"model discovery failed");
+            }
+        });
+        state = state.with_model_catalog(catalog);
+    }
+    state
+}
+fn spawn_project_agent_loop(
+    background: &mut BackgroundTasks,
+    state: AppState,
+    shutdown: &watch::Receiver<bool>,
+) -> Result<(), io::Error> {
+    if let Some(agents) =
+        ProjectAgentReconciler::from_environment(state).map_err(io::Error::other)?
+    {
+        background.spawn_periodic(
+            "project-agents",
+            Duration::from_secs(5),
+            shutdown.clone(),
+            move || {
+                let agents = agents.clone();
+                async move {
+                    agents.reconcile().await;
+                }
+            },
+        );
+    }
+    Ok(())
 }

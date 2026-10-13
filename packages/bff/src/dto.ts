@@ -156,6 +156,7 @@ export interface AgentSelectionDto {
 }
 
 export interface DevelopmentTaskInputDto {
+  connectionId?: string;
   projectId: string;
   repositoryConnectionId: string;
   repositoryRevision: string;
@@ -185,6 +186,7 @@ export interface FrozenRuntimeDto {
 }
 
 export interface DevelopmentSnapshotDto {
+  providerBinding?: {connectionId:string;credentialRevision:string};
   repository: FrozenRepositoryDto;
   runtime: FrozenRuntimeDto;
   agent: AgentSelectionDto;
@@ -273,6 +275,7 @@ export interface ProviderModelDto {
 }
 
 export interface ProviderModelPageDto {
+  connectionId: string;
   provider: string;
   models: ProviderModelDto[];
   observedAt: string;
@@ -285,7 +288,15 @@ export interface RequestContext {
   deadlineMs?: number;
 }
 
+export interface ProjectAgentDefaultsDto {
+  projectConnectionId: string;
+  projectModel: string;
+  codingConnectionId: string;
+  codingModel: string;
+}
+
 export interface ProjectDto {
+  agentDefaults?: ProjectAgentDefaultsDto;
   id: string;
   displayName: string;
   state: "active" | "archived";
@@ -329,4 +340,16 @@ export interface WorkerResultDto {
   pullRequest?: PullRequestReceiptDto | undefined;
   codingTurnsConsumed: number;
   qualityRound: number;
+}
+
+export interface ProjectConversationDto {
+  id: string;
+  projectId: string;
+  title: string;
+  repositoryConnectionIds: string[];
+  updateCursor: string;
+  createdAt: string;
+  messages: Array<{id:string;role:string;content:string;createdAt:string;runId:string}>;
+  runs: Array<{id:string;state:string;model:string;connectionId:string;modelCalls:number;failure:string;usage?:{inputTokens:string|undefined;outputTokens:string|undefined;totalTokens:string|undefined}}>;
+  proposals: Array<{id:string;runId:string;state:string;action:string;targetTaskId:string;taskId:string;attemptId:string;failure:string;runtime?:{profileRevisionId:string;artifactId:string;image:string;digest:string};request?:DevelopmentTaskInputDto}>;
 }

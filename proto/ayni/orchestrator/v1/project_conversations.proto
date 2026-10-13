@@ -1,0 +1,106 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+import "ayni/orchestrator/v1/development_tasks.proto";
+import "google/protobuf/timestamp.proto";
+
+// Trusted operator conversation API; not available on the custom-client listener.
+service ProjectConversationService {
+  rpc WatchProjectConversation(WatchProjectConversationRequest) returns (stream WatchProjectConversationResponse);
+  rpc CreateProjectConversation(CreateProjectConversationRequest) returns (CreateProjectConversationResponse);
+  rpc ListProjectConversations(ListProjectConversationsRequest) returns (ListProjectConversationsResponse);
+  rpc GetProjectConversation(GetProjectConversationRequest) returns (GetProjectConversationResponse);
+  rpc SendProjectMessage(SendProjectMessageRequest) returns (SendProjectMessageResponse);
+  rpc DecideProjectProposal(DecideProjectProposalRequest) returns (DecideProjectProposalResponse);
+}
+message ProjectConversation {
+  string id = 1;
+  string project_id = 2;
+  string title = 3;
+  repeated string repository_connection_ids = 4;
+  repeated ProjectMessage messages = 5;
+  repeated ProjectAgentRun runs = 6;
+  repeated ProjectTaskProposal proposals = 7;
+  uint64 update_cursor = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+message ProjectMessage {
+  string id = 1;
+  string role = 2;
+  string content = 3;
+  google.protobuf.Timestamp created_at = 4;
+  string run_id = 5;
+}
+message ProjectAgentRun {
+  string id = 1;
+  string state = 2;
+  string model = 3;
+  string connection_id = 4;
+  string credential_revision = 5;
+  uint32 model_calls = 6;
+  string failure = 7;
+  google.protobuf.Timestamp created_at = 8;
+  FrozenProviderCredentials provider_credentials = 9;
+  string purpose = 10;
+  ProviderTokenUsage token_usage = 11;
+}
+message ProjectTaskProposal {
+  string id = 1;
+  string run_id = 2;
+  string state = 3;
+  DevelopmentTaskRequest request = 4;
+  string task_id = 5;
+  string attempt_id = 6;
+  string failure = 7;
+  // create_task, cancel_task, retry_task, retry_publication.
+  string action = 8;
+  string target_task_id = 9;
+  FrozenRuntime researched_runtime = 10;
+}
+message CreateProjectConversationRequest {
+  string idempotency_key = 1;
+  string project_id = 2;
+  string title = 3;
+  repeated string repository_connection_ids = 4;
+}
+message WatchProjectConversationResponse {
+  ProjectConversation conversation = 1;
+}
+message CreateProjectConversationResponse {
+  ProjectConversation conversation = 1;
+}
+message GetProjectConversationResponse {
+  ProjectConversation conversation = 1;
+}
+message SendProjectMessageResponse {
+  ProjectConversation conversation = 1;
+}
+message DecideProjectProposalResponse {
+  ProjectConversation conversation = 1;
+}
+message ListProjectConversationsRequest {
+  string project_id = 1;
+}
+message ListProjectConversationsResponse {
+  repeated ProjectConversation conversations = 1;
+}
+message GetProjectConversationRequest {
+  string conversation_id = 1;
+}
+message SendProjectMessageRequest {
+  string idempotency_key = 1;
+  string conversation_id = 2;
+  string content = 3;
+}
+message DecideProjectProposalRequest {
+  string idempotency_key = 1;
+  string conversation_id = 2;
+  string proposal_id = 3;
+  // approve, reject, revise. Revisions are supplied as a new user message.
+  string decision = 4;
+}
+
+message WatchProjectConversationRequest {
+  string conversation_id = 1;
+  uint64 after_cursor = 2;
+}

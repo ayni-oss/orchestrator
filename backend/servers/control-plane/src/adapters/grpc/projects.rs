@@ -117,6 +117,45 @@ impl v1::project_service_server::ProjectService for GrpcApi {
             }
         })
         .map_err(|e| context.validation(&e))?;
+        let _connection_guard = self.state.connection_lock.lock().await;
+        if let Some(defaults) = value.agent_defaults.as_ref() {
+            for (connection, model) in [
+                (&defaults.project_connection_id, &defaults.project_model),
+                (&defaults.coding_connection_id, &defaults.coding_model),
+            ] {
+                if connection.is_empty() && model.is_empty() {
+                    continue;
+                }
+                api_validation::resource_id(connection, "connection_id")
+                    .map_err(|error| context.validation(&error))?;
+                if model.is_empty() {
+                    return Err(Status::invalid_argument("provider_model_required"));
+                }
+            }
+            let project_validation = async {
+                if !defaults.project_connection_id.is_empty() {
+                    self.state
+                        .freeze_provider_credentials(
+                            &defaults.project_connection_id,
+                            &defaults.project_model,
+                        )
+                        .await?;
+                }
+                Ok::<(), Status>(())
+            };
+            let coding_validation = async {
+                if !defaults.coding_connection_id.is_empty() {
+                    self.state
+                        .freeze_provider_credentials(
+                            &defaults.coding_connection_id,
+                            &defaults.coding_model,
+                        )
+                        .await?;
+                }
+                Ok::<(), Status>(())
+            };
+            tokio::try_join!(project_validation, coding_validation)?;
+        }
         let key = context.idempotency_key(&value.idempotency_key)?;
         let message = request.into_inner();
         let project = with_store(&self.state, move |s| s.update_project(&key, &message))

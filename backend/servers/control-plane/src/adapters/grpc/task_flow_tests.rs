@@ -194,6 +194,7 @@ fn task_request(profile: &RuntimeFixture, key: &str) -> v1::CreateDevelopmentTas
     v1::CreateDevelopmentTaskRequest {
         idempotency_key: key.into(),
         request: Some(v1::DevelopmentTaskRequest {
+            connection_id: String::new(),
             coding_turns: Some(12),
             project_id: profile.project.id.clone(),
             repository_connection_id: profile.repository.id.clone(),

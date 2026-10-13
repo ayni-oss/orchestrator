@@ -598,7 +598,11 @@ export interface DevelopmentTaskRequest {
    * Total model iterations across implementation and quality repairs, 1 through 128.
    * When absent, the deployment default applies for older clients.
    */
-  codingTurns?: number | undefined;
+  codingTurns?:
+    | number
+    | undefined;
+  /** Empty uses the project coding default, or legacy deployment credentials. */
+  connectionId: string;
 }
 
 /** FrozenRepository freezes the source snapshot used by a task or attempt. */
@@ -639,6 +643,7 @@ export interface DevelopmentSnapshot {
     | undefined;
   /** Base branch observed when the publication request is frozen. */
   publicationBaseBranch: string;
+  providerCredentials?: FrozenProviderCredentials | undefined;
 }
 
 /** ProviderTokenUsage preserves independent counters; absence never means zero. */
@@ -918,6 +923,14 @@ export interface WatchDevelopmentTaskResponse {
   } | undefined;
 }
 
+/** Immutable credential identity; contains no secret material. */
+export interface FrozenProviderCredentials {
+  connectionId: string;
+  credentialRevision: string;
+  secretName: string;
+  secretUid: string;
+}
+
 function createBaseAgentSelection(): AgentSelection {
   return { provider: "", agent: "", model: "" };
 }
@@ -1031,6 +1044,7 @@ function createBaseDevelopmentTaskRequest(): DevelopmentTaskRequest {
     changeConstraints: undefined,
     deadline: undefined,
     codingTurns: undefined,
+    connectionId: "",
   };
 }
 
@@ -1065,6 +1079,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     }
     if (message.codingTurns !== undefined) {
       writer.uint32(88).uint32(message.codingTurns);
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(98).string(message.connectionId);
     }
     return writer;
   },
@@ -1162,6 +1179,14 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
             message.codingTurns = reader.uint32();
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1214,6 +1239,11 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
         : isSet(object.coding_turns)
         ? globalThis.Number(object.coding_turns)
         : undefined,
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
     };
   },
 
@@ -1249,6 +1279,9 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
     if (message.codingTurns !== undefined) {
       obj.codingTurns = Math.round(message.codingTurns);
     }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
     return obj;
   },
 
@@ -1273,6 +1306,7 @@ export const DevelopmentTaskRequest: MessageFns<DevelopmentTaskRequest> = {
       ? Duration.fromPartial(object.deadline)
       : undefined;
     message.codingTurns = object.codingTurns ?? undefined;
+    message.connectionId = object.connectionId ?? "";
     return message;
   },
 };
@@ -1659,6 +1693,7 @@ function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
     deadlineAt: undefined,
     limits: undefined,
     publicationBaseBranch: "",
+    providerCredentials: undefined,
   };
 }
 
@@ -1690,6 +1725,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     }
     if (message.publicationBaseBranch !== "") {
       writer.uint32(74).string(message.publicationBaseBranch);
+    }
+    if (message.providerCredentials !== undefined) {
+      FrozenProviderCredentials.encode(message.providerCredentials, writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -1779,6 +1817,14 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
             message.publicationBaseBranch = reader.string();
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.providerCredentials = FrozenProviderCredentials.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1818,6 +1864,11 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
         : isSet(object.publication_base_branch)
         ? globalThis.String(object.publication_base_branch)
         : "",
+      providerCredentials: isSet(object.providerCredentials)
+        ? FrozenProviderCredentials.fromJSON(object.providerCredentials)
+        : isSet(object.provider_credentials)
+        ? FrozenProviderCredentials.fromJSON(object.provider_credentials)
+        : undefined,
     };
   },
 
@@ -1850,6 +1901,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     if (message.publicationBaseBranch !== "") {
       obj.publicationBaseBranch = message.publicationBaseBranch;
     }
+    if (message.providerCredentials !== undefined) {
+      obj.providerCredentials = FrozenProviderCredentials.toJSON(message.providerCredentials);
+    }
     return obj;
   },
 
@@ -1877,6 +1931,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
       ? WorkerLimits.fromPartial(object.limits)
       : undefined;
     message.publicationBaseBranch = object.publicationBaseBranch ?? "";
+    message.providerCredentials = (object.providerCredentials !== undefined && object.providerCredentials !== null)
+      ? FrozenProviderCredentials.fromPartial(object.providerCredentials)
+      : undefined;
     return message;
   },
 };
@@ -6624,6 +6681,139 @@ export const WatchDevelopmentTaskResponse: MessageFns<WatchDevelopmentTaskRespon
         break;
       }
     }
+    return message;
+  },
+};
+
+function createBaseFrozenProviderCredentials(): FrozenProviderCredentials {
+  return { connectionId: "", credentialRevision: "", secretName: "", secretUid: "" };
+}
+
+export const FrozenProviderCredentials: MessageFns<FrozenProviderCredentials> = {
+  encode(message: FrozenProviderCredentials, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.connectionId !== "") {
+      writer.uint32(10).string(message.connectionId);
+    }
+    if (message.credentialRevision !== "") {
+      writer.uint32(18).string(message.credentialRevision);
+    }
+    if (message.secretName !== "") {
+      writer.uint32(26).string(message.secretName);
+    }
+    if (message.secretUid !== "") {
+      writer.uint32(34).string(message.secretUid);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FrozenProviderCredentials {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseFrozenProviderCredentials();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.credentialRevision = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.secretName = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.secretUid = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): FrozenProviderCredentials {
+    return {
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+      credentialRevision: isSet(object.credentialRevision)
+        ? globalThis.String(object.credentialRevision)
+        : isSet(object.credential_revision)
+        ? globalThis.String(object.credential_revision)
+        : "",
+      secretName: isSet(object.secretName)
+        ? globalThis.String(object.secretName)
+        : isSet(object.secret_name)
+        ? globalThis.String(object.secret_name)
+        : "",
+      secretUid: isSet(object.secretUid)
+        ? globalThis.String(object.secretUid)
+        : isSet(object.secret_uid)
+        ? globalThis.String(object.secret_uid)
+        : "",
+    };
+  },
+
+  toJSON(message: FrozenProviderCredentials): unknown {
+    const obj: any = {};
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
+    if (message.credentialRevision !== "") {
+      obj.credentialRevision = message.credentialRevision;
+    }
+    if (message.secretName !== "") {
+      obj.secretName = message.secretName;
+    }
+    if (message.secretUid !== "") {
+      obj.secretUid = message.secretUid;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<FrozenProviderCredentials>): FrozenProviderCredentials {
+    return FrozenProviderCredentials.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<FrozenProviderCredentials>): FrozenProviderCredentials {
+    const message = createBaseFrozenProviderCredentials();
+    message.connectionId = object.connectionId ?? "";
+    message.credentialRevision = object.credentialRevision ?? "";
+    message.secretName = object.secretName ?? "";
+    message.secretUid = object.secretUid ?? "";
     return message;
   },
 };

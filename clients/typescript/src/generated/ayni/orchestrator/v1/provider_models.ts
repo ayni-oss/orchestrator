@@ -37,7 +37,11 @@ export interface ProviderModel {
 }
 
 export interface ListProviderModelsRequest {
-  page?: PageRequest | undefined;
+  page?:
+    | PageRequest
+    | undefined;
+  /** Empty retains deployment-managed OpenAI discovery for legacy clients. */
+  connectionId: string;
 }
 
 export interface ListProviderModelsResponse {
@@ -48,6 +52,7 @@ export interface ListProviderModelsResponse {
     | undefined;
   /** observed_at identifies when this catalog snapshot was obtained from the provider. */
   observedAt?: Date | undefined;
+  connectionId: string;
 }
 
 function createBaseProviderModel(): ProviderModel {
@@ -223,13 +228,16 @@ export const ProviderModel: MessageFns<ProviderModel> = {
 };
 
 function createBaseListProviderModelsRequest(): ListProviderModelsRequest {
-  return { page: undefined };
+  return { page: undefined, connectionId: "" };
 }
 
 export const ListProviderModelsRequest: MessageFns<ListProviderModelsRequest> = {
   encode(message: ListProviderModelsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.page !== undefined) {
       PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(18).string(message.connectionId);
     }
     return writer;
   },
@@ -255,6 +263,14 @@ export const ListProviderModelsRequest: MessageFns<ListProviderModelsRequest> = 
             message.page = PageRequest.decode(reader, reader.uint32());
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -268,13 +284,23 @@ export const ListProviderModelsRequest: MessageFns<ListProviderModelsRequest> = 
   },
 
   fromJSON(object: any): ListProviderModelsRequest {
-    return { page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined };
+    return {
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
+    };
   },
 
   toJSON(message: ListProviderModelsRequest): unknown {
     const obj: any = {};
     if (message.page !== undefined) {
       obj.page = PageRequest.toJSON(message.page);
+    }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
     }
     return obj;
   },
@@ -287,12 +313,13 @@ export const ListProviderModelsRequest: MessageFns<ListProviderModelsRequest> = 
     message.page = (object.page !== undefined && object.page !== null)
       ? PageRequest.fromPartial(object.page)
       : undefined;
+    message.connectionId = object.connectionId ?? "";
     return message;
   },
 };
 
 function createBaseListProviderModelsResponse(): ListProviderModelsResponse {
-  return { provider: "", models: [], page: undefined, observedAt: undefined };
+  return { provider: "", models: [], page: undefined, observedAt: undefined, connectionId: "" };
 }
 
 export const ListProviderModelsResponse: MessageFns<ListProviderModelsResponse> = {
@@ -308,6 +335,9 @@ export const ListProviderModelsResponse: MessageFns<ListProviderModelsResponse> 
     }
     if (message.observedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.observedAt), writer.uint32(34).fork()).join();
+    }
+    if (message.connectionId !== "") {
+      writer.uint32(42).string(message.connectionId);
     }
     return writer;
   },
@@ -357,6 +387,14 @@ export const ListProviderModelsResponse: MessageFns<ListProviderModelsResponse> 
             message.observedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.connectionId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -379,6 +417,11 @@ export const ListProviderModelsResponse: MessageFns<ListProviderModelsResponse> 
         : isSet(object.observed_at)
         ? fromJsonTimestamp(object.observed_at)
         : undefined,
+      connectionId: isSet(object.connectionId)
+        ? globalThis.String(object.connectionId)
+        : isSet(object.connection_id)
+        ? globalThis.String(object.connection_id)
+        : "",
     };
   },
 
@@ -396,6 +439,9 @@ export const ListProviderModelsResponse: MessageFns<ListProviderModelsResponse> 
     if (message.observedAt !== undefined) {
       obj.observedAt = message.observedAt.toISOString();
     }
+    if (message.connectionId !== "") {
+      obj.connectionId = message.connectionId;
+    }
     return obj;
   },
 
@@ -410,6 +456,7 @@ export const ListProviderModelsResponse: MessageFns<ListProviderModelsResponse> 
       ? PageResponse.fromPartial(object.page)
       : undefined;
     message.observedAt = object.observedAt ?? undefined;
+    message.connectionId = object.connectionId ?? "";
     return message;
   },
 };

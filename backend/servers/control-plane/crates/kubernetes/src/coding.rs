@@ -91,7 +91,23 @@ impl RuntimeKubernetes {
         image: &str,
         deadline: u32,
     ) -> Result<(), &'static str> {
-        let mut job = coding_job(name, &self.configuration, runtime, image, deadline)?;
+        let mut configuration = self.configuration.clone();
+        if let Some(binding) = &request.provider_credentials {
+            if binding.connection_id.is_empty()
+                || binding.credential_revision.is_empty()
+                || binding.secret_uid.is_empty()
+            {
+                return Err("provider_binding_invalid");
+            }
+            configuration.model_secret.clone_from(&binding.secret_name);
+            configuration.validate()?;
+            let credentials = crate::connections::ConnectionSecrets::new(&configuration.namespace)?;
+            let (uid, revision) = credentials.metadata(&binding.secret_name, None).await?;
+            if uid != binding.secret_uid || revision != binding.credential_revision {
+                return Err("provider_credential_revision_changed");
+            }
+        }
+        let mut job = coding_job(name, &configuration, runtime, image, deadline)?;
         let mut data = std::collections::BTreeMap::from([
             (
                 "execution.json".into(),

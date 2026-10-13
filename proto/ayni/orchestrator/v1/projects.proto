@@ -34,6 +34,7 @@ message Project {
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
   uint64 resource_version = 7;
+  ProjectAgentDefaults agent_defaults = 8;
 }
 
 message CreateProjectRequest {
@@ -69,6 +70,8 @@ message UpdateProjectRequest {
   string display_name = 4;
   // A nonempty list replaces current membership; empty preserves membership.
   repeated string repository_connection_ids = 5;
+  // Omitted preserves defaults; an empty message clears them.
+  ProjectAgentDefaults agent_defaults = 6;
 }
 message UpdateProjectResponse {
   Project project = 1;
@@ -116,4 +119,12 @@ message WatchProjectsResponse {
   bool deleted = 3;
   // Marks the snapshot boundary, including an empty snapshot.
   bool snapshot_complete = 4;
+}
+
+// Separate connection and model selections for research and implementation.
+message ProjectAgentDefaults {
+  string project_connection_id = 1;
+  string project_model = 2;
+  string coding_connection_id = 3;
+  string coding_model = 4;
 }

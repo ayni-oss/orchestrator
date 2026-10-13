@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import ThemedSection from "$lib/components/ui/collapsible/section.svelte";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
@@ -10,7 +10,10 @@
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { words } from "$lib/presentation.js";
-  let {project,repositories,profiles,models,provider,idempotencyKey,onSubmitted} : {project:NonNullable<PageData["project"]>;repositories:PageData["repositories"];profiles:PageData["profiles"];models:PageData["models"];provider:string;idempotencyKey:string;onSubmitted?:()=>Promise<void>} = $props();
+  let {project,repositories,profiles,models,provider,idempotencyKey,onSubmitted,connections=[],catalogues={}} : {project:NonNullable<PageData["project"]>;repositories:PageData["repositories"];profiles:PageData["profiles"];models:PageData["models"];provider:string;idempotencyKey:string;onSubmitted?:()=>Promise<void>;connections?:PageData["llmConnections"];catalogues?:PageData["connectionModels"]} = $props();
+  let selectedConnection=$state(untrack(()=>project.agentDefaults?.codingConnectionId??""));
+  const selectedModels=$derived(selectedConnection ? catalogues[selectedConnection]?.models??[] : models);
+  let selectedModel=$state(untrack(()=>project.agentDefaults?.codingModel??""));
   let choice=$state("");
   const repository=$derived(project.repositoryConnectionIds.includes(choice) ? choice : project.repositoryConnectionIds.length===1 ? project.repositoryConnectionIds[0]! : "");
   const ready=$derived(profiles.filter(profile => profile.repositoryConnectionId===repository && profile.support==="operational" && profile.state==="ready"));
@@ -21,7 +24,7 @@
   let pending=$state(false), allowTestEdits=$state(true);
 </script>
 <form action="?/createTask" method="POST" class="space-y-4" use:enhance={() => {pending=true;return async ({update,result})=>{pending=false;if(result.type === "redirect") {await onSubmitted?.();await tick();}await update();};}}>
-  <input type="hidden" name="idempotencyKey" value={idempotencyKey} /><input type="hidden" name="projectId" value={project.id} /><input type="hidden" name="provider" value={provider} />
+  <input type="hidden" name="idempotencyKey" value={idempotencyKey} /><input type="hidden" name="projectId" value={project.id} /><input type="hidden" name="provider" value={selectedConnection ? "openai" : provider} />
   <div class="space-y-2">
     <Label for="task-repository">Repository</Label>
     <ThemedSelect id="task-repository" descriptionId="task-repository-help" name="repositoryConnectionId" required value={repository} onValueChange={value => { choice = value; selectedProfile = ""; }} placeholder="Select a repository" options={repositories.map(repo => ({ value: repo.id, label: repo.displayName }))} />
@@ -33,12 +36,13 @@
     <p id="task-profile-help" class="text-xs text-muted-foreground">The prepared environment with tools and dependencies for coding and checks. Its source revision and image are fixed when you submit.</p>
   </div>
   {#if repository && !ready.length}<p role="status" class="text-sm text-muted-foreground">This repository needs a ready runtime before you can submit work.</p>{/if}
+  {#if connections.length}<div class="space-y-2"><Label for="task-connection">Coding connection</Label><ThemedSelect id="task-connection" name="connectionId" required value={selectedConnection} onValueChange={value=>{selectedConnection=value;selectedModel="";}} options={connections.map(c=>({value:c.id,label:c.displayName}))} placeholder="Select a connection" /></div>{/if}
   <div class="space-y-2">
     <Label for="task-model">Model</Label>
-    <ThemedSelect id="task-model" descriptionId="task-model-help" name="model" required placeholder="Select a model" options={models.map(model => ({ value: model.id, label: model.id }))} />
-    <p id="task-model-help" class="text-xs text-muted-foreground">The AI model that implements the request and repairs check failures. Choose gpt-5.6-luna, gpt-5.6-terra, or gpt-5.6-sol when available from your provider.</p>
+    <ThemedSelect id="task-model" descriptionId="task-model-help" name="model" required bind:value={selectedModel} placeholder="Select a model" options={selectedModels.map(model => ({ value: model.id, label: model.id }))} />
+    <p id="task-model-help" class="text-xs text-muted-foreground">The AI model that implements the request and repairs check failures. Choose a model available from your selected connection.</p>
   </div>
-  {#if !models.length}<p class="text-sm text-muted-foreground">No supported models are available. Check provider access to gpt-5.6-luna, gpt-5.6-terra, and gpt-5.6-sol.</p>{/if}
+  {#if !selectedModels.length}<p class="text-sm text-muted-foreground">No supported models are available. Check the selected provider connection.</p>{/if}
   <div class="space-y-2">
     <Label for="task-request">Request</Label><Textarea id="task-request" aria-describedby="task-request-help" name="request" required maxlength={16384} rows={4} />
     <p id="task-request-help" class="text-xs text-muted-foreground">Describe the problem, the change you want, and any context the agent needs.</p>
@@ -68,5 +72,5 @@
     </div>
   </ThemedSection>
   <p class="text-xs text-muted-foreground">Work targets the selected repository and is published as a draft PR with its actual check results.</p>
-  <Button type="submit" class="w-full" disabled={pending || !ready.length || !models.length}>{pending ? "Submitting…" : "Submit task"}</Button>
+  <Button type="submit" class="w-full" disabled={pending || !ready.length || !selectedModels.length}>{pending ? "Submitting…" : "Submit task"}</Button>
 </form>

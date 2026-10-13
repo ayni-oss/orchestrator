@@ -12,6 +12,8 @@ fn configuration() -> RuntimeConfiguration {
         coding_turns: 24,
         quality_repair_limit: 3,
         concurrency: 4,
+        project_agent_model_calls: 24,
+        project_agent_deadline_seconds: 600,
         allow_emulation: false,
         engine_mode: "external-isolated".into(),
 
@@ -106,6 +108,7 @@ fn operator_document() -> serde_json::Value {
         "output_claim": "outputs", "model_secret": "model", "allow_emulation": true,
         "verification_mode": "shadow", "engine_mode": "external-isolated",
         "interval_seconds": 42, "request_timeout_seconds": 12, "coding_turns": 17, "quality_repair_limit": 3, "concurrency": 3,
+        "project_agent_model_calls": 24, "project_agent_deadline_seconds": 600,
         "profiles": {
             "project-profile": {
                 "image": "registry.test/environment:lock", "platform": "linux/arm64",
@@ -198,6 +201,8 @@ fn operator_json_preserves_scheduling_and_workload_defaults()
     assert_eq!(configuration.coding_turns, 24);
     assert_eq!(configuration.quality_repair_limit, 3);
     assert_eq!(configuration.concurrency, 4);
+    assert_eq!(configuration.project_agent_model_calls, 24);
+    assert_eq!(configuration.project_agent_deadline_seconds, 600);
     assert!(!configuration.allow_emulation);
     assert!(configuration.managed_runtime.is_none());
     let profile = configuration.profiles.get("default").ok_or("profile")?;
@@ -390,4 +395,20 @@ fn verification_default_changes_leave_frozen_authority_and_transport_unchanged()
         .is_err()
     );
     Ok(())
+}
+
+#[test]
+fn project_research_limits_are_bounded_separately_from_coding() {
+    let mut config = configuration();
+    for value in [0, 129] {
+        config.project_agent_model_calls = value;
+        assert!(config.validate().is_err());
+    }
+    config.project_agent_model_calls = 24;
+    for value in [0, 3601] {
+        config.project_agent_deadline_seconds = value;
+        assert!(config.validate().is_err());
+    }
+    config.project_agent_deadline_seconds = 600;
+    assert!(config.validate().is_ok());
 }

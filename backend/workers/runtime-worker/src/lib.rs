@@ -5,3 +5,5 @@ pub mod profiles;
 pub mod verification;
 
 pub mod operation;
+
+pub mod project_agent;

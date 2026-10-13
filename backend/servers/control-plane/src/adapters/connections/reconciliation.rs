@@ -75,7 +75,7 @@ impl AppState {
         &self,
         snapshot: v1::Connection,
     ) -> Result<(), Status> {
-        let github_guard = if snapshot.kind == "github_app" {
+        let github_guard = if matches!(snapshot.kind.as_str(), "github_app" | "openai") {
             Some(self.connection_lock.lock().await)
         } else {
             None
@@ -97,6 +97,8 @@ impl AppState {
         if value.kind == "github_app" {
             self.reconcile_github_candidate(&mut value).await?;
             self.reconcile_github_active(value).await?;
+        } else if value.kind == "openai" {
+            self.reconcile_provider(value).await?;
         } else {
             self.reconcile_registry(value).await?;
         }

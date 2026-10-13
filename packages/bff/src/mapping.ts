@@ -291,6 +291,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
       platform: mapPlatform(required(runtime.platform)),
     },
     agent: { provider: agent.provider, agent: agent.agent, model: agent.model },
+    ...(value.providerCredentials ? {providerBinding:{connectionId:value.providerCredentials.connectionId,credentialRevision:value.providerCredentials.credentialRevision}} : {}),
     request: value.request,
     limits: { codingTurns: required(value.limits).codingTurns, qualityRepairLimit: required(value.limits).qualityRepairLimit, deadlineAt: date(value.limits?.deadlineAt) },
     acceptanceCriteria: value.acceptanceCriteria.map(String),
@@ -358,6 +359,7 @@ export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentT
   const deadlineSeconds = value.deadlineSeconds;
   return {
     projectId: value.projectId,
+    connectionId: value.connectionId ?? "",
     repositoryConnectionId: value.repositoryConnectionId,
     repositoryRevision: value.repositoryRevision,
     runtimeProfileId: value.runtimeProfileId,

@@ -11,6 +11,20 @@ pub(super) fn valid_project(value: &v1::Project) -> bool {
             Ok(v1::ProjectState::Active | v1::ProjectState::Archived)
         )
         && api_validation::project_members(&value.repository_connection_ids).is_ok()
+        && value.agent_defaults.as_ref().is_none_or(|defaults| {
+            [
+                (&defaults.project_connection_id, &defaults.project_model),
+                (&defaults.coding_connection_id, &defaults.coding_model),
+            ]
+            .into_iter()
+            .all(|(connection, model)| {
+                (connection.is_empty() && model.is_empty())
+                    || (api_validation::resource_id(connection, "connection_id").is_ok()
+                        && !model.is_empty()
+                        && model.len() <= 128
+                        && !model.chars().any(char::is_control))
+            })
+        })
         && value.created_at.is_some()
         && value.updated_at.is_some()
         && value.resource_version > 0

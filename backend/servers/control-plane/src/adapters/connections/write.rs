@@ -34,7 +34,7 @@ impl AppState {
         if candidate.kind == "ghcr" {
             return Ok(value);
         }
-        self.finish_github_replacement(previous, value, candidate)
+        self.finish_authenticated_replacement(previous, value, candidate)
             .await
     }
     async fn create_candidate_secrets(
@@ -49,6 +49,8 @@ impl AppState {
                 ("app-id".into(), value.app_id.clone()),
                 ("private-key.pem".into(), credentials.private_key.clone()),
             ])
+        } else if value.kind == "openai" {
+            BTreeMap::from([("api-key".into(), credentials.api_key.clone())])
         } else {
             docker(&value.username, &credentials.token)?
         };
@@ -81,7 +83,7 @@ impl AppState {
         self.persist_connection(value.clone()).await?;
         Ok(candidate)
     }
-    async fn finish_github_replacement(
+    async fn finish_authenticated_replacement(
         &self,
         previous: v1::Connection,
         mut value: v1::Connection,
@@ -122,8 +124,19 @@ fn validate_credentials(
     if credentials.private_key.len() > 32768
         || credentials.token.len() > 4096
         || credentials.pull_token.len() > 4096
+        || credentials.api_key.len() > 4096
     {
         return Err(Status::invalid_argument("credentials_too_large"));
+    }
+    if value.kind == "openai" {
+        ayni_orchestrator_providers::openai_client("openai", &credentials.api_key)
+            .map_err(Status::invalid_argument)?;
+        if !credentials.private_key.is_empty()
+            || !credentials.token.is_empty()
+            || !credentials.pull_token.is_empty()
+        {
+            return Err(Status::invalid_argument("credentials_kind_mismatch"));
+        }
     }
     if value.kind == "github_app" {
         let candidate = SourceClient::unconfigured(20).map_err(Status::unavailable)?;
@@ -168,4 +181,101 @@ pub(super) fn clear_candidate(value: &mut v1::Connection) {
     value.candidate_secret_uid.clear();
     value.candidate_pull_secret_name.clear();
     value.candidate_pull_secret_uid.clear();
+}
+
+#[cfg(test)]
+mod provider_tests {
+    use super::*;
+    #[tokio::test]
+    async fn failed_provider_replacement_preserves_the_previous_usable_revision()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let state = AppState::open(directory.path().join("state.db"), 3)?;
+        let previous = v1::Connection {
+            id: "openai-rotation".into(),
+            kind: "openai".into(),
+            management_source: "ui".into(),
+            secret_name: "usable-key".into(),
+            secret_uid: "usable-uid".into(),
+            observed_revision: "one".into(),
+            desired_revision: "one".into(),
+            status: "ready".into(),
+            enabled: true,
+            resource_version: 1,
+            ..Default::default()
+        };
+        state.persist_connection(previous.clone()).await?;
+        let mut intent = previous.clone();
+        intent.resource_version += 1;
+        intent.candidate_secret_name = "rejected-key".into();
+        intent.candidate_secret_uid = "rejected-uid".into();
+        intent.desired_revision = "two".into();
+        intent.status = "pending".into();
+        state.persist_connection(intent.clone()).await?;
+        let mut candidate = intent.clone();
+        candidate.secret_name = "rejected-key".into();
+        candidate.secret_uid = "rejected-uid".into();
+        candidate.observed_revision = "two".into();
+        state.provider_catalogs.lock().await.insert(
+            "openai-rotation:rejected-uid:two".into(),
+            crate::ModelCatalog::unavailable(),
+        );
+        let actual = state
+            .finish_authenticated_replacement(previous, intent, candidate)
+            .await?;
+        assert_eq!(actual.status, "ready");
+        assert_eq!(actual.secret_name, "usable-key");
+        assert_eq!(actual.observed_revision, "one");
+        assert_eq!(actual.desired_revision, "one");
+        assert_eq!(actual.failure_reason, "provider_authentication_failed");
+        assert!(actual.candidate_secret_name.is_empty());
+        assert!(
+            actual
+                .retired_secret_revisions
+                .iter()
+                .any(|revision| revision.secret_name == "rejected-key")
+        );
+        state.shutdown_database().await?;
+        Ok(())
+    }
+
+    #[test]
+    fn openai_credentials_are_bounded_and_cannot_mix_connector_keys() {
+        let value = v1::Connection {
+            kind: "openai".into(),
+            ..Default::default()
+        };
+        assert!(validate_credentials(&value, &v1::ConnectionCredentials::default()).is_err());
+        assert!(
+            validate_credentials(
+                &value,
+                &v1::ConnectionCredentials {
+                    api_key: "key".into(),
+                    ..Default::default()
+                }
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_credentials(
+                &value,
+                &v1::ConnectionCredentials {
+                    api_key: "key".into(),
+                    token: "connector".into(),
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            validate_credentials(
+                &value,
+                &v1::ConnectionCredentials {
+                    api_key: "x".repeat(4097),
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+    }
 }

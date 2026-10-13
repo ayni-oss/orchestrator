@@ -283,6 +283,8 @@ impl Fixture {
             coding_turns: 24,
             quality_repair_limit: 3,
             concurrency: 4,
+            project_agent_model_calls: 24,
+            project_agent_deadline_seconds: 600,
             allow_emulation: false,
             engine_mode: "external-isolated".into(),
 

@@ -4,6 +4,8 @@
   import AyniIcon from "$lib/components/ayni-icon.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
+  import ProjectAgentSettings from "$lib/components/project-agent-settings.svelte";
+  import ProjectConversation from "$lib/components/project-conversation.svelte";
   import NewTaskForm from "$lib/components/new-task-form.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -44,6 +46,8 @@
           <DropdownMenu.Item onSelect={() => archiveProject=true}>Archive</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>{/if}{/snippet}</PageHeader>
+    {#key `${data.project.id}-${data.conversation?.id??""}`}<ProjectConversation {data} />{/key}
+    {#if data.project.state === "active"}{#key data.project.id}<ProjectAgentSettings project={data.project} connections={data.llmConnections} catalogues={data.connectionModels} idempotencyKey={data.idempotencyKey} />{/key}{/if}
     <section class="space-y-4"><h2 class="text-lg font-semibold">Tasks</h2>{#if data.project.state === "archived"}<p>New tasks and retries are disabled for this archived project.</p>{/if}<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each data.tasks as task (task.id)}<Card.Root><Card.Header><Card.Title class="text-base"><a href={`/tasks/${encodeURIComponent(task.id)}`} class="hover:underline">{task.snapshot.request}</a></Card.Title><Card.Description>{data.repositories.find(repo=>repo.id===task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</Card.Description></Card.Header><Card.Content class="space-y-3 text-sm"><StatusBadge status={task.state} tone={statusTone(task.state)} /><p class="text-muted-foreground">Created {formatDate(task.createdAt)}</p><p class="text-muted-foreground">Usage and PR results available in task details</p></Card.Content></Card.Root>{:else}<p class="text-sm text-muted-foreground">No tasks yet.</p>{/each}
     </div>{#if data.nextPageToken}<Button variant="outline" href={`?pageToken=${encodeURIComponent(data.nextPageToken)}`}>More tasks</Button>{/if}</section>
@@ -84,6 +88,6 @@
         </Dialog.Content>
       </Dialog.Root>
     {/if}
-    <Dialog.Root bind:open={newTask} onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>New task</Dialog.Title><Dialog.Description>Choose a repository and describe the work for {data.project.displayName}.</Dialog.Description></Dialog.Header><NewTaskForm project={data.project} repositories={data.repositories} profiles={data.profiles} models={data.models} provider={data.provider} idempotencyKey={data.taskKey} onSubmitted={closeTask} /></Dialog.Content></Dialog.Root>
+    <Dialog.Root bind:open={newTask} onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>New task</Dialog.Title><Dialog.Description>Choose a repository and describe the work for {data.project.displayName}.</Dialog.Description></Dialog.Header><NewTaskForm project={data.project} repositories={data.repositories} profiles={data.profiles} models={data.models} connections={data.llmConnections} catalogues={data.connectionModels} provider={data.provider} idempotencyKey={data.taskKey} onSubmitted={closeTask} /></Dialog.Content></Dialog.Root>
   {/if}
 </div>

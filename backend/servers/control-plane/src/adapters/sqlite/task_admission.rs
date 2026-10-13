@@ -151,6 +151,23 @@ impl TaskRepository for CleanStore {
         created_at: TimePoint,
     ) -> Result<AdmissionReceipt, Self::Error> {
         let now = created_at.seconds;
+        let requested = v1::CreateDevelopmentTaskRequest::decode(identity.payload.as_slice())
+            .map_err(|_| CleanStoreError::CorruptState)?;
+        let request = requested
+            .request
+            .as_ref()
+            .ok_or(CleanStoreError::CorruptState)?;
+        let project = self.project(&frozen.project_id)?;
+        let connection_id = self.resolve_task_provider(&project, &request.connection_id)?;
+        let provider_credentials = self.freeze_task_provider(&connection_id)?;
+        if provider_credentials.is_some()
+            && frozen
+                .agent
+                .as_ref()
+                .is_none_or(|agent| agent.provider != "openai")
+        {
+            return Err(CleanStoreError::InvalidTransition);
+        }
         let repository_id = frozen.repository_id;
         let profile_id = frozen.runtime.profile_id;
         let repository = self.repository_connection(&repository_id)?;
@@ -233,6 +250,7 @@ impl TaskRepository for CleanStore {
                     .or_else(|| Some(timestamp(now + 3600))),
             }),
             publication_base_branch: frozen.base_branch,
+            provider_credentials,
         };
         let task_id = resource_id("task");
         let attempt_id = resource_id("attempt");

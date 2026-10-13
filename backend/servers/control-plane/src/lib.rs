@@ -45,3 +45,5 @@ pub fn reporting_configuration() -> Result<
         ),
     )
 }
+
+pub use coordinators::project_agent::ProjectAgentReconciler;

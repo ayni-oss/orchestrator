@@ -10,3 +10,5 @@ pub mod image_build;
 pub mod verification;
 
 pub mod operation;
+
+pub mod project_agent;

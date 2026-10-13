@@ -31,11 +31,23 @@ pub struct WorkerSpec<Profile> {
     pub acceptance_criteria: Vec<String>,
     pub constraints: ChangeConstraints,
     pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_credentials: Option<ProviderCredentials>,
     pub limits: WorkerLimits,
     pub publication: PublicationDestination,
     pub publication_only: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reporting: Option<crate::coding_events::CodingAdmission>,
+}
+
+/// Credential-free immutable provider binding selected at admission.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderCredentials {
+    pub connection_id: String,
+    pub credential_revision: String,
+    pub secret_name: String,
+    pub secret_uid: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
