@@ -53,7 +53,7 @@ A newly admitted retry has a new execution and event identity. Deduplication mus
 content under the same source/ID; the pair alone grants no execution authority.
 
 The event type is
-`ayni.build.orchestrator.runtime.verification.result.available.v1`, its dataschema is
+`build.ayni.orchestrator.runtime.verification.result.available.v1`, its dataschema is
 `ayni://orchestrator/schemas/runtime-verification-result/v1`, and its data content
 type is `application/json`. The subject identifies the repository and runtime
 profile; `operationid` and `executionid` extensions must match the body. The
@@ -143,7 +143,7 @@ A failed quality check can still establish a valid signed runtime under the
 existing policy; shadow processing never counts a physical failure.
 
 The accepted event is
-`ayni.build.orchestrator.runtime.verification.accepted.v1`, with generated
+`build.ayni.orchestrator.runtime.verification.accepted.v1`, with generated
 `VerificationDecisionRecorded` ProtoJSON, a controller-owned source, selected
 revision, preparation/execution identity, aggregate revision and canonical report
 SHA256. Observation causation links event-owned acceptance to the original stored

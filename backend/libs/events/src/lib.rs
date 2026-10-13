@@ -22,7 +22,7 @@ pub mod decisions;
 pub mod event_types;
 pub mod operations;
 
-pub const EVENT_TYPE: &str = "ayni.build.orchestrator.runtime.verification.result.available.v1";
+pub const EVENT_TYPE: &str = "build.ayni.orchestrator.runtime.verification.result.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-verification-result/v1";
 pub const MAX_EVENT_BYTES: usize = 16_384;
 pub const MAX_EVIDENCE_BYTES: u64 = 131_072;

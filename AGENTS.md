@@ -25,8 +25,8 @@
 ## Ayni domain
 
 - Ayni's canonical public domain is `ayni.build`, not `ayni.io`.
-- All Ayni event types use the literal `ayni.build` prefix. New DNS-qualified
-  names also use `ayni.build`. Preserve historical stored envelopes through
+- All Ayni event types use the reverse-DNS prefix `build.ayni`, derived from
+  `ayni.build`. Preserve historical `io.ayni` stored envelopes through
   compatibility readers and canonicalize their type names at delivery.
 
 ## Implementation direction

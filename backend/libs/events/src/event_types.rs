@@ -1,8 +1,8 @@
 //! One canonical event namespace; compatibility readers never emit legacy names.
 use crate::{ContractError, MAX_EVENT_BYTES};
 
-const LEGACY_PREFIXES: [&str; 2] = ["io.ayni.", "build.ayni."];
-const PREFIX: &str = "ayni.build.";
+const LEGACY_PREFIXES: [&str; 1] = ["io.ayni."];
+const PREFIX: &str = "build.ayni.";
 const TYPES: [&str; 6] = [
     crate::EVENT_TYPE,
     crate::decisions::EVENT_TYPE,

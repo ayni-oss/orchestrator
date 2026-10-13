@@ -9,9 +9,9 @@ admitted work. Schema 17 adds `coding_executions` and `coding_inbox`.
 ## Authority and retained evidence
 
 `CodingReportAvailable` uses generated Protobuf/ProtoJSON inside structured
-CloudEvents. New types use Ayni's canonical `ayni.build` domain:
-`ayni.build.orchestrator.coding.report.available.v1` and
-`ayni.build.orchestrator.coding.accepted.v1`. Its binding identifies task, attempt, physical generation, Job,
+CloudEvents. Event types use the reverse-DNS prefix derived from Ayni's canonical
+`ayni.build` domain: `build.ayni.orchestrator.coding.report.available.v1` and
+`build.ayni.orchestrator.coding.accepted.v1`. Its binding identifies task, attempt, physical generation, Job,
 Pod UID, frozen snapshot digest and exact worker-request digest. The trusted
 supervisor retains immutable JSON under
 `coding-events/<generation>/<pod-uid>/<event-id>.json` before sending the event.

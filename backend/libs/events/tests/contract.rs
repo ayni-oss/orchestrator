@@ -160,7 +160,7 @@ fn accepted_decisions_have_controller_identity_and_preserve_optional_causation()
         ),
         (
             "/type",
-            json!("ayni.build.orchestrator.runtime.verification.result.available.v1"),
+            json!("build.ayni.orchestrator.runtime.verification.result.available.v1"),
         ),
         ("/data/aggregateRevision", json!("0")),
         ("/data/reportSha256", json!("bad")),
@@ -185,7 +185,8 @@ fn accepted_decisions_have_controller_identity_and_preserve_optional_causation()
 fn retained_legacy_observations_keep_identity_and_payload_but_deliver_canonical_types()
 -> Result<(), Box<dyn std::error::Error>> {
     let expected = decode(REPORT)?;
-    for prefix in ["io.ayni.", "build.ayni."] {
+    {
+        let prefix = "io.ayni.";
         let mut old: Value = serde_json::from_slice(REPORT)?;
         old["type"] = json!(format!(
             "{prefix}orchestrator.runtime.verification.result.available.v1"

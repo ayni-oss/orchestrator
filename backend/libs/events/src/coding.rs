@@ -7,7 +7,7 @@ use super::{
 use cloudevents::event::{ExtensionValue, SpecVersion};
 use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};
 
-pub const EVENT_TYPE: &str = "ayni.build.orchestrator.coding.report.available.v1";
+pub const EVENT_TYPE: &str = "build.ayni.orchestrator.coding.report.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/coding-report/v1";
 pub const CONTRACT: &str = "coding-report-v1";
 pub const MAX_RECORD_BYTES: usize = 524_288;

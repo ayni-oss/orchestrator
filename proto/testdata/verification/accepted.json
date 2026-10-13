@@ -2,7 +2,7 @@
   "specversion": "1.0",
   "id": "0199d5a1-1000-7000-8000-000000000004",
   "source": "ayni://orchestrator/controllers/verification",
-  "type": "ayni.build.orchestrator.runtime.verification.accepted.v1",
+  "type": "build.ayni.orchestrator.runtime.verification.accepted.v1",
   "subject": "repositories/repo-1/runtime-profiles/profile-1",
   "datacontenttype": "application/json",
   "dataschema": "ayni://orchestrator/schemas/runtime-verification-accepted/v1",

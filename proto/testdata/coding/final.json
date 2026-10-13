@@ -2,7 +2,7 @@
   "specversion": "1.0",
   "id": "019a3b66-2436-7000-8000-000000000001",
   "source": "ayni://orchestrator/supervisors/test",
-  "type": "ayni.build.orchestrator.coding.report.available.v1",
+  "type": "build.ayni.orchestrator.coding.report.available.v1",
   "subject": "tasks/task-one/attempts/attempt-one",
   "operationid": "generation-one",
   "executionid": "coding-one",

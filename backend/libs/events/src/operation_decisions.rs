@@ -5,7 +5,7 @@ use crate::{
 };
 use cloudevents::event::SpecVersion;
 use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};
-pub const EVENT_TYPE: &str = "ayni.build.orchestrator.runtime.operation.accepted.v1";
+pub const EVENT_TYPE: &str = "build.ayni.orchestrator.runtime.operation.accepted.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-operation-accepted/v1";
 
 fn validate(
