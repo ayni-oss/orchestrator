@@ -53,7 +53,7 @@ A newly admitted retry has a new execution and event identity. Deduplication mus
 content under the same source/ID; the pair alone grants no execution authority.
 
 The event type is
-`io.ayni.orchestrator.runtime.verification.result.available.v1`, its dataschema is
+`ayni.build.orchestrator.runtime.verification.result.available.v1`, its dataschema is
 `ayni://orchestrator/schemas/runtime-verification-result/v1`, and its data content
 type is `application/json`. The subject identifies the repository and runtime
 profile; `operationid` and `executionid` extensions must match the body. The
@@ -99,7 +99,8 @@ new receipts under pressure; it never evicts unprocessed evidence. Ingress limit
 body size to 16384 bytes and concurrent authenticated requests to 32.
 
 The supervisor fsyncs `verification-event.json` before sending and preserves its
-identity and exact bytes on process replay. It retries transport errors, 408, 429
+identity and exact bytes on process replay, with the historical type-only
+normalization described in [the shared contract](cloudevents-contract.md). It retries transport errors, 408, 429
 and 5xx responses with delays from one to thirty seconds. It rereads the projected
 token on each attempt to support rotation and rejects redirects. A bounded,
 matching 202 receipt is fsynced as `verification-receipt.json`. Permanent rejection
@@ -142,7 +143,7 @@ A failed quality check can still establish a valid signed runtime under the
 existing policy; shadow processing never counts a physical failure.
 
 The accepted event is
-`io.ayni.orchestrator.runtime.verification.accepted.v1`, with generated
+`ayni.build.orchestrator.runtime.verification.accepted.v1`, with generated
 `VerificationDecisionRecorded` ProtoJSON, a controller-owned source, selected
 revision, preparation/execution identity, aggregate revision and canonical report
 SHA256. Observation causation links event-owned acceptance to the original stored

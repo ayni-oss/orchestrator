@@ -2,7 +2,7 @@
   "specversion": "1.0",
   "id": "019a0000-0000-7000-8000-000000000001",
   "source": "ayni://orchestrator/supervisors/local",
-  "type": "io.ayni.orchestrator.runtime.verification.result.available.v1",
+  "type": "ayni.build.orchestrator.runtime.verification.result.available.v1",
   "dataschema": "ayni://orchestrator/schemas/runtime-verification-result/v1",
   "datacontenttype": "application/json",
   "subject": "repositories/repo-1/runtime-profiles/runtime-1",

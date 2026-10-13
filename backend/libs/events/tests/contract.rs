@@ -160,7 +160,7 @@ fn accepted_decisions_have_controller_identity_and_preserve_optional_causation()
         ),
         (
             "/type",
-            json!("io.ayni.orchestrator.runtime.verification.result.available.v1"),
+            json!("ayni.build.orchestrator.runtime.verification.result.available.v1"),
         ),
         ("/data/aggregateRevision", json!("0")),
         ("/data/reportSha256", json!("bad")),
@@ -177,6 +177,46 @@ fn accepted_decisions_have_controller_identity_and_preserve_optional_causation()
     assert_eq!(
         decisions::decode(&decisions::encode(&identity, &payload)?)?,
         (identity, payload)
+    );
+    Ok(())
+}
+
+#[test]
+fn retained_legacy_observations_keep_identity_and_payload_but_deliver_canonical_types()
+-> Result<(), Box<dyn std::error::Error>> {
+    let expected = decode(REPORT)?;
+    for prefix in ["io.ayni.", "build.ayni."] {
+        let mut old: Value = serde_json::from_slice(REPORT)?;
+        old["type"] = json!(format!(
+            "{prefix}orchestrator.runtime.verification.result.available.v1"
+        ));
+        let bytes = serde_json::to_vec(&old)?;
+        assert_eq!(decode(&bytes)?, expected);
+        let canonical = ayni_orchestrator_events::event_types::canonicalize(bytes)?;
+        assert_eq!(decode(&canonical)?, expected);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&canonical)?["type"],
+            ayni_orchestrator_events::EVENT_TYPE
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn historical_controller_facts_remain_readable_and_replay_with_canonical_names()
+-> Result<(), Box<dyn std::error::Error>> {
+    use ayni_orchestrator_events::{decisions, event_types};
+    let fixture = include_bytes!("../../../../proto/testdata/verification/accepted.json");
+    let expected = decisions::decode(fixture)?;
+    let mut old: Value = serde_json::from_slice(fixture)?;
+    old["type"] = json!("io.ayni.orchestrator.runtime.verification.accepted.v1");
+    let bytes = serde_json::to_vec(&old)?;
+    assert_eq!(decisions::decode(&bytes)?, expected);
+    let canonical = event_types::canonicalize(bytes)?;
+    assert_eq!(decisions::decode(&canonical)?, expected);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&canonical)?["type"],
+        decisions::EVENT_TYPE
     );
     Ok(())
 }

@@ -170,6 +170,7 @@ pub(crate) async fn deliver_event(
     bytes: Vec<u8>,
     receipt_file: &str,
 ) -> io::Result<()> {
+    let bytes = ayni_orchestrator_events::event_types::canonicalize(bytes).map_err(|_| failed())?;
     match read_bounded(&output.join(receipt_file), 1024) {
         Ok(receipt) => return validate_receipt(&receipt, identity),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}

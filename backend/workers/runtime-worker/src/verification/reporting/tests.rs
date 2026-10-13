@@ -44,12 +44,18 @@ async fn unavailable_ingress_and_lost_acknowledgement_replay_persisted_observati
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let endpoint = format!("http://{}/events/verification", listener.local_addr()?);
     let (directory, admission) = setup(endpoint)?;
-    let persisted = event(directory.path(), &admission, &admission.binding.pod_uid)?;
+    let encoded = event(directory.path(), &admission, &admission.binding.pod_uid)?;
+    let mut historical: serde_json::Value = serde_json::from_slice(&encoded)?;
+    historical["type"] =
+        serde_json::json!("io.ayni.orchestrator.runtime.verification.result.available.v1");
+    let persisted = serde_json::to_vec(&historical)?;
+    // Arrange a record retained by the earlier producer before this process resumes.
+    fs::write(directory.path().join(EVENT_FILE), &persisted)?;
     assert_eq!(
         event(directory.path(), &admission, &admission.binding.pod_uid)?,
         persisted
     );
-    let expected = persisted.clone();
+    let expected = ayni_orchestrator_events::event_types::canonicalize(persisted.clone())?;
     let server = std::thread::spawn(move || -> io::Result<()> {
         for attempt in 0..3 {
             let (mut stream, _) = listener.accept()?;

@@ -19,9 +19,10 @@ pub mod v1 {
 pub mod coding;
 pub mod coding_decisions;
 pub mod decisions;
+pub mod event_types;
 pub mod operations;
 
-pub const EVENT_TYPE: &str = "io.ayni.orchestrator.runtime.verification.result.available.v1";
+pub const EVENT_TYPE: &str = "ayni.build.orchestrator.runtime.verification.result.available.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-verification-result/v1";
 pub const MAX_EVENT_BYTES: usize = 16_384;
 pub const MAX_EVIDENCE_BYTES: u64 = 131_072;
@@ -86,7 +87,7 @@ pub fn decode(bytes: &[u8]) -> Result<(EventIdentity, VerificationResultAvailabl
     }
     let event: Event = serde_json::from_slice(bytes)?;
     if event.specversion() != SpecVersion::V10
-        || event.ty() != EVENT_TYPE
+        || !crate::event_types::matches(event.ty(), EVENT_TYPE)
         || event.datacontenttype() != Some("application/json")
         || event
             .dataschema()

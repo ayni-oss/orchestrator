@@ -103,7 +103,7 @@ results do not depend on broker availability.
 A post-install/post-upgrade Job creates or edits `ORCHESTRATOR_LIFECYCLE` in place.
 The initial routing subject is `orchestrator.runtime.verification.accepted.v1`,
 carrying the structured CloudEvent type
-`io.ayni.orchestrator.runtime.verification.accepted.v1` defined in the
+`ayni.build.orchestrator.runtime.verification.accepted.v1` defined in the
 [verification contract](verification-events.md). This subject is distinct from
 the CloudEvents resource `subject`. The local chart enables the accepted-event
 outbox publisher and the durable verification cleanup consumer.

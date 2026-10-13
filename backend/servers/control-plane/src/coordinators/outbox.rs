@@ -136,7 +136,7 @@ impl OutboxPublisher {
         connection: &mut Option<jetstream::Context>,
         publication: &Publication,
     ) -> Option<(u64, bool)> {
-        // Validate the persisted envelope without serializing it again.
+        // Validate retained authority before adapting only legacy envelope type names.
         let (identity, subject) = if let Ok((identity, _)) =
             ayni_orchestrator_events::decisions::decode(&publication.bytes)
         {
@@ -156,6 +156,8 @@ impl OutboxPublisher {
         if identity != publication.identity {
             return None;
         }
+        let bytes =
+            ayni_orchestrator_events::event_types::canonicalize(publication.bytes.clone()).ok()?;
         if connection.is_none() {
             let client = async_nats::ConnectOptions::new()
                 .connection_timeout(TIMEOUT)
@@ -174,7 +176,7 @@ impl OutboxPublisher {
         headers.insert("Nats-Expected-Stream", STREAM);
         let ack = connection
             .as_ref()?
-            .publish_with_headers(subject, headers, publication.bytes.clone().into())
+            .publish_with_headers(subject, headers, bytes.into())
             .await
             .ok()?
             .await

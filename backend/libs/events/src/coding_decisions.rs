@@ -5,7 +5,7 @@ use crate::{
 };
 use cloudevents::event::SpecVersion;
 use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};
-pub const EVENT_TYPE: &str = "build.ayni.orchestrator.coding.accepted.v1";
+pub const EVENT_TYPE: &str = "ayni.build.orchestrator.coding.accepted.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/coding-accepted/v1";
 
 fn validate(
@@ -73,7 +73,7 @@ pub fn decode(bytes: &[u8]) -> Result<(EventIdentity, CodingDecisionRecorded), C
     }
     let e: Event = serde_json::from_slice(bytes)?;
     if e.specversion() != SpecVersion::V10
-        || e.ty() != EVENT_TYPE
+        || !crate::event_types::matches(e.ty(), EVENT_TYPE)
         || e.datacontenttype() != Some("application/json")
         || e.dataschema().is_none_or(|s| s.as_str() != DATA_SCHEMA)
     {

@@ -70,7 +70,8 @@ Foreground deletion and cursor comparison still gate replacement and credential
 release.
 
 The supervisor fsyncs the retained record and event before delivery and retries the
-same bytes/identity until durable receipt. `report-operation` resumes delivery under
+same bytes/identity until durable receipt, with historical type-only normalization
+at the delivery boundary described in [the shared contract](cloudevents-contract.md). `report-operation` resumes delivery under
 the original admission and Pod identity. Replaying a process with retained terminal
 state resumes reporting rather than rerunning build, trust or publication. Reporting
 reuses the bounded verification delivery implementation, including token rotation,
@@ -97,7 +98,7 @@ Run `dev/tests/verification-reporting.sh CONTROL_PLANE_IMAGE PINNED_WORKER_IMAGE
 WEB_IMAGE events` with built images loaded into Docker Desktop. The disposable
 Helm fixture exercises real discovery, trust, build and publication supervisors
 with invalid public inputs, checks receipt before exit, restarts the controller
-and replays the original bytes. A seeded accepted runtime decision separately
+and replays the original bytes through that canonical delivery boundary. A seeded accepted runtime decision separately
 exercises the production publisher and its real JetStream storage acknowledgement.
 These checks cover transport and recovery; live GitHub trust proposals and GHCR
 build/publication round trips still require an admitted provider fixture.

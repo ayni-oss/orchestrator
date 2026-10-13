@@ -54,6 +54,15 @@ versioned `type`. Put resource identity in `subject`, occurrence time in `time`,
 and a locally recognized payload schema identifier in `dataschema`. Distinguish
 event schema version from resource revision and execution generation.
 
+All emitted Ayni event types use the literal `ayni.build.orchestrator.` prefix,
+including verification, runtime operations, coding observations and accepted
+controller decisions. Compatibility decoders can read retained historical names.
+Delivery adapters normalize a historical envelope's type before HTTP or broker
+publication, preserving its source/ID, payload, evidence hashes and trace context.
+Current envelopes remain byte-identical across retries. Historical retained
+bytes remain unchanged for audit and replay; normalization does not grant any
+additional authority or repeat a state transition.
+
 The following values and event type are illustrative proposals:
 
 ```json
@@ -61,7 +70,7 @@ The following values and event type are illustrative proposals:
   "specversion": "1.0",
   "id": "fdea456e-26a7-4ff6-9e36-2c1be9dc80bb",
   "source": "ayni://orchestrator/runtime-worker",
-  "type": "io.ayni.orchestrator.runtime.verification.result.available.v1",
+  "type": "ayni.build.orchestrator.runtime.verification.result.available.v1",
   "subject": "repositories/repo-42/runtimes/profile-9",
   "time": "2026-10-11T10:00:00Z",
   "datacontenttype": "application/json",
