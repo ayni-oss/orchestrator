@@ -9,7 +9,7 @@ deadline. Ayni remains independently useful as a local CLI.
 The trusted operator UI onboards one GitHub App, multiple GHCR connections, and
 global Ed25519 signing certificates. Ayni runtimes select a certificate or follow
 the global default; projects inherit their repositories’ runtime selections.
-Kubernetes Secrets hold credentials; SQLite schema version 17 stores safe metadata
+Kubernetes Secrets hold credentials; SQLite schema version 18 stores safe metadata
 and references, preserving retained history and migrating active runtime preparation to typed phases.
 Administrator-managed connections remain read-only, while
 validated UI replacements activate without restarting the control plane. Registry
@@ -45,6 +45,7 @@ Separate task-stage pods and independent assessment are research, not current ex
 - [Runtime verification event contract](docs/verification-events.md)
 - [Coding lifecycle event contract](docs/coding-events.md)
 - [Runtime operation event contract](docs/runtime-operation-events.md)
+- [Operator lifecycle facts and resource streams](docs/operator-projections.md)
 - [CloudEvents lifecycle contract](docs/cloudevents-contract.md)
 - [Event platform implementation proposal](docs/event-platform-implementation.md)
 - [Event platform migration and retirement](docs/event-platform-migration.md)

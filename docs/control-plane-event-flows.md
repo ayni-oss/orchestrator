@@ -4,6 +4,10 @@ Source snapshot: 11 October 2026, orchestrator commit `1f4e03a44e3217d6e3cf14b98
 
 The [architecture assessment](control-plane-events.md) develops the proposed event protocol from this inventory. Expected contracts in this document describe recommendations, not implemented behavior.
 
+This inventory retains its audited source snapshot. Current operator lifecycle
+facts, watches and projection recovery are documented in
+[operator lifecycle facts and resource streams](operator-projections.md).
+
 The current control plane combines persisted commands, Kubernetes observations, worker files, provider responses and resource-change streams. These signals have different authority. Application outcomes require validated evidence; infrastructure observations establish execution status and inform recovery.
 
 This inventory covers the implemented orchestrator checkout. Schema values for Custom Runtime, waiting states and future capabilities do not establish an implemented flow. Separate coding, check and publication Pods, independent CI assessment and coordinated multi-repository tasks remain documented research.
@@ -51,7 +55,11 @@ These are the ten current append-event kinds. Most carry full resource snapshots
 
 An attempt snapshot can contain new activity, progress, result, usage or receipt without an event type identifying which changed. Connections and certificates use separate persistent operation records. Provider model discovery uses an in-memory cache.
 
-The companion [contract catalog](control-plane-event-contracts.csv) contains 289 source-indexed entries: 57 RPCs, 100 nonzero public enum values, 118 internal enum values, ten stored event kinds and four agent tools. State vocabularies are labelled as states, not claimed to be individually published events.
+The companion [contract catalog](control-plane-event-contracts.csv) indexes RPCs,
+public and internal state vocabularies, stored event kinds, lifecycle contracts
+and agent tools. It includes implemented extensions beyond this audited source
+snapshot. State vocabularies are labelled as states, not claimed to be individually
+published events.
 
 Sources: [Transactional resource events and bounded retention](<../backend/servers/control-plane/src/adapters/sqlite/pagination_events.rs#L87>); [Resumable repository, profile and task streams](<../backend/servers/control-plane/src/adapters/grpc/watch.rs#L3>); [Worker validation, state transitions and publication retry](<../backend/servers/control-plane/src/adapters/sqlite/coding_reconciliation.rs#L165>); [Project commands and resource events](<../backend/servers/control-plane/src/adapters/sqlite/projects.rs#L64>); [Model discovery cache and provider availability](<../backend/servers/control-plane/src/adapters/models.rs#L15>).
 

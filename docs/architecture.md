@@ -162,13 +162,21 @@ out of browser components and avoids per-repository profile requests or sampling
 global task/profile pages. Unavailable summaries produce a visible error instead
 of an empty-success state. Resource detail and mutation APIs remain available.
 
-Browser consumers share one refresh timer and one in-flight invalidation per
-resource scope. The page loaders declare their runtime, task, connection or
-certificate dependencies. Background refresh pauses in hidden tabs and while a
-dialog or editable input is active; the next scheduled poll catches changes after
-editing ends, including terminal task events received during the pause. Successful
-mutations explicitly refresh their scope, bypassing this pause. Task events and
-periodic task refresh use the same coordinator, so their requests coalesce.
+Browser consumers share one notification stream, repair timer and in-flight
+invalidation per resource scope. The page loaders declare their runtime, task,
+connection, certificate or project dependencies. Background refresh pauses in
+hidden tabs and while a dialog or editable input is active. Deferred stream
+notifications and periodic repair recover changes after editing ends. Successful
+mutations explicitly refresh their scope, bypassing this pause.
+
+Connections, certificates and projects expose resumable resource streams with
+an explicit snapshot-complete cursor. Their accepted lifecycle facts use the
+transactional lifecycle journal/outbox alongside repository onboarding and source
+synchronization.
+Ownership-scoped Kubernetes metadata watches wake existing reconciliation lanes;
+periodic repair and guarded readback remain active. See
+[operator lifecycle facts and resource streams](operator-projections.md) for
+authority, privacy, replay and recovery boundaries.
 
 
 ## Runtime preparation ownership

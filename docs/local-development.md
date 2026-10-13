@@ -20,7 +20,7 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-SQLite schema version 17 migrates recognized versions 6–16 before reconciliation.
+SQLite schema version 18 migrates recognized versions 6–17 before reconciliation.
 The migration preserves connections, certificates, registries, runtime history
 and retained tasks, and records obsolete installation resources for restartable
 cleanup. Follow [operations](operations.md) and upgrade with cleaned values and
@@ -252,3 +252,34 @@ remove their test-only host and node image tags after the run.
 Coding event acceptance and restart can be exercised with
 `dev/tests/coding-reporting.sh CONTROL_PLANE_IMAGE PINNED_WORKER_IMAGE WEB_IMAGE`; see
 [the coding event contract](coding-events.md) for its precise validation scope.
+
+### Kubernetes observation acceleration
+
+The control plane watches namespace-scoped metadata for owned runtime Jobs and
+Pods, coding attempt Jobs and Pods, isolated build-engine Pods, and UI-managed
+connection/certificate Secrets and connection probe Jobs/Pods. Secret payloads are never requested by these
+streams. The deployment role grants metadata list/watch access; Kubernetes RBAC
+cannot limit Secret permissions by labels, so deployment namespace isolation
+remains the security boundary. Configured, unlabeled administrator Secret
+references retain the existing periodic readback path.
+
+Notifications coalesce to one retained wake per runtime, coding or connection
+reconciliation lane. Each lane runs at most one pass per second. A watch hint
+only accelerates the existing guarded readback: accepted event evidence,
+ownership/UID checks, provider readback and stop confirmation retain authority.
+The 5-second runtime repair and 30-second connection repair loops remain active,
+including deadlines, credential expiry and retry scheduling. Every stream closure
+or error (including an expired resource version) starts a fresh paginated relist;
+even an empty relist wakes repair to cover missed deletions. Reconnect failures
+emit bounded reason telemetry and back off without changing product outcomes.
+
+Run `dev/tests/kubernetes-watches.sh` against the explicit `docker-desktop` context
+for a disposable suspended-Job metadata fixture. It verifies modification,
+deletion and an empty relist after reconnect, then removes its own namespace.
+
+Run `dev/tests/operator-projections.sh CONTROL_PLANE_IMAGE WEB_IMAGE` with newly
+built images for production-chart certificate creation/default/deletion,
+rejected replacement admission, empty resource snapshots and cursor replay across
+controller restart. The fixture also compares each accepted lifecycle envelope in
+SQLite's journal/outbox with its exact JetStream delivery. It creates and deletes
+one disposable namespace; generated signing keys are confined to that fixture.
