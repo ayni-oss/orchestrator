@@ -363,6 +363,21 @@ pub(super) fn valid_resource_event(
     version: i64,
 ) -> Result<bool, CleanStoreError> {
     match (service, resource_type) {
+        ("connections", "connection" | "connection_deleted") => Ok(v1::Connection::decode(payload)
+            .is_ok_and(|v| {
+                !v.id.is_empty()
+                    && v.id == resource_id
+                    && v.resource_version > 0
+                    && i64::try_from(v.resource_version) == Ok(version)
+            })),
+        ("certificates", "certificate" | "certificate_deleted") => {
+            Ok(v1::Certificate::decode(payload).is_ok_and(|v| {
+                !v.id.is_empty()
+                    && v.id == resource_id
+                    && v.resource_version > 0
+                    && i64::try_from(v.resource_version) == Ok(version)
+            }))
+        }
         (PROJECT_SERVICE, "project") => Ok(v1::Project::decode(payload).is_ok_and(|v| {
             valid_project(&v)
                 && v.id == resource_id

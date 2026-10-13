@@ -92,6 +92,7 @@ impl CleanStore {
     pub(super) fn validate_durable_state(&self) -> Result<(), CleanStoreError> {
         self.validate_verification_inbox()?;
         self.validate_coding_events()?;
+        self.validate_lifecycle_events()?;
         self.validate_runtime_operations()?;
         self.validate_runtime_operation_delivery()?;
         self.validate_verification_journal()?;
@@ -120,7 +121,23 @@ impl CleanStore {
         repository_connection_id: Option<&str>,
         parent_id: Option<&str>,
     ) -> Result<(Vec<StoredEvent>, u64), CleanStoreError> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(CleanStoreError::Database)?;
         let (sql, parameters): (&str, Vec<Option<&str>>) = match service {
+            CONNECTION_SERVICE => (
+                "SELECT COALESCE((SELECT MAX(cursor) FROM resource_events e WHERE e.service='connections' AND e.resource_id=r.id),0),'connection',r.payload FROM connections r WHERE ?1 IS NULL ORDER BY 1",
+                vec![None],
+            ),
+            CERTIFICATE_SERVICE => (
+                "SELECT COALESCE((SELECT MAX(cursor) FROM resource_events e WHERE e.service='certificates' AND e.resource_id=r.id),0),'certificate',r.payload FROM certificates r WHERE ?1 IS NULL ORDER BY 1",
+                vec![None],
+            ),
+            PROJECT_SERVICE => (
+                "SELECT event_cursor,'project',payload FROM projects WHERE ?1 IS NULL ORDER BY 1",
+                vec![None],
+            ),
             REPOSITORY_SERVICE => (
                 "SELECT event_cursor,'repository_connection',payload FROM repository_connections
                  WHERE (?1 IS NULL OR id=?1)
@@ -171,15 +188,26 @@ impl CleanStore {
             _ => return Err(CleanStoreError::CorruptState),
         };
         let mut events = Vec::new();
+        let mut snapshot_bytes = 0_usize;
         while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
             let cursor: i64 = row.get(0).map_err(CleanStoreError::Database)?;
+            let payload: Vec<u8> = row.get(2).map_err(CleanStoreError::Database)?;
+            snapshot_bytes = snapshot_bytes
+                .checked_add(payload.len())
+                .ok_or(CleanStoreError::BoundExceeded)?;
+            if events.len() >= MAX_PAGE_SNAPSHOT_ITEMS || snapshot_bytes > MAX_PAGE_SNAPSHOT_BYTES {
+                return Err(CleanStoreError::BoundExceeded);
+            }
             events.push(StoredEvent {
                 cursor: u64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
                 resource_type: row.get(1).map_err(CleanStoreError::Database)?,
-                payload: row.get(2).map_err(CleanStoreError::Database)?,
+                payload,
             });
         }
         let high_water = self.current_cursor(service)?;
+        drop(rows);
+        drop(statement);
+        transaction.commit().map_err(CleanStoreError::Database)?;
         Ok((events, high_water))
     }
 

@@ -1,6 +1,25 @@
 use super::*;
 #[tonic::async_trait]
 impl v1::certificate_service_server::CertificateService for GrpcApi {
+    type WatchCertificatesStream = super::BoxGrpcStream<v1::WatchCertificatesResponse>;
+    async fn watch_certificates(
+        &self,
+        request: Request<v1::WatchCertificatesRequest>,
+    ) -> Result<Response<Self::WatchCertificatesStream>, Status> {
+        let context = self.context(&request, "WatchCertificates")?;
+        if context.client_id.is_some() {
+            return Err(Status::permission_denied("trusted_operator_required"));
+        }
+        Ok(
+            context.response(Box::pin(super::resource_watch::certificates(
+                self.state.clone(),
+                self.shutdown.clone(),
+                request.into_inner(),
+                context.request_id.clone(),
+            ))),
+        )
+    }
+
     async fn list_certificates(
         &self,
         request: Request<v1::ListCertificatesRequest>,

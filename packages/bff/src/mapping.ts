@@ -330,6 +330,8 @@ export function mapAttemptState(value: DevelopmentAttemptState): DevelopmentAtte
 
 export function mapDevelopmentAttempt(value: DevelopmentAttempt): DevelopmentAttemptDto {
   return {
+    reportingState: safeText(value.reportingState) || "unavailable",
+    cleanupState: safeText(value.cleanupState) || "unavailable",
     progress: value.progress ? mapWorkerProgress(value.progress) : undefined,
     result: value.result ? mapWorkerResult(value.result) : undefined,
     pullRequest: value.pullRequest ? mapPullRequest(value.pullRequest) : undefined,

@@ -427,6 +427,43 @@ export class OrchestratorBff {
     return mapDevelopmentAttempt(required(response.attempt));
   }
 
+  /** Browser invalidation stream: emits only cursors, never operator metadata. */
+  watchResources(scope: "connections" | "certificates" | "projects" | "runtimes" | "repositories", afterCursor: string | undefined, context: RequestContext, onUpdate: (cursor: string) => void | Promise<void>): Promise<void> {
+    const acceptedRequestId = requestId(context.requestId);
+    const metadata = new Metadata();
+    metadata.set("x-request-id", acceptedRequestId);
+    const acceptedCursor = afterCursor === "0" ? "0" : cursor(afterCursor);
+    const request = acceptedCursor === undefined ? {} : { afterCursor: acceptedCursor };
+    const options = { deadline: Date.now() + DEFAULT_STREAM_DEADLINE_MS };
+    const stream = scope === "connections" ? this.#connections.watchConnections(request, metadata, options)
+      : scope === "certificates" ? this.#certificates.watchCertificates(request, metadata, options)
+      : scope === "projects" ? this.#projects.watchProjects(request, metadata, options)
+      : scope === "repositories" ? this.#repositories.watchRepositories(request, metadata, options)
+      : this.#profiles.watchRuntimeProfiles(request, metadata, options);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        context.signal?.removeEventListener("abort", abort);
+        if (error === undefined || context.signal?.aborted === true) resolve();
+        else reject(toBffError(error, acceptedRequestId));
+      };
+      const abort = (): void => { stream.cancel(); finish(); };
+      if (context.signal?.aborted === true) { abort(); return; }
+      context.signal?.addEventListener("abort", abort, { once: true });
+      let snapshot = acceptedCursor === undefined && scope !== "runtimes" && scope !== "repositories";
+      stream.on("data", (response: { cursor: string; snapshotComplete?: boolean }) => {
+        if (snapshot && !response.snapshotComplete) return;
+        snapshot = false;
+        stream.pause();
+        Promise.resolve().then(() => onUpdate(response.cursor)).then(() => stream.resume()).catch((error: unknown) => { stream.cancel(); finish(error); });
+      });
+      stream.on("error", finish);
+      stream.on("end", () => finish());
+    });
+  }
+
   watchDevelopmentTask(
     developmentTaskId: string,
     afterCursor: string | undefined,

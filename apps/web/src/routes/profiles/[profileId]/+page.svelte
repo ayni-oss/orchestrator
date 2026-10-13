@@ -29,6 +29,15 @@
     if (key === "error-class") return words(value);
     return value;
   }
+  const statusExplanation: Record<string, string> = {
+    setup_required: "Repository setup is required before runtime preparation can proceed.",
+    setup_pr_open: "Review and merge the repository setup pull request.",
+    awaiting_environment: "Resolving and verifying the registry image for this exact lock fingerprint. A missing image is built by an Orchestrator-managed Kubernetes Job.",
+    ready: "The signed runtime image matches the checked lock and is ready for use.",
+    updating: "A new lock fingerprint is being resolved. Existing requests retain their frozen image.",
+    degraded: "Repair provider access, registry access, build configuration or certificate trust, then retry reconciliation.",
+    failed: "The committed Ayni configuration or runtime image could not be verified. Review the failure and retry after repair.",
+  };
 </script>
 
 <svelte:head><title>Runtime profile · Ayni Orchestrator</title></svelte:head>
@@ -49,6 +58,7 @@
       {#snippet trustLink()}
         {#if trustUpdate}<a href={trustUpdate.value} target="_blank" rel="noreferrer" class="underline">Review certificate trust update</a>{/if}
       {/snippet}
+      {#if statusExplanation[profile.state]}<p class="text-sm text-muted-foreground" role="status">{statusExplanation[profile.state]}</p>{/if}
       <InformationCard title="Current runtime identity" status={profile.state} actions={[
         { label: profile.reconciliation.some(entry => entry.key === "reason-code" || entry.key === "retry-eligibility" && entry.value === "operator_required") ? "Retry" : "Sync", onSelect: () => syncForm?.requestSubmit(), disabled: busy },
         { label: "Rebuild", onSelect: () => rebuildForm?.requestSubmit(), disabled: busy || !profile.rebuildAvailable },

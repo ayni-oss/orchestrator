@@ -91,3 +91,18 @@ writer generation and exact worker request. `CodingDecisionRecorded` includes
 causation, aggregate revision and whether the observation changed task state.
 See [coding lifecycle reporting](../docs/coding-events.md) for authenticated
 ingestion, independent outcomes, writer fencing and retained-envelope recovery.
+
+## Operator lifecycle and watch contracts
+
+`LifecycleDecisionRecorded` records a committed connection, certificate, project
+or repository transition with its resource revision, projection cursor, digest and
+safe classification. It uses dedicated journal/outbox storage and the existing
+accepted-fact delivery mechanism. It cannot authorize a mutation through broker replay.
+
+`WatchConnections`, `WatchCertificates` and `WatchProjects` accept an optional
+`after_cursor`. A fresh watch sends current resources and an explicit
+`snapshot_complete` boundary at the matching service cursor, including for empty
+snapshots. Updates carry their cursor and deletions set `deleted`. An expired
+cursor requires a fresh snapshot; cursors cannot move across services. Connections
+and certificates remain trusted-operator APIs. See
+[operator lifecycle facts and streams](../docs/operator-projections.md).

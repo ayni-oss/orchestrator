@@ -76,6 +76,7 @@ impl CleanStore {
                 "INSERT INTO coding_executions(attempt_id,admission) VALUES(?1,?2) ON CONFLICT(attempt_id) DO UPDATE SET admission=excluded.admission,stopped=0,last_sequence=0,pod_uid=NULL,terminal=0,request_digest=''",
                 params![id, raw],
             ).map_err(CleanStoreError::Database)?;
+            store.refresh_coding_status(id)?;
             Ok(admission)
         })
     }
@@ -98,13 +99,16 @@ impl CleanStore {
         Ok(())
     }
     pub(crate) fn stop_coding_execution(&mut self, id: &str) -> Result<(), CleanStoreError> {
-        self.connection
-            .execute(
-                "UPDATE coding_executions SET stopped=1 WHERE attempt_id=?1",
-                [id],
-            )
-            .map_err(CleanStoreError::Database)?;
-        Ok(())
+        self.verification_transaction(|store| {
+            store
+                .connection
+                .execute(
+                    "UPDATE coding_executions SET stopped=1 WHERE attempt_id=?1",
+                    [id],
+                )
+                .map_err(CleanStoreError::Database)?;
+            store.refresh_coding_status(id)
+        })
     }
     pub(crate) fn receive_coding(
         &mut self,
@@ -240,6 +244,7 @@ impl CleanStore {
                 "UPDATE coding_inbox SET decision='accepted',accepted_source=?3,accepted_id=?4,accepted_payload=?5 WHERE source=?1 AND event_id=?2",
                 params![identity.source, identity.id, fact_identity.source, fact_identity.id, bytes],
             ).map_err(CleanStoreError::Database)?;
+            if applied { store.refresh_coding_status(&binding.attempt_id)?; }
             Ok(applied)
         })
     }

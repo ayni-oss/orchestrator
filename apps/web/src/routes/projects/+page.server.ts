@@ -6,7 +6,9 @@ import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError } from "$lib/server/page.js";
 import { projectRepositoryChoices } from "$lib/server/project-choices.js";
 import { projectSchema } from "$lib/project-schema.js";
-export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
+export const load: PageServerLoad = async ({ locals, depends, setHeaders, url }) => {
+  depends("app:projects", "app:runtimes", "app:tasks");
+  depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });
   const context = requestContext(locals);
   const [projects, repositories] = await Promise.allSettled([

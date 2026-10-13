@@ -548,6 +548,10 @@ fn now() -> Result<u64, &'static str> {
 }
 
 impl RuntimeReconciler<RuntimeKubernetes> {
+    pub fn observation_namespace(&self) -> &str {
+        &self.configuration.namespace
+    }
+
     /// Constructs execution adapters from the deployed process configuration.
     ///
     /// # Errors

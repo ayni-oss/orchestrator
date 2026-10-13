@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 
 // Projects are user-facing workspaces with shared, editable repository membership.
 service ProjectService {
+  rpc WatchProjects(WatchProjectsRequest) returns (stream WatchProjectsResponse);
   rpc ListProjectSummaries(ListProjectSummariesRequest) returns (ListProjectSummariesResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
@@ -102,4 +103,17 @@ message ListProjectSummariesRequest {
 message ListProjectSummariesResponse {
   repeated ProjectSummary summaries = 1;
   PageResponse page = 2;
+}
+
+// Omit after_cursor for a current snapshot followed by durable replay. Expired
+// cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
+message WatchProjectsRequest {
+  optional uint64 after_cursor = 1;
+}
+message WatchProjectsResponse {
+  uint64 cursor = 1;
+  Project project = 2;
+  bool deleted = 3;
+  // Marks the snapshot boundary, including an empty snapshot.
+  bool snapshot_complete = 4;
 }

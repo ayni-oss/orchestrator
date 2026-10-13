@@ -7,7 +7,9 @@
   import InformationCard from "$lib/components/information-card.svelte";
   import InformationTable from "$lib/components/information-table.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
-  import PollStatus from "$lib/components/poll-status.svelte";
+  import TaskUpdateStatus from "$lib/components/task-update-status.svelte";
+  import { onMount } from "svelte";
+  import { subscribeRefresh } from "$lib/refresh.js";
   import QualitySignal from "$lib/components/quality-signal.svelte";
   import EmptyState from "$lib/components/empty-state.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -27,6 +29,7 @@
       try { await update(); } finally { busy = false; }
     };
   };
+  onMount(() => subscribeRefresh("app:tasks", { intervalMs: 120_000 }));
 </script>
 
 <svelte:head><title>{data.task?.snapshot.request.slice(0, 60) ?? "Task unavailable"} · Ayni Orchestrator</title></svelte:head>
@@ -37,7 +40,7 @@
     {@const terminal = terminalStates.includes(task.state)}
     <PageHeader eyebrow="Task" title={task.snapshot.request} />
     <section class="space-y-4" aria-labelledby="task-information-title">
-      <div class="flex flex-wrap items-center justify-between gap-2"><h2 id="task-information-title" class="text-lg font-semibold">Information</h2><PollStatus scope="app:tasks" /></div>
+      <div class="flex flex-wrap items-center justify-between gap-2"><h2 id="task-information-title" class="text-lg font-semibold">Information</h2>{#key task.id}<TaskUpdateStatus taskId={task.id} resourceVersion={task.resourceVersion} />{/key}</div>
       <InformationCard title="Task" status={task.state} actions={[
         ...(["failed", "cancelled", "deadline_exceeded"].includes(task.state) ? [{ label: "Retry task · new attempt", onSelect: () => retryForm?.requestSubmit(), disabled: busy }] : []),
         ...(terminal && canRetryPublication ? [{ label: "Retry publication", onSelect: () => publicationForm?.requestSubmit(), disabled: busy }] : []),
@@ -48,6 +51,8 @@
           { label: "Model", value: `${task.snapshot.agent.provider}/${task.snapshot.agent.model}` },
           { label: "Agent iterations", value: String(task.snapshot.limits.codingTurns) },
           { label: "Task ID", value: task.id, monospace: true },
+          { label: "Accepted outcome", value: words(task.state) },
+          { label: "Retry", value: ["failed", "cancelled", "deadline_exceeded"].includes(task.state) ? "New execution available" : canRetryPublication ? "Publication retry available" : "Unavailable" },
         ]} />
         {#if task.failure}<Feedback kind="error" title="Task failed" message={task.failure.message} />{/if}
         <form hidden bind:this={retryForm} method="POST" action="?/retry" use:enhance={submit}><input type="hidden" name="idempotencyKey" value={data.actionKeys.retry} /></form>
@@ -84,7 +89,9 @@
             { label: "Iterations used", value: `${attempt.result?.codingTurnsConsumed ?? attempt.progress?.codingTurnsConsumed ?? "Unavailable"} / ${attempt.snapshot.limits.codingTurns}` },
             { label: "Quality round", value: String(attempt.result?.qualityRound ?? attempt.progress?.qualityRound ?? "Unavailable") },
             { label: "Repair limit", value: String(attempt.snapshot.limits.qualityRepairLimit) },
-            ...(attempt.result ? [{ label: "Execution", value: words(attempt.result.execution) }] : []),
+            { label: "Execution", value: words(attempt.result?.execution ?? attempt.state) },
+            { label: "Reporting", value: words(attempt.reportingState) },
+            { label: "Cleanup", value: words(attempt.cleanupState) },
             { label: "Input tokens", value: formatTokens(attempt.usage.input) },
             { label: "Output tokens", value: formatTokens(attempt.usage.output) },
             { label: "Model interactions", value: String(attempt.usage.interactions ?? "Unavailable") },

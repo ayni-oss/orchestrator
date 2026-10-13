@@ -60,6 +60,10 @@ helm template runtime "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true --set runtime.serviceAccounts.create=false \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   >"$scratch/runtime-existing-accounts.yaml"
+# Namespaced observation watches cover only Pods, Jobs and Secret metadata.
+for render in "$scratch/application.yaml" "$scratch/runtime.yaml"; do
+  awk '/^---/{controller=0} /name: connection-controller/{controller=1} controller && /resources: \[secrets\]/{getline; if ($0 !~ /verbs: \[get, list, watch, create, patch, delete\]/) exit 1; secrets=1} controller && /resources: \[pods\]/{getline; if ($0 !~ /verbs: \[get, list, watch\]/) exit 1; pods=1} controller && /resources: \[jobs\]/{getline; if ($0 !~ /verbs: \[get, list, watch, create, delete\]/) exit 1; jobs=1} END {if (!secrets || !pods || !jobs) exit 1}' "$render"
+done
 # TokenReview authority exists only for opt-in verification reporting.
 helm template runtime-reporting "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true \
@@ -154,7 +158,7 @@ grep -q '^  name: jetstream-data$' "$scratch/local.yaml"
 grep -q '"discard": "new"' "$scratch/local.yaml"
 grep -q '"max_msg_size": 16384' "$scratch/local.yaml"
 grep -q '"retention": "limits"' "$scratch/local.yaml"
-grep -q '"subjects": \["orchestrator.runtime.verification.accepted.v1", "orchestrator.runtime.operation.accepted.v1", "orchestrator.coding.accepted.v1"\]' "$scratch/local.yaml"
+grep -q '"subjects": \["orchestrator.runtime.verification.accepted.v1", "orchestrator.runtime.operation.accepted.v1", "orchestrator.coding.accepted.v1", "orchestrator.lifecycle.accepted.v1"\]' "$scratch/local.yaml"
 grep -q 'job_name: ayni-orchestrator-jetstream' "$scratch/local.yaml"
 grep -q 'jetstream.json:' "$scratch/local.yaml"
 if grep -q 'name: exporter' "$scratch/no-observability.yaml"; then

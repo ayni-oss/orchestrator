@@ -47,7 +47,7 @@
 
     <Card.Root id="new" class="xl:sticky xl:top-24"><Card.Header><Card.Title>Submit task</Card.Title><Card.Description>Only operational, ready profiles can admit work.</Card.Description></Card.Header><Card.Content>
       {#if readyProfiles.length === 0 || data.models.length === 0}<Feedback kind="warning" title="Submission unavailable" message={readyProfiles.length === 0 ? "No runtime profile is ready." : "No provider model is available."} />{/if}
-      <form method="POST" action="?/create" class="mt-4 space-y-4" use:enhance={() => { submitting = true; return async ({ update }) => { submitting = false; await update(); }; }}>
+      <form data-refresh-paused={submitting ? "" : undefined} method="POST" action="?/create" class="mt-4 space-y-4" use:enhance={() => { submitting = true; return async ({ update }) => { try { await update(); } finally { submitting = false; } }; }}>
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="provider" value={data.provider ?? ""} />
         <div class="space-y-2"><Label for="project">Project</Label><ThemedSelect id="project" name="projectId" required value={selectedProject} onValueChange={value => { projectChoice = value; repositoryChoice = ""; selectedProfile = ""; }} placeholder="Select a project" options={data.projects.map(item => ({ value: item.id, label: item.displayName }))} /></div>
         <div class="space-y-2"><Label for="repository">Repository</Label><ThemedSelect id="repository" name="repositoryConnectionId" required value={selectedRepository} onValueChange={value => { repositoryChoice = value; selectedProfile = ""; }} placeholder="Select a repository" options={members.map(id => ({ value: id, label: id }))} /></div>

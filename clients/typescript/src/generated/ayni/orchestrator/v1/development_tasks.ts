@@ -757,6 +757,10 @@ export interface DevelopmentAttempt {
   result?: WorkerResult | undefined;
   pullRequest?: PullRequestReceipt | undefined;
   publicationOnly: boolean;
+  /** Retained delivery and cleanup projections; empty means historical unavailable. */
+  reportingState: string;
+  /** pending, stopping, complete */
+  cleanupState: string;
 }
 
 /** Frozen operator limits are immutable for the entire attempt. */
@@ -3431,6 +3435,8 @@ function createBaseDevelopmentAttempt(): DevelopmentAttempt {
     result: undefined,
     pullRequest: undefined,
     publicationOnly: false,
+    reportingState: "",
+    cleanupState: "",
   };
 }
 
@@ -3486,6 +3492,12 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     }
     if (message.publicationOnly !== false) {
       writer.uint32(136).bool(message.publicationOnly);
+    }
+    if (message.reportingState !== "") {
+      writer.uint32(146).string(message.reportingState);
+    }
+    if (message.cleanupState !== "") {
+      writer.uint32(154).string(message.cleanupState);
     }
     return writer;
   },
@@ -3639,6 +3651,22 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
             message.publicationOnly = reader.bool();
             continue;
           }
+          case 18: {
+            if (tag !== 146) {
+              break;
+            }
+
+            message.reportingState = reader.string();
+            continue;
+          }
+          case 19: {
+            if (tag !== 154) {
+              break;
+            }
+
+            message.cleanupState = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3714,6 +3742,16 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
         : isSet(object.publication_only)
         ? globalThis.Boolean(object.publication_only)
         : false,
+      reportingState: isSet(object.reportingState)
+        ? globalThis.String(object.reportingState)
+        : isSet(object.reporting_state)
+        ? globalThis.String(object.reporting_state)
+        : "",
+      cleanupState: isSet(object.cleanupState)
+        ? globalThis.String(object.cleanupState)
+        : isSet(object.cleanup_state)
+        ? globalThis.String(object.cleanup_state)
+        : "",
     };
   },
 
@@ -3770,6 +3808,12 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
     if (message.publicationOnly !== false) {
       obj.publicationOnly = message.publicationOnly;
     }
+    if (message.reportingState !== "") {
+      obj.reportingState = message.reportingState;
+    }
+    if (message.cleanupState !== "") {
+      obj.cleanupState = message.cleanupState;
+    }
     return obj;
   },
 
@@ -3807,6 +3851,8 @@ export const DevelopmentAttempt: MessageFns<DevelopmentAttempt> = {
       ? PullRequestReceipt.fromPartial(object.pullRequest)
       : undefined;
     message.publicationOnly = object.publicationOnly ?? false;
+    message.reportingState = object.reportingState ?? "";
+    message.cleanupState = object.cleanupState ?? "";
     return message;
   },
 };

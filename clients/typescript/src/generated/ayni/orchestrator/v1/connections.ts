@@ -11,7 +11,9 @@ import {
   type ChannelCredentials,
   Client,
   type ClientOptions,
+  type ClientReadableStream,
   type ClientUnaryCall,
+  type handleServerStreamingCall,
   type handleUnaryCall,
   makeGenericClientConstructor,
   type Metadata,
@@ -146,6 +148,22 @@ export interface ConnectionSecretRevision {
   secretUid: string;
   pullSecretName: string;
   pullSecretUid: string;
+}
+
+/**
+ * Omit after_cursor for a current snapshot followed by durable replay. Expired
+ * cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
+ */
+export interface WatchConnectionsRequest {
+  afterCursor?: string | undefined;
+}
+
+export interface WatchConnectionsResponse {
+  cursor: string;
+  connection?: Connection | undefined;
+  deleted: boolean;
+  /** Marks the snapshot boundary, including an empty snapshot. */
+  snapshotComplete: boolean;
 }
 
 function createBaseConnection(): Connection {
@@ -2440,9 +2458,216 @@ export const ConnectionSecretRevision: MessageFns<ConnectionSecretRevision> = {
   },
 };
 
+function createBaseWatchConnectionsRequest(): WatchConnectionsRequest {
+  return { afterCursor: undefined };
+}
+
+export const WatchConnectionsRequest: MessageFns<WatchConnectionsRequest> = {
+  encode(message: WatchConnectionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.afterCursor !== undefined) {
+      writer.uint32(8).uint64(message.afterCursor);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchConnectionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWatchConnectionsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.afterCursor = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WatchConnectionsRequest {
+    return {
+      afterCursor: isSet(object.afterCursor)
+        ? globalThis.String(object.afterCursor)
+        : isSet(object.after_cursor)
+        ? globalThis.String(object.after_cursor)
+        : undefined,
+    };
+  },
+
+  toJSON(message: WatchConnectionsRequest): unknown {
+    const obj: any = {};
+    if (message.afterCursor !== undefined) {
+      obj.afterCursor = message.afterCursor;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WatchConnectionsRequest>): WatchConnectionsRequest {
+    return WatchConnectionsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WatchConnectionsRequest>): WatchConnectionsRequest {
+    const message = createBaseWatchConnectionsRequest();
+    message.afterCursor = object.afterCursor ?? undefined;
+    return message;
+  },
+};
+
+function createBaseWatchConnectionsResponse(): WatchConnectionsResponse {
+  return { cursor: "0", connection: undefined, deleted: false, snapshotComplete: false };
+}
+
+export const WatchConnectionsResponse: MessageFns<WatchConnectionsResponse> = {
+  encode(message: WatchConnectionsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cursor !== "0") {
+      writer.uint32(8).uint64(message.cursor);
+    }
+    if (message.connection !== undefined) {
+      Connection.encode(message.connection, writer.uint32(18).fork()).join();
+    }
+    if (message.deleted !== false) {
+      writer.uint32(24).bool(message.deleted);
+    }
+    if (message.snapshotComplete !== false) {
+      writer.uint32(32).bool(message.snapshotComplete);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchConnectionsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWatchConnectionsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.cursor = reader.uint64().toString();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.connection = Connection.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.deleted = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.snapshotComplete = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WatchConnectionsResponse {
+    return {
+      cursor: isSet(object.cursor) ? globalThis.String(object.cursor) : "0",
+      connection: isSet(object.connection) ? Connection.fromJSON(object.connection) : undefined,
+      deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
+      snapshotComplete: isSet(object.snapshotComplete)
+        ? globalThis.Boolean(object.snapshotComplete)
+        : isSet(object.snapshot_complete)
+        ? globalThis.Boolean(object.snapshot_complete)
+        : false,
+    };
+  },
+
+  toJSON(message: WatchConnectionsResponse): unknown {
+    const obj: any = {};
+    if (message.cursor !== "0") {
+      obj.cursor = message.cursor;
+    }
+    if (message.connection !== undefined) {
+      obj.connection = Connection.toJSON(message.connection);
+    }
+    if (message.deleted !== false) {
+      obj.deleted = message.deleted;
+    }
+    if (message.snapshotComplete !== false) {
+      obj.snapshotComplete = message.snapshotComplete;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WatchConnectionsResponse>): WatchConnectionsResponse {
+    return WatchConnectionsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WatchConnectionsResponse>): WatchConnectionsResponse {
+    const message = createBaseWatchConnectionsResponse();
+    message.cursor = object.cursor ?? "0";
+    message.connection = (object.connection !== undefined && object.connection !== null)
+      ? Connection.fromPartial(object.connection)
+      : undefined;
+    message.deleted = object.deleted ?? false;
+    message.snapshotComplete = object.snapshotComplete ?? false;
+    return message;
+  },
+};
+
 /** Trusted operator API. Never registered on the custom-client listener. */
 export type ConnectionServiceService = typeof ConnectionServiceService;
 export const ConnectionServiceService = {
+  watchConnections: {
+    path: "/ayni.orchestrator.v1.ConnectionService/WatchConnections" as const,
+    requestStream: false as const,
+    responseStream: true as const,
+    requestSerialize: (value: WatchConnectionsRequest): Buffer =>
+      Buffer.from(WatchConnectionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): WatchConnectionsRequest => WatchConnectionsRequest.decode(value),
+    responseSerialize: (value: WatchConnectionsResponse): Buffer =>
+      Buffer.from(WatchConnectionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): WatchConnectionsResponse => WatchConnectionsResponse.decode(value),
+  },
   listConnections: {
     path: "/ayni.orchestrator.v1.ConnectionService/ListConnections" as const,
     requestStream: false as const,
@@ -2536,6 +2761,7 @@ export const ConnectionServiceService = {
 } as const;
 
 export interface ConnectionServiceServer extends UntypedServiceImplementation {
+  watchConnections: handleServerStreamingCall<WatchConnectionsRequest, WatchConnectionsResponse>;
   listConnections: handleUnaryCall<ListConnectionsRequest, ListConnectionsResponse>;
   getConnection: handleUnaryCall<GetConnectionRequest, GetConnectionResponse>;
   createConnection: handleUnaryCall<CreateConnectionRequest, CreateConnectionResponse>;
@@ -2550,6 +2776,15 @@ export interface ConnectionServiceServer extends UntypedServiceImplementation {
 }
 
 export interface ConnectionServiceClient extends Client {
+  watchConnections(
+    request: WatchConnectionsRequest,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<WatchConnectionsResponse>;
+  watchConnections(
+    request: WatchConnectionsRequest,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<WatchConnectionsResponse>;
   listConnections(
     request: ListConnectionsRequest,
     callback: (error: ServiceError | null, response: ListConnectionsResponse) => void,

@@ -288,7 +288,7 @@ fn watch_rejects_pruned_and_future_cursors() -> Result<(), CleanStoreError> {
         .map_err(CleanStoreError::Database)?;
     for version in 1..=MAX_EVENTS_PER_SERVICE.saturating_add(2) {
         let resource = v1::RepositoryConnection {
-            id: format!("repository:{version}"),
+            id: format!("repository-{version}"),
             resource_version: u64::try_from(version).map_err(|_| CleanStoreError::CorruptState)?,
             ..v1::RepositoryConnection::default()
         };
@@ -536,7 +536,7 @@ fn schema_seven_cutover_retires_image_automation_and_preserves_frozen_work()
         "task",
         &task_request(&store, &repository.id, &profile.id, "task")?,
     )?;
-    store.connection.execute_batch("DROP TABLE coding_inbox; DROP TABLE coding_executions; DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
+    store.connection.execute_batch("DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; DROP TABLE coding_inbox; DROP TABLE coding_executions; DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=7 WHERE component='control_plane';")?;
     store.connection.execute(
         "INSERT INTO automation_installations(id) VALUES('obsolete')",
         [],
@@ -569,5 +569,89 @@ fn schema_seven_cutover_retires_image_automation_and_preserves_frozen_work()
             .iter()
             .any(|name| name == "automation_installations")
     );
+    Ok(())
+}
+
+#[test]
+fn operator_stream_snapshot_covers_resources_created_before_event_history()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = CleanStore::in_memory()?;
+    let connection = v1::Connection {
+        id: "legacy".into(),
+        kind: "ghcr".into(),
+        management_source: "ui".into(),
+        resource_version: 1,
+        ..Default::default()
+    };
+    store.connection.execute(
+        "INSERT INTO connections(id,kind,payload) VALUES (?1,?2,?3)",
+        params![connection.id, connection.kind, connection.encode_to_vec()],
+    )?;
+    let (events, high_water) = store.initial_events(CONNECTION_SERVICE, None, None)?;
+    assert_eq!(high_water, 0);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].cursor, 0);
+    assert_eq!(
+        v1::Connection::decode(events[0].payload.as_slice())?,
+        connection
+    );
+    assert!(
+        store
+            .events_after(CONNECTION_SERVICE, 0, None, None)?
+            .is_empty()
+    );
+    assert!(matches!(
+        store.events_after(CONNECTION_SERVICE, 1, None, None),
+        Err(CleanStoreError::WatchCursorExpired)
+    ));
+    Ok(())
+}
+
+#[test]
+fn project_stream_snapshot_contains_current_membership() -> Result<(), Box<dyn std::error::Error>> {
+    let mut store = CleanStore::in_memory()?;
+    let repository =
+        store.create_repository_connection("stream-repo", &repository_request("repo", "123"))?;
+    let project = store.create_project(
+        "stream-project",
+        &v1::CreateProjectRequest {
+            idempotency_key: "stream-project".into(),
+            display_name: "Project".into(),
+            repository_connection_ids: vec![repository.id],
+            ..Default::default()
+        },
+    )?;
+    let (events, cursor) = store.initial_events(PROJECT_SERVICE, None, None)?;
+    assert_eq!(events.len(), 1);
+    assert_eq!(v1::Project::decode(events[0].payload.as_slice())?, project);
+    assert_eq!(cursor, events[0].cursor);
+    assert!(
+        store
+            .events_after(PROJECT_SERVICE, cursor, None, None)?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
+fn stream_snapshots_reject_oversized_resources_without_partial_success()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store = CleanStore::in_memory()?;
+    let connection = v1::Connection {
+        id: "oversized".into(),
+        kind: "ghcr".into(),
+        management_source: "ui".into(),
+        resource_version: 1,
+        display_name: "x".repeat(MAX_PAGE_SNAPSHOT_BYTES + 1),
+        ..Default::default()
+    };
+    store.connection.execute(
+        "INSERT INTO connections(id,kind,payload) VALUES (?1,?2,?3)",
+        params![connection.id, connection.kind, connection.encode_to_vec()],
+    )?;
+    assert!(matches!(
+        store.initial_events(CONNECTION_SERVICE, None, None),
+        Err(CleanStoreError::BoundExceeded)
+    ));
     Ok(())
 }

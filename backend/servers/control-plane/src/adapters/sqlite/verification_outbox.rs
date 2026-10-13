@@ -61,6 +61,15 @@ impl CleanStore {
         if coding.oldest_at > 0 && (stats.oldest_at == 0 || coding.oldest_at < stats.oldest_at) {
             stats.oldest_at = coding.oldest_at;
         }
+        let lifecycle = self.connection.query_row("SELECT COUNT(*),COALESCE(SUM(length(o.payload)),0),COALESCE(MIN(j.created_at),0),(SELECT COUNT(*) FROM lifecycle_outbox WHERE stored_at IS NOT NULL) FROM lifecycle_outbox o JOIN lifecycle_journal j ON j.id=o.journal_id WHERE o.stored_at IS NULL", [], |r| Ok(OutboxStats { pending:r.get(0)?, bytes:r.get(1)?, oldest_at:r.get(2)?, retained:r.get(3)? })).map_err(CleanStoreError::Database)?;
+        stats.pending += lifecycle.pending;
+        stats.bytes += lifecycle.bytes;
+        stats.retained += lifecycle.retained;
+        if lifecycle.oldest_at > 0
+            && (stats.oldest_at == 0 || lifecycle.oldest_at < stats.oldest_at)
+        {
+            stats.oldest_at = lifecycle.oldest_at;
+        }
         Ok(stats)
     }
 
@@ -143,7 +152,8 @@ impl CleanStore {
         let now = unix_seconds()?;
         self.prune_verification_history_at(now)?;
         self.prune_runtime_operation_history(now)?;
-        self.prune_coding_history(now)
+        self.prune_coding_history(now)?;
+        self.prune_lifecycle_history(now)
     }
 
     pub(crate) fn prune_verification_history_at(

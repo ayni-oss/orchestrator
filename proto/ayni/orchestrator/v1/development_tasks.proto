@@ -250,6 +250,9 @@ message DevelopmentAttempt {
   WorkerResult result = 15;
   PullRequestReceipt pull_request = 16;
   bool publication_only = 17;
+  // Retained delivery and cleanup projections; empty means historical unavailable.
+  string reporting_state = 18; // awaiting, accepted, legacy
+  string cleanup_state = 19; // pending, stopping, complete
 }
 
 // Frozen operator limits are immutable for the entire attempt.

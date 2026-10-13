@@ -3,7 +3,7 @@
   import { words, type StatusTone } from "$lib/presentation.js";
   let { status, tone = "neutral", pulse = false }: { status: string; tone?: StatusTone; pulse?: boolean } = $props();
   const toneClass: Record<StatusTone, string> = {
-    neutral: "border-border bg-muted text-muted-foreground",
+    neutral: "border-border bg-muted text-foreground",
     active: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
     success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
     warning: "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300",

@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 17;
+pub(crate) const SCHEMA_VERSION: i64 = 18;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -53,6 +53,8 @@ const CLEAN_TABLES: &[&str] = &[
     "development_tasks",
     "durable_actions",
     "event_watermarks",
+    "lifecycle_journal",
+    "lifecycle_outbox",
     "page_snapshots",
     "project_repositories",
     "projects",
@@ -70,6 +72,8 @@ const CLEAN_TABLES: &[&str] = &[
     "verification_outbox",
 ];
 
+pub(crate) const CONNECTION_SERVICE: &str = "connections";
+pub(crate) const CERTIFICATE_SERVICE: &str = "certificates";
 pub(crate) const PROJECT_SERVICE: &str = "projects";
 
 pub(crate) const REPOSITORY_SERVICE: &str = "repositories";
@@ -218,6 +222,7 @@ use pagination_events::{
 };
 mod coding_events;
 mod coding_reconciliation;
+mod lifecycle_events;
 mod runtime_reconciliation;
 
 #[cfg(test)]

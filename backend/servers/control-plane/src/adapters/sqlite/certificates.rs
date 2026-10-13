@@ -31,6 +31,7 @@ impl CleanStore {
             return Err(CleanStoreError::InvalidTransition);
         }
         match self.get_certificate(&value.id) {
+            Ok(current) if current == *value => return Ok(()),
             Ok(current)
                 if value.resource_version < current.resource_version
                     || value.resource_version > current.resource_version + 1 =>
@@ -43,7 +44,22 @@ impl CleanStore {
             Err(error) if !matches!(error, CleanStoreError::NotFound { .. }) => return Err(error),
             _ => {}
         }
-        self.connection.execute("INSERT INTO certificates(id,is_default,payload) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET is_default=excluded.is_default,payload=excluded.payload",params![value.id,value.is_default,value.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+        let tx = self
+            .connection
+            .transaction()
+            .map_err(CleanStoreError::Database)?;
+        tx.execute("INSERT INTO certificates(id,is_default,payload) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET is_default=excluded.is_default,payload=excluded.payload",params![value.id,value.is_default,value.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+        append_event(
+            &tx,
+            "certificates",
+            "certificate",
+            &value.id,
+            value.resource_version,
+            None,
+            None,
+            value,
+        )?;
+        tx.commit().map_err(CleanStoreError::Database)?;
         Ok(())
     }
     pub(crate) fn certificate_operation(
@@ -111,6 +127,16 @@ impl CleanStore {
                     .map_err(|_| CleanStoreError::CorruptState)?;
                 old.is_default = false;
                 old.resource_version += 1;
+                append_event(
+                    &tx,
+                    "certificates",
+                    "certificate",
+                    &old.id,
+                    old.resource_version,
+                    None,
+                    None,
+                    &old,
+                )?;
                 tx.execute(
                     "UPDATE certificates SET is_default=0,payload=?2 WHERE id=?1",
                     params![old.id, old.encode_to_vec()],
@@ -130,9 +156,34 @@ impl CleanStore {
         )
         .map_err(CleanStoreError::Database)?;
         if op == "delete" {
+            let mut tombstone = value.clone();
+            tombstone.resource_version = tombstone
+                .resource_version
+                .checked_add(1)
+                .ok_or(CleanStoreError::BoundExceeded)?;
+            append_event(
+                &tx,
+                "certificates",
+                "certificate_deleted",
+                &tombstone.id,
+                tombstone.resource_version,
+                None,
+                None,
+                &tombstone,
+            )?;
             tx.execute("DELETE FROM certificates WHERE id=?1", [&value.id])
                 .map_err(CleanStoreError::Database)?;
         } else {
+            append_event(
+                &tx,
+                "certificates",
+                "certificate",
+                &value.id,
+                value.resource_version,
+                None,
+                None,
+                value,
+            )?;
             tx.execute("INSERT INTO certificates(id,is_default,payload) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET is_default=excluded.is_default,payload=excluded.payload",params![value.id,value.is_default,value.encode_to_vec()]).map_err(CleanStoreError::Database)?;
         }
         tx.commit().map_err(CleanStoreError::Database)
@@ -168,7 +219,7 @@ mod tests {
             "INSERT INTO connections(id,kind,payload) VALUES(?1,?2,?3)",
             params![connection.id, connection.kind, connection.encode_to_vec()],
         )?;
-        store.connection.execute_batch("DROP TABLE certificate_operations; DROP TABLE coding_inbox; DROP TABLE coding_executions; DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; DROP TABLE certificates; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=6;")?;
+        store.connection.execute_batch("DROP TABLE certificate_operations; DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; DROP TABLE coding_inbox; DROP TABLE coding_executions; DROP TABLE runtime_operation_inbox; DROP TABLE verification_consumer; DROP TABLE verification_outbox; DROP TABLE verification_journal; DROP TABLE verification_inbox; DROP TABLE certificates; CREATE TABLE automation_installations(id TEXT PRIMARY KEY); DROP INDEX development_tasks_project_created_idx; ALTER TABLE development_tasks DROP COLUMN created_at_seconds; ALTER TABLE development_tasks DROP COLUMN created_at_nanos; UPDATE clean_schema SET version=6;")?;
         drop(store);
         let store = CleanStore::open(&path, 3)?;
         assert_eq!(store.schema_version()?, super::SCHEMA_VERSION);

@@ -7,7 +7,8 @@ use crate::{
         MAX_CONCURRENT_STREAMS_PER_CONNECTION, MAX_HTTP2_HEADER_LIST_BYTES,
     },
     adapters::sqlite::{
-        CleanStoreError, DEVELOPMENT_SERVICE, PROFILE_SERVICE, REPOSITORY_SERVICE, StoredEvent,
+        CERTIFICATE_SERVICE, CONNECTION_SERVICE, CleanStoreError, DEVELOPMENT_SERVICE,
+        PROFILE_SERVICE, PROJECT_SERVICE, REPOSITORY_SERVICE, StoredEvent,
     },
     coordinators::with_store_async as with_store,
     process::metrics::record_grpc_completion,
@@ -453,3 +454,4 @@ mod onboarding_error;
 
 mod certificates;
 mod connections;
+mod resource_watch;

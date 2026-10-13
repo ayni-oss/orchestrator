@@ -47,11 +47,11 @@ test("repository overview shows identity and readiness separately from runtime c
   await expect(information).not.toContainText("Ayni lock");
   await expect(page.getByText("Automatic runtime inspection",{exact:true})).toHaveCount(0);
   await expect(page.getByLabel("GHCR connection")).toHaveCount(0);
-  const runtime=page.locator("article").first();
+  const runtime=page.getByRole("region", {name:"Ayni managed", exact:true});
   await expect(runtime).toContainText("Ayni lock");
   await expect(runtime).toContainText("c".repeat(64));
   await expect(runtime.getByRole("button")).toHaveCount(1);
-  await runtime.getByRole("button",{name:"Edit",exact:true}).click();
+  await runtime.getByRole("button",{name:"Ayni managed actions",exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   const dialog=page.getByRole("dialog");
   await dialog.getByLabel("GHCR connection").click();
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
@@ -63,9 +63,9 @@ test("repository overview shows identity and readiness separately from runtime c
   await dialog.getByRole("button",{name:"Build / Retry",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
-  await expect(dialog.getByRole("alert")).toContainText("Close and reopen");
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toContainText("Close and reopen");
   await page.keyboard.press("Escape");
-  await runtime.getByRole("button",{name:"Edit",exact:true}).click();
+  await runtime.getByRole("button",{name:"Ayni managed actions",exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await dialog.getByLabel("GHCR connection").click();
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
   await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
@@ -76,8 +76,8 @@ test("repository overview shows identity and readiness separately from runtime c
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await page.getByRole("button",{name:"Dismiss notification"}).click();
-  await expect(page.getByText("Runtime sync requested.",{exact:true})).toHaveCount(0);
+  // Success toasts expire automatically; dedicated notification tests verify dismissal.
+  await expect(page.getByText("Runtime sync requested.",{exact:true})).toHaveCount(0, {timeout:10_000});
 });
 
 
@@ -85,22 +85,22 @@ test("runtime preparation shows progress, findings and guarded corrective action
   await request.post("http://127.0.0.1:50062/admin-certificate");
   await request.post("http://127.0.0.1:50062/preparation?phase=building");
   await page.goto("/repositories/repository:1");
-  await expect(page.locator("article").first()).toContainText("Preparation: Building");
+  await expect(page.getByRole("region", {name:"Ayni managed", exact:true})).toContainText("Preparation Building");
   for(const phase of ["publishing", "verifying", "ready"]) {
     await request.post(`http://127.0.0.1:50062/preparation?phase=${phase}`);
     await page.reload();
-    await expect(page.locator("article").first()).toContainText(`Preparation: ${phase[0]!.toUpperCase()}${phase.slice(1)}`);
+    await expect(page.getByRole("region", {name:"Ayni managed", exact:true})).toContainText(`Preparation ${phase[0]!.toUpperCase()}${phase.slice(1)}`);
   }
   await request.post("http://127.0.0.1:50062/preparation?phase=verifying&code=runtime_certificate_invalid");
   await page.reload();
-  await expect(page.locator("article").first()).toContainText("The image certificate is invalid.");
-  await expect(page.locator("article").first()).toContainText("Review trust and rebuild.");
-  await page.locator("article").first().getByRole("button", {name:"Edit",exact:true}).click();
+  await expect(page.getByRole("region", {name:"Ayni managed", exact:true})).toContainText("The image certificate is invalid.");
+  await expect(page.getByRole("region", {name:"Ayni managed", exact:true})).toContainText("Review trust and rebuild.");
+  await page.getByRole("button",{name:"Ayni managed actions",exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await page.getByRole("dialog").getByRole("button",{name:"Rebuild runtime",exact:true}).click();
   await expect(page.getByText("Runtime rebuild requested.", {exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/preparation?phase=setup_required&code=lock_missing&rebuild=false");
   await page.reload();
-  await page.locator("article").first().getByRole("button", {name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name:"Ayni managed actions",exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await expect(page.getByRole("dialog").getByRole("button",{name:"Rebuild runtime",exact:true})).toBeDisabled();
   await page.getByRole("dialog").getByRole("button",{name:"Retry",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.", {exact:true})).toBeVisible();
@@ -114,7 +114,7 @@ test("repository analysis retains onboarding independently of connection access"
   await expect(onboarding).toContainText("Awaiting trust");
   await expect(onboarding).toContainText("Merge the trust proposal before preparing the runtime.");
   await expect(page.getByRole("region", {name:"Information",exact:true})).toContainText("Connected");
-  await onboarding.getByRole("button", { name: "Analyze repository" }).click();
+  await onboarding.getByRole("button", { name: "Ayni onboarding actions" }).click();await page.getByRole("menuitem", { name: "Analyze repository" }).click();
   await expect(onboarding).toContainText("Analyzing");
   await page.reload();
   await expect(onboarding).toContainText("Analyzing");

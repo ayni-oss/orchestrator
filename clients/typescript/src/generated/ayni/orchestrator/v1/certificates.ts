@@ -11,7 +11,9 @@ import {
   type ChannelCredentials,
   Client,
   type ClientOptions,
+  type ClientReadableStream,
   type ClientUnaryCall,
+  type handleServerStreamingCall,
   type handleUnaryCall,
   makeGenericClientConstructor,
   type Metadata,
@@ -126,6 +128,22 @@ export interface DeleteCertificateRequest {
 }
 
 export interface DeleteCertificateResponse {
+}
+
+/**
+ * Omit after_cursor for a current snapshot followed by durable replay. Expired
+ * cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
+ */
+export interface WatchCertificatesRequest {
+  afterCursor?: string | undefined;
+}
+
+export interface WatchCertificatesResponse {
+  cursor: string;
+  certificate?: Certificate | undefined;
+  deleted: boolean;
+  /** Marks the snapshot boundary, including an empty snapshot. */
+  snapshotComplete: boolean;
 }
 
 function createBaseCertificate(): Certificate {
@@ -2080,9 +2098,216 @@ export const DeleteCertificateResponse: MessageFns<DeleteCertificateResponse> = 
   },
 };
 
+function createBaseWatchCertificatesRequest(): WatchCertificatesRequest {
+  return { afterCursor: undefined };
+}
+
+export const WatchCertificatesRequest: MessageFns<WatchCertificatesRequest> = {
+  encode(message: WatchCertificatesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.afterCursor !== undefined) {
+      writer.uint32(8).uint64(message.afterCursor);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchCertificatesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWatchCertificatesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.afterCursor = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WatchCertificatesRequest {
+    return {
+      afterCursor: isSet(object.afterCursor)
+        ? globalThis.String(object.afterCursor)
+        : isSet(object.after_cursor)
+        ? globalThis.String(object.after_cursor)
+        : undefined,
+    };
+  },
+
+  toJSON(message: WatchCertificatesRequest): unknown {
+    const obj: any = {};
+    if (message.afterCursor !== undefined) {
+      obj.afterCursor = message.afterCursor;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WatchCertificatesRequest>): WatchCertificatesRequest {
+    return WatchCertificatesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WatchCertificatesRequest>): WatchCertificatesRequest {
+    const message = createBaseWatchCertificatesRequest();
+    message.afterCursor = object.afterCursor ?? undefined;
+    return message;
+  },
+};
+
+function createBaseWatchCertificatesResponse(): WatchCertificatesResponse {
+  return { cursor: "0", certificate: undefined, deleted: false, snapshotComplete: false };
+}
+
+export const WatchCertificatesResponse: MessageFns<WatchCertificatesResponse> = {
+  encode(message: WatchCertificatesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cursor !== "0") {
+      writer.uint32(8).uint64(message.cursor);
+    }
+    if (message.certificate !== undefined) {
+      Certificate.encode(message.certificate, writer.uint32(18).fork()).join();
+    }
+    if (message.deleted !== false) {
+      writer.uint32(24).bool(message.deleted);
+    }
+    if (message.snapshotComplete !== false) {
+      writer.uint32(32).bool(message.snapshotComplete);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchCertificatesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWatchCertificatesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.cursor = reader.uint64().toString();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.certificate = Certificate.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.deleted = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.snapshotComplete = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): WatchCertificatesResponse {
+    return {
+      cursor: isSet(object.cursor) ? globalThis.String(object.cursor) : "0",
+      certificate: isSet(object.certificate) ? Certificate.fromJSON(object.certificate) : undefined,
+      deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
+      snapshotComplete: isSet(object.snapshotComplete)
+        ? globalThis.Boolean(object.snapshotComplete)
+        : isSet(object.snapshot_complete)
+        ? globalThis.Boolean(object.snapshot_complete)
+        : false,
+    };
+  },
+
+  toJSON(message: WatchCertificatesResponse): unknown {
+    const obj: any = {};
+    if (message.cursor !== "0") {
+      obj.cursor = message.cursor;
+    }
+    if (message.certificate !== undefined) {
+      obj.certificate = Certificate.toJSON(message.certificate);
+    }
+    if (message.deleted !== false) {
+      obj.deleted = message.deleted;
+    }
+    if (message.snapshotComplete !== false) {
+      obj.snapshotComplete = message.snapshotComplete;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WatchCertificatesResponse>): WatchCertificatesResponse {
+    return WatchCertificatesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WatchCertificatesResponse>): WatchCertificatesResponse {
+    const message = createBaseWatchCertificatesResponse();
+    message.cursor = object.cursor ?? "0";
+    message.certificate = (object.certificate !== undefined && object.certificate !== null)
+      ? Certificate.fromPartial(object.certificate)
+      : undefined;
+    message.deleted = object.deleted ?? false;
+    message.snapshotComplete = object.snapshotComplete ?? false;
+    return message;
+  },
+};
+
 /** Trusted operator API; never exposed on the custom-client listener. */
 export type CertificateServiceService = typeof CertificateServiceService;
 export const CertificateServiceService = {
+  watchCertificates: {
+    path: "/ayni.orchestrator.v1.CertificateService/WatchCertificates" as const,
+    requestStream: false as const,
+    responseStream: true as const,
+    requestSerialize: (value: WatchCertificatesRequest): Buffer =>
+      Buffer.from(WatchCertificatesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): WatchCertificatesRequest => WatchCertificatesRequest.decode(value),
+    responseSerialize: (value: WatchCertificatesResponse): Buffer =>
+      Buffer.from(WatchCertificatesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): WatchCertificatesResponse => WatchCertificatesResponse.decode(value),
+  },
   listCertificates: {
     path: "/ayni.orchestrator.v1.CertificateService/ListCertificates" as const,
     requestStream: false as const,
@@ -2174,6 +2399,7 @@ export const CertificateServiceService = {
 } as const;
 
 export interface CertificateServiceServer extends UntypedServiceImplementation {
+  watchCertificates: handleServerStreamingCall<WatchCertificatesRequest, WatchCertificatesResponse>;
   listCertificates: handleUnaryCall<ListCertificatesRequest, ListCertificatesResponse>;
   getCertificate: handleUnaryCall<GetCertificateRequest, GetCertificateResponse>;
   createCertificate: handleUnaryCall<CreateCertificateRequest, CreateCertificateResponse>;
@@ -2185,6 +2411,15 @@ export interface CertificateServiceServer extends UntypedServiceImplementation {
 }
 
 export interface CertificateServiceClient extends Client {
+  watchCertificates(
+    request: WatchCertificatesRequest,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<WatchCertificatesResponse>;
+  watchCertificates(
+    request: WatchCertificatesRequest,
+    metadata?: Metadata,
+    options?: Partial<CallOptions>,
+  ): ClientReadableStream<WatchCertificatesResponse>;
   listCertificates(
     request: ListCertificatesRequest,
     callback: (error: ServiceError | null, response: ListCertificatesResponse) => void,

@@ -113,6 +113,14 @@ pub(super) fn append_event<M: Message>(
         )
         .map_err(CleanStoreError::Database)?;
     let cursor = transaction.last_insert_rowid();
+    super::lifecycle_events::append(
+        transaction,
+        resource_type,
+        resource_id,
+        resource_version,
+        u64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)?,
+        value,
+    )?;
     prune_events(transaction, service)?;
     u64::try_from(cursor).map_err(|_| CleanStoreError::CorruptState)
 }
