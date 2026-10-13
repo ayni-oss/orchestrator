@@ -85,11 +85,11 @@ for name,token in [('runtime-pull','pull-test'),('runtime-push','push-test')]:
     config=json.loads((root/f'{name}.json').read_text())
     assert base64.b64decode(config['auths']['ghcr.io']['auth']).decode()==f'ExampleUser:{token}'
 PY
-! rg -q 'pull-test|push-test|openai-test' "$BOOTSTRAP_TEST_LOG" "$scratch/output" "$scratch/errors"
+! grep -Eq 'pull-test|push-test|openai-test' "$BOOTSTRAP_TEST_LOG" "$scratch/output" "$scratch/errors"
 sed '/^GHCR_IMAGE_NAMESPACE=/d' "$scratch/complete.env" > "$scratch/personal.env"
 chmod 600 "$scratch/personal.env"
 run_configure "$scratch/personal.env"
-rg -q 'ayni.dev/image-namespace=ghcr.io/exampleuser' "$BOOTSTRAP_TEST_LOG"
+grep -Eq 'ayni.dev/image-namespace=ghcr.io/exampleuser' "$BOOTSTRAP_TEST_LOG"
 export MOCK_GITHUB_OWNER=admin MOCK_PUSH_OWNER=admin MOCK_PULL_OWNER=admin MOCK_IMAGE_NAMESPACE=ghcr.io/example-org MOCK_REGISTRY_USERNAME=ExampleUser
 source "$repository_root/dev/lib/connections.sh"
 export MOCK_OPENAI_OWNER=admin
@@ -115,7 +115,7 @@ dev_bootstrap_connection_values docker-desktop test
 sed 's/GHCR_PUSH_TOKEN=push-test/GHCR_PUSH_TOKEN=pull-test/' "$scratch/complete.env" > "$scratch/same.env"
 chmod 600 "$scratch/same.env"
 if run_configure "$scratch/same.env"; then echo 'Distinct pull and push credentials are required' >&2; exit 1; fi
-! rg -q 'pull-test|push-test|openai-test' "$BOOTSTRAP_TEST_LOG" "$scratch/output" "$scratch/errors"
+! grep -Eq 'pull-test|push-test|openai-test' "$BOOTSTRAP_TEST_LOG" "$scratch/output" "$scratch/errors"
 printf '%s\n' 'OPENAI_API_KEY=openai-test' > "$scratch/openai.env"
 chmod 600 "$scratch/openai.env"
 if run_configure "$scratch/openai.env"; then echo 'UI-managed OpenAI credentials must not be overwritten' >&2; exit 1; fi
@@ -123,5 +123,5 @@ unset MOCK_OPENAI_OWNER MOCK_GITHUB_OWNER MOCK_PULL_OWNER MOCK_PUSH_OWNER
 dev_bootstrap_helm_values docker-desktop test
 [[ -z "$DEV_ADMIN_OPENAI_SECRET" && -z "$DEV_ADMIN_GITHUB_SECRET" && "$DEV_ADMIN_REGISTRIES" == '[]' ]]
 helm upgrade "${DEV_BOOTSTRAP_HELM_VALUES[@]}"
-rg -q 'ayni-orchestrator.connections.openaiSecretName= --set-json ayni-orchestrator.connections.adminRegistries=\[\]' "$BOOTSTRAP_TEST_LOG"
+grep -Eq 'ayni-orchestrator.connections.openaiSecretName= --set-json ayni-orchestrator.connections.adminRegistries=\[\]' "$BOOTSTRAP_TEST_LOG"
 echo 'development credential bootstrap checks passed' 
