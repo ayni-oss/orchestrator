@@ -17,6 +17,10 @@ case "$mode" in
 esac
 cleanup() {
   status=$?
+  if [[ "$status" != 0 && -f "$scratch/controller.log" ]]; then
+    cat "$scratch/controller.log" >&2
+    cat "$scratch/worker.log" >&2
+  fi
   if [[ "$created" == true ]]; then
     helm uninstall coding-validation --kube-context docker-desktop -n "$namespace" --ignore-not-found >/dev/null || status=1
     kubectl --context docker-desktop delete namespace "$namespace" --wait=false >/dev/null || status=1
@@ -134,7 +138,10 @@ if [[ "$mode" == retained ]]; then
 fi
 kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=1
 kubectl --context docker-desktop -n "$namespace" rollout status deployment/control-plane --timeout=180s
-sleep 8
+# Allow reporting backoff and two controller passes before checkpointing.
+sleep 20
+kubectl --context docker-desktop -n "$namespace" logs deployment/control-plane --tail=50 > "$scratch/controller.log"
+kubectl --context docker-desktop -n "$namespace" logs "$pod" -c supervisor --tail=50 > "$scratch/worker.log"
 kubectl --context docker-desktop -n "$namespace" scale deployment/control-plane --replicas=0
 kubectl --context docker-desktop -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane --timeout=60s
 kubectl --context docker-desktop -n "$namespace" cp coding-state:/state/orchestrator.sqlite "$scratch/accepted.sqlite"
@@ -144,7 +151,7 @@ import json,sqlite3,sys
 from pathlib import Path
 root=Path(sys.argv[1]);db=sqlite3.connect(root/'accepted.sqlite')
 assert db.execute('SELECT version FROM clean_schema').fetchone()==(17,)
-assert db.execute('SELECT terminal FROM coding_executions').fetchone()==(1,)
+assert db.execute('SELECT terminal FROM coding_executions').fetchone()==(1,), (db.execute('SELECT terminal,last_sequence,stopped FROM coding_executions').fetchall(),db.execute('SELECT kind,decision FROM coding_inbox').fetchall())
 assert db.execute("SELECT COUNT(*) FROM coding_inbox WHERE kind=2 AND decision='accepted'").fetchone()==(1,)
 raw=db.execute("SELECT accepted_payload FROM coding_inbox WHERE kind=2").fetchone()[0]
 fact=json.loads(raw)['data'];assert fact['applied'] is True
