@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("$app/state", () => ({navigating:{to:null}}));
 vi.mock("$app/navigation", () => ({invalidate:vi.fn()}));
 import { createRefreshCoordinator } from "./refresh.js";
 
@@ -74,4 +75,63 @@ describe("scoped resource refresh", () => {
     expect(onResult).toHaveBeenCalledWith(true);
     stop();
   });
+});
+
+
+it("shares an event stream and uses a low-frequency repair timer", async () => {
+  vi.useFakeTimers();
+  const invalidate = vi.fn().mockResolvedValue(undefined);
+  const stopStream = vi.fn();
+  let changed!: () => void;
+  const watch = vi.fn((_scope, onChange) => { changed = onChange; return stopStream; });
+  const refresh = createRefreshCoordinator(invalidate, () => true, watch);
+  const first = refresh.subscribe("app:connections", { intervalMs: 10_000 });
+  const second = refresh.subscribe("app:connections", { intervalMs: 30_000 });
+  expect(watch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(invalidate).not.toHaveBeenCalled();
+  changed();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith("app:connections");
+  first();
+  expect(stopStream).not.toHaveBeenCalled();
+  second();
+  expect(stopStream).toHaveBeenCalledTimes(1);
+});
+
+it("retains an event deferred while editing and refreshes once editing ends", async () => {
+  vi.useFakeTimers();
+  let editing = true;
+  let changed!: () => void;
+  const invalidate = vi.fn().mockResolvedValue(undefined);
+  const refresh = createRefreshCoordinator(invalidate, () => !editing, (_scope, callback) => { changed = callback; return () => {}; });
+  const stop = refresh.subscribe("app:certificates", { intervalMs: 30_000 });
+  changed();
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(invalidate).not.toHaveBeenCalled();
+  editing = false;
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith("app:certificates");
+  stop();
+});
+
+
+it("keeps an event dirty if editing starts while the earlier read is pending", async () => {
+  vi.useFakeTimers();
+  let editing = false;
+  let finish!: () => void;
+  const invalidate = vi.fn().mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; })).mockResolvedValue(undefined);
+  const refresh = createRefreshCoordinator(invalidate, () => !editing);
+  const stop = refresh.subscribe("app:tasks", { intervalMs: 30_000 });
+  const before = refresh.request("app:tasks");
+  await Promise.resolve();
+  refresh.event("app:tasks");
+  editing = true;
+  finish(); await before;
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(invalidate).toHaveBeenCalledTimes(1);
+  editing = false;
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(invalidate).toHaveBeenCalledTimes(2);
+  stop();
 });

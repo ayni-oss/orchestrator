@@ -19,19 +19,19 @@ describe("project page server boundary",()=>{
  it("redirects home to projects",()=>{expect(()=>home({} as never)).toThrow(expect.objectContaining({status:307,location:"/projects"}));});
  it("loads project state through the BFF with no caching",async()=>{
   const setHeaders=vi.fn();
-  const result=await load({locals,setHeaders,url:new URL("http://localhost/projects")} as never);
+  const result=await load({locals,depends:vi.fn(),setHeaders,url:new URL("http://localhost/projects")} as never);
   expect(result).toMatchObject({summaries:[],repositories:[],available:true});
   expect(setHeaders).toHaveBeenCalledWith({"cache-control":"no-store"});
  });
  it("retains partial results and sanitizes backend failures",async()=>{
   bff.listProjectSummaries.mockRejectedValueOnce(new Error("private backend detail"));
-  const result=await load({locals,setHeaders:vi.fn(),url:new URL("http://localhost/projects")} as never);
+  const result=await load({locals,depends:vi.fn(),setHeaders:vi.fn(),url:new URL("http://localhost/projects")} as never);
   expect(result).toMatchObject({available:false,error:{reason:"internal"}});
   expect(JSON.stringify(result)).not.toContain("private backend detail");
  });
  it("uses complete server summaries without listing global profiles or tasks",async()=>{
   bff.listProjectSummaries.mockResolvedValueOnce({summaries:[{project:{id:"project:1"},tasksComplete:true,latestTask:{id:"task:101"}}],page:{...page,nextPageToken:"next"}});
-  expect(await load({locals,setHeaders:vi.fn(),url:new URL("http://localhost/projects")} as never)).toMatchObject({summaries:[{latestTask:{id:"task:101"}}],nextPageToken:"next"});
+  expect(await load({locals,depends:vi.fn(),setHeaders:vi.fn(),url:new URL("http://localhost/projects")} as never)).toMatchObject({summaries:[{latestTask:{id:"task:101"}}],nextPageToken:"next"});
   expect(bff.listRuntimeProfiles).not.toHaveBeenCalled();
   expect(bff.listDevelopmentTasks).not.toHaveBeenCalled();
  });

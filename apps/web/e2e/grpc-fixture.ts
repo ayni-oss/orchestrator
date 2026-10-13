@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { Server, ServerCredentials, status, type UntypedServiceImplementation } from "@grpc/grpc-js";
+import { Server, ServerCredentials, status, type ServerWritableStream, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
   CertificateServiceService, Certificate,
   ConnectionServiceService, type Connection,
@@ -168,7 +168,7 @@ const taskService: UntypedServiceImplementation = {
   listDevelopmentAttempts(call, callback) {
     const t = tasks.get(call.request.developmentTaskId);
     const publicationFailed = t?.id.endsWith("0044");
-    callback(null, { attempts: t ? [{publicationOnly:publicationRetries.has(t.id), id: `attempt:${t.id}`, developmentTaskId:t.id, attemptNumber:1, snapshot:t.snapshot, state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED, agentActivity:[], progress:{phase:8,codingTurnsConsumed:5,qualityRound:2,publication:3}, result:{execution:1,commit:"d".repeat(40),changedPaths:["src/main.rs"],quality:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[{kind:"test",passed:false,status:"fail",summary:"total=4 passed=3 failed=1",target:"rust (workspace)"},{kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"}],findings:["Repair the failing test"],evidence:{artifactPath:".ayni/last/signals.json",signalsDigest:"e".repeat(64),sourceFingerprint:"f".repeat(64),commit:"d".repeat(40)}},publication:publicationFailed ? 4 : 3,codingTurnsConsumed:5,qualityRound:2,pullRequest:publicationFailed ? undefined : {repository:"ayni-oss/sandbox",number:"9",url:"https://github.com/ayni-oss/sandbox/pull/9",branch:"task/example",baseBranch:"main",headCommit:"d".repeat(40),draft:true}},createdAt:now,updatedAt:now,resourceVersion:"1"}] : [], page});
+    callback(null, { attempts: t ? [{publicationOnly:publicationRetries.has(t.id), id: `attempt:${t.id}`, developmentTaskId:t.id, attemptNumber:1, reportingState:"accepted", cleanupState:"complete", snapshot:t.snapshot, state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED, agentActivity:[], progress:{phase:8,codingTurnsConsumed:5,qualityRound:2,publication:3}, result:{execution:1,commit:"d".repeat(40),changedPaths:["src/main.rs"],quality:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[{kind:"test",passed:false,status:"fail",summary:"total=4 passed=3 failed=1",target:"rust (workspace)"},{kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"}],findings:["Repair the failing test"],evidence:{artifactPath:".ayni/last/signals.json",signalsDigest:"e".repeat(64),sourceFingerprint:"f".repeat(64),commit:"d".repeat(40)}},publication:publicationFailed ? 4 : 3,codingTurnsConsumed:5,qualityRound:2,pullRequest:publicationFailed ? undefined : {repository:"ayni-oss/sandbox",number:"9",url:"https://github.com/ayni-oss/sandbox/pull/9",branch:"task/example",baseBranch:"main",headCommit:"d".repeat(40),draft:true}},createdAt:now,updatedAt:now,resourceVersion:"1"}] : [], page});
   },
   retryTaskPublication(call, callback) { const t=tasks.get(call.request.developmentTaskId); publicationRetries.add(t.id); callback(null,{attempt:{id:"publication:retry",developmentTaskId:t.id,attemptNumber:2,snapshot:t.snapshot,state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_QUEUED,agentActivity:[],publicationOnly:true,createdAt:now,updatedAt:now,resourceVersion:"2"}}); },
 
@@ -243,7 +243,42 @@ function certificateMutation(operation:string):UntypedServiceImplementation[stri
   if(operation==="delete"){certificates=certificates.filter(item=>item.id!==c.id);return callback(null,{});}
   c.resourceVersion=String(Number(c.resourceVersion)+1);callback(null,{certificate:c});
 };}
+function resourceWatch(call: ServerWritableStream<any, any>, field: string, values: () => any[]) {
+  let previous = JSON.stringify(values());
+  let cursor = 1;
+  for (const value of values()) call.write({ cursor: String(cursor), [field]: value, deleted: false, snapshotComplete: false });
+  call.write({ cursor: String(cursor), snapshotComplete: true, deleted: false });
+  const timer = setInterval(() => {
+    const current = JSON.stringify(values());
+    if (current === previous) return;
+    previous = current;
+    cursor++;
+    // Browser only consumes invalidations. The durable stream contract is tested
+    // against the real SQLite adapter, including tombstones and replay.
+    call.write({ cursor: String(cursor), snapshotComplete: true, deleted: false });
+  }, 100);
+  call.on("cancelled", () => clearInterval(timer));
+  call.on("close", () => clearInterval(timer));
+}
+function projectionWatch(call: ServerWritableStream<any, any>, field: string, values: () => any[]) {
+  let previous = "";
+  let cursor = 1;
+  function send() {
+    const current = JSON.stringify(values());
+    if (current === previous) return;
+    previous = current;
+    for (const value of values()) call.write({ cursor: String(cursor++), update: { $case: field, [field]: value } });
+  }
+  send();
+  const timer = setInterval(send, 100);
+  call.on("cancelled", () => clearInterval(timer));
+  call.on("close", () => clearInterval(timer));
+}
+repositoryService.watchRepositories = call => projectionWatch(call, "repositoryConnection", () => [repository]);
+runtimeProfileService.watchRuntimeProfiles = call => projectionWatch(call, "runtimeProfile", () => profileEnrolled ? [profileView()] : []);
+connectionService.watchConnections = call => resourceWatch(call, "connection", () => connections);
 grpc.addService(CertificateServiceService,{
+  watchCertificates(call:any) { resourceWatch(call, "certificate", () => certificates); },
   listCertificates(_call:any,callback:any){callback(null,{certificates});},
   getCertificate(call:any,callback:any){callback(null,{certificate:certificates.find(c=>c.id===call.request.id)});},
   createCertificate(call:any,callback:any){if(rejectMutation(callback))return;const c=certificate({displayName:call.request.displayName,keyId:call.request.keyId});certificates.push(c);callback(null,{certificate:c});},
@@ -251,6 +286,7 @@ grpc.addService(CertificateServiceService,{
 });
 grpc.addService(ConnectionServiceService,connectionService);
 grpc.addService(ProjectServiceService, {
+  watchProjects(call:any) { resourceWatch(call, "project", () => [project]); },
   listProjectSummaries(_call:any,callback:any){
     const members=project.repositoryConnectionIds.map((id:string)=>runtimeSummary(id));
     const latest=[...tasks.values()].filter(task=>task.projectId===project.id).sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime() || b.id.localeCompare(a.id))[0];
@@ -278,6 +314,7 @@ function connectionFixture(url: URL): void {
  if(url.pathname==="/connection-state" && connections[0]) {
    connections[0].resourceVersion=String(Number(connections[0].resourceVersion)+1);
    connections[0].status=url.searchParams.get("status") ?? "ready";
+   connections[0].failureReason=url.searchParams.get("failure") ?? "";
    connections[0].testCleanup=url.searchParams.get("cleanup") ?? "passed";
    connections[0].testCleanupFailureReason=connections[0].testCleanup==="failed" ? "registry_cleanup_permission_required" : "";
  }
@@ -311,6 +348,8 @@ function profileFixture(url: URL): void {
 const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
  if(request.method==="POST") {
+   if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
+   if (url.pathname === "/reset-project") project = {id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
    certificateFixture(url.pathname);
    connectionFixture(url);
    profileFixture(url);

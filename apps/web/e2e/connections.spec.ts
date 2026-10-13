@@ -6,7 +6,7 @@ test("GitHub import and rotation use dialogs and the canonical route",async ({pa
   await expect(page.getByRole("button",{name:"Enroll a repository"})).toHaveCount(0);
   await expect(page.getByLabel("Private key (PEM)")).toHaveCount(0);
   await page.getByRole("button",{name:"Add GitHub App",exact:true}).click();
-  await page.getByRole("button",{name:"Import existing App"}).click();
+  await page.getByRole("tab",{name:"Import existing App"}).click();
   await page.getByLabel("Connection name").fill("My App");
   await page.getByLabel("App ID",{exact:true}).fill("42");
   await page.getByLabel("Private key (PEM)").fill("test-private-value");
@@ -15,29 +15,31 @@ test("GitHub import and rotation use dialogs and the canonical route",async ({pa
   await expect(page.getByRole("heading",{name:"My App"})).toBeVisible();
   await expect(page.locator("body")).not.toContainText("test-private-value");
   await expect(page.getByRole("button",{name:"Add GitHub App",exact:true})).toHaveCount(0);
-  await page.getByRole("button",{name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name:/ actions$/u}).first().click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await page.getByLabel("New private key").fill("replacement-private-value");
   await request.post("http://127.0.0.1:50062/reject-connection-mutation");
-  await page.getByRole("button",{name:"Replace credentials"}).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
+  await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("?/replace")), page.getByRole("button",{name:"Replace credentials"}).click()]);await expect(page.getByRole("button",{name:"Replace credentials"})).toBeEnabled();
+  await expect(page.locator('[data-sonner-toast][data-type="error"]').last()).toContainText("Action failed");
+
   await expect(page.getByLabel("New private key")).toHaveValue("");
   await page.getByLabel("New private key").fill("accepted-private-value");
-  await page.getByRole("button",{name:"Replace credentials"}).click();
+  await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("?/replace")), page.getByRole("button",{name:"Replace credentials"}).click()]);await expect(page.getByRole("button",{name:"Replace credentials"})).toBeEnabled();
   await expect(page.getByRole("dialog").getByRole("alert")).toHaveCount(0);
   await expect(page.getByLabel("New private key")).toHaveValue("");
-  await page.getByRole("button",{name:"Test connection / Retry"}).click();
-  await page.getByRole("button",{name:"Disable",exact:true}).click();
-  await expect(page.getByRole("dialog").getByText("Disabled",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Enable",exact:true}).click();
-  await expect(page.getByRole("dialog").getByText("Ready",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Delete",exact:true}).click();
-  await expect(page.getByRole("dialog")).toBeHidden();
+  await page.getByRole("dialog").getByRole("button", {name:"Close",exact:true}).click();
+  for (const [action, expected] of [["Test connection / Retry", "Ready"], ["Disable", "Disabled"], ["Enable", "Ready"]]) {
+    await page.getByRole("button", {name:"My App actions",exact:true}).click();
+    await page.getByRole("menuitem", {name:action!,exact:true}).click();
+    await expect(page.getByRole("region", {name:"My App",exact:true}).getByText(expected!, {exact:true})).toBeVisible();
+  }
+  await page.getByRole("button", {name:"My App actions",exact:true}).click();
+  await page.getByRole("menuitem", {name:"Delete",exact:true}).click();
   await expect(page.getByRole("heading",{name:"My App"})).toHaveCount(0);
 });
 test("admin GitHub App has a compact read-only details dialog",async ({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection");await page.goto("/source-control/github");
-  await expect(page.getByText("Managed by your administrator",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Details"}).click();
+  await expect(page.getByText("Your administrator",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:/ actions$/u}).first().click();await page.getByRole("menuitem",{name:"Details",exact:true}).click();
   await expect(page.getByRole("dialog").getByText("Managed by your administrator.",{exact:false})).toBeVisible();
   await expect(page.getByRole("button",{name:"Replace credentials"})).toHaveCount(0);
   await expect(page.getByLabel("Private key (PEM)")).toHaveCount(0);
@@ -51,11 +53,11 @@ test("GitHub setup dialog clears dismissed credentials and prepares a canonical 
   const manifest=JSON.parse(await page.locator('input[name="manifest"]').first().inputValue());
   expect(manifest.redirect_url).toBe("http://127.0.0.1:4173/source-control/github/complete");
   expect(manifest.default_permissions).toEqual({contents:"write",metadata:"read",pull_requests:"write"});
-  await page.getByRole("button",{name:"Import existing App"}).click();
+  await page.getByRole("tab",{name:"Import existing App"}).click();
   await page.getByLabel("Private key (PEM)").fill("discarded-secret");
   await page.getByRole("button",{name:"Cancel",exact:true}).click();
   await page.getByRole("button",{name:"Add GitHub App",exact:true}).click();
-  await page.getByRole("button",{name:"Import existing App"}).click();
+  await page.getByRole("tab",{name:"Import existing App"}).click();
   await expect(page.getByLabel("Private key (PEM)")).toHaveValue("");
 });
 test("canonical and legacy manifest callbacks enforce session state and reject replay",async ({page})=>{
@@ -106,7 +108,8 @@ test("GHCR creation lives in a dialog and clears credentials on close and reject
   await fillRegistry(page);
   await request.post("http://127.0.0.1:50062/reject-connection-mutation");
   await page.getByRole("dialog").getByRole("button", {name:"Save and test"}).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
+  await expect(page.locator('[data-sonner-toast][data-type="error"]').last()).toContainText("Action failed");
+
   await expect(page.getByLabel("Push token", {exact:true})).toHaveValue("");
   await expect(page.getByLabel("Separate pull-only token", {exact:true})).toHaveValue("");
   await expect(page.getByRole("region", {name:"Team images"})).toHaveCount(0);
@@ -123,18 +126,19 @@ test("GHCR creation lives in a dialog and clears credentials on close and reject
 test("GHCR editing clears credentials on success, failure, and dismissal and supports connection actions", async ({page,request})=>{
   await createRegistry(page);
   await expect(page.getByLabel("New push token")).toHaveCount(0);
-  await page.getByRole("region", {name:"Team images"}).getByRole("button", {name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name: "Team images" + " actions", exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   const dialog=page.getByRole("dialog");
   await dialog.getByLabel("New push token").fill("replacement-push-value");
   await dialog.getByLabel("Separate pull-only token").fill("replacement-pull-value");
   await request.post("http://127.0.0.1:50062/reject-connection-mutation");
-  await dialog.getByRole("button", {name:"Replace credentials"}).click();
-  await expect(dialog.getByRole("alert")).toBeVisible();
+  await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("?/replace")), dialog.getByRole("button", {name:"Replace credentials"}).click()]);await expect(dialog.getByRole("button", {name:"Replace credentials"})).toBeEnabled();
+  await expect(page.locator('[data-sonner-toast][data-type="error"]').last()).toContainText("Action failed");
+
   await expect(dialog.getByLabel("New push token")).toHaveValue("");
   await expect(dialog.getByLabel("Separate pull-only token")).toHaveValue("");
   await dialog.getByLabel("New push token").fill("accepted-push-value");
   await dialog.getByLabel("Separate pull-only token").fill("accepted-pull-value");
-  await dialog.getByRole("button", {name:"Replace credentials"}).click();
+  await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("?/replace")), dialog.getByRole("button", {name:"Replace credentials"}).click()]);await expect(dialog.getByRole("button", {name:"Replace credentials"})).toBeEnabled();
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await expect(dialog.getByLabel("New push token")).toHaveValue("");
   await expect(dialog.getByLabel("Separate pull-only token")).toHaveValue("");
@@ -145,9 +149,9 @@ test("GHCR editing clears credentials on success, failure, and dismissal and sup
   await expect(dialog.getByText("Ready", {exact:true})).toBeVisible();
   await dialog.getByLabel("New push token").fill("discarded-push-value");
   await dialog.getByLabel("Separate pull-only token").fill("discarded-pull-value");
-  await page.keyboard.press("Escape");
+  await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).click();await expect(page.getByRole("dialog")).toBeHidden();
   await expect(dialog).toBeHidden();
-  await page.getByRole("region", {name:"Team images"}).getByRole("button", {name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name: "Team images" + " actions", exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await expect(dialog.getByLabel("New push token")).toHaveValue("");
   await expect(dialog.getByLabel("Separate pull-only token")).toHaveValue("");
   await dialog.getByRole("button", {name:"Delete",exact:true}).click();
@@ -158,7 +162,7 @@ test("GHCR editing clears credentials on success, failure, and dismissal and sup
 test("GHCR editing preserves inputs until close and refreshes new revisions before reopening", async ({page,request})=>{
   await page.clock.install();
   await createRegistry(page);
-  await page.getByRole("region", {name:"Team images"}).getByRole("button", {name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name: "Team images" + " actions", exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   const dialog=page.getByRole("dialog");
   await dialog.getByLabel("New push token").fill("unsaved-push");
   let backgroundRequests=0;
@@ -167,15 +171,15 @@ test("GHCR editing preserves inputs until close and refreshes new revisions befo
   await page.clock.fastForward(30_000);
   await expect(dialog.getByLabel("New push token")).toHaveValue("unsaved-push");
   expect(backgroundRequests).toBe(0);
-  await page.keyboard.press("Escape");
+  await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).click();await expect(page.getByRole("dialog")).toBeHidden();
   await expect(dialog).toBeHidden();
   await page.clock.fastForward(30_000);
   await expect(page.getByRole("region", {name:"Team images"}).getByText("Cleanup required", {exact:true})).toBeVisible();
-  await page.getByRole("region", {name:"Team images"}).getByRole("button", {name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name: "Team images" + " actions", exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await expect(dialog.getByText("registry_cleanup_permission_required", {exact:false})).toBeVisible();
   await dialog.getByLabel("New push token").fill("current-revision-push");
   await dialog.getByLabel("Separate pull-only token").fill("current-revision-pull");
-  await dialog.getByRole("button", {name:"Replace credentials"}).click();
+  await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("?/replace")), dialog.getByRole("button", {name:"Replace credentials"}).click()]);await expect(dialog.getByRole("button", {name:"Replace credentials"})).toBeEnabled();
   await expect(dialog.getByLabel("New push token")).toHaveValue("");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
 });
@@ -184,11 +188,35 @@ test("GHCR administrator connections expose status and readonly details", async 
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
   await page.goto("/container-registries/github");
   const row=page.getByRole("region", {name:"Admin App"});
-  await expect(row.getByText("Managed by your administrator", {exact:true})).toBeVisible();
+  await expect(row.getByText("Your administrator", {exact:true})).toBeVisible();
   await expect(row.getByRole("button", {name:"Edit",exact:true})).toHaveCount(0);
-  await row.getByRole("button", {name:"Details",exact:true}).click();
+  await row.getByRole("button", {name:"Admin App actions",exact:true}).click();await page.getByRole("menuitem", {name:"Details",exact:true}).click();
   const dialog=page.getByRole("dialog");
   await expect(dialog.getByText("Managed by your administrator.", {exact:false})).toBeVisible();
   await expect(dialog.getByRole("button", {name:"Replace credentials"})).toHaveCount(0);
   await expect(dialog.locator("input[type=password]")).toHaveCount(0);
+});
+
+test("live connection updates retain ready identity and surface rejected replacement and cleanup separately", async ({ page, request }) => {
+  await createRegistry(page);
+  const row = page.getByRole("region", { name: "Team images" });
+  await request.post("http://127.0.0.1:50062/connection-state?status=ready&cleanup=failed&failure=registry_replacement_rejected");
+  await expect(row.getByText("Ready", { exact: true })).toBeVisible();
+  await expect(row.getByText("Cleanup required", { exact: true })).toBeVisible();
+  await expect(row.getByText("registry_replacement_rejected", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("push-only-value");
+});
+
+test("expired operator cursor opens a fresh snapshot stream without Last-Event-ID", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
+  const headers: Array<Record<string, string>> = [];
+  await page.route("**/updates/connections", async route => {
+    headers.push(route.request().headers());
+    if (headers.length === 1) return route.fulfill({ status: 200, contentType: "text/event-stream", body: 'id: 999\nevent: error\ndata: {"reason":"watch_cursor_expired"}\n\n' });
+    return route.continue();
+  });
+  await page.goto("/container-registries/github");
+  await expect.poll(() => headers.length).toBeGreaterThanOrEqual(2);
+  expect(headers[1]?.["last-event-id"]).toBeUndefined();
+  await expect(page.getByRole("region", { name: "Admin App" }).getByText("Ready", { exact: true })).toBeVisible();
 });

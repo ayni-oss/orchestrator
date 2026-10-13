@@ -229,6 +229,8 @@ export type DevelopmentAttemptStateDto =
   | "unknown";
 
 export interface DevelopmentAttemptDto {
+  reportingState: string;
+  cleanupState: string;
   progress?: WorkerProgressDto;
   result?: WorkerResultDto;
   pullRequest?: PullRequestReceiptDto;

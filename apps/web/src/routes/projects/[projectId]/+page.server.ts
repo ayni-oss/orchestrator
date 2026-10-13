@@ -6,7 +6,9 @@ import { isCanonicalIdentifier } from "$lib/server/validation.js";
 import { projectRepositoryChoices } from "$lib/server/project-choices.js";
 import { projectSchema } from "$lib/project-schema.js";
 import { actions as taskActions } from "../../tasks/+page.server.js";
-export const load: PageServerLoad = async ({ locals, params, setHeaders, url }) => {
+export const load: PageServerLoad = async ({ locals, depends, params, setHeaders, url }) => {
+  depends("app:projects", "app:runtimes", "app:tasks");
+  depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });
   const base = { idempotencyKey: actionKey(), taskKey: actionKey(), requestId: locals.requestId };
   try {

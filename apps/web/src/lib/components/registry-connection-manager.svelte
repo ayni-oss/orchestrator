@@ -78,6 +78,7 @@
         ...(connection.testCleanup === "failed" ? [{ label: "Test cleanup", value: cleanupStatus }] : []),
         ...(connection.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
       ]} />
+      {#if connection.failureReason}<Feedback kind="warning" title="Latest operation needs attention" message={connection.failureReason} />{/if}
     </InformationCard>
   {/each}
 </div>

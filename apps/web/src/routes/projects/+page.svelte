@@ -17,6 +17,7 @@
   import { formatDate, statusTone } from "$lib/presentation.js";
   let { data }: PageProps = $props();
   let open = $state(false);
+  let redirecting = $state(false);
   let finishClosing: (() => void) | undefined;
   async function closeBeforeNavigation() {
     if (!open) return;
@@ -24,11 +25,11 @@
     await new Promise<void>(resolve => {finishClosing=resolve;open=false;});
     await tick();
   }
-  const projectForm = (() => superForm(data.form, {validators:zodClient(projectSchema), onError: ({result}) => notify("error", "Action failed", result.error.message), onResult:async ({result}) => {if(result.type === "redirect") { await closeBeforeNavigation(); redirectNotification(result, new URL("?/create", window.location.href)); }}}))();
+  const projectForm = (() => superForm(data.form, {validators:zodClient(projectSchema), onError: ({result}) => notify("error", "Action failed", result.error.message), onResult:async ({result}) => {if(result.type === "redirect") { redirecting = true; await closeBeforeNavigation(); redirectNotification(result, new URL("?/create", window.location.href)); }}}))();
   const { form: values, enhance, submitting } = projectForm;
 </script>
 <svelte:head><title>Projects · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8">
+<div data-refresh-paused={$submitting || redirecting ? "" : undefined} class="space-y-8">
   <PageHeader title="Projects" description="Your repositories, environments, and development tasks.">
     {#snippet actions()}<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create project</Button>{/snippet}
   </PageHeader>

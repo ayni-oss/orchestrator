@@ -46,7 +46,7 @@
               <Button {...props} class="relative z-20" variant="ghost" size="icon-sm" aria-label={`${title} actions`}><EllipsisVertical aria-hidden="true" /></Button>
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end">
+          <DropdownMenu.Content align="end" preventScroll={false}>
             {#each actions as action (action.label)}
               <DropdownMenu.Item onSelect={action.onSelect} disabled={action.disabled ?? false} variant={action.destructive ? "destructive" : "default"}>{action.label}</DropdownMenu.Item>
             {/each}

@@ -11,6 +11,10 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import {
+  ConnectionServiceService,
+  Connection,
+  type WatchConnectionsRequest,
+  type WatchConnectionsResponse,
   DevelopmentTaskServiceService,
   DevelopmentTaskState,
   ErrorDetail,
@@ -241,6 +245,15 @@ describe("clean-v1 native gRPC BFF integration", () => {
         call.end();
       },
     });
+    server.addService(ConnectionServiceService, {
+      watchConnections(call: ServerWritableStream<WatchConnectionsRequest, WatchConnectionsResponse>): void {
+        receivedStreamCursor = call.request.afterCursor;
+        for (let i = 0; i < 100; i++) call.write({ cursor: "0", connection: Connection.fromPartial({ id: `snapshot-${i}` }), deleted: false, snapshotComplete: false });
+        call.write({ cursor: "0", deleted: false, snapshotComplete: true });
+        call.write({ cursor: "17", connection: Connection.fromPartial({ id: "safe-connection", kind: "ghcr" }), deleted: true, snapshotComplete: false });
+        call.end();
+      },
+    });
     const port = await new Promise<number>((resolve, reject) => {
       server.bindAsync("127.0.0.1:0", ServerCredentials.createInsecure(), (error, boundPort) => {
         if (error === null) resolve(boundPort);
@@ -253,6 +266,13 @@ describe("clean-v1 native gRPC BFF integration", () => {
   afterEach(async () => {
     bff.close();
     await new Promise<void>((resolve) => server.tryShutdown(() => resolve()));
+  });
+
+  it("relays operator invalidations with an empty snapshot cursor and no resource metadata", async () => {
+    const updates: string[] = [];
+    await bff.watchResources("connections", undefined, { requestId: "integration-request" }, next => { updates.push(next); });
+    expect(receivedStreamCursor).toBeUndefined();
+    expect(updates).toEqual(["0", "17"]);
   });
 
   it("uses generated native clients and returns provider-neutral DTOs", async () => {

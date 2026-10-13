@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test.beforeEach(async ({request}) => { await request.post("http://127.0.0.1:50062/reset-project"); });
+
 async function choose(page: Page, label: string, option: string): Promise<void> {
   await page.getByLabel(label, { exact: true }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
@@ -13,14 +15,14 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await expect(page.getByRole("heading", { name: "Projects", exact:true })).toBeVisible();
 
   await page.goto("/repositories");
-  await page.getByRole("link", { name: "Manage repository" }).first().click();
+  await page.getByRole("link", { name: "Open repository ayni-oss/sandbox" }).first().click();
   await expect(page.getByRole("heading", { name: "Runtimes" })).toBeVisible();
-  await expect(page.locator("article").getByText("Ready", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Ayni managed", exact: true }).getByText("Ready", { exact: true }).first()).toBeVisible();
 
   await page.goto("/tasks");
   await choose(page, "Project", "Sandbox");
   await choose(page, "Runtime profile", "Ayni managed");
-  await choose(page, "Model", "gpt-5.6-sol");
+  await choose(page, "Model", "Sol");
   await page.getByLabel("Request").fill("Document the bounded retry behavior");
   await page.getByLabel("Acceptance criteria").fill("Retry count is explicit\nExisting behavior remains covered");
   await page.getByRole("button", { name: "Submit task" }).click();
@@ -42,6 +44,8 @@ test("connected runtime and truthful worker draft delivery are visible", async (
  const progress = page.getByRole("region",{name:"Attempt 1",exact:true});
  await expect(progress).toContainText("5 / 24");
  await expect(progress).toContainText("Quality round");
+ await expect(progress).toContainText("Reporting Accepted");
+ await expect(progress).toContainText("Cleanup Complete");
  await expect(progress.locator("details")).not.toHaveAttribute("open");
  await progress.getByText("Worker activity · 0 events",{exact:true}).click();
  await expect(progress.getByText("No worker activity has been retained for this attempt yet.")).toBeVisible();
@@ -66,7 +70,7 @@ test("connected runtime and truthful worker draft delivery are visible", async (
 });
 
 test("every managed profile state explains the next step",async({page,request})=>{
- const states=["Inspecting the connected repository's default revision.", "Preparing the immutable runtime identity.", "Resolving and verifying the registry image for this exact lock fingerprint. A missing image is built by an Orchestrator-managed Kubernetes Job.", "The signed runtime image matches the checked lock and is ready for use.", "A new lock fingerprint is being resolved. Existing requests retain their frozen image.", "Repair provider access, registry access, build configuration or certificate trust, then retry reconciliation.", "The committed Ayni configuration or runtime image could not be verified. Review the failure and retry after repair."];
+ const states=["Repository setup is required before runtime preparation can proceed.", "Review and merge the repository setup pull request.", "Resolving and verifying the registry image for this exact lock fingerprint. A missing image is built by an Orchestrator-managed Kubernetes Job.", "The signed runtime image matches the checked lock and is ready for use.", "A new lock fingerprint is being resolved. Existing requests retain their frozen image.", "Repair provider access, registry access, build configuration or certificate trust, then retry reconciliation.", "The committed Ayni configuration or runtime image could not be verified. Review the failure and retry after repair."];
  try { for(let index=0;index<states.length;index++) {
   await request.post(`http://127.0.0.1:50062/profile-state?value=${index+1}`);
   await page.goto("/profiles/profile:1");

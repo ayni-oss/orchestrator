@@ -1,11 +1,12 @@
+import { navigating } from "$app/state";
 import { invalidate } from "$app/navigation";
 
-export type RefreshScope = "app:runtimes" | "app:tasks" | "app:connections" | "app:certificates";
+export type RefreshScope = "app:runtimes" | "app:tasks" | "app:connections" | "app:certificates" | "app:projects" | "app:repositories";
 type Subscriber = { intervalMs: number; onResult?: ((ok: boolean) => void) | undefined };
-type Entry = { subscribers: Set<Subscriber>; timer?: ReturnType<typeof setInterval> | undefined; pending?: Promise<void> | undefined; queued?: Promise<void> | undefined };
+type Entry = { subscribers: Set<Subscriber>; timer?: ReturnType<typeof setInterval> | undefined; pending?: Promise<void> | undefined; queued?: Promise<void> | undefined; stopStream?: (() => void) | undefined; dirty?: boolean | undefined };
 
 /** One in-flight refresh and one timer per resource scope, shared by mounted consumers. */
-export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promise<void>, canRefresh: () => boolean) {
+export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promise<void>, canRefresh: () => boolean, watch?: (scope: RefreshScope, changed: () => void, status: (ok: boolean) => void) => () => void) {
   const entries = new Map<RefreshScope, Entry>();
   function entry(scope: RefreshScope) {
     let value = entries.get(scope);
@@ -32,18 +33,30 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
     });
     return value.pending;
   }
+  function event(scope: RefreshScope) {
+    const value = entry(scope);
+    value.dirty = true;
+    if (!canRefresh() || value.pending || value.queued) return;
+    value.dirty = false;
+    void request(scope).catch(() => { for (const subscriber of value.subscribers) subscriber.onResult?.(false); });
+  }
   function schedule(scope: RefreshScope, value: Entry) {
     clearInterval(value.timer);
     value.timer = undefined;
-    if (!value.subscribers.size) { if (!value.pending && !value.queued) entries.delete(scope); return; }
-    const interval = Math.min(...Array.from(value.subscribers, subscriber => subscriber.intervalMs));
+    if (!value.subscribers.size) { value.stopStream?.(); value.stopStream = undefined; if (!value.pending && !value.queued) entries.delete(scope); return; }
+    const streaming = watch !== undefined && scope !== "app:tasks";
+    if (streaming && !value.stopStream) value.stopStream = watch(scope, () => event(scope), ok => { for (const subscriber of value.subscribers) subscriber.onResult?.(ok); });
+    const interval = Math.max(streaming ? 120_000 : 0, Math.min(...Array.from(value.subscribers, subscriber => subscriber.intervalMs)));
+    let repairedAt = Date.now();
     value.timer = setInterval(() => {
-      if (!canRefresh() || value.pending) return;
+      if (!canRefresh() || value.pending || (!value.dirty && Date.now() - repairedAt < interval)) return;
+      value.dirty = false;
+      repairedAt = Date.now();
       void request(scope).then(
         () => { for (const subscriber of value.subscribers) subscriber.onResult?.(true); },
         () => { for (const subscriber of value.subscribers) subscriber.onResult?.(false); },
       );
-    }, interval);
+    }, 1_000);
   }
   function subscribe(scope: RefreshScope, subscriber: Subscriber) {
     if (!Number.isFinite(subscriber.intervalMs) || subscriber.intervalMs < 1_000) throw new Error("Refresh interval must be at least one second.");
@@ -52,15 +65,48 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
     schedule(scope, value);
     return () => { value.subscribers.delete(subscriber); schedule(scope, value); };
   }
-  return { request, subscribe };
+  return { request, subscribe, event };
 }
 
 // Instantiated on the server too, but only mounted browser consumers subscribe.
 // Avoid replacing resource versions or form defaults while an editor is active.
+export function watchRefreshScope(scope: RefreshScope, changed: () => void, status: (ok: boolean) => void): () => void {
+  if (scope === "app:tasks") return () => {};
+  let source: EventSource | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  function connect() {
+    if (stopped) return;
+    source = new EventSource(`/updates/${scope.slice(4)}`);
+    source.onopen = () => status(true);
+    source.addEventListener("changed", changed);
+    source.addEventListener("error", event => {
+      status(false);
+      if (event instanceof MessageEvent) {
+        try {
+          const error = JSON.parse(event.data) as { reason?: string };
+          if (error.reason === "watch_cursor_expired") {
+            // Closing and creating a fresh EventSource clears Last-Event-ID.
+            source?.close();
+            changed();
+            retry = setTimeout(connect, 1_000);
+          }
+        } catch { /* Native transport errors reconnect with Last-Event-ID. */ }
+      }
+    });
+  }
+  connect();
+  return () => { stopped = true; clearTimeout(retry); source?.close(); };
+}
+
 const coordinator = createRefreshCoordinator(invalidate, () =>
   typeof document !== "undefined" && document.visibilityState === "visible"
+  && navigating.to === null
+  && !document.querySelector("[data-refresh-paused]")
   && !document.querySelector('[role="dialog"][data-state="open"]')
   && !document.activeElement?.matches('input, textarea, select, [contenteditable="true"]'),
-);
+  watchRefreshScope);
 export const refreshScope = coordinator.request;
 export const subscribeRefresh = coordinator.subscribe;
+
+export const resourceChanged = coordinator.event;

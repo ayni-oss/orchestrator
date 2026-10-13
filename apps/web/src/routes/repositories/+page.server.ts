@@ -4,7 +4,8 @@ import { getBff } from "$lib/server/bff.js";
 import { actionKey, isOwnerOrRepository, requestContext, safeError, text } from "$lib/server/page.js";
 import { isCanonicalIdentifier } from "$lib/server/validation.js";
 
-export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
+export const load: PageServerLoad = async ({ depends, locals, setHeaders, url }) => {
+  depends("app:repositories", "app:runtimes");
   setHeaders({ "cache-control": "no-store" });
   const requestedPageToken = url.searchParams.get("pageToken");
   const pageToken = requestedPageToken !== null && requestedPageToken.length <= 512 ? requestedPageToken : undefined;

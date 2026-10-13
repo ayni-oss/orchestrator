@@ -92,6 +92,7 @@
         { label: "App ID", value: String(connection.appId) },
         ...(connection.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
       ]} />
+      {#if connection.failureReason}<Feedback kind="warning" title="Latest operation needs attention" message={connection.failureReason} />{/if}
       {#if connection.managementSource !== "admin"}
         {#each ["test", "toggle", "delete"] as action (action)}
           <form hidden bind:this={actionForms[`${connection.id}-${action}`]} method="POST" action={`?/${action}`} use:enhance={submit(action)}>

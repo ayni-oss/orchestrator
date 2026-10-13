@@ -55,6 +55,7 @@
         { label: "Default", value: c.isDefault ? "Yes" : "No" },
         ...(c.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
       ]} />
+      {#if c.failureReason}<Feedback kind="warning" title="Latest operation needs attention" message={c.failureReason} />{/if}
     </InformationCard>
   {/each}
 </div>
