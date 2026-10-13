@@ -4,6 +4,14 @@ set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
 
+# Match the checked-out application instead of retaining an obsolete schema pin.
+readonly schema_version="$(sed -n 's/^pub(crate) const SCHEMA_VERSION: i64 = \([0-9]*\);$/\1/p' \
+  "$DEV_REPOSITORY_ROOT/backend/servers/control-plane/src/adapters/sqlite/mod.rs")"
+if [[ -z "$schema_version" ]]; then
+  echo "cannot determine the checked-out control-plane schema version" >&2
+  exit 1
+fi
+
 # Validate local monitoring RBAC, scrape targets, and the provisioned dashboard.
 dev_check_observability() (
   set -euo pipefail
@@ -55,14 +63,13 @@ dev_check_observability() (
       "http://127.0.0.1:$prometheus_port/-/ready" >/dev/null || return 1
     for job in \
       ayni-orchestrator-control-plane \
-      ayni-orchestrator-kube-state-metrics \
+      ayni-orchestrator-jetstream \
       ayni-orchestrator-cadvisor \
       ayni-orchestrator-node-storage \
       ayni-orchestrator-kubelet-volumes; do
       query_has_result "up{job=\"$job\"} == 1" || return 1
     done
-    query_has_result 'orchestrator_clean_v1_schema_info{version="6"} == 1' || return 1
-    query_has_result "kube_pod_info{namespace=\"$namespace\"}" || return 1
+    query_has_result "orchestrator_clean_v1_schema_info{version=\"$schema_version\"} == 1" || return 1
     query_has_result "container_cpu_usage_seconds_total{namespace=\"$namespace\"}" || return 1
     query_has_result "kubelet_volume_stats_used_bytes{namespace=\"$namespace\"} or container_fs_usage_bytes{job=\"ayni-orchestrator-node-storage\",id=\"/\"}" || return 1
     observability_stage="Grafana health"
@@ -73,6 +80,10 @@ dev_check_observability() (
     dashboard="$(curl "${curl_options[@]}" \
       "http://127.0.0.1:$grafana_port/api/dashboards/uid/ayni-orchestrator-tasks-resources")" || return 1
     grep -Fq '"uid":"ayni-orchestrator-tasks-resources"' <<<"$dashboard" || return 1
+    observability_stage="Grafana JetStream dashboard"
+    dashboard="$(curl "${curl_options[@]}" \
+      "http://127.0.0.1:$grafana_port/api/dashboards/uid/ayni-orchestrator-jetstream")" || return 1
+    grep -Fq '"uid":"ayni-orchestrator-jetstream"' <<<"$dashboard" || return 1
   }
 
   for _ in {1..30}; do
@@ -146,9 +157,9 @@ check_once() {
     "http://127.0.0.1:$operations_port/readyz" 2>/dev/null)" || return 1
   grep -qi '^x-request-id: local-readiness-check' "$response_headers" || return 1
   grep -q '"clean_v1_contract":true' <<<"$readiness" || return 1
-  grep -q '"clean_schema_version":5' <<<"$readiness" || return 1
+  grep -q "\"clean_schema_version\":$schema_version[,}]" <<<"$readiness" || return 1
   metrics="$(curl_local "http://127.0.0.1:$operations_port/metrics")" || return 1
-  grep -q 'orchestrator_clean_v1_schema_info{version="6"} 1' <<<"$metrics" || return 1
+  grep -q "orchestrator_clean_v1_schema_info{version=\"$schema_version\"} 1" <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_admissions_total' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_completions_total' <<<"$metrics" || return 1
 
