@@ -6,6 +6,7 @@ export default withMermaid(defineConfig({
   description: 'Turn a development request into a reviewable pull request.',
   srcDir: 'site',
   mermaid: {
+    startOnLoad: false,
     theme: 'neutral',
     look: 'classic',
     layout: 'elk',
