@@ -48,6 +48,8 @@ is confined to the hot-reload overlay.
   Initial synchronization and subsequent live updates compile with one Cargo job
   to keep compiler concurrency within the control-plane container's 3 GiB memory
   budget while the server remains running.
+  Tilt allows five minutes for initial attachment, which includes that build;
+  its default 30-second Kubernetes apply timeout is too short for Rust rebuilds.
 - Changes under `apps/web/`, `packages/bff/`, or `clients/typescript/` are
   copied into the web container; Vite refreshes the browser without a Pod
   rollout. The web application is available at http://127.0.0.1:18080.

@@ -3,6 +3,9 @@
 
 allow_k8s_contexts('docker-desktop')
 
+# Initial attachment includes an in-container Rust build, not just kubectl apply.
+update_settings(k8s_upsert_timeout_secs=300)
+
 namespace = os.getenv('AYNI_ORCHESTRATOR_NAMESPACE', 'ayni-orchestrator-dev')
 
 def attach(name, container, deps, live_update, port_forwards=[], sync_web=False, sync_control_plane=False):
