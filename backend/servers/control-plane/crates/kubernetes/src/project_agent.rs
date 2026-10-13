@@ -59,6 +59,7 @@ impl RuntimeKubernetes {
             request.deadline_seconds,
             model_secret,
             &digest,
+            &source_tokens.keys().cloned().collect::<Vec<_>>(),
         )?;
         let spec_digest = format!(
             "sha256:{:x}",
@@ -348,6 +349,7 @@ fn project_job(
     deadline: u64,
     model_secret: &str,
     digest: &str,
+    source_keys: &[String],
 ) -> Result<Job, &'static str> {
     if name.len() > 63
         || name.is_empty()
@@ -359,6 +361,23 @@ fn project_job(
     {
         return Err("project_job_invalid");
     }
+    let mut checkout_mounts = vec![
+        json!({"name":"request","mountPath":"/request/project-agent.json","subPath":"project-agent.json","readOnly":true}),
+        json!({"name":"workspace","mountPath":"/workspace"}),
+        json!({"name":"scratch","mountPath":"/tmp"}),
+        json!({"name":"scratch","mountPath":"/scratch"}),
+    ];
+    for key in source_keys {
+        if key.is_empty()
+            || key.len() > 253
+            || !key
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        {
+            return Err("project_source_key_invalid");
+        }
+        checkout_mounts.push(json!({"name":"source","mountPath":format!("/credentials/{key}"),"subPath":key,"readOnly":true}));
+    }
     let security = json!({"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}});
     serde_json::from_value(json!({"apiVersion":"batch/v1","kind":"Job","metadata":{"name":name,
         "labels":{"ayni.io/runtime-operation":name,"app.kubernetes.io/component":"project-agent"},
@@ -369,11 +388,10 @@ fn project_job(
         "securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},
         "initContainers":[{"name":"checkout","image":image,"args":["project-checkout"],"securityContext":security,
             "resources":{"requests":{"cpu":"100m","memory":"128Mi"},"limits":{"cpu":"1","memory":"512Mi"}},
-            "volumeMounts":[{"name":"request","mountPath":"/request","readOnly":true},{"name":"source","mountPath":"/credentials","readOnly":true},
-            {"name":"workspace","mountPath":"/workspace"},{"name":"scratch","mountPath":"/tmp"},{"name":"scratch","mountPath":"/scratch"}]}],
+            "volumeMounts":checkout_mounts}],
         "containers":[{"name":"research","image":image,"args":["project-agent"],"securityContext":security,
             "resources":{"requests":{"cpu":"100m","memory":"128Mi"},"limits":{"cpu":"1","memory":"1Gi"}},
-            "volumeMounts":[{"name":"request","mountPath":"/request","readOnly":true},{"name":"model","mountPath":"/model","readOnly":true},
+            "volumeMounts":[{"name":"request","mountPath":"/request/project-agent.json","subPath":"project-agent.json","readOnly":true},{"name":"model","mountPath":"/model/api-key","subPath":"api-key","readOnly":true},
             {"name":"workspace","mountPath":"/workspace","readOnly":true},{"name":"scratch","mountPath":"/tmp"},{"name":"scratch","mountPath":"/scratch"}]}],
         "volumes":[{"name":"request","configMap":{"name":name}},{"name":"source","secret":{"secretName":name}},
             {"name":"model","secret":{"secretName":model_secret,"items":[{"key":"api-key","path":"api-key"}]}},
@@ -385,6 +403,66 @@ fn project_job(
 mod tests {
     use super::*;
     #[test]
+    fn projected_inputs_are_regular_read_only_files_with_source_credentials_init_only()
+    -> Result<(), &'static str> {
+        let keys = vec!["repo-first".to_owned(), "repo-second".to_owned()];
+        let job = project_job(
+            "project-files",
+            "test",
+            "worker@sha256:abc",
+            600,
+            "model",
+            "digest",
+            &keys,
+        )?;
+        let pod = job.spec.ok_or("spec")?.template.spec.ok_or("pod")?;
+        let checkout = pod
+            .init_containers
+            .as_ref()
+            .and_then(|c| c.first())
+            .ok_or("checkout")?;
+        let checkout_mounts = checkout.volume_mounts.as_ref().ok_or("checkout mounts")?;
+        let research_mounts = pod.containers[0]
+            .volume_mounts
+            .as_ref()
+            .ok_or("research mounts")?;
+        for mounts in [checkout_mounts, research_mounts] {
+            let request = mounts
+                .iter()
+                .find(|m| m.name == "request")
+                .ok_or("request")?;
+            assert_eq!(request.mount_path, "/request/project-agent.json");
+            assert_eq!(request.sub_path.as_deref(), Some("project-agent.json"));
+            assert_eq!(request.read_only, Some(true));
+        }
+        for key in &keys {
+            let source = checkout_mounts
+                .iter()
+                .find(|m| m.name == "source" && m.sub_path.as_deref() == Some(key.as_str()))
+                .ok_or("source")?;
+            assert_eq!(source.mount_path, format!("/credentials/{key}"));
+            assert_eq!(source.read_only, Some(true));
+        }
+        assert_eq!(
+            checkout_mounts
+                .iter()
+                .filter(|m| m.name == "source")
+                .count(),
+            keys.len()
+        );
+        assert!(!research_mounts.iter().any(|m| m.name == "source"));
+        let model = research_mounts
+            .iter()
+            .find(|m| m.name == "model")
+            .ok_or("model")?;
+        assert_eq!(model.mount_path, "/model/api-key");
+        assert_eq!(model.sub_path.as_deref(), Some("api-key"));
+        assert_eq!(model.read_only, Some(true));
+        assert!(!checkout_mounts.iter().any(|m| m.name == "model"));
+        Ok(())
+    }
+
+    #[test]
     fn adoption_rejects_changed_commands_and_credential_mounts() -> Result<(), &'static str> {
         let expected = project_job(
             "project-test",
@@ -393,6 +471,7 @@ mod tests {
             600,
             "model",
             "digest",
+            &[],
         )?;
         assert!(job_matches(&expected, &expected));
         let mut actual = expected.clone();
@@ -453,6 +532,7 @@ mod tests {
             600,
             "model",
             "sha256:abc",
+            &[],
         )?;
         let pod = job.spec.ok_or("spec")?.template.spec.ok_or("pod")?;
         assert_eq!(pod.automount_service_account_token, Some(false));

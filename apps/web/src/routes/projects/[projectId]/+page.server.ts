@@ -5,7 +5,7 @@ import { actionKey, requestContext, safeError, text } from "$lib/server/page.js"
 import { isCanonicalIdentifier } from "$lib/server/validation.js";
 import { projectRepositoryChoices } from "$lib/server/project-choices.js";
 import { projectSchema } from "$lib/project-schema.js";
-import type { ProjectConversationDto, ProviderModelPageDto } from "@ayni-orchestrator/bff/server";
+import type { ProjectConversationDto, ProviderModelPageDto, RequestContext } from "@ayni-orchestrator/bff/server";
 import { actions as taskActions } from "../../tasks/+page.server.js";
 export const load: PageServerLoad = async ({ locals, depends, params, setHeaders, url }) => {
   depends("app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
@@ -83,39 +83,66 @@ async function mutate({ locals, params, request }: Parameters<NonNullable<Action
   }
 }
 
+type ConversationActionContext = {
+  form:FormData;
+  idempotencyKey:string;
+  projectId:string;
+  requestId:string;
+  ctx:RequestContext;
+};
+
 async function conversationAction(event:Parameters<NonNullable<Actions[string]>>[0],operation:"create"|"send"|"decide"|"model") {
-  const {locals,params,request}=event, form=await request.formData(),bff=getBff(),ctx={...requestContext(locals),deadlineMs:30_000};
+  const {locals,params,request}=event,form=await request.formData();
   const idempotencyKey=text(form,"idempotencyKey",128),conversationId=text(form,"conversationId",128);
-  if(!idempotencyKey || (operation!=="create"&&!conversationId))return fail(400,{error:{message:"Reload the conversation and try again.",requestId:locals.requestId}});
+  if(!idempotencyKey || (operation!=="create"&&!conversationId))return conversationInputError(locals.requestId,"Reload the conversation and try again.");
+  const context:ConversationActionContext={form,idempotencyKey,projectId:params.projectId!,requestId:locals.requestId,ctx:{...requestContext(locals),deadlineMs:30_000}};
   try {
-    if(operation==="create"){
-      const title=text(form,"title",256),ids=form.getAll("repositoryConnectionIds");
-      const project=await bff.getProject(params.projectId!,ctx);
-      if(!title || !ids.length || ids.length>100 || ids.some(id=>typeof id!=="string"||!project.repositoryConnectionIds.includes(id)) || new Set(ids).size!==ids.length)return fail(400,{error:{message:"Enter a conversation title and choose project repositories.",requestId:locals.requestId}});
-      const conversation=await bff.createProjectConversation({idempotencyKey,projectId:project.id,title,repositoryConnectionIds:ids as string[]},ctx);
-      redirect(303,`/projects/${encodeURIComponent(project.id)}?conversation=${encodeURIComponent(conversation.id)}`);
-    }
-    const conversation=await bff.getProjectConversation(conversationId!,ctx);
-    if(conversation.projectId!==params.projectId)return fail(400,{error:{message:"Select a conversation in this project.",requestId:locals.requestId}});
-    if(operation==="send"){
-      const content=text(form,"content",16384);
-      if(!content)return fail(400,{error:{message:"Enter your message.",requestId:locals.requestId}});
-      await bff.sendProjectMessage({idempotencyKey,conversationId:conversation.id,content},ctx);
-      return {success:"Message sent."};
-    }
-    if(operation==="model"){
-      const proposalId=text(form,"proposalId",128),connectionId=text(form,"connectionId",128),model=text(form,"model",128);
-      const proposal=conversation.proposals.find(p=>p.id===proposalId && p.action==="create_task" && p.state==="pending");
-      if(!proposal||!connectionId||!model)return fail(400,{error:{message:"Choose an available coding connection and model for this pending task plan.",requestId:locals.requestId}});
-      const catalog=await bff.listProviderModels({pageSize:100},ctx,connectionId);
-      if(!catalog.models.some(m=>m.id===model))return fail(400,{error:{message:"The selected model is no longer available.",requestId:locals.requestId}});
-      await bff.decideProjectProposal({idempotencyKey,conversationId:conversation.id,proposalId:proposal.id,decision:"revise"},ctx);
-      await bff.sendProjectMessage({idempotencyKey:`${idempotencyKey}-message`,conversationId:conversation.id,content:`Revise task plan ${proposal.id} for repository ${proposal.request?.repositoryConnectionId}: use coding connection ${connectionId} and model ${model}. Preserve the other requirements and prepare a new proposal for approval.`},ctx);
-      return {success:"Coding model revision requested. Review the new plan before approving."};
-    }
-    const proposalId=text(form,"proposalId",128),decision=text(form,"decision",16);
-    if(!proposalId||!["approve","reject","revise"].includes(decision??"")||!conversation.proposals.some(p=>p.id===proposalId))return fail(400,{error:{message:"Select a pending proposal and a decision.",requestId:locals.requestId}});
-    await bff.decideProjectProposal({idempotencyKey,conversationId:conversation.id,proposalId,decision:decision!},ctx);
-    return {success:decision==="approve"?"Approved action submitted.":decision==="revise"?"Send a message with the revisions you need.":"Proposal rejected."};
-  }catch(error){if(error && typeof error==="object" && "status" in error && error.status===303)throw error;const mapped=safeError(error,locals.requestId);return fail(mapped.status,{error:mapped});}
+    if(operation==="create")return await createConversation(context);
+    const conversation=await getBff().getProjectConversation(conversationId!,context.ctx);
+    if(conversation.projectId!==context.projectId)return conversationInputError(locals.requestId,"Select a conversation in this project.");
+    if(operation==="send")return await sendConversationMessage(context,conversation.id);
+    if(operation==="model")return await reviseConversationModel(context,conversation);
+    return await decideConversationProposal(context,conversation);
+  }catch(error){
+    if(error && typeof error==="object" && "status" in error && error.status===303)throw error;
+    const mapped=safeError(error,locals.requestId);
+    return fail(mapped.status,{error:mapped});
+  }
+}
+
+function conversationInputError(requestId:string,message:string){
+  return fail(400,{error:{message,requestId}});
+}
+
+async function createConversation({form,idempotencyKey,projectId,requestId,ctx}:ConversationActionContext){
+  const title=text(form,"title",256),ids=form.getAll("repositoryConnectionIds");
+  const bff=getBff(),project=await bff.getProject(projectId,ctx);
+  if(!title || !ids.length || ids.length>100 || ids.some(id=>typeof id!=="string"||!project.repositoryConnectionIds.includes(id)) || new Set(ids).size!==ids.length)return conversationInputError(requestId,"Enter a conversation title and choose project repositories.");
+  const conversation=await bff.createProjectConversation({idempotencyKey,projectId:project.id,title,repositoryConnectionIds:ids as string[]},ctx);
+  redirect(303,`/projects/${encodeURIComponent(project.id)}?conversation=${encodeURIComponent(conversation.id)}`);
+}
+
+async function sendConversationMessage({form,idempotencyKey,requestId,ctx}:ConversationActionContext,conversationId:string){
+  const content=text(form,"content",16384);
+  if(!content)return conversationInputError(requestId,"Enter your message.");
+  await getBff().sendProjectMessage({idempotencyKey,conversationId,content},ctx);
+  return {success:"Message sent."};
+}
+
+async function reviseConversationModel({form,idempotencyKey,requestId,ctx}:ConversationActionContext,conversation:ProjectConversationDto){
+  const proposalId=text(form,"proposalId",128),connectionId=text(form,"connectionId",128),model=text(form,"model",128);
+  const proposal=conversation.proposals.find(p=>p.id===proposalId && p.action==="create_task" && p.state==="pending");
+  if(!proposal||!connectionId||!model)return conversationInputError(requestId,"Choose an available coding connection and model for this pending task plan.");
+  const bff=getBff(),catalog=await bff.listProviderModels({pageSize:100},ctx,connectionId);
+  if(!catalog.models.some(m=>m.id===model))return conversationInputError(requestId,"The selected model is no longer available.");
+  await bff.decideProjectProposal({idempotencyKey,conversationId:conversation.id,proposalId:proposal.id,decision:"revise"},ctx);
+  await bff.sendProjectMessage({idempotencyKey:`${idempotencyKey}-message`,conversationId:conversation.id,content:`Revise task plan ${proposal.id} for repository ${proposal.request?.repositoryConnectionId}: use coding connection ${connectionId} and model ${model}. Preserve the other requirements and prepare a new proposal for approval.`},ctx);
+  return {success:"Coding model revision requested. Review the new plan before approving."};
+}
+
+async function decideConversationProposal({form,idempotencyKey,requestId,ctx}:ConversationActionContext,conversation:ProjectConversationDto){
+  const proposalId=text(form,"proposalId",128),decision=text(form,"decision",16);
+  if(!proposalId||!["approve","reject","revise"].includes(decision??"")||!conversation.proposals.some(p=>p.id===proposalId))return conversationInputError(requestId,"Select a pending proposal and a decision.");
+  await getBff().decideProjectProposal({idempotencyKey,conversationId:conversation.id,proposalId,decision:decision!},ctx);
+  return {success:decision==="approve"?"Approved action submitted.":decision==="revise"?"Send a message with the revisions you need.":"Proposal rejected."};
 }

@@ -140,6 +140,7 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
         let context = self.context(&request, "DecideProjectProposal")?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
+        let lifecycle = self.state.repository_lifecycle.read().await;
         let _connection = self.state.connection_lock.lock().await;
         if message.decision == "approve" {
             let id = message.conversation_id.clone();
@@ -158,9 +159,10 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
                     .ok_or_else(|| Status::internal("proposal invalid"))?;
                 let observed = self
                     .state
-                    .observe_project_repository_head(
+                    .observe_project_repository_head_guarded(
                         &c.project_id,
                         &requested.repository_connection_id,
+                        &lifecycle,
                     )
                     .await
                     .map_err(Status::failed_precondition)?;
@@ -183,6 +185,7 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
         })
         .await
         .map_err(|e| context.store_error(&e))?;
+        drop(lifecycle);
         Ok(context.response(v1::DecideProjectProposalResponse {
             conversation: Some(c),
         }))

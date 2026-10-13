@@ -232,7 +232,18 @@ impl AppState {
         project_id: &str,
         repository_id: &str,
     ) -> Result<v1::RepositorySnapshot, &'static str> {
-        let _lifecycle = self.repository_lifecycle.read().await;
+        let lifecycle = self.repository_lifecycle.read().await;
+        self.observe_project_repository_head_guarded(project_id, repository_id, &lifecycle)
+            .await
+    }
+
+    /// Caller holds repository lifecycle before the connection lock, matching removal.
+    pub(crate) async fn observe_project_repository_head_guarded(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        _lifecycle: &tokio::sync::RwLockReadGuard<'_, ()>,
+    ) -> Result<v1::RepositorySnapshot, &'static str> {
         let project = project_id.to_owned();
         let repository = repository_id.to_owned();
         let value = with_store_async(self, move |store| {

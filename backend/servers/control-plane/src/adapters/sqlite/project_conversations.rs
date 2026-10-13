@@ -3,7 +3,9 @@ use super::{
     CleanStore, CleanStoreError, Connection, Digest, Message, OptionalExtension, Sha256, decode,
     get_payload, is_terminal_attempt, params, resource_id, timestamp, unix_seconds, v1,
 };
-use ayni_orchestrator_runtime::project_agent::ProjectAgentResult;
+use ayni_orchestrator_runtime::project_agent::{
+    ProjectAgentRequest, ProjectAgentResult, ResearchProposal,
+};
 
 pub(crate) const SCHEMA: &str = "CREATE TABLE project_agent_requests(run_id TEXT PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE project_conversations(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),cursor INTEGER NOT NULL,payload BLOB NOT NULL); CREATE TABLE project_conversation_actions(action_key TEXT PRIMARY KEY,digest BLOB NOT NULL,conversation_id TEXT NOT NULL REFERENCES project_conversations(id)); CREATE TABLE project_outcome_summaries(attempt_id TEXT NOT NULL,outcome TEXT NOT NULL,conversation_id TEXT NOT NULL,PRIMARY KEY(attempt_id,outcome));";
 
@@ -22,46 +24,13 @@ impl CleanStore {
             let project: String = row.get(1).map_err(CleanStoreError::Database)?;
             let cursor: i64 = row.get(2).map_err(CleanStoreError::Database)?;
             let payload: Vec<u8> = row.get(3).map_err(CleanStoreError::Database)?;
-            let c: v1::ProjectConversation = decode(&payload)?;
-            if c.id != id
-                || c.project_id != project
-                || cursor <= 0
-                || u64::try_from(cursor).ok() != Some(c.update_cursor)
-                || payload.len() > 3 * 1024 * 1024
-                || c.messages.len() > 512
-            {
-                return Err(CleanStoreError::CorruptState);
-            }
-            let mut ids = std::collections::BTreeSet::new();
-            for r in &c.runs {
-                if !ids.insert(r.id.clone())
-                    || !matches!(
-                        r.state.as_str(),
-                        "queued" | "running" | "completed" | "interrupted" | "failed"
-                    )
-                {
-                    return Err(CleanStoreError::CorruptState);
-                }
-            }
-            if c.runs
-                .iter()
-                .filter(|r| matches!(r.state.as_str(), "queued" | "running"))
-                .count()
-                > 1
-            {
-                return Err(CleanStoreError::CorruptState);
-            }
-            for p in &c.proposals {
-                if !ids.contains(&p.run_id)
-                    || !matches!(
-                        p.state.as_str(),
-                        "pending" | "approved" | "rejected" | "revise" | "failed"
-                    )
-                {
-                    return Err(CleanStoreError::CorruptState);
-                }
-            }
+            let conversation: v1::ProjectConversation = decode(&payload)?;
+            validate_conversation_index(&conversation, &id, &project, cursor, payload.len())?;
+            validate_conversation_runs(&conversation)?;
         }
+        self.validate_project_agent_requests()
+    }
+    fn validate_project_agent_requests(&self) -> Result<(), CleanStoreError> {
         let mut requests = self
             .connection
             .prepare("SELECT run_id,payload FROM project_agent_requests")
@@ -70,7 +39,7 @@ impl CleanStore {
         while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
             let id: String = row.get(0).map_err(CleanStoreError::Database)?;
             let payload: String = row.get(1).map_err(CleanStoreError::Database)?;
-            let request: ayni_orchestrator_runtime::project_agent::ProjectAgentRequest =
+            let request: ProjectAgentRequest =
                 serde_json::from_str(&payload).map_err(|_| CleanStoreError::CorruptState)?;
             if id != request.run_id || payload.len() > 512 * 1024 {
                 return Err(CleanStoreError::CorruptState);
@@ -453,145 +422,15 @@ impl CleanStore {
         else {
             return Ok(());
         };
-        if result.message.len() > 16384
-            || result.proposals.len() > c.repository_connection_ids.len()
-            || result.model_calls
-                > self
-                    .project_run_request(&result.run_id)?
-                    .map_or(24, |r| r.max_model_calls)
-        {
-            return Err(CleanStoreError::BoundExceeded);
-        }
-        if c.runs
-            .iter()
-            .any(|r| r.id == result.run_id && r.purpose == "summary")
-            && !result.proposals.is_empty()
-        {
-            return Err(CleanStoreError::InvalidTransition);
-        }
         let researched = self.project_run_request(&result.run_id)?;
+        validate_project_result(&c, &result, researched.as_ref())?;
         let mut targets = std::collections::BTreeSet::new();
-        for p in result.proposals {
-            if researched.as_ref().is_none_or(|r| {
-                !r.repositories.iter().any(|repository| {
-                    let same_repository = repository.id == p.repository_id;
-                    let same_revision = repository.revision == p.revision;
-                    same_repository && same_revision
-                })
-            }) {
-                return Err(CleanStoreError::StaleVersion);
-            }
-            if !c.repository_connection_ids.contains(&p.repository_id)
-                || !targets.insert(p.repository_id.clone())
-            {
-                return Err(CleanStoreError::ParentMismatch);
-            }
-            self.project_member(&c.project_id, &p.repository_id)?;
-            if !matches!(
-                p.action.as_str(),
-                "create_task" | "cancel_task" | "retry_task" | "retry_publication"
-            ) {
-                return Err(CleanStoreError::InvalidTransition);
-            }
-            if p.action != "create_task" {
-                let task = self.development_task(&p.target_task_id)?;
-                if task.project_id != c.project_id {
-                    return Err(CleanStoreError::ParentMismatch);
-                }
-            }
-            if p.action != "create_task" {
-                let last = c
-                    .messages
-                    .iter()
-                    .rev()
-                    .find(|m| m.role == "user")
-                    .map_or("", |m| m.content.as_str())
-                    .to_ascii_lowercase();
-                if !ayni_orchestrator_runtime::project_agent::explicit_action_request(
-                    &last,
-                    &p.action,
-                    &p.target_task_id,
-                ) {
-                    return Err(CleanStoreError::InvalidTransition);
-                }
-                let task = self.development_task(&p.target_task_id)?;
-                if task
-                    .snapshot
-                    .as_ref()
-                    .and_then(|s| s.repository.as_ref())
-                    .is_none_or(|r| r.repository_connection_id != p.repository_id)
-                {
-                    return Err(CleanStoreError::ParentMismatch);
-                }
-            }
-            let request = v1::DevelopmentTaskRequest {
-                project_id: c.project_id.clone(),
-                repository_connection_id: p.repository_id,
-                repository_revision: p.revision,
-                runtime_profile_id: p.runtime_profile_id,
-                agent: Some(v1::AgentSelection {
-                    provider: "openai".into(),
-                    agent: "coding-agent".into(),
-                    model: p.coding_model,
-                }),
-                request: if p.allowed_paths.is_empty() {
-                    p.request
-                } else {
-                    format!(
-                        "{}\nAllowed paths: {}",
-                        p.request,
-                        p.allowed_paths.join(", ")
-                    )
-                },
-                acceptance_criteria: p.acceptance_criteria,
-                change_constraints: Some(v1::ChangeConstraints {
-                    protected_paths: p.forbidden_paths,
-                    allow_test_edits: p.allow_test_edits,
-                }),
-                coding_turns: Some(p.coding_turns),
-                deadline: Some(prost_types::Duration {
-                    seconds: i64::try_from(p.deadline_seconds)
-                        .map_err(|_| CleanStoreError::BoundExceeded)?,
-                    nanos: 0,
-                }),
-                connection_id: p.coding_connection_id,
-            };
-            if p.action == "create_task" {
+        for proposal in result.proposals {
+            self.validate_research_proposal(&c, &proposal, researched.as_ref(), &mut targets)?;
+            let request = proposal_request(&c.project_id, &proposal)?;
+            let researched_runtime = if proposal.action == "create_task" {
                 api_validation_task(&request)?;
-            }
-            let researched_runtime = if p.action == "create_task" {
-                let frozen = self
-                    .project_run_request(&result.run_id)?
-                    .ok_or(CleanStoreError::CorruptState)?;
-                let context: serde_json::Value = serde_json::from_str(&frozen.context)
-                    .map_err(|_| CleanStoreError::CorruptState)?;
-                let profile = context["repositories"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|r| {
-                        r["repository_id"].as_str()
-                            == Some(request.repository_connection_id.as_str())
-                    })
-                    .flat_map(|r| r["profiles"].as_array().into_iter().flatten())
-                    .find(|r| r["id"].as_str() == Some(request.runtime_profile_id.as_str()))
-                    .ok_or(CleanStoreError::ProfileNotReady)?;
-                Some(v1::FrozenRuntime {
-                    runtime_profile_id: request.runtime_profile_id.clone(),
-                    runtime_profile_revision_id: profile["active_revision_id"]
-                        .as_str()
-                        .ok_or(CleanStoreError::ProfileNotReady)?
-                        .into(),
-                    runtime_artifact_id: profile["active_runtime_artifact_id"]
-                        .as_str()
-                        .ok_or(CleanStoreError::ProfileNotReady)?
-                        .into(),
-                    resolved_digest: profile["resolved_digest"]
-                        .as_str()
-                        .ok_or(CleanStoreError::ProfileNotReady)?
-                        .into(),
-                    ..Default::default()
-                })
+                Some(self.researched_proposal_runtime(&result.run_id, &request)?)
             } else {
                 None
             };
@@ -601,8 +440,8 @@ impl CleanStore {
                 run_id: result.run_id.clone(),
                 state: "pending".into(),
                 request: Some(request),
-                action: p.action,
-                target_task_id: p.target_task_id,
+                action: proposal.action,
+                target_task_id: proposal.target_task_id,
                 ..Default::default()
             });
         }
@@ -629,6 +468,109 @@ impl CleanStore {
         });
         self.save_conversation(&mut c)
     }
+    fn validate_research_proposal(
+        &self,
+        c: &v1::ProjectConversation,
+        p: &ResearchProposal,
+        researched: Option<&ProjectAgentRequest>,
+        targets: &mut std::collections::BTreeSet<String>,
+    ) -> Result<(), CleanStoreError> {
+        if researched.is_none_or(|r| {
+            !r.repositories.iter().any(|repository| {
+                let same_repository = repository.id == p.repository_id;
+                let same_revision = repository.revision == p.revision;
+                same_repository && same_revision
+            })
+        }) {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        if !c.repository_connection_ids.contains(&p.repository_id)
+            || !targets.insert(p.repository_id.clone())
+        {
+            return Err(CleanStoreError::ParentMismatch);
+        }
+        self.project_member(&c.project_id, &p.repository_id)?;
+        if !matches!(
+            p.action.as_str(),
+            "create_task" | "cancel_task" | "retry_task" | "retry_publication"
+        ) {
+            return Err(CleanStoreError::InvalidTransition);
+        }
+        if p.action != "create_task" {
+            self.validate_proposed_lifecycle_action(c, p)?;
+        }
+        Ok(())
+    }
+    fn validate_proposed_lifecycle_action(
+        &self,
+        c: &v1::ProjectConversation,
+        p: &ResearchProposal,
+    ) -> Result<(), CleanStoreError> {
+        let task = self.development_task(&p.target_task_id)?;
+        if task.project_id != c.project_id {
+            return Err(CleanStoreError::ParentMismatch);
+        }
+        let last = c
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "user")
+            .map_or("", |m| m.content.as_str())
+            .to_ascii_lowercase();
+        if !ayni_orchestrator_runtime::project_agent::explicit_action_request(
+            &last,
+            &p.action,
+            &p.target_task_id,
+        ) {
+            return Err(CleanStoreError::InvalidTransition);
+        }
+        if task
+            .snapshot
+            .as_ref()
+            .and_then(|s| s.repository.as_ref())
+            .is_none_or(|r| r.repository_connection_id != p.repository_id)
+        {
+            return Err(CleanStoreError::ParentMismatch);
+        }
+        Ok(())
+    }
+    fn researched_proposal_runtime(
+        &self,
+        run_id: &str,
+        request: &v1::DevelopmentTaskRequest,
+    ) -> Result<v1::FrozenRuntime, CleanStoreError> {
+        let frozen = self
+            .project_run_request(run_id)?
+            .ok_or(CleanStoreError::CorruptState)?;
+        let context: serde_json::Value =
+            serde_json::from_str(&frozen.context).map_err(|_| CleanStoreError::CorruptState)?;
+        let profile = context["repositories"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|r| {
+                r["repository_id"].as_str() == Some(request.repository_connection_id.as_str())
+            })
+            .flat_map(|r| r["profiles"].as_array().into_iter().flatten())
+            .find(|r| r["id"].as_str() == Some(request.runtime_profile_id.as_str()))
+            .ok_or(CleanStoreError::ProfileNotReady)?;
+        Ok(v1::FrozenRuntime {
+            runtime_profile_id: request.runtime_profile_id.clone(),
+            runtime_profile_revision_id: profile["active_revision_id"]
+                .as_str()
+                .ok_or(CleanStoreError::ProfileNotReady)?
+                .into(),
+            runtime_artifact_id: profile["active_runtime_artifact_id"]
+                .as_str()
+                .ok_or(CleanStoreError::ProfileNotReady)?
+                .into(),
+            resolved_digest: profile["resolved_digest"]
+                .as_str()
+                .ok_or(CleanStoreError::ProfileNotReady)?
+                .into(),
+            ..Default::default()
+        })
+    }
     pub(crate) fn decide_project_proposal(
         &mut self,
         key: &str,
@@ -654,91 +596,7 @@ impl CleanStore {
             "reject" => p.state = "rejected".into(),
             "revise" => p.state = "revise".into(),
             "approve" => {
-                let requested = p.request.as_ref().ok_or(CleanStoreError::CorruptState)?;
-                self.project_member(&c.project_id, &requested.repository_connection_id)?;
-                let stable_key = format!("project-proposal-{}", p.id);
-                let (task, attempt) = match p.action.as_str() {
-                    "create_task" => {
-                        let request = p.request.clone().ok_or(CleanStoreError::CorruptState)?;
-                        self.project_member(&c.project_id, &request.repository_connection_id)?;
-                        let repository =
-                            self.repository_connection(&request.repository_connection_id)?;
-                        if !repository.onboarding_revision.is_empty()
-                            && repository.onboarding_revision != request.repository_revision
-                        {
-                            return Err(CleanStoreError::StaleVersion);
-                        }
-                        let frozen = p
-                            .researched_runtime
-                            .as_ref()
-                            .ok_or(CleanStoreError::ProfileNotReady)?;
-                        let profile = self.runtime_profile(&request.runtime_profile_id)?;
-                        if profile.active_revision_id.as_deref()
-                            != Some(frozen.runtime_profile_revision_id.as_str())
-                            || profile.active_runtime_artifact_id.as_deref()
-                                != Some(frozen.runtime_artifact_id.as_str())
-                            || self
-                                .runtime_artifact(&frozen.runtime_artifact_id)?
-                                .resolved_digest
-                                != frozen.resolved_digest
-                        {
-                            return Err(CleanStoreError::StaleVersion);
-                        }
-                        let latest:Option<String>=self.connection.query_row("SELECT revision FROM repository_snapshots WHERE repository_connection_id=?1 ORDER BY event_cursor DESC LIMIT 1",[&request.repository_connection_id],|r|r.get(0)).optional().map_err(CleanStoreError::Database)?;
-                        if latest.as_deref() != Some(request.repository_revision.as_str()) {
-                            return Err(CleanStoreError::StaleVersion);
-                        }
-                        let command = crate::adapters::grpc::task_mapping::task_command(
-                            &stable_key,
-                            &v1::CreateDevelopmentTaskRequest {
-                                idempotency_key: stable_key.clone(),
-                                request: Some(request),
-                            },
-                        )?;
-                        let receipt = ayni_orchestrator_application::tasks::admit(self, command)
-                            .map_err(super::task_admission::admission_error)?;
-                        (receipt.task_id, receipt.attempt_id)
-                    }
-                    "cancel_task" => {
-                        let task = self.development_task(&p.target_task_id)?;
-                        let cmd = crate::adapters::grpc::task_mapping::cancel_command(
-                            &stable_key,
-                            &v1::CancelDevelopmentTaskRequest {
-                                idempotency_key: stable_key.clone(),
-                                development_task_id: task.id.clone(),
-                            },
-                        );
-                        let receipt =
-                            ayni_orchestrator_application::tasks::cancellation::cancel(self, cmd)
-                                .map_err(super::task_cancellation::cancellation_error)?;
-                        (receipt, task.active_attempt_id.unwrap_or_default())
-                    }
-                    "retry_task" => {
-                        let cmd = crate::adapters::grpc::task_mapping::retry_command(
-                            &stable_key,
-                            &v1::RetryDevelopmentTaskRequest {
-                                idempotency_key: stable_key.clone(),
-                                development_task_id: p.target_task_id.clone(),
-                            },
-                        );
-                        let receipt =
-                            ayni_orchestrator_application::tasks::retry::retry(self, &cmd)
-                                .map_err(super::task_retry::retry_error)?;
-                        (p.target_task_id.clone(), receipt)
-                    }
-                    "retry_publication" => {
-                        let task = self.development_task(&p.target_task_id)?;
-                        let attempt = self.retry_task_publication(
-                            &stable_key,
-                            &v1::RetryTaskPublicationRequest {
-                                idempotency_key: stable_key.clone(),
-                                development_task_id: task.id.clone(),
-                            },
-                        )?;
-                        (task.id, attempt.id)
-                    }
-                    _ => return Err(CleanStoreError::InvalidTransition),
-                };
+                let (task, attempt) = self.approve_project_proposal(&c.project_id, p)?;
                 p.task_id = task;
                 p.attempt_id = attempt;
                 p.state = "approved".into();
@@ -755,6 +613,216 @@ impl CleanStore {
         finish_transaction(&self.connection, result)?;
         Ok(c)
     }
+    fn approve_project_proposal(
+        &mut self,
+        project_id: &str,
+        p: &v1::ProjectTaskProposal,
+    ) -> Result<(String, String), CleanStoreError> {
+        let requested = p.request.as_ref().ok_or(CleanStoreError::CorruptState)?;
+        self.project_member(project_id, &requested.repository_connection_id)?;
+        let stable_key = format!("project-proposal-{}", p.id);
+        let (task, attempt) = match p.action.as_str() {
+            "create_task" => self.admit_project_proposal(&stable_key, p)?,
+            "cancel_task" => {
+                let task = self.development_task(&p.target_task_id)?;
+                let cmd = crate::adapters::grpc::task_mapping::cancel_command(
+                    &stable_key,
+                    &v1::CancelDevelopmentTaskRequest {
+                        idempotency_key: stable_key.clone(),
+                        development_task_id: task.id.clone(),
+                    },
+                );
+                let receipt = ayni_orchestrator_application::tasks::cancellation::cancel(self, cmd)
+                    .map_err(super::task_cancellation::cancellation_error)?;
+                (receipt, task.active_attempt_id.unwrap_or_default())
+            }
+            "retry_task" => {
+                let cmd = crate::adapters::grpc::task_mapping::retry_command(
+                    &stable_key,
+                    &v1::RetryDevelopmentTaskRequest {
+                        idempotency_key: stable_key.clone(),
+                        development_task_id: p.target_task_id.clone(),
+                    },
+                );
+                let receipt = ayni_orchestrator_application::tasks::retry::retry(self, &cmd)
+                    .map_err(super::task_retry::retry_error)?;
+                (p.target_task_id.clone(), receipt)
+            }
+            "retry_publication" => {
+                let task = self.development_task(&p.target_task_id)?;
+                let attempt = self.retry_task_publication(
+                    &stable_key,
+                    &v1::RetryTaskPublicationRequest {
+                        idempotency_key: stable_key.clone(),
+                        development_task_id: task.id.clone(),
+                    },
+                )?;
+                (task.id, attempt.id)
+            }
+            _ => return Err(CleanStoreError::InvalidTransition),
+        };
+
+        Ok((task, attempt))
+    }
+    fn admit_project_proposal(
+        &mut self,
+        stable_key: &str,
+        p: &v1::ProjectTaskProposal,
+    ) -> Result<(String, String), CleanStoreError> {
+        let request = p.request.clone().ok_or(CleanStoreError::CorruptState)?;
+        self.validate_proposal_admission(p, &request)?;
+        let command = crate::adapters::grpc::task_mapping::task_command(
+            stable_key,
+            &v1::CreateDevelopmentTaskRequest {
+                idempotency_key: stable_key.into(),
+                request: Some(request),
+            },
+        )?;
+        let receipt = ayni_orchestrator_application::tasks::admit(self, command)
+            .map_err(super::task_admission::admission_error)?;
+        Ok((receipt.task_id, receipt.attempt_id))
+    }
+    fn validate_proposal_admission(
+        &self,
+        p: &v1::ProjectTaskProposal,
+        request: &v1::DevelopmentTaskRequest,
+    ) -> Result<(), CleanStoreError> {
+        self.project_member(&request.project_id, &request.repository_connection_id)?;
+        let repository = self.repository_connection(&request.repository_connection_id)?;
+        if !repository.onboarding_revision.is_empty()
+            && repository.onboarding_revision != request.repository_revision
+        {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        let frozen = p
+            .researched_runtime
+            .as_ref()
+            .ok_or(CleanStoreError::ProfileNotReady)?;
+        let profile = self.runtime_profile(&request.runtime_profile_id)?;
+        if profile.active_revision_id.as_deref()
+            != Some(frozen.runtime_profile_revision_id.as_str())
+            || profile.active_runtime_artifact_id.as_deref()
+                != Some(frozen.runtime_artifact_id.as_str())
+            || self
+                .runtime_artifact(&frozen.runtime_artifact_id)?
+                .resolved_digest
+                != frozen.resolved_digest
+        {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        let latest:Option<String>=self.connection.query_row("SELECT revision FROM repository_snapshots WHERE repository_connection_id=?1 ORDER BY event_cursor DESC LIMIT 1",[&request.repository_connection_id],|r|r.get(0)).optional().map_err(CleanStoreError::Database)?;
+        if latest.as_deref() != Some(request.repository_revision.as_str()) {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        Ok(())
+    }
+}
+fn validate_conversation_index(
+    c: &v1::ProjectConversation,
+    id: &str,
+    project: &str,
+    cursor: i64,
+    payload_bytes: usize,
+) -> Result<(), CleanStoreError> {
+    if c.id != id
+        || c.project_id != project
+        || cursor <= 0
+        || u64::try_from(cursor).ok() != Some(c.update_cursor)
+        || payload_bytes > 3 * 1024 * 1024
+        || c.messages.len() > 512
+    {
+        return Err(CleanStoreError::CorruptState);
+    }
+    Ok(())
+}
+fn validate_conversation_runs(c: &v1::ProjectConversation) -> Result<(), CleanStoreError> {
+    let mut ids = std::collections::BTreeSet::new();
+    for run in &c.runs {
+        if !ids.insert(run.id.clone())
+            || !matches!(
+                run.state.as_str(),
+                "queued" | "running" | "completed" | "interrupted" | "failed"
+            )
+        {
+            return Err(CleanStoreError::CorruptState);
+        }
+    }
+    if c.runs
+        .iter()
+        .filter(|r| matches!(r.state.as_str(), "queued" | "running"))
+        .count()
+        > 1
+    {
+        return Err(CleanStoreError::CorruptState);
+    }
+    for proposal in &c.proposals {
+        if !ids.contains(&proposal.run_id)
+            || !matches!(
+                proposal.state.as_str(),
+                "pending" | "approved" | "rejected" | "revise" | "failed"
+            )
+        {
+            return Err(CleanStoreError::CorruptState);
+        }
+    }
+    Ok(())
+}
+fn validate_project_result(
+    c: &v1::ProjectConversation,
+    result: &ProjectAgentResult,
+    researched: Option<&ProjectAgentRequest>,
+) -> Result<(), CleanStoreError> {
+    if result.message.len() > 16384
+        || result.proposals.len() > c.repository_connection_ids.len()
+        || result.model_calls > researched.map_or(24, |r| r.max_model_calls)
+    {
+        return Err(CleanStoreError::BoundExceeded);
+    }
+    if c.runs
+        .iter()
+        .any(|r| r.id == result.run_id && r.purpose == "summary")
+        && !result.proposals.is_empty()
+    {
+        return Err(CleanStoreError::InvalidTransition);
+    }
+    Ok(())
+}
+fn proposal_request(
+    project_id: &str,
+    p: &ResearchProposal,
+) -> Result<v1::DevelopmentTaskRequest, CleanStoreError> {
+    Ok(v1::DevelopmentTaskRequest {
+        project_id: project_id.into(),
+        repository_connection_id: p.repository_id.clone(),
+        repository_revision: p.revision.clone(),
+        runtime_profile_id: p.runtime_profile_id.clone(),
+        agent: Some(v1::AgentSelection {
+            provider: "openai".into(),
+            agent: "coding-agent".into(),
+            model: p.coding_model.clone(),
+        }),
+        request: if p.allowed_paths.is_empty() {
+            p.request.clone()
+        } else {
+            format!(
+                "{}\nAllowed paths: {}",
+                p.request,
+                p.allowed_paths.join(", ")
+            )
+        },
+        acceptance_criteria: p.acceptance_criteria.clone(),
+        change_constraints: Some(v1::ChangeConstraints {
+            protected_paths: p.forbidden_paths.clone(),
+            allow_test_edits: p.allow_test_edits,
+        }),
+        coding_turns: Some(p.coding_turns),
+        deadline: Some(prost_types::Duration {
+            seconds: i64::try_from(p.deadline_seconds)
+                .map_err(|_| CleanStoreError::BoundExceeded)?,
+            nanos: 0,
+        }),
+        connection_id: p.coding_connection_id.clone(),
+    })
 }
 fn finish_transaction(
     connection: &Connection,
