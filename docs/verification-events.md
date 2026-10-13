@@ -23,6 +23,16 @@ state, alongside the existing verification request. The Kubernetes adapter binds
 the request digest to the serialized request and creates the manifest before the
 Job. The downward API supplies the physical Pod UID.
 
+The Kubernetes adapter also supplies `VERIFICATION_REPORTING_AUTHORITY` only to
+the trusted verifier, using the frozen preparation authority. With a reporting
+manifest and authority `events`, current workers retain evidence and deliver its
+event without writing the compact termination reference. Shadow and retained
+workers keep that reference; an absent or unrecognized authority preserves the
+legacy behavior. Safe failure codes may still appear in termination diagnostics.
+This launch setting leaves the `reporting.json` shape unchanged, so existing
+digest-pinned workers can read their original manifest and ignore the new
+environment setting. Existing Jobs retain their original Pod specification.
+
 The supervisor writes the existing bounded `retained-v1` verification record
 outside child-writable storage. It hashes the exact retained bytes and emits
 `report_available`, or emits `execution_failed` with a recognized failure code

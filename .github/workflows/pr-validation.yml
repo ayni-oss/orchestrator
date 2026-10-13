@@ -253,6 +253,9 @@ jobs:
       - name: Test NATS fault injector framing
         run: node --test dev/tests/nats-fault-proxy.test.mjs
 
+      - name: Test compatibility drain inventory
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/operations -p 'test_*.py'
+
       - name: Prepare host quality tools
         run: |
           rustup toolchain install 1.94.0 --profile minimal --component clippy --component rustfmt

@@ -174,6 +174,9 @@ spec:
               /usr/local/bin/ayni-orchestrator-worker verify
               result=\$?
               test "\$result" = 1 || exit 1
+              if test "$mode" = events; then
+                test "\$(cat /dev/termination-log)" != 'retained-v1:verification.json' || exit 1
+              fi
               /usr/local/bin/ayni-orchestrator-worker report-verification || exit 1
               test -s /output/verification-event.json || exit 1
               test -s /output/verification-receipt.json || exit 1
@@ -184,6 +187,8 @@ spec:
               cmp /output/verification-receipt-before-restart.json /output/verification-receipt.json || exit 1
               echo verification-receipt-and-supervisor-replay-passed
           env:
+            - name: VERIFICATION_REPORTING_AUTHORITY
+              value: $mode
             - name: JOB_NAME
               value: $job
             - name: POD_UID
@@ -239,7 +244,7 @@ kubectl --context docker-desktop -n "$namespace" delete pod/reporting-inbox-insp
 python3 - "$temporary/synthetic.sqlite" "$mode" <<'PYSQL'
 import json,sqlite3,sys
 connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
-assert connection.execute("SELECT version FROM clean_schema").fetchone()==(17,)
+assert connection.execute("SELECT version FROM clean_schema").fetchone()==(18,)
 if sys.argv[2]=='events':
     assert connection.execute("SELECT execution_id,decision FROM verification_inbox").fetchall()==[('verification-receipt-smoke','accepted')]
     cursor=json.loads(connection.execute("SELECT value FROM reconciliation_cursors WHERE name LIKE 'managed:%'").fetchone()[0])

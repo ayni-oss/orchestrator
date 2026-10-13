@@ -4,7 +4,7 @@ import { createResourceWatch } from "./resource-watch.js";
 
 export type RefreshScope = "app:runtimes" | "app:tasks" | "app:connections" | "app:certificates" | "app:projects" | "app:repositories";
 type Subscriber = { intervalMs: number; onResult?: ((ok: boolean) => void) | undefined };
-type Entry = { subscribers: Set<Subscriber>; timer?: ReturnType<typeof setInterval> | undefined; pending?: Promise<void> | undefined; queued?: Promise<void> | undefined; stopStream?: (() => void) | undefined; dirty?: boolean | undefined };
+type Entry = { subscribers: Set<Subscriber>; timer?: ReturnType<typeof setInterval> | undefined; pending?: Promise<void> | undefined; queued?: Promise<void> | undefined; stopStream?: (() => void) | undefined; streamHealthy?: boolean | undefined; dirty?: boolean | undefined };
 
 /** One in-flight refresh and one timer per resource scope, shared by mounted consumers. */
 export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promise<void>, canRefresh: () => boolean, watch?: (scope: RefreshScope, changed: () => void, status: (ok: boolean) => void) => () => void) {
@@ -46,7 +46,13 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
     value.timer = undefined;
     if (!value.subscribers.size) { value.stopStream?.(); value.stopStream = undefined; if (!value.pending && !value.queued) entries.delete(scope); return; }
     const streaming = watch !== undefined && scope !== "app:tasks";
-    if (streaming && !value.stopStream) value.stopStream = watch(scope, () => event(scope), ok => { for (const subscriber of value.subscribers) subscriber.onResult?.(ok); });
+    if (streaming && !value.stopStream) value.stopStream = watch(scope, () => event(scope), ok => {
+      value.streamHealthy = ok;
+      for (const subscriber of value.subscribers) subscriber.onResult?.(ok);
+    });
+    // A new consumer needs the existing transport state, not an optimistic
+    // "live" label merely because another consumer already opened the stream.
+    if (streaming && value.streamHealthy !== undefined) for (const subscriber of value.subscribers) subscriber.onResult?.(value.streamHealthy);
     const interval = Math.max(streaming ? 120_000 : 0, Math.min(...Array.from(value.subscribers, subscriber => subscriber.intervalMs)));
     let repairedAt = Date.now();
     value.timer = setInterval(() => {
@@ -54,7 +60,7 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
       value.dirty = false;
       repairedAt = Date.now();
       void request(scope).then(
-        () => { for (const subscriber of value.subscribers) subscriber.onResult?.(true); },
+        () => { for (const subscriber of value.subscribers) subscriber.onResult?.(!streaming || value.streamHealthy === true); },
         () => { for (const subscriber of value.subscribers) subscriber.onResult?.(false); },
       );
     }, 1_000);

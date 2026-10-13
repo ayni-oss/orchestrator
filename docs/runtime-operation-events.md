@@ -88,7 +88,11 @@ only when its preparation is no longer reachable; pending publications remain.
 For rollback, change subsequent admission defaults while retaining the original
 endpoint/RBAC until frozen work drains. The read-only
 `scripts/operations/verification-drain.py` reports both verification and runtime
-operation reader dependencies for schemas 13–16. Zero live Pods does not establish
+operation reader dependencies for schemas 13–18, including trust review
+continuations and repository-removal cleanup. It also inventories coding
+admissions, pending receipts, conservative publication-recovery candidates and
+retained history counts. See [drain inventory](operations.md#compatibility-drain-inventory)
+for the report boundaries. Zero live Pods does not establish
 zero resumable or historical dependencies. Compatibility-reader retirement remains
 subject to the [migration gates](event-platform-migration.md).
 

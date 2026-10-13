@@ -42,7 +42,8 @@ async function listModelChoices(context: RequestContext): Promise<{ provider?: s
   return { ...(provider === undefined ? {} : { provider }), models };
 }
 
-export const load: PageServerLoad = async ({ locals, setHeaders, url }) => {
+export const load: PageServerLoad = async ({ locals, setHeaders, url, depends }) => {
+  depends("app:tasks", "app:projects", "app:runtimes");
   setHeaders({ "cache-control": "no-store" });
   const token = url.searchParams.get("pageToken");
   const pageToken = token !== null && token.length <= 512 ? token : undefined;

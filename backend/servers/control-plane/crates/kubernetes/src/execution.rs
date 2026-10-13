@@ -71,6 +71,7 @@ impl RuntimeKubernetes {
         request: &ExecutionRequest<Profile>,
         token: &str,
         reporting: Option<&ayni_orchestrator_runtime::verification::ReportingAdmission>,
+        event_authoritative: bool,
     ) -> Result<(), &'static str> {
         let request = serde_json::to_string(request).map_err(|_| "runtime_request_invalid")?;
         let mut job = verification_job(name, &self.configuration, runtime)?;
@@ -96,7 +97,7 @@ impl RuntimeKubernetes {
             let manifest =
                 serde_json::to_string(&admission).map_err(|_| "runtime_request_invalid")?;
             data.insert("reporting.json".into(), manifest);
-            crate::reporting::configure_job(&mut job)?;
+            crate::reporting::configure_job(&mut job, event_authoritative)?;
         }
         crate::reporting::configure_telemetry(&mut job);
         self.create(name, data, token, &job).await

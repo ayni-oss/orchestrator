@@ -34,7 +34,7 @@ fn large_failed_quality_report_is_committed_before_termination_reference() -> io
     let termination = output.path().join("termination");
     retain(
         output.path(),
-        &termination,
+        Some(&termination),
         "runtime-test",
         "pod-one",
         "request".into(),
@@ -56,7 +56,7 @@ fn large_failed_quality_report_is_committed_before_termination_reference() -> io
     assert!(
         retain(
             output.path(),
-            &output.path().join("termination"),
+            Some(&output.path().join("termination")),
             "runtime-test",
             "pod-two",
             "request".into(),
@@ -73,7 +73,7 @@ fn termination_delivery_failure_preserves_complete_report() -> io::Result<()> {
     let output = tempfile::tempdir()?;
     let error = retain(
         output.path(),
-        &output.path().join("absent/termination"),
+        Some(&output.path().join("absent/termination")),
         "runtime-test",
         "pod",
         "request".into(),
@@ -104,7 +104,7 @@ fn failures_retain_only_safe_classification_and_oversized_reports_are_explicit()
         assert!(
             retain(
                 output.path(),
-                &output.path().join("termination"),
+                Some(&output.path().join("termination")),
                 "runtime-test",
                 "pod",
                 "request".into(),
@@ -137,4 +137,72 @@ fn retained_output_rejects_directory_symlinks() -> io::Result<()> {
     std::os::unix::fs::symlink(root.path(), root.path().join("link"))?;
     assert!(persist(&root.path().join("link"), b"{}").is_err());
     Ok(())
+}
+
+#[test]
+fn event_reporting_retains_large_evidence_without_a_termination_reference() -> io::Result<()> {
+    let output = tempfile::tempdir()?;
+    // A directory cannot be written as a termination file. Event authority must
+    // still retain and return its actual verification outcome.
+    let termination = legacy_termination_reference(true, Some("events"), output.path());
+    retain(
+        output.path(),
+        termination,
+        "runtime-test",
+        "pod-event",
+        "request".into(),
+        Ok(report()),
+    )?;
+    let bytes = read_bounded(&output.path().join(RECORD_FILE), MAX_RECORD_BYTES)?;
+    assert!(bytes.len() > 4096);
+    assert!(retained_result(output.path()).is_ok());
+    assert!(!output.path().join("termination").exists());
+    let record: VerificationRecord<VerificationReport> = serde_json::from_slice(&bytes)?;
+    assert_eq!(record.pod_uid, "pod-event");
+    assert!(matches!(record.outcome, VerificationOutcome::Report { .. }));
+    Ok(())
+}
+
+#[test]
+fn event_reporting_preserves_failure_classification_without_a_termination_reference()
+-> io::Result<()> {
+    let output = tempfile::tempdir()?;
+    let error = retain(
+        output.path(),
+        None,
+        "runtime-test",
+        "pod-event",
+        "request".into(),
+        Err(VerificationFailure::LockMismatch),
+    )
+    .err()
+    .ok_or_else(|| io::Error::other("failed verification must remain failed"))?;
+    assert_eq!(error.to_string(), "runtime_lock_mismatch");
+    assert_eq!(
+        retained_result(output.path())
+            .err()
+            .ok_or_else(|| io::Error::other("retained failure missing"))?
+            .to_string(),
+        "runtime_lock_mismatch"
+    );
+    Ok(())
+}
+
+#[test]
+fn frozen_reporting_authority_preserves_shadow_and_legacy_references() {
+    let path = Path::new("/dev/termination-log");
+    assert_eq!(
+        legacy_termination_reference(true, Some("events"), path),
+        None
+    );
+    for authority in [None, Some("shadow"), Some("unexpected")] {
+        assert_eq!(
+            legacy_termination_reference(true, authority, path),
+            Some(path)
+        );
+    }
+    assert_eq!(
+        legacy_termination_reference(false, Some("events"), path),
+        Some(path)
+    );
 }

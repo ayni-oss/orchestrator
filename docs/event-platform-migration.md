@@ -132,3 +132,31 @@ status, last meaningful progress, retry eligibility and cleanup condition. Show
 safe reason, operation identity and retained diagnostics; link a trace when
 available. A terminal result remains visible while execution is stopping.
 No trace, heartbeat or broker acknowledgement establishes successful work.
+
+
+## Retained compatibility boundaries
+
+Normal event-selected verification uses authenticated result delivery. The trusted
+Pod launch freezes a supervisor-only `VERIFICATION_REPORTING_AUTHORITY=events`
+hint from the persisted authority. New workers omit the compact termination
+reference only when that hint and the reporting admission are both present.
+Shadow, retained and older workers keep their selected behavior. The admission
+JSON remains unchanged so pinned workers with strict decoding can finish.
+Safe termination failure codes remain diagnostic output.
+
+Runtime-operation and coding collectors select their existing legacy readers
+only for frozen work without event admission. Retained final-envelope recovery,
+provider readback and observed stopped writers remain required. Review-only trust
+continuations and publication-only retries can depend on legacy readers after
+all Pods have stopped. Versioned stored-state decoding, historical API reads,
+legacy failure accounting and evidence retention therefore remain supported.
+The [drain inventory](operations.md#compatibility-drain-inventory) identifies these
+dependencies without authorizing deletion.
+
+Ownership-scoped Kubernetes watches wake guarded reconciliation. Repair scans,
+deadlines, Secret references and resource-dependency observations still converge
+when notifications are lost. Operator resource scopes use notification-driven
+refresh with 120-second repair; task detail streams use the same repair interval.
+Task lists and project task summaries keep 30-second discovery until a global
+resumable task watch exists. Runtime notifications react to projection changes
+without a separate one-second poll.

@@ -150,7 +150,7 @@ python3 - "$scratch" "$mode" <<'PY'
 import json,sqlite3,sys
 from pathlib import Path
 root=Path(sys.argv[1]);db=sqlite3.connect(root/'accepted.sqlite')
-assert db.execute('SELECT version FROM clean_schema').fetchone()==(17,)
+assert db.execute('SELECT version FROM clean_schema').fetchone()==(18,)
 assert db.execute('SELECT terminal FROM coding_executions').fetchone()==(1,), (db.execute('SELECT terminal,last_sequence,stopped FROM coding_executions').fetchall(),db.execute('SELECT kind,decision FROM coding_inbox').fetchall())
 assert db.execute("SELECT COUNT(*) FROM coding_inbox WHERE kind=2 AND decision='accepted'").fetchone()==(1,)
 raw=db.execute("SELECT accepted_payload FROM coding_inbox WHERE kind=2").fetchone()[0]

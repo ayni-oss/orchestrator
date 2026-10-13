@@ -4,11 +4,16 @@ use ayni_orchestrator_runtime::verification::REPORTING_AUDIENCE;
 use k8s_openapi::api::batch::v1::Job;
 use serde_json::json;
 
-pub fn configure_job(job: &mut Job) -> Result<(), &'static str> {
-    job.metadata
-        .annotations
-        .get_or_insert_default()
-        .insert("ayni.io/verification-events".into(), "shadow-v1".into());
+pub fn configure_job(job: &mut Job, event_authoritative: bool) -> Result<(), &'static str> {
+    job.metadata.annotations.get_or_insert_default().insert(
+        "ayni.io/verification-events".into(),
+        if event_authoritative {
+            "events-v1"
+        } else {
+            "shadow-v1"
+        }
+        .into(),
+    );
     let pod = job
         .spec
         .as_mut()
@@ -19,6 +24,21 @@ pub fn configure_job(job: &mut Job) -> Result<(), &'static str> {
         .iter_mut()
         .find(|container| container.name == "verify")
         .ok_or("runtime_job_invalid")?;
+    verifier
+        .env
+        .get_or_insert_default()
+        .push(k8s_openapi::api::core::v1::EnvVar {
+            name: "VERIFICATION_REPORTING_AUTHORITY".into(),
+            value: Some(
+                if event_authoritative {
+                    "events"
+                } else {
+                    "shadow"
+                }
+                .into(),
+            ),
+            ..Default::default()
+        });
     let mounts = verifier.volume_mounts.get_or_insert_default();
     mounts.push(serde_json::from_value(json!({"name":"request","mountPath":"/request/reporting.json","subPath":"reporting.json","readOnly":true})).map_err(|_| "runtime_job_invalid")?);
     mounts.push(
@@ -122,7 +142,7 @@ mod tests {
         let mut job: Job = serde_json::from_value(
             json!({"metadata":{},"spec":{"template":{"spec":{"automountServiceAccountToken":false,"initContainers":[{"name":"checkout","image":"trusted"}],"containers":[{"name":"verify","image":"pinned"}],"volumes":[]}}}}),
         )?;
-        configure_job(&mut job)?;
+        configure_job(&mut job, false)?;
         let pod = job
             .spec
             .as_ref()
@@ -162,6 +182,58 @@ mod tests {
             .ok_or("projection")?;
         assert_eq!(projection.audience.as_deref(), Some(REPORTING_AUDIENCE));
         assert_eq!(projection.expiration_seconds, Some(600));
+        Ok(())
+    }
+    #[test]
+    fn selected_reporting_authority_is_confined_to_the_verifier()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for event_authoritative in [false, true] {
+            let mut job: Job = serde_json::from_value(json!({
+                "metadata": {}, "spec": {"template": {"spec": {
+                    "initContainers": [{"name": "checkout", "image": "trusted"}],
+                    "containers": [{"name": "verify", "image": "pinned"},
+                                   {"name": "repository", "image": "pinned"}]
+                }}}
+            }))?;
+            configure_job(&mut job, event_authoritative)?;
+            let pod = job
+                .spec
+                .as_ref()
+                .and_then(|s| s.template.spec.as_ref())
+                .ok_or("pod")?;
+            let expected = if event_authoritative {
+                "events"
+            } else {
+                "shadow"
+            };
+            let verifier = pod
+                .containers
+                .iter()
+                .find(|c| c.name == "verify")
+                .ok_or("verify")?;
+            assert!(
+                verifier
+                    .env
+                    .as_ref()
+                    .ok_or("env")?
+                    .iter()
+                    .any(|e| e.name == "VERIFICATION_REPORTING_AUTHORITY"
+                        && e.value.as_deref() == Some(expected))
+            );
+            assert!(
+                pod.containers
+                    .iter()
+                    .filter(|c| c.name != "verify")
+                    .all(|c| c.env.is_none())
+            );
+            assert!(
+                pod.init_containers
+                    .as_ref()
+                    .ok_or("checkout")?
+                    .iter()
+                    .all(|c| c.env.is_none())
+            );
+        }
         Ok(())
     }
 }
