@@ -91,8 +91,8 @@ impl RuntimeKubernetes {
         image: &str,
         deadline: u32,
     ) -> Result<(), &'static str> {
-        let job = coding_job(name, &self.configuration, runtime, image, deadline)?;
-        let data = std::collections::BTreeMap::from([
+        let mut job = coding_job(name, &self.configuration, runtime, image, deadline)?;
+        let mut data = std::collections::BTreeMap::from([
             (
                 "execution.json".into(),
                 serde_json::to_string(&request.execution).map_err(|_| "coding_request_invalid")?,
@@ -102,6 +102,9 @@ impl RuntimeKubernetes {
                 serde_json::to_string(request).map_err(|_| "coding_request_invalid")?,
             ),
         ]);
+        if let Some(admission) = &request.reporting {
+            crate::coding_reporting::configure(&mut job, &mut data, admission)?;
+        }
         self.create(name, data, token, &job).await
     }
 

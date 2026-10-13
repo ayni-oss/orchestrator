@@ -22,6 +22,13 @@
 - Repository publication does not authorize new package/image releases, sites,
   announcements or publishing workflows; those require a separate maintainer decision.
 
+## Ayni domain
+
+- Ayni's canonical public domain is `ayni.build`, not `ayni.io`.
+- All Ayni event types use the reverse-DNS prefix `build.ayni`, derived from
+  `ayni.build`. Preserve historical `io.ayni` stored envelopes through
+  compatibility readers and canonicalize their type names at delivery.
+
 ## Implementation direction
 
 - Prefer Rust for orchestrator-owned application code, including controllers and

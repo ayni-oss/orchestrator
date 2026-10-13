@@ -533,6 +533,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
 }
 
 mod coding;
+mod coding_events;
 mod preparation;
 #[cfg(test)]
 mod preparation_tests;

@@ -87,6 +87,14 @@ pub trait ExecutionBackend: Send + Sync + 'static {
         &self,
         name: &str,
     ) -> impl Future<Output = ExecutionResult<ExecutionState>> + Send;
+    fn coding_reporting_identity(
+        &self,
+        _name: &str,
+    ) -> impl Future<
+        Output = ExecutionResult<Option<ayni_orchestrator_runtime::coding_events::CodingAdmission>>,
+    > + Send {
+        async { Ok(None) }
+    }
     fn cleanup(&self, name: &str) -> impl Future<Output = ExecutionResult<()>> + Send;
     fn coding_stopped(&self, name: &str) -> impl Future<Output = ExecutionResult<bool>> + Send;
 }

@@ -7,11 +7,11 @@ use tower::ServiceExt as _;
     clippy::too_many_lines,
     reason = "one receipt scenario owns authentication API fixtures and durable restart"
 )]
-async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_ingress_contract(mode: u8) -> Result<(), Box<dyn std::error::Error>> {
     let mut event: Value = serde_json::from_slice(include_bytes!(
         "../../../../../../../proto/testdata/verification/report.json"
     ))?;
-    if operation {
+    if mode == 1 {
         event["type"] = json!(ayni_orchestrator_events::operations::EVENT_TYPE);
         event["dataschema"] = json!(ayni_orchestrator_events::operations::DATA_SCHEMA);
         event["data"]["binding"]
@@ -25,12 +25,21 @@ async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error:
         event["data"]["evidence"]["contract"] =
             json!(ayni_orchestrator_events::operations::CONTRACT);
     }
+    if mode == 2 {
+        let original = event["data"]["binding"].clone();
+        event["type"] = json!(ayni_orchestrator_events::coding::EVENT_TYPE);
+        event["dataschema"] = json!(ayni_orchestrator_events::coding::DATA_SCHEMA);
+        event["subject"] = json!("tasks/task-one/attempts/attempt-one");
+        event["data"] = json!({"binding":{"taskId":"task-one","attemptId":"attempt-one","generation":original["preparationId"],"executionId":original["executionId"],"podUid":original["podUid"],"snapshotDigest":original["requestDigest"],"requestDigest":original["requestDigest"]},"kind":"CODING_REPORT_KIND_FINAL","sequence":257,"sha256":original["requestDigest"],"sizeBytes":100,"contract":ayni_orchestrator_events::coding::CONTRACT});
+    }
     let binding = &event["data"]["binding"];
     let mut admission = json!({"configuration":{"endpoint":"http://control-plane/events/verification","source":event["source"]},"binding":binding});
-    if operation {
+    if mode == 1 {
         admission["kind"] = event["data"]["kind"].clone();
     }
-    let manifest_key = if operation {
+    let manifest_key = if mode == 2 {
+        "coding-reporting.json"
+    } else if mode == 1 {
         "operation-reporting.json"
     } else {
         "reporting.json"
@@ -85,7 +94,7 @@ async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error:
     assert_eq!(
         state
             .database
-            .execute(move |store| receipt_count(store, operation))
+            .execute(move |store| receipt_count(store, mode))
             .await?,
         0
     );
@@ -108,7 +117,11 @@ async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error:
         assert_eq!(response.status(), StatusCode::ACCEPTED);
     }
     let mut wrong = event.clone();
-    wrong["data"]["binding"]["preparationId"] = json!("other");
+    wrong["data"]["binding"][if mode == 2 {
+        "generation"
+    } else {
+        "preparationId"
+    }] = json!("other");
     wrong["operationid"] = json!("other");
     assert_eq!(
         service
@@ -119,7 +132,9 @@ async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error:
         StatusCode::UNAUTHORIZED
     );
     let mut conflict = event.clone();
-    let evidence = if operation {
+    let evidence = if mode == 2 {
+        &mut conflict["data"]
+    } else if mode == 1 {
         &mut conflict["data"]["evidence"]
     } else {
         &mut conflict["data"]["reportAvailable"]["evidence"]
@@ -138,7 +153,7 @@ async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error:
     assert_eq!(
         reopened
             .database
-            .execute(move |store| receipt_count(store, operation))
+            .execute(move |store| receipt_count(store, mode))
             .await?,
         1
     );
@@ -149,9 +164,11 @@ async fn run_ingress_contract(operation: bool) -> Result<(), Box<dyn std::error:
 
 fn receipt_count(
     store: &crate::adapters::sqlite::CleanStore,
-    operation: bool,
+    mode: u8,
 ) -> Result<usize, CleanStoreError> {
-    if operation {
+    if mode == 2 {
+        Ok(store.pending_coding("attempt-one")?.len())
+    } else if mode == 1 {
         Ok(usize::from(
             store.runtime_operation_receipt("verification-1")?.is_some(),
         ))
@@ -162,10 +179,16 @@ fn receipt_count(
 #[tokio::test]
 async fn ingress_authenticates_before_durable_ack_and_preserves_receipts_on_restart()
 -> Result<(), Box<dyn std::error::Error>> {
-    run_ingress_contract(false).await
+    run_ingress_contract(0).await
 }
 #[tokio::test]
 async fn operation_ingress_checks_manifest_binding_and_conflicts_across_restart()
 -> Result<(), Box<dyn std::error::Error>> {
-    run_ingress_contract(true).await
+    run_ingress_contract(1).await
+}
+
+#[tokio::test]
+async fn coding_ingress_authenticates_frozen_generation_and_rejects_conflicting_terminal_reports()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_ingress_contract(2).await
 }

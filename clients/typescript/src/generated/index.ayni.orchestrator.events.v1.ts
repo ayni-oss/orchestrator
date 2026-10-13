@@ -5,5 +5,6 @@
 
 /* eslint-disable */
 
+export * from "./ayni/orchestrator/events/v1/coding";
 export * from "./ayni/orchestrator/events/v1/runtime_operation";
 export * from "./ayni/orchestrator/events/v1/verification";

@@ -128,6 +128,14 @@ impl ExecutionBackend for RuntimeKubernetes {
     async fn cleanup(&self, name: &str) -> ExecutionResult<()> {
         self.cleanup(name).await.map_err(ExecutionError::from)
     }
+    async fn coding_reporting_identity(
+        &self,
+        name: &str,
+    ) -> ExecutionResult<Option<ayni_orchestrator_runtime::coding_events::CodingAdmission>> {
+        self.coding_reporting_identity(name)
+            .await
+            .map_err(ExecutionError::from)
+    }
     async fn coding_stopped(&self, name: &str) -> ExecutionResult<bool> {
         self.coding_stopped(name)
             .await

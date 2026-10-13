@@ -50,6 +50,14 @@ Once publication starts, recovery resumes delivery without recoding. Persisted
 intent identifies the deterministic attempt branch; persisted receipts identify
 the adopted or created draft and precise head.
 
+## Lifecycle reporting
+
+New event-mode physical executions report retained progress, activity, usage,
+publication journal milestones and final results through authenticated ingress.
+Final acceptance can precede process exit. Replacement writers and publication
+retries still wait for observed stop. Migrated attempts retain their original
+reader; see [coding lifecycle reporting](coding-events.md).
+
 ## Worker sandbox
 
 The Linux worker requires fully enforced Landlock ABI 6 (kernel 6.12 or newer).

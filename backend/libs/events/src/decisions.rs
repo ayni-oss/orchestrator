@@ -6,7 +6,7 @@ use crate::{
 use cloudevents::event::SpecVersion;
 use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};
 
-pub const EVENT_TYPE: &str = "io.ayni.orchestrator.runtime.verification.accepted.v1";
+pub const EVENT_TYPE: &str = "build.ayni.orchestrator.runtime.verification.accepted.v1";
 pub const DATA_SCHEMA: &str = "ayni://orchestrator/schemas/runtime-verification-accepted/v1";
 
 fn validate(
@@ -90,7 +90,7 @@ pub fn decode(
     }
     let event: Event = serde_json::from_slice(bytes)?;
     if event.specversion() != SpecVersion::V10
-        || event.ty() != EVENT_TYPE
+        || !crate::event_types::matches(event.ty(), EVENT_TYPE)
         || event.datacontenttype() != Some("application/json")
         || event.dataschema().is_none_or(|s| s.as_str() != DATA_SCHEMA)
     {

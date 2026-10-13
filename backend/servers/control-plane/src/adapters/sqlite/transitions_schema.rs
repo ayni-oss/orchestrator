@@ -202,42 +202,7 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
             migrate_schema_six(connection, &tables)?;
             version = 7;
         }
-        if version == 7 {
-            migrate_schema_seven(connection)?;
-            version = 8;
-        }
-        if version == 8 {
-            super::builder_cutover::migrate(connection)?;
-            version = 9;
-        }
-        if version == 9 {
-            super::preparation_migration::migrate(connection)?;
-            version = 10;
-        }
-        if version == 10 {
-            super::verification_inbox::migrate(connection)?;
-            version = 11;
-        }
-        if version == 11 {
-            super::verification_acceptance::migrate(connection)?;
-            version = 12;
-        }
-        if version == 12 {
-            super::verification_cutover::migrate(connection)?;
-            version = 13;
-        }
-        if version == 13 {
-            super::verification_outbox::migrate(connection)?;
-            version = 14;
-        }
-        if version == 14 {
-            super::verification_consumer::migrate(connection)?;
-            version = 15;
-        }
-        if version == 15 {
-            super::runtime_operations::migrate(connection)?;
-            version = 16;
-        }
+        version = upgrade_clean_schema(connection, version)?;
         if version != SCHEMA_VERSION {
             return Err(CleanStoreError::UnsupportedSchemaVersion(version));
         }
@@ -257,6 +222,30 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
     Ok(())
 }
 
+type SchemaMigration = fn(&Connection) -> Result<(), CleanStoreError>;
+
+fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64, CleanStoreError> {
+    let migrations: [(i64, SchemaMigration); 10] = [
+        (7, migrate_schema_seven),
+        (8, super::builder_cutover::migrate),
+        (9, super::preparation_migration::migrate),
+        (10, super::verification_inbox::migrate),
+        (11, super::verification_acceptance::migrate),
+        (12, super::verification_cutover::migrate),
+        (13, super::verification_outbox::migrate),
+        (14, super::verification_consumer::migrate),
+        (15, super::runtime_operations::migrate),
+        (16, super::coding_events::migrate),
+    ];
+    for (source_version, migrate) in migrations {
+        if version == source_version {
+            migrate(connection)?;
+            version += 1;
+        }
+    }
+    Ok(version)
+}
+
 fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), CleanStoreError> {
     let expected = CLEAN_TABLES
         .iter()
@@ -267,6 +256,8 @@ fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), 
                     | "certificate_operations"
                     | "verification_consumer"
                     | "runtime_operation_inbox"
+                    | "coding_executions"
+                    | "coding_inbox"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -292,6 +283,8 @@ fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> 
                 **name,
                 "verification_consumer"
                     | "runtime_operation_inbox"
+                    | "coding_executions"
+                    | "coding_inbox"
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
@@ -330,7 +323,11 @@ CREATE TABLE clean_schema(
     created_at INTEGER NOT NULL
 );
 INSERT INTO clean_schema(component,version,created_at)
-VALUES ('control_plane',16,unixepoch());
+VALUES ('control_plane',17,unixepoch());
+CREATE TABLE coding_executions(attempt_id TEXT PRIMARY KEY,admission TEXT,stopped INTEGER NOT NULL DEFAULT 0,last_sequence INTEGER NOT NULL DEFAULT 0,pod_uid TEXT,terminal INTEGER NOT NULL DEFAULT 0,request_digest TEXT NOT NULL DEFAULT '');
+CREATE TABLE coding_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,attempt_id TEXT NOT NULL,generation TEXT NOT NULL,pod_uid TEXT NOT NULL,sequence INTEGER NOT NULL,kind INTEGER NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL DEFAULT 'pending',accepted_source TEXT,accepted_id TEXT,accepted_payload BLOB,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,stored_at INTEGER,broker_sequence INTEGER,PRIMARY KEY(source,event_id),UNIQUE(attempt_id,generation,pod_uid,sequence));
+CREATE UNIQUE INDEX coding_terminal ON coding_inbox(attempt_id,generation,pod_uid) WHERE kind=2;
+
 CREATE TABLE runtime_operation_inbox(source TEXT NOT NULL,event_id TEXT NOT NULL,execution_id TEXT NOT NULL,payload BLOB NOT NULL,received_at INTEGER NOT NULL,decision TEXT NOT NULL CHECK(decision IN ('pending','accepted','rejected')),accepted_source TEXT,accepted_id TEXT,accepted_payload BLOB,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,stored_at INTEGER,broker_sequence INTEGER,PRIMARY KEY(source,event_id),UNIQUE(execution_id));
 CREATE TABLE verification_consumer(
  delivery_key TEXT PRIMARY KEY CHECK(length(delivery_key) IN (64,66)),

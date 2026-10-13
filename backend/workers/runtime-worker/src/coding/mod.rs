@@ -14,6 +14,7 @@ use std::{fs, io, path::Path, sync::Arc};
 
 pub mod activity;
 mod commits;
+mod events;
 pub mod model_usage;
 mod publication;
 mod quality;
@@ -39,6 +40,7 @@ pub async fn run(
         serial: Arc::new(tokio::sync::Mutex::new(())),
         activity: activity.clone(),
     };
+    let reporter = events::Reporter::start(output, spec.reporting.as_ref())?;
     let mut result = empty_result();
     let operation = execute(&context, &mut result);
     #[cfg(unix)]
@@ -75,7 +77,11 @@ pub async fn run(
     result.model_usage = collect_usage(&output.join("usage"))?;
     recovery::write_json(&output.join("result.json"), &result)?;
     context.state.lock().await.progress.publication = result.publication;
-    context.phase(WorkerPhase::Completed).await
+    context.phase(WorkerPhase::Completed).await?;
+    if let Some(reporter) = reporter {
+        reporter.finish().await?;
+    }
+    Ok(())
 }
 
 async fn execute(context: &Context, result: &mut WorkerResult) -> io::Result<()> {
