@@ -245,6 +245,9 @@ pub fn create_development_task(
             "repository_connection_id",
         )?;
     }
+    if !request.connection_id.is_empty() {
+        resource_id(&request.connection_id, "connection_id")?;
+    }
     git_revision(&request.repository_revision, "repository_revision")?;
     resource_id(&request.runtime_profile_id, "runtime_profile_id")?;
     let agent = request
@@ -498,6 +501,7 @@ mod tests {
         v1::CreateDevelopmentTaskRequest {
             idempotency_key: "task:1".to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                connection_id: String::new(),
                 coding_turns: Some(12),
                 project_id: "project:test".into(),
                 repository_connection_id: "repo:1".to_owned(),

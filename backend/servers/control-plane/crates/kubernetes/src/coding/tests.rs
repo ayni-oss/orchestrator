@@ -386,3 +386,34 @@ fn certified_runtime_requires_signing_authority() -> Result<(), Box<dyn std::err
     assert!(build_job("runtime", &configuration, &runtime).is_err());
     Ok(())
 }
+
+#[test]
+fn coding_mounts_only_the_selected_model_credential_revision()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (mut configuration, runtime) = fixture();
+    configuration.model_secret = "openai-frozen-revision".into();
+    let image = format!("registry.test/team/runtime@sha256:{}", "c".repeat(64));
+    let job = coding_job("coding-selected", &configuration, &runtime, &image, 3600)?;
+    let pod = job.spec.ok_or("spec")?.template.spec.ok_or("pod")?;
+    let model_secrets = pod
+        .volumes
+        .iter()
+        .flatten()
+        .filter(|volume| volume.name == "model")
+        .filter_map(|volume| {
+            volume
+                .secret
+                .as_ref()
+                .and_then(|secret| secret.secret_name.as_deref())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(model_secrets, ["openai-frozen-revision"]);
+    assert!(
+        !pod.init_containers
+            .iter()
+            .flatten()
+            .flat_map(|container| container.volume_mounts.iter().flatten())
+            .any(|mount| mount.name == "model")
+    );
+    Ok(())
+}

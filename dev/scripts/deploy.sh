@@ -4,6 +4,7 @@ set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
 source "$dev_directory/lib/images.sh"
+source "$dev_directory/lib/connections.sh"
 # Local deployment uses no Helm plugins or encrypted Helm values.
 export HELM_NO_PLUGINS=1
 
@@ -69,6 +70,8 @@ if [[ -n "$signing_secret_name" ]]; then
   admin_certificates='[{"id":"certificate-admin-environment-producer","displayName":"Local environment signing","secretName":"environment-producer"}]'
 fi
 
+dev_bootstrap_helm_values "$context" "$namespace"
+
 echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
@@ -78,7 +81,7 @@ helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
   --set-string "ayni-orchestrator.images.web=$web_image_ref" \
   --set-string "ayni-orchestrator.connections.testImage=$connection_test_image" \
-  --set-string "ayni-orchestrator.connections.githubAppSecretName=${AYNI_ORCHESTRATOR_GITHUB_APP_SECRET_NAME:-}" \
+  "${DEV_BOOTSTRAP_HELM_VALUES[@]}" \
   --set-json "ayni-orchestrator.connections.adminCertificates=$admin_certificates" \
   --set "ayni-orchestrator.customClients.enabled=$custom_clients" \
   --set ayni-orchestrator.runtime.enabled=true \

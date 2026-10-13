@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 18;
+pub(crate) const SCHEMA_VERSION: i64 = 19;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -56,6 +56,10 @@ const CLEAN_TABLES: &[&str] = &[
     "lifecycle_journal",
     "lifecycle_outbox",
     "page_snapshots",
+    "project_agent_requests",
+    "project_conversation_actions",
+    "project_conversations",
+    "project_outcome_summaries",
     "project_repositories",
     "projects",
     "reconciliation_cursors",
@@ -364,6 +368,7 @@ mod tests {
         Ok(v1::CreateDevelopmentTaskRequest {
             idempotency_key: key.to_owned(),
             request: Some(v1::DevelopmentTaskRequest {
+                connection_id: String::new(),
                 coding_turns: None,
                 project_id,
                 repository_connection_id: repository_id.to_owned(),
@@ -390,6 +395,7 @@ mod tests {
     mod cutover;
     mod lifecycle;
     mod outbox;
+    mod project_conversations;
     mod projects;
     mod recovery;
     mod runtime;
@@ -426,3 +432,5 @@ mod preparation_migration;
 mod summary_index;
 
 mod verification_consumer;
+
+pub(crate) mod project_conversations;

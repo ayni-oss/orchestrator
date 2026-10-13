@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
@@ -20,8 +21,8 @@ elif [[ $# -ne 0 ]]; then
 fi
 
 if [[ ! -f "$env_file" ]]; then
-  echo "environment file does not exist: $env_file" >&2
-  exit 1
+  echo "No development env file; configure connections through the UI or provide --env-file." >&2
+  exit 0
 fi
 if env_file_mode="$(stat -f '%Lp' "$env_file" 2>/dev/null)"; then
   :
@@ -42,6 +43,8 @@ ayni_environment_signing_key=""
 ayni_environment_key_id=""
 ghcr_pull_username=""
 ghcr_pull_token=""
+ghcr_push_token=""
+ghcr_image_namespace=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ -z "$line" || "$line" == \#* ]] && continue
   if [[ ! "$line" =~ ^([A-Z0-9_]+)=(.*)$ ]]; then
@@ -59,6 +62,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     AYNI_ENV_CERTIFICATE_KEY_ID) ayni_environment_key_id="$value" ;;
     GHCR_PULL_USERNAME) ghcr_pull_username="$value" ;;
     GHCR_PULL_TOKEN) ghcr_pull_token="$value" ;;
+    GHCR_PUSH_TOKEN) ghcr_push_token="$value" ;;
+    GHCR_IMAGE_NAMESPACE) ghcr_image_namespace="$value" ;;
     *)
       echo "unsupported environment-file key: $key" >&2
       exit 1
@@ -68,21 +73,24 @@ done < "$env_file"
 
 configure_github=false
 if [[ -n "$github_app_id" || -n "$github_app_private_key_b64" ]]; then
-  [[ -n "$github_app_id" && -n "$github_app_private_key_b64" ]] || { echo "GitHub admin credentials require both App ID and key" >&2; exit 1; }
-  configure_github=true
+  if [[ -n "$github_app_id" && -n "$github_app_private_key_b64" ]]; then
+    configure_github=true
+  else
+    echo "Skipping incomplete GitHub credentials; finish setup in the UI or env file." >&2
+  fi
 fi
 if [[ "$configure_github" == true && ! "$github_app_id" =~ ^[1-9][0-9]*$ ]]; then
   echo "GitHub App ID must be a positive decimal number" >&2
   exit 1
 fi
-if [[ -n "$github_app_installation_id" \
+if [[ "$configure_github" == true && -n "$github_app_installation_id" \
   && ! "$github_app_installation_id" =~ ^[1-9][0-9]*$ ]]; then
   echo "GitHub App installation ID must be a positive decimal number" >&2
   exit 1
 fi
 
 configure_ayni_environment_signing=false
-if [[ -n "$ayni_environment_signing_key" || -n "$ayni_environment_key_id" ]]; then
+if [[ -n "$ayni_environment_signing_key" && -n "$ayni_environment_key_id" ]]; then
   if [[ ! "$ayni_environment_signing_key" =~ ^[0-9a-f]{64}$ ]]; then
     echo "Ayni environment signing key must be a 32-byte lowercase hexadecimal seed" >&2
     exit 1
@@ -92,23 +100,52 @@ if [[ -n "$ayni_environment_signing_key" || -n "$ayni_environment_key_id" ]]; th
     exit 1
   fi
   configure_ayni_environment_signing=true
+elif [[ -n "$ayni_environment_signing_key" || -n "$ayni_environment_key_id" ]]; then
+  echo "Skipping incomplete Ayni signing credentials; finish setup in the UI or env file." >&2
 fi
 
 configure_ghcr_pull=false
-if [[ -n "$ghcr_pull_username" || -n "$ghcr_pull_token" ]]; then
-  if [[ -z "$ghcr_pull_username" || -z "$ghcr_pull_token" ]]; then
-    echo "GHCR pull credentials require both GHCR_PULL_USERNAME and GHCR_PULL_TOKEN" >&2
-    exit 1
-  fi
+configure_ghcr_push=false
+if [[ -n "$ghcr_pull_username" && -n "$ghcr_pull_token" ]]; then
+  configure_ghcr_pull=true
+elif [[ -n "$ghcr_pull_username" || -n "$ghcr_pull_token" ]]; then
+  echo "Skipping incomplete GHCR pull credentials; finish setup in the UI or env file." >&2
+fi
+if [[ "$configure_ghcr_pull" == true ]]; then
   if [[ ! "$ghcr_pull_username" =~ ^[A-Za-z0-9-]{1,39}$ ]]; then
     echo "GHCR pull username must be a GitHub username" >&2
     exit 1
   fi
-  if [[ ${#ghcr_pull_token} -gt 1024 || "$ghcr_pull_token" =~ [[:space:]] ]]; then
-    echo "GHCR pull token must be at most 1024 characters with no whitespace" >&2
+fi
+tokens_to_validate=()
+if [[ "$configure_ghcr_pull" == true ]]; then tokens_to_validate+=("$ghcr_pull_token"); fi
+if [[ "$configure_ghcr_pull" == true && -n "$ghcr_push_token" ]]; then tokens_to_validate+=("$ghcr_push_token"); fi
+for token in "${tokens_to_validate[@]}"; do
+  if [[ ${#token} -gt 4096 || "$token" =~ [[:space:]] ]]; then
+    echo "GHCR tokens must be at most 4096 characters with no whitespace" >&2
     exit 1
   fi
-  configure_ghcr_pull=true
+done
+if [[ "$configure_ghcr_pull" == true && -n "$ghcr_push_token" ]]; then
+  if [[ "$ghcr_push_token" == "$ghcr_pull_token" ]]; then
+    echo "GHCR requires distinct push and pull credentials" >&2
+    exit 1
+  fi
+  if [[ -z "$ghcr_image_namespace" ]]; then
+    ghcr_image_namespace="ghcr.io/$(printf '%s' "$ghcr_pull_username" | tr '[:upper:]' '[:lower:]')"
+  fi
+  if [[ ${#ghcr_image_namespace} -gt 100 || ! "$ghcr_image_namespace" =~ ^ghcr\.io/[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+    echo "GHCR_IMAGE_NAMESPACE must be ghcr.io followed by a lowercase owner namespace" >&2
+    exit 1
+  fi
+  configure_ghcr_push=true
+elif [[ -n "$ghcr_push_token" ]]; then
+  echo "Skipping incomplete GHCR connection; push requires separate pull credentials." >&2
+fi
+if [[ "$configure_github" == false && "$configure_ayni_environment_signing" == false \
+  && "$configure_ghcr_pull" == false && -z "$openai_api_key" ]]; then
+  echo "No complete development credentials; configure connections through the UI." >&2
+  exit 0
 fi
 
 temporary_directory="$(mktemp -d)"
@@ -133,6 +170,7 @@ readonly openai_key_file="$temporary_directory/api-key"
 readonly ayni_signing_key_file="$temporary_directory/ayni-signing-key"
 readonly ayni_key_id_file="$temporary_directory/ayni-key-id"
 readonly ghcr_dockerconfig_file="$temporary_directory/ghcr-dockerconfigjson"
+readonly ghcr_push_dockerconfig_file="$temporary_directory/ghcr-push-dockerconfigjson"
 if [[ "$configure_github" == true ]]; then
 printf '%s' "$github_app_id" > "$app_id_file"
 if ! printf '%s' "$github_app_private_key_b64" | decode_base64 > "$private_key_file"; then
@@ -153,6 +191,12 @@ if [[ "$configure_ghcr_pull" == true ]]; then
   ghcr_auth="$(printf '%s:%s' "$ghcr_pull_username" "$ghcr_pull_token" | base64 | tr -d '\n')"
   printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$ghcr_auth" > "$ghcr_dockerconfig_file"
   chmod 0600 "$ghcr_dockerconfig_file"
+fi
+
+if [[ "$configure_ghcr_push" == true ]]; then
+  ghcr_push_auth="$(printf '%s:%s' "$ghcr_pull_username" "$ghcr_push_token" | base64 | tr -d '\n')"
+  printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$ghcr_push_auth" > "$ghcr_push_dockerconfig_file"
+  chmod 0600 "$ghcr_push_dockerconfig_file"
 fi
 
 context="$(dev_context)"
@@ -191,6 +235,7 @@ kubectl --context "$context" --namespace "$namespace" label secret github-app-cr
 fi
 if [[ -n "$openai_api_key" ]]; then
   apply_secret openai-api --from-file=api-key="$openai_key_file"
+  kubectl --context "$context" --namespace "$namespace" label secret openai-api ayni.dev/management-source=admin ayni.dev/connection-kind=openai --overwrite >/dev/null
 fi
 if [[ "$configure_ayni_environment_signing" == true ]]; then
   apply_secret environment-producer \
@@ -202,6 +247,15 @@ if [[ "$configure_ghcr_pull" == true ]]; then
     --type=kubernetes.io/dockerconfigjson \
     --from-file=.dockerconfigjson="$ghcr_dockerconfig_file"
   kubectl --context "$context" --namespace "$namespace" label secret runtime-pull ayni.dev/management-source=admin ayni.dev/connection-kind=ghcr --overwrite >/dev/null
+fi
+
+if [[ "$configure_ghcr_push" == true ]]; then
+  apply_secret runtime-push \
+    --type=kubernetes.io/dockerconfigjson \
+    --from-file=.dockerconfigjson="$ghcr_push_dockerconfig_file"
+  kubectl --context "$context" --namespace "$namespace" label secret runtime-push ayni.dev/management-source=admin ayni.dev/connection-kind=ghcr --overwrite >/dev/null
+  kubectl --context "$context" --namespace "$namespace" annotate secret runtime-push \
+    "ayni.dev/image-namespace=$ghcr_image_namespace" "ayni.dev/registry-username=$ghcr_pull_username" --overwrite >/dev/null
 fi
 
 echo "configured local development Secrets in namespace $namespace"

@@ -151,6 +151,9 @@ impl CleanStore {
                 return Err(CleanStoreError::InvalidTransition);
             }
         }
+        if value.kind == "openai" && self.provider_connection_in_use(id)? {
+            return Err(CleanStoreError::InvalidTransition);
+        }
         if value.kind == "ghcr" && self.registry_connection_in_use(id)? {
             return Err(CleanStoreError::InvalidTransition);
         }

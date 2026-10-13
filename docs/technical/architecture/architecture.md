@@ -33,9 +33,9 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 18 retains preparation state,
+and pull request receipts. SQLite schema version 19 retains preparation state,
 authenticated result inboxes, accepted decisions, transactional outboxes and
-operator lifecycle facts. Recognized versions 6–17 migrate in order before
+operator lifecycle facts. Recognized versions 6–18 migrate in order before
 reconciliation; malformed retained state aborts the upgrade. Older and unknown
 versions are rejected. See [operations](../operations/operations.md) for upgrade
 and rollback requirements. Credentials remain separate inputs and are never worker output.
@@ -212,3 +212,34 @@ probe, discovery, build or publication authority. Kubernetes discovery and
 verification use a shared observer for owned Job/Pod completion and bounded result
 collection. Execution adapters must implement every capability explicitly; missing
 production behavior cannot inherit a successful default.
+
+
+## Project conversations
+
+The trusted operator API persists project conversations, research runs, task
+proposals, approval receipts and linked outcomes. Project settings select distinct
+research and coding connection/model defaults. OpenAI is the enabled provider;
+Anthropic and Bedrock cards confer no backend capability. The shared provider
+library constructs Rig clients without importing server or worker policy.
+
+A serialized conversation run freezes model credentials and research inputs before
+launching a dedicated project-agent Job. Checkout runs in an init container with
+repository-scoped read credentials. The research container mounts source read-only,
+has no checkout credentials or Kubernetes API token, and exposes bounded listing,
+search and reading tools rather than process execution. Repository instructions
+remain context, not authorization. Different conversations can run concurrently.
+
+The model prepares proposals; approval dispatch owns task admission and lifecycle
+commands. Existing task guards enforce repository membership, readiness and frozen
+execution identity. Approval revalidates researched source and runtime identity;
+replayed approvals use deterministic action identities and retain original receipts.
+Each run prepares at most one task per repository; cross-repository dependencies
+are outside this contract. Accepted attempt outcomes schedule bounded summaries
+with durable deduplication. Summaries cannot propose additional work.
+
+SQLite owns the authoritative conversation state. A resumable full-state stream
+updates browser cards, while periodic reconciliation recovers missed observations
+and broker outages. Research result collection verifies the single Job-owned Pod
+and bounded run-bound receipt before persistence. Cleanup follows durable
+acceptance and observed stopped writers. Missing running Jobs become interrupted;
+new user requests can explicitly retry research without replaying admitted actions.

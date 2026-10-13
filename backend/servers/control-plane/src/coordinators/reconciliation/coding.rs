@@ -483,6 +483,14 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             request: snapshot.request.clone(),
             acceptance_criteria: snapshot.acceptance_criteria.clone(),
             model: agent.model.clone(),
+            provider_credentials: snapshot.provider_credentials.as_ref().map(|binding| {
+                ayni_orchestrator_runtime::coding::ProviderCredentials {
+                    connection_id: binding.connection_id.clone(),
+                    credential_revision: binding.credential_revision.clone(),
+                    secret_name: binding.secret_name.clone(),
+                    secret_uid: binding.secret_uid.clone(),
+                }
+            }),
             task_id: attempt.development_task_id.clone(),
             attempt_id: attempt.id.clone(),
             runtime_digest: frozen.resolved_digest.clone(),

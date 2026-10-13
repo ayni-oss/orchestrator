@@ -25,6 +25,8 @@ message ProviderModel {
 
 message ListProviderModelsRequest {
   PageRequest page = 1;
+  // Empty retains deployment-managed OpenAI discovery for legacy clients.
+  string connection_id = 2;
 }
 
 message ListProviderModelsResponse {
@@ -33,4 +35,5 @@ message ListProviderModelsResponse {
   PageResponse page = 3;
   // observed_at identifies when this catalog snapshot was obtained from the provider.
   google.protobuf.Timestamp observed_at = 4;
+  string connection_id = 5;
 }

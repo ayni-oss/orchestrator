@@ -51,7 +51,7 @@ test("GitHub setup dialog clears dismissed credentials and prepares a canonical 
   const create = page.getByRole("button",{name:"Create App for example-org"});
   await expect(create).toBeVisible();
   const manifest=JSON.parse(await page.locator('input[name="manifest"]').first().inputValue());
-  expect(manifest.redirect_url).toBe("http://127.0.0.1:4173/source-control/github/complete");
+  expect(manifest.redirect_url).toBe(`${new URL(page.url()).origin}/source-control/github/complete`);
   expect(manifest.default_permissions).toEqual({contents:"write",metadata:"read",pull_requests:"write"});
   await page.getByRole("tab",{name:"Import existing App"}).click();
   await page.getByLabel("Private key (PEM)").fill("discarded-secret");
@@ -62,7 +62,7 @@ test("GitHub setup dialog clears dismissed credentials and prepares a canonical 
 });
 test("canonical and legacy manifest callbacks enforce session state and reject replay",async ({page})=>{
   await page.goto("/source-control/github");
-  const origin="http://127.0.0.1:4173";
+  const origin=new URL(page.url()).origin;
   const foreign=await page.request.post("/source-control/github/start",{headers:{origin:"https://foreign.example"}});
   expect(foreign.status()).toBe(403);
   for(const prefix of ["/source-control/github","/setup/github"]){

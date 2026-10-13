@@ -12,7 +12,7 @@ use rig_agent::{
     client::AgentModelExt,
     completion::Prompt,
 };
-use rig_core::{client::completion::CompletionClient, providers::openai};
+use rig_core::client::completion::CompletionClient;
 use std::{future::Future, io};
 
 /// Adapter contract preserves frozen limits and durable session accounting.
@@ -82,9 +82,11 @@ impl CodingAgentRunner for RigCodingAgent {
         let time = context.coding_time()?;
         context.activity.record(Stage::ModelCredentials);
         let key = read_bounded(std::path::Path::new("/model/api-key"), 16384)?;
-        let client =
-            openai::Client::new(std::str::from_utf8(&key).map_err(io::Error::other)?.trim())
-                .map_err(io::Error::other)?;
+        let client = ayni_orchestrator_providers::openai_client(
+            "openai",
+            std::str::from_utf8(&key).map_err(io::Error::other)?,
+        )
+        .map_err(io::Error::other)?;
         let usage = UsageTracker::new(
             context.output.join("usage"),
             ModelUsageStage::Coding,

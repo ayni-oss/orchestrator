@@ -23,6 +23,7 @@ export const load: LayoutServerLoad = async ({ locals, depends }) => {
   })();
   return {
     sourceControlConfiguration,
+    llmConfiguration: connections.status === "rejected" ? {status:"warning",description:"LLM provider status is unavailable."} : connections.value.some(c=>c.kind==="openai" && c.enabled && c.status==="ready") ? {status:"ready",description:"An LLM connection is ready."} : {status:"missing",description:"No enabled LLM connection is ready."},
     registryConfiguration: connections.status === "fulfilled" ? registryConfiguration(connections.value) : { status: "warning", description: "Container registry permission status is unavailable." },
     certificateConfiguration: certificates.status === "rejected"
       ? { status: "warning", description: "Certificate configuration status is unavailable." }

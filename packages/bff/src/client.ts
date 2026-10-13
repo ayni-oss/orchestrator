@@ -1,3 +1,4 @@
+import { mapConversation, type ProjectConversationResponse } from "./conversations.js";
 import { mapSummaryReadiness } from "./summaries.js";
 import { mapCertificate } from "./certificates.js";
 import {
@@ -12,6 +13,7 @@ import {
   CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
   ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
   ProjectServiceClient, ProjectState,
+  ProjectConversationServiceClient, type ListProjectConversationsResponse,
   type ListProjectSummariesResponse, type ListRepositorySummariesResponse,
   type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
@@ -46,7 +48,9 @@ import {
 import { mapInspection, mapRevision, mapAttemptUsage } from "./onboarding.js";
 import { randomUUID } from "node:crypto";
 import type {
+  ProjectConversationDto,
   ProjectDto,
+  ProjectAgentDefaultsDto,
   CreateDevelopmentTaskInput,
   CreateRepositoryConnectionInput,
   CreateRuntimeProfileInput,
@@ -144,13 +148,14 @@ function pageDto(value: { nextPageToken: string; snapshotCursor: string } | unde
 
 function mapProject(value: Project): ProjectDto {
   if (value.repositoryConnectionIds.length < 1 || value.repositoryConnectionIds.length > 100 || new Set(value.repositoryConnectionIds).size !== value.repositoryConnectionIds.length || ![ProjectState.PROJECT_STATE_ACTIVE, ProjectState.PROJECT_STATE_ARCHIVED].includes(value.state)) throw new BffMappingError();
-  return {id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion};
+  return {id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion, ...(value.agentDefaults ? {agentDefaults:{...value.agentDefaults}} : {})};
 }
 
 export class OrchestratorBff {
   readonly #certificates: CertificateServiceClient;
   readonly #connections: ConnectionServiceClient;
   readonly #projects: ProjectServiceClient;
+  readonly #conversations: ProjectConversationServiceClient;
   readonly #repositories: RepositoryServiceClient;
   readonly #profiles: RuntimeProfileServiceClient;
   readonly #providers: ProviderServiceClient;
@@ -167,6 +172,7 @@ export class OrchestratorBff {
     this.#certificates = new CertificateServiceClient(address, channelCredentials, options);
     this.#connections = new ConnectionServiceClient(address, channelCredentials, options);
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
+    this.#conversations = new ProjectConversationServiceClient(address, channelCredentials, options);
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
@@ -255,7 +261,7 @@ export class OrchestratorBff {
     const response = await this.#unary<CreateProjectResponse>(context,(m,o,c)=>this.#projects.createProject({...input,repositoryConnectionId:""},m,o,c));
     return mapProject(required(response.project));
   }
-  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string;repositoryConnectionIds?:string[]}, context:RequestContext):Promise<ProjectDto> {
+  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string;repositoryConnectionIds?:string[];agentDefaults?:ProjectAgentDefaultsDto}, context:RequestContext):Promise<ProjectDto> {
     const response = await this.#unary<UpdateProjectResponse>(context,(m,o,c)=>this.#projects.updateProject({...input,repositoryConnectionIds:input.repositoryConnectionIds ?? []},m,o,c));
     return mapProject(required(response.project));
   }
@@ -264,10 +270,50 @@ export class OrchestratorBff {
     return mapProject(required(response.project));
   }
 
+  watchProjectConversation(conversationId:string, afterCursor:string|undefined, context:RequestContext, onUpdate:(updateCursor:string)=>void|Promise<void>):Promise<void> {
+    const acceptedRequestId=requestId(context.requestId),metadata=new Metadata();
+    metadata.set("x-request-id",acceptedRequestId);
+    const stream=this.#conversations.watchProjectConversation({conversationId,afterCursor:cursor(afterCursor)??"0"},metadata,{deadline:Date.now()+DEFAULT_STREAM_DEADLINE_MS});
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(error?:unknown)=>{if(settled)return;settled=true;context.signal?.removeEventListener("abort",abort);if(error===undefined||context.signal?.aborted)resolve();else reject(toBffError(error,acceptedRequestId));};
+      const abort=()=>{stream.cancel();finish();};
+      if(context.signal?.aborted){abort();return;}
+      context.signal?.addEventListener("abort",abort,{once:true});
+      stream.on("data",(response:ProjectConversationResponse)=>{
+        stream.pause();
+        Promise.resolve().then(()=>onUpdate(required(response.conversation).updateCursor)).then(()=>stream.resume()).catch(error=>{stream.cancel();finish(error);});
+      });
+      stream.on("error",finish);stream.on("end",()=>finish());
+    });
+  }
+
+  async listProjectConversations(projectId:string, context:RequestContext):Promise<ProjectConversationDto[]> {
+    const response=await this.#unary<ListProjectConversationsResponse>(context,(m,o,c)=>this.#conversations.listProjectConversations({projectId},m,o,c));
+    return response.conversations.map(mapConversation);
+  }
+  async getProjectConversation(conversationId:string, context:RequestContext):Promise<ProjectConversationDto> {
+    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.getProjectConversation({conversationId},m,o,c));
+    return mapConversation(required(response.conversation));
+  }
+  async createProjectConversation(input:{idempotencyKey:string;projectId:string;title:string;repositoryConnectionIds:string[]},context:RequestContext):Promise<ProjectConversationDto> {
+    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.createProjectConversation(input,m,o,c));
+    return mapConversation(required(response.conversation));
+  }
+  async sendProjectMessage(input:{idempotencyKey:string;conversationId:string;content:string},context:RequestContext):Promise<ProjectConversationDto> {
+    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.sendProjectMessage(input,m,o,c));
+    return mapConversation(required(response.conversation));
+  }
+  async decideProjectProposal(input:{idempotencyKey:string;conversationId:string;proposalId:string;decision:string},context:RequestContext):Promise<ProjectConversationDto> {
+    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.decideProjectProposal(input,m,o,c));
+    return mapConversation(required(response.conversation));
+  }
+
   close(): void {
     this.#certificates.close();
     this.#connections.close();
     this.#projects.close();
+    this.#conversations.close();
     this.#repositories.close();
     this.#profiles.close();
     this.#providers.close();
@@ -378,13 +424,14 @@ export class OrchestratorBff {
     return { runtimeArtifacts: response.runtimeArtifacts.map(mapRuntimeArtifact), page: pageDto(response.page) };
   }
 
-  async listProviderModels(selection: PageInput, context: RequestContext): Promise<ProviderModelPageDto> {
+  async listProviderModels(selection: PageInput, context: RequestContext, connectionId = ""): Promise<ProviderModelPageDto> {
     const response = await this.#unary<ListProviderModelsResponse>(context, (metadata, options, callback) =>
-      this.#providers.listProviderModels({ page: page(selection) }, metadata, options, callback));
+      this.#providers.listProviderModels({ page: page(selection), connectionId }, metadata, options, callback));
     const observedAt = required(response.observedAt);
     if (!Number.isFinite(observedAt.getTime())) throw new BffMappingError();
     return {
       provider: response.provider,
+      connectionId: response.connectionId,
       models: response.models.map(mapProviderModel),
       observedAt: observedAt.toISOString(),
       page: pageDto(response.page),

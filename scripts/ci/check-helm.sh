@@ -22,6 +22,7 @@ bash -n \
   "$repository_root"/dev/tests/*.sh
 "$repository_root/dev/ctl" help >/dev/null
 bash "$repository_root/dev/tests/check-image-build.sh"
+bash "$repository_root/dev/tests/check-development-secrets.sh"
 if find "$repository_root" \
     \( -path "$repository_root/.git" -o -path "$repository_root/.worktrees" \) -prune -o \
     -name kustomization.yaml -print -quit | grep -q .; then
@@ -51,6 +52,19 @@ helm template reusable "$application_chart" --set runtime.enabled=false \
   --set-string images.controlPlane=registry.example/control-plane:test \
   --set-string images.web=registry.example/web:test \
   >"$scratch/application.yaml"
+# Existing modelSecret overrides remain inherited; explicit empty disables admin setup.
+helm template provider-legacy "$application_chart" --set runtime.enabled=false \
+  --set-string runtime.modelSecret=legacy-model-key >"$scratch/provider-legacy.yaml"
+grep -q 'secretName: "legacy-model-key"' "$scratch/provider-legacy.yaml"
+awk '/name: ORCHESTRATOR_OPENAI_SECRET_NAME/{getline; if ($0 !~ /value: "legacy-model-key"/) exit 1; found=1} END{if (!found) exit 1}' "$scratch/provider-legacy.yaml"
+helm template provider-ui "$application_chart" --set runtime.enabled=false \
+  --set-string runtime.modelSecret=legacy-model-key --set-string connections.openaiSecretName= \
+  >"$scratch/provider-ui.yaml"
+if grep -Eq 'name: (openai-api-key|OPENAI_API_KEY_PATH)$|secretName: "legacy-model-key"' "$scratch/provider-ui.yaml"; then
+  echo "UI provider setup unexpectedly mounted deployment credentials" >&2
+  exit 1
+fi
+awk '/name: ORCHESTRATOR_OPENAI_SECRET_NAME/{getline; if ($0 !~ /value: ""/) exit 1; found=1} END{if (!found) exit 1}' "$scratch/provider-ui.yaml"
 helm template runtime "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \

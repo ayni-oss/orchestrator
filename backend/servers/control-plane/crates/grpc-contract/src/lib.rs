@@ -40,6 +40,7 @@ mod tests {
                 "CertificateService",
                 "ConnectionService",
                 "DevelopmentTaskService",
+                "ProjectConversationService",
                 "ProjectService",
                 "ProviderService",
                 "RepositoryService",

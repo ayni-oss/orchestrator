@@ -29,17 +29,19 @@ async function listProfileChoices(context: RequestContext): Promise<RuntimeProfi
   return values;
 }
 
-async function listModelChoices(context: RequestContext): Promise<{ provider?: string; models: ProviderModelDto[] }> {
+async function listModelChoices(context: RequestContext): Promise<{ provider?: string; connectionId?: string; models: ProviderModelDto[] }> {
   const models: ProviderModelDto[] = [];
   let provider: string | undefined;
+  let connectionId: string | undefined;
   let pageToken: string | undefined;
   do {
     const page = await getBff().listProviderModels({ pageSize: 100, ...(pageToken === undefined ? {} : { pageToken }) }, context);
     provider ??= page.provider;
+    connectionId ??= page.connectionId;
     models.push(...page.models);
     pageToken = page.page.nextPageToken || undefined;
   } while (pageToken !== undefined && models.length < 1000);
-  return { ...(provider === undefined ? {} : { provider }), models };
+  return { ...(provider === undefined ? {} : { provider }), ...(connectionId === undefined ? {} : {connectionId}), models };
 }
 
 export const load: PageServerLoad = async ({ locals, setHeaders, url, depends }) => {
@@ -69,6 +71,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders, url, depends })
     projects: repositories.status === "fulfilled" ? repositories.value : [],
     runtimeProfiles: profiles.status === "fulfilled" ? profiles.value : [],
     provider: models.status === "fulfilled" ? models.value.provider : undefined,
+    connectionId: models.status === "fulfilled" ? models.value.connectionId : undefined,
     models: models.status === "fulfilled" ? models.value.models : [],
     requestId: locals.requestId,
     idempotencyKey: actionKey(),
@@ -105,6 +108,7 @@ export const actions: Actions = {
     const runtimeProfileId = text(form, "runtimeProfileId", 128);
     const provider = text(form, "provider", 128);
     const model = text(form, "model", 128);
+    const connectionId=text(form,"connectionId",128);
 
     const taskRequest = text(form, "request", 16_384);
     const criteriaValue = text(form, "acceptanceCriteria", 40_960);
@@ -138,6 +142,7 @@ export const actions: Actions = {
         idempotencyKey,
         request: {
           projectId,
+          ...(connectionId ? {connectionId} : {}),
           repositoryConnectionId,
           repositoryRevision,
           runtimeProfileId,
@@ -148,7 +153,7 @@ export const actions: Actions = {
           changeConstraints: { protectedPaths, allowTestEdits: form.get("allowTestEdits") === "on" },
           ...(deadlineSeconds === undefined ? {} : { deadlineSeconds }),
         },
-      }, requestContext(locals));
+      }, {...requestContext(locals),deadlineMs:30_000});
     } catch (error) {
       const mapped = safeError(error, locals.requestId);
       return fail(mapped.status, { action: "create", error: mapped });

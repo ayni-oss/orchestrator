@@ -11,6 +11,7 @@ export * from "./ayni/orchestrator/v1/common";
 export * from "./ayni/orchestrator/v1/connections";
 export * from "./ayni/orchestrator/v1/runtime_profiles";
 export * from "./ayni/orchestrator/v1/development_tasks";
+export * from "./ayni/orchestrator/v1/project_conversations";
 export * from "./ayni/orchestrator/v1/repositories";
 export * from "./ayni/orchestrator/v1/projects";
 export * from "./ayni/orchestrator/v1/provider_models";

@@ -219,13 +219,14 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
     connection
         .execute_batch(CLEAN_SCHEMA)
         .map_err(CleanStoreError::Database)?;
+    super::project_conversations::migrate(connection)?;
     Ok(())
 }
 
 type SchemaMigration = fn(&Connection) -> Result<(), CleanStoreError>;
 
 fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64, CleanStoreError> {
-    let migrations: [(i64, SchemaMigration); 11] = [
+    let migrations: [(i64, SchemaMigration); 12] = [
         (7, migrate_schema_seven),
         (8, super::builder_cutover::migrate),
         (9, super::preparation_migration::migrate),
@@ -237,6 +238,7 @@ fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64
         (15, super::runtime_operations::migrate),
         (16, super::coding_events::migrate),
         (17, super::lifecycle_events::migrate),
+        (18, super::project_conversations::migrate),
     ];
     for (source_version, migrate) in migrations {
         if version == source_version {
@@ -264,6 +266,10 @@ fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), 
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
+                    | "project_agent_requests"
+                    | "project_conversations"
+                    | "project_conversation_actions"
+                    | "project_outcome_summaries"
             )
         })
         .map(ToString::to_string)
@@ -293,6 +299,10 @@ fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> 
                     | "verification_inbox"
                     | "verification_journal"
                     | "verification_outbox"
+                    | "project_agent_requests"
+                    | "project_conversations"
+                    | "project_conversation_actions"
+                    | "project_outcome_summaries"
             )
         })
         .map(ToString::to_string)

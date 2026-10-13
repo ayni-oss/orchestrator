@@ -113,6 +113,13 @@ pub async fn serve(
     Server::builder()
         .add_service(health)
         .add_service(reflection)
+        .add_service(
+            v1::project_conversation_service_server::ProjectConversationServiceServer::new(
+                api.clone(),
+            )
+            .max_decoding_message_size(MAX_REQUEST_BYTES)
+            .max_encoding_message_size(MAX_RESPONSE_BYTES),
+        )
         .add_service(project_server(api.clone()))
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
@@ -430,7 +437,7 @@ impl RequestContext {
 }
 
 mod projects;
-mod task_mapping;
+pub mod task_mapping;
 #[cfg(test)]
 pub use task_mapping::{cancel_command, retry_command, task_command};
 mod providers_tasks;
@@ -455,3 +462,5 @@ mod onboarding_error;
 mod certificates;
 mod connections;
 mod resource_watch;
+
+mod project_conversations;

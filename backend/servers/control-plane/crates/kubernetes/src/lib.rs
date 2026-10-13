@@ -29,3 +29,5 @@ mod reporting;
 mod operation_reporting;
 
 pub mod notifications;
+
+pub mod project_agent;

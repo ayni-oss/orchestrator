@@ -81,6 +81,7 @@ impl AppState {
                 }
             }
         }
+        self.register_admin_openai().await?;
         self.sync_admin_ownership().await?;
         Ok(())
     }
@@ -122,6 +123,68 @@ impl AppState {
         .await?;
         Ok(())
     }
+    async fn register_admin_openai(&self) -> Result<(), Status> {
+        let Ok(source_name) = std::env::var("ORCHESTRATOR_OPENAI_SECRET_NAME") else {
+            return Ok(());
+        };
+        if source_name.is_empty() {
+            return Ok(());
+        }
+        let _guard = self.connection_lock.lock().await;
+        let mut value = match self.connection("openai-admin".into()).await {
+            Ok(value) if value.management_source == "admin" && value.kind == "openai" => value,
+            Ok(_) => {
+                return Err(Status::failed_precondition(
+                    "provider_admin_identity_conflict",
+                ));
+            }
+            Err(_) => v1::Connection {
+                id: "openai-admin".into(),
+                kind: "openai".into(),
+                management_source: "admin".into(),
+                display_name: "OpenAI".into(),
+                resource_version: 1,
+                ..Default::default()
+            },
+        };
+        let (name, uid, revision, source_revision) = super::secrets()?
+            .snapshot_openai(&source_name, &value.id)
+            .await
+            .map_err(Status::failed_precondition)?;
+        if value.secret_name != name || !value.enabled {
+            let mut candidate = value.clone();
+            candidate.secret_name = name;
+            candidate.secret_uid = uid;
+            candidate.observed_revision = revision;
+            candidate.desired_revision = source_revision.clone();
+            candidate.enabled = true;
+            if let Err(error) = self.validate_connection(&candidate).await {
+                if value.secret_name.is_empty() {
+                    candidate.status = "failed".into();
+                    candidate.failure_reason = error.message().into();
+                    self.persist_connection(candidate).await?;
+                } else if value.failure_reason != error.message()
+                    || value.desired_revision != source_revision
+                {
+                    value.resource_version += 1;
+                    value.failure_reason = error.message().into();
+                    value.desired_revision = source_revision;
+                    self.persist_connection(value).await?;
+                }
+                return Ok(());
+            }
+            if !value.secret_name.is_empty() {
+                candidate
+                    .retired_secret_revisions
+                    .push(super::retired(&value));
+                candidate.resource_version += 1;
+            }
+            candidate.status = "ready".into();
+            candidate.failure_reason.clear();
+            self.persist_connection(candidate).await?;
+        }
+        Ok(())
+    }
     async fn sync_admin_ownership(&self) -> Result<(), Status> {
         let github_secret =
             std::env::var("ORCHESTRATOR_GITHUB_APP_SECRET_NAME").unwrap_or_default();
@@ -136,6 +199,8 @@ impl AppState {
             }
             let configured = if existing.kind == "github_app" {
                 !github_secret.is_empty()
+            } else if existing.kind == "openai" {
+                std::env::var("ORCHESTRATOR_OPENAI_SECRET_NAME").is_ok_and(|name| !name.is_empty())
             } else {
                 configured_registries.as_array().is_some_and(|items| {
                     items

@@ -7,7 +7,10 @@
 
 Ayni Orchestrator is a control plane for worker-owned development tasks.
 Integrations manage provider access, repositories own shared runtimes, and projects
-organize work. A task freezes its source, runtime digest, model, constraints,
+organize work and retain conversations. A project agent researches immutable
+repository checkouts and prepares complete tasks for human approval. OpenAI
+connections and project model defaults are configured in the operator UI.
+A task freezes its source, runtime digest, model, constraints,
 coding budget and deadline before one worker executes it.
 
 The worker attests its runtime, checks out source, codes, commits, runs full Ayni
@@ -17,8 +20,9 @@ uses retained final work without starting another coding session.
 
 The control plane admits and schedules work, supplies scoped credentials, accepts
 validated results and handles cleanup. Ayni remains independently useful as a
-local CLI. Ayni Managed is supported; Custom Runtime and coordinated
-multi-repository work remain future work.
+local CLI. Ayni Managed is supported; Custom Runtime and dependent
+multi-repository orchestration remain future work. Independent tasks can target
+several repositories in one project conversation.
 
 ## Documentation
 

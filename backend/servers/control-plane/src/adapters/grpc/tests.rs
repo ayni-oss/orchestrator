@@ -82,7 +82,10 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
 
     let mut provider = v1::provider_service_client::ProviderServiceClient::new(channel.clone());
     let models = provider
-        .list_provider_models(v1::ListProviderModelsRequest { page: None })
+        .list_provider_models(v1::ListProviderModelsRequest {
+            page: None,
+            connection_id: String::new(),
+        })
         .await?
         .into_inner();
     assert_eq!(models.models.len(), 1);
@@ -326,6 +329,7 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
         .ok_or("missing project")?;
     let rename = api
         .update_project(Request::new(v1::UpdateProjectRequest {
+            agent_defaults: None,
             idempotency_key: "rename".into(),
             project_id: project.id.clone(),
             display_name: "Renamed".into(),

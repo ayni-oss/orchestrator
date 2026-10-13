@@ -153,6 +153,97 @@ impl ConnectionSecrets {
                 .ok_or("connection_secret_identity_missing")?,
         ))
     }
+    /// Reads an explicitly referenced `OpenAI` key after checking Secret ownership.
+    ///
+    /// # Errors
+    /// Returns bounded identity or format errors without credential contents.
+    pub async fn openai(
+        &self,
+        name: &str,
+        owner: Option<(&str, &str)>,
+    ) -> Result<String, &'static str> {
+        self.metadata(name, owner).await?;
+        let secret = self
+            .secrets
+            .get(name)
+            .await
+            .map_err(|_| "connection_secret_unavailable")?;
+        // Repeat UID verification on the credential read to prevent replacement races.
+        if owner
+            .is_some_and(|(_, uid)| !uid.is_empty() && secret.metadata.uid.as_deref() != Some(uid))
+        {
+            return Err("connection_secret_ownership_mismatch");
+        }
+        let mut data = secret.data.ok_or("provider_credentials_invalid")?;
+        let key = String::from_utf8(
+            data.remove("api-key")
+                .ok_or("provider_credentials_invalid")?
+                .0,
+        )
+        .map_err(|_| "provider_credentials_invalid")?;
+        if key.trim().is_empty() || key.len() > 4096 {
+            return Err("provider_credentials_invalid");
+        }
+        Ok(key)
+    }
+    /// Copy deployment-managed `OpenAI` credentials into an immutable revision.
+    /// Legacy workers keep using the deployment Secret; new work uses the copy.
+    ///
+    /// # Errors
+    /// Returns bounded transport, ownership or credential errors.
+    pub async fn snapshot_openai(
+        &self,
+        source: &str,
+        id: &str,
+    ) -> Result<(String, String, String, String), &'static str> {
+        let source_secret = self
+            .secrets
+            .get(source)
+            .await
+            .map_err(|_| "connection_secret_unavailable")?;
+        let (secret, marker) = admin_openai_snapshot(source_secret, id)?;
+        let name = secret
+            .metadata
+            .name
+            .clone()
+            .ok_or("connection_secret_identity_missing")?;
+        let observed = match self.secrets.create(&PostParams::default(), &secret).await {
+            Ok(created) => created,
+            Err(kube::Error::Api(error)) if error.code == 409 => {
+                let existing = self
+                    .secrets
+                    .get(&name)
+                    .await
+                    .map_err(|_| "connection_secret_unavailable")?;
+                if existing.immutable != Some(true)
+                    || existing.data != secret.data
+                    || secret.metadata.labels.as_ref().is_none_or(|expected| {
+                        existing.metadata.labels.as_ref().is_none_or(|actual| {
+                            expected
+                                .iter()
+                                .any(|(key, value)| actual.get(key) != Some(value))
+                        })
+                    })
+                {
+                    return Err("connection_secret_ownership_mismatch");
+                }
+                existing
+            }
+            Err(_) => return Err("connection_secret_create_failed"),
+        };
+        Ok((
+            name,
+            observed
+                .metadata
+                .uid
+                .ok_or("connection_secret_identity_missing")?,
+            observed
+                .metadata
+                .resource_version
+                .ok_or("connection_secret_identity_missing")?,
+            marker,
+        ))
+    }
     /// Reads the referenced GitHub credential for application authentication.
     ///
     /// # Errors
@@ -293,6 +384,46 @@ impl ConnectionSecrets {
     }
 }
 
+fn admin_openai_snapshot(source: Secret, id: &str) -> Result<(Secret, String), &'static str> {
+    use sha2::{Digest as _, Sha256};
+    let source_uid = source
+        .metadata
+        .uid
+        .ok_or("connection_secret_identity_missing")?;
+    let source_revision = source
+        .metadata
+        .resource_version
+        .ok_or("connection_secret_identity_missing")?;
+    let mut data = source.data.ok_or("provider_credentials_invalid")?;
+    let key = data
+        .remove("api-key")
+        .ok_or("provider_credentials_invalid")?;
+    if key.0.is_empty() || key.0.len() > 4096 {
+        return Err("provider_credentials_invalid");
+    }
+    let marker = format!("{source_uid}:{source_revision}");
+    let name = format!(
+        "ayni-openai-admin-{}",
+        &format!("{:x}", Sha256::digest(marker.as_bytes()))[..32]
+    );
+    let secret = Secret {
+        metadata: kube::core::ObjectMeta {
+            name: Some(name),
+            labels: Some(BTreeMap::from([
+                ("ayni.dev/connection-id".into(), id.into()),
+                ("ayni.dev/management-source".into(), "admin".into()),
+                ("ayni.dev/purpose".into(), "connection".into()),
+            ])),
+            ..Default::default()
+        },
+        data: Some(BTreeMap::from([("api-key".into(), key)])),
+        immutable: Some(true),
+        type_: Some("Opaque".into()),
+        ..Default::default()
+    };
+    Ok((secret, marker))
+}
+
 fn references(value: &serde_json::Value, name: &str) -> bool {
     match value {
         serde_json::Value::Object(fields) => fields.iter().any(|(key, value)| {
@@ -310,4 +441,52 @@ pub struct SigningCredential {
     pub key_id: String,
     pub uid: String,
     pub revision: String,
+}
+
+#[cfg(test)]
+mod provider_snapshot_tests {
+    use super::*;
+    fn source(revision: &str) -> Secret {
+        Secret {
+            metadata: kube::core::ObjectMeta {
+                uid: Some("source-uid".into()),
+                resource_version: Some(revision.into()),
+                ..Default::default()
+            },
+            data: Some(BTreeMap::from([
+                (
+                    "api-key".into(),
+                    k8s_openapi::ByteString(b"test-key".to_vec()),
+                ),
+                (
+                    "unrelated".into(),
+                    k8s_openapi::ByteString(b"other".to_vec()),
+                ),
+            ])),
+            ..Default::default()
+        }
+    }
+    #[test]
+    fn administrator_credentials_have_immutable_revision_identity() -> Result<(), &'static str> {
+        let (one, marker) = admin_openai_snapshot(source("one"), "openai-admin")?;
+        let (same, _) = admin_openai_snapshot(source("one"), "openai-admin")?;
+        let (two, _) = admin_openai_snapshot(source("two"), "openai-admin")?;
+        assert_eq!(one.metadata.name, same.metadata.name);
+        assert_ne!(one.metadata.name, two.metadata.name);
+        assert_eq!(one.immutable, Some(true));
+        assert_eq!(marker, "source-uid:one");
+        assert_eq!(one.data.as_ref().map(BTreeMap::len), Some(1));
+        assert_eq!(
+            one.metadata
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.get("ayni.dev/management-source"))
+                .map(String::as_str),
+            Some("admin")
+        );
+        let mut missing = source("one");
+        missing.metadata.uid = None;
+        assert!(admin_openai_snapshot(missing, "openai-admin").is_err());
+        Ok(())
+    }
 }

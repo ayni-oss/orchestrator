@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-providers = { path = "../../libs/providers" }
 async-nats.workspace = true
 url.workspace = true
 ayni-orchestrator-events = { path = "../../libs/events" }

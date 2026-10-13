@@ -13,6 +13,7 @@ use tonic::Status;
 use uuid::Uuid;
 mod admin;
 mod lifecycle;
+mod providers;
 mod reconciliation;
 mod registry;
 mod write;
@@ -53,7 +54,7 @@ impl AppState {
         if request.display_name.len() > 128 || request.display_name.is_empty() {
             return Err(Status::invalid_argument("connection_name_invalid"));
         }
-        if !matches!(request.kind.as_str(), "github_app" | "ghcr") {
+        if !matches!(request.kind.as_str(), "github_app" | "ghcr" | "openai") {
             return Err(Status::invalid_argument("connection_kind_invalid"));
         }
         if request.kind == "github_app"
@@ -156,7 +157,14 @@ impl AppState {
         .await
     }
     async fn validate_connection(&self, value: &v1::Connection) -> Result<(), Status> {
-        if value.kind == "github_app" {
+        if value.kind == "openai" {
+            self.provider_catalog(value)
+                .await?
+                .available()
+                .await
+                .map(|_| ())
+                .map_err(|_| Status::failed_precondition("provider_authentication_failed"))
+        } else if value.kind == "github_app" {
             let credential = secrets()?
                 .github(
                     &value.secret_name,
@@ -274,7 +282,7 @@ impl AppState {
         value.enabled = enabled;
         value.status = if enabled { "pending" } else { "disabled" }.into();
         value.resource_version += 1;
-        if enabled && value.kind == "github_app" {
+        if enabled && matches!(value.kind.as_str(), "github_app" | "openai") {
             self.validate_connection(&value).await?;
             value.status = "ready".into();
         }

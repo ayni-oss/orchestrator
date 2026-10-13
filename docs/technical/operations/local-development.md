@@ -13,6 +13,13 @@ restarting the deployment inputs. Connection Secret rotation reconciles without
 restarting Tilt or the control plane. `dev/ctl` never falls back to another
 cluster or prints credentials.
 
+The optional mode-600 `dev/.env` bootstraps complete GitHub App, OpenAI, Ayni signing
+and GHCR credential groups. Missing files and incomplete groups leave UI onboarding
+available and preserve existing Secrets. GHCR push and pull credentials are distinct
+Docker config Secrets; registration uses only safe namespace/username annotations.
+`connections.openaiSecretName` is empty locally when no administrator OpenAI Secret
+exists, while `runtime.modelSecret` preserves legacy worker credential resolution.
+
 Admission freezes runtime/source identities and execution limits. Runtime
 configuration defaults to 24 total coding turns and 3 quality repairs, with
 repairs bounded to 0–10. Workers attest before checkout, commit coherent work,
@@ -20,7 +27,7 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-SQLite schema version 18 migrates recognized versions 6–17 before reconciliation.
+SQLite schema version 19 migrates recognized versions 6–18 before reconciliation.
 The migration preserves connections, certificates, registries, runtime history
 and retained tasks, and records obsolete installation resources for restartable
 cleanup. Follow [operations](operations.md) and upgrade with cleaned values and

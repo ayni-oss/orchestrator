@@ -21,8 +21,8 @@ export function connectionActions(kind:string):Actions {
     };
     try {
     const input={id:value("id"),idempotencyKey:value("idempotencyKey"),expectedResourceVersion:value("resourceVersion")};
-    const credentials={privateKey:value("privateKey",32768),token:value("token",4096),pullToken:value("pullToken",4096)};
-      const bff=getBff(),ctx=requestContext(locals);
+    const credentials={privateKey:value("privateKey",32768),token:value("token",4096),pullToken:value("pullToken",4096),apiKey:value("apiKey",4096)};
+      const bff=getBff(),ctx={...requestContext(locals),...(kind==="openai"?{deadlineMs:30_000}:{})};
       if(operation==="create") await bff.createConnection({kind,displayName:value("displayName"),appId:value("appId"),username:value("username"),imageNamespace:value("imageNamespace"),idempotencyKey:input.idempotencyKey,credentials},ctx);
       else if(operation==="replace") await bff.replaceConnectionCredentials({...input,credentials},ctx);
       else if(operation==="test") await bff.testConnection(input,ctx);

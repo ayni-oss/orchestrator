@@ -14,7 +14,7 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Schema 18 is the current database format. Recognized schemas 6–17 migrate in
+Schema 19 is the current database format. Recognized schemas 6–18 migrate in
 order before reconciliation. It retains typed preparation, authenticated
 verification/runtime-operation/coding inboxes, accepted decisions, outbox retry
 and acknowledgement state, and operator lifecycle journal/outbox records.
@@ -223,3 +223,29 @@ migration and external evidence audit establish that they are unnecessary.
 
 Verify the report with
 `python3 -m unittest discover -s scripts/operations -p 'test_*.py'`.
+
+
+## Project research and OpenAI connections
+
+The deployment's `runtime.modelSecret` remains a compatibility source for retained
+legacy attempts. It registers an administrator-managed OpenAI connection backed by an immutable
+Secret snapshot. Source rotations validate a new snapshot before activation;
+failed replacements keep the old working revision. Secret values are never
+copied into SQLite. UI connections store write-only keys in
+immutable, owned Secret revisions. Project settings select connection/model defaults
+for research and coding independently. New runs and tasks freeze Secret identity;
+rotation retains revisions needed by retained work, and a failed candidate keeps
+the previous working revision. Disable blocks new admissions without rewriting
+existing work. Credential management is trusted-operator only.
+
+`runtime.projectAgentModelCalls` defaults to 24 (range 1–128), and
+`runtime.projectAgentDeadlineSeconds` defaults to 600 (range 1–3600). Research uses
+the pinned worker image in dedicated Jobs, without a ready coding runtime. The
+research container mounts immutable source read-only; only checkout init containers
+receive scoped source credentials. Results are bounded and accepted before cleanup.
+
+The schema-18 to schema-19 migration adds conversations, immutable research requests,
+action receipts and outcome-summary deduplication. Retained tasks and preparation
+state keep their existing semantics. Back up state and upgrade server, worker and
+clients together. An interrupted model interaction needs an explicit user retry;
+reconciliation never silently restarts lost running research Jobs.

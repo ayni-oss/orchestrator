@@ -64,6 +64,8 @@ struct CatalogInner {
 enum CatalogSource {
     OpenAi(openai::Client),
     #[cfg(test)]
+    Unavailable,
+    #[cfg(test)]
     Fixed(Vec<AvailableModel>),
 }
 
@@ -81,7 +83,8 @@ impl ModelCatalog {
     /// Returns [`ModelCatalogError::Initialization`] when the Rig client cannot
     /// be constructed from the supplied credential.
     pub fn openai(api_key: &str) -> Result<Self, ModelCatalogError> {
-        let client = openai::Client::new(api_key).map_err(|_| ModelCatalogError::Initialization)?;
+        let client = ayni_orchestrator_providers::openai_client("openai", api_key)
+            .map_err(|_| ModelCatalogError::Initialization)?;
         Ok(Self {
             inner: Arc::new(CatalogInner {
                 source: CatalogSource::OpenAi(client),
@@ -102,6 +105,17 @@ impl ModelCatalog {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn unavailable() -> Self {
+        Self {
+            inner: Arc::new(CatalogInner {
+                source: CatalogSource::Unavailable,
+                cache: Mutex::new(None),
+                verified: AtomicBool::new(false),
+            }),
+        }
+    }
+
     /// Whether this catalog has completed at least one successful provider fetch.
     #[must_use]
     pub fn is_verified(&self) -> bool {
@@ -118,6 +132,15 @@ impl ModelCatalog {
     pub async fn available(&self) -> Result<AvailableModels, ModelCatalogError> {
         let (models, observed_at) = match &self.inner.source {
             #[cfg(test)]
+            CatalogSource::Unavailable => self
+                .inner
+                .cache
+                .lock()
+                .await
+                .as_ref()
+                .and_then(|cached| cached.models.clone().zip(cached.observed_at))
+                .ok_or(ModelCatalogError::Discovery)?,
+            #[cfg(test)]
             CatalogSource::Fixed(models) => (models.clone(), observed_now()?),
             CatalogSource::OpenAi(client) => {
                 let mut cache = self.inner.cache.lock().await;
@@ -132,27 +155,7 @@ impl ModelCatalog {
                     let stale = cache
                         .as_ref()
                         .and_then(|cached| cached.models.clone().zip(cached.observed_at));
-                    let discovered = async {
-                        let listed = tokio::time::timeout(DISCOVERY_TIMEOUT, client.list_models())
-                            .await
-                            .map_err(|_| ModelCatalogError::Discovery)?
-                            .map_err(|_| ModelCatalogError::Discovery)?;
-                        let models = normalize(
-                            listed
-                                .into_iter()
-                                .map(|model| AvailableModel {
-                                    id: model.id,
-                                    name: model.name,
-                                    owned_by: model.owned_by,
-                                    created_at: model.created_at,
-                                    context_length: model.context_length,
-                                    max_output_tokens: model.max_output_tokens,
-                                })
-                                .collect(),
-                        )?;
-                        Ok::<_, ModelCatalogError>((models, observed_now()?))
-                    }
-                    .await;
+                    let discovered = discover(client).await;
                     match discovered {
                         Ok((models, observed_at)) => {
                             self.inner.verified.store(true, Ordering::Release);
@@ -182,6 +185,32 @@ impl ModelCatalog {
         })
     }
 
+    /// Validate admission against a fresh provider response, without stale fallback.
+    ///
+    /// # Errors
+    /// Returns an error when the bounded provider discovery fails or is invalid.
+    pub async fn contains_current(&self, model: &str) -> Result<bool, ModelCatalogError> {
+        let models = match &self.inner.source {
+            #[cfg(test)]
+            CatalogSource::Unavailable => return Err(ModelCatalogError::Discovery),
+            #[cfg(test)]
+            CatalogSource::Fixed(models) => models.clone(),
+            CatalogSource::OpenAi(client) => {
+                let (models, observed_at) = discover(client).await?;
+                self.inner.verified.store(true, Ordering::Release);
+                *self.inner.cache.lock().await = Some(CachedModels {
+                    refresh_after: Instant::now() + CACHE_TTL,
+                    models: Some(models.clone()),
+                    observed_at: Some(observed_at),
+                });
+                models
+            }
+        };
+        Ok(models
+            .binary_search_by(|candidate| candidate.id.as_str().cmp(model))
+            .is_ok())
+    }
+
     /// Checks whether the provider's current catalog contains an exact model ID.
     ///
     /// # Errors
@@ -195,6 +224,29 @@ impl ModelCatalog {
             .binary_search_by(|candidate| candidate.id.as_str().cmp(model))
             .is_ok())
     }
+}
+
+async fn discover(
+    client: &openai::Client,
+) -> Result<(Vec<AvailableModel>, u64), ModelCatalogError> {
+    let listed = tokio::time::timeout(DISCOVERY_TIMEOUT, client.list_models())
+        .await
+        .map_err(|_| ModelCatalogError::Discovery)?
+        .map_err(|_| ModelCatalogError::Discovery)?;
+    let models = normalize(
+        listed
+            .into_iter()
+            .map(|model| AvailableModel {
+                id: model.id,
+                name: model.name,
+                owned_by: model.owned_by,
+                created_at: model.created_at,
+                context_length: model.context_length,
+                max_output_tokens: model.max_output_tokens,
+            })
+            .collect(),
+    )?;
+    Ok((models, observed_now()?))
 }
 
 fn observed_now() -> Result<u64, ModelCatalogError> {
@@ -256,6 +308,23 @@ mod tests {
             context_length: None,
             max_output_tokens: None,
         }
+    }
+
+    #[tokio::test]
+    async fn admission_validation_never_uses_a_stale_catalog_after_provider_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let catalog = ModelCatalog::unavailable();
+        *catalog.inner.cache.lock().await = Some(super::CachedModels {
+            refresh_after: std::time::Instant::now(),
+            models: Some(vec![model("gpt-5.6-sol")]),
+            observed_at: Some(1),
+        });
+        assert!(catalog.contains("gpt-5.6-sol").await?);
+        assert!(catalog.contains_current("gpt-5.6-sol").await.is_err());
+        let fixed = ModelCatalog::fixed(vec![model("gpt-5.6-sol")]);
+        assert!(fixed.contains_current("gpt-5.6-sol").await?);
+        assert!(!fixed.contains_current("missing").await?);
+        Ok(())
     }
 
     #[tokio::test]

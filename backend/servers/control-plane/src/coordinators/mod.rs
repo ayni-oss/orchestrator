@@ -12,3 +12,5 @@ pub use outbox::OutboxPublisher;
 
 mod consumer;
 pub use consumer::VerificationConsumer;
+
+pub mod project_agent;

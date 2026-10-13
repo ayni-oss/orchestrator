@@ -26,6 +26,11 @@ pub struct RuntimeConfiguration {
     pub quality_repair_limit: u16,
     #[serde(default = "concurrency")]
     pub concurrency: usize,
+    /// Bounded project research policy, independent from coding budgets.
+    #[serde(default = "project_agent_model_calls")]
+    pub project_agent_model_calls: u32,
+    #[serde(default = "project_agent_deadline_seconds")]
+    pub project_agent_deadline_seconds: u64,
     /// Local Docker Desktop only; production keeps platform node selection.
     #[serde(default)]
     pub allow_emulation: bool,
@@ -112,6 +117,12 @@ const fn quality_repair_limit() -> u16 {
 const fn concurrency() -> usize {
     4
 }
+const fn project_agent_model_calls() -> u32 {
+    24
+}
+const fn project_agent_deadline_seconds() -> u64 {
+    600
+}
 
 impl RuntimeConfiguration {
     /// Loads and validates the optional operator-owned runtime configuration.
@@ -167,6 +178,11 @@ impl RuntimeConfiguration {
 
     fn validate(&self) -> Result<(), &'static str> {
         self.execution_configuration().validate()?;
+        if !(1..=128).contains(&self.project_agent_model_calls)
+            || !(1..=3600).contains(&self.project_agent_deadline_seconds)
+        {
+            return Err("project_agent_limits_invalid");
+        }
         if self.verification_mode == VerificationMode::Events && self.reporting.is_none() {
             return Err("runtime_reporting_required");
         }

@@ -7,6 +7,7 @@ process execution and publication stay with the worker.
 | Owner | Responsibility |
 | --- | --- |
 | `backend/libs/oci` | Provider-independent OCI syntax and canonical SHA-256 identities |
+| `backend/libs/providers` | Enabled Rig provider client construction shared by project and coding agents |
 | `backend/libs/domain` | Domain identities, content hashing and model usage |
 | `backend/libs/events` | Protobuf lifecycle payloads and CloudEvents structural validation |
 | `backend/libs/registry` | Bounded registry credentials and scoped registry requests |

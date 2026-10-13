@@ -12,6 +12,8 @@ runtime:
   codingTurns: 24
   qualityRepairLimit: 3
   concurrency: 4
+  projectAgentModelCalls: 24
+  projectAgentDeadlineSeconds: 600
   # Docker Desktop-only architecture emulation is enabled by the local chart.
   # Production releases retain strict runtime platform scheduling.
   allowEmulation: false
@@ -53,6 +55,8 @@ development:
 
 connections:
   githubAppSecretName: ""
+  # Null inherits runtime.modelSecret for compatibility; empty leaves setup to the UI.
+  openaiSecretName: null
   testImage: ""
   # Explicit safe metadata only; referenced Secrets remain administrator-owned.
   adminRegistries: []

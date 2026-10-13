@@ -49,6 +49,7 @@
         <InformationTable rows={[
           { label: "Updated", value: formatDate(task.updatedAt) },
           { label: "Model", value: `${task.snapshot.agent.provider}/${task.snapshot.agent.model}` },
+          ...(task.snapshot.providerBinding ? [{label:"LLM connection",value:task.snapshot.providerBinding.connectionId},{label:"Credential revision",value:task.snapshot.providerBinding.credentialRevision}] : []),
           { label: "Agent iterations", value: String(task.snapshot.limits.codingTurns) },
           { label: "Task ID", value: task.id, monospace: true },
           { label: "Accepted outcome", value: words(task.state) },
@@ -118,6 +119,7 @@
           <InformationTable rows={[
             { label: "Agent", value: task.snapshot.agent.agent },
             { label: "Model", value: `${task.snapshot.agent.provider}/${task.snapshot.agent.model}` },
+          ...(task.snapshot.providerBinding ? [{label:"LLM connection",value:task.snapshot.providerBinding.connectionId},{label:"Credential revision",value:task.snapshot.providerBinding.credentialRevision}] : []),
             { label: "Agent iterations", value: String(task.snapshot.limits.codingTurns) },
             { label: "Deadline", value: task.snapshot.deadlineAt ? formatDate(task.snapshot.deadlineAt) : "None" },
             { label: "Test edits", value: task.snapshot.changeConstraints.allowTestEdits ? "Authorized" : "Protected" },

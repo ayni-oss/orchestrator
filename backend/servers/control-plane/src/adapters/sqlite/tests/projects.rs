@@ -28,6 +28,7 @@ fn project_membership_archive_and_reonboarding_preserve_history() -> Result<(), 
         Err(CleanStoreError::IdempotencyConflict)
     ));
     let rename = v1::UpdateProjectRequest {
+        agent_defaults: None,
         idempotency_key: "rename".into(),
         project_id: project.id.clone(),
         expected_resource_version: 1,
@@ -254,6 +255,7 @@ fn shared_membership_edits_preserve_task_history_and_block_removed_retries()
     store.transition_attempt(&attempt.id, 1, v1::DevelopmentAttemptState::Running, None)?;
     store.transition_attempt(&attempt.id, 2, v1::DevelopmentAttemptState::Failed, None)?;
     let edit = v1::UpdateProjectRequest {
+        agent_defaults: None,
         idempotency_key: "remove".into(),
         project_id: shared.id.clone(),
         expected_resource_version: 1,
@@ -306,6 +308,7 @@ fn shared_membership_edits_preserve_task_history_and_block_removed_retries()
     store.update_project(
         "add",
         &v1::UpdateProjectRequest {
+            agent_defaults: None,
             idempotency_key: "add".into(),
             project_id: shared.id.clone(),
             expected_resource_version: 2,

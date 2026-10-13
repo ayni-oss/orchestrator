@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "backend/libs/events",
+    "backend/libs/providers",
     "backend/servers/control-plane/crates/application",
     "backend/servers/control-plane/crates/grpc-contract",
     "backend/libs/domain",

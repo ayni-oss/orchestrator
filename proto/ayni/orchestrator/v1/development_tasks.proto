@@ -96,6 +96,8 @@ message DevelopmentTaskRequest {
   // Total model iterations across implementation and quality repairs, 1 through 128.
   // When absent, the deployment default applies for older clients.
   optional uint32 coding_turns = 11;
+  // Empty uses the project coding default, or legacy deployment credentials.
+  string connection_id = 12;
 }
 
 // FrozenRepository freezes the source snapshot used by a task or attempt.
@@ -134,6 +136,7 @@ message DevelopmentSnapshot {
   WorkerLimits limits = 8;
   // Base branch observed when the publication request is frozen.
   string publication_base_branch = 9;
+  FrozenProviderCredentials provider_credentials = 10;
 }
 
 // ProviderTokenUsage preserves independent counters; absence never means zero.
@@ -438,4 +441,12 @@ message WatchDevelopmentTaskResponse {
     DevelopmentTask development_task = 2;
     DevelopmentAttempt attempt = 3;
   }
+}
+
+// Immutable credential identity; contains no secret material.
+message FrozenProviderCredentials {
+  string connection_id = 1;
+  string credential_revision = 2;
+  string secret_name = 3;
+  string secret_uid = 4;
 }
