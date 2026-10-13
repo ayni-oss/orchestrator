@@ -104,4 +104,4 @@ The current coding adapter uses Rig and OpenAI; broader harness and provider int
 - [Architecture](../architecture/architecture.md): implemented lifecycle and trust boundaries.
 - [Runtime worker](../architecture/runtime-runner.md): budgets, repair, evidence, and delivery.
 - [Ayni integration contract](../reference/ayni-integration.md): supported CLI and artifact boundaries.
-- [Roadmap](../../ROADMAP.md): remaining work and issue links.
+- [Roadmap](../../../ROADMAP.md): remaining work and issue links.

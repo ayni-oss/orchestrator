@@ -17,4 +17,4 @@ creating descriptors does not publish endpoints or SDKs.
 The prior baseline removed repository environment workflow installation resources.
 Earlier worker-owned task contracts, frozen execution limits and publication retry
 remain. Persisted history and retained task work survive migration; see
-[operations](../docs/operations/operations.md).
+[operations](../docs/technical/operations/operations.md).

@@ -101,6 +101,6 @@ their selected readers. Older binaries cannot open the upgraded database.
 Legacy collector and polling retirement remains governed by
 [the migration gates](../operations/event-compatibility.md#what-retires-and-when).
 
-See the [protocol contract](../../proto/README.md),
+See the [protocol contract](../../../proto/README.md),
 [local development](../operations/local-development.md) and
 [event platform implementation proposal](../history/event-platform/event-platform-implementation.md).

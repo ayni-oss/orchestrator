@@ -4,7 +4,7 @@ These records preserve the decisions and assumptions made at their recorded date
 They are not the active product roadmap or implementation specification.
 
 Start with [product flow](../guides/ayni-product-flow.md), [architecture](../architecture/architecture.md),
-[assurance boundaries](../architecture/assurance.md), and the [current roadmap](../../ROADMAP.md).
+[assurance boundaries](../architecture/assurance.md), and the [current roadmap](../../../ROADMAP.md).
 The worker-owned lifecycle supersedes earlier task pipelines, assessment ownership, and repository environment workflow installation.
 
 Historical text remains for provenance. Current operational and compatibility requirements belong to the linked active documents.

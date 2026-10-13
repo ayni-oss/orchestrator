@@ -57,6 +57,6 @@ also require the explicit Docker Desktop Kubernetes topology.
 ## Documentation
 
 Use [the documentation index](docs/index.md) to find current guides.
-[Documentation authoring](docs/contributing/documentation.md) describes the
+[Documentation authoring](docs/technical/contributing/documentation.md) describes the
 source layout, link checks and publication workflow. Requirements and delivery
 status belong in issues and the organization Project.

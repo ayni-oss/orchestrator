@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/public/ayni-logo-dark.svg">
-  <img src="docs/public/ayni-logo.svg" alt="Ayni icon" width="64" height="64">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/site/public/ayni-logo-dark.svg">
+  <img src="docs/site/public/ayni-logo.svg" alt="Ayni icon" width="64" height="64">
 </picture>
 
 # Ayni Orchestrator
@@ -22,20 +22,18 @@ multi-repository work remain future work.
 
 ## Documentation
 
-Start with the [documentation index](docs/index.md) or the site at
-[orchestrator.ayni.build](https://orchestrator.ayni.build).
+The [human guide](docs/site/index.md), published at
+[orchestrator.ayni.build](https://orchestrator.ayni.build), covers setup,
+repositories, tasks, results and recovery with diagrams.
 
-- [Local development](docs/operations/local-development.md): run the local Helm/Tilt topology.
-- [Operator onboarding](docs/guides/operator-onboarding.md): configure integrations, certificates and runtimes.
-- [Product flow](docs/guides/ayni-product-flow.md): repository, project and task ownership.
-- [Architecture](docs/architecture/architecture.md): code boundaries and implemented execution.
-- [Operations](docs/operations/operations.md): upgrades, recovery and cleanup.
-- [Protocol](proto/README.md): source schemas and generated clients.
+[Technical documentation](docs/technical/README.md) stays in the repository for
+contributors, deployment maintainers and coding agents. It covers architecture,
+code boundaries, protocols and deployment internals and is excluded from the website.
 
 ## Contributing and delivery
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and documentation authoring,
 [AGENTS.md](AGENTS.md) for repository rules, and [ROADMAP.md](ROADMAP.md) for the
 project and remaining work. Completed delivery lives in Git history, merged PRs
-and closed issues. [Historical decisions](docs/decisions/README.md) preserve
+and closed issues. [Historical decisions](docs/technical/decisions/README.md) preserve
 provenance; they do not override current guides.

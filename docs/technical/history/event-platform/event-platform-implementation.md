@@ -82,7 +82,7 @@ Existing client snapshots remain projections rather than a replacement journal.
 ### Contracts and encoding
 
 Add versioned lifecycle payloads alongside the existing
-[protocol tooling](../../../proto/README.md). A registry maps each event type to its
+[protocol tooling](../../../../proto/README.md). A registry maps each event type to its
 payload descriptor, producer role, validator, ordering scope and progression
 gate. CloudEvents context carries identity and correlation; typed payloads carry
 frozen bindings and operation-specific evidence.

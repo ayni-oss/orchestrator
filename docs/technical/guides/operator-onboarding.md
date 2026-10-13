@@ -8,17 +8,17 @@ Start the control plane without a GitHub App, registry or model credentials to
 configure connections through the trusted operator UI. Model credentials are
 required when admitting model-backed work, not when opening onboarding.
 
-The sidebar groups **Projects**, **Integrations**, and **Config**. Integrations
-contains Repositories and Source control; Config contains Ayni's Certificates
-and Container registries. These navigation groups do not change credential ownership.
+The sidebar exposes **Projects**, **Repositories**, and **Config**. Config
+contains Source control, Container registries and Ayni; certificates are reached
+from the Ayni overview. These navigation groups do not change credential ownership.
 
-Under **Integrations → Source control → GitHub**, create a customer-owned App through the
+Under **Config → Source control → GitHub**, create a customer-owned App through the
 manifest flow or import its App ID and PEM key. The server stores credentials in
 a Kubernetes Secret and returns safe connection status. Install the App on the
 repositories it may access in GitHub, then connect those repositories in Ayni.
 App ownership and installation permissions remain under GitHub administration.
 
-Under **Config → Ayni → Container registries → GitHub**, add a GHCR connection with an approved
+Under **Config → Container registries → GitHub**, add a GHCR connection with an approved
 image namespace, username, push token and a distinct pull-only token. Check the
 independent authentication, push, pull and cleanup results. A cleanup failure is
 reported separately and can be retried. Select the connection in the runtime’s **Edit** dialog on its repository overview. Repository
@@ -34,7 +34,7 @@ Ayni and its official builder always use the version in the repository’s commi
 
 Administrator-managed connections show **Managed by your administrator** and
 cannot be edited or deleted through the UI. Register them explicitly using the
-Helm connection references described in the [deployment chart](../../deploy/charts/ayni-orchestrator/README.md).
+Helm connection references described in the [deployment chart](../../../deploy/charts/ayni-orchestrator/README.md).
 UI-managed connections support replacement, testing, disabling and deletion when
 unreferenced. Credential inputs clear after submission and read APIs never return
 them. Validated replacements activate automatically; no reload button, deployment

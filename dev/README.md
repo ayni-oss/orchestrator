@@ -143,12 +143,12 @@ reproducible from its commit alone.
   is checked by the worker on the managed topology.
 
 Long-form behavior, security boundaries, and troubleshooting remain in
-[`docs/operations/local-development.md`](../docs/operations/local-development.md) and
-[`docs/operations/operations.md`](../docs/operations/operations.md).
+[`docs/technical/operations/local-development.md`](../docs/technical/operations/local-development.md) and
+[`docs/technical/operations/operations.md`](../docs/technical/operations/operations.md).
 
 The local stack includes persistent NATS JetStream and its Grafana dashboard.
 Normal cleanup retains `jetstream-data`; `jetstream.enabled=false` disables the
-transport independently. See [persistent local JetStream](../docs/operations/local-development.md#persistent-local-jetstream)
+transport independently. See [persistent local JetStream](../docs/technical/operations/local-development.md#persistent-local-jetstream)
 for limits, replay expiry, trusted-development access and recovery boundaries.
 
 ### Connection onboarding and rotation

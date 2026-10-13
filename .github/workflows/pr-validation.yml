@@ -124,9 +124,9 @@ jobs:
           test -f MAINTAINERS.md
           test -f ROADMAP.md
           test -f .github/dco.yml
-          test -f docs/architecture/architecture.md
-          test -f docs/operations/local-development.md
-          test -f docs/operations/operations.md
+          test -f docs/technical/architecture/architecture.md
+          test -f docs/technical/operations/local-development.md
+          test -f docs/technical/operations/operations.md
 
   documentation:
     name: Documentation
