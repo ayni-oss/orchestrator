@@ -32,7 +32,9 @@ config:
 ---
 ```
 
-The theme registers the ELK layout loader before rendering. SVG text labels size
+The theme disables Mermaid’s automatic page-load scanner before loading ELK;
+the VitePress components alone render the authored diagram source. This prevents
+the scanner from parsing empty containers during initial loading. SVG text labels size
 nodes naturally with padding; wide diagrams scroll rather than shrinking text.
 Review labels inside both rectangles and decision diamonds after changing a flow.
 
