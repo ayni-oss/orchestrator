@@ -156,6 +156,19 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
                     .request
                     .as_ref()
                     .ok_or_else(|| Status::internal("proposal invalid"))?;
+                let observed = self
+                    .state
+                    .observe_project_repository_head(
+                        &c.project_id,
+                        &requested.repository_connection_id,
+                    )
+                    .await
+                    .map_err(Status::failed_precondition)?;
+                if observed.revision != requested.repository_revision {
+                    return Err(Status::aborted(
+                        "repository source changed; request a refreshed proposal",
+                    ));
+                }
                 let model = requested
                     .agent
                     .as_ref()

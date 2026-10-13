@@ -170,6 +170,17 @@ impl ProjectAgentReconciler {
             return Ok(request);
         }
 
+        let mut source_snapshots = BTreeMap::new();
+        if run.purpose != "summary" {
+            for repository in &conversation.repository_connection_ids {
+                let observed = self
+                    .state
+                    .observe_project_repository_head(&conversation.project_id, repository)
+                    .await?;
+                source_snapshots.insert(repository.clone(), observed);
+            }
+        }
+
         let project_id = conversation.project_id.clone();
         let project = with_store_async(&self.state, move |s| s.project(&project_id))
             .await
@@ -193,7 +204,7 @@ impl ProjectAgentReconciler {
         let calls = self.configuration.project_agent_model_calls;
         let deadline = self.configuration.project_agent_deadline_seconds;
         let prepared = with_store_async(&self.state, move |s| {
-            prepare_request(s, &c, &r, calls, deadline, &models)
+            prepare_request(s, &c, &r, calls, deadline, &models, &source_snapshots)
         })
         .await;
         let request = prepared.map_err(|_| "project_research_inputs_unavailable")?;
@@ -213,6 +224,47 @@ impl ProjectAgentReconciler {
             .map_err(|_| "project_store_unavailable")
     }
 }
+impl AppState {
+    /// Observe source with contents-read authority independently from runtime onboarding.
+    /// Existing agent requests replay their own immutable source and do not call this.
+    pub(crate) async fn observe_project_repository_head(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+    ) -> Result<v1::RepositorySnapshot, &'static str> {
+        let _lifecycle = self.repository_lifecycle.read().await;
+        let project = project_id.to_owned();
+        let repository = repository_id.to_owned();
+        let value = with_store_async(self, move |store| {
+            store.project_member(&project, &repository)?;
+            store.repository_connection(&repository)
+        })
+        .await
+        .map_err(|_| "project_repository_unavailable")?;
+        let provider = github(&value).ok_or("project_repository_unsupported")?;
+        let source = self.source.as_ref().ok_or("project_source_unconfigured")?;
+        let token = source
+            .token(provider.installation_id, &provider.repository_id)
+            .await?;
+        let revision = source
+            .head(
+                &provider.owner,
+                &provider.name,
+                &value.default_branch,
+                &token,
+            )
+            .await?;
+        let project = project_id.to_owned();
+        let repository = repository_id.to_owned();
+        with_store_async(self, move |store| {
+            store.project_member(&project, &repository)?;
+            store.observe_repository_snapshot(&repository, &revision)
+        })
+        .await
+        .map_err(|_| "project_source_observation_unavailable")
+    }
+}
+
 fn job_name(id: &str) -> String {
     format!(
         "project-{}",
@@ -232,13 +284,14 @@ fn prepare_request(
     calls: u32,
     deadline: u64,
     models: &str,
+    source_snapshots: &BTreeMap<String, v1::RepositorySnapshot>,
 ) -> Result<ProjectAgentRequest, CleanStoreError> {
     let project = store.project(&c.project_id)?;
     let defaults = project
         .agent_defaults
         .as_ref()
         .ok_or(CleanStoreError::InvalidTransition)?;
-    let (repositories, context) = research_repositories(store, c, r, defaults)?;
+    let (repositories, context) = research_repositories(store, c, r, defaults, source_snapshots)?;
     let tasks = store.list_development_tasks(
         Some(&c.project_id),
         None,
@@ -296,6 +349,7 @@ fn research_repositories(
     c: &v1::ProjectConversation,
     r: &v1::ProjectAgentRun,
     defaults: &v1::ProjectAgentDefaults,
+    source_snapshots: &BTreeMap<String, v1::RepositorySnapshot>,
 ) -> Result<(Vec<ResearchRepository>, Vec<serde_json::Value>), CleanStoreError> {
     let mut repositories = Vec::new();
     let mut context = Vec::new();
@@ -304,7 +358,9 @@ fn research_repositories(
             store.project_member(&c.project_id, id)?;
             let repo = store.repository_connection(id)?;
             let provider = github(&repo).ok_or(CleanStoreError::InvalidTransition)?;
-            let snapshot = store.latest_research_snapshot(id)?;
+            let snapshot = source_snapshots
+                .get(id)
+                .ok_or(CleanStoreError::InvalidTransition)?;
             let profiles = store.list_runtime_profiles(
                 Some(id),
                 None,
@@ -345,7 +401,7 @@ fn research_repositories(
                     "https://github.com/{}/{}.git",
                     provider.owner, provider.name
                 ),
-                revision: snapshot.revision,
+                revision: snapshot.revision.clone(),
                 coding_connection_id: defaults.coding_connection_id.clone(),
                 coding_model: defaults.coding_model.clone(),
                 runtime_profile_id: selected,
@@ -353,4 +409,139 @@ fn research_repositories(
         }
     }
     Ok((repositories, context))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plain_repository_fixture() -> Result<
+        (
+            CleanStore,
+            v1::RepositoryConnection,
+            v1::ProjectConversation,
+        ),
+        CleanStoreError,
+    > {
+        let mut store = CleanStore::in_memory()?;
+        let repository = store.create_repository_connection(
+            "plain-repository",
+            &v1::CreateRepositoryConnectionRequest {
+                idempotency_key: "plain-repository".into(),
+                display_name: "Read-only source".into(),
+                default_branch: "main".into(),
+                use_ayni: Some(false),
+                provider: Some(v1::RepositoryProvider {
+                    provider: Some(v1::repository_provider::Provider::Github(
+                        v1::GithubRepository {
+                            repository_id: "123".into(),
+                            owner: "ayni-oss".into(),
+                            name: "sandbox".into(),
+                            installation_id: 42,
+                            html_url: "https://github.com/ayni-oss/sandbox".into(),
+                        },
+                    )),
+                }),
+                ..Default::default()
+            },
+        )?;
+        let project = store.create_project(
+            "plain-project",
+            &v1::CreateProjectRequest {
+                idempotency_key: "plain-project".into(),
+                display_name: "Plain research".into(),
+                repository_connection_id: repository.id.clone(),
+                repository_connection_ids: vec![],
+            },
+        )?;
+        let conversation = store.create_project_conversation(
+            "plain-conversation",
+            &v1::CreateProjectConversationRequest {
+                idempotency_key: "plain-conversation".into(),
+                project_id: project.id,
+                title: "Research before runtime setup".into(),
+                repository_connection_ids: vec![],
+            },
+        )?;
+        Ok((store, repository, conversation))
+    }
+
+    #[test]
+    fn plain_repository_research_freezes_observed_source_without_any_runtime()
+    -> Result<(), CleanStoreError> {
+        let (mut store, repository, conversation) = plain_repository_fixture()?;
+        let run = v1::ProjectAgentRun {
+            id: "plain-run".into(),
+            purpose: "research".into(),
+            model: "research-model".into(),
+            state: "queued".into(),
+            ..Default::default()
+        };
+        store.send_project_message(
+            "plain-message",
+            &v1::SendProjectMessageRequest {
+                idempotency_key: "plain-message".into(),
+                conversation_id: conversation.id.clone(),
+                content: "Inspect this repository".into(),
+            },
+            run.clone(),
+        )?;
+        let defaults = v1::ProjectAgentDefaults {
+            project_connection_id: "project-provider".into(),
+            project_model: "research-model".into(),
+            coding_connection_id: "coding-provider".into(),
+            coding_model: "coding-model".into(),
+        };
+        let revision = "a".repeat(40);
+        assert!(matches!(
+            store.repository_snapshot_for_revision(&repository.id, &revision),
+            Err(CleanStoreError::NotFound { .. })
+        ));
+        assert!(
+            research_repositories(&mut store, &conversation, &run, &defaults, &BTreeMap::new())
+                .is_err()
+        );
+        // This is the durable seam after the read-only provider HEAD observation.
+        let observed = store.observe_repository_snapshot(&repository.id, &revision)?;
+        let source_snapshots = BTreeMap::from([(repository.id.clone(), observed)]);
+        let (repositories, context) = research_repositories(
+            &mut store,
+            &conversation,
+            &run,
+            &defaults,
+            &source_snapshots,
+        )?;
+        assert_eq!(repositories.len(), 1);
+        assert_eq!(repositories[0].revision, revision);
+        assert!(repositories[0].runtime_profile_id.is_empty());
+        assert!(context[0]["profiles"].as_array().is_some_and(Vec::is_empty));
+        let request = ProjectAgentRequest {
+            run_id: run.id.clone(),
+            project_id: conversation.project_id.clone(),
+            model: run.model,
+            history: "user: Inspect this repository".into(),
+            repositories,
+            context: json!({"repositories":context}).to_string(),
+            max_model_calls: 24,
+            deadline_seconds: 600,
+        };
+        store.save_project_run_request(&run.id, &request)?;
+        store.observe_repository_snapshot(&repository.id, &"b".repeat(40))?;
+        let frozen = store
+            .project_run_request(&run.id)?
+            .ok_or(CleanStoreError::CorruptState)?;
+        assert_eq!(frozen.repositories[0].revision, revision);
+        assert_eq!(frozen.context, request.context);
+        assert_eq!(
+            store.repository_connection(&repository.id)?.use_ayni,
+            Some(false)
+        );
+        assert!(
+            store
+                .list_runtime_profiles(Some(&repository.id), None, None, None)?
+                .items
+                .is_empty()
+        );
+        Ok(())
+    }
 }

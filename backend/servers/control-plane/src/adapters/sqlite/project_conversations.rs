@@ -78,17 +78,6 @@ impl CleanStore {
         }
         Ok(())
     }
-    pub(crate) fn latest_research_snapshot(
-        &self,
-        repository: &str,
-    ) -> Result<v1::RepositorySnapshot, CleanStoreError> {
-        get_payload(
-            &self.connection,
-            "SELECT payload FROM repository_snapshots WHERE repository_connection_id=?1 ORDER BY event_cursor DESC LIMIT 1",
-            repository,
-            "repository_snapshot",
-        )
-    }
     pub(crate) fn project_run_request(
         &self,
         id: &str,
