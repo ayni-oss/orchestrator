@@ -19,6 +19,11 @@ dev/ctl deploy
 dev/ctl check
 ```
 
+The env file is optional. With no file or incomplete credential groups, deployment
+skips those groups and leaves their setup to the UI. Previously provisioned Secrets
+are preserved. Complete groups remain administrator-managed; the bootstrap refuses
+to overwrite UI-managed Secrets.
+
 ## Hot reload
 
 Install [Tilt](https://docs.tilt.dev/install.html) once, then start the
@@ -89,7 +94,15 @@ For private GHCR runtime images, optionally set `GHCR_PULL_USERNAME` and
 same mode-600 `dev/.env`. `dev/ctl secrets` creates the Kubernetes
 `runtime-pull` imagePullSecret. Reference `runtime-pull` as the runtime
 `pull_secret`; it is used by Kubernetes to fetch a runtime image before the
-container starts and is never mounted into the application.
+container starts and is never mounted into the application. Add a distinct
+`GHCR_PUSH_TOKEN` to create the separate `runtime-push` Docker config Secret.
+Deployment registers the GHCR connection only when both admin Secrets exist and
+valid namespace metadata is present. `GHCR_IMAGE_NAMESPACE` selects the owner
+namespace; it defaults to `ghcr.io/<GHCR_PULL_USERNAME>`. Set an organization
+namespace explicitly. Push credentials reach only trusted build/probe Jobs.
+Complete GitHub App ID/key credentials register automatically on the next deploy;
+installation bindings are still chosen through repository setup. OpenAI is registered
+only when the bootstrap Secret exists; otherwise configure it in LLM providers.
 
 Use a different ignored env file when working with an isolated profile:
 
@@ -161,8 +174,9 @@ The control plane reconciles Secret changes every 30 seconds; UI writes trigger
 immediate reconciliation and validated activation without a pod restart.
 
 `dev/ctl secrets` optionally creates administrator GitHub and GHCR Secrets and
-labels them as admin-managed; it refuses to overwrite a UI-managed Secret. Register
-an administrator App explicitly with `connections.githubAppSecretName`. Local
+labels them as admin-managed; it refuses to overwrite a UI-managed Secret. Deployment
+registers complete bootstrap connections from safe Secret metadata, without passing
+credentials into Helm. Local
 managed runtime defaults to native `linux/arm64` and disables architecture emulation;
 Intel hosts must select `linux/amd64` explicitly. A connection test requires
 `connections.testImage` set to a digest-pinned control-plane image.

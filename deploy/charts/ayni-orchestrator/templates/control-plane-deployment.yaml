@@ -1,4 +1,8 @@
 {{- if .Values.enabled }}
+{{- $openaiSecretName := .Values.runtime.modelSecret }}
+{{- if kindIs "string" .Values.connections.openaiSecretName }}
+{{- $openaiSecretName = .Values.connections.openaiSecretName }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -90,9 +94,11 @@ spec:
               value: /runtime-config/runtime.json
             {{- end }}
             - name: ORCHESTRATOR_OPENAI_SECRET_NAME
-              value: {{ .Values.runtime.modelSecret | quote }}
+              value: {{ $openaiSecretName | quote }}
+            {{- if $openaiSecretName }}
             - name: OPENAI_API_KEY_PATH
               value: /run/secrets/openai/api-key
+            {{- end }}
           startupProbe:
             httpGet:
               path: /livez
@@ -135,9 +141,11 @@ spec:
               mountPath: /data
             - name: control-plane-scratch
               mountPath: /tmp
+            {{- if $openaiSecretName }}
             - name: openai-api-key
               mountPath: /run/secrets/openai
               readOnly: true
+            {{- end }}
             {{- if .Values.customClients.enabled }}
             - name: custom-grpc-access
               mountPath: /run/secrets/custom-grpc
@@ -220,11 +228,13 @@ spec:
         - name: web-scratch
           emptyDir:
             sizeLimit: 64Mi
+        {{- if $openaiSecretName }}
         - name: openai-api-key
           secret:
-            secretName: {{ .Values.runtime.modelSecret | quote }}
+            secretName: {{ $openaiSecretName | quote }}
             defaultMode: 288
             optional: true
+        {{- end }}
         {{- if .Values.customClients.enabled }}
         - name: custom-grpc-access
           secret:
