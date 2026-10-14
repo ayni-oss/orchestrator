@@ -57,7 +57,7 @@ test("repository overview shows identity and readiness separately from runtime c
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
   await expect(dialog.getByLabel("Image namespace")).toHaveCount(0);
   await expect(dialog.locator('input[name="imageNamespace"]')).toHaveCount(0);
-  await expect(dialog.getByText("Namespace: admin-team",{exact:true})).toBeVisible();
+  await expect(dialog.getByText("Image destination: ghcr.io/admin-team/ayni-oss/sandbox",{exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/profile-version");
   await page.waitForTimeout(11000);
   await dialog.getByRole("button",{name:"Build / Retry",exact:true}).click();
@@ -133,5 +133,33 @@ test("exhausted runtime offers explicit retry without an automatic timestamp", a
     await expect(page.getByText("Reconciliation requested.", {exact:true})).toBeVisible();
   } finally {
     await request.post("http://127.0.0.1:50062/preparation");
+  }
+});
+
+
+test("repository dialogs preview publishing ownership without exposing the authentication account", async ({page, request}) => {
+  for (const [namespace, destination] of [
+    ["ayni-oss", "ghcr.io/ayni-oss/sandbox"],
+    ["build-team", "ghcr.io/build-team/ayni-oss/sandbox"],
+  ]) {
+    await request.post(`http://127.0.0.1:50062/admin-connection?kind=ghcr&namespace=${namespace}`);
+    const response = await page.goto("/repositories");
+    expect(await response!.text()).not.toContain("registry-auth-account");
+    await page.getByRole("button", {name:"Connect repository", exact:true}).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Repository", {exact:true}).click();
+    await page.getByRole("option", {name:"sandbox", exact:true}).click();
+    await dialog.getByRole("checkbox", {name:"Use Ayni", exact:true}).check();
+    await dialog.getByLabel("GHCR connection").click();
+    await page.getByRole("option", {name:"Admin App", exact:true}).click();
+    await expect(dialog.getByText(`Image destination: ${destination}`, {exact:true})).toBeVisible();
+    await page.screenshot({path:`/tmp/orchestrator-registry-${namespace}.png`});
+    await page.keyboard.press("Escape");
+    await page.goto("/repositories/repository:1");
+    await page.getByRole("button", {name:"Ayni managed actions", exact:true}).click();
+    await page.getByRole("menuitem", {name:"Edit", exact:true}).click();
+    await dialog.getByLabel("GHCR connection").click();
+    await page.getByRole("option", {name:"Admin App", exact:true}).click();
+    await expect(dialog.getByText(`Image destination: ${destination}`, {exact:true})).toBeVisible();
   }
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { registryImageRepository } from "$lib/connection.js";
   import { notify } from "$lib/notifications.js";
   import type { RepositoryOptions } from "$lib/server/repository-options.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
@@ -51,6 +52,7 @@
   let useAyni = $state(false);
   const selectedRegistry = $derived(data.registryConnections.find(connection => connection.id === selectedRegistryId));
   const selectedOwner = $derived(options.installations.find(item => item.installationId === options.selectedInstallationId)?.owner ?? "");
+  const imageDestination = $derived(registryImageRepository(selectedRegistry?.imageNamespace ?? "", selectedOwner, selectedRepository));
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
 </script>
 
@@ -125,7 +127,7 @@
             <div class="space-y-2">
               <Label for="connect-registry">GHCR connection</Label>
               <ThemedSelect id="connect-registry" name="registryConnectionId" bind:value={selectedRegistryId} options={[{ value: "", label: "Configure later" }, ...data.registryConnections.map(connection => ({ value: connection.id, label: connection.displayName }))]} disabled={connecting || !useAyni} />
-              {#if selectedRegistry}<p class="text-xs text-muted-foreground">Namespace: {selectedRegistry.imageNamespace}</p>{/if}
+              {#if imageDestination}<p class="break-all text-xs text-muted-foreground">Image destination: {imageDestination}</p>{:else if selectedRegistry}<p class="text-xs text-muted-foreground">Select a repository to preview its image destination.</p>{/if}
               {#if useAyni && data.registryError}
 
                 <p class="text-sm text-muted-foreground">You can connect now and configure the runtime's image destination later.</p>

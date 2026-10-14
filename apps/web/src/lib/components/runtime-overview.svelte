@@ -6,6 +6,7 @@
   import type { PageData } from "../../routes/repositories/[repositoryId]/$types";
   type RuntimeProfileDto = PageData["runtimeProfiles"][number];
   type RepositoryConnectionDto = NonNullable<PageData["repositoryConnection"]>;
+  import { registryImageRepository } from "$lib/connection.js";
   import type { ConnectionView } from "$lib/connection.js";
   import type { CertificateView } from "$lib/certificate.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -33,6 +34,7 @@
   let registryId=$state("");
   const selected=$derived(profiles.find(profile=>profile.id===selectedId));
   const selectedConnection=$derived(connections.find(connection=>connection.id===registryId));
+  const imageDestination=$derived(registryImageRepository(selectedConnection?.imageNamespace ?? "", repository.provider.owner, repository.provider.name));
   const failureMessage=(message:string)=>message==="runtime_verification_failed" ? "Runtime image verification failed. Rebuild explicitly to replace this image." : /^[a-z][a-z0-9_]+$/u.test(message) ? words(message) : message;
   const selection=(profile:RuntimeProfileDto)=>profile.registry ?? {registryConnectionId:repository.registryConnectionId ?? ""};
   function edit(profile:RuntimeProfileDto) {
@@ -103,7 +105,7 @@
       <form method="POST" action="?/registry" use:enhance={submit} class="space-y-4">
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><input type="hidden" name="resourceVersion" value={editVersion}/>
         <div class="space-y-2"><Label for="runtime-registry">GHCR connection</Label><ThemedSelect id="runtime-registry" name="registryConnectionId" bind:value={registryId} options={connections.map(connection=>({value:connection.id,label:connection.displayName}))} required /></div>
-        {#if selectedConnection}<p class="text-xs text-muted-foreground">Namespace: {selectedConnection.imageNamespace}</p>{/if}
+        {#if imageDestination}<p class="break-all text-xs text-muted-foreground">Image destination: {imageDestination}</p>{/if}
         {#if !connections.length}<p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> to configure this runtime.</p>{/if}
         <Button type="submit" disabled={busy || !registryId}>Save image destination</Button>
       </form>

@@ -43,8 +43,13 @@ restart or Tilt restart is required. Connection pages refresh status periodicall
 The repository overview shows connection status and branch once, followed by its
 runtimes. Lock fingerprints and image destinations belong to each runtime.
 Onboarding status, inspected commit and actionable failures persist independently
-from repository access and remain visible on its overview. The namespace is defined once on the registry connection; runtime dialogs show
-the server-computed image destination without a namespace input. Registry changes invalidate that runtime’s
+from repository access and remain visible on its overview. Set the registry
+connection namespace to the repository owner to publish at
+`ghcr.io/<owner>/<repository>:ayni-<arch>-<lock>`. Authentication usernames stay
+on the server and do not determine image ownership. The namespace is defined once
+on the registry connection; repository and runtime dialogs preview
+the image destination without a namespace input. The control plane validates and
+derives the destination when saved. Registry changes invalidate that runtime’s
 readiness until its new destination is verified; other runtimes are unaffected.
 
 Connect the repository and open its runtime, even if configuration is incomplete.

@@ -97,6 +97,7 @@
         <div class="space-y-2"><Label for="registry-username">GitHub username</Label><Input id="registry-username" name="username" required /></div>
         <div class="space-y-2"><Label for="registry-namespace">Image namespace</Label><Input id="registry-namespace" name="imageNamespace" required placeholder="organization" /></div>
       </div>
+      <p class="text-sm text-muted-foreground">Set the image namespace to the repository owner to publish at ghcr.io/&lt;owner&gt;/&lt;repository&gt;. The GitHub username is used only for authentication.</p>
       <div class="space-y-2"><Label for="registry-push">Push token</Label><Input id="registry-push" name="token" type="password" required autocomplete="new-password" bind:value={createPush} /></div>
       <div class="space-y-2"><Label for="registry-pull">Separate pull-only token</Label><Input id="registry-pull" name="pullToken" type="password" required autocomplete="new-password" bind:value={createPull} /></div>
       {@render permissions()}

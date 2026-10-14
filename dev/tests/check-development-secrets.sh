@@ -88,8 +88,15 @@ PY
 ! grep -Eq 'pull-test|push-test|openai-test' "$BOOTSTRAP_TEST_LOG" "$scratch/output" "$scratch/errors"
 sed '/^GHCR_IMAGE_NAMESPACE=/d' "$scratch/complete.env" > "$scratch/personal.env"
 chmod 600 "$scratch/personal.env"
+calls_before="$(wc -l < "$BOOTSTRAP_TEST_LOG")"
+if run_configure "$scratch/personal.env"; then echo 'Publishing requires an explicit namespace' >&2; exit 1; fi
+grep -Fq 'GHCR_IMAGE_NAMESPACE is required for publishing' "$scratch/errors"
+[[ "$(wc -l < "$BOOTSTRAP_TEST_LOG")" == "$calls_before" ]]
+cat >> "$scratch/personal.env" <<'DATA'
+GHCR_IMAGE_NAMESPACE=ghcr.io/exampleuser
+DATA
 run_configure "$scratch/personal.env"
-grep -Eq 'ayni.dev/image-namespace=ghcr.io/exampleuser' "$BOOTSTRAP_TEST_LOG"
+grep -Fq 'ayni.dev/image-namespace=ghcr.io/exampleuser' "$BOOTSTRAP_TEST_LOG"
 export MOCK_GITHUB_OWNER=admin MOCK_PUSH_OWNER=admin MOCK_PULL_OWNER=admin MOCK_IMAGE_NAMESPACE=ghcr.io/example-org MOCK_REGISTRY_USERNAME=ExampleUser
 source "$repository_root/dev/lib/connections.sh"
 export MOCK_OPENAI_OWNER=admin
@@ -99,7 +106,7 @@ dev_bootstrap_helm_values docker-desktop test
 python3 - "$DEV_ADMIN_REGISTRIES" <<'PY'
 import json,sys
 registry,=json.loads(sys.argv[1])
-assert registry['imageNamespace']=='ghcr.io/example-org'
+assert registry['imageNamespace']=='example-org'
 assert registry['pushSecretName']=='runtime-push'
 assert registry['pullSecretName']=='runtime-pull'
 PY
