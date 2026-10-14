@@ -80,15 +80,16 @@ This replaces the fixed latest-32-messages approach while keeping durable histor
 These slices describe the agreed direction; they are not yet implemented.
 Delivery issues and milestones remain in the Orchestrator Project.
 
-| Slice | Observable outcome |
-| --- | --- |
-| Workspace and Project model | Shared configuration belongs to Workspaces; outcome-focused Projects retain their conversation and task links. |
-| Durable conversation context | A recreated planner can recover prior decisions and retrieve older research without relying on pod memory. |
-| Reusable planner sessions | Consecutive messages reuse a session; configured inactivity expiry preserves history and allows recreation. |
-| Project working interface | Overview combines fixed-height chat and the current plan; Plans and Tasks provide review and execution history. |
-| Plan approval and worker feedback | Approved plan versions produce bounded tasks, and worker evidence returns to the originating conversation. |
-| Agent capability foundations | Agent profiles define models, instructions, pinned skills, allowed tools, resource scope and budgets. |
-| Workflow evaluation | Repeatable scenarios verify research, clarification, approval, execution, recovery and result interpretation across the complete flow. |
+| Slice | Observable outcome | Issue |
+| --- | --- | --- |
+| Workspace and Project model | Shared configuration belongs to Workspaces; outcome-focused Projects retain their conversation and task links. | [#183](https://github.com/ayni-oss/orchestrator/issues/183) |
+| Versioned plans and approval | Approval binds reviewed plan versions to immutable task inputs. | [#184](https://github.com/ayni-oss/orchestrator/issues/184) |
+| Durable conversation context | A recreated planner can recover prior decisions and retrieve older research without relying on pod memory. | [#185](https://github.com/ayni-oss/orchestrator/issues/185) |
+| Reusable planner sessions | Consecutive messages reuse a session; configured inactivity expiry preserves history and allows recreation. | [#186](https://github.com/ayni-oss/orchestrator/issues/186) |
+| Project working interface | Overview combines fixed-height chat and the current plan; Plans and Tasks provide review and execution history. | [#187](https://github.com/ayni-oss/orchestrator/issues/187) |
+| Worker feedback | Progress, questions and evidence return to the originating conversation with independent execution, quality and publication outcomes. | [#188](https://github.com/ayni-oss/orchestrator/issues/188) |
+| Agent capability foundations | Agent profiles define models, instructions, pinned skills, allowed tools, resource scope and budgets. | [#189](https://github.com/ayni-oss/orchestrator/issues/189) |
+| Workflow evaluation | Repeatable scenarios verify research, clarification, approval, execution, recovery and result interpretation across the complete flow. | [#190](https://github.com/ayni-oss/orchestrator/issues/190) |
 
 Capability foundations provide attachment points for future Model Context Protocol tools and skills.
 Application code enforces permissions on tool calls and records their results; skills do not grant additional authority.
