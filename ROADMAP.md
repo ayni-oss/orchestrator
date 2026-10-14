@@ -112,12 +112,19 @@ See [managed runtime execution](docs/technical/guides/managed-runtime-execution.
 
 ## Existing research and environment work
 
-The remaining open work at this consolidation is:
+The [M7 — Workspaces Projects milestone](https://github.com/ayni-oss/orchestrator/milestone/8)
+tracks the product direction above and retains the existing open work:
 
 | Work | Source of truth |
 | --- | --- |
-| Disposable execution, stage separation and independent assessment research | [#128](https://github.com/ayni-oss/orchestrator/issues/128) |
-| Reviewed environment changes and candidate validation | [#129](https://github.com/ayni-oss/orchestrator/issues/129) |
+| Later research: disposable execution, stage separation and independent assessment | [#128](https://github.com/ayni-oss/orchestrator/issues/128) |
+| Approved dependency/lock changes with local checks and post-merge runtime preparation | [#129](https://github.com/ayni-oss/orchestrator/issues/129) |
+
+Plans assess dependency and environment impact before approval.
+Authorized workers regenerate `.ayni.lock`, install dependencies locally, and run applicable checks before opening a PR.
+They do not build or publish a proposed runtime image.
+After owner review and merge, repository sync reuses a compatible verified image or builds and verifies a new shared runtime.
+The execution runtime and proposed lock remain separate evidence identities; quality thresholds and trusted keys require separate authorization.
 
 The [product flow](docs/technical/guides/ayni-product-flow.md) and
 [architecture](docs/technical/architecture/architecture.md) describe current behavior.
