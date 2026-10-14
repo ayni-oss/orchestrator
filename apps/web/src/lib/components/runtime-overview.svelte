@@ -34,7 +34,7 @@
   let registryId=$state("");
   const selected=$derived(profiles.find(profile=>profile.id===selectedId));
   const selectedConnection=$derived(connections.find(connection=>connection.id===registryId));
-  const imageDestination=$derived(registryImageRepository(selectedConnection?.imageNamespace ?? "", repository.provider.owner, repository.provider.name));
+  const imageDestination=$derived(selectedConnection ? registryImageRepository(repository.provider.owner, repository.provider.name) : "");
   const failureMessage=(message:string)=>message==="runtime_verification_failed" ? "Runtime image verification failed. Rebuild explicitly to replace this image." : /^[a-z][a-z0-9_]+$/u.test(message) ? words(message) : message;
   const selection=(profile:RuntimeProfileDto)=>profile.registry ?? {registryConnectionId:repository.registryConnectionId ?? ""};
   function edit(profile:RuntimeProfileDto) {

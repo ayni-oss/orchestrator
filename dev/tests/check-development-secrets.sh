@@ -89,8 +89,8 @@ PY
 sed '/^GHCR_IMAGE_NAMESPACE=/d' "$scratch/complete.env" > "$scratch/personal.env"
 chmod 600 "$scratch/personal.env"
 calls_before="$(wc -l < "$BOOTSTRAP_TEST_LOG")"
-if run_configure "$scratch/personal.env"; then echo 'Publishing requires an explicit namespace' >&2; exit 1; fi
-grep -Fq 'GHCR_IMAGE_NAMESPACE is required for publishing' "$scratch/errors"
+if run_configure "$scratch/personal.env"; then echo 'Connection tests require an explicit namespace' >&2; exit 1; fi
+grep -Fq 'GHCR_IMAGE_NAMESPACE is required for connection tests' "$scratch/errors"
 [[ "$(wc -l < "$BOOTSTRAP_TEST_LOG")" == "$calls_before" ]]
 cat >> "$scratch/personal.env" <<'DATA'
 GHCR_IMAGE_NAMESPACE=ghcr.io/exampleuser

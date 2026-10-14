@@ -29,10 +29,7 @@ export function registryConfiguration(connections: Pick<ConnectionView, "kind" |
 }
 
 /** Preview only; the control plane validates and derives the publishing destination. */
-export function registryImageRepository(namespace: string, owner: string, repository: string): string {
-  if (!namespace || !owner || !repository) return "";
-  const imageOwner = namespace.toLowerCase();
-  const sourceOwner = owner.toLowerCase();
-  const name = repository.toLowerCase();
-  return `ghcr.io/${imageOwner}/${imageOwner === sourceOwner ? name : `${sourceOwner}/${name}`}`;
+export function registryImageRepository(owner: string, repository: string): string {
+  if (!owner || !repository) return "";
+  return `ghcr.io/${owner.toLowerCase()}/${repository.toLowerCase()}`;
 }

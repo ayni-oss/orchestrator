@@ -77,7 +77,7 @@ fn selected_registry_runtime(
         .managed_runtime
         .clone()
         .ok_or("runtime_source_missing")?;
-    managed_runtime.registry_prefix = format!("ghcr.io/{}", connection.image_namespace);
+    managed_runtime.registry_prefix = "ghcr.io".into();
     managed_runtime.pull_secret =
         (!connection.pull_secret_name.is_empty()).then_some(connection.pull_secret_name);
     if let Some(build) = &mut managed_runtime.build {

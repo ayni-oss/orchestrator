@@ -52,7 +52,7 @@
   let useAyni = $state(false);
   const selectedRegistry = $derived(data.registryConnections.find(connection => connection.id === selectedRegistryId));
   const selectedOwner = $derived(options.installations.find(item => item.installationId === options.selectedInstallationId)?.owner ?? "");
-  const imageDestination = $derived(registryImageRepository(selectedRegistry?.imageNamespace ?? "", selectedOwner, selectedRepository));
+  const imageDestination = $derived(selectedRegistry ? registryImageRepository(selectedOwner, selectedRepository) : "");
   const nextPageHref = $derived(data.nextPageToken === undefined ? undefined : `/repositories?pageToken=${encodeURIComponent(data.nextPageToken)}`);
 </script>
 

@@ -57,7 +57,7 @@ test("repository overview shows identity and readiness separately from runtime c
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
   await expect(dialog.getByLabel("Image namespace")).toHaveCount(0);
   await expect(dialog.locator('input[name="imageNamespace"]')).toHaveCount(0);
-  await expect(dialog.getByText("Image destination: ghcr.io/admin-team/ayni-oss/sandbox",{exact:true})).toBeVisible();
+  await expect(dialog.getByText("Image destination: ghcr.io/ayni-oss/sandbox",{exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/profile-version");
   await page.waitForTimeout(11000);
   await dialog.getByRole("button",{name:"Build / Retry",exact:true}).click();
@@ -70,7 +70,7 @@ test("repository overview shows identity and readiness separately from runtime c
   await page.getByRole("option",{name:"Admin App",exact:true}).click();
   await dialog.getByRole("button",{name:"Save image destination",exact:true}).click();
   await expect(page.getByText("Runtime image destination updated.",{exact:true})).toBeVisible();
-  await expect(runtime).toContainText("ghcr.io/admin-team/ayni-oss/sandbox");
+  await expect(runtime).toContainText("ghcr.io/ayni-oss/sandbox");
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await dialog.getByRole("button",{name:"Build / Retry",exact:true}).click();
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
@@ -140,7 +140,7 @@ test("exhausted runtime offers explicit retry without an automatic timestamp", a
 test("repository dialogs preview publishing ownership without exposing the authentication account", async ({page, request}) => {
   for (const [namespace, destination] of [
     ["ayni-oss", "ghcr.io/ayni-oss/sandbox"],
-    ["build-team", "ghcr.io/build-team/ayni-oss/sandbox"],
+    ["ghcr.io/credential-owner", "ghcr.io/ayni-oss/sandbox"],
   ]) {
     await request.post(`http://127.0.0.1:50062/admin-connection?kind=ghcr&namespace=${namespace}`);
     const response = await page.goto("/repositories");

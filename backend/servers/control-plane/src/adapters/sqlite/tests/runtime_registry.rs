@@ -136,7 +136,7 @@ fn explicit_selection_replaces_legacy_defaults_and_survives_restart() -> Result<
 }
 
 #[test]
-fn changed_destinations_keep_frozen_attempt_credentials_and_reject_old_activation()
+fn changed_registry_connections_keep_frozen_attempt_credentials_and_reject_old_activation()
 -> Result<(), CleanStoreError> {
     let mut store = CleanStore::in_memory()?;
     let (repository, profile, _) = ready_profile(&mut store)?;
@@ -150,7 +150,7 @@ fn changed_destinations_keep_frozen_attempt_credentials_and_reject_old_activatio
         .as_deref()
         .ok_or(CleanStoreError::CorruptState)?;
     let mut artifact = verified_artifact(revision_id, DIGEST);
-    artifact.oci_repository = "ghcr.io/first/ayni-oss/sandbox".into();
+    artifact.oci_repository = "ghcr.io/ayni-oss/sandbox".into();
     store.record_runtime_artifact(&selected.id, artifact)?;
     let ready = store.runtime_profile(&selected.id)?;
     let (_, attempt) = store.create_development_task(
@@ -168,7 +168,7 @@ fn changed_destinations_keep_frozen_attempt_credentials_and_reject_old_activatio
     assert!(store.registry_connection_in_use(&first.id)?);
     assert!(store.connection_secret_in_use(&first.pull_secret_name)?);
     // An old verification can be retained as historical evidence but cannot gain
-    // admission authority after the destination changes.
+    // admission authority after the registry connection changes.
     store.record_runtime_artifact(&ready.id, verified_artifact(revision_id, SECOND_DIGEST))?;
     assert_eq!(
         store.runtime_profile(&ready.id)?.active_revision_id,

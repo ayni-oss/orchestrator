@@ -132,7 +132,7 @@ if [[ "$configure_ghcr_pull" == true && -n "$ghcr_push_token" ]]; then
     exit 1
   fi
   if [[ -z "$ghcr_image_namespace" ]]; then
-    echo "GHCR_IMAGE_NAMESPACE is required for publishing; set ghcr.io/<repository-owner> explicitly" >&2
+    echo "GHCR_IMAGE_NAMESPACE is required for connection tests; set ghcr.io/<test-namespace> explicitly" >&2
     exit 1
   fi
   if [[ ${#ghcr_image_namespace} -gt 100 || ! "$ghcr_image_namespace" =~ ^ghcr\.io/[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then

@@ -281,8 +281,8 @@ fn validate_profile(profile: &str, runtime: &ProfileRuntime) -> Result<(), &'sta
     runtime.execution_runtime().validate()
 }
 
-/// Connection-owned GHCR destination. Preserve foreign-owner routing while
-/// avoiding a repeated namespace when the source repository has the same owner.
+/// Repository-owned GHCR destination. Connections supply credentials; the source
+/// owner and repository determine the image path.
 ///
 /// # Errors
 ///
@@ -298,15 +298,11 @@ pub fn connection_image_repository(
     {
         return Err("runtime_repository_identity_invalid");
     }
-    let namespace = namespace.to_ascii_lowercase();
-    let owner = owner.to_ascii_lowercase();
-    let repository = repository.to_ascii_lowercase();
-    let path = if namespace == owner {
-        repository
-    } else {
-        format!("{owner}/{repository}")
-    };
-    let destination = format!("ghcr.io/{namespace}/{path}");
+    let destination = format!(
+        "ghcr.io/{}/{}",
+        owner.to_ascii_lowercase(),
+        repository.to_ascii_lowercase()
+    );
     managed_image_reference(&destination, "linux/amd64", &"a".repeat(64))?;
     Ok(destination)
 }

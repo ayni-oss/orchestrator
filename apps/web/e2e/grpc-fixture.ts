@@ -121,9 +121,7 @@ const repositoryService: UntypedServiceImplementation = {
 };
 
 function profileView() {
-  const connection=connections.find(item=>item.id===profile.registry?.registryConnectionId);
-  const imageName=connection?.imageNamespace.toLowerCase()==="ayni-oss" ? "sandbox" : "ayni-oss/sandbox";
-  return {...profile,effectiveCertificate:certificates.find(c=>c.id===profile.certificateId) ?? certificates.find(c=>c.isDefault),desiredImageRepository:connection ? `ghcr.io/${connection.imageNamespace}/${imageName}` : "ghcr.io/ayni-oss/sandbox"};
+  return {...profile,effectiveCertificate:certificates.find(c=>c.id===profile.certificateId) ?? certificates.find(c=>c.isDefault),desiredImageRepository:"ghcr.io/ayni-oss/sandbox"};
 }
 
 let profileEnrolled = true;
