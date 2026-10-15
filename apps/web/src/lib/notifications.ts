@@ -27,11 +27,14 @@ export function actionNotification(result: Record<string, unknown> | null | unde
 /** Per-layout event history: repeated saves notify again, unchanged polling failures do not. */
 export function createNotificationEvents() {
   let lastForm: unknown;
+  let lastActionId: string|undefined;
   let route = "";
   let previousFailures = new Set<string>();
   return {
     action(result: Record<string, unknown> | null | undefined) {
-      if (result === lastForm) return;
+      const actionId=typeof result?.notificationId==="string"?result.notificationId:undefined;
+      if (result === lastForm || (actionId!==undefined&&actionId===lastActionId)) return;
+      if(actionId!==undefined)lastActionId=actionId;
       lastForm = result;
       actionNotification(result);
     },

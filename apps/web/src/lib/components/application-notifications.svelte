@@ -14,7 +14,7 @@
   // Task details already receive resumable updates; retain list discovery repair
   // without shortening the detail stream's low-frequency safety read.
   $effect(() => subscribeRefresh("app:tasks", {
-    intervalMs: page.route.id === "/tasks/[taskId]" ? 120_000 : 30_000,
+    intervalMs: 120_000,
   }));
   const events = createNotificationEvents();
   $effect(() => events.action(page.form));

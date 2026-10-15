@@ -51,3 +51,10 @@ it("notifies completed redirect mutations without claiming failed actions succee
   redirectNotification({ type: "redirect", status: 303, location: "/repositories" }, action);
   expect(toast.success).toHaveBeenCalledWith("Repository removed.", { duration: 6000 });
 });
+
+it("does not repeat an action notification when a refresh recreates its form object",()=>{
+ vi.clearAllMocks();const events=createNotificationEvents();
+ events.action({success:"Saved.",notificationId:"save:1"});events.action({success:"Saved.",notificationId:"save:1"});events.action(null);events.action({success:"Saved.",notificationId:"save:1"});
+ expect(toast.success).toHaveBeenCalledTimes(1);
+ events.action({success:"Saved.",notificationId:"save:2"});expect(toast.success).toHaveBeenCalledTimes(2);
+});
