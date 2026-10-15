@@ -7,6 +7,7 @@ fn conversation(store: &mut CleanStore) -> Result<v1::ProjectConversation, Clean
     store.create_project_conversation(
         "context-create",
         &v1::CreateProjectConversationRequest {
+            planner_idle_timeout_seconds: None,
             idempotency_key: "create-context".into(),
             project_id: request.project_id,
             title: "Context archive".into(),

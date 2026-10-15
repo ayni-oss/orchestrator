@@ -131,6 +131,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl dependencies` | Rebuild ignored chart archives from `Chart.lock` |
 | `dev/ctl test plans CP WEB` | Validate plan review, approval replay, migration and restart persistence in a disposable namespace |
 | `dev/ctl test context CP WEB` | Validate older context retrieval, scope, migration, replay and restart persistence in a disposable namespace |
+| `dev/ctl test sessions CP WEB WORKER` | Validate resident planner reuse, expiry, recreation, rotation, cancellation and recovery in a disposable namespace |
 | `dev/ctl test workspaces CP WEB` | Validate workspace ownership, admission and persistence across a control-plane restart in a disposable namespace |
 | `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
 
@@ -186,7 +187,7 @@ managed runtime defaults to native `linux/arm64` and disables architecture emula
 Intel hosts must select `linux/amd64` explicitly. A connection test requires
 `connections.testImage` set to a digest-pinned control-plane image.
 
-Recognized SQLite schemas 6–21 migrate to schema 22 before reconciliation. Back up
+Recognized SQLite schemas 6–22 migrate to schema 23 before reconciliation. Back up
 and quiesce state before upgrading; malformed or unsupported state aborts startup.
 Follow the [upgrade procedure](../docs/technical/operations/operations.md) and obtain
 explicit approval before deleting application data. Runtime outputs and
@@ -252,3 +253,12 @@ summary provenance, receipt replay and restart persistence. Stopped SQLite check
 compare original context records, frozen requests, task snapshots, plans and action
 receipts. The gate uses no provider credentials or calls and claims no live model
 execution. Its unique namespace and retained claims are removed on every exit.
+
+The planner session gate runs as `dev/ctl test sessions CONTROL_PLANE_IMAGE
+WEB_IMAGE WORKER_IMAGE`. It uses the local Helm topology and a synthetic model
+endpoint to exercise resident worker turns without live provider credentials.
+Runtime checks cover Pod reuse, serial delivery, duplicate-safe receipts, rotation,
+cancellation and lost workers. Control-plane checks separately cover persisted
+session state, idle expiry, durable context and restart recovery. Fixture inputs
+are synthetic; they do not attest live GitHub source observation or provider
+authentication. Cleanup targets only the gate's own namespace and resources.

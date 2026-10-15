@@ -255,6 +255,7 @@ impl CleanStore {
                 .map_err(CleanStoreError::Database)?
             {
                 let workspace = v1::Workspace {
+                    planner_idle_timeout_seconds: super::project_sessions::DEFAULT_IDLE_SECONDS,
                     id: project.workspace_id.clone(),
                     display_name: project.display_name.clone(),
                     state: project.state,

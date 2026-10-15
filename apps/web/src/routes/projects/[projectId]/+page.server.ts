@@ -3,7 +3,7 @@ import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError, text } from "$lib/server/page.js";
-import { isCanonicalIdentifier } from "$lib/server/validation.js";
+import { isResourceVersion, isCanonicalIdentifier } from "$lib/server/validation.js";
 import { projectRepositoryChoices } from "$lib/server/project-choices.js";
 import { projectSchema } from "$lib/project-schema.js";
 import type { ProjectConversationDto, ProviderModelPageDto, RequestContext } from "@ayni-orchestrator/bff/server";
@@ -45,6 +45,8 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
   }
 };
 export const actions: Actions = {
+  plannerSettings: async event => conversationAction(event,"settings"),
+  cancelPlannerTurn: async event => conversationAction(event,"cancel"),
   createConversation: async event => conversationAction(event,"create"),
   sendMessage: async event => conversationAction(event,"send"),
   reviseModel: async event => conversationAction(event,"model"),
@@ -101,7 +103,7 @@ type ConversationActionContext = {
   ctx:RequestContext;
 };
 
-async function conversationAction(event:Parameters<NonNullable<Actions[string]>>[0],operation:"create"|"send"|"decide"|"model"|"plan") {
+async function conversationAction(event:Parameters<NonNullable<Actions[string]>>[0],operation:"create"|"send"|"decide"|"model"|"plan"|"settings"|"cancel") {
   const {locals,params,request}=event,form=await request.formData();
   const idempotencyKey=text(form,"idempotencyKey",128),conversationId=text(form,"conversationId",128);
   if(!idempotencyKey || (operation!=="create"&&!conversationId))return conversationInputError(locals.requestId,"Reload the conversation and try again.");
@@ -110,6 +112,8 @@ async function conversationAction(event:Parameters<NonNullable<Actions[string]>>
     if(operation==="create")return await createConversation(context);
     const conversation=await getBff().getProjectConversation(conversationId!,context.ctx);
     if(conversation.projectId!==context.projectId)return conversationInputError(locals.requestId,"Select a conversation in this project.");
+    if(operation==="settings")return await updatePlannerSettings(context,conversation);
+    if(operation==="cancel")return await cancelPlannerTurn(context,conversation);
     if(operation==="send")return await sendConversationMessage(context,conversation.id);
     if(operation==="plan")return await decideConversationPlan(context,conversation);
     if(operation==="model")return await reviseConversationModel(context,conversation);
@@ -166,4 +170,17 @@ async function decideConversationPlan({form,idempotencyKey,requestId,ctx}:Conver
   if(!planId||!version||!/^([1-9][0-9]{0,19})$/u.test(version)||!['approve','reject','revise'].includes(decision??'')||conversation.plan?.id!==planId||!conversation.plan.versions.some(v=>v.version===version))return conversationInputError(requestId,"Select a saved plan version and a decision.");
   await getBff().decideProjectPlan({idempotencyKey,conversationId:conversation.id,planId,version,decision:decision!},ctx);
   return {success:decision==='approve'?`Plan version ${version} approved. Tasks submitted.`:decision==='revise'?"Send a message with the revisions you need, then review the new version.":`Plan version ${version} rejected.`};
+}
+
+async function updatePlannerSettings({form,idempotencyKey,projectId,requestId,ctx}:ConversationActionContext,conversation:ProjectConversationDto){
+  const selected=text(form,"plannerIdleTimeoutSeconds",16),expectedUpdateCursor=text(form,"expectedUpdateCursor",20);
+  if(!expectedUpdateCursor||!isResourceVersion(expectedUpdateCursor)||!['inherit','300','86400'].includes(selected??''))return conversationInputError(requestId,"Choose the workspace default, 5 minutes, or 24 hours, then reload if settings have changed.");
+  await getBff().updateProjectConversationSettings({idempotencyKey,projectId,conversationId:conversation.id,expectedUpdateCursor,inheritWorkspaceTimeout:selected==='inherit',...(selected==='inherit'?{}:{plannerIdleTimeoutSeconds:Number(selected)})},ctx);
+  return {success:"Planner session settings updated."};
+}
+async function cancelPlannerTurn({form,idempotencyKey,projectId,requestId,ctx}:ConversationActionContext,conversation:ProjectConversationDto){
+  const runId=text(form,"runId",128);
+  if(!runId||!conversation.runs.some(run=>run.id===runId))return conversationInputError(requestId,"Select a planner turn in this conversation.");
+  await getBff().cancelProjectAgentRun({idempotencyKey,projectId,conversationId:conversation.id,runId},ctx);
+  return {success:"Planner turn cancellation requested. Saved history is retained."};
 }

@@ -19,6 +19,7 @@ fn setup() -> Result<
     let c = store.create_project_conversation(
         "conversation-key",
         &v1::CreateProjectConversationRequest {
+            planner_idle_timeout_seconds: None,
             idempotency_key: "create".into(),
             project_id: task.project_id,
             title: "Research change".into(),
@@ -252,11 +253,15 @@ fn accepted_attempt_outcomes_queue_one_summary_without_actions() -> Result<(), C
             development_task_id: c.proposals[0].task_id.clone(),
         },
     )?;
+    summary_defaults(&store, &c)?;
     store.queue_project_outcome_summaries()?;
     store.queue_project_outcome_summaries()?;
     let queued = store.queued_project_runs()?;
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].1.purpose, "summary");
+    assert!(queued[0].1.session_managed);
+    assert!(queued[0].1.provider_credentials.is_none());
+    assert_eq!(queued[0].1.model, "current-summary-model");
     let request = store
         .project_run_request(&queued[0].1.id)?
         .ok_or(CleanStoreError::CorruptState)?;
@@ -280,7 +285,7 @@ fn schema_eighteen_upgrade_preserves_existing_projects() -> Result<(), CleanStor
     let path = directory.path().join("state.db");
     let mut store = CleanStore::open(&path, 3)?;
     let (repository, _, _) = ready_profile(&mut store)?;
-    store.connection.execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; UPDATE clean_schema SET version=18;").map_err(CleanStoreError::Database)?;
+    store.connection.execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; UPDATE clean_schema SET version=18;").map_err(CleanStoreError::Database)?;
     drop(store);
     let store = CleanStore::open(&path, 3)?;
     assert_eq!(store.schema_version()?, SCHEMA_VERSION);
@@ -323,6 +328,7 @@ fn whole_plan_approval_rolls_back_when_second_repository_is_stale() -> Result<()
     let c = store.create_project_conversation(
         "multi-conversation",
         &v1::CreateProjectConversationRequest {
+            planner_idle_timeout_seconds: None,
             idempotency_key: "multi-conversation".into(),
             project_id: project.id,
             title: "Independent repository changes".into(),
@@ -623,7 +629,7 @@ fn remove_plan_representation(store: &mut CleanStore) -> Result<(), CleanStoreEr
     }
     store
         .connection
-        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
+        .execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
         .map_err(CleanStoreError::Database)
 }
 #[test]
@@ -678,7 +684,7 @@ fn corrupt_legacy_history_rolls_back_entire_migration() -> Result<(), CleanStore
     store.send_project_message("send1", &message(&c), run.clone())?;
     complete(&mut store, &c, &run, &profile)?;
     remove_plan_representation(&mut store)?;
-    let mut c = store.project_conversation(&c.id)?;
+    let mut c = legacy_conversation(&store, &c.id)?;
     c.proposals[0].state = "unknown".into();
     store
         .connection
@@ -689,7 +695,7 @@ fn corrupt_legacy_history_rolls_back_entire_migration() -> Result<(), CleanStore
         .map_err(CleanStoreError::Database)?;
     assert!(super::super::project_plans::migrate(&store.connection).is_err());
     assert_eq!(store.schema_version()?, 20);
-    assert!(store.project_conversation(&c.id)?.plan.is_none());
+    assert!(legacy_conversation(&store, &c.id)?.plan.is_none());
     Ok(())
 }
 #[test]
@@ -715,10 +721,11 @@ fn migration_keeps_mixed_terminal_decisions_non_actionable() -> Result<(), Clean
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
+        .execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
         .map_err(CleanStoreError::Database)?;
     super::super::project_plans::migrate(&store.connection)?;
     super::super::project_context::migrate(&store.connection)?;
+    super::super::project_sessions::migrate(&store.connection)?;
     let migrated = store.project_conversation(&c.id)?;
     assert_eq!(migrated.proposals, c.proposals);
     assert_eq!(
@@ -907,10 +914,11 @@ fn migration_preserves_more_than_one_hundred_twenty_eight_legacy_research_versio
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
+        .execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
         .map_err(CleanStoreError::Database)?;
     super::super::project_plans::migrate(&store.connection)?;
     super::super::project_context::migrate(&store.connection)?;
+    super::super::project_sessions::migrate(&store.connection)?;
     let migrated = store.project_conversation(&c.id)?;
     assert_eq!(migrated.proposals, c.proposals);
     let versions = migrated.plan.ok_or(CleanStoreError::CorruptState)?.versions;
@@ -926,3 +934,38 @@ mod context_fixture;
 
 #[path = "project_context_lifecycle.rs"]
 mod context_lifecycle;
+
+#[path = "project_session_fixture.rs"]
+mod session_fixture;
+
+fn legacy_conversation(
+    store: &CleanStore,
+    id: &str,
+) -> Result<v1::ProjectConversation, CleanStoreError> {
+    get_payload(
+        &store.connection,
+        "SELECT payload FROM project_conversations WHERE id=?1",
+        id,
+        "project_conversation",
+    )
+}
+fn summary_defaults(
+    store: &CleanStore,
+    c: &v1::ProjectConversation,
+) -> Result<(), CleanStoreError> {
+    let p = store.project(&c.project_id)?;
+    let mut w = store.workspace(&p.workspace_id)?;
+    w.agent_defaults = Some(v1::ProjectAgentDefaults {
+        project_connection_id: "summary-connection".into(),
+        project_model: "current-summary-model".into(),
+        ..Default::default()
+    });
+    store
+        .connection
+        .execute(
+            "UPDATE workspaces SET payload=?1 WHERE id=?2",
+            params![w.encode_to_vec(), w.id],
+        )
+        .map_err(CleanStoreError::Database)?;
+    Ok(())
+}

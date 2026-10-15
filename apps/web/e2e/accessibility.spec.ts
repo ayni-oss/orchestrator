@@ -45,6 +45,8 @@ test("project creation supports keyboard selection and accessible validation", a
  await expect(page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true})).toBeChecked();
  await page.keyboard.press("Escape");
  await expect(page.getByRole("textbox",{name:"Search repositories",exact:true})).toBeHidden();
+ await page.getByRole("dialog").getByRole("button",{name:"Create project",exact:true}).hover();
+ await expectAccessible(page);
  await page.keyboard.press("Escape");
  await expect(page.getByRole("dialog")).toBeHidden();
  await expect(page.getByRole("button",{name:"Create project",exact:true})).toBeFocused();

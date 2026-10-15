@@ -399,6 +399,7 @@ async fn workspace_api_preserves_project_history(
     assert_eq!(child.workspace_id, workspace.id);
     assert_eq!(child.goal, "Ship a bounded improvement");
     let update = v1::UpdateWorkspaceRequest {
+        planner_idle_timeout_seconds: None,
         idempotency_key: "rename-workspace".into(),
         workspace_id: workspace.id.clone(),
         expected_resource_version: workspace.resource_version,

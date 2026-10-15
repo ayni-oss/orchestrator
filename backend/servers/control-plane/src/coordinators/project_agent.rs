@@ -48,6 +48,7 @@ impl ProjectAgentReconciler {
         }
     }
     async fn reconcile_pass(&self) -> Result<(), &'static str> {
+        self.reconcile_sessions().await?;
         // Accepted attempt state, not broker delivery, owns summary eligibility.
         with_store_async(&self.state, CleanStore::queue_project_outcome_summaries)
             .await
@@ -73,6 +74,16 @@ impl ProjectAgentReconciler {
             .await
             .map_err(|_| "project_store_unavailable")?;
         for (_, run) in terminal {
+            if run.session_managed {
+                continue;
+            }
+            if run.state == "cancelled" {
+                let _ = self
+                    .kubernetes
+                    .cancel_project_agent(&job_name(&run.id))
+                    .await;
+                continue;
+            }
             let _ = self
                 .kubernetes
                 .cleanup_project_agent(&job_name(&run.id))
@@ -85,6 +96,9 @@ impl ProjectAgentReconciler {
         conversation: &v1::ProjectConversation,
         run: &v1::ProjectAgentRun,
     ) -> Result<(), &'static str> {
+        if run.session_managed {
+            return self.run_session(conversation, run).await;
+        }
         let name = job_name(&run.id);
         match self
             .kubernetes
@@ -511,6 +525,7 @@ mod tests {
         let conversation = store.create_project_conversation(
             "plain-conversation",
             &v1::CreateProjectConversationRequest {
+                planner_idle_timeout_seconds: None,
                 idempotency_key: "plain-conversation".into(),
                 project_id: project.id,
                 title: "Research before runtime setup".into(),
@@ -619,6 +634,7 @@ mod tests {
         store.update_workspace(
             "workspace-defaults",
             &v1::UpdateWorkspaceRequest {
+                planner_idle_timeout_seconds: None,
                 idempotency_key: "workspace-defaults".into(),
                 workspace_id: workspace.id,
                 expected_resource_version: workspace.resource_version,
@@ -722,3 +738,6 @@ mod tests {
         assert!(prompt.contains("retrieve original archive records"));
     }
 }
+
+#[path = "project_session.rs"]
+mod sessions;

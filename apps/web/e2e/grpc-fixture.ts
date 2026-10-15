@@ -41,7 +41,7 @@ let repository: any = {
 };
 
 const secondRepository = {...repository,id:"repository:2",displayName:"ayni-oss/library",provider:{provider:{$case:"github",github:{...repository.provider.provider.github,repositoryId:"456",name:"library",htmlUrl:"https://github.com/ayni-oss/library"}}}};
-let workspace:any={id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
+let workspace:any={plannerIdleTimeoutSeconds:300,id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
 let project: any = {workspaceId:workspace.id,goal:"Improve the sandbox",id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
 const profile: any = {
   id: profileId,
@@ -289,7 +289,7 @@ grpc.addService(ProjectServiceService, {
   createWorkspace(call:any,callback:any){workspace={...workspace,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds,state:WorkspaceState.WORKSPACE_STATE_ACTIVE,resourceVersion:"1"};callback(null,{workspace});},
   listWorkspaces(_call:any,callback:any){callback(null,{workspaces:[workspace],page});},
   getWorkspace(_call:any,callback:any){callback(null,{workspace});},
-  updateWorkspace(call:any,callback:any){workspace={...workspace,...(call.request.agentDefaults?{agentDefaults:call.request.agentDefaults}:{}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length?call.request.repositoryConnectionIds:workspace.repositoryConnectionIds,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
+  updateWorkspace(call:any,callback:any){workspace={...workspace,...(call.request.plannerIdleTimeoutSeconds===undefined?{}:{plannerIdleTimeoutSeconds:call.request.plannerIdleTimeoutSeconds}),...(call.request.agentDefaults?{agentDefaults:call.request.agentDefaults}:{}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length?call.request.repositoryConnectionIds:workspace.repositoryConnectionIds,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
   archiveWorkspace(_call:any,callback:any){workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
   watchProjects(call:any) { resourceWatch(call, "project", () => [project]); },
   listProjectSummaries(_call:any,callback:any){
@@ -308,8 +308,23 @@ grpc.addService(ProjectServiceService, {
 let conversations:ProjectConversation[]=[];
 let stalePlan=false;
 const proposalTasks=new Map<string,string>();
+function conversationProjection(c:ProjectConversation){return {...c,effectivePlannerIdleTimeoutSeconds:c.plannerIdleTimeoutSeconds??workspace.plannerIdleTimeoutSeconds??300};}
 function changedConversation(c:ProjectConversation){c.updateCursor=String(Number(c.updateCursor)+1);}
 grpc.addService(ProjectConversationServiceService,{
+  updateProjectConversationSettings(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId&&c.projectId===call.request.projectId);
+    if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});
+    if(c.updateCursor!==call.request.expectedUpdateCursor)return callback({code:status.ABORTED,message:"Conversation settings changed. Reload and try again."});
+    if(call.request.inheritWorkspaceTimeout){delete c.plannerIdleTimeoutSeconds;}else{if(![300,86400].includes(call.request.plannerIdleTimeoutSeconds))return callback({code:status.INVALID_ARGUMENT,message:"Choose a supported timeout"});c.plannerIdleTimeoutSeconds=call.request.plannerIdleTimeoutSeconds;}
+    changedConversation(c);callback(null,{conversation:conversationProjection(c)});
+  },
+  cancelProjectAgentRun(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId&&c.projectId===call.request.projectId),run=c?.runs.find(r=>r.id===call.request.runId);
+    if(!c||!run)return callback({code:status.NOT_FOUND,message:"Planner turn not found"});
+    run.state="interrupted";run.failure="Planner turn cancelled by operator";
+    if(c.plannerSession)c.plannerSession={...c.plannerSession,state:"expired",activeRunId:""};
+    changedConversation(c);callback(null,{conversation:conversationProjection(c)});
+  },
   getProjectConversationContext(call:any,callback:any){
     const c=conversations.find(c=>c.id===call.request.conversationId&&c.projectId===call.request.projectId);
     if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});
@@ -325,12 +340,14 @@ grpc.addService(ProjectConversationServiceService,{
   },
   createProjectConversation(call:any,callback:any){const c=ProjectConversation.fromPartial({id:`conversation:${conversations.length+1}`,projectId:call.request.projectId,title:call.request.title,repositoryConnectionIds:call.request.repositoryConnectionIds,updateCursor:"1",createdAt:now});conversations.push(c);callback(null,{conversation:c});},
   listProjectConversations(_call:any,callback:any){callback(null,{conversations:conversations.map(c=>ProjectConversation.fromPartial({id:c.id,projectId:c.projectId,title:c.title,repositoryConnectionIds:c.repositoryConnectionIds,updateCursor:c.updateCursor,createdAt:c.createdAt}))});},
-  getProjectConversation(call:any,callback:any){const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...c,messages:c.messages.slice(-32)}});},
+  getProjectConversation(call:any,callback:any){const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...conversationProjection(c),messages:c.messages.slice(-32)}});},
   sendProjectMessage(call:any,callback:any){
     const c=conversations.find(c=>c.id===call.request.conversationId)!;
     c.messages.push({id:`message:${c.messages.length+1}`,role:"user",content:call.request.content,createdAt:now,runId:""});
     const runId=`run:${c.runs.length+1}`;
-    c.runs.push({id:runId,state:"completed",model:project.agentDefaults.projectModel,connectionId:project.agentDefaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
+    const generation=c.plannerSession?.state==="idle"?c.plannerSession.generation:String(Number(c.plannerSession?.generation??0)+1);
+    c.plannerSession={sessionId:`session:${c.id}`,generation,state:"idle",activeRunId:"",lastActivityAt:now,idleExpiresAt:new Date(now.getTime()+(c.plannerIdleTimeoutSeconds??workspace.plannerIdleTimeoutSeconds??300)*1000)};
+    c.runs.push({sessionId:c.plannerSession.sessionId,sessionGeneration:generation,sessionTurnSequence:String(c.runs.length+1),sessionManaged:true,id:runId,state:"completed",model:project.agentDefaults.projectModel,connectionId:project.agentDefaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
     c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"I read the repository instructions and implementation. Review the complete task plan below.",createdAt:now,runId});
     c.proposals.push({id:`proposal:${c.proposals.length+1}`,runId,state:"pending",action:"create_task",targetTaskId:"",taskId:"",attemptId:"",failure:"",request:{projectId:project.id,repositoryConnectionId:c.repositoryConnectionIds[0]!,repositoryRevision:revision,runtimeProfileId:profileId,connectionId:project.agentDefaults.codingConnectionId,agent:{provider:"openai",agent:"coding-agent",model:call.request.content.includes("model gpt-5.6-luna")?"gpt-5.6-luna":project.agentDefaults.codingModel},request:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],codingTurns:24,changeConstraints:{protectedPaths:["policy.toml"],allowTestEdits:true},deadline:{seconds:"3600",nanos:0}}});
     c.plan??={id:`plan:${c.id}`,versions:[]};
@@ -422,6 +439,10 @@ const health = createServer((request, response) => {
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
    if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();stalePlan=false;}
+   if(url.pathname==="/planner-queued")for(const c of conversations){c.plannerSession=undefined;c.runs.push(ProjectConversation.fromPartial({runs:[{id:"run:queued",state:"queued",model:"gpt-5.6-sol",connectionId:"connection:1",createdAt:now}]}).runs[0]!);changedConversation(c);}
+   if(url.pathname==="/archive-workspace")workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED};
+   if(url.pathname==="/expire-planner")for(const c of conversations){if(c.plannerSession)c.plannerSession={...c.plannerSession,state:"expired",activeRunId:""};changedConversation(c);}
+   if(url.pathname==="/planner-active")for(const c of conversations){const run=c.runs.at(-1);if(run&&c.plannerSession){run.state="running";c.plannerSession={...c.plannerSession,state:"active",activeRunId:run.id};changedConversation(c);}}
    if(url.pathname==="/long-history")for(const c of conversations){c.messages=Array.from({length:75},(_,i)=>({id:`message:${i+1}`,role:"user",content:i===0?"Original compatibility constraint: preserve legacy API behavior.":`Later discussion ${i+1}`,createdAt:now,runId:""}));changedConversation(c);}
    if(url.pathname==="/stale-plan")stalePlan=true;
    if(url.pathname==="/new-plan-version")for(const c of conversations){
@@ -433,7 +454,7 @@ const health = createServer((request, response) => {
      changedConversation(c);
    }
    if(url.pathname==="/restart-conversations")conversations=conversations.map(c=>ProjectConversation.decode(ProjectConversation.encode(c).finish()));
-   if (url.pathname === "/reset-project") workspace={id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
+   if (url.pathname === "/reset-project") workspace={plannerIdleTimeoutSeconds:300,id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
    if (url.pathname === "/reset-project") project = {workspaceId:workspace.id,goal:"Improve the sandbox",id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
    certificateFixture(url.pathname);
    connectionFixture(url);

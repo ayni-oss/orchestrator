@@ -1,7 +1,7 @@
 //! Durable project conversations, approval receipts and serialized research runs.
 use super::{
     CleanStore, CleanStoreError, Connection, Digest, Message, OptionalExtension, Sha256, decode,
-    get_payload, is_terminal_attempt, params, resource_id, timestamp, unix_seconds, v1,
+    get_payload, params, resource_id, timestamp, unix_seconds, v1,
 };
 use ayni_orchestrator_runtime::project_agent::{
     ProjectAgentRequest, ProjectAgentResult, ResearchProposal,
@@ -27,10 +27,17 @@ impl CleanStore {
             let conversation: v1::ProjectConversation = decode(&payload)?;
             validate_conversation_index(&conversation, &id, &project, cursor, payload.len())?;
             validate_conversation_runs(&conversation)?;
+            if conversation
+                .planner_idle_timeout_seconds
+                .is_some_and(|timeout| super::project_sessions::idle_timeout(timeout).is_err())
+            {
+                return Err(CleanStoreError::CorruptState);
+            }
             super::project_plans::validate(&conversation)?;
             self.validate_project_context(&conversation)?;
         }
-        self.validate_project_agent_requests()
+        self.validate_project_agent_requests()?;
+        self.validate_planner_sessions()
     }
     fn validate_project_agent_requests(&self) -> Result<(), CleanStoreError> {
         let mut requests = self
@@ -99,12 +106,14 @@ impl CleanStore {
         &self,
         id: &str,
     ) -> Result<v1::ProjectConversation, CleanStoreError> {
-        get_payload(
+        let mut c: v1::ProjectConversation = get_payload(
             &self.connection,
             "SELECT payload FROM project_conversations WHERE id=?1",
             id,
             "project_conversation",
-        )
+        )?;
+        self.conversation_session_projection(&mut c)?;
+        Ok(c)
     }
     pub(crate) fn list_project_conversations(
         &self,
@@ -119,6 +128,7 @@ impl CleanStore {
         while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
             let payload: Vec<u8> = row.get(0).map_err(CleanStoreError::Database)?;
             let mut conversation: v1::ProjectConversation = decode(&payload)?;
+            self.conversation_session_projection(&mut conversation)?;
             conversation.messages.clear();
             conversation.runs.clear();
             conversation.proposals.clear();
@@ -147,6 +157,7 @@ impl CleanStore {
         conversation: &mut v1::ProjectConversation,
     ) -> Result<(), CleanStoreError> {
         let mut next = conversation.clone();
+        self.conversation_session_projection(&mut next)?;
         next.update_cursor = next
             .update_cursor
             .checked_add(1)
@@ -225,6 +236,10 @@ impl CleanStore {
             id: resource_id("conversation"),
             project_id: request.project_id.clone(),
             title: request.title.clone(),
+            planner_idle_timeout_seconds: request
+                .planner_idle_timeout_seconds
+                .map(super::project_sessions::idle_timeout)
+                .transpose()?,
             repository_connection_ids: repositories,
             created_at: Some(timestamp(unix_seconds()?)),
             ..Default::default()
@@ -251,33 +266,37 @@ impl CleanStore {
         if request.content.trim().is_empty() || request.content.len() > 16384 {
             return Err(CleanStoreError::BoundExceeded);
         }
-        let mut c = self.project_conversation(&request.conversation_id)?;
-        for id in &c.repository_connection_ids {
-            self.project_member(&c.project_id, id)?;
-        }
-        if c.runs
-            .iter()
-            .any(|r| matches!(r.state.as_str(), "queued" | "running"))
-        {
-            return Err(CleanStoreError::InvalidTransition);
-        }
-        c.messages.push(v1::ProjectMessage {
-            id: resource_id("message"),
-            role: "user".into(),
-            content: request.content.clone(),
-            created_at: Some(timestamp(unix_seconds()?)),
-            run_id: run.id.clone(),
-        });
-        c.runs.push(run);
         self.connection
             .execute_batch("BEGIN IMMEDIATE")
             .map_err(CleanStoreError::Database)?;
         let result = (|| {
+            if let Some(c) = self.replay_conversation(key, request)? {
+                return Ok(c);
+            }
+            let mut c = self.project_conversation(&request.conversation_id)?;
+            for id in &c.repository_connection_ids {
+                self.project_member(&c.project_id, id)?;
+            }
+            if c.runs
+                .iter()
+                .any(|r| matches!(r.state.as_str(), "queued" | "running"))
+            {
+                return Err(CleanStoreError::InvalidTransition);
+            }
+            c.messages.push(v1::ProjectMessage {
+                id: resource_id("message"),
+                role: "user".into(),
+                content: request.content.clone(),
+                created_at: Some(timestamp(unix_seconds()?)),
+                run_id: run.id.clone(),
+            });
+            c.runs.push(run);
+            self.note_planner_message(&c, unix_seconds()?)?;
             self.save_conversation(&mut c)?;
-            self.remember_conversation(key, request, &c.id)
+            self.remember_conversation(key, request, &c.id)?;
+            Ok(c)
         })();
-        finish_transaction(&self.connection, result)?;
-        Ok(c)
+        finish_transaction(&self.connection, result)
     }
     pub(crate) fn terminal_project_runs(
         &self,
@@ -302,121 +321,58 @@ impl CleanStore {
         }
         Ok(runs)
     }
-    pub(crate) fn queue_project_outcome_summaries(&mut self) -> Result<(), CleanStoreError> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT payload FROM project_conversations ORDER BY id LIMIT 1000")
-            .map_err(CleanStoreError::Database)?;
-        let payloads = statement
-            .query_map([], |r| r.get::<_, Vec<u8>>(0))
-            .map_err(CleanStoreError::Database)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(CleanStoreError::Database)?;
-        drop(statement);
-        for payload in payloads {
-            let mut c: v1::ProjectConversation = decode(&payload)?;
-            if c.runs
-                .iter()
-                .any(|r| matches!(r.state.as_str(), "queued" | "running"))
-            {
-                continue;
-            }
-            let proposals = c.proposals.clone();
-            for proposal in proposals
-                .into_iter()
-                .filter(|p| p.state == "approved" && !p.attempt_id.is_empty())
-            {
-                let attempt = self.development_attempt(&proposal.attempt_id)?;
-                if !is_terminal_attempt(attempt.state)
-                    && attempt.state != v1::DevelopmentAttemptState::WaitingForInput as i32
-                {
-                    continue;
-                }
-                let outcome = format!(
-                    "{}:{:x}",
-                    attempt.state,
-                    Sha256::digest(
-                        format!("{:?}:{:?}", attempt.result, attempt.requested_input).as_bytes()
-                    )
-                );
-                let exists=self.connection.query_row("SELECT 1 FROM project_outcome_summaries WHERE attempt_id=?1 AND outcome=?2",params![attempt.id,outcome],|r|r.get::<_,i32>(0)).optional().map_err(CleanStoreError::Database)?.is_some();
-                if exists {
-                    continue;
-                }
-                let original = c
-                    .runs
-                    .iter()
-                    .find(|r| r.id == proposal.run_id)
-                    .ok_or(CleanStoreError::CorruptState)?
-                    .clone();
-                let mut run = original;
-                run.id = resource_id("run");
-                run.purpose = "summary".into();
-                run.state = "queued".into();
-                run.model_calls = 0;
-                run.failure.clear();
-                run.created_at = Some(timestamp(unix_seconds()?));
-                let safe_outcome =
-                    super::project_context::safe_outcome(&proposal.task_id, &attempt);
-                let request = ayni_orchestrator_runtime::project_agent::ProjectAgentRequest {
-                    run_id: run.id.clone(),
-                    project_id: c.project_id.clone(),
-                    model: run.model.clone(),
-                    history: String::new(),
-                    conversation_context: serde_json::Value::Null,
-                    repositories: Vec::new(),
-                    context: crate::truncate_utf8(
-                        &format!(
-                            "Summarize the accepted outcome. Explicitly distinguish execution, quality and publication. Never propose or initiate actions. {safe_outcome}"
-                        ),
-                        65536,
-                    ),
-                    max_model_calls: 1,
-                    deadline_seconds: 600,
-                };
-                self.connection
-                    .execute_batch("BEGIN IMMEDIATE")
-                    .map_err(CleanStoreError::Database)?;
-                let result = (|| {
-                    self.save_project_run_request(&run.id, &request)?;
-                    self.connection.execute("INSERT INTO project_outcome_summaries(attempt_id,outcome,conversation_id) VALUES(?1,?2,?3)",params![attempt.id,outcome,c.id]).map_err(CleanStoreError::Database)?;
-                    super::project_context::archive_outcome(
-                        &self.connection,
-                        &c,
-                        &attempt,
-                        &safe_outcome,
-                    )?;
-                    c.runs.push(run);
-                    self.save_conversation(&mut c)
-                })();
-                finish_transaction(&self.connection, result)?;
-                break;
-            }
-        }
-        Ok(())
-    }
     pub(crate) fn queued_project_runs(
         &self,
     ) -> Result<Vec<(v1::ProjectConversation, v1::ProjectAgentRun)>, CleanStoreError> {
         let mut statement = self
             .connection
-            .prepare("SELECT payload FROM project_conversations ORDER BY id LIMIT 1000")
+            .prepare("SELECT payload FROM project_conversations ORDER BY id")
             .map_err(CleanStoreError::Database)?;
-        let payloads = statement
-            .query_map([], |r| r.get::<_, Vec<u8>>(0))
-            .map_err(CleanStoreError::Database)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(CleanStoreError::Database)?;
+        let mut rows = statement.query([]).map_err(CleanStoreError::Database)?;
         let mut runs = Vec::new();
-        for payload in payloads {
-            let c: v1::ProjectConversation = decode(&payload)?;
+        while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
+            let payload: Vec<u8> = row.get(0).map_err(CleanStoreError::Database)?;
+            let mut c: v1::ProjectConversation = decode(&payload)?;
+            if !c
+                .runs
+                .iter()
+                .any(|r| matches!(r.state.as_str(), "queued" | "running"))
+            {
+                continue;
+            }
+            self.conversation_session_projection(&mut c)?;
             for r in &c.runs {
                 if matches!(r.state.as_str(), "queued" | "running") {
                     runs.push((c.clone(), r.clone()));
+                    if runs.len() >= 128 {
+                        return Ok(runs);
+                    }
                 }
             }
         }
         Ok(runs)
+    }
+    fn conversation_for_active_run(
+        &self,
+        id: &str,
+    ) -> Result<Option<v1::ProjectConversation>, CleanStoreError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT payload FROM project_conversations ORDER BY id")
+            .map_err(CleanStoreError::Database)?;
+        let mut rows = statement.query([]).map_err(CleanStoreError::Database)?;
+        while let Some(row) = rows.next().map_err(CleanStoreError::Database)? {
+            let bytes: Vec<u8> = row.get(0).map_err(CleanStoreError::Database)?;
+            let mut c: v1::ProjectConversation = decode(&bytes)?;
+            if c.runs
+                .iter()
+                .any(|r| r.id == id && matches!(r.state.as_str(), "queued" | "running"))
+            {
+                self.conversation_session_projection(&mut c)?;
+                return Ok(Some(c));
+            }
+        }
+        Ok(None)
     }
     pub(crate) fn mark_project_run_running(&mut self, id: &str) -> Result<(), CleanStoreError> {
         self.update_project_run(id, "running", "")
@@ -434,31 +390,40 @@ impl CleanStore {
         state: &str,
         reason: &str,
     ) -> Result<(), CleanStoreError> {
-        let Some((mut c, _)) = self
-            .queued_project_runs()?
-            .into_iter()
-            .find(|(_, r)| r.id == id)
-        else {
-            return Ok(());
-        };
-        let run = c
-            .runs
-            .iter_mut()
-            .find(|r| r.id == id)
-            .ok_or(CleanStoreError::CorruptState)?;
-        run.state = state.into();
-        run.failure = crate::truncate_utf8(reason, 512);
-        self.save_conversation(&mut c)
+        self.connection
+            .execute_batch("SAVEPOINT project_run_transition")
+            .map_err(CleanStoreError::Database)?;
+        let result = (|| {
+            let Some(mut c) = self.conversation_for_active_run(id)? else {
+                return Ok(());
+            };
+            let run = c
+                .runs
+                .iter_mut()
+                .find(|r| r.id == id)
+                .ok_or(CleanStoreError::CorruptState)?;
+            run.state = state.into();
+            run.failure = crate::truncate_utf8(reason, 512);
+            self.save_conversation(&mut c)
+        })();
+        match result {
+            Ok(()) => self
+                .connection
+                .execute_batch("RELEASE project_run_transition")
+                .map_err(CleanStoreError::Database),
+            Err(e) => {
+                let _ = self.connection.execute_batch(
+                    "ROLLBACK TO project_run_transition; RELEASE project_run_transition",
+                );
+                Err(e)
+            }
+        }
     }
     pub(crate) fn complete_project_run(
         &mut self,
         result: ProjectAgentResult,
     ) -> Result<(), CleanStoreError> {
-        let Some((mut c, _)) = self
-            .queued_project_runs()?
-            .into_iter()
-            .find(|(_, r)| r.id == result.run_id)
-        else {
+        let Some(mut c) = self.conversation_for_active_run(&result.run_id)? else {
             return Ok(());
         };
         let researched = self.project_run_request(&result.run_id)?;
@@ -810,7 +775,7 @@ pub(super) fn validate_conversation_runs(
         if !ids.insert(run.id.clone())
             || !matches!(
                 run.state.as_str(),
-                "queued" | "running" | "completed" | "interrupted" | "failed"
+                "queued" | "running" | "completed" | "interrupted" | "failed" | "cancelled"
             )
         {
             return Err(CleanStoreError::CorruptState);
@@ -893,13 +858,14 @@ fn proposal_request(
         connection_id: p.coding_connection_id.clone(),
     })
 }
-fn finish_transaction(
+pub(super) fn finish_transaction<T>(
     connection: &Connection,
-    result: Result<(), CleanStoreError>,
-) -> Result<(), CleanStoreError> {
+    result: Result<T, CleanStoreError>,
+) -> Result<T, CleanStoreError> {
     match result {
-        Ok(()) => connection
+        Ok(value) => connection
             .execute_batch("COMMIT")
+            .map(|()| value)
             .map_err(CleanStoreError::Database),
         Err(error) => {
             let _ = connection.execute_batch("ROLLBACK");

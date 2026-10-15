@@ -3,7 +3,7 @@ import {beforeEach,describe,expect,it,vi} from "vitest";
 const metadata={id:"conversation:1",projectId:"project:1",title:"Research",repositoryConnectionIds:["repository:1"],updateCursor:"4",createdAt:"2026-10-13T00:00:00Z",messages:[],runs:[],proposals:[],plan:{id:"plan:1",versions:[{version:"1",state:"superseded",proposalIds:["proposal:1"]},{version:"2",state:"pending",proposalIds:["proposal:2"]}]}};
 const workspace={id:"workspace:1",displayName:"Workspace",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1",agentDefaults:{projectConnectionId:"workspace-connection",projectModel:"workspace-model",codingConnectionId:"workspace-connection",codingModel:"workspace-model"}};
 const project={workspaceId:"workspace:1",goal:"Complete work",id:"project:1",displayName:"Project",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
-const bff=vi.hoisted(()=>({getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
+const bff=vi.hoisted(()=>({getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),updateProjectConversationSettings:vi.fn(),cancelProjectAgentRun:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[]}));
 import {load,actions} from "../routes/projects/[projectId]/+page.server.js";
@@ -14,7 +14,7 @@ function event(fields:Record<string,string>={}){
 }
 describe("project agent operator routes",()=>{
   beforeEach(()=>{
-    vi.clearAllMocks();bff.getProject.mockResolvedValue(project);bff.getWorkspace.mockResolvedValue(workspace);bff.getRepositoryConnection.mockResolvedValue({id:"repository:1"});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[]});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page:{nextPageToken:""}});bff.listProviderModels.mockResolvedValue({models:[],provider:"openai"});bff.listConnections.mockResolvedValue([]);bff.listProjectConversations.mockResolvedValue([metadata]);bff.getProjectConversation.mockResolvedValue({...metadata,messages:[{id:"message:1",role:"assistant",content:"Full conversation history",createdAt:metadata.createdAt,runId:"run:1"}],proposals:[{id:"proposal:1",action:"create_task",state:"pending"}]});
+    vi.clearAllMocks();bff.getProject.mockResolvedValue(project);bff.getWorkspace.mockResolvedValue(workspace);bff.getRepositoryConnection.mockResolvedValue({id:"repository:1"});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[]});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page:{nextPageToken:""}});bff.listProviderModels.mockResolvedValue({models:[],provider:"openai"});bff.listConnections.mockResolvedValue([]);bff.listProjectConversations.mockResolvedValue([metadata]);bff.getProjectConversation.mockResolvedValue({...metadata,runs:[{id:"run:1",state:"running"}],messages:[{id:"message:1",role:"assistant",content:"Full conversation history",createdAt:metadata.createdAt,runId:"run:1"}],proposals:[{id:"proposal:1",action:"create_task",state:"pending"}]});
   });
   it("loads selected conversation details separately from metadata-only history",async()=>{
     const result=await load(event()) as {conversation?:{messages:Array<{content:string}>}};
@@ -31,6 +31,28 @@ describe("project agent operator routes",()=>{
     await actions.sendMessage!(event({conversationId:"conversation:1",content:"Requested work"}));
     await actions.decideProposal!(event({conversationId:"conversation:1",proposalId:"proposal:1",decision:"approve"}));
     for(const method of [bff.updateProject,bff.sendProjectMessage,bff.decideProjectProposal])expect(method.mock.calls[0]?.[1]).toMatchObject({deadlineMs:30_000});
+  });
+  it("saves explicit planner presets and inheritance with scope and submitted cursor",async()=>{
+    await actions.plannerSettings!(event({conversationId:"conversation:1",plannerIdleTimeoutSeconds:"86400",expectedUpdateCursor:"4"}));
+    expect(bff.updateProjectConversationSettings).toHaveBeenCalledWith(expect.objectContaining({projectId:"project:1",conversationId:"conversation:1",expectedUpdateCursor:"4",plannerIdleTimeoutSeconds:86400,inheritWorkspaceTimeout:false}),expect.objectContaining({deadlineMs:30000}));
+    await actions.plannerSettings!(event({conversationId:"conversation:1",plannerIdleTimeoutSeconds:"inherit",expectedUpdateCursor:"4"}));
+    expect(bff.updateProjectConversationSettings.mock.calls[1]?.[0]).toMatchObject({inheritWorkspaceTimeout:true});expect(bff.updateProjectConversationSettings.mock.calls[1]?.[0]).not.toHaveProperty("plannerIdleTimeoutSeconds");
+  });
+  it.each(["301","0","NaN","3600"])("rejects unsupported planner timeout %s",async timeout=>{
+    expect(await actions.plannerSettings!(event({conversationId:"conversation:1",plannerIdleTimeoutSeconds:timeout,expectedUpdateCursor:"4"}))).toMatchObject({status:400});expect(bff.updateProjectConversationSettings).not.toHaveBeenCalled();
+  });
+  it("preserves stale settings errors and cancels only turns within the selected project conversation",async()=>{
+    bff.updateProjectConversationSettings.mockRejectedValueOnce(new BffError({status:409,reason:"stale_version",message:"Reload conversation settings",retryable:false}));
+    expect(await actions.plannerSettings!(event({conversationId:"conversation:1",plannerIdleTimeoutSeconds:"300",expectedUpdateCursor:"3"}))).toMatchObject({status:409});
+    expect(await actions.cancelPlannerTurn!(event({conversationId:"conversation:1",runId:"run:other"}))).toMatchObject({status:400});expect(bff.cancelProjectAgentRun).not.toHaveBeenCalled();
+    await actions.cancelPlannerTurn!(event({conversationId:"conversation:1",runId:"run:1"}));expect(bff.cancelProjectAgentRun).toHaveBeenCalledWith(expect.objectContaining({projectId:"project:1",conversationId:"conversation:1",runId:"run:1"}),expect.objectContaining({deadlineMs:30000}));
+    bff.getProjectConversation.mockResolvedValueOnce({...metadata,projectId:"project:other"});expect(await actions.cancelPlannerTurn!(event({conversationId:"conversation:1",runId:"run:1"}))).toMatchObject({status:400});expect(bff.cancelProjectAgentRun).toHaveBeenCalledTimes(1);
+  });
+  it.each(["queued","running"])("cancels a retained %s turn without requiring a live session or active workspace",async state=>{
+    bff.getWorkspace.mockResolvedValue({...workspace,state:"archived"});
+    bff.getProjectConversation.mockResolvedValueOnce({...metadata,runs:[{id:"run:1",state}]});
+    expect(await actions.cancelPlannerTurn!(event({conversationId:"conversation:1",runId:"run:1"}))).toMatchObject({success:expect.stringContaining("cancellation requested")});
+    expect(bff.cancelProjectAgentRun).toHaveBeenCalledWith(expect.objectContaining({runId:"run:1",projectId:"project:1"}),expect.anything());
   });
   it("binds decisions to the submitted exact plan version instead of silently selecting the newest",async()=>{
     await actions.decidePlan!(event({conversationId:"conversation:1",planId:"plan:1",version:"1",decision:"approve"}));

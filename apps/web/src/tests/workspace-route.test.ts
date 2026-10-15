@@ -18,6 +18,10 @@ describe("workspace operator routes",()=>{
     await actions.update!(event({displayName:"Renamed",repositoryConnectionIds:["repository:1","repository:outside"]}));
     expect(bff.updateWorkspace).toHaveBeenCalledWith(expect.objectContaining({workspaceId:workspace.id,displayName:"Renamed",expectedResourceVersion:"3",repositoryConnectionIds:["repository:1","repository:outside"]}),expect.objectContaining({deadlineMs:30000}));
   });
+  it("sets only the supported workspace timeout presets",async()=>{
+    await actions.update!(event({displayName:"Shared",repositoryConnectionIds:["repository:1"],plannerIdleTimeoutSeconds:"86400"}));expect(bff.updateWorkspace).toHaveBeenCalledWith(expect.objectContaining({plannerIdleTimeoutSeconds:86400}),expect.anything());
+    bff.updateWorkspace.mockClear();expect(await actions.update!(event({displayName:"Shared",repositoryConnectionIds:["repository:1"],plannerIdleTimeoutSeconds:"3600"}))).toMatchObject({status:400});expect(bff.updateWorkspace).not.toHaveBeenCalled();
+  });
   it("rejects empty membership before dispatch",async()=>{
     expect(await actions.update!(event({displayName:"Shared"}))).toMatchObject({status:400});expect(bff.updateWorkspace).not.toHaveBeenCalled();
   });

@@ -225,7 +225,7 @@ mod tests {
         let mut store = CleanStore::open(&path, 3)?;
         store.save_connection(&connection())?;
         let retained = store.get_connection("registry")?;
-        store.connection.execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; UPDATE clean_schema SET version=17;")?;
+        store.connection.execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; DROP TABLE lifecycle_outbox; DROP TABLE lifecycle_journal; UPDATE clean_schema SET version=17;")?;
         drop(store);
         let mut store = CleanStore::open(&path, 3)?;
         assert_eq!(store.schema_version()?, SCHEMA_VERSION);

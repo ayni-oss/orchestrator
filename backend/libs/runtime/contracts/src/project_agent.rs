@@ -138,3 +138,59 @@ mod tests {
         ));
     }
 }
+
+/// One immutable dispatch into a disposable live planner generation.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectSessionTurn {
+    pub session_id: String,
+    pub generation: u64,
+    pub turn_sequence: u64,
+    pub pod_uid: String,
+    pub deadline_at_unix_seconds: u64,
+    pub request: ProjectAgentRequest,
+}
+/// Source credentials travel only to the trusted checkout container over stdin.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectSessionSubmission {
+    pub turn: ProjectSessionTurn,
+    pub source_tokens: std::collections::BTreeMap<String, String>,
+}
+/// Local, bounded receipt accepted only against its frozen turn and Pod identity.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectSessionReceipt {
+    pub session_id: String,
+    pub generation: u64,
+    pub turn_sequence: u64,
+    pub pod_uid: String,
+    pub run_id: String,
+    pub request_digest: String,
+    pub result: Option<ProjectAgentResult>,
+    pub failure: String,
+}
+impl ProjectSessionTurn {
+    /// Hash the complete frozen turn independently from refreshed source credentials.
+    /// # Errors
+    /// Returns an encoding error for an invalid request value.
+    pub fn request_digest(&self) -> Result<String, serde_json::Error> {
+        use sha2::{Digest, Sha256};
+        Ok(format!(
+            "sha256:{:x}",
+            Sha256::digest(serde_json::to_vec(self)?)
+        ))
+    }
+    /// Compare every receipt fence without relying on container logs.
+    #[must_use]
+    pub fn matches_receipt(&self, receipt: &ProjectSessionReceipt) -> bool {
+        receipt.session_id == self.session_id
+            && receipt.generation == self.generation
+            && receipt.turn_sequence == self.turn_sequence
+            && receipt.pod_uid == self.pod_uid
+            && receipt.run_id == self.request.run_id
+            && self
+                .request_digest()
+                .is_ok_and(|digest| digest == receipt.request_digest)
+    }
+}

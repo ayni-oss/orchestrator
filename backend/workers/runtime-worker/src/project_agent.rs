@@ -327,11 +327,26 @@ impl AgentHook for Budget {
 /// # Errors
 /// Rejects malformed source identity, expired deadlines and failed immutable checkouts.
 pub async fn checkout(request: &ProjectAgentRequest) -> io::Result<()> {
+    checkout_at(request, Path::new("/workspace"), None).await
+}
+pub(crate) async fn checkout_at(
+    request: &ProjectAgentRequest,
+    root: &Path,
+    tokens: Option<&std::collections::BTreeMap<String, String>>,
+) -> io::Result<()> {
     for repo in &request.repositories {
-        let token = read_bounded(
-            &Path::new("/credentials").join(research_key(&repo.id)),
-            16384,
-        )?;
+        let token = if let Some(tokens) = tokens {
+            tokens
+                .get(&research_key(&repo.id))
+                .ok_or_else(|| io::Error::other("source credential missing"))?
+                .as_bytes()
+                .to_vec()
+        } else {
+            read_bounded(
+                &Path::new("/credentials").join(research_key(&repo.id)),
+                16384,
+            )?
+        };
         let execution = ExecutionRequest {
             repository_url: repo.repository_url.clone(),
             revision: repo.revision.clone(),
@@ -339,7 +354,7 @@ pub async fn checkout(request: &ProjectAgentRequest) -> io::Result<()> {
         };
         crate::operations::runtime::checkout_with_deadline(
             &execution,
-            &Path::new("/workspace").join(research_key(&repo.id)),
+            &root.join(research_key(&repo.id)),
             Some(
                 std::str::from_utf8(&token)
                     .map_err(io::Error::other)?
@@ -348,11 +363,7 @@ pub async fn checkout(request: &ProjectAgentRequest) -> io::Result<()> {
             std::time::Duration::from_secs(request.deadline_seconds.min(600)),
         )
         .await?;
-        fs::remove_dir_all(
-            Path::new("/workspace")
-                .join(research_key(&repo.id))
-                .join(".git"),
-        )?;
+        fs::remove_dir_all(root.join(research_key(&repo.id)).join(".git"))?;
     }
     Ok(())
 }
@@ -381,6 +392,12 @@ fn repository_instructions(context: &Context) -> io::Result<String> {
 /// # Errors
 /// Returns only safe failure codes through the worker supervisor.
 pub async fn run(request: ProjectAgentRequest) -> io::Result<ProjectAgentResult> {
+    run_at(request, Path::new("/workspace")).await
+}
+pub(crate) async fn run_at(
+    request: ProjectAgentRequest,
+    root: &Path,
+) -> io::Result<ProjectAgentResult> {
     if request.max_model_calls == 0
         || request.max_model_calls > 128
         || request.deadline_seconds == 0
@@ -399,7 +416,7 @@ pub async fn run(request: ProjectAgentRequest) -> io::Result<ProjectAgentResult>
     .map_err(io::Error::other)?;
     let context = Context {
         request: Arc::new(request),
-        root: PathBuf::from("/workspace"),
+        root: root.to_path_buf(),
         proposals: Arc::default(),
     };
     let budget = Budget {

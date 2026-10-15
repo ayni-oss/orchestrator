@@ -4,6 +4,7 @@
   import type { PageData } from "../../routes/projects/[projectId]/$types";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { enhance } from "$lib/forms.js";
+  import PlannerSession from "$lib/components/planner-session.svelte";
   import ConversationContext from "$lib/components/conversation-context.svelte";
   import ProjectProposal from "$lib/components/project-proposal.svelte";
   import ProjectPlanReview from "$lib/components/project-plan-review.svelte";
@@ -53,6 +54,7 @@
   {#if conversation}
     <InformationCard title={conversation.title} status={running?"running":""}>
       <p class="text-sm text-muted-foreground">Researching {conversation.repositoryConnectionIds.map(name).join(", ")}. Tasks are submitted only after your approval.</p>
+      {#key conversation.id}<PlannerSession {data} />{/key}
       {#key conversation.id}<ConversationContext projectId={conversation.projectId} conversationId={conversation.id} updateCursor={conversation.updateCursor} />{/key}
       <div class="space-y-4" aria-label="Conversation messages" aria-live="polite" aria-relevant="additions text">
         {#each conversation.messages as message (message.id)}

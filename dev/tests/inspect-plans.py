@@ -11,7 +11,7 @@ def connect(path):
 
 
 baseline, observed = map(connect, sys.argv[1:3])
-assert observed.execute("SELECT version FROM clean_schema WHERE component='control_plane'").fetchone() == (22,), 'plan schema upgrade missing'
+assert observed.execute("SELECT version FROM clean_schema WHERE component='control_plane'").fetchone() == (23,), 'plan schema upgrade missing'
 for table in ('development_tasks', 'development_attempts', 'durable_actions'):
     expected = baseline.execute(f'SELECT * FROM {table} ORDER BY 1,2').fetchall()
     actual = observed.execute(f'SELECT * FROM {table} ORDER BY 1,2').fetchall()
@@ -21,4 +21,4 @@ actual = observed.execute('SELECT action_key,digest,conversation_id FROM project
 for receipt in expected:
     assert receipt in actual, 'historical conversation receipt changed'
 assert observed.execute('PRAGMA integrity_check').fetchone() == ('ok',), 'SQLite integrity check failed'
-print('Schema 22, immutable admitted task/attempt rows and retained action receipts verified.')
+print('Schema 23, immutable admitted task/attempt rows and retained action receipts verified.')

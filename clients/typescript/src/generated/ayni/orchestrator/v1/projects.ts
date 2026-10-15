@@ -243,6 +243,7 @@ export interface Workspace {
   updatedAt?: Date | undefined;
   resourceVersion: string;
   agentDefaults?: ProjectAgentDefaults | undefined;
+  plannerIdleTimeoutSeconds: number;
 }
 
 export interface CreateWorkspaceRequest {
@@ -250,6 +251,7 @@ export interface CreateWorkspaceRequest {
   displayName: string;
   repositoryConnectionIds: string[];
   agentDefaults?: ProjectAgentDefaults | undefined;
+  plannerIdleTimeoutSeconds?: number | undefined;
 }
 
 export interface CreateWorkspaceResponse {
@@ -282,6 +284,7 @@ export interface UpdateWorkspaceRequest {
   /** Empty preserves membership, matching the compatibility Project API. */
   repositoryConnectionIds: string[];
   agentDefaults?: ProjectAgentDefaults | undefined;
+  plannerIdleTimeoutSeconds?: number | undefined;
 }
 
 export interface UpdateWorkspaceResponse {
@@ -2332,6 +2335,7 @@ function createBaseWorkspace(): Workspace {
     updatedAt: undefined,
     resourceVersion: "0",
     agentDefaults: undefined,
+    plannerIdleTimeoutSeconds: 0,
   };
 }
 
@@ -2360,6 +2364,9 @@ export const Workspace: MessageFns<Workspace> = {
     }
     if (message.agentDefaults !== undefined) {
       ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(66).fork()).join();
+    }
+    if (message.plannerIdleTimeoutSeconds !== 0) {
+      writer.uint32(72).uint32(message.plannerIdleTimeoutSeconds);
     }
     return writer;
   },
@@ -2441,6 +2448,14 @@ export const Workspace: MessageFns<Workspace> = {
             message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
             continue;
           }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.plannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2487,6 +2502,11 @@ export const Workspace: MessageFns<Workspace> = {
         : isSet(object.agent_defaults)
         ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
         : undefined,
+      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
+        : isSet(object.planner_idle_timeout_seconds)
+        ? globalThis.Number(object.planner_idle_timeout_seconds)
+        : 0,
     };
   },
 
@@ -2516,6 +2536,9 @@ export const Workspace: MessageFns<Workspace> = {
     if (message.agentDefaults !== undefined) {
       obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
     }
+    if (message.plannerIdleTimeoutSeconds !== 0) {
+      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
+    }
     return obj;
   },
 
@@ -2534,12 +2557,19 @@ export const Workspace: MessageFns<Workspace> = {
     message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
       ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
       : undefined;
+    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? 0;
     return message;
   },
 };
 
 function createBaseCreateWorkspaceRequest(): CreateWorkspaceRequest {
-  return { idempotencyKey: "", displayName: "", repositoryConnectionIds: [], agentDefaults: undefined };
+  return {
+    idempotencyKey: "",
+    displayName: "",
+    repositoryConnectionIds: [],
+    agentDefaults: undefined,
+    plannerIdleTimeoutSeconds: undefined,
+  };
 }
 
 export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
@@ -2555,6 +2585,9 @@ export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
     }
     if (message.agentDefaults !== undefined) {
       ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(34).fork()).join();
+    }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      writer.uint32(40).uint32(message.plannerIdleTimeoutSeconds);
     }
     return writer;
   },
@@ -2604,6 +2637,14 @@ export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
             message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
             continue;
           }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.plannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2638,6 +2679,11 @@ export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
         : isSet(object.agent_defaults)
         ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
         : undefined,
+      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
+        : isSet(object.planner_idle_timeout_seconds)
+        ? globalThis.Number(object.planner_idle_timeout_seconds)
+        : undefined,
     };
   },
 
@@ -2655,6 +2701,9 @@ export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
     if (message.agentDefaults !== undefined) {
       obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
     }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
+    }
     return obj;
   },
 
@@ -2669,6 +2718,7 @@ export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
     message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
       ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
       : undefined;
+    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
     return message;
   },
 };
@@ -3068,6 +3118,7 @@ function createBaseUpdateWorkspaceRequest(): UpdateWorkspaceRequest {
     displayName: "",
     repositoryConnectionIds: [],
     agentDefaults: undefined,
+    plannerIdleTimeoutSeconds: undefined,
   };
 }
 
@@ -3090,6 +3141,9 @@ export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
     }
     if (message.agentDefaults !== undefined) {
       ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(50).fork()).join();
+    }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      writer.uint32(56).uint32(message.plannerIdleTimeoutSeconds);
     }
     return writer;
   },
@@ -3155,6 +3209,14 @@ export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
             message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
             continue;
           }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.plannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3199,6 +3261,11 @@ export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
         : isSet(object.agent_defaults)
         ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
         : undefined,
+      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
+        : isSet(object.planner_idle_timeout_seconds)
+        ? globalThis.Number(object.planner_idle_timeout_seconds)
+        : undefined,
     };
   },
 
@@ -3222,6 +3289,9 @@ export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
     if (message.agentDefaults !== undefined) {
       obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
     }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
+    }
     return obj;
   },
 
@@ -3238,6 +3308,7 @@ export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
     message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
       ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
       : undefined;
+    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
     return message;
   },
 };

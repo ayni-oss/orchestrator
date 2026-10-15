@@ -245,12 +245,38 @@ OpenAI is the enabled provider;
 Anthropic and Bedrock cards confer no backend capability. The shared provider
 library constructs Rig clients without importing server or worker policy.
 
-A serialized conversation run freezes model credentials and research inputs before
-launching a dedicated project-agent Job. Checkout runs in an init container with
-repository-scoped read credentials. The research container mounts source read-only,
-has no checkout credentials or Kubernetes API token, and exposes bounded listing,
-search and reading tools rather than process execution. Repository instructions
-remain context, not authorization. Different conversations can run concurrently.
+A serialized conversation turn freezes model credentials, research inputs and its
+own execution deadline. Consecutive turns reuse one resident planner Pod while
+its credential binding remains compatible. A trusted checkout container prepares
+fresh source for each turn using repository-scoped credentials; the research
+container mounts source read-only and receives no checkout credentials or
+Kubernetes API token. Its tools expose bounded listing, search and reading rather
+than process execution. Repository instructions remain context, not authorization.
+Different conversations can run concurrently.
+
+SQLite retains the logical session identity, generation, active turn and idle
+deadline. Workspaces default to 300 seconds and can select 86,400 seconds;
+conversations can inherit or override either preset. Accepted user messages reset
+activity, while replaying a receipt does not. Completion starts a fresh idle
+period. Idle expiry does not interrupt queued or active turns, whose deadlines
+and model-call budgets remain independent.
+
+The control plane submits bounded turn envelopes and reads bounded receipts with
+fixed Kubernetes exec commands. Turn identities include the session generation
+and sequence. Worker-side serialization and retained receipts make repeated
+delivery safe; SQLite accepts a result only for the current bound generation and
+active run. Cancellation fences the run before stopping its owned Pod. A missing
+active Pod interrupts its turn rather than repeating a potentially paid model
+call. A later message creates a new generation using durable context.
+
+Each new turn refreshes repository observations and source credentials. A changed
+model Secret name, UID or revision requires stopping the old owned Pod before a
+replacement generation can run. Source credentials travel only to the checkout
+container; model credentials remain in the research container's read-only mount.
+Pod adoption checks ownership and the expected specification, and cleanup uses
+UID preconditions. The control plane's exec permission belongs to the trusted
+namespace boundary; it is never delegated to model tools or worker service
+accounts.
 
 Research appends immutable plan content under one stable conversation plan ID.
 Versions retain findings, scope, acceptance criteria, task proposal identities and
@@ -291,9 +317,10 @@ count and ask for a refined conversation question when missing context is needed
 A retained request without a selection remains readable and reports unavailable
 retrieval until a new turn refreshes its inputs.
 
-SQLite owns the authoritative archive independently of Job memory. A resumable full-state stream
+SQLite owns the authoritative archive independently of planner memory. A resumable full-state stream
 updates browser cards, while periodic reconciliation recovers missed observations
-and broker outages. Research result collection verifies the single Job-owned Pod
-and bounded run-bound receipt before persistence. Cleanup follows durable
-acceptance and observed stopped writers. Missing running Jobs become interrupted;
-new user requests can explicitly retry research without replaying admitted actions.
+and broker outages. Research result collection verifies the owned Pod and bounded,
+generation-bound receipt before persistence. Idle cleanup preserves durable
+records. Controller restart adopts surviving owned sessions and reconciles their
+stored deadlines. Already admitted one-shot turns from older schemas finish with
+their original frozen inputs; new turns use resident sessions.

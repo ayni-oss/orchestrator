@@ -137,3 +137,23 @@ test("older requirements remain searchable and paginated with summary provenance
   const denied=await page.request.get("/projects/project:other/conversations/conversation:1/history");expect(denied.status()).toBe(404);
   const axe=await new AxeBuilder({page}).include("main").analyze();expect(axe.violations).toEqual([]);
 });
+
+test("planner presets, warm reuse, expiry and cancellation preserve durable conversation history",async({page,request})=>{
+  await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
+  await page.goto("/workspaces/workspace:1");
+  await choose(page,"Planner idle timeout","24 hours");await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();await expect(page.getByLabel("Planner idle timeout",{exact:true})).toContainText("24 hours");
+  await page.goto("/projects/project:1");
+  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
+  await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Reusable planner");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
+  const planner=page.getByRole("region",{name:"Planner session",exact:true});
+  await expect(planner).toContainText("Idle timeout: 24 hours · inherited from workspace");
+  await request.post("http://127.0.0.1:50062/planner-queued");await page.reload();await expect(planner).toContainText("Queued");await expect(planner).not.toContainText("Session generation");await planner.getByRole("button",{name:"Cancel planner turn",exact:true}).click();await expect(planner.getByRole("button",{name:"Cancel planner turn",exact:true})).toHaveCount(0);
+  await planner.getByText("Planner session settings",{exact:true}).click();await choose(page,"Conversation planner idle timeout","5 minutes");await planner.getByRole("button",{name:"Save planner settings",exact:true}).click();await expect(planner).toContainText("Idle timeout: 5 minutes · conversation override");
+  await page.getByLabel("Message",{exact:true}).fill("Preserve this original requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(planner).toContainText("Warm");await expect(planner).toContainText("Session generation 1");
+  await page.getByLabel("Message",{exact:true}).fill("Clarify the same requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(planner).toContainText("Session generation 1");
+  await request.post("http://127.0.0.1:50062/expire-planner");await page.reload();await expect(planner).toContainText("The idle session expired");await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
+  await page.getByLabel("Message",{exact:true}).fill("Continue with the saved requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(planner).toContainText("Session generation 2");
+  await planner.getByText("Planner session settings",{exact:true}).click();await choose(page,"Conversation planner idle timeout","Workspace default (24 hours)");await planner.getByRole("button",{name:"Save planner settings",exact:true}).click();await expect(planner).toContainText("Idle timeout: 24 hours · inherited from workspace");
+  await request.post("http://127.0.0.1:50062/planner-active");await page.reload();await expect(planner).toContainText("The planner is working on the current turn");await request.post("http://127.0.0.1:50062/archive-workspace");await page.reload();await expect(planner.getByText("Planner session settings",{exact:true})).toHaveCount(0);await planner.getByRole("button",{name:"Cancel planner turn",exact:true}).click();await expect(planner.getByRole("button",{name:"Cancel planner turn",exact:true})).toHaveCount(0);await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
+  const axe=await new AxeBuilder({page}).include("main").analyze();expect(axe.violations).toEqual([]);
+});

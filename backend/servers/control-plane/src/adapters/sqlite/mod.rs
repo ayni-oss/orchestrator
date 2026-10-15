@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 22;
+pub(crate) const SCHEMA_VERSION: i64 = 23;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -62,6 +62,7 @@ const CLEAN_TABLES: &[&str] = &[
     "project_conversation_actions",
     "project_conversations",
     "project_outcome_summaries",
+    "project_planner_sessions",
     "project_repositories",
     "projects",
     "reconciliation_cursors",
@@ -411,6 +412,7 @@ mod tests {
     mod outbox;
     mod project_context;
     mod project_conversations;
+    mod project_sessions;
     mod projects;
     mod recovery;
     mod runtime;
@@ -453,3 +455,7 @@ pub(crate) mod project_conversations;
 pub(crate) mod project_plans;
 
 pub(crate) mod project_context;
+
+pub(crate) mod project_sessions;
+
+mod project_summaries;

@@ -6,6 +6,7 @@
   import ProjectAgentSettings from "$lib/components/project-agent-settings.svelte";
   import {Button} from "$lib/components/ui/button/index.js";
   import {Input} from "$lib/components/ui/input/index.js";
+  import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import {Label} from "$lib/components/ui/label/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -29,6 +30,8 @@
         <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.workspace.resourceVersion} />
         <Label for="workspace-name">Workspace name</Label><Input id="workspace-name" name="displayName" value={data.workspace.displayName} required maxlength={256} />
         <Label for="workspace-repositories">Repositories</Label><RepositoryPicker id="workspace-repositories" repositories={data.repositories} value={members??data.workspace.repositoryConnectionIds} onchange={value=>members=value} />
+        <Label for="workspace-planner-timeout">Planner idle timeout</Label><ThemedSelect id="workspace-planner-timeout" name="plannerIdleTimeoutSeconds" value={String(data.workspace.plannerIdleTimeoutSeconds)} options={[{value:"300",label:"5 minutes"},{value:"86400",label:"24 hours"}]} required />
+        <p class="text-sm text-muted-foreground">Keep an idle planner session ready for this long. Conversations can override this default. Saved history survives session expiry.</p>
         <Button type="submit">Save workspace settings</Button>
       </form>
     </Card.Content></Card.Root>

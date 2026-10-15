@@ -29,6 +29,9 @@ export function mapConversation(value:ProjectConversation):ProjectConversationDt
     };
   });
   return {id:value.id,projectId:value.projectId,title:value.title,repositoryConnectionIds:[...value.repositoryConnectionIds],updateCursor:value.updateCursor,createdAt:required(value.createdAt).toISOString(),
+    ...(value.plannerIdleTimeoutSeconds===undefined?{}:{plannerIdleTimeoutSeconds:value.plannerIdleTimeoutSeconds}),
+    effectivePlannerIdleTimeoutSeconds:value.effectivePlannerIdleTimeoutSeconds||300,
+    ...(value.plannerSession?{plannerSession:{state:value.plannerSession.state,generation:value.plannerSession.generation,activeRunId:value.plannerSession.activeRunId,...(value.plannerSession.lastActivityAt?{lastActivityAt:value.plannerSession.lastActivityAt.toISOString()}:{}),...(value.plannerSession.idleExpiresAt?{idleExpiresAt:value.plannerSession.idleExpiresAt.toISOString()}: {})}}:{}),
     messages:value.messages.map(m=>({id:m.id,role:m.role,content:m.content,createdAt:required(m.createdAt).toISOString(),runId:m.runId})),
     runs:value.runs.map(r=>({id:r.id,state:r.state,model:r.model,connectionId:r.connectionId,modelCalls:r.modelCalls,failure:r.failure,...(r.tokenUsage ? {usage:{inputTokens:r.tokenUsage.inputTokens,outputTokens:r.tokenUsage.outputTokens,totalTokens:r.tokenUsage.totalTokens}} : {})})),
     proposals,

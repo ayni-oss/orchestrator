@@ -36,6 +36,7 @@ fn project_summary_uses_complete_history_and_preserves_member_readiness()
     store.update_workspace(
         "add-workspace-member",
         &v1::UpdateWorkspaceRequest {
+            planner_idle_timeout_seconds: None,
             idempotency_key: "add-workspace-member".into(),
             workspace_id: project.workspace_id.clone(),
             expected_resource_version: 1,
