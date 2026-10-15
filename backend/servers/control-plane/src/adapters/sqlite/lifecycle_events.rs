@@ -250,7 +250,10 @@ mod tests {
         drop(store);
         let mut store = CleanStore::open(&path, 3)?;
         assert_eq!(facts(&store)?.len(), 1);
-        store.prune_lifecycle_history(future)?;
+        // Delivery acknowledgement may have occurred in a later clock second.
+        let acknowledged_future =
+            unix_seconds()? + super::super::verification_outbox::HISTORY_SECONDS + 1;
+        store.prune_lifecycle_history(acknowledged_future)?;
         assert!(facts(&store)?.is_empty());
         Ok(())
     }

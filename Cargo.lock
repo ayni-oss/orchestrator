@@ -378,6 +378,7 @@ name = "ayni-orchestrator-providers"
 version = "0.1.0"
 dependencies = [
  "rig-core",
+ "url",
 ]
 
 [[package]]

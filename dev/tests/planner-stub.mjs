@@ -1,4 +1,5 @@
 // Disposable local-only OpenAI Responses/model-list stub; never records credentials or prompts.
+import {realpathSync} from "node:fs";
 import {createServer} from "node:http";
 import {pathToFileURL} from "node:url";
 export function plannerStub(){
@@ -31,6 +32,6 @@ export function plannerStub(){
   });
   return server;
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
   plannerStub().listen(Number(process.env.PORT??8080),"0.0.0.0");
 }

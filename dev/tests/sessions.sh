@@ -30,6 +30,7 @@ cleanup() {
   status=$?
   if [[ "$status" != 0 && "$created" == true ]]; then
     k get pods -o wide >&2 || true
+    curl --fail --silent --max-time 2 "http://127.0.0.1:$stub_port/fixture/stats" >&2 || true
     k logs deployment/control-plane --tail=100 >&2 || true
     for pod in $(k get pods -l app.kubernetes.io/component=project-session -o name); do k logs "$pod" --all-containers --tail=50 >&2 || true; done
     [[ ! -f "$scratch/forward.log" ]] || cat "$scratch/forward.log" >&2
@@ -87,6 +88,7 @@ spec:
       image: $2
       imagePullPolicy: Never
       command: [node, /fixture/server.mjs]
+      env: [{name: PORT, value: "8080"}]
       ports: [{containerPort: 8080}]
       readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 1}
       resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {cpu: 200m, memory: 128Mi}}
@@ -104,10 +106,12 @@ k wait --for=condition=Ready pod/planner-stub --timeout=120s
 helm upgrade --install session-validation "$DEV_CHART" --kube-context docker-desktop -n "$namespace" --wait --timeout=5m \
   --set observability.enabled=false --set ayni-orchestrator.runtime.enabled=true \
   --set-string "ayni-orchestrator.images.controlPlane=$cp_image" --set-string "ayni-orchestrator.images.web=$2" \
-  --set-string "ayni-orchestrator.runtime.workerImage=$worker_digest" --set ayni-orchestrator.runtime.intervalSeconds=2 \
+  --set-string "ayni-orchestrator.runtime.workerImage=$worker_digest" --set ayni-orchestrator.runtime.intervalSeconds=10 \
   --set-string ayni-orchestrator.runtime.modelSecret=planner-model --set ayni-orchestrator.images.pullPolicy=Never
-k auth can-i get pods/exec --as="system:serviceaccount:$namespace:control-plane" | rg -x yes
-if k auth can-i get pods/exec --as="system:serviceaccount:$namespace:runtime-coding"; then echo 'runtime worker must not be able to exec into Pods' >&2; exit 1; fi
+for verb in get create; do
+  k auth can-i "$verb" pods --subresource=exec --as="system:serviceaccount:$namespace:control-plane" | rg -x yes
+  if k auth can-i "$verb" pods --subresource=exec --as="system:serviceaccount:$namespace:runtime-coding"; then echo 'runtime worker must not be able to exec into Pods' >&2; exit 1; fi
+done
 kubectl --context docker-desktop -n "$namespace" port-forward --address=127.0.0.1 service/planner-stub "$stub_port:8080" > "$scratch/stub-forward.log" 2>&1 &
 stub_forward=$!
 for _ in {1..30}; do if curl --fail --silent "http://127.0.0.1:$stub_port/healthz" >/dev/null; then break; fi; sleep 1; done
@@ -209,21 +213,25 @@ first_generation=$(jq -r '.conversation.plannerSession.generation' "$scratch/con
 first_session=$(jq -r '.conversation.plannerSession.sessionId' "$scratch/conversation.json")
 first_pods=$(k get pods -o json | jq -c '[.items[]|select(.metadata.name|startswith("project-"))|select(.metadata.name!="planner-stub")|.metadata.uid]')
 jq -e 'length==1' <<<"$first_pods" >/dev/null
+echo 'Verifying idle controller restart preserves the session Pod.'
 stop; snapshot; start
 wait_state '.conversation.plannerSession.state=="idle" and (.conversation.runs|all(.state!="queued" and .state!="running"))'
 [[ $(jq -r '.conversation.plannerSession.sessionId' "$scratch/conversation.json") == "$first_session" ]]
 [[ $(k get pods -o json | jq -c '[.items[]|select(.metadata.name|startswith("project-"))|select(.metadata.name!="planner-stub")|.metadata.uid]') == "$first_pods" ]]
 stop; snapshot; mutate expire; seed; start
+echo 'Verifying controlled idle expiry and generation recreation.'
 wait_state '.conversation.plannerSession.state=="expired"'
 stop; snapshot; mutate next; seed; start
 wait_state '.conversation.plannerSession.state=="idle" and (.conversation.runs|all(.state!="queued" and .state!="running"))'
 jq -e --arg generation "$first_generation" '(.conversation.plannerSession.generation|tonumber)>($generation|tonumber)' "$scratch/conversation.json" >/dev/null
 rotation_generation=$(jq -r '.conversation.plannerSession.generation' "$scratch/conversation.json")
+echo 'Verifying model-binding rotation creates a new generation.'
 # Rotation selects a new binding without exposing a real provider credential.
 stop; snapshot; mutate rotate planner-model-rotated; seed; start
 wait_state '.conversation.plannerSession.state=="idle" and (.conversation.runs|all(.state!="queued" and .state!="running"))'
 jq -e --arg generation "$rotation_generation" '(.conversation.plannerSession.generation|tonumber)>($generation|tonumber)' "$scratch/conversation.json" >/dev/null
 # Losing a real active Pod interrupts the retained run instead of silently retrying it.
+echo 'Verifying active controller restart and ACK-safe redispatch.'
 curl --fail --silent -X POST "http://127.0.0.1:$stub_port/fixture/hold" >/dev/null
 stop; snapshot; mutate next planner-model-rotated; seed; start
 wait_state '.conversation.plannerSession.state=="active"'
@@ -242,7 +250,7 @@ for _ in {1..3}; do
   jq -c --arg run "$lost_run" '.conversation.runs[]|select(.id==$run)|{id,sessionId,sessionGeneration,sessionTurnSequence,sessionDeadlineAt}' "$scratch/active-after.json" > "$scratch/fence-after.json"
   cmp "$scratch/fence-before.json" "$scratch/fence-after.json"
   [[ $(curl --fail --silent "http://127.0.0.1:$stub_port/fixture/stats" | jq '.calls') == "$active_calls" ]]
-  sleep 1
+  sleep 11
 done
 jq -e --arg run "$lost_run" '.conversation.runs|any(.id==$run and .state=="running")' "$scratch/active-after.json" >/dev/null
 k delete pods -l app.kubernetes.io/component=project-session --wait=true --timeout=90s
@@ -250,6 +258,7 @@ wait_state '.conversation.plannerSession.state=="lost"'
 jq -e --arg run "$lost_run" '.conversation.runs|any(.id==$run and .state=="interrupted")' "$scratch/conversation.json" >/dev/null
 curl --fail --silent -X POST "http://127.0.0.1:$stub_port/fixture/release" >/dev/null
 # Hold the actual worker at its provider boundary, then cancel via the real API.
+echo 'Verifying active cancellation and late-result fencing.'
 curl --fail --silent -X POST "http://127.0.0.1:$stub_port/fixture/hold" >/dev/null
 stop; snapshot; mutate next planner-model-rotated; seed; start
 wait_state '.conversation.plannerSession.state=="active"'

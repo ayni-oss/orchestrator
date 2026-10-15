@@ -126,7 +126,7 @@ if grep -q 'resources: \[pods/log\]' "$scratch/application.yaml"; then
   exit 1
 fi
 # Fixed session IPC belongs solely to the enabled control-plane runtime Role.
-awk '/^---$/{role=0;controller=0} /^kind: Role$/{role=1} role && /^  name: runtime-controller$/{controller=1} /resources: \[pods\/exec\]/{if (!controller) exit 1; getline; if ($0 !~ /verbs: \[get\]/) exit 1; found=1} END{if (!found) exit 1}' "$scratch/runtime.yaml"
+awk '/^---$/{role=0;controller=0} /^kind: Role$/{role=1} role && /^  name: runtime-controller$/{controller=1} /resources: \[pods\/exec\]/{if (!controller) exit 1; getline; if ($0 !~ /verbs: \[get, create\]/) exit 1; found=1} END{if (!found) exit 1}' "$scratch/runtime.yaml"
 if grep -q 'resources: \[pods/exec\]' "$scratch/application.yaml"; then
   echo "runtime-disabled control plane rendered pod exec authority" >&2
   exit 1

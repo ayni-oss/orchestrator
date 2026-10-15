@@ -107,17 +107,22 @@ fn turn(uid: &str, generation: u64, sequence: u64) -> TestResult<ProjectSessionT
     })
 }
 async fn dispatch(runtime: &RuntimeKubernetes, turn: &ProjectSessionTurn) -> TestResult {
-    for _ in 0..120 {
+    for attempt in 0..120 {
         match runtime
             .dispatch_project_session("planner-direct", turn, BTreeMap::new())
             .await
         {
             Ok(()) => return Ok(()),
             Err(
-                "project_session_starting"
+                reason @ ("project_session_starting"
                 | "project_session_transport_unavailable"
-                | "project_session_command_unavailable",
-            ) => tokio::time::sleep(Duration::from_secs(1)).await,
+                | "project_session_command_unavailable"),
+            ) => {
+                if attempt % 10 == 0 {
+                    eprintln!("dispatch retry {attempt}: {reason}");
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
             Err(reason) => return Err(safe(reason).into()),
         }
     }

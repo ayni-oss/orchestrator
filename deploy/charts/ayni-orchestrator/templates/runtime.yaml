@@ -44,10 +44,10 @@ rules:
   - apiGroups: [networking.k8s.io]
     resources: [networkpolicies]
     verbs: [get, create, delete]
-  # kube-rs uses WebSocket GET for fixed commands in owned session containers.
+  # WebSocket GET also requires create under Kubernetes 1.35+ compound authorization.
   - apiGroups: [""]
     resources: [pods/exec]
-    verbs: [get]
+    verbs: [get, create]
   # Read only the public policy/lock result emitted by owned trust Jobs.
   - apiGroups: [""]
     resources: [pods/log]
