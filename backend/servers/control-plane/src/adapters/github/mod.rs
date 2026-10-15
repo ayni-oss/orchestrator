@@ -9,6 +9,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub struct SourceClient {
     client: reqwest::Client,
     credentials: std::sync::RwLock<Option<(String, EncodingKey)>>,
+    #[cfg(test)]
+    fixed_head: Option<String>,
 }
 
 impl SourceClient {
@@ -59,7 +61,17 @@ impl SourceClient {
         Ok(Self {
             client,
             credentials: std::sync::RwLock::new(None),
+            #[cfg(test)]
+            fixed_head: None,
         })
+    }
+
+    /// Deterministic source observations for transport tests, absent from binaries.
+    #[cfg(test)]
+    pub(crate) fn fixed(revision: &str) -> Result<Self, &'static str> {
+        let mut client = Self::unconfigured(1)?;
+        client.fixed_head = Some(revision.into());
+        Ok(client)
     }
 
     pub(crate) fn activate(&self, app_id: String, private_key: &[u8]) -> Result<(), &'static str> {
@@ -104,6 +116,10 @@ impl SourceClient {
         installation: u64,
         repository_id: &str,
     ) -> Result<String, &'static str> {
+        #[cfg(test)]
+        if self.fixed_head.is_some() {
+            return Ok("synthetic-source-test-token".into());
+        }
         self.scoped_token(installation, repository_id, json!({"contents":"read"}))
             .await
     }
@@ -185,6 +201,10 @@ impl SourceClient {
         branch: &str,
         token: &str,
     ) -> Result<String, &'static str> {
+        #[cfg(test)]
+        if let Some(revision) = &self.fixed_head {
+            return Ok(revision.clone());
+        }
         let mut url =
             reqwest::Url::parse("https://api.github.com").map_err(|_| "github_url_invalid")?;
         url.path_segments_mut()

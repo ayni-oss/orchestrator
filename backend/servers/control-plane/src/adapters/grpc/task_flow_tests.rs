@@ -27,6 +27,10 @@ struct Server {
 impl Server {
     async fn start(path: &Path) -> TestResult<(Self, Channel)> {
         let state = AppState::open(path, 3)?;
+        Self::start_state(state).await
+    }
+
+    async fn start_state(state: AppState) -> TestResult<(Self, Channel)> {
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         let address = listener.local_addr()?;
         drop(listener);
@@ -80,18 +84,27 @@ struct RuntimeFixture {
 }
 
 async fn create_profile(server: &Server, channel: Channel) -> TestResult<RuntimeFixture> {
+    create_profile_named(server, channel, "", "123").await
+}
+
+async fn create_profile_named(
+    server: &Server,
+    channel: Channel,
+    prefix: &str,
+    github_id: &str,
+) -> TestResult<RuntimeFixture> {
     let repository = RepositoryServiceClient::new(channel.clone())
         .create_repository_connection(v1::CreateRepositoryConnectionRequest {
             use_ayni: None,
-            idempotency_key: "repository".into(),
+            idempotency_key: format!("{prefix}repository"),
             display_name: "Task flow fixture".into(),
             default_branch: "main".into(),
             provider: Some(v1::RepositoryProvider {
                 provider: Some(v1::repository_provider::Provider::Github(
                     v1::GithubRepository {
-                        repository_id: "123".into(),
+                        repository_id: github_id.into(),
                         owner: "test-org".into(),
-                        name: "repository".into(),
+                        name: format!("{prefix}repository"),
                         installation_id: 42,
                         html_url: "https://github.com/test-org/repository".into(),
                     },
@@ -108,7 +121,7 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
         .create_project(v1::CreateProjectRequest {
             workspace_id: String::new(),
             goal: String::new(),
-            idempotency_key: "project".into(),
+            idempotency_key: format!("{prefix}project"),
             display_name: "Task flow project".into(),
             repository_connection_id: repository.id.clone(),
             repository_connection_ids: vec![],
@@ -125,7 +138,7 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
     .await?;
     let created = RuntimeProfileServiceClient::new(channel)
         .create_runtime_profile(v1::CreateRuntimeProfileRequest {
-            idempotency_key: "profile".into(),
+            idempotency_key: format!("{prefix}profile"),
             repository_connection_id: repository.id.clone(),
             repository_snapshot_id: snapshot.id.clone(),
             configuration: Some(v1::RuntimeProfileConfiguration {
@@ -302,5 +315,6 @@ fn assert_frozen_inputs(
 }
 
 mod lifecycle;
+mod plans;
 
 use crate::coordinators::with_store_async as with_store;

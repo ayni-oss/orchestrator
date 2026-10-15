@@ -33,9 +33,9 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 20 retains preparation state,
+and pull request receipts. SQLite schema version 21 retains preparation state,
 authenticated result inboxes, accepted decisions, transactional outboxes and
-operator lifecycle facts. Recognized versions 6–19 migrate in order before
+operator lifecycle facts. Recognized versions 6–20 migrate in order before
 reconciliation; malformed retained state aborts the upgrade. Older and unknown
 versions are rejected. See [operations](../operations/operations.md) for upgrade
 and rollback requirements. Credentials remain separate inputs and are never worker output.
@@ -239,8 +239,8 @@ execution admission. Already admitted work retains its frozen inputs.
 ## Project conversations
 
 The trusted operator API persists project conversations, research runs, task
-proposals, approval receipts and linked outcomes. Workspace settings select distinct
-research and coding connection/model defaults, with optional project overrides.
+proposals, versioned plans, approval receipts and linked outcomes. Workspace settings
+select distinct research and coding connection/model defaults, with optional project overrides.
 OpenAI is the enabled provider;
 Anthropic and Bedrock cards confer no backend capability. The shared provider
 library constructs Rig clients without importing server or worker policy.
@@ -252,13 +252,23 @@ has no checkout credentials or Kubernetes API token, and exposes bounded listing
 search and reading tools rather than process execution. Repository instructions
 remain context, not authorization. Different conversations can run concurrently.
 
-The model prepares proposals; approval dispatch owns task admission and lifecycle
-commands. Existing task guards enforce repository membership, readiness and frozen
-execution identity. Approval revalidates researched source and runtime identity;
-replayed approvals use deterministic action identities and retain original receipts.
-Each run prepares at most one task per repository; cross-repository dependencies
-are outside this contract. Accepted attempt outcomes schedule bounded summaries
-with durable deduplication. Summaries cannot propose additional work.
+Research appends immutable plan content under one stable conversation plan ID.
+Versions retain findings, scope, acceptance criteria, task proposal identities and
+descriptive dependency/environment impact. A version's review state and failure
+explanation can change; its researched content stays fixed. Lifecycle actions
+(cancel, retry task and retry publication) remain separately confirmed action cards.
+Outcome summaries cannot propose additional work.
+
+Approval names the exact plan ID and version. The current pending version admits
+its entire task set in one SQLite transaction after revalidating project/workspace
+membership, repository readiness and frozen source/runtime identity. No task is
+admitted if any member fails validation. A changed source or runtime returns an
+actionable explanation requiring refreshed research. The version decision and
+admitted task receipts persist together; duplicate decisions retain original task
+identities. Stale versions and conflicting concurrent decisions cannot replace the
+current decision. Each run prepares at most one task per repository;
+cross-repository dependency execution remains outside this contract. Accepted
+attempt outcomes schedule bounded summaries with durable deduplication.
 
 SQLite owns the authoritative conversation state. A resumable full-state stream
 updates browser cards, while periodic reconciliation recovers missed observations

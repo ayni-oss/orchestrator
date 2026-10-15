@@ -27,6 +27,7 @@ impl CleanStore {
             let conversation: v1::ProjectConversation = decode(&payload)?;
             validate_conversation_index(&conversation, &id, &project, cursor, payload.len())?;
             validate_conversation_runs(&conversation)?;
+            super::project_plans::validate(&conversation)?;
         }
         self.validate_project_agent_requests()
     }
@@ -120,6 +121,7 @@ impl CleanStore {
             conversation.messages.clear();
             conversation.runs.clear();
             conversation.proposals.clear();
+            conversation.plan = None;
             conversations.push(conversation);
         }
         Ok(conversations)
@@ -139,7 +141,7 @@ impl CleanStore {
             })
             .transpose()
     }
-    fn save_conversation(
+    pub(super) fn save_conversation(
         &mut self,
         conversation: &mut v1::ProjectConversation,
     ) -> Result<(), CleanStoreError> {
@@ -154,7 +156,7 @@ impl CleanStore {
         self.connection.execute("INSERT INTO project_conversations(id,project_id,cursor,payload) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,payload=excluded.payload",params![conversation.id,conversation.project_id,i64::try_from(conversation.update_cursor).map_err(|_|CleanStoreError::BoundExceeded)?,conversation.encode_to_vec()]).map_err(CleanStoreError::Database)?;
         Ok(())
     }
-    fn remember_conversation<M: Message>(
+    pub(super) fn remember_conversation<M: Message>(
         &self,
         key: &str,
         request: &M,
@@ -425,7 +427,26 @@ impl CleanStore {
         let researched = self.project_run_request(&result.run_id)?;
         validate_project_result(&c, &result, researched.as_ref())?;
         let mut targets = std::collections::BTreeSet::new();
+        let first_new = c.proposals.len();
+        let metadata = result
+            .proposals
+            .iter()
+            .filter(|p| p.action == "create_task")
+            .map(|p| {
+                (
+                    p.findings.clone(),
+                    p.scope.clone(),
+                    p.dependency_environment_impact.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
         for proposal in result.proposals {
+            if proposal.findings.len() > 16384
+                || proposal.scope.len() > 16384
+                || proposal.dependency_environment_impact.len() > 16384
+            {
+                return Err(CleanStoreError::BoundExceeded);
+            }
             self.validate_research_proposal(&c, &proposal, researched.as_ref(), &mut targets)?;
             let request = proposal_request(&c.project_id, &proposal)?;
             let researched_runtime = if proposal.action == "create_task" {
@@ -445,6 +466,8 @@ impl CleanStore {
                 ..Default::default()
             });
         }
+        super::project_plans::append_version(&mut c, first_new, &result.run_id, &metadata)?;
+        super::project_plans::validate(&c)?;
         let run = c
             .runs
             .iter_mut()
@@ -585,6 +608,13 @@ impl CleanStore {
             .iter()
             .position(|p| p.id == message.proposal_id)
             .ok_or(CleanStoreError::InvalidTransition)?;
+        if c.proposals[index].action == "create_task" {
+            if c.proposals[index].state == "approved" && message.decision == "approve" {
+                self.remember_conversation(key, message, &c.id)?;
+                return Ok(c);
+            }
+            return Err(CleanStoreError::InvalidTransition);
+        }
         let p = &mut c.proposals[index];
         if p.state == "approved" && message.decision == "approve" {
             return Ok(c);
@@ -613,7 +643,7 @@ impl CleanStore {
         finish_transaction(&self.connection, result)?;
         Ok(c)
     }
-    fn approve_project_proposal(
+    pub(super) fn approve_project_proposal(
         &mut self,
         project_id: &str,
         p: &v1::ProjectTaskProposal,
@@ -717,7 +747,7 @@ impl CleanStore {
         Ok(())
     }
 }
-fn validate_conversation_index(
+pub(super) fn validate_conversation_index(
     c: &v1::ProjectConversation,
     id: &str,
     project: &str,
@@ -735,7 +765,9 @@ fn validate_conversation_index(
     }
     Ok(())
 }
-fn validate_conversation_runs(c: &v1::ProjectConversation) -> Result<(), CleanStoreError> {
+pub(super) fn validate_conversation_runs(
+    c: &v1::ProjectConversation,
+) -> Result<(), CleanStoreError> {
     let mut ids = std::collections::BTreeSet::new();
     for run in &c.runs {
         if !ids.insert(run.id.clone())

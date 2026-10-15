@@ -38,6 +38,7 @@ export interface ProjectConversation {
   proposals: ProjectTaskProposal[];
   updateCursor: string;
   createdAt?: Date | undefined;
+  plan?: ProjectPlan | undefined;
 }
 
 export interface ProjectMessage {
@@ -134,6 +135,42 @@ export interface WatchProjectConversationRequest {
   afterCursor: string;
 }
 
+/**
+ * Stable identity with append-only research snapshots. Approval admits the entire
+ * reviewed version; lifecycle actions remain separate proposal confirmations.
+ */
+export interface ProjectPlan {
+  id: string;
+  versions: ProjectPlanVersion[];
+}
+
+export interface ProjectPlanVersion {
+  version: string;
+  runId: string;
+  state: string;
+  findings: string;
+  scope: string;
+  acceptanceCriteria: string[];
+  proposalIds: string[];
+  /** Descriptive research only; this grants no environment change authority. */
+  dependencyEnvironmentImpact: string;
+  createdAt?: Date | undefined;
+  failure: string;
+}
+
+export interface DecideProjectPlanRequest {
+  idempotencyKey: string;
+  conversationId: string;
+  planId: string;
+  version: string;
+  /** approve, reject, revise. Revisions are supplied as a new user message. */
+  decision: string;
+}
+
+export interface DecideProjectPlanResponse {
+  conversation?: ProjectConversation | undefined;
+}
+
 function createBaseProjectConversation(): ProjectConversation {
   return {
     id: "",
@@ -145,6 +182,7 @@ function createBaseProjectConversation(): ProjectConversation {
     proposals: [],
     updateCursor: "0",
     createdAt: undefined,
+    plan: undefined,
   };
 }
 
@@ -176,6 +214,9 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
+    }
+    if (message.plan !== undefined) {
+      ProjectPlan.encode(message.plan, writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -265,6 +306,14 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
             message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.plan = ProjectPlan.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -310,6 +359,7 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
         : isSet(object.created_at)
         ? fromJsonTimestamp(object.created_at)
         : undefined,
+      plan: isSet(object.plan) ? ProjectPlan.fromJSON(object.plan) : undefined,
     };
   },
 
@@ -342,6 +392,9 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
     }
+    if (message.plan !== undefined) {
+      obj.plan = ProjectPlan.toJSON(message.plan);
+    }
     return obj;
   },
 
@@ -359,6 +412,9 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     message.proposals = object.proposals?.map((e) => ProjectTaskProposal.fromPartial(e)) || [];
     message.updateCursor = object.updateCursor ?? "0";
     message.createdAt = object.createdAt ?? undefined;
+    message.plan = (object.plan !== undefined && object.plan !== null)
+      ? ProjectPlan.fromPartial(object.plan)
+      : undefined;
     return message;
   },
 };
@@ -2043,6 +2099,551 @@ export const WatchProjectConversationRequest: MessageFns<WatchProjectConversatio
   },
 };
 
+function createBaseProjectPlan(): ProjectPlan {
+  return { id: "", versions: [] };
+}
+
+export const ProjectPlan: MessageFns<ProjectPlan> = {
+  encode(message: ProjectPlan, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    for (const v of message.versions) {
+      ProjectPlanVersion.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectPlan {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectPlan();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.versions.push(ProjectPlanVersion.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectPlan {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      versions: globalThis.Array.isArray(object?.versions)
+        ? object.versions.map((e: any) => ProjectPlanVersion.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ProjectPlan): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.versions?.length) {
+      obj.versions = message.versions.map((e) => ProjectPlanVersion.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectPlan>): ProjectPlan {
+    return ProjectPlan.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectPlan>): ProjectPlan {
+    const message = createBaseProjectPlan();
+    message.id = object.id ?? "";
+    message.versions = object.versions?.map((e) => ProjectPlanVersion.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseProjectPlanVersion(): ProjectPlanVersion {
+  return {
+    version: "0",
+    runId: "",
+    state: "",
+    findings: "",
+    scope: "",
+    acceptanceCriteria: [],
+    proposalIds: [],
+    dependencyEnvironmentImpact: "",
+    createdAt: undefined,
+    failure: "",
+  };
+}
+
+export const ProjectPlanVersion: MessageFns<ProjectPlanVersion> = {
+  encode(message: ProjectPlanVersion, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.version !== "0") {
+      writer.uint32(8).uint64(message.version);
+    }
+    if (message.runId !== "") {
+      writer.uint32(18).string(message.runId);
+    }
+    if (message.state !== "") {
+      writer.uint32(26).string(message.state);
+    }
+    if (message.findings !== "") {
+      writer.uint32(34).string(message.findings);
+    }
+    if (message.scope !== "") {
+      writer.uint32(42).string(message.scope);
+    }
+    for (const v of message.acceptanceCriteria) {
+      writer.uint32(50).string(v!);
+    }
+    for (const v of message.proposalIds) {
+      writer.uint32(58).string(v!);
+    }
+    if (message.dependencyEnvironmentImpact !== "") {
+      writer.uint32(66).string(message.dependencyEnvironmentImpact);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
+    }
+    if (message.failure !== "") {
+      writer.uint32(82).string(message.failure);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectPlanVersion {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectPlanVersion();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.version = reader.uint64().toString();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.runId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.findings = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.scope = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.acceptanceCriteria.push(reader.string());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.proposalIds.push(reader.string());
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.dependencyEnvironmentImpact = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.failure = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectPlanVersion {
+    return {
+      version: isSet(object.version) ? globalThis.String(object.version) : "0",
+      runId: isSet(object.runId)
+        ? globalThis.String(object.runId)
+        : isSet(object.run_id)
+        ? globalThis.String(object.run_id)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      findings: isSet(object.findings) ? globalThis.String(object.findings) : "",
+      scope: isSet(object.scope) ? globalThis.String(object.scope) : "",
+      acceptanceCriteria: globalThis.Array.isArray(object?.acceptanceCriteria)
+        ? object.acceptanceCriteria.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.acceptance_criteria)
+        ? object.acceptance_criteria.map((e: any) => globalThis.String(e))
+        : [],
+      proposalIds: globalThis.Array.isArray(object?.proposalIds)
+        ? object.proposalIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.proposal_ids)
+        ? object.proposal_ids.map((e: any) => globalThis.String(e))
+        : [],
+      dependencyEnvironmentImpact: isSet(object.dependencyEnvironmentImpact)
+        ? globalThis.String(object.dependencyEnvironmentImpact)
+        : isSet(object.dependency_environment_impact)
+        ? globalThis.String(object.dependency_environment_impact)
+        : "",
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+      failure: isSet(object.failure) ? globalThis.String(object.failure) : "",
+    };
+  },
+
+  toJSON(message: ProjectPlanVersion): unknown {
+    const obj: any = {};
+    if (message.version !== "0") {
+      obj.version = message.version;
+    }
+    if (message.runId !== "") {
+      obj.runId = message.runId;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.findings !== "") {
+      obj.findings = message.findings;
+    }
+    if (message.scope !== "") {
+      obj.scope = message.scope;
+    }
+    if (message.acceptanceCriteria?.length) {
+      obj.acceptanceCriteria = message.acceptanceCriteria;
+    }
+    if (message.proposalIds?.length) {
+      obj.proposalIds = message.proposalIds;
+    }
+    if (message.dependencyEnvironmentImpact !== "") {
+      obj.dependencyEnvironmentImpact = message.dependencyEnvironmentImpact;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    if (message.failure !== "") {
+      obj.failure = message.failure;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectPlanVersion>): ProjectPlanVersion {
+    return ProjectPlanVersion.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectPlanVersion>): ProjectPlanVersion {
+    const message = createBaseProjectPlanVersion();
+    message.version = object.version ?? "0";
+    message.runId = object.runId ?? "";
+    message.state = object.state ?? "";
+    message.findings = object.findings ?? "";
+    message.scope = object.scope ?? "";
+    message.acceptanceCriteria = object.acceptanceCriteria?.map((e) => e) || [];
+    message.proposalIds = object.proposalIds?.map((e) => e) || [];
+    message.dependencyEnvironmentImpact = object.dependencyEnvironmentImpact ?? "";
+    message.createdAt = object.createdAt ?? undefined;
+    message.failure = object.failure ?? "";
+    return message;
+  },
+};
+
+function createBaseDecideProjectPlanRequest(): DecideProjectPlanRequest {
+  return { idempotencyKey: "", conversationId: "", planId: "", version: "0", decision: "" };
+}
+
+export const DecideProjectPlanRequest: MessageFns<DecideProjectPlanRequest> = {
+  encode(message: DecideProjectPlanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.planId !== "") {
+      writer.uint32(26).string(message.planId);
+    }
+    if (message.version !== "0") {
+      writer.uint32(32).uint64(message.version);
+    }
+    if (message.decision !== "") {
+      writer.uint32(42).string(message.decision);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DecideProjectPlanRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDecideProjectPlanRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.planId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.version = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.decision = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DecideProjectPlanRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      planId: isSet(object.planId)
+        ? globalThis.String(object.planId)
+        : isSet(object.plan_id)
+        ? globalThis.String(object.plan_id)
+        : "",
+      version: isSet(object.version) ? globalThis.String(object.version) : "0",
+      decision: isSet(object.decision) ? globalThis.String(object.decision) : "",
+    };
+  },
+
+  toJSON(message: DecideProjectPlanRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.version !== "0") {
+      obj.version = message.version;
+    }
+    if (message.decision !== "") {
+      obj.decision = message.decision;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DecideProjectPlanRequest>): DecideProjectPlanRequest {
+    return DecideProjectPlanRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DecideProjectPlanRequest>): DecideProjectPlanRequest {
+    const message = createBaseDecideProjectPlanRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.planId = object.planId ?? "";
+    message.version = object.version ?? "0";
+    message.decision = object.decision ?? "";
+    return message;
+  },
+};
+
+function createBaseDecideProjectPlanResponse(): DecideProjectPlanResponse {
+  return { conversation: undefined };
+}
+
+export const DecideProjectPlanResponse: MessageFns<DecideProjectPlanResponse> = {
+  encode(message: DecideProjectPlanResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.conversation !== undefined) {
+      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DecideProjectPlanResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDecideProjectPlanResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.conversation = ProjectConversation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DecideProjectPlanResponse {
+    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
+  },
+
+  toJSON(message: DecideProjectPlanResponse): unknown {
+    const obj: any = {};
+    if (message.conversation !== undefined) {
+      obj.conversation = ProjectConversation.toJSON(message.conversation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DecideProjectPlanResponse>): DecideProjectPlanResponse {
+    return DecideProjectPlanResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DecideProjectPlanResponse>): DecideProjectPlanResponse {
+    const message = createBaseDecideProjectPlanResponse();
+    message.conversation = (object.conversation !== undefined && object.conversation !== null)
+      ? ProjectConversation.fromPartial(object.conversation)
+      : undefined;
+    return message;
+  },
+};
+
 /** Trusted operator conversation API; not available on the custom-client listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
@@ -2108,6 +2709,17 @@ export const ProjectConversationServiceService = {
       Buffer.from(SendProjectMessageResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): SendProjectMessageResponse => SendProjectMessageResponse.decode(value),
   },
+  decideProjectPlan: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/DecideProjectPlan" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DecideProjectPlanRequest): Buffer =>
+      Buffer.from(DecideProjectPlanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DecideProjectPlanRequest => DecideProjectPlanRequest.decode(value),
+    responseSerialize: (value: DecideProjectPlanResponse): Buffer =>
+      Buffer.from(DecideProjectPlanResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DecideProjectPlanResponse => DecideProjectPlanResponse.decode(value),
+  },
   decideProjectProposal: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/DecideProjectProposal" as const,
     requestStream: false as const,
@@ -2130,6 +2742,7 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   listProjectConversations: handleUnaryCall<ListProjectConversationsRequest, ListProjectConversationsResponse>;
   getProjectConversation: handleUnaryCall<GetProjectConversationRequest, GetProjectConversationResponse>;
   sendProjectMessage: handleUnaryCall<SendProjectMessageRequest, SendProjectMessageResponse>;
+  decideProjectPlan: handleUnaryCall<DecideProjectPlanRequest, DecideProjectPlanResponse>;
   decideProjectProposal: handleUnaryCall<DecideProjectProposalRequest, DecideProjectProposalResponse>;
 }
 
@@ -2202,6 +2815,21 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: SendProjectMessageResponse) => void,
+  ): ClientUnaryCall;
+  decideProjectPlan(
+    request: DecideProjectPlanRequest,
+    callback: (error: ServiceError | null, response: DecideProjectPlanResponse) => void,
+  ): ClientUnaryCall;
+  decideProjectPlan(
+    request: DecideProjectPlanRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DecideProjectPlanResponse) => void,
+  ): ClientUnaryCall;
+  decideProjectPlan(
+    request: DecideProjectPlanRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DecideProjectPlanResponse) => void,
   ): ClientUnaryCall;
   decideProjectProposal(
     request: DecideProjectProposalRequest,

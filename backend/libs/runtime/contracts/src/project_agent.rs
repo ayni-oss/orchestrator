@@ -37,6 +37,12 @@ pub struct ProjectAgentResult {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResearchProposal {
+    #[serde(default)]
+    pub findings: String,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub dependency_environment_impact: String,
     pub repository_id: String,
     pub revision: String,
     pub runtime_profile_id: String,

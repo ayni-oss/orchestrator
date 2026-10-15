@@ -300,6 +300,10 @@ export class OrchestratorBff {
     const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.sendProjectMessage(input,m,o,c));
     return mapConversation(required(response.conversation));
   }
+  async decideProjectPlan(input:{idempotencyKey:string;conversationId:string;planId:string;version:string;decision:string},context:RequestContext):Promise<ProjectConversationDto> {
+    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.decideProjectPlan(input,m,o,c));
+    return mapConversation(required(response.conversation));
+  }
   async decideProjectProposal(input:{idempotencyKey:string;conversationId:string;proposalId:string;decision:string},context:RequestContext):Promise<ProjectConversationDto> {
     const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.decideProjectProposal(input,m,o,c));
     return mapConversation(required(response.conversation));

@@ -9,7 +9,7 @@ Ayni Orchestrator is a control plane for worker-owned development tasks.
 Integrations manage provider access and repositories own shared runtimes.
 Workspaces share repositories and agent defaults; projects select workspace
 repositories around a goal and retain conversations. A project agent researches
-immutable repository checkouts and prepares complete tasks for human approval. OpenAI
+immutable repository checkouts and prepares versioned plans for human approval. OpenAI
 connections and project model defaults are configured in the operator UI.
 A task freezes its source, runtime digest, model, constraints,
 coding budget and deadline before one worker executes it.

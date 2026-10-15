@@ -353,7 +353,14 @@ export interface WorkerResultDto {
   qualityRound: number;
 }
 
+export interface ProjectPlanVersionDto {
+  version: string; runId: string; state: string; findings: string; scope: string;
+  acceptanceCriteria: string[]; proposalIds: string[]; dependencyEnvironmentImpact: string;
+  createdAt: string; failure: string;
+}
+
 export interface ProjectConversationDto {
+  plan?: {id: string; versions: ProjectPlanVersionDto[]};
   id: string;
   projectId: string;
   title: string;

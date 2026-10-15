@@ -49,6 +49,7 @@ export const actions: Actions = {
   sendMessage: async event => conversationAction(event,"send"),
   reviseModel: async event => conversationAction(event,"model"),
   decideProposal: async event => conversationAction(event,"decide"),
+  decidePlan: async event => conversationAction(event,"plan"),
   agentDefaults: async ({locals,params,request}) => {
     const form=await request.formData();
     const inherit=form.get("inherit")==="true";
@@ -100,7 +101,7 @@ type ConversationActionContext = {
   ctx:RequestContext;
 };
 
-async function conversationAction(event:Parameters<NonNullable<Actions[string]>>[0],operation:"create"|"send"|"decide"|"model") {
+async function conversationAction(event:Parameters<NonNullable<Actions[string]>>[0],operation:"create"|"send"|"decide"|"model"|"plan") {
   const {locals,params,request}=event,form=await request.formData();
   const idempotencyKey=text(form,"idempotencyKey",128),conversationId=text(form,"conversationId",128);
   if(!idempotencyKey || (operation!=="create"&&!conversationId))return conversationInputError(locals.requestId,"Reload the conversation and try again.");
@@ -110,11 +111,13 @@ async function conversationAction(event:Parameters<NonNullable<Actions[string]>>
     const conversation=await getBff().getProjectConversation(conversationId!,context.ctx);
     if(conversation.projectId!==context.projectId)return conversationInputError(locals.requestId,"Select a conversation in this project.");
     if(operation==="send")return await sendConversationMessage(context,conversation.id);
+    if(operation==="plan")return await decideConversationPlan(context,conversation);
     if(operation==="model")return await reviseConversationModel(context,conversation);
     return await decideConversationProposal(context,conversation);
   }catch(error){
     if(error && typeof error==="object" && "status" in error && error.status===303)throw error;
     const mapped=safeError(error,locals.requestId);
+    if((operation==="plan"||operation==="model")&&(mapped.status===409||mapped.status===412))mapped.message="This plan cannot be approved with its saved inputs. Reload and select the latest version. If its source or runtime has changed, request a revised plan before approving again.";
     return fail(mapped.status,{error:mapped});
   }
 }
@@ -144,7 +147,9 @@ async function reviseConversationModel({form,idempotencyKey,requestId,ctx}:Conve
   if(!proposal||!connectionId||!model)return conversationInputError(requestId,"Choose an available coding connection and model for this pending task plan.");
   const bff=getBff(),catalog=await bff.listProviderModels({pageSize:100},ctx,connectionId);
   if(!catalog.models.some(m=>m.id===model))return conversationInputError(requestId,"The selected model is no longer available.");
-  await bff.decideProjectProposal({idempotencyKey,conversationId:conversation.id,proposalId:proposal.id,decision:"revise"},ctx);
+  const planId=text(form,"planId",128),version=text(form,"version",20);
+  if(!planId||!version||conversation.plan?.id!==planId||!conversation.plan.versions.some(v=>v.version===version&&v.proposalIds.includes(proposal.id)))return conversationInputError(requestId,"Reload the current plan before changing its coding model.");
+  await bff.decideProjectPlan({idempotencyKey,conversationId:conversation.id,planId,version,decision:"revise"},ctx);
   await bff.sendProjectMessage({idempotencyKey:`${idempotencyKey}-message`,conversationId:conversation.id,content:`Revise task plan ${proposal.id} for repository ${proposal.request?.repositoryConnectionId}: use coding connection ${connectionId} and model ${model}. Preserve the other requirements and prepare a new proposal for approval.`},ctx);
   return {success:"Coding model revision requested. Review the new plan before approving."};
 }
@@ -154,4 +159,11 @@ async function decideConversationProposal({form,idempotencyKey,requestId,ctx}:Co
   if(!proposalId||!["approve","reject","revise"].includes(decision??"")||!conversation.proposals.some(p=>p.id===proposalId))return conversationInputError(requestId,"Select a pending proposal and a decision.");
   await getBff().decideProjectProposal({idempotencyKey,conversationId:conversation.id,proposalId,decision:decision!},ctx);
   return {success:decision==="approve"?"Approved action submitted.":decision==="revise"?"Send a message with the revisions you need.":"Proposal rejected."};
+}
+
+async function decideConversationPlan({form,idempotencyKey,requestId,ctx}:ConversationActionContext,conversation:ProjectConversationDto){
+  const planId=text(form,"planId",128),version=text(form,"version",20),decision=text(form,"decision",16);
+  if(!planId||!version||!/^([1-9][0-9]{0,19})$/u.test(version)||!['approve','reject','revise'].includes(decision??'')||conversation.plan?.id!==planId||!conversation.plan.versions.some(v=>v.version===version))return conversationInputError(requestId,"Select a saved plan version and a decision.");
+  await getBff().decideProjectPlan({idempotencyKey,conversationId:conversation.id,planId,version,decision:decision!},ctx);
+  return {success:decision==='approve'?`Plan version ${version} approved. Tasks submitted.`:decision==='revise'?"Send a message with the revisions you need, then review the new version.":`Plan version ${version} rejected.`};
 }

@@ -32,5 +32,6 @@ export function mapConversation(value:ProjectConversation):ProjectConversationDt
     messages:value.messages.map(m=>({id:m.id,role:m.role,content:m.content,createdAt:required(m.createdAt).toISOString(),runId:m.runId})),
     runs:value.runs.map(r=>({id:r.id,state:r.state,model:r.model,connectionId:r.connectionId,modelCalls:r.modelCalls,failure:r.failure,...(r.tokenUsage ? {usage:{inputTokens:r.tokenUsage.inputTokens,outputTokens:r.tokenUsage.outputTokens,totalTokens:r.tokenUsage.totalTokens}} : {})})),
     proposals,
+    ...(value.plan ? {plan:{id:value.plan.id,versions:value.plan.versions.map(v=>({...v,acceptanceCriteria:[...v.acceptanceCriteria],proposalIds:[...v.proposalIds],createdAt:required(v.createdAt).toISOString()}))}} : {}),
   };
 }

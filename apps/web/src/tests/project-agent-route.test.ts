@@ -1,8 +1,9 @@
+import {BffError} from "@ayni-orchestrator/bff/server";
 import {beforeEach,describe,expect,it,vi} from "vitest";
-const metadata={id:"conversation:1",projectId:"project:1",title:"Research",repositoryConnectionIds:["repository:1"],updateCursor:"4",createdAt:"2026-10-13T00:00:00Z",messages:[],runs:[],proposals:[]};
+const metadata={id:"conversation:1",projectId:"project:1",title:"Research",repositoryConnectionIds:["repository:1"],updateCursor:"4",createdAt:"2026-10-13T00:00:00Z",messages:[],runs:[],proposals:[],plan:{id:"plan:1",versions:[{version:"1",state:"superseded",proposalIds:["proposal:1"]},{version:"2",state:"pending",proposalIds:["proposal:2"]}]}};
 const workspace={id:"workspace:1",displayName:"Workspace",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1",agentDefaults:{projectConnectionId:"workspace-connection",projectModel:"workspace-model",codingConnectionId:"workspace-connection",codingModel:"workspace-model"}};
 const project={workspaceId:"workspace:1",goal:"Complete work",id:"project:1",displayName:"Project",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
-const bff=vi.hoisted(()=>({getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
+const bff=vi.hoisted(()=>({getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[]}));
 import {load,actions} from "../routes/projects/[projectId]/+page.server.js";
@@ -30,6 +31,22 @@ describe("project agent operator routes",()=>{
     await actions.sendMessage!(event({conversationId:"conversation:1",content:"Requested work"}));
     await actions.decideProposal!(event({conversationId:"conversation:1",proposalId:"proposal:1",decision:"approve"}));
     for(const method of [bff.updateProject,bff.sendProjectMessage,bff.decideProjectProposal])expect(method.mock.calls[0]?.[1]).toMatchObject({deadlineMs:30_000});
+  });
+  it("binds decisions to the submitted exact plan version instead of silently selecting the newest",async()=>{
+    await actions.decidePlan!(event({conversationId:"conversation:1",planId:"plan:1",version:"1",decision:"approve"}));
+    expect(bff.decideProjectPlan).toHaveBeenCalledWith(expect.objectContaining({conversationId:"conversation:1",planId:"plan:1",version:"1",decision:"approve"}),expect.objectContaining({deadlineMs:30_000}));
+  });
+  it("rejects unknown plans and malformed versions before mutation",async()=>{
+    for(const fields of [{planId:"plan:other",version:"2"},{planId:"plan:1",version:"0"},{planId:"plan:1",version:"3"}]){
+      const result=await actions.decidePlan!(event({conversationId:"conversation:1",decision:"approve",...fields}));
+      expect(result).toMatchObject({status:400});
+    }
+    expect(bff.decideProjectPlan).not.toHaveBeenCalled();
+  });
+  it("makes stale source and runtime approval failures actionable",async()=>{
+    bff.decideProjectPlan.mockRejectedValueOnce(new BffError({status:412,reason:"failed_precondition",message:"current inputs unavailable",retryable:false}));
+    const result=await actions.decidePlan!(event({conversationId:"conversation:1",planId:"plan:1",version:"2",decision:"approve"}));
+    expect(result).toMatchObject({status:412,data:{error:{message:expect.stringContaining("request a revised plan")}}});
   });
   it.each(["create","test","replace"])("gives OpenAI %s the bounded 30 second deadline",async operation=>{
     await connectionActions("openai")[operation]!(event({id:"connection:1",displayName:"Models",apiKey:"fixture-key",resourceVersion:"1"}));

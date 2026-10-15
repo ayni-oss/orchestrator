@@ -14,7 +14,7 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Schema 20 is the current database format. Recognized schemas 6–19 migrate in
+Schema 21 is the current database format. Recognized schemas 6–20 migrate in
 order before reconciliation. It retains typed preparation, authenticated
 verification/runtime-operation/coding inboxes, accepted decisions, outbox retry
 and acknowledgement state, and operator lifecycle journal/outbox records.
@@ -57,6 +57,37 @@ Workspace writes use resource versions; refresh after a stale-write error.
 `dev/ctl test workspaces CONTROL_PLANE_IMAGE WEB_IMAGE` exercises ownership
 and restart persistence against the local Helm chart in an isolated Docker Desktop
 namespace, with runtime execution disabled.
+
+## Project plan upgrade
+
+The schema-20 to schema-21 migration groups retained create-task proposals into
+versioned conversation plans. It preserves proposal IDs, task and attempt links,
+action receipts and admitted work. Cancel and retry actions stay explicit action
+cards. Migration creates no tasks and reruns no research or worker execution.
+Plans retain up to 512 versions within the conversation payload limit. If migrated
+state exceeds a limit, the transaction aborts and preserves the schema-20 database;
+restore from a trusted backup or repair the retained state rather than deleting
+history.
+
+Upgrade the control plane, generated clients, BFF and UI together after backing up
+and quiescing the database. The legacy individual-proposal API remains available
+for lifecycle action cards and receipt replay; new task creation requires approval
+of the exact plan ID and current version. Retained proposal decisions preserve
+their receipts rather than duplicating admission. Earlier binaries do not support
+schema 21; follow the rollback procedure above.
+
+Plan approval revalidates all proposed tasks before committing any of them.
+Source/runtime drift blocks approval with a refresh explanation; request
+new research instead of retrying an outdated plan. Rejections and revision requests
+retain the version history. Duplicate approvals return the existing receipt;
+stale or conflicting decisions require refreshing the conversation.
+
+`dev/ctl test plans CONTROL_PLANE_IMAGE WEB_IMAGE` exercises seeded approval replay,
+stale/concurrent review decisions, rejected versions, migration and persistence
+across control-plane restart on Docker Desktop. Runtime execution is disabled; the
+fixture proves API and retained-state behavior without provider or worker calls.
+Fresh atomic task admission is covered separately by SQLite repository tests; this
+fixture does not bypass provider source observation or model credential checks.
 
 ## Historical builder cutover
 

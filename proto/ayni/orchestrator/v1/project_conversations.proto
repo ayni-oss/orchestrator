@@ -11,6 +11,7 @@ service ProjectConversationService {
   rpc ListProjectConversations(ListProjectConversationsRequest) returns (ListProjectConversationsResponse);
   rpc GetProjectConversation(GetProjectConversationRequest) returns (GetProjectConversationResponse);
   rpc SendProjectMessage(SendProjectMessageRequest) returns (SendProjectMessageResponse);
+  rpc DecideProjectPlan(DecideProjectPlanRequest) returns (DecideProjectPlanResponse);
   rpc DecideProjectProposal(DecideProjectProposalRequest) returns (DecideProjectProposalResponse);
 }
 message ProjectConversation {
@@ -23,6 +24,7 @@ message ProjectConversation {
   repeated ProjectTaskProposal proposals = 7;
   uint64 update_cursor = 8;
   google.protobuf.Timestamp created_at = 9;
+  ProjectPlan plan = 10;
 }
 message ProjectMessage {
   string id = 1;
@@ -103,4 +105,35 @@ message DecideProjectProposalRequest {
 message WatchProjectConversationRequest {
   string conversation_id = 1;
   uint64 after_cursor = 2;
+}
+
+// Stable identity with append-only research snapshots. Approval admits the entire
+// reviewed version; lifecycle actions remain separate proposal confirmations.
+message ProjectPlan {
+  string id = 1;
+  repeated ProjectPlanVersion versions = 2;
+}
+message ProjectPlanVersion {
+  uint64 version = 1;
+  string run_id = 2;
+  string state = 3;
+  string findings = 4;
+  string scope = 5;
+  repeated string acceptance_criteria = 6;
+  repeated string proposal_ids = 7;
+  // Descriptive research only; this grants no environment change authority.
+  string dependency_environment_impact = 8;
+  google.protobuf.Timestamp created_at = 9;
+  string failure = 10;
+}
+message DecideProjectPlanRequest {
+  string idempotency_key = 1;
+  string conversation_id = 2;
+  string plan_id = 3;
+  uint64 version = 4;
+  // approve, reject, revise. Revisions are supplied as a new user message.
+  string decision = 5;
+}
+message DecideProjectPlanResponse {
+  ProjectConversation conversation = 1;
 }

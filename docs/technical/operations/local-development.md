@@ -27,7 +27,7 @@ run mandatory full checks, repair within budget, bind final evidence and deliver
 truthful drafts. Control-plane collection is idempotent and cleanup follows
 durable collection.
 
-SQLite schema version 19 migrates recognized versions 6–18 before reconciliation.
+SQLite schema version 21 migrates recognized versions 6–20 before reconciliation.
 The migration preserves connections, certificates, registries, runtime history
 and retained tasks, and records obsolete installation resources for restartable
 cleanup. Follow [operations](operations.md) and upgrade with cleaned values and

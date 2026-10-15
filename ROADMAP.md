@@ -26,11 +26,14 @@ The product model is **Workspace → Project → Plan → Task → Run**.
 | Session | A replaceable live planner instance associated with a conversation. |
 | Agent Runtime | The software that runs the model loop and routes tool calls. |
 
-The current Project resource holds much of the proposed Workspace configuration.
-Implementation introduces outcome-focused Projects beneath Workspaces and preserves existing conversations and task history.
-Multiple Projects can use the same Workspace and select the resources required for their work.
+Workspaces currently own repository membership and shared agent defaults.
+Outcome-focused Projects select workspace repositories while retaining conversations
+and task history. Conversations retain versioned plans, and approval binds the exact
+reviewed version to immutable task inputs. Multiple Projects can share a Workspace.
 
 ### Product interface
+
+The following interface and idle-timeout controls describe the planned working surface.
 
 The Project page is the main working surface, with **Overview, Plans and Tasks** views.
 Overview places a fixed-height planner chat above the current plan card.
@@ -62,7 +65,7 @@ User and assistant messages currently persist in SQLite on the Control Plane's p
 Conversation messages are not currently JetStream events.
 Research uses a separate one-shot Kubernetes Job for each turn, and model input includes only the latest 32 messages.
 
-Reusable sessions keep one live planner environment per conversation and process turns serially.
+Planned reusable sessions keep one live planner environment per conversation and process turns serially.
 Each conversation has a configurable idle timeout, including five minutes or 24 hours.
 Accepted user messages reset the idle timeout; an expired session is removed once it has no active turn.
 A later message recreates the session and restores its context without losing history.
@@ -71,14 +74,14 @@ Session expiry does not interrupt an active turn.
 Per-turn deadlines and model-call budgets remain separate from the idle timeout.
 Repository observations and credentials are refreshed between turns.
 
-Durable context includes messages, decisions, unresolved questions, research references, plans, approvals and worker outcomes.
+The planned context model includes messages, decisions, unresolved questions, research references, plans, approvals and worker outcomes.
 The model receives a compact working summary and recent messages, with retrieval of older context when needed.
 This replaces the fixed latest-32-messages approach while keeping durable history independent of the live session.
 
 ### Implementation sequence
 
-These slices describe the agreed direction; they are not yet implemented.
-Delivery issues and milestones remain in the Orchestrator Project.
+These slices describe the agreed direction. Use their linked delivery issues and
+the Orchestrator Project for current status and acceptance criteria.
 
 | Slice | Observable outcome | Issue |
 | --- | --- | --- |

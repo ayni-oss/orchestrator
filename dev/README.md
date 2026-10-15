@@ -129,6 +129,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl purge ayni-orchestrator-dev` | Permanently remove the labeled namespace and all local state |
 | `dev/ctl render CP WORKER_DIGEST WEB` | Render the complete Helm composition for inspection |
 | `dev/ctl dependencies` | Rebuild ignored chart archives from `Chart.lock` |
+| `dev/ctl test plans CP WEB` | Validate plan review, approval replay, migration and restart persistence in a disposable namespace |
 | `dev/ctl test workspaces CP WEB` | Validate workspace ownership, admission and persistence across a control-plane restart in a disposable namespace |
 | `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
 
@@ -184,9 +185,11 @@ managed runtime defaults to native `linux/arm64` and disables architecture emula
 Intel hosts must select `linux/amd64` explicitly. A connection test requires
 `connections.testImage` set to a digest-pinned control-plane image.
 
-Database schema changes reject old state rather than migrate it. Inventory the
-exact retained claims and obtain explicit approval before deleting application
-data; runtime outputs and administrator Secrets are separate retained resources.
+Recognized SQLite schemas 6–20 migrate to schema 21 before reconciliation. Back up
+and quiesce state before upgrading; malformed or unsupported state aborts startup.
+Follow the [upgrade procedure](../docs/technical/operations/operations.md) and obtain
+explicit approval before deleting application data. Runtime outputs and
+administrator Secrets are separate retained resources.
 Use an isolated Docker Desktop namespace to validate fresh onboarding safely.
 
 
@@ -228,3 +231,13 @@ persistence and workspace archival. It uses no provider credentials and makes no
 provider calls. Its unique disposable namespace and retained claims are removed
 on success or failure. This gate does not claim worker or provider execution
 coverage.
+
+The plan API gate runs as `dev/ctl test plans CONTROL_PLANE_IMAGE WEB_IMAGE`.
+It seeds retained SQLite fixtures, including legacy task proposals, and uses the
+local Helm chart with runtime execution disabled. It checks persisted approved task
+identities, approval replay, stale/concurrent review decisions, rejection, migration and restart persistence. Fresh admission is covered
+by the SQLite repository tests; the API fixture does not bypass source or model
+credential checks.
+No provider credentials or live research are used, and it claims no worker execution
+coverage. Its unique namespace and retained claims are cleaned up on failure as well
+as success.
