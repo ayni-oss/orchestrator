@@ -9,6 +9,8 @@ fn turn(sequence: u64) -> io::Result<ProjectSessionTurn> {
         pod_uid: "pod-uid".into(),
         deadline_at_unix_seconds: now()? + 300,
         request: ProjectAgentRequest {
+            worker_profile: None,
+            profile: None,
             run_id: format!("run-{sequence}"),
             project_id: "project".into(),
             model: "model".into(),

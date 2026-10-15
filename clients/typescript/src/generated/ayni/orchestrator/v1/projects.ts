@@ -21,6 +21,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
+import { AgentProfileSettings } from "./agent_profiles";
 import { PageRequest, PageResponse } from "./common";
 import { DevelopmentTaskState, developmentTaskStateFromJSON, developmentTaskStateToJSON } from "./development_tasks";
 import { RuntimeReadinessSummary } from "./repositories";
@@ -232,6 +233,8 @@ export interface ProjectAgentDefaults {
   projectModel: string;
   codingConnectionId: string;
   codingModel: string;
+  plannerProfile?: AgentProfileSettings | undefined;
+  workerProfile?: AgentProfileSettings | undefined;
 }
 
 export interface Workspace {
@@ -2193,7 +2196,14 @@ export const WatchProjectsResponse: MessageFns<WatchProjectsResponse> = {
 };
 
 function createBaseProjectAgentDefaults(): ProjectAgentDefaults {
-  return { projectConnectionId: "", projectModel: "", codingConnectionId: "", codingModel: "" };
+  return {
+    projectConnectionId: "",
+    projectModel: "",
+    codingConnectionId: "",
+    codingModel: "",
+    plannerProfile: undefined,
+    workerProfile: undefined,
+  };
 }
 
 export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
@@ -2209,6 +2219,12 @@ export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
     }
     if (message.codingModel !== "") {
       writer.uint32(34).string(message.codingModel);
+    }
+    if (message.plannerProfile !== undefined) {
+      AgentProfileSettings.encode(message.plannerProfile, writer.uint32(42).fork()).join();
+    }
+    if (message.workerProfile !== undefined) {
+      AgentProfileSettings.encode(message.workerProfile, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -2258,6 +2274,22 @@ export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
             message.codingModel = reader.string();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.plannerProfile = AgentProfileSettings.decode(reader, reader.uint32());
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.workerProfile = AgentProfileSettings.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2292,6 +2324,16 @@ export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
         : isSet(object.coding_model)
         ? globalThis.String(object.coding_model)
         : "",
+      plannerProfile: isSet(object.plannerProfile)
+        ? AgentProfileSettings.fromJSON(object.plannerProfile)
+        : isSet(object.planner_profile)
+        ? AgentProfileSettings.fromJSON(object.planner_profile)
+        : undefined,
+      workerProfile: isSet(object.workerProfile)
+        ? AgentProfileSettings.fromJSON(object.workerProfile)
+        : isSet(object.worker_profile)
+        ? AgentProfileSettings.fromJSON(object.worker_profile)
+        : undefined,
     };
   },
 
@@ -2309,6 +2351,12 @@ export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
     if (message.codingModel !== "") {
       obj.codingModel = message.codingModel;
     }
+    if (message.plannerProfile !== undefined) {
+      obj.plannerProfile = AgentProfileSettings.toJSON(message.plannerProfile);
+    }
+    if (message.workerProfile !== undefined) {
+      obj.workerProfile = AgentProfileSettings.toJSON(message.workerProfile);
+    }
     return obj;
   },
 
@@ -2321,6 +2369,12 @@ export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
     message.projectModel = object.projectModel ?? "";
     message.codingConnectionId = object.codingConnectionId ?? "";
     message.codingModel = object.codingModel ?? "";
+    message.plannerProfile = (object.plannerProfile !== undefined && object.plannerProfile !== null)
+      ? AgentProfileSettings.fromPartial(object.plannerProfile)
+      : undefined;
+    message.workerProfile = (object.workerProfile !== undefined && object.workerProfile !== null)
+      ? AgentProfileSettings.fromPartial(object.workerProfile)
+      : undefined;
     return message;
   },
 };

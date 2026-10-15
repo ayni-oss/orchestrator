@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectAgentRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<crate::agent_profile::FrozenProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_profile: Option<crate::agent_profile::FrozenProfile>,
     pub run_id: String,
     pub project_id: String,
     pub model: String,
@@ -192,5 +196,48 @@ impl ProjectSessionTurn {
             && self
                 .request_digest()
                 .is_ok_and(|digest| digest == receipt.request_digest)
+    }
+}
+
+impl ProjectAgentRequest {
+    /// Validate frozen capabilities before reading credentials or contacting a model.
+    /// # Errors
+    /// Rejects altered roles, resources, bindings and execution budgets.
+    pub fn validate_profile(&self) -> std::io::Result<()> {
+        use crate::agent_profile::Role;
+        let repositories = self
+            .repositories
+            .iter()
+            .map(|r| r.id.clone())
+            .collect::<Vec<_>>();
+        if let Some(profile) = &self.profile {
+            profile.validate(&Role::Planner, &self.model, &profile.repository_ids)?;
+            if repositories
+                .iter()
+                .any(|id| !profile.repository_ids.contains(id))
+            {
+                return Err(std::io::Error::other("profile resource scope exceeded"));
+            }
+            if self.max_model_calls > profile.settings.max_model_calls
+                || self.deadline_seconds > profile.settings.deadline_seconds
+            {
+                return Err(std::io::Error::other("profile budget exceeded"));
+            }
+        }
+        if let Some(profile) = &self.worker_profile {
+            profile.validate(&Role::Worker, &profile.model, &profile.repository_ids)?;
+            if repositories
+                .iter()
+                .any(|id| !profile.repository_ids.contains(id))
+            {
+                return Err(std::io::Error::other("profile resource scope exceeded"));
+            }
+            if self.repositories.iter().any(|r| {
+                r.coding_connection_id != profile.connection_id || r.coding_model != profile.model
+            }) {
+                return Err(std::io::Error::other("profile binding mismatch"));
+            }
+        }
+        Ok(())
     }
 }

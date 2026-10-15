@@ -4,6 +4,7 @@ import {createServer} from "node:http";
 import {pathToFileURL} from "node:url";
 export function plannerStub(){
   let calls=0,completed=0,holding=false;
+  let profileMetadata={tools:[],revisionTwo:false};
   const pending=new Set();
   function send(response,body,status=200){if(!response.destroyed){const value=JSON.stringify(body);response.writeHead(status,{"content-type":"application/json","content-length":Buffer.byteLength(value)});response.end(value);}}
   function complete(response,model,number){
@@ -13,6 +14,7 @@ export function plannerStub(){
   const server=createServer(async(request,response)=>{
     const path=new URL(request.url??"/","http://fixture").pathname;
     if(path==="/healthz")return send(response,{ready:true});
+    if(path==="/fixture/profile")return send(response,profileMetadata);
     if(path==="/fixture/stats")return send(response,{calls,completed,pending:pending.size,holding});
     if(request.method==="POST"&&path==="/fixture/hold"){holding=true;return send(response,{holding});}
     if(request.method==="POST"&&path==="/fixture/release"){
@@ -25,6 +27,7 @@ export function plannerStub(){
       for await(const chunk of request){bytes+=chunk.length;if(bytes>1_048_576)throw Error("request too large");chunks.push(chunk);}
       const value=JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if(typeof value.model!=="string"||value.stream===true)throw Error("invalid fixture request");
+      profileMetadata={tools:(value.tools??[]).map(t=>t.name??t.function?.name).filter(Boolean).sort(),revisionTwo:JSON.stringify(value).includes("Profile fixture revision 2")};
       const number=++calls;
       if(holding){const item={response,model:value.model,number};pending.add(item);response.once("close",()=>pending.delete(item));}
       else complete(response,value.model,number);

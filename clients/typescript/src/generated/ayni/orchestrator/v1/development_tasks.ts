@@ -22,6 +22,7 @@ import {
 } from "@grpc/grpc-js";
 import { Duration } from "../../../google/protobuf/duration";
 import { Timestamp } from "../../../google/protobuf/timestamp";
+import { FrozenAgentProfile } from "./agent_profiles";
 import { ChangeConstraints, OciPlatform, PageRequest, PageResponse, ResourceFailure } from "./common";
 import { RuntimeProfileKind, runtimeProfileKindFromJSON, runtimeProfileKindToJSON } from "./runtime_profiles";
 
@@ -655,6 +656,7 @@ export interface DevelopmentSnapshot {
   publicationBaseBranch: string;
   providerCredentials?: FrozenProviderCredentials | undefined;
   origin?: TaskOrigin | undefined;
+  agentProfile?: FrozenAgentProfile | undefined;
 }
 
 /** ProviderTokenUsage preserves independent counters; absence never means zero. */
@@ -1879,6 +1881,7 @@ function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
     publicationBaseBranch: "",
     providerCredentials: undefined,
     origin: undefined,
+    agentProfile: undefined,
   };
 }
 
@@ -1916,6 +1919,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     }
     if (message.origin !== undefined) {
       TaskOrigin.encode(message.origin, writer.uint32(90).fork()).join();
+    }
+    if (message.agentProfile !== undefined) {
+      FrozenAgentProfile.encode(message.agentProfile, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -2021,6 +2027,14 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
             message.origin = TaskOrigin.decode(reader, reader.uint32());
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.agentProfile = FrozenAgentProfile.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2066,6 +2080,11 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
         ? FrozenProviderCredentials.fromJSON(object.provider_credentials)
         : undefined,
       origin: isSet(object.origin) ? TaskOrigin.fromJSON(object.origin) : undefined,
+      agentProfile: isSet(object.agentProfile)
+        ? FrozenAgentProfile.fromJSON(object.agentProfile)
+        : isSet(object.agent_profile)
+        ? FrozenAgentProfile.fromJSON(object.agent_profile)
+        : undefined,
     };
   },
 
@@ -2104,6 +2123,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     if (message.origin !== undefined) {
       obj.origin = TaskOrigin.toJSON(message.origin);
     }
+    if (message.agentProfile !== undefined) {
+      obj.agentProfile = FrozenAgentProfile.toJSON(message.agentProfile);
+    }
     return obj;
   },
 
@@ -2136,6 +2158,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
       : undefined;
     message.origin = (object.origin !== undefined && object.origin !== null)
       ? TaskOrigin.fromPartial(object.origin)
+      : undefined;
+    message.agentProfile = (object.agentProfile !== undefined && object.agentProfile !== null)
+      ? FrozenAgentProfile.fromPartial(object.agentProfile)
       : undefined;
     return message;
   },

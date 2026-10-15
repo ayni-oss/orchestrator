@@ -33,9 +33,9 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 24 retains preparation state,
+and pull request receipts. SQLite schema version 25 retains preparation state,
 authenticated result inboxes, accepted decisions, transactional outboxes and
-operator lifecycle facts. Recognized versions 6–23 migrate in order before
+operator lifecycle facts. Recognized versions 6–24 migrate in order before
 reconciliation; malformed retained state aborts the upgrade. Older and unknown
 versions are rejected. See [operations](../operations/operations.md) for upgrade
 and rollback requirements. Credentials remain separate inputs and are never worker output.
@@ -283,7 +283,7 @@ Versions retain findings, scope, acceptance criteria, task proposal identities a
 descriptive dependency/environment impact. A version's review state and failure
 explanation can change; its researched content stays fixed. Lifecycle actions
 (cancel, retry task and retry publication) remain separately confirmed action cards.
-Outcome summaries cannot propose additional work.
+Worker updates do not propose additional work.
 
 Approval names the exact plan ID and version. The current pending version admits
 its entire task set in one SQLite transaction after revalidating project/workspace
@@ -294,7 +294,8 @@ admitted task receipts persist together; duplicate decisions retain original tas
 identities. Stale versions and conflicting concurrent decisions cannot replace the
 current decision. Each run prepares at most one task per repository;
 cross-repository dependency execution remains outside this contract. Accepted
-attempt outcomes schedule bounded summaries with durable deduplication.
+attempt revisions project structured worker updates into the originating
+conversation and safe archive, with revision fences and semantic deduplication.
 
 SQLite owns the authoritative conversation state. Its append-only context archive
 stores safe projections of messages, plans, approval decisions, proposals and worker
@@ -324,3 +325,39 @@ generation-bound receipt before persistence. Idle cleanup preserves durable
 records. Controller restart adopts surviving owned sessions and reconciles their
 stored deadlines. Already admitted one-shot turns from older schemas finish with
 their original frozen inputs; new turns use resident sessions.
+
+## Agent profiles and capability enforcement
+
+Workspace agent defaults optionally select separate planner and worker capability
+profiles alongside their model/provider bindings. Project selections can reduce
+tools, repository scope, model-call ceilings, deadlines and pinned workspace skills;
+they cannot widen these. Project instructions append to workspace instructions.
+The compiled role catalogs remain the upper authority, independently of metadata.
+
+New message admission freezes both profiles into the research run. Preparation
+uses those bindings even when defaults subsequently change, and freezes the exact
+request budgets within deployment ceilings. Worker profiles are frozen again for
+the approved task's single repository and explicit execution limits. Approval
+rejects a changed worker profile or binding revision, requiring new research.
+Ordinary retries retain their task snapshot. New dispatch rejects disabled or
+unready connections; already dispatched executions retain their credential revision
+until completion or explicit cancellation.
+
+A content digest binds the role, builtin-role-v1 policy revision, provider/model,
+connection revision, exact builtin and selected instructions, exact skill text and revision, tools and resource
+scope. Profiles contain safe binding identifiers; credential values and Secret
+names/UIDs remain outside profile/model context. Frozen request and run profiles
+must match. Startup verifies revisions and bindings rather than adopting changed
+settings into historical work.
+
+The worker registers only allowed tools and checks the frozen role and scope again
+inside each tool invocation. Read-only planner mounts and bounded retrieval remain
+in force; it receives no command or repository mutation tool. Worker commands and
+quality execution retain the existing Landlock sandbox, protected-path enforcement,
+mandatory final checks and separate publication authority. Disabling an agent's
+quality tool does not disable the worker's mandatory check.
+
+The runtime contract defines ScopedToolAdapter as a future MCP attachment boundary.
+An implementation must authorize every invocation against application-issued
+capabilities. Tool descriptions, skill text and server metadata cannot grant a
+capability. No external MCP server, marketplace or dynamic hierarchy is enabled.

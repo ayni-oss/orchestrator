@@ -90,6 +90,7 @@ impl CleanStore {
             .map_err(CleanStoreError::Database)?;
         for bytes in tasks {
             let task: v1::DevelopmentTask = decode(&bytes)?;
+            validate_snapshot_profile(task.snapshot.as_ref())?;
             let indexed = super::project_origins::indexed_origin(&self.connection, &task.id)?;
             if task.snapshot.as_ref().and_then(|s| s.origin.as_ref()) != indexed.as_ref() {
                 return Err(CleanStoreError::CorruptState);
@@ -157,6 +158,10 @@ fn validate_attempt_origins(
         .map_err(CleanStoreError::Database)?;
     for bytes in attempts {
         let a: v1::DevelopmentAttempt = decode(&bytes)?;
+        if let Some(snapshot) = &a.snapshot {
+            crate::agent_profiles::validate_snapshot(snapshot)
+                .map_err(|_| CleanStoreError::CorruptState)?;
+        }
         if a.snapshot.as_ref().and_then(|s| s.origin.as_ref()) != Some(origin) {
             return Err(CleanStoreError::CorruptState);
         }
@@ -209,4 +214,14 @@ pub(super) fn normalize_quality(quality: &mut v1::QualityResult, commit: Option<
         quality.outcome = v1::QualityOutcome::Unavailable as i32;
         quality.evidence = None;
     }
+}
+
+fn validate_snapshot_profile(
+    snapshot: Option<&v1::DevelopmentSnapshot>,
+) -> Result<(), CleanStoreError> {
+    if let Some(snapshot) = snapshot {
+        crate::agent_profiles::validate_snapshot(snapshot)
+            .map_err(|_| CleanStoreError::CorruptState)?;
+    }
+    Ok(())
 }

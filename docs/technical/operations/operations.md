@@ -409,3 +409,23 @@ progress, questions, independent results, retries, schema-23 backfill and restar
 idempotency through the deployed API in a disposable Docker Desktop namespace.
 It seeds synthetic retained state with the writer stopped; it does not execute a
 live model or coding worker.
+
+## Agent profile upgrade
+
+Schema 25 fences binaries that cannot enforce saved capability selections. Upgrade
+the control plane, runtime worker, generated clients, BFF and web UI together after
+backing up and quiescing SQLite. Versions 6–24 migrate in order. The marker-only
+24-to-25 upgrade preserves existing snapshots, requests, receipts and execution
+authority; it does not invent historical profile revisions. Retained executions
+without a profile continue under the fixed legacy role catalogs and sandbox.
+New admitted model executions freeze content-addressed profiles and the builtin
+policy revision. Older binaries cannot open schema 25.
+
+`dev/ctl test agent-profiles CONTROL_PLANE_IMAGE WEB_IMAGE WORKER_IMAGE` runs a
+real resident planner against the local synthetic provider in a disposable Docker
+Desktop namespace. It checks the registered tool catalog, pinned skills, frozen
+revisions across settings changes/restart, and rejection of planner mutation
+capabilities. Its pre-frozen source scope is empty; it does not claim a live GitHub
+checkout or production provider call. Native regressions exercise scoped reads,
+command denial before process creation, revoked bindings and retained-state
+validation. The fixture removes only its own namespace and volumes.

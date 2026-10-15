@@ -7,6 +7,24 @@ use ayni_orchestrator_application::{
     tasks::lifecycle::AttemptState,
 };
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
+    async fn validate_coding_profile_binding(
+        &self,
+        profile: Option<&v1::FrozenAgentProfile>,
+    ) -> Result<Option<ayni_orchestrator_runtime::agent_profile::FrozenProfile>, &'static str> {
+        if let Some(profile) = profile {
+            let profile = profile.clone();
+            self.with_database(move |store| {
+                store
+                    .validate_profile_connection(&profile)
+                    .map_err(|_| "coding_model_binding_revoked")
+            })
+            .await?;
+        }
+        profile
+            .map(crate::agent_profiles::frozen)
+            .transpose()
+            .map_err(|_| "coding_profile_invalid")
+    }
     pub(super) async fn coding(&self, profile_id: &str) -> Result<(), &'static str> {
         let lookup_profile = profile_id.to_owned();
         let attempts = self
@@ -419,6 +437,9 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
     ) -> Result<(), &'static str> {
         use ayni_orchestrator_profile_ayni::coding::WorkerSpec;
         let snapshot = attempt.snapshot.as_ref().ok_or("coding_snapshot_missing")?;
+        let agent_profile = self
+            .validate_coding_profile_binding(snapshot.agent_profile.as_ref())
+            .await?;
         let source = snapshot
             .repository
             .as_ref()
@@ -471,6 +492,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .as_ref()
             .ok_or("coding_constraints_missing")?;
         let mut request = WorkerSpec {
+            profile: agent_profile,
             execution: ExecutionRequest {
                 repository_url: format!("https://github.com/{}/{}.git", github.owner, github.name),
                 revision: source.revision.clone(),

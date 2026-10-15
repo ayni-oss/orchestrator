@@ -1,3 +1,4 @@
+import {mapFrozenProfile} from "./agent-profiles.js";
 import {mapTaskOrigin} from "./task-origin.js";
 import { mapCertificate } from "./certificates.js";
 import { safeText, safeGithubLink, safeReconciliation } from "./onboarding.js";
@@ -292,6 +293,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
       platform: mapPlatform(required(runtime.platform)),
     },
     agent: { provider: agent.provider, agent: agent.agent, model: agent.model },
+    ...(value.agentProfile?{agentProfile:mapFrozenProfile(value.agentProfile)}:{}),
     ...(value.origin?{origin:mapTaskOrigin(value.origin)}:{}),
     ...(value.providerCredentials ? {providerBinding:{connectionId:value.providerCredentials.connectionId,credentialRevision:value.providerCredentials.credentialRevision}} : {}),
     request: value.request,

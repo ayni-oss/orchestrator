@@ -33,6 +33,13 @@ impl CleanStore {
             {
                 return Err(CleanStoreError::CorruptState);
             }
+            for run in &conversation.runs {
+                if let Some(request) = self.project_run_request(&run.id)? {
+                    validate_request_profiles(run, &request)?;
+                }
+                crate::agent_profiles::validate_run(&conversation, run)
+                    .map_err(|_| CleanStoreError::CorruptState)?;
+            }
             super::project_plans::validate(&conversation)?;
             self.validate_project_context(&conversation)?;
         }
@@ -81,6 +88,11 @@ impl CleanStore {
         id: &str,
         request: &ayni_orchestrator_runtime::project_agent::ProjectAgentRequest,
     ) -> Result<(), CleanStoreError> {
+        if let Some(c) = self.conversation_for_active_run(id)?
+            && let Some(run) = c.runs.iter().find(|r| r.id == id)
+        {
+            validate_request_profiles(run, request)?;
+        }
         let payload = serde_json::to_string(request).map_err(|_| CleanStoreError::CorruptState)?;
         if payload.len() > 512 * 1024 {
             return Err(CleanStoreError::BoundExceeded);
@@ -260,7 +272,7 @@ impl CleanStore {
         &mut self,
         key: &str,
         request: &v1::SendProjectMessageRequest,
-        run: v1::ProjectAgentRun,
+        mut run: v1::ProjectAgentRun,
     ) -> Result<v1::ProjectConversation, CleanStoreError> {
         if let Some(c) = self.replay_conversation(key, request)? {
             return Ok(c);
@@ -285,6 +297,7 @@ impl CleanStore {
             {
                 return Err(CleanStoreError::InvalidTransition);
             }
+            self.freeze_run_profiles(&c, &mut run)?;
             c.messages.push(v1::ProjectMessage {
                 id: resource_id("message"),
                 role: "user".into(),
@@ -844,6 +857,18 @@ fn validate_project_result(
     {
         return Err(CleanStoreError::InvalidTransition);
     }
+    if let Some(profile) = researched.and_then(|r| r.worker_profile.as_ref()) {
+        for p in &result.proposals {
+            if !profile.repository_ids.contains(&p.repository_id)
+                || p.coding_model != profile.model
+                || p.coding_connection_id != profile.connection_id
+                || p.coding_turns > profile.settings.max_model_calls
+                || p.deadline_seconds > profile.settings.deadline_seconds
+            {
+                return Err(CleanStoreError::InvalidTransition);
+            }
+        }
+    }
     Ok(())
 }
 fn proposal_request(
@@ -904,4 +929,29 @@ fn api_validation_task(request: &v1::DevelopmentTaskRequest) -> Result<(), Clean
         request: Some(request.clone()),
     })
     .map_err(|_| CleanStoreError::BoundExceeded)
+}
+
+fn validate_request_profiles(
+    run: &v1::ProjectAgentRun,
+    request: &ProjectAgentRequest,
+) -> Result<(), CleanStoreError> {
+    request
+        .validate_profile()
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    let planner = run
+        .planner_profile
+        .as_ref()
+        .map(crate::agent_profiles::frozen)
+        .transpose()
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    let worker = run
+        .worker_profile
+        .as_ref()
+        .map(crate::agent_profiles::frozen)
+        .transpose()
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    if request.profile != planner || request.worker_profile != worker {
+        return Err(CleanStoreError::CorruptState);
+    }
+    Ok(())
 }

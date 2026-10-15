@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AgentProfileSummary from "$lib/components/agent-profile-summary.svelte";
   import {projectHref} from "$lib/project-navigation.js";
   import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
@@ -41,6 +42,7 @@
     {@const terminal = terminalStates.includes(task.state)}
     <Button href={projectHref(task.projectId,"tasks",task.snapshot.origin?.conversationId)} variant="outline">Project tasks</Button>
     <PageHeader eyebrow="Task" title={task.snapshot.request} />
+    <AgentProfileSummary profile={task.snapshot.agentProfile} />
     {#if task.snapshot.origin}
       {@const origin=task.snapshot.origin}
       <nav class="flex flex-wrap gap-3 text-sm" aria-label="Task origin"><a class="underline" href={projectHref(origin.projectId,"overview",origin.conversationId)}>Originating conversation</a><a class="underline" href={projectHref(origin.projectId,"plans",origin.conversationId,undefined,origin.planVersion)}>Approved plan · version {origin.planVersion}</a></nav>

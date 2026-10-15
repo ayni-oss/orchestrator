@@ -94,6 +94,8 @@ fn turn(uid: &str, generation: u64, sequence: u64) -> TestResult<ProjectSessionT
         pod_uid: uid.into(),
         deadline_at_unix_seconds: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() + 180,
         request: ProjectAgentRequest {
+            worker_profile: None,
+            profile: None,
             run_id: format!("fixture-direct-{generation}-{sequence}"),
             project_id: "fixture-project".into(),
             model: "gpt-5.6-sol".into(),

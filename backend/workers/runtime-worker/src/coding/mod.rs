@@ -287,6 +287,16 @@ fn empty_result() -> WorkerResult {
     }
 }
 fn validate_spec(spec: &WorkerSpec) -> io::Result<()> {
+    if let Some(profile) = &spec.profile {
+        profile.validate(
+            &ayni_orchestrator_runtime::agent_profile::Role::Worker,
+            &spec.model,
+            &profile.repository_ids,
+        )?;
+        if u32::from(spec.limits.coding_turns) > profile.settings.max_model_calls {
+            return Err(io::Error::other("profile budget exceeded"));
+        }
+    }
     validate_source(&spec.execution)?;
     spec.constraints.validate().map_err(io::Error::other)?;
     let safe_identity = |v: &str| {
@@ -356,3 +366,6 @@ mod tests;
 mod agent_runner;
 
 mod report;
+
+#[cfg(test)]
+mod profile_tests;

@@ -54,7 +54,33 @@ fn complete(
             .as_deref()
             .ok_or(CleanStoreError::CorruptState)?,
     )?;
-    store.save_project_run_request(&run.id,&ProjectAgentRequest{run_id:run.id.clone(),project_id:c.project_id.clone(),model:run.model.clone(),history:String::new(),conversation_context:serde_json::Value::Null,repositories:vec![ayni_orchestrator_runtime::project_agent::ResearchRepository{id:c.repository_connection_ids[0].clone(),repository_url:"https://github.com/ayni-oss/sandbox.git".into(),revision:REVISION.into(),coding_connection_id:String::new(),coding_model:run.model.clone(),runtime_profile_id:profile.id.clone()}],context:serde_json::json!({"repositories":[{"repository_id":c.repository_connection_ids[0],"profiles":[{"id":profile.id,"active_revision_id":profile.active_revision_id,"active_runtime_artifact_id":profile.active_runtime_artifact_id,"resolved_digest":artifact.resolved_digest}]}]}).to_string(),max_model_calls:24,deadline_seconds:600})?;
+    let saved = store.project_conversation(&c.id)?;
+    let saved_run = saved
+        .runs
+        .iter()
+        .find(|r| r.id == run.id)
+        .ok_or(CleanStoreError::CorruptState)?;
+    let planner_profile = saved_run
+        .planner_profile
+        .as_ref()
+        .map(crate::agent_profiles::frozen)
+        .transpose()
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    let worker_profile = saved_run
+        .worker_profile
+        .as_ref()
+        .map(crate::agent_profiles::frozen)
+        .transpose()
+        .map_err(|_| CleanStoreError::CorruptState)?;
+    let coding_connection = worker_profile
+        .as_ref()
+        .map_or_else(String::new, |p| p.connection_id.clone());
+    let calls = planner_profile
+        .as_ref()
+        .map_or(24, |p| p.settings.max_model_calls.min(24));
+    store.save_project_run_request(&run.id,&ProjectAgentRequest{
+        worker_profile,
+            profile: planner_profile,run_id:run.id.clone(),project_id:c.project_id.clone(),model:run.model.clone(),history:String::new(),conversation_context:serde_json::Value::Null,repositories:vec![ayni_orchestrator_runtime::project_agent::ResearchRepository{id:c.repository_connection_ids[0].clone(),repository_url:"https://github.com/ayni-oss/sandbox.git".into(),revision:REVISION.into(),coding_connection_id:coding_connection.clone(),coding_model:run.model.clone(),runtime_profile_id:profile.id.clone()}],context:serde_json::json!({"repositories":[{"repository_id":c.repository_connection_ids[0],"profiles":[{"id":profile.id,"active_revision_id":profile.active_revision_id,"active_runtime_artifact_id":profile.active_runtime_artifact_id,"resolved_digest":artifact.resolved_digest}]}]}).to_string(),max_model_calls:calls,deadline_seconds:600})?;
     store.complete_project_run(ProjectAgentResult {
         run_id: run.id.clone(),
         message: "Review this proposal".into(),
@@ -67,7 +93,7 @@ fn complete(
             repository_id: c.repository_connection_ids[0].clone(),
             revision: REVISION.into(),
             runtime_profile_id: profile.id.clone(),
-            coding_connection_id: String::new(),
+            coding_connection_id: coding_connection,
             coding_model: "gpt-5.6-sol".into(),
             request: "Make the bounded change".into(),
             acceptance_criteria: vec!["Tests pass".into()],
@@ -352,6 +378,8 @@ fn whole_plan_approval_rolls_back_when_second_repository_is_stale() -> Result<()
     store.save_project_run_request(
         &run.id,
         &ProjectAgentRequest {
+            worker_profile: None,
+            profile: None,
             run_id: run.id.clone(),
             project_id: c.project_id.clone(),
             model: run.model.clone(),
@@ -942,3 +970,6 @@ fn legacy_conversation(
 }
 #[path = "project_worker_evidence.rs"]
 mod worker_evidence;
+
+#[path = "agent_profiles.rs"]
+mod agent_profiles;

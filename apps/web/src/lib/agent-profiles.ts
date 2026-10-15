@@ -1,0 +1,3 @@
+export const profileTools={planner:["list_repository_files","read_repository_file","search_repository","inspect_project_context","search_context","get_context_record","prepare_task_proposal"],worker:["run_command","ayni_verify","ayni_check","commit_changes"]};
+export type ProfileRole=keyof typeof profileTools;
+export function profileDefaults(role:ProfileRole){return {instructions:"",skills:[] as Array<{id:string;revision:string;instructions:string}>,allowedTools:[...profileTools[role]],repositoryIds:[] as string[],maxModelCalls:role==="planner"?16:128,deadlineSeconds:role==="planner"?"900":"86400"};}

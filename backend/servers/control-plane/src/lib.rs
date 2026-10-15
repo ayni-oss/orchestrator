@@ -1,5 +1,6 @@
 //! Native gRPC, operational HTTP, and durable orchestration for Ayni Orchestrator.
 mod adapters;
+pub(crate) mod agent_profiles;
 mod coordinators;
 mod process;
 mod profiles;

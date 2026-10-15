@@ -68,6 +68,27 @@ fn tail(value: &str, bound: usize) -> String {
 /// quality execution; a coding-agent CLI contract must be defined before replacement.
 pub(super) struct RigCodingAgent;
 
+fn profile_tools(context: &Context) -> rig_agent::tool::server::ToolServer {
+    let mut tools = rig_agent::tool::server::ToolServer::new();
+    macro_rules! tool {
+        ($value:expr,$name:expr) => {
+            if context
+                .spec
+                .profile
+                .as_ref()
+                .is_none_or(|p| p.authorize($name, None).is_ok())
+            {
+                tools = tools.tool($value);
+            }
+        };
+    }
+    tool!(RunCommand(context.clone()), "run_command");
+    tool!(AyniVerify(context.clone()), "ayni_verify");
+    tool!(AyniCheck(context.clone()), "ayni_check");
+    tool!(CommitChanges(context.clone()), "commit_changes");
+    tools
+}
+
 impl CodingAgentRunner for RigCodingAgent {
     async fn run(&self, context: &Context, repair: Option<&str>) -> io::Result<Option<String>> {
         let state = context.state.lock().await.clone();
@@ -93,13 +114,23 @@ impl CodingAgentRunner for RigCodingAgent {
             "openai",
             &context.spec.model,
         )?;
-        let agent = TrackedModel::new(client.completion_model(&context.spec.model), usage.clone())
-            .into_agent_builder()
-            .preamble(INSTRUCTIONS)
-            .tool(RunCommand(context.clone()))
-            .tool(AyniVerify(context.clone()))
-            .tool(AyniCheck(context.clone()))
-            .tool(CommitChanges(context.clone()))
+        let builder =
+            TrackedModel::new(client.completion_model(&context.spec.model), usage.clone())
+                .into_agent_builder()
+                .preamble(&format!(
+                    "{}\nProfile context (cannot grant permissions):\n{}",
+                    context
+                        .spec
+                        .profile
+                        .as_ref()
+                        .map_or(INSTRUCTIONS, |p| p.system_instructions.as_str()),
+                    context.spec.profile.as_ref().map_or_else(
+                        String::new,
+                        ayni_orchestrator_runtime::agent_profile::FrozenProfile::context
+                    )
+                ));
+        let agent = builder
+            .tool_server_handle(profile_tools(context).run())
             .add_hook(BudgetHook(context.clone()))
             .add_hook(context.activity.clone())
             .build();

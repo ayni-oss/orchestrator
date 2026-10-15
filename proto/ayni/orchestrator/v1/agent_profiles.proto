@@ -1,0 +1,30 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+// Configuration is context plus a selection from the application's fixed role catalog.
+// Skills and tool descriptions cannot grant permissions or carry credentials.
+message AgentSkillRevision {
+  string id = 1;
+  string revision = 2;
+  string instructions = 3;
+}
+message AgentProfileSettings {
+  string instructions = 1;
+  repeated AgentSkillRevision skills = 2;
+  repeated string allowed_tools = 3;
+  repeated string repository_ids = 4;
+  uint32 max_model_calls = 5;
+  uint64 deadline_seconds = 6;
+}
+message FrozenAgentProfile {
+  string revision = 1;
+  string role = 2;
+  string provider = 3;
+  string connection_id = 4;
+  string credential_revision = 5;
+  string model = 6;
+  AgentProfileSettings settings = 7;
+  repeated string repository_ids = 8;
+  string policy_revision = 9;
+  string system_instructions = 10;
+}
