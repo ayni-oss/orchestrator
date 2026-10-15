@@ -28,12 +28,13 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+trap 'echo "Plan fixture failed at line $LINENO" >&2' ERR
 trap 'exit 130' INT
 trap 'exit 143' TERM
 kubectl --context docker-desktop get nodes >/dev/null
 dev_build_chart_dependencies
 AYNI_PLAN_FIXTURE_PATH="$scratch/current.sqlite" AYNI_LEGACY_PLAN_FIXTURE_PATH="$scratch/legacy.sqlite" \
-  cargo test --locked -p ayni-orchestrator-control-plane export_project_plan_fixture -- --ignored
+  cargo test --locked -p ayni-orchestrator-control-plane --lib export_project_plan_fixture -- --ignored
 if kubectl --context docker-desktop get namespace "$namespace" >/dev/null 2>&1; then echo 'fixture namespace already exists' >&2; exit 1; fi
 kubectl --context docker-desktop create namespace "$namespace"
 created=true
@@ -109,6 +110,7 @@ superseded=$(jq -r '.supersededVersion' "$manifest")
 get() { api GetProjectConversation "$(jq -nc --arg id "$conversation" '{conversationId:$id}')"; }
 decision() { jq -nc --arg c "$conversation" --arg p "$plan" --arg key "$1" --arg v "$2" --arg d "$3" '{idempotencyKey:$key,conversationId:$c,planId:$p,version:$v,decision:$d}'; }
 for mode in current legacy; do
+  echo "Validating $mode retained plan state and review receipts"
   seed "$scratch/$mode.sqlite"
   start
   get >"$scratch/$mode-initial.json"
