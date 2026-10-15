@@ -7,7 +7,9 @@ from pathlib import Path
 
 
 def connect(path):
-    return sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True)
+    # Exported baselines are VACUUM snapshots; observed copies are made only
+    # after the stopped writer's WAL was explicitly checkpointed and drained.
+    return sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro&immutable=1', uri=True)
 
 
 def varint(payload, offset):

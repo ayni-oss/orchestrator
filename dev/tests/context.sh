@@ -60,7 +60,7 @@ stop() {
 start() {
   k scale deployment/control-plane --replicas=1
   k rollout status deployment/control-plane --timeout=180s
-  k port-forward --address=127.0.0.1 service/control-plane "$port:50051" >"$scratch/forward.log" 2>&1 &
+  kubectl --context docker-desktop -n "$namespace" port-forward --address=127.0.0.1 service/control-plane "$port:50051" >"$scratch/forward.log" 2>&1 &
   forward=$!
   for _ in {1..30}; do
     if ! kill -0 "$forward" 2>/dev/null; then cat "$scratch/forward.log" >&2; return 1; fi
@@ -106,7 +106,9 @@ seed() {
 }
 # Assertions below use exporter-defined conversation IDs and public ProtoJSON.
 inspect() {
-  k exec context-fixture -- node -e 'process.stdout.write(require("fs").readFileSync("/state/orchestrator.sqlite"));' > "$scratch/observed.sqlite"
+  # The sole application writer is stopped. Checkpoint with the production web
+  # image's SQLite runtime and require a fully drained WAL before copying bytes.
+  k exec context-fixture -- node -e 'const f=require("fs"),{DatabaseSync}=require("node:sqlite");const d=new DatabaseSync("/state/orchestrator.sqlite");const [r]=d.prepare("PRAGMA wal_checkpoint(TRUNCATE)").all();if(r.busy!==0||r.log!==0||r.checkpointed!==0)throw Error("fixture WAL checkpoint did not drain");d.close();const wal="/state/orchestrator.sqlite-wal";if(f.existsSync(wal)&&f.statSync(wal).size!==0)throw Error("fixture WAL is not empty");process.stdout.write(f.readFileSync("/state/orchestrator.sqlite"));' > "$scratch/observed.sqlite"
   python3 "$root/dev/tests/inspect-context.py" "$1" "$scratch/observed.sqlite"
 }
 manifest="$scratch/current.sqlite.json"

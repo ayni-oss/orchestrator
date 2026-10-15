@@ -6,7 +6,8 @@ from pathlib import Path
 
 
 def connect(path):
-    return sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True)
+    # VACUUM baselines and explicitly checkpointed stopped-state copies have no WAL.
+    return sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro&immutable=1', uri=True)
 
 
 baseline, observed = map(connect, sys.argv[1:3])
