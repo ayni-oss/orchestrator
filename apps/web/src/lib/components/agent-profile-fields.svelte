@@ -5,7 +5,7 @@
   import {Textarea} from "$lib/components/ui/textarea/index.js";
   import {Label} from "$lib/components/ui/label/index.js";
   import {Button} from "$lib/components/ui/button/index.js";
-  import type {AgentCapabilitiesDto,AgentProfileSettingsDto} from "@ayni-orchestrator/bff/server";
+  import type {AgentCapabilitiesDto,AgentProfileSettingsDto} from "$lib/project-view.js";
   let {role,configured,inherited,effective,capabilities,repositories,project=false}:{role:ProfileRole;configured?:AgentProfileSettingsDto|undefined;inherited?:AgentProfileSettingsDto|undefined;effective?:AgentProfileSettingsDto|undefined;capabilities:AgentCapabilitiesDto;repositories:string[];project?:boolean}=$props();
   const defaults=$derived(capabilities.roles[role]);
   const limits=$derived(capabilities.limits);

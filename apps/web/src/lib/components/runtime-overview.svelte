@@ -3,7 +3,7 @@
   import { tick } from "svelte";
   import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import type {RuntimeProfileDto,RepositoryConnectionDto} from "@ayni-orchestrator/bff/server";
+  import type {RuntimeProfileDto,RepositoryConnectionDto} from "$lib/project-view.js";
   import { registryImageRepository } from "$lib/connection.js";
   import type { ConnectionView } from "$lib/connection.js";
   import type { CertificateView } from "$lib/certificate.js";

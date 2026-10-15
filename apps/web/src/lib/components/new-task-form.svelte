@@ -10,7 +10,7 @@
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { words } from "$lib/presentation.js";
-  let {project,repositories,profiles,models,provider,idempotencyKey,onSubmitted,connections=[],catalogues={},effectiveDefaults,configured=false} : {project:NonNullable<ProjectViewData["project"]>;repositories:ProjectViewData["repositories"];profiles:ProjectViewData["profiles"];models:ProjectViewData["models"];provider:string;idempotencyKey:string;onSubmitted?:()=>Promise<void>;connections?:ProjectViewData["llmConnections"];catalogues?:ProjectViewData["connectionModels"];effectiveDefaults?:import("@ayni-orchestrator/bff/server").ProjectAgentDefaultsDto|undefined;configured?:boolean} = $props();
+  let {project,repositories,profiles,models,provider,idempotencyKey,onSubmitted,connections=[],catalogues={},effectiveDefaults,configured=false} : {project:NonNullable<ProjectViewData["project"]>;repositories:ProjectViewData["repositories"];profiles:ProjectViewData["profiles"];models:ProjectViewData["models"];provider:string;idempotencyKey:string;onSubmitted?:()=>Promise<void>;connections?:ProjectViewData["llmConnections"];catalogues?:ProjectViewData["connectionModels"];effectiveDefaults?:import("$lib/project-view.js").ProjectAgentDefaultsDto|undefined;configured?:boolean} = $props();
   let selectedConnection=$state(untrack(()=>effectiveDefaults?.codingConnectionId??""));
   const selectedModels=$derived(selectedConnection ? catalogues[selectedConnection]?.models??[] : models);
   let selectedModel=$state(untrack(()=>effectiveDefaults?.codingModel??""));

@@ -1,5 +1,5 @@
 <script lang="ts">
-import type {DevelopmentTaskDto} from "@ayni-orchestrator/bff/server";
+import type {DevelopmentTaskDto} from "$lib/project-view.js";
 import {projectHref} from "$lib/project-navigation.js";
 let {task}:{task:DevelopmentTaskDto}=$props();
 </script>

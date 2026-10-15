@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type {AgentCapabilitiesDto,AgentConfigurationDto} from "@ayni-orchestrator/bff/server";
+  import type {AgentCapabilitiesDto,AgentConfigurationDto} from "$lib/project-view.js";
   import AgentProfileFields from "$lib/components/agent-profile-fields.svelte";
   import { tick, untrack } from "svelte";
   import type {ProjectViewData} from "$lib/project-view.js";
