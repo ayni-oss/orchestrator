@@ -28,9 +28,10 @@ test("OpenAI credentials stay write-only and unavailable providers have no confi
 test("project chat persists requirements, requires approval, links results, and preserves manual tasks",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/projects/project:1");
+  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
-  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
+  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();
   await page.getByLabel("Title",{exact:true}).fill("Retry behavior");
   await page.getByRole("button",{name:"Create conversation",exact:true}).click();
@@ -64,9 +65,10 @@ test("project chat persists requirements, requires approval, links results, and 
 test("coding model revisions retire the previous proposal and require fresh approval",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/projects/project:1");
+  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
-  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
+  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Model revision");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
   await page.getByLabel("Message",{exact:true}).fill("Change the documentation");await page.getByRole("button",{name:"Send message",exact:true}).click();
   const plans=page.getByRole("region",{name:"Task plan",exact:true});
@@ -96,9 +98,10 @@ test("coding model revisions retire the previous proposal and require fresh appr
 test("outdated inputs block approval with a recovery message",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/projects/project:1");
+  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
-  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
+  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Stale inputs");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
   await page.getByLabel("Message",{exact:true}).fill("Research the source");await page.getByRole("button",{name:"Send message",exact:true}).click();
   await expect(page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true})).toBeVisible();
@@ -143,7 +146,8 @@ test("planner presets, warm reuse, expiry and cancellation preserve durable conv
   await page.goto("/workspaces/workspace:1");
   await choose(page,"Planner idle timeout","24 hours");await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();await expect(page.getByLabel("Planner idle timeout",{exact:true})).toContainText("24 hours");
   await page.goto("/projects/project:1");
-  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
+  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
+  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Reusable planner");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
   const planner=page.getByRole("region",{name:"Planner session",exact:true});
   await expect(planner).toContainText("Idle timeout: 24 hours · inherited from workspace");

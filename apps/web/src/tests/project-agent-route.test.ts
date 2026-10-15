@@ -26,6 +26,16 @@ describe("project agent operator routes",()=>{
     const result=await load(event()) as {conversation?:unknown;conversationError?:{status:number}};
     expect(result.conversation).toBeUndefined();expect(result.conversationError?.status).toBe(404);
   });
+  it("reports an unavailable selected conversation without silently switching records",async()=>{
+    bff.listProjectConversations.mockResolvedValueOnce([]);
+    expect(await load(event())).toMatchObject({conversation:undefined,conversationError:{status:404}});
+    expect(bff.getProjectConversation).not.toHaveBeenCalled();
+  });
+  it("retains linked task results when the task list is on another page",async()=>{
+    bff.getProjectConversation.mockResolvedValueOnce({...metadata,proposals:[{id:"proposal:1",taskId:"task:older"}]});
+    bff.taskProgress.mockResolvedValueOnce({attempts:[{id:"attempt:older"}]});
+    expect(await load(event())).toMatchObject({taskProgress:{"task:older":{attempts:[{id:"attempt:older"}]}}});
+  });
   it("gives project defaults, messages and approval mutations the bounded 30 second deadline",async()=>{
     await actions.agentDefaults!(event({resourceVersion:"1",projectConnectionId:"connection:1",projectModel:"model",codingConnectionId:"connection:1",codingModel:"model"}));
     await actions.sendMessage!(event({conversationId:"conversation:1",content:"Requested work"}));

@@ -9,6 +9,24 @@ Existing projects keep their repositories, conversations and tasks in an
 automatically assigned workspace. Archiving a workspace blocks new work while
 preserving project history and tasks already admitted.
 
+## Choose a project view
+
+| View | Use it to |
+| --- | --- |
+| Overview | Discuss the goal in a fixed-height chat above the current plan. Scroll the timeline to read messages, session details, and saved history. |
+| Plans | Review saved plan versions, inspect the research run, and approve the exact tasks shown. Version links can be bookmarked. |
+| Tasks | Follow project tasks and open their execution attempts, quality results, and pull requests. |
+
+The selected conversation follows you between views. **Project settings** in the
+project actions menu contains the goal and planning instructions, selected
+repositories, and model overrides. Repository instructions such as `AGENTS.md`
+remain in each repository.
+
+Open the workspace link for **Shared configuration**: repository membership,
+agent defaults, and the default planner idle timeout. Repository links lead to
+shared runtimes; connection links lead to provider setup. Each settings form
+shows saving progress and reports failures so you can retry.
+
 ## Work through a project conversation
 
 Under **Config → LLM providers**, configure and test an OpenAI connection. In the
@@ -47,8 +65,10 @@ After idle expiry, send another message to resume with saved history. Session
 details show its state and expiry. Use the planner's cancel action to stop an
 active research turn; cancelling research preserves the conversation and its plans.
 
-Task cards show progress and
-results, with an automatic summary when an attempt finishes or needs your input.
+Approved plan cards link to tasks and their retained results. The **Tasks** view
+shows execution attempt counts and links to the approved version when it belongs
+to the selected conversation. Task details link back to the project task list.
+An automatic conversation summary appears when an attempt finishes or needs your input.
 A summary does not start further work. To cancel or retry, name the task in your
 request and confirm the resulting action card. You can still use the task detail
 page directly.

@@ -8,7 +8,7 @@ Start the control plane without a GitHub App, registry or model credentials to
 configure connections through the trusted operator UI. Model credentials are
 required when admitting model-backed work, not when opening onboarding.
 
-The sidebar exposes **Projects**, **Repositories**, and **Config**. Config
+The sidebar exposes **Workspaces**, **Projects**, **Repositories**, and **Config**. Config
 contains Source control, Container registries and Ayni; certificates are reached
 from the Ayni overview. These navigation groups do not change credential ownership.
 
@@ -93,6 +93,32 @@ procedure in [operations](../operations/operations.md). Existing source reposito
 runtime images and GitHub pull requests are retained.
 
 Manage the GitHub App at `/source-control/github`. Use **Add GitHub App** to create an App in your organization or personal account, or import an existing App ID and private key. The compact connection card opens an **Edit** dialog for key rotation, testing, disablement, and deletion; administrator-managed Apps expose read-only **Details**. App installation stays in GitHub. Legacy `/setup/github` links redirect here, and existing Apps using `/setup/github/complete` retain callback compatibility.
+
+### Project navigation and settings
+
+Project pages use `?view=overview`, `?view=plans`, and `?view=tasks`. View links
+preserve the selected `conversation` and discard task pagination. Plans accept
+`version` for a retained version link. An unavailable conversation or version
+shows recovery feedback instead of silently selecting a different record.
+
+Overview keeps the timeline in a fixed-height keyboard-scrollable region above
+the plan. Session details, saved context, messages, and research activity scroll
+within it. The composer remains outside the timeline. Conversation invalidations
+and periodic refresh run across all three views, preserving a draft message and
+an explicitly selected plan version during refresh.
+
+Workspace shared configuration owns membership, agent defaults, and planner idle
+defaults. The project settings dialog edits its goal, selected repositories, and
+model overrides. The goal also carries project planning instructions; there is no
+separate custom instruction field. Repository instruction files remain in source
+control. Conversation session settings override only that conversation's idle
+timeout. Mutations retain their resource-version or update-cursor guards.
+
+Plan review uses the existing safe BFF projection of run identity, model, calls,
+and token usage. Credentials stay server-side. Linked task progress is loaded
+independently of the task-list page so retained plan results remain inspectable
+when paging tasks. No plan, approval, or task-admission contract changes are
+required for these views.
 
 ### Task instructions and budgets
 
