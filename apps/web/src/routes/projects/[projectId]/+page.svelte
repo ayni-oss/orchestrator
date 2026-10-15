@@ -39,6 +39,7 @@
     await new Promise<void>(resolve => { finishArchiving=resolve; archiveProject=false; });
   }
   let settingsError=$state("");
+  let projectName=$state(""),projectGoal=$state("");
   let editProject=$state(false), archiveProject=$state(false), saving=$state(false);
   let newTask=$state(untrack(()=>page.url.searchParams.get("directTask")==="1")), members=$state<string[]>([]), editing=$state(false);
   const selectedMembers=$derived(editing ? members : data.project?.repositoryConnectionIds ?? []);
@@ -52,7 +53,7 @@
         <DropdownMenu.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={`${data.project.displayName} project actions`}><EllipsisVertical aria-hidden="true" /></Button>{/snippet}</DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" preventScroll={false}>
           <DropdownMenu.Item disabled={!data.agentConfiguration} onSelect={()=>newTask=true}>Submit task directly</DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => { members=[...data.project!.repositoryConnectionIds]; editing=true; settingsError=""; editProject=true; }}>Project settings</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => { members=[...data.project!.repositoryConnectionIds];projectName=data.project!.displayName;projectGoal=data.project!.goal; editing=true; settingsError=""; editProject=true; }}>Project settings</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => archiveProject=true}>Archive</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>{/if}{/snippet}</PageHeader>
@@ -77,8 +78,8 @@
           <form use:enhance={() => {saving=true;settingsError="";return async ({ result, update }) => {try{if(result.type === "failure")settingsError=String(result.data?.error?.message??"Settings could not be saved. Try again.");if(result.type === "success"){await closeEditor();editing=false;}await update({reset:false});}finally{saving=false;}};}} method="POST" action="?/update" class="space-y-3">
             <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.project.resourceVersion} />
             <input type="hidden" name="workspaceId" value={data.project.workspaceId} />
-            <Label for="goal">Goal and planning instructions</Label><Textarea id="goal" name="goal" value={data.project.goal} required maxlength={16384} rows={4} /><p class="text-xs text-muted-foreground">Describe the outcome and project constraints. Repository instructions such as AGENTS.md remain in each repository.</p>
-            <Label for="name">Project name</Label><Input id="name" name="displayName" value={data.project.displayName} required maxlength={256} />
+            <Label for="goal">Goal and planning instructions</Label><Textarea id="goal" name="goal" bind:value={projectGoal} required maxlength={16384} rows={4} /><p class="text-xs text-muted-foreground">Describe the outcome and project constraints. Repository instructions such as AGENTS.md remain in each repository.</p>
+            <Label for="name">Project name</Label><Input id="name" name="displayName" bind:value={projectName} required maxlength={256} />
             <Label for="members">Repositories</Label><RepositoryPicker id="members" repositories={data.choices} value={selectedMembers} onchange={value => {members=value;editing=true;}} />
             <p class="text-xs text-muted-foreground">Removing a repository prevents new tasks and retries for it; task history is retained.</p>
             {#if settingsError}<Feedback kind="error" title="Settings not saved" message={settingsError} />{/if}
