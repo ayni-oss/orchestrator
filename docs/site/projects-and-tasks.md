@@ -3,7 +3,7 @@
 A workspace brings together connected repositories and shared agent settings.
 Create a project in a workspace, give it a goal, and select the repositories it
 needs. Several projects can share a repository and its runtime. Then describe work
-in a project conversation or create a task using one of its **Ready** runtimes.
+with **Discuss project**, review the versioned plan, and approve its tasks.
 
 Existing projects keep their repositories, conversations and tasks in an
 automatically assigned workspace. Archiving a workspace blocks new work while
@@ -38,7 +38,9 @@ In **Agent capability profiles**, workspace settings can select instructions,
 pinned skill revisions, tools, repository scope and budget ceilings for the planner
 and worker. Project settings can narrow those selections and add project
 instructions. Model choices remain separate. Leave inheritance enabled to use
-workspace or application capabilities.
+workspace or application capabilities. Expand **Effective settings for new executions**
+to see the resolved instructions, tools and budgets. If configuration cannot load,
+reload before changing profiles or submitting work.
 
 New research turns and tasks freeze their effective profiles. Inspect the frozen
 revision in research-run details or task details. Later settings changes apply to
@@ -94,6 +96,18 @@ details, or request the action in chat and confirm its action card.
 One interaction prepares at most one task per repository. Tasks across repositories
 run independently; coordinate dependent changes after reviewing the earlier result.
 Plan approval validates all proposed tasks before admitting them together.
+
+## Submit a task directly
+
+For work whose inputs are already known, open the project actions menu and choose
+**Submit task directly**. Select a ready runtime and coding connection/model, then
+review the request, criteria, constraints and deadline before submitting. Test
+edits start enabled and the default iteration budget is 24.
+
+Direct submission authorizes those displayed inputs without creating a plan.
+Its task details identify that it has no originating plan. The global **Task
+history** page follows execution across projects; start new work within a project.
+Old task-creation bookmarks lead to the project dialog or project selection.
 
 ## Describe the work
 
