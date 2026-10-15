@@ -13,8 +13,10 @@ import * as Table from "$lib/components/ui/table/index.js";
 import {formatDate,statusTone,words} from "$lib/presentation.js";
 let {data}:PageProps=$props();
 const nextPageHref=$derived(data.nextPageToken?`/tasks?pageToken=${encodeURIComponent(data.nextPageToken)}`:undefined);
-onMount(()=>{if(location.hash==="#new"&&!data.legacy)void goto("/tasks?new=1");return subscribeRefresh("app:tasks",{intervalMs:120_000});});
+function redirectLegacyHash(){if(location.hash==="#new"&&!data.legacy)void goto("/tasks?new=1",{replaceState:true});}
+onMount(()=>{redirectLegacyHash();return subscribeRefresh("app:tasks",{intervalMs:120_000});});
 </script>
+<svelte:window onhashchange={redirectLegacyHash} />
 <svelte:head><title>Task history · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
 <PageHeader eyebrow="Execution" title="Task history" description="Follow execution across projects. Discuss and approve new work within a project." />
