@@ -40,6 +40,7 @@ impl CleanStore {
             if previous.as_ref().is_some_and(|(old, _)| *old >= version) {
                 return Ok(());
             }
+            super::workflow_trace::outcome(attempt, &origin);
             let update = projection(attempt, origin.clone());
             let mut semantic = update.clone();
             semantic.resource_version = 0;

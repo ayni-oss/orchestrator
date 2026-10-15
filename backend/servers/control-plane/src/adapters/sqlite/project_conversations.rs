@@ -207,6 +207,7 @@ impl CleanStore {
         self.connection
             .execute_batch("RELEASE conversation_context_save")
             .map_err(CleanStoreError::Database)?;
+        super::workflow_trace::conversation(&next);
         *conversation = next;
         Ok(())
     }

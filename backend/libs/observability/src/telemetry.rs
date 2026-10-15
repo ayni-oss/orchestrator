@@ -1,4 +1,4 @@
-//! Optional verification-only export. Diagnostic context conveys no authority.
+//! Optional allowlisted verification and workflow export. Diagnostic context conveys no authority.
 use opentelemetry::{
     Context, KeyValue,
     propagation::TextMapPropagator,
@@ -172,7 +172,7 @@ pub fn provider(service: &'static str) -> TelemetryGuard {
         Some(
             SdkTracerProvider::builder()
                 .with_span_processor(processor)
-                .with_max_attributes_per_span(16)
+                .with_max_attributes_per_span(32)
                 .with_max_events_per_span(8)
                 .with_max_links_per_span(8)
                 .with_resource(

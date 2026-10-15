@@ -5,6 +5,26 @@ use std::{env, fs, io, path::Path, process::ExitCode};
 use tracing::Instrument;
 
 fn main() -> ExitCode {
+    if env::args().nth(1).as_deref() == Some("workflow-eval") {
+        let model = env::args().nth(2).unwrap_or_default();
+        if model.is_empty() || model.len() > 128 {
+            return ExitCode::FAILURE;
+        }
+        let result = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_or_else(
+                |_| Err(io::Error::other("evaluation_runtime_unavailable")),
+                |runtime| runtime.block_on(ayni_orchestrator_worker::evaluation::command(&model)),
+            );
+        return if result.is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            eprintln!("evaluation_failed");
+            ExitCode::FAILURE
+        };
+    }
+
     if env::args().nth(1).as_deref() == Some("sandbox") {
         let arguments = env::args().skip(2).collect::<Vec<_>>();
         let Some((program, arguments)) = arguments.split_first() else {
@@ -22,6 +42,12 @@ fn main() -> ExitCode {
         .nth(1)
         .is_some_and(|operation| operation.starts_with("project-session-"))
     {
+        let operation = env::args().nth(1).unwrap_or_default();
+        let telemetry = matches!(
+            operation.as_str(),
+            "project-session-research" | "project-session-checkout"
+        )
+        .then(|| ayni_orchestrator_observability::init("runtime-worker"));
         let result = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -33,6 +59,9 @@ fn main() -> ExitCode {
                     ))
                 },
             );
+        if let Some(telemetry) = telemetry {
+            telemetry.shutdown();
+        }
         return if result.is_ok() {
             ExitCode::SUCCESS
         } else {
