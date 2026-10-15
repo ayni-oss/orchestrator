@@ -113,6 +113,7 @@ impl CleanStore {
             "project_conversation",
         )?;
         self.conversation_session_projection(&mut c)?;
+        self.conversation_worker_projection(&mut c)?;
         Ok(c)
     }
     pub(crate) fn list_project_conversations(
@@ -157,6 +158,7 @@ impl CleanStore {
         conversation: &mut v1::ProjectConversation,
     ) -> Result<(), CleanStoreError> {
         let mut next = conversation.clone();
+        next.worker_updates.clear();
         self.conversation_session_projection(&mut next)?;
         next.update_cursor = next
             .update_cursor
@@ -426,6 +428,15 @@ impl CleanStore {
         let Some(mut c) = self.conversation_for_active_run(&result.run_id)? else {
             return Ok(());
         };
+        if c.runs
+            .iter()
+            .any(|run| run.id == result.run_id && run.purpose == "summary")
+        {
+            return self.fail_project_run(
+                &result.run_id,
+                "Worker evidence is returned directly from accepted attempts.",
+            );
+        }
         let researched = self.project_run_request(&result.run_id)?;
         validate_project_result(&c, &result, researched.as_ref())?;
         let mut targets = std::collections::BTreeSet::new();
@@ -632,7 +643,7 @@ impl CleanStore {
                 "reject" => p.state = "rejected".into(),
                 "revise" => p.state = "revise".into(),
                 "approve" => {
-                    let (task, attempt) = self.approve_project_proposal(&c.project_id, p)?;
+                    let (task, attempt) = self.approve_project_proposal(&c.project_id, p, None)?;
                     p.task_id = task;
                     p.attempt_id = attempt;
                     p.state = "approved".into();
@@ -649,12 +660,17 @@ impl CleanStore {
         &mut self,
         project_id: &str,
         p: &v1::ProjectTaskProposal,
+        origin: Option<v1::TaskOrigin>,
     ) -> Result<(String, String), CleanStoreError> {
         let requested = p.request.as_ref().ok_or(CleanStoreError::CorruptState)?;
         self.project_member(project_id, &requested.repository_connection_id)?;
         let stable_key = format!("project-proposal-{}", p.id);
         let (task, attempt) = match p.action.as_str() {
-            "create_task" => self.admit_project_proposal(&stable_key, p)?,
+            "create_task" => self.admit_project_proposal(
+                &stable_key,
+                p,
+                origin.ok_or(CleanStoreError::CorruptState)?,
+            )?,
             "cancel_task" => {
                 let task = self.development_task(&p.target_task_id)?;
                 let cmd = crate::adapters::grpc::task_mapping::cancel_command(
@@ -700,16 +716,25 @@ impl CleanStore {
         &mut self,
         stable_key: &str,
         p: &v1::ProjectTaskProposal,
+        origin: v1::TaskOrigin,
     ) -> Result<(String, String), CleanStoreError> {
         let request = p.request.clone().ok_or(CleanStoreError::CorruptState)?;
         self.validate_proposal_admission(p, &request)?;
-        let command = crate::adapters::grpc::task_mapping::task_command(
+        let mut command = crate::adapters::grpc::task_mapping::task_command(
             stable_key,
             &v1::CreateDevelopmentTaskRequest {
                 idempotency_key: stable_key.into(),
                 request: Some(request),
             },
         )?;
+        command.origin = Some(ayni_orchestrator_application::tasks::TaskOrigin {
+            project_id: origin.project_id,
+            conversation_id: origin.conversation_id,
+            plan_id: origin.plan_id,
+            plan_version: origin.plan_version,
+            proposal_id: origin.proposal_id,
+            research_run_id: origin.research_run_id,
+        });
         let receipt = ayni_orchestrator_application::tasks::admit(self, command)
             .map_err(super::task_admission::admission_error)?;
         Ok((receipt.task_id, receipt.attempt_id))

@@ -124,6 +124,16 @@ message FrozenRuntime {
   string pull_secret_name = 10;
 }
 
+// Control-plane-owned provenance. Public task requests cannot supply it.
+message TaskOrigin {
+  string project_id = 1;
+  string conversation_id = 2;
+  string plan_id = 3;
+  uint64 plan_version = 4;
+  string proposal_id = 5;
+  string research_run_id = 6;
+}
+
 // DevelopmentSnapshot is the complete immutable execution input.
 message DevelopmentSnapshot {
   FrozenRepository repository = 1;
@@ -137,6 +147,7 @@ message DevelopmentSnapshot {
   // Base branch observed when the publication request is frozen.
   string publication_base_branch = 9;
   FrozenProviderCredentials provider_credentials = 10;
+  TaskOrigin origin = 11;
 }
 
 // ProviderTokenUsage preserves independent counters; absence never means zero.

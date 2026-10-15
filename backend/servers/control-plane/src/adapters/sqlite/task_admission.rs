@@ -195,7 +195,16 @@ impl TaskRepository for CleanStore {
                 return Err(CleanStoreError::InvalidTransition);
             }
         }
+        let origin = frozen.origin.map(|origin| v1::TaskOrigin {
+            project_id: origin.project_id,
+            conversation_id: origin.conversation_id,
+            plan_id: origin.plan_id,
+            plan_version: origin.plan_version,
+            proposal_id: origin.proposal_id,
+            research_run_id: origin.research_run_id,
+        });
         let snapshot = v1::DevelopmentSnapshot {
+            origin: origin.clone(),
             repository: Some(v1::FrozenRepository {
                 repository_connection_id: repository_id.clone(),
                 repository_snapshot_id: frozen.snapshot_id,
@@ -364,6 +373,9 @@ impl TaskRepository for CleanStore {
                 ],
             )
             .map_err(map_constraint)?;
+        if let Some(origin) = origin {
+            super::project_origins::insert_origin(&transaction, &task_id, &origin)?;
+        }
         transaction.commit().map_err(CleanStoreError::Database)?;
         Ok(AdmissionReceipt {
             task_id,

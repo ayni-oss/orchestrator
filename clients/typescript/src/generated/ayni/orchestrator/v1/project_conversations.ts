@@ -22,10 +22,17 @@ import {
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
 import {
+  DevelopmentAttemptState,
+  developmentAttemptStateFromJSON,
+  developmentAttemptStateToJSON,
   DevelopmentTaskRequest,
   FrozenProviderCredentials,
   FrozenRuntime,
   ProviderTokenUsage,
+  PullRequestReceipt,
+  TaskOrigin,
+  WorkerProgress,
+  WorkerResult,
 } from "./development_tasks";
 
 export interface ProjectConversation {
@@ -41,7 +48,11 @@ export interface ProjectConversation {
   plan?: ProjectPlan | undefined;
   plannerIdleTimeoutSeconds?: number | undefined;
   effectivePlannerIdleTimeoutSeconds: number;
-  plannerSession?: ProjectPlannerSession | undefined;
+  plannerSession?:
+    | ProjectPlannerSession
+    | undefined;
+  /** Latest accepted state per execution attempt; older evidence stays in history. */
+  workerUpdates: ProjectWorkerUpdate[];
 }
 
 export interface ProjectMessage {
@@ -262,6 +273,23 @@ export interface CancelProjectAgentRunResponse {
   conversation?: ProjectConversation | undefined;
 }
 
+/** Derived from retained, accepted attempts. Model prose is never an outcome source. */
+export interface ProjectWorkerUpdate {
+  origin?: TaskOrigin | undefined;
+  taskId: string;
+  attemptId: string;
+  attemptNumber: number;
+  resourceVersion: string;
+  state: DevelopmentAttemptState;
+  requestedInput?: string | undefined;
+  progress?: WorkerProgress | undefined;
+  result?: WorkerResult | undefined;
+  pullRequest?: PullRequestReceipt | undefined;
+  publicationOnly: boolean;
+  failure: string;
+  updatedAt?: Date | undefined;
+}
+
 function createBaseProjectConversation(): ProjectConversation {
   return {
     id: "",
@@ -277,6 +305,7 @@ function createBaseProjectConversation(): ProjectConversation {
     plannerIdleTimeoutSeconds: undefined,
     effectivePlannerIdleTimeoutSeconds: 0,
     plannerSession: undefined,
+    workerUpdates: [],
   };
 }
 
@@ -320,6 +349,9 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     }
     if (message.plannerSession !== undefined) {
       ProjectPlannerSession.encode(message.plannerSession, writer.uint32(106).fork()).join();
+    }
+    for (const v of message.workerUpdates) {
+      ProjectWorkerUpdate.encode(v!, writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -441,6 +473,14 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
             message.plannerSession = ProjectPlannerSession.decode(reader, reader.uint32());
             continue;
           }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.workerUpdates.push(ProjectWorkerUpdate.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -502,6 +542,11 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
         : isSet(object.planner_session)
         ? ProjectPlannerSession.fromJSON(object.planner_session)
         : undefined,
+      workerUpdates: globalThis.Array.isArray(object?.workerUpdates)
+        ? object.workerUpdates.map((e: any) => ProjectWorkerUpdate.fromJSON(e))
+        : globalThis.Array.isArray(object?.worker_updates)
+        ? object.worker_updates.map((e: any) => ProjectWorkerUpdate.fromJSON(e))
+        : [],
     };
   },
 
@@ -546,6 +591,9 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     if (message.plannerSession !== undefined) {
       obj.plannerSession = ProjectPlannerSession.toJSON(message.plannerSession);
     }
+    if (message.workerUpdates?.length) {
+      obj.workerUpdates = message.workerUpdates.map((e) => ProjectWorkerUpdate.toJSON(e));
+    }
     return obj;
   },
 
@@ -571,6 +619,7 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     message.plannerSession = (object.plannerSession !== undefined && object.plannerSession !== null)
       ? ProjectPlannerSession.fromPartial(object.plannerSession)
       : undefined;
+    message.workerUpdates = object.workerUpdates?.map((e) => ProjectWorkerUpdate.fromPartial(e)) || [];
     return message;
   },
 };
@@ -4416,6 +4465,321 @@ export const CancelProjectAgentRunResponse: MessageFns<CancelProjectAgentRunResp
     message.conversation = (object.conversation !== undefined && object.conversation !== null)
       ? ProjectConversation.fromPartial(object.conversation)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseProjectWorkerUpdate(): ProjectWorkerUpdate {
+  return {
+    origin: undefined,
+    taskId: "",
+    attemptId: "",
+    attemptNumber: 0,
+    resourceVersion: "0",
+    state: 0,
+    requestedInput: undefined,
+    progress: undefined,
+    result: undefined,
+    pullRequest: undefined,
+    publicationOnly: false,
+    failure: "",
+    updatedAt: undefined,
+  };
+}
+
+export const ProjectWorkerUpdate: MessageFns<ProjectWorkerUpdate> = {
+  encode(message: ProjectWorkerUpdate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.origin !== undefined) {
+      TaskOrigin.encode(message.origin, writer.uint32(10).fork()).join();
+    }
+    if (message.taskId !== "") {
+      writer.uint32(18).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(26).string(message.attemptId);
+    }
+    if (message.attemptNumber !== 0) {
+      writer.uint32(32).uint32(message.attemptNumber);
+    }
+    if (message.resourceVersion !== "0") {
+      writer.uint32(40).uint64(message.resourceVersion);
+    }
+    if (message.state !== 0) {
+      writer.uint32(48).int32(message.state);
+    }
+    if (message.requestedInput !== undefined) {
+      writer.uint32(58).string(message.requestedInput);
+    }
+    if (message.progress !== undefined) {
+      WorkerProgress.encode(message.progress, writer.uint32(66).fork()).join();
+    }
+    if (message.result !== undefined) {
+      WorkerResult.encode(message.result, writer.uint32(74).fork()).join();
+    }
+    if (message.pullRequest !== undefined) {
+      PullRequestReceipt.encode(message.pullRequest, writer.uint32(82).fork()).join();
+    }
+    if (message.publicationOnly !== false) {
+      writer.uint32(88).bool(message.publicationOnly);
+    }
+    if (message.failure !== "") {
+      writer.uint32(98).string(message.failure);
+    }
+    if (message.updatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(106).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectWorkerUpdate {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectWorkerUpdate();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.origin = TaskOrigin.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.attemptNumber = reader.uint32();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.resourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.requestedInput = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.progress = WorkerProgress.decode(reader, reader.uint32());
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.result = WorkerResult.decode(reader, reader.uint32());
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.pullRequest = PullRequestReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.publicationOnly = reader.bool();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.failure = reader.string();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectWorkerUpdate {
+    return {
+      origin: isSet(object.origin) ? TaskOrigin.fromJSON(object.origin) : undefined,
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      attemptNumber: isSet(object.attemptNumber)
+        ? globalThis.Number(object.attemptNumber)
+        : isSet(object.attempt_number)
+        ? globalThis.Number(object.attempt_number)
+        : 0,
+      resourceVersion: isSet(object.resourceVersion)
+        ? globalThis.String(object.resourceVersion)
+        : isSet(object.resource_version)
+        ? globalThis.String(object.resource_version)
+        : "0",
+      state: isSet(object.state) ? developmentAttemptStateFromJSON(object.state) : 0,
+      requestedInput: isSet(object.requestedInput)
+        ? globalThis.String(object.requestedInput)
+        : isSet(object.requested_input)
+        ? globalThis.String(object.requested_input)
+        : undefined,
+      progress: isSet(object.progress) ? WorkerProgress.fromJSON(object.progress) : undefined,
+      result: isSet(object.result) ? WorkerResult.fromJSON(object.result) : undefined,
+      pullRequest: isSet(object.pullRequest)
+        ? PullRequestReceipt.fromJSON(object.pullRequest)
+        : isSet(object.pull_request)
+        ? PullRequestReceipt.fromJSON(object.pull_request)
+        : undefined,
+      publicationOnly: isSet(object.publicationOnly)
+        ? globalThis.Boolean(object.publicationOnly)
+        : isSet(object.publication_only)
+        ? globalThis.Boolean(object.publication_only)
+        : false,
+      failure: isSet(object.failure) ? globalThis.String(object.failure) : "",
+      updatedAt: isSet(object.updatedAt)
+        ? fromJsonTimestamp(object.updatedAt)
+        : isSet(object.updated_at)
+        ? fromJsonTimestamp(object.updated_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ProjectWorkerUpdate): unknown {
+    const obj: any = {};
+    if (message.origin !== undefined) {
+      obj.origin = TaskOrigin.toJSON(message.origin);
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.attemptNumber !== 0) {
+      obj.attemptNumber = Math.round(message.attemptNumber);
+    }
+    if (message.resourceVersion !== "0") {
+      obj.resourceVersion = message.resourceVersion;
+    }
+    if (message.state !== 0) {
+      obj.state = developmentAttemptStateToJSON(message.state);
+    }
+    if (message.requestedInput !== undefined) {
+      obj.requestedInput = message.requestedInput;
+    }
+    if (message.progress !== undefined) {
+      obj.progress = WorkerProgress.toJSON(message.progress);
+    }
+    if (message.result !== undefined) {
+      obj.result = WorkerResult.toJSON(message.result);
+    }
+    if (message.pullRequest !== undefined) {
+      obj.pullRequest = PullRequestReceipt.toJSON(message.pullRequest);
+    }
+    if (message.publicationOnly !== false) {
+      obj.publicationOnly = message.publicationOnly;
+    }
+    if (message.failure !== "") {
+      obj.failure = message.failure;
+    }
+    if (message.updatedAt !== undefined) {
+      obj.updatedAt = message.updatedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectWorkerUpdate>): ProjectWorkerUpdate {
+    return ProjectWorkerUpdate.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectWorkerUpdate>): ProjectWorkerUpdate {
+    const message = createBaseProjectWorkerUpdate();
+    message.origin = (object.origin !== undefined && object.origin !== null)
+      ? TaskOrigin.fromPartial(object.origin)
+      : undefined;
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.attemptNumber = object.attemptNumber ?? 0;
+    message.resourceVersion = object.resourceVersion ?? "0";
+    message.state = object.state ?? 0;
+    message.requestedInput = object.requestedInput ?? undefined;
+    message.progress = (object.progress !== undefined && object.progress !== null)
+      ? WorkerProgress.fromPartial(object.progress)
+      : undefined;
+    message.result = (object.result !== undefined && object.result !== null)
+      ? WorkerResult.fromPartial(object.result)
+      : undefined;
+    message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
+      ? PullRequestReceipt.fromPartial(object.pullRequest)
+      : undefined;
+    message.publicationOnly = object.publicationOnly ?? false;
+    message.failure = object.failure ?? "";
+    message.updatedAt = object.updatedAt ?? undefined;
     return message;
   },
 };

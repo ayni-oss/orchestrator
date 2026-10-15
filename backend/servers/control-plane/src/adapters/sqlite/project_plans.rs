@@ -244,6 +244,8 @@ impl CleanStore {
                 return Err(CleanStoreError::StaleVersion);
             }
             let proposal_ids = version.proposal_ids.clone();
+            let plan_id = message.plan_id.clone();
+            let research_run_id = version.run_id.clone();
             let state = match message.decision.as_str() {
                 "approve" => "approved",
                 "reject" => "rejected",
@@ -261,7 +263,18 @@ impl CleanStore {
                     continue;
                 }
                 if state == "approved" {
-                    let (task, attempt) = self.approve_project_proposal(&c.project_id, p)?;
+                    let (task, attempt) = self.approve_project_proposal(
+                        &c.project_id,
+                        p,
+                        Some(v1::TaskOrigin {
+                            project_id: c.project_id.clone(),
+                            conversation_id: c.id.clone(),
+                            plan_id: plan_id.clone(),
+                            plan_version: message.version,
+                            proposal_id: p.id.clone(),
+                            research_run_id: research_run_id.clone(),
+                        }),
+                    )?;
                     p.task_id = task;
                     p.attempt_id = attempt;
                 }

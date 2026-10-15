@@ -36,6 +36,14 @@ impl ProjectAgentReconciler {
             pass: Mutex::new(()),
         })))
     }
+    /// Project accepted evidence even when research runtimes or provider credentials are unavailable.
+    /// # Errors
+    /// Returns a bounded storage classification; periodic reconciliation retries safely.
+    pub async fn return_worker_evidence(state: &AppState) -> Result<(), &'static str> {
+        with_store_async(state, CleanStore::queue_project_outcome_summaries)
+            .await
+            .map_err(|_| "project_worker_evidence_unavailable")
+    }
     pub async fn reconcile(&self) {
         let Ok(_guard) = self.pass.try_lock() else {
             return;
@@ -49,10 +57,6 @@ impl ProjectAgentReconciler {
     }
     async fn reconcile_pass(&self) -> Result<(), &'static str> {
         self.reconcile_sessions().await?;
-        // Accepted attempt state, not broker delivery, owns summary eligibility.
-        with_store_async(&self.state, CleanStore::queue_project_outcome_summaries)
-            .await
-            .map_err(|_| "project_summary_unavailable")?;
         let runs = with_store_async(&self.state, |s| s.queued_project_runs())
             .await
             .map_err(|_| "project_store_unavailable")?;

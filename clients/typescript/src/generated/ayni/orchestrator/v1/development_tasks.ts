@@ -629,6 +629,16 @@ export interface FrozenRuntime {
   pullSecretName: string;
 }
 
+/** Control-plane-owned provenance. Public task requests cannot supply it. */
+export interface TaskOrigin {
+  projectId: string;
+  conversationId: string;
+  planId: string;
+  planVersion: string;
+  proposalId: string;
+  researchRunId: string;
+}
+
 /** DevelopmentSnapshot is the complete immutable execution input. */
 export interface DevelopmentSnapshot {
   repository?: FrozenRepository | undefined;
@@ -644,6 +654,7 @@ export interface DevelopmentSnapshot {
   /** Base branch observed when the publication request is frozen. */
   publicationBaseBranch: string;
   providerCredentials?: FrozenProviderCredentials | undefined;
+  origin?: TaskOrigin | undefined;
 }
 
 /** ProviderTokenUsage preserves independent counters; absence never means zero. */
@@ -1682,6 +1693,179 @@ export const FrozenRuntime: MessageFns<FrozenRuntime> = {
   },
 };
 
+function createBaseTaskOrigin(): TaskOrigin {
+  return { projectId: "", conversationId: "", planId: "", planVersion: "0", proposalId: "", researchRunId: "" };
+}
+
+export const TaskOrigin: MessageFns<TaskOrigin> = {
+  encode(message: TaskOrigin, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.projectId !== "") {
+      writer.uint32(10).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(18).string(message.conversationId);
+    }
+    if (message.planId !== "") {
+      writer.uint32(26).string(message.planId);
+    }
+    if (message.planVersion !== "0") {
+      writer.uint32(32).uint64(message.planVersion);
+    }
+    if (message.proposalId !== "") {
+      writer.uint32(42).string(message.proposalId);
+    }
+    if (message.researchRunId !== "") {
+      writer.uint32(50).string(message.researchRunId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskOrigin {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskOrigin();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.planId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.planVersion = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.proposalId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.researchRunId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskOrigin {
+    return {
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      planId: isSet(object.planId)
+        ? globalThis.String(object.planId)
+        : isSet(object.plan_id)
+        ? globalThis.String(object.plan_id)
+        : "",
+      planVersion: isSet(object.planVersion)
+        ? globalThis.String(object.planVersion)
+        : isSet(object.plan_version)
+        ? globalThis.String(object.plan_version)
+        : "0",
+      proposalId: isSet(object.proposalId)
+        ? globalThis.String(object.proposalId)
+        : isSet(object.proposal_id)
+        ? globalThis.String(object.proposal_id)
+        : "",
+      researchRunId: isSet(object.researchRunId)
+        ? globalThis.String(object.researchRunId)
+        : isSet(object.research_run_id)
+        ? globalThis.String(object.research_run_id)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskOrigin): unknown {
+    const obj: any = {};
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.planVersion !== "0") {
+      obj.planVersion = message.planVersion;
+    }
+    if (message.proposalId !== "") {
+      obj.proposalId = message.proposalId;
+    }
+    if (message.researchRunId !== "") {
+      obj.researchRunId = message.researchRunId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskOrigin>): TaskOrigin {
+    return TaskOrigin.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskOrigin>): TaskOrigin {
+    const message = createBaseTaskOrigin();
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.planId = object.planId ?? "";
+    message.planVersion = object.planVersion ?? "0";
+    message.proposalId = object.proposalId ?? "";
+    message.researchRunId = object.researchRunId ?? "";
+    return message;
+  },
+};
+
 function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
   return {
     repository: undefined,
@@ -1694,6 +1878,7 @@ function createBaseDevelopmentSnapshot(): DevelopmentSnapshot {
     limits: undefined,
     publicationBaseBranch: "",
     providerCredentials: undefined,
+    origin: undefined,
   };
 }
 
@@ -1728,6 +1913,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     }
     if (message.providerCredentials !== undefined) {
       FrozenProviderCredentials.encode(message.providerCredentials, writer.uint32(82).fork()).join();
+    }
+    if (message.origin !== undefined) {
+      TaskOrigin.encode(message.origin, writer.uint32(90).fork()).join();
     }
     return writer;
   },
@@ -1825,6 +2013,14 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
             message.providerCredentials = FrozenProviderCredentials.decode(reader, reader.uint32());
             continue;
           }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.origin = TaskOrigin.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1869,6 +2065,7 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
         : isSet(object.provider_credentials)
         ? FrozenProviderCredentials.fromJSON(object.provider_credentials)
         : undefined,
+      origin: isSet(object.origin) ? TaskOrigin.fromJSON(object.origin) : undefined,
     };
   },
 
@@ -1904,6 +2101,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     if (message.providerCredentials !== undefined) {
       obj.providerCredentials = FrozenProviderCredentials.toJSON(message.providerCredentials);
     }
+    if (message.origin !== undefined) {
+      obj.origin = TaskOrigin.toJSON(message.origin);
+    }
     return obj;
   },
 
@@ -1933,6 +2133,9 @@ export const DevelopmentSnapshot: MessageFns<DevelopmentSnapshot> = {
     message.publicationBaseBranch = object.publicationBaseBranch ?? "";
     message.providerCredentials = (object.providerCredentials !== undefined && object.providerCredentials !== null)
       ? FrozenProviderCredentials.fromPartial(object.providerCredentials)
+      : undefined;
+    message.origin = (object.origin !== undefined && object.origin !== null)
+      ? TaskOrigin.fromPartial(object.origin)
       : undefined;
     return message;
   },

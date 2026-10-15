@@ -1,3 +1,4 @@
+import {setWorkerEvidence} from "./worker-evidence-fixture.js";
 import { createServer } from "node:http";
 import { Server, ServerCredentials, status, type ServerWritableStream, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
@@ -168,6 +169,8 @@ const providerService: UntypedServiceImplementation = {
 const taskService: UntypedServiceImplementation = {
   listDevelopmentAttempts(call, callback) {
     const t = tasks.get(call.request.developmentTaskId);
+    const evidence=conversations.flatMap(c=>c.workerUpdates).filter(update=>update.taskId===t?.id);
+    if(evidence.length){callback(null,{attempts:evidence.map(update=>({...update,id:update.attemptId,developmentTaskId:update.taskId,snapshot:t.snapshot,agentActivity:[],failure:undefined,reportingState:"accepted",cleanupState:"complete",createdAt:now,updatedAt:now})),page});return;}
     const publicationFailed = t?.id.endsWith("0044");
     callback(null, { attempts: t ? [{publicationOnly:publicationRetries.has(t.id), id: `attempt:${t.id}`, developmentTaskId:t.id, attemptNumber:1, reportingState:"accepted", cleanupState:"complete", snapshot:t.snapshot, state:DevelopmentAttemptState.DEVELOPMENT_ATTEMPT_STATE_SUCCEEDED, agentActivity:[], progress:{phase:8,codingTurnsConsumed:5,qualityRound:2,publication:3}, result:{execution:1,commit:"d".repeat(40),changedPaths:["src/main.rs"],quality:{outcome:2,completedTargets:1,skippedTargets:0,warningOffenders:0,failingOffenders:1,rows:[{kind:"test",passed:false,status:"fail",summary:"total=4 passed=3 failed=1",target:"rust (workspace)"},{kind:"size",passed:true,status:"warn",summary:"max_lines=900 fail_count=0",target:"rust (workspace)"}],findings:["Repair the failing test"],evidence:{artifactPath:".ayni/last/signals.json",signalsDigest:"e".repeat(64),sourceFingerprint:"f".repeat(64),commit:"d".repeat(40)}},publication:publicationFailed ? 4 : 3,codingTurnsConsumed:5,qualityRound:2,pullRequest:publicationFailed ? undefined : {repository:"ayni-oss/sandbox",number:"9",url:"https://github.com/ayni-oss/sandbox/pull/9",branch:"task/example",baseBranch:"main",headCommit:"d".repeat(40),draft:true}},createdAt:now,updatedAt:now,resourceVersion:"1"}] : [], page});
   },
@@ -343,14 +346,15 @@ grpc.addService(ProjectConversationServiceService,{
   listProjectConversations(_call:any,callback:any){callback(null,{conversations:conversations.map(c=>ProjectConversation.fromPartial({id:c.id,projectId:c.projectId,title:c.title,repositoryConnectionIds:c.repositoryConnectionIds,updateCursor:c.updateCursor,createdAt:c.createdAt}))});},
   getProjectConversation(call:any,callback:any){if(conversationUnavailable)return callback({code:status.UNAVAILABLE,message:"Conversations temporarily unavailable"});const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...conversationProjection(c),messages:c.messages.slice(-32)}});},
   sendProjectMessage(call:any,callback:any){
+    const defaults=project.agentDefaults??workspace.agentDefaults;
     const c=conversations.find(c=>c.id===call.request.conversationId)!;
     c.messages.push({id:`message:${c.messages.length+1}`,role:"user",content:call.request.content,createdAt:now,runId:""});
     const runId=`run:${c.runs.length+1}`;
     const generation=c.plannerSession?.state==="idle"?c.plannerSession.generation:String(Number(c.plannerSession?.generation??0)+1);
     c.plannerSession={sessionId:`session:${c.id}`,generation,state:"idle",activeRunId:"",lastActivityAt:now,idleExpiresAt:new Date(now.getTime()+(c.plannerIdleTimeoutSeconds??workspace.plannerIdleTimeoutSeconds??300)*1000)};
-    c.runs.push({sessionId:c.plannerSession.sessionId,sessionGeneration:generation,sessionTurnSequence:String(c.runs.length+1),sessionManaged:true,id:runId,state:"completed",model:project.agentDefaults.projectModel,connectionId:project.agentDefaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
+    c.runs.push({sessionId:c.plannerSession.sessionId,sessionGeneration:generation,sessionTurnSequence:String(c.runs.length+1),sessionManaged:true,id:runId,state:"completed",model:defaults.projectModel,connectionId:defaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
     c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"I read the repository instructions and implementation. Review the complete task plan below.",createdAt:now,runId});
-    c.proposals.push({id:`proposal:${c.proposals.length+1}`,runId,state:"pending",action:"create_task",targetTaskId:"",taskId:"",attemptId:"",failure:"",request:{projectId:project.id,repositoryConnectionId:c.repositoryConnectionIds[0]!,repositoryRevision:revision,runtimeProfileId:profileId,connectionId:project.agentDefaults.codingConnectionId,agent:{provider:"openai",agent:"coding-agent",model:call.request.content.includes("model gpt-5.6-luna")?"gpt-5.6-luna":project.agentDefaults.codingModel},request:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],codingTurns:24,changeConstraints:{protectedPaths:["policy.toml"],allowTestEdits:true},deadline:{seconds:"3600",nanos:0}}});
+    c.proposals.push({id:`proposal:${c.proposals.length+1}`,runId,state:"pending",action:"create_task",targetTaskId:"",taskId:"",attemptId:"",failure:"",request:{projectId:project.id,repositoryConnectionId:c.repositoryConnectionIds[0]!,repositoryRevision:revision,runtimeProfileId:profileId,connectionId:defaults.codingConnectionId,agent:{provider:"openai",agent:"coding-agent",model:call.request.content.includes("model gpt-5.6-luna")?"gpt-5.6-luna":defaults.codingModel},request:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],codingTurns:24,changeConstraints:{protectedPaths:["policy.toml"],allowTestEdits:true},deadline:{seconds:"3600",nanos:0}}});
     c.plan??={id:`plan:${c.id}`,versions:[]};
     const prior=c.plan.versions.at(-1);if(prior?.state==="pending")prior.state="superseded";
     c.plan.versions.push({version:String(c.plan.versions.length+1),runId,state:"pending",findings:"Repository instructions and implementation reviewed.",scope:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],proposalIds:[c.proposals.at(-1)!.id],dependencyEnvironmentImpact:"",createdAt:now,failure:""});
@@ -366,10 +370,11 @@ grpc.addService(ProjectConversationServiceService,{
       p.state=v.state;
       if(v.state==="approved"){
         const id=proposalTasks.get(p.id)??`00000000-0000-4000-8000-${String(50+proposalTasks.size).padStart(12,"0")}`;proposalTasks.set(p.id,id);
-        tasks.set(id,task(id,DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED,p.request!.request));p.taskId=id;p.attemptId=`attempt:${id}`;
+        const created=task(id,DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED,p.request!.request);
+        created.snapshot.origin={projectId:c.projectId,conversationId:c.id,planId:c.plan!.id,planVersion:v.version,proposalId:p.id,researchRunId:v.runId};
+        tasks.set(id,created);p.taskId=id;p.attemptId=`attempt:${id}`;setWorkerEvidence(c,created,"failed_quality");
       }
     }
-    if(v.state==="approved")c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"Execution succeeded. Quality checks failed. A draft PR was published; review its findings before merging.",createdAt:now,runId:v.runId});
     changedConversation(c);callback(null,{conversation:c});
   },
   decideProjectProposal(call:any,callback:any){
@@ -435,10 +440,18 @@ function profileFixture(url: URL): void {
  if(url.pathname==="/profile-version") profile.resourceVersion=String(Number(profile.resourceVersion)+1);
  if(url.pathname==="/profile-state") { const state=Number(url.searchParams.get("value")); if(Number.isInteger(state) && state>=1 && state<=7) profile.state=state; }
 }
+function updateWorkerEvidence(url:URL):void {
+ for(const c of conversations){
+   const proposal=c.proposals.findLast(p=>p.state==="approved"&&p.action==="create_task");
+   const task=proposal?tasks.get(proposal.taskId):undefined;
+   if(task&&setWorkerEvidence(c,task,url.searchParams.get("case")??"success",url.searchParams.get("version")??undefined))changedConversation(c);
+ }
+}
 const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
+   if(url.pathname==="/worker-evidence")updateWorkerEvidence(url);
    if(url.pathname==="/conversation-unavailable")conversationUnavailable=url.searchParams.get("value")!=="false";
    if(url.pathname==="/append-message")for(const c of conversations){c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"Additional research update. ".repeat(200),createdAt:now,runId:""});changedConversation(c);}
    if (url.pathname === "/reset-project") {conversationUnavailable=false;conversations=[];proposalTasks.clear();stalePlan=false;}

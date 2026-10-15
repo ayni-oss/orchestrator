@@ -1,4 +1,6 @@
 <script lang="ts">
+  import {tick} from "svelte";
+  import WorkerUpdates from "$lib/components/worker-updates.svelte";
   import { projectHref } from "$lib/project-navigation.js";
   import { invalidate } from "$app/navigation";
   import type { PageData } from "../../routes/projects/[projectId]/$types";
@@ -24,6 +26,11 @@
   const active=$derived(data.project?.state==="active"&&data.workspace?.state==="active");
   const running=$derived(conversation?.runs.some(r=>r.state==="queued"||r.state==="running")??false);
   const submit:SubmitFunction=()=>{pending=true;return async({result,update})=>{try{if(result.type==="success")content="";await update({reset:false});}finally{pending=false;}};};
+  async function discuss(update:NonNullable<PageData["conversation"]>["workerUpdates"][number]){
+    content=`For task ${update.taskId}, attempt ${update.attemptId}, approved plan version ${update.origin.planVersion}:\nWorker question: ${update.requestedInput??update.result?.requestedInput??""}\nMy answer: `;
+    await tick();
+    const composer=document.getElementById("project-message");composer?.focus();composer?.scrollIntoView({block:"center",behavior:"smooth"});
+  }
   function key(suffix:string){return `${data.idempotencyKey}-${suffix}`;}
   function name(id:string){return data.repositories.find(r=>r.id===id)?.displayName??id;}
 </script>
@@ -44,6 +51,7 @@
           <article class={['rounded-lg border p-4',message.role==='user'&&'bg-muted/40']}><div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>{message.role==="user"?"You":message.role==="assistant"?"Project agent":words(message.role)}</span><time datetime={message.createdAt}>{formatDate(message.createdAt)}</time></div><p class="whitespace-pre-wrap break-words text-sm">{message.content}</p></article>
         {:else}<p class="text-sm text-muted-foreground">Describe the change you want. The project agent will research these repositories and clarify the requirements.</p>{/each}
       </div>
+      <WorkerUpdates updates={conversation.workerUpdates} onDiscuss={active?discuss:undefined} />
       {#if conversation.runs.length}<details class="text-sm"><summary class="cursor-pointer text-muted-foreground">Agent activity · {conversation.runs.length} runs</summary><div class="mt-3 space-y-2">{#each conversation.runs as run (run.id)}<InformationTable rows={[{label:"Run",value:words(run.state)},{label:"Model",value:run.model},{label:"Model calls",value:String(run.modelCalls)},{label:"Total tokens",value:run.usage?.totalTokens??"Unavailable"}]} />{/each}</div></details>{/if}
       {#each conversation.runs.filter(r=>r.state==="failed"||r.state==="interrupted") as run (run.id)}<Feedback kind="warning" title={`Agent run ${words(run.state)}`} message={run.failure||"Send a message to explicitly retry. Previously approved tasks remain linked below."} />{/each}
       {#if running}<p role="status" class="text-sm text-muted-foreground">The agent is researching your request. You can return later; this conversation is saved.</p>{/if}

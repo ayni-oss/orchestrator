@@ -385,3 +385,27 @@ action receipts and outcome-summary deduplication. Retained tasks and preparatio
 state keep their existing semantics. Back up state and upgrade server, worker and
 clients together. An interrupted model interaction needs an explicit user retry;
 reconciliation never silently restarts lost running research Jobs.
+
+## Worker evidence upgrade
+
+Schema 24 binds approved task snapshots to their project, conversation, plan
+version, proposal and research run. It backfills that provenance from retained
+approval receipts, preserving existing coding admission authority. Back up and
+quiesce SQLite before upgrading all components together. Older binaries cannot
+open schema 24. Unverifiable provenance aborts startup.
+
+An independent control-plane loop projects accepted attempt revisions into worker
+updates and safe context records. It runs even when runtime execution is disabled.
+Each attempt has one current update; semantic changes append history atomically
+with the revision watermark. Duplicate, delayed and restart observations do not
+append repeated evidence. Usage and cleanup changes only advance the watermark.
+The conversation shows at most 32 current updates within a 1 MiB budget; archived
+outcomes remain searchable. Raw task snapshots, credential bindings and evidence
+artifact locations are excluded from planner context. Existing queued or running
+model-generated outcome summary turns are retired during upgrade.
+
+`dev/ctl test worker-evidence CONTROL_PLANE_IMAGE WEB_IMAGE` exercises accepted
+progress, questions, independent results, retries, schema-23 backfill and restart
+idempotency through the deployed API in a disposable Docker Desktop namespace.
+It seeds synthetic retained state with the writer stopped; it does not execute a
+live model or coding worker.

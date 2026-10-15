@@ -455,7 +455,7 @@ fn schema_twenty_two_upgrade_preserves_legacy_frozen_requests_and_receipts()
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("DROP TABLE project_planner_sessions; UPDATE clean_schema SET version=22;")
+        .execute_batch("DROP TABLE project_worker_updates; DROP TABLE project_task_origins; DROP TABLE project_planner_sessions; UPDATE clean_schema SET version=22;")
         .map_err(CleanStoreError::Database)?;
     let directory = tempdir().map_err(CleanStoreError::CreateDirectory)?;
     let path = directory.path().join("legacy.sqlite");
@@ -465,7 +465,7 @@ fn schema_twenty_two_upgrade_preserves_legacy_frozen_requests_and_receipts()
         .map_err(CleanStoreError::Database)?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 23);
+    assert_eq!(store.schema_version()?, SCHEMA_VERSION);
     let actual: String = store
         .connection
         .query_row(

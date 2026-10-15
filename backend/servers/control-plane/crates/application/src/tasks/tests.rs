@@ -87,6 +87,7 @@ fn receipt() -> AdmissionReceipt {
 
 fn command() -> AdmitTask {
     AdmitTask {
+        origin: None,
         identity: RequestIdentity {
             key: "key".into(),
             digest: vec![1],

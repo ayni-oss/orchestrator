@@ -81,7 +81,7 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), CleanStoreError> {
     finish(connection, result)
 }
 
-fn append(
+pub(super) fn append(
     connection: &Connection,
     c: &v1::ProjectConversation,
     id: &str,
@@ -483,7 +483,32 @@ fn finish(
 
 /// Deliberately excludes snapshots, provider bindings, secrets and environment data.
 pub(crate) fn safe_outcome(task_id: &str, attempt: &v1::DevelopmentAttempt) -> Value {
-    json!({"task_id":task_id,"attempt_id":attempt.id,"state":attempt.state,"requested_input":attempt.requested_input,"execution":attempt.result.as_ref().map(|r|r.execution),"publication":attempt.result.as_ref().map(|r|r.publication),"quality_state":attempt.result.as_ref().and_then(|r|r.quality.as_ref()).map(|q|q.outcome),"commit":attempt.result.as_ref().and_then(|r|r.commit.as_ref()),"quality_findings":attempt.result.as_ref().and_then(|r|r.quality.as_ref()).map(|q|&q.findings),"changed_paths":attempt.result.as_ref().map(|r|&r.changed_paths),"reporting_state":attempt.reporting_state,"cleanup_state":attempt.cleanup_state})
+    let origin = attempt.snapshot.as_ref().and_then(|s| s.origin.as_ref());
+    let quality = attempt
+        .result
+        .as_ref()
+        .and_then(|r| r.quality.as_ref())
+        .or_else(|| {
+            attempt
+                .progress
+                .as_ref()
+                .and_then(|p| p.latest_full_check.as_ref())
+        });
+    let quality = quality.cloned().map(|mut quality| {
+        super::project_worker_evidence::normalize_quality(
+            &mut quality,
+            attempt.result.as_ref().and_then(|r| r.commit.as_ref()),
+        );
+        quality
+    });
+    let quality = quality.as_ref();
+    let receipt = attempt.pull_request.as_ref().or_else(|| {
+        attempt
+            .result
+            .as_ref()
+            .and_then(|r| r.pull_request.as_ref())
+    });
+    json!({"task_id":task_id,"attempt_id":attempt.id,"attempt_number":attempt.attempt_number,"resource_version":attempt.resource_version,"state":attempt.state,"requested_input":attempt.requested_input,"phase":attempt.progress.as_ref().map(|p|p.phase),"execution":attempt.result.as_ref().map(|r|r.execution),"publication":attempt.result.as_ref().map(|r|r.publication).or_else(||attempt.progress.as_ref().map(|p|p.publication)),"quality_state":quality.map(|q|q.outcome),"commit":attempt.result.as_ref().and_then(|r|r.commit.as_ref()),"quality_findings":quality.map(|q|&q.findings),"evidence":quality.and_then(|q|q.evidence.as_ref()).map(|e|json!({"signals_digest":e.signals_digest,"source_fingerprint":e.source_fingerprint,"commit":e.commit})),"changed_paths":attempt.result.as_ref().map(|r|&r.changed_paths),"publication_only":attempt.publication_only,"failure":attempt.failure.as_ref().map(|f|&f.message),"pull_request":receipt.map(|r|json!({"url":r.url,"number":r.number,"head_commit":r.head_commit,"draft":r.draft})),"origin":origin.map(|o|json!({"project_id":o.project_id,"conversation_id":o.conversation_id,"plan_id":o.plan_id,"plan_version":o.plan_version,"proposal_id":o.proposal_id,"research_run_id":o.research_run_id}))})
 }
 pub(super) fn archive_outcome(
     connection: &Connection,
