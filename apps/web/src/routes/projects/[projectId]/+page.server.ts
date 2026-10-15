@@ -1,3 +1,4 @@
+import {projectView} from "$lib/project-navigation.js";
 import {effectiveAgentDefaults} from "$lib/server/agent-defaults.js";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
@@ -12,7 +13,7 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
   depends("app:workspaces", "app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
   depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });
-  const base = { idempotencyKey: actionKey(), taskKey: actionKey(), requestId: locals.requestId };
+  const base = { view: projectView(url.searchParams.get("view")), planVersion: url.searchParams.get("version") ?? "", idempotencyKey: actionKey(), taskKey: actionKey(), requestId: locals.requestId };
   try {
     const context = requestContext(locals), bff = getBff();
     const storedProject = await bff.getProject(params.projectId, context);
@@ -33,12 +34,14 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     const conversationId=url.searchParams.get("conversation");
     const selectedConversation=conversationId ? conversationResult.conversations.find(c=>c.id===conversationId) : conversationResult.conversations[0];
     let conversation:ProjectConversationDto|undefined,conversationError=conversationResult.error;
+    if(conversationId && !selectedConversation && !conversationError)conversationError={status:404,reason:"resource_not_found",message:"This conversation is no longer available in this project. Choose another conversation or start a new one.",requestId:locals.requestId,retryable:false};
     if(selectedConversation){
       try {const detail=await bff.getProjectConversation(selectedConversation.id,context);if(detail.projectId===project.id)conversation=detail;else conversationError={status:404,reason:"resource_not_found",message:"This conversation is no longer available in this project.",requestId:locals.requestId,retryable:false};}
       catch(error){conversationError=safeError(error,locals.requestId);}
     }
     const taskProgress:Record<string,Awaited<ReturnType<typeof bff.taskProgress>>>={};
-    await Promise.allSettled(tasks.developmentTasks.map(async task=>{taskProgress[task.id]=await bff.taskProgress(task.id,context);}));
+    const taskIds=new Set([...tasks.developmentTasks.map(task=>task.id),...(conversation?.proposals.flatMap(proposal=>proposal.taskId?[proposal.taskId]:[])??[])]);
+    await Promise.allSettled([...taskIds].map(async id=>{taskProgress[id]=await bff.taskProgress(id,context);}));
     return { ...base, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, workspace, overrides:storedProject.agentDefaults?.projectConnectionId||storedProject.agentDefaults?.codingConnectionId?storedProject.agentDefaults:undefined, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:models?.models ?? [], provider:models?.provider ?? "" };
   } catch (error) {
     return { ...base, llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, workspace:undefined, overrides:undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };

@@ -25,6 +25,7 @@ const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
 const now = new Date("2026-09-28T10:00:00.000Z");
 let version = 10;
+let conversationUnavailable=false;
 
 let repository: any = {
   id: repositoryId,
@@ -340,7 +341,7 @@ grpc.addService(ProjectConversationServiceService,{
   },
   createProjectConversation(call:any,callback:any){const c=ProjectConversation.fromPartial({id:`conversation:${conversations.length+1}`,projectId:call.request.projectId,title:call.request.title,repositoryConnectionIds:call.request.repositoryConnectionIds,updateCursor:"1",createdAt:now});conversations.push(c);callback(null,{conversation:c});},
   listProjectConversations(_call:any,callback:any){callback(null,{conversations:conversations.map(c=>ProjectConversation.fromPartial({id:c.id,projectId:c.projectId,title:c.title,repositoryConnectionIds:c.repositoryConnectionIds,updateCursor:c.updateCursor,createdAt:c.createdAt}))});},
-  getProjectConversation(call:any,callback:any){const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...conversationProjection(c),messages:c.messages.slice(-32)}});},
+  getProjectConversation(call:any,callback:any){if(conversationUnavailable)return callback({code:status.UNAVAILABLE,message:"Conversations temporarily unavailable"});const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...conversationProjection(c),messages:c.messages.slice(-32)}});},
   sendProjectMessage(call:any,callback:any){
     const c=conversations.find(c=>c.id===call.request.conversationId)!;
     c.messages.push({id:`message:${c.messages.length+1}`,role:"user",content:call.request.content,createdAt:now,runId:""});
@@ -438,7 +439,9 @@ const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
-   if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();stalePlan=false;}
+   if(url.pathname==="/conversation-unavailable")conversationUnavailable=url.searchParams.get("value")!=="false";
+   if(url.pathname==="/append-message")for(const c of conversations){c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"Additional research update. ".repeat(200),createdAt:now,runId:""});changedConversation(c);}
+   if (url.pathname === "/reset-project") {conversationUnavailable=false;conversations=[];proposalTasks.clear();stalePlan=false;}
    if(url.pathname==="/planner-queued")for(const c of conversations){c.plannerSession=undefined;c.runs.push(ProjectConversation.fromPartial({runs:[{id:"run:queued",state:"queued",model:"gpt-5.6-sol",connectionId:"connection:1",createdAt:now}]}).runs[0]!);changedConversation(c);}
    if(url.pathname==="/archive-workspace")workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED};
    if(url.pathname==="/expire-planner")for(const c of conversations){if(c.plannerSession)c.plannerSession={...c.plannerSession,state:"expired",activeRunId:""};changedConversation(c);}

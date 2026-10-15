@@ -94,7 +94,7 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await page.getByRole("dialog").getByRole("button", { name: "Create project", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payments", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Payments project actions" }).click();
-  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Project settings", exact: true }).click();
   await page.getByLabel("Project name", { exact: true }).fill("Ledger");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Ledger", exact: true })).toBeVisible();
@@ -166,23 +166,21 @@ test("publication retry resumes retained final work and is distinct from task re
 });
 
 
-test("project overview starts with conversations and retains tasks and responsive repository grid", async ({ page }) => {
+test("project views separate planning, tasks and project settings on desktop and mobile", async ({ page }) => {
   await page.setViewportSize({ width: 1185, height: 1071 });
   await page.goto("/projects/project:1");
-  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
-  const sections = page.locator("main section");
-  await expect(sections.nth(0).getByRole("heading", {name:"Conversations",exact:true})).toBeVisible();
-  await expect(sections.nth(1).getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
-  await expect(sections.nth(2).getByRole("heading", {name:"Repositories",exact:true})).toBeVisible();
-  const grid = sections.nth(2).locator(".grid");
-  expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(3);
+  await expect(page.getByRole("heading", {name:"Conversations",exact:true})).toBeVisible();
+  await expect(page.getByRole("heading", {name:"Tasks",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button", {name:"Save settings",exact:true})).toHaveCount(0);
+  await page.getByRole("navigation",{name:"Project views"}).getByRole("link",{name:"Tasks",exact:true}).click();
+  await expect(page.getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
+  await expect(page.getByRole("heading", {name:"Conversations",exact:true})).toHaveCount(0);
   await page.getByRole("button", {name:/project actions$/u}).click();
-  await page.getByRole("menuitem", {name:"Archive",exact:true}).click();
-  await expect(page.getByRole("dialog", {name:"Archive project",exact:true})).toBeVisible();
-  await page.getByRole("button", {name:"Cancel",exact:true}).click();
+  await page.getByRole("menuitem", {name:"Project settings",exact:true}).click();
+  await expect(page.getByRole("region",{name:"Project repositories",exact:true})).toContainText("ayni-oss/sandbox");
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("button", {name:"New task",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:/project actions$/u})).toBeFocused();
   await page.setViewportSize({width:375,height:720});
-  expect(await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

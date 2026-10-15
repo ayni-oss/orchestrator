@@ -38,6 +38,7 @@
   {#if data.task}
     {@const task = data.task}
     {@const terminal = terminalStates.includes(task.state)}
+    <Button href={`/projects/${encodeURIComponent(task.projectId)}?view=tasks`} variant="outline">Project tasks</Button>
     <PageHeader eyebrow="Task" title={task.snapshot.request} />
     <section class="space-y-4" aria-labelledby="task-information-title">
       <div class="flex flex-wrap items-center justify-between gap-2"><h2 id="task-information-title" class="text-lg font-semibold">Information</h2>{#key task.id}<TaskUpdateStatus taskId={task.id} resourceVersion={task.resourceVersion} />{/key}</div>
