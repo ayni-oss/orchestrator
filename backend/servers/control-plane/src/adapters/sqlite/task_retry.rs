@@ -110,7 +110,7 @@ impl Repository for CleanStore {
             .ok_or(CleanStoreError::CorruptState)?;
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         transaction
             .execute(

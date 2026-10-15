@@ -53,7 +53,7 @@ fn complete(
             .as_deref()
             .ok_or(CleanStoreError::CorruptState)?,
     )?;
-    store.save_project_run_request(&run.id,&ProjectAgentRequest{run_id:run.id.clone(),project_id:c.project_id.clone(),model:run.model.clone(),history:String::new(),repositories:vec![ayni_orchestrator_runtime::project_agent::ResearchRepository{id:c.repository_connection_ids[0].clone(),repository_url:"https://github.com/ayni-oss/sandbox.git".into(),revision:REVISION.into(),coding_connection_id:String::new(),coding_model:run.model.clone(),runtime_profile_id:profile.id.clone()}],context:serde_json::json!({"repositories":[{"repository_id":c.repository_connection_ids[0],"profiles":[{"id":profile.id,"active_revision_id":profile.active_revision_id,"active_runtime_artifact_id":profile.active_runtime_artifact_id,"resolved_digest":artifact.resolved_digest}]}]}).to_string(),max_model_calls:24,deadline_seconds:600})?;
+    store.save_project_run_request(&run.id,&ProjectAgentRequest{run_id:run.id.clone(),project_id:c.project_id.clone(),model:run.model.clone(),history:String::new(),conversation_context:serde_json::Value::Null,repositories:vec![ayni_orchestrator_runtime::project_agent::ResearchRepository{id:c.repository_connection_ids[0].clone(),repository_url:"https://github.com/ayni-oss/sandbox.git".into(),revision:REVISION.into(),coding_connection_id:String::new(),coding_model:run.model.clone(),runtime_profile_id:profile.id.clone()}],context:serde_json::json!({"repositories":[{"repository_id":c.repository_connection_ids[0],"profiles":[{"id":profile.id,"active_revision_id":profile.active_revision_id,"active_runtime_artifact_id":profile.active_runtime_artifact_id,"resolved_digest":artifact.resolved_digest}]}]}).to_string(),max_model_calls:24,deadline_seconds:600})?;
     store.complete_project_run(ProjectAgentResult {
         run_id: run.id.clone(),
         message: "Review this proposal".into(),
@@ -280,7 +280,7 @@ fn schema_eighteen_upgrade_preserves_existing_projects() -> Result<(), CleanStor
     let path = directory.path().join("state.db");
     let mut store = CleanStore::open(&path, 3)?;
     let (repository, _, _) = ready_profile(&mut store)?;
-    store.connection.execute_batch("DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; UPDATE clean_schema SET version=18;").map_err(CleanStoreError::Database)?;
+    store.connection.execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; UPDATE clean_schema SET version=18;").map_err(CleanStoreError::Database)?;
     drop(store);
     let store = CleanStore::open(&path, 3)?;
     assert_eq!(store.schema_version()?, SCHEMA_VERSION);
@@ -361,6 +361,7 @@ fn whole_plan_approval_rolls_back_when_second_repository_is_stale() -> Result<()
             project_id: c.project_id.clone(),
             model: run.model.clone(),
             history: String::new(),
+            conversation_context: serde_json::Value::Null,
             context,
             repositories,
             max_model_calls: 24,
@@ -622,7 +623,7 @@ fn remove_plan_representation(store: &mut CleanStore) -> Result<(), CleanStoreEr
     }
     store
         .connection
-        .execute_batch("UPDATE clean_schema SET version=20")
+        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
         .map_err(CleanStoreError::Database)
 }
 #[test]
@@ -649,7 +650,7 @@ fn migration_preserves_history_and_receipts_across_restart() -> Result<(), Clean
         .map_err(CleanStoreError::Database)?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 21);
+    assert_eq!(store.schema_version()?, super::super::SCHEMA_VERSION);
     let migrated = store.project_conversation(&c.id)?;
     assert_eq!(migrated.proposals, original);
     assert!(migrated.update_cursor > c.update_cursor);
@@ -714,9 +715,10 @@ fn migration_keeps_mixed_terminal_decisions_non_actionable() -> Result<(), Clean
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("UPDATE clean_schema SET version=20")
+        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
         .map_err(CleanStoreError::Database)?;
     super::super::project_plans::migrate(&store.connection)?;
+    super::super::project_context::migrate(&store.connection)?;
     let migrated = store.project_conversation(&c.id)?;
     assert_eq!(migrated.proposals, c.proposals);
     assert_eq!(
@@ -905,9 +907,10 @@ fn migration_preserves_more_than_one_hundred_twenty_eight_legacy_research_versio
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("UPDATE clean_schema SET version=20")
+        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=20")
         .map_err(CleanStoreError::Database)?;
     super::super::project_plans::migrate(&store.connection)?;
+    super::super::project_context::migrate(&store.connection)?;
     let migrated = store.project_conversation(&c.id)?;
     assert_eq!(migrated.proposals, c.proposals);
     let versions = migrated.plan.ok_or(CleanStoreError::CorruptState)?.versions;
@@ -917,3 +920,9 @@ fn migration_preserves_more_than_one_hundred_twenty_eight_legacy_research_versio
     store.validate_project_conversations()?;
     Ok(())
 }
+
+#[path = "project_context_fixture.rs"]
+mod context_fixture;
+
+#[path = "project_context_lifecycle.rs"]
+mod context_lifecycle;

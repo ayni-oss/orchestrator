@@ -1,5 +1,6 @@
 import {workspaceOperations,mapProject,type WorkspaceOperations,type UnaryInvoker} from "./workspaces.js";
-import { mapConversation, type ProjectConversationResponse } from "./conversations.js";
+import { conversationOperations, type ConversationOperations } from "./conversation-transport.js";
+import { type ProjectConversationResponse } from "./conversations.js";
 import { mapSummaryReadiness } from "./summaries.js";
 import { mapCertificate } from "./certificates.js";
 import {
@@ -12,7 +13,7 @@ import {
   CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
   ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
   ProjectServiceClient, ProjectState,
-  ProjectConversationServiceClient, type ListProjectConversationsResponse,
+  ProjectConversationServiceClient,
   type ListProjectSummariesResponse, type ListRepositorySummariesResponse,
   type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
@@ -47,7 +48,6 @@ import {
 import { mapInspection, mapRevision, mapAttemptUsage } from "./onboarding.js";
 import { randomUUID } from "node:crypto";
 import type {
-  ProjectConversationDto,
   ProjectDto,
   ProjectAgentDefaultsDto,
   CreateDevelopmentTaskInput,
@@ -145,6 +145,7 @@ export class OrchestratorBff {
   readonly #workspaces:WorkspaceOperations;
   readonly #projects: ProjectServiceClient;
   readonly #conversations: ProjectConversationServiceClient;
+  readonly #conversationOperations: ConversationOperations;
   readonly #repositories: RepositoryServiceClient;
   readonly #profiles: RuntimeProfileServiceClient;
   readonly #providers: ProviderServiceClient;
@@ -163,6 +164,7 @@ export class OrchestratorBff {
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
     this.#workspaces=workspaceOperations(this.#projects,<T>(context:RequestContext,invoke:UnaryInvoker<T>)=>this.#unary(context,invoke));
     this.#conversations = new ProjectConversationServiceClient(address, channelCredentials, options);
+    this.#conversationOperations = conversationOperations(this.#conversations, <T>(context:RequestContext,invoke:UnaryInvoker<T>)=>this.#unary(context,invoke));
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
     this.#providers = new ProviderServiceClient(address, channelCredentials, options);
@@ -284,30 +286,14 @@ export class OrchestratorBff {
     });
   }
 
-  async listProjectConversations(projectId:string, context:RequestContext):Promise<ProjectConversationDto[]> {
-    const response=await this.#unary<ListProjectConversationsResponse>(context,(m,o,c)=>this.#conversations.listProjectConversations({projectId},m,o,c));
-    return response.conversations.map(mapConversation);
-  }
-  async getProjectConversation(conversationId:string, context:RequestContext):Promise<ProjectConversationDto> {
-    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.getProjectConversation({conversationId},m,o,c));
-    return mapConversation(required(response.conversation));
-  }
-  async createProjectConversation(input:{idempotencyKey:string;projectId:string;title:string;repositoryConnectionIds:string[]},context:RequestContext):Promise<ProjectConversationDto> {
-    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.createProjectConversation(input,m,o,c));
-    return mapConversation(required(response.conversation));
-  }
-  async sendProjectMessage(input:{idempotencyKey:string;conversationId:string;content:string},context:RequestContext):Promise<ProjectConversationDto> {
-    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.sendProjectMessage(input,m,o,c));
-    return mapConversation(required(response.conversation));
-  }
-  async decideProjectPlan(input:{idempotencyKey:string;conversationId:string;planId:string;version:string;decision:string},context:RequestContext):Promise<ProjectConversationDto> {
-    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.decideProjectPlan(input,m,o,c));
-    return mapConversation(required(response.conversation));
-  }
-  async decideProjectProposal(input:{idempotencyKey:string;conversationId:string;proposalId:string;decision:string},context:RequestContext):Promise<ProjectConversationDto> {
-    const response=await this.#unary<ProjectConversationResponse>(context,(m,o,c)=>this.#conversations.decideProjectProposal(input,m,o,c));
-    return mapConversation(required(response.conversation));
-  }
+  getProjectConversationContext(...args:Parameters<ConversationOperations["getProjectConversationContext"]>){return this.#conversationOperations.getProjectConversationContext(...args);}
+  listProjectConversationHistory(...args:Parameters<ConversationOperations["listProjectConversationHistory"]>){return this.#conversationOperations.listProjectConversationHistory(...args);}
+  listProjectConversations(...args:Parameters<ConversationOperations["listProjectConversations"]>){return this.#conversationOperations.listProjectConversations(...args);}
+  getProjectConversation(...args:Parameters<ConversationOperations["getProjectConversation"]>){return this.#conversationOperations.getProjectConversation(...args);}
+  createProjectConversation(...args:Parameters<ConversationOperations["createProjectConversation"]>){return this.#conversationOperations.createProjectConversation(...args);}
+  sendProjectMessage(...args:Parameters<ConversationOperations["sendProjectMessage"]>){return this.#conversationOperations.sendProjectMessage(...args);}
+  decideProjectPlan(...args:Parameters<ConversationOperations["decideProjectPlan"]>){return this.#conversationOperations.decideProjectPlan(...args);}
+  decideProjectProposal(...args:Parameters<ConversationOperations["decideProjectProposal"]>){return this.#conversationOperations.decideProjectProposal(...args);}
 
   close(): void {
     this.#certificates.close();

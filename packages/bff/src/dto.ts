@@ -371,3 +371,21 @@ export interface ProjectConversationDto {
   runs: Array<{id:string;state:string;model:string;connectionId:string;modelCalls:number;failure:string;usage?:{inputTokens:string|undefined;outputTokens:string|undefined;totalTokens:string|undefined}}>;
   proposals: Array<{id:string;runId:string;state:string;action:string;targetTaskId:string;taskId:string;attemptId:string;failure:string;runtime?:{profileRevisionId:string;artifactId:string;image:string;digest:string};request?:DevelopmentTaskInputDto}>;
 }
+
+export interface ConversationContextDto {
+  summary?: {version:string;sourceWatermark:string;content:string;sourceRecordIds:string[]};
+  sourceWatermark:string;
+  archiveRecordCount:string;
+  capacityRecordLimit:string;
+  recentMessageLimit:number;
+}
+export interface ConversationRecordDto {
+  sequence:string;id:string;kind:string;sourceId:string;repositoryId:string;role:string;content:string;
+}
+export interface ConversationHistoryDto {
+  records:ConversationRecordDto[];
+  snapshotSequence:string;nextBeforeSequence:string;hasMore:boolean;archiveRecordCount:string;
+}
+export interface ConversationHistoryInput {
+  projectId:string;conversationId:string;beforeSequence?:string;snapshotSequence?:string;query?:string;limit?:number;
+}

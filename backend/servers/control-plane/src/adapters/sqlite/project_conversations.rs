@@ -28,6 +28,7 @@ impl CleanStore {
             validate_conversation_index(&conversation, &id, &project, cursor, payload.len())?;
             validate_conversation_runs(&conversation)?;
             super::project_plans::validate(&conversation)?;
+            self.validate_project_context(&conversation)?;
         }
         self.validate_project_agent_requests()
     }
@@ -141,19 +142,47 @@ impl CleanStore {
             })
             .transpose()
     }
-    pub(super) fn save_conversation(
+    pub(crate) fn save_conversation(
         &mut self,
         conversation: &mut v1::ProjectConversation,
     ) -> Result<(), CleanStoreError> {
-        if conversation.messages.len() > 512 || conversation.encode_to_vec().len() > 3 * 1024 * 1024
-        {
-            return Err(CleanStoreError::BoundExceeded);
-        }
-        conversation.update_cursor = conversation
+        let mut next = conversation.clone();
+        next.update_cursor = next
             .update_cursor
             .checked_add(1)
             .ok_or(CleanStoreError::BoundExceeded)?;
-        self.connection.execute("INSERT INTO project_conversations(id,project_id,cursor,payload) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,payload=excluded.payload",params![conversation.id,conversation.project_id,i64::try_from(conversation.update_cursor).map_err(|_|CleanStoreError::BoundExceeded)?,conversation.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+        self.connection
+            .execute_batch("SAVEPOINT conversation_context_save")
+            .map_err(CleanStoreError::Database)?;
+        let result = (|| {
+            // Install the parent before archive rows; the savepoint rolls both back on failure.
+            self.connection.execute("INSERT INTO project_conversations(id,project_id,cursor,payload) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,payload=excluded.payload",params![next.id,next.project_id,i64::try_from(next.update_cursor).map_err(|_|CleanStoreError::BoundExceeded)?,next.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+            super::project_context::archive(&self.connection, &next)?;
+            if next.messages.len() > super::project_context::RECENT_MESSAGES {
+                next.messages
+                    .drain(..next.messages.len() - super::project_context::RECENT_MESSAGES);
+            }
+            if next.encoded_len() > 3 * 1024 * 1024 {
+                return Err(CleanStoreError::ConversationCapacity);
+            }
+            self.connection
+                .execute(
+                    "UPDATE project_conversations SET payload=?1 WHERE id=?2",
+                    params![next.encode_to_vec(), next.id],
+                )
+                .map_err(CleanStoreError::Database)?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            let _ = self.connection.execute_batch(
+                "ROLLBACK TO conversation_context_save; RELEASE conversation_context_save",
+            );
+            return Err(error);
+        }
+        self.connection
+            .execute_batch("RELEASE conversation_context_save")
+            .map_err(CleanStoreError::Database)?;
+        *conversation = next;
         Ok(())
     }
     pub(super) fn remember_conversation<M: Message>(
@@ -327,16 +356,18 @@ impl CleanStore {
                 run.model_calls = 0;
                 run.failure.clear();
                 run.created_at = Some(timestamp(unix_seconds()?));
-                let task = self.development_task(&proposal.task_id)?;
+                let safe_outcome =
+                    super::project_context::safe_outcome(&proposal.task_id, &attempt);
                 let request = ayni_orchestrator_runtime::project_agent::ProjectAgentRequest {
                     run_id: run.id.clone(),
                     project_id: c.project_id.clone(),
                     model: run.model.clone(),
                     history: String::new(),
+                    conversation_context: serde_json::Value::Null,
                     repositories: Vec::new(),
                     context: crate::truncate_utf8(
                         &format!(
-                            "Summarize the accepted outcome. Explicitly distinguish execution, quality and publication. Never propose or initiate actions. Task: {task:?} Attempt: {attempt:?}"
+                            "Summarize the accepted outcome. Explicitly distinguish execution, quality and publication. Never propose or initiate actions. {safe_outcome}"
                         ),
                         65536,
                     ),
@@ -349,6 +380,12 @@ impl CleanStore {
                 let result = (|| {
                     self.save_project_run_request(&run.id, &request)?;
                     self.connection.execute("INSERT INTO project_outcome_summaries(attempt_id,outcome,conversation_id) VALUES(?1,?2,?3)",params![attempt.id,outcome,c.id]).map_err(CleanStoreError::Database)?;
+                    super::project_context::archive_outcome(
+                        &self.connection,
+                        &c,
+                        &attempt,
+                        &safe_outcome,
+                    )?;
                     c.runs.push(run);
                     self.save_conversation(&mut c)
                 })();
@@ -615,28 +652,28 @@ impl CleanStore {
             }
             return Err(CleanStoreError::InvalidTransition);
         }
-        let p = &mut c.proposals[index];
-        if p.state == "approved" && message.decision == "approve" {
+        if c.proposals[index].state == "approved" && message.decision == "approve" {
             return Ok(c);
         }
-        if p.state != "pending" {
+        if c.proposals[index].state != "pending" {
             return Err(CleanStoreError::InvalidTransition);
-        }
-        match message.decision.as_str() {
-            "reject" => p.state = "rejected".into(),
-            "revise" => p.state = "revise".into(),
-            "approve" => {
-                let (task, attempt) = self.approve_project_proposal(&c.project_id, p)?;
-                p.task_id = task;
-                p.attempt_id = attempt;
-                p.state = "approved".into();
-            }
-            _ => return Err(CleanStoreError::InvalidTransition),
         }
         self.connection
             .execute_batch("BEGIN IMMEDIATE")
             .map_err(CleanStoreError::Database)?;
         let result = (|| {
+            let p = &mut c.proposals[index];
+            match message.decision.as_str() {
+                "reject" => p.state = "rejected".into(),
+                "revise" => p.state = "revise".into(),
+                "approve" => {
+                    let (task, attempt) = self.approve_project_proposal(&c.project_id, p)?;
+                    p.task_id = task;
+                    p.attempt_id = attempt;
+                    p.state = "approved".into();
+                }
+                _ => return Err(CleanStoreError::InvalidTransition),
+            }
             self.save_conversation(&mut c)?;
             self.remember_conversation(key, message, &c.id)
         })();

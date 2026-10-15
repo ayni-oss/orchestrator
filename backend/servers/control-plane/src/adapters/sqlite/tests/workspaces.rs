@@ -220,7 +220,7 @@ fn workspace_migration_preserves_frozen_work_and_is_restart_safe() -> Result<(),
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("DROP TABLE workspaces; UPDATE clean_schema SET version=19;")
+        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; UPDATE clean_schema SET version=19;")
         .map_err(CleanStoreError::Database)?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
@@ -269,7 +269,7 @@ fn invalid_legacy_project_rolls_back_workspace_migration() -> Result<(), CleanSt
     let path = directory.path().join("migration-rollback.sqlite");
     let mut store = CleanStore::open(&path, 3)?;
     ready_profile(&mut store)?;
-    store.connection.execute_batch("DROP TABLE workspaces; UPDATE clean_schema SET version=19; UPDATE projects SET payload=x'ff';").map_err(CleanStoreError::Database)?;
+    store.connection.execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; UPDATE clean_schema SET version=19; UPDATE projects SET payload=x'ff';").map_err(CleanStoreError::Database)?;
     drop(store);
     assert!(matches!(
         CleanStore::open(&path, 3),

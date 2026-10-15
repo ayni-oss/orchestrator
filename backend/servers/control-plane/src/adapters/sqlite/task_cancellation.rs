@@ -131,7 +131,7 @@ impl CancellationRepository for CleanStore {
         }
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         transaction.execute(
             "INSERT INTO durable_actions(operation,idempotency_key,request_hash,request_payload,state,target_type,target_id,created_at,updated_at)

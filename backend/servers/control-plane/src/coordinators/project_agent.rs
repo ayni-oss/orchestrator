@@ -92,11 +92,16 @@ impl ProjectAgentReconciler {
             .await?
         {
             ProjectObservation::Completed(result) => {
-                if with_store_async(&self.state, move |s| s.complete_project_run(result))
-                    .await
-                    .is_err()
+                if let Err(error) =
+                    with_store_async(&self.state, move |s| s.complete_project_run(result)).await
                 {
-                    return self.fail(&run.id, "project_result_rejected").await;
+                    let reason = match error {
+                        CleanStoreError::ConversationCapacity => {
+                            "conversation capacity reached; start another conversation; original records are retained"
+                        }
+                        _ => "project_result_rejected",
+                    };
+                    return self.fail(&run.id, reason).await;
                 }
                 self.kubernetes.cleanup_project_agent(&name).await
             }
@@ -111,10 +116,9 @@ impl ProjectAgentReconciler {
                 self.fail(&run.id, "project_execution_lost").await
             }
             ProjectObservation::Missing => {
-                let Ok(request) = self.request(conversation, run).await else {
-                    return self
-                        .fail(&run.id, "project_research_inputs_unavailable")
-                        .await;
+                let request = match self.request(conversation, run).await {
+                    Ok(request) => request,
+                    Err(reason) => return self.fail(&run.id, reason).await,
                 };
                 let binding = run
                     .provider_credentials
@@ -207,7 +211,11 @@ impl ProjectAgentReconciler {
             prepare_request(s, &c, &r, calls, deadline, &models, &source_snapshots)
         })
         .await;
-        let request = prepared.map_err(|_| "project_research_inputs_unavailable")?;
+        let request = prepared.map_err(|error|match error {
+            CleanStoreError::ContextBudget=>"context request exceeds byte budget; narrow the question or selected repository scope and retry; original records are retained",
+            CleanStoreError::ConversationCapacity=>"conversation capacity reached; start another conversation; original records are retained",
+            _=>"project_research_inputs_unavailable",
+        })?;
         let id = run.id.clone();
         let saved = request.clone();
         with_store_async(&self.state, move |s| {
@@ -314,6 +322,14 @@ fn prepare_request(
     )?;
     let mut task_context = Vec::new();
     for task in tasks.items {
+        let repository = task
+            .snapshot
+            .as_ref()
+            .and_then(|s| s.repository.as_ref())
+            .map(|r| r.repository_connection_id.as_str());
+        if repository.is_none_or(|id| !c.repository_connection_ids.iter().any(|r| r == id)) {
+            continue;
+        }
         let attempts = store.list_development_attempts(
             &task.id,
             Some(&v1::PageRequest {
@@ -325,33 +341,59 @@ fn prepare_request(
             continue;
         };
         task_context.push(json!({"id":task.id,"state":task.state,"repository_id":task.snapshot.as_ref().map(|s|s.repository.as_ref().map(|r|r.repository_connection_id.clone())),"attempt_id":attempt.id,"requested_input":attempt.requested_input,
-            "outcome":format!("{:?}",attempt.result),"progress":format!("{:?}",attempt.progress)}));
+            "outcome":crate::adapters::sqlite::project_context::safe_outcome(&task.id,&attempt)}));
     }
-    let history = c
-        .messages
-        .iter()
-        .rev()
-        .take(32)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .map(|m| format!("{}: {}", m.role, m.content))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let conversation_context = store.frozen_conversation_context(c)?;
+    let summary = conversation_context["summary"]["content"]
+        .as_str()
+        .unwrap_or("");
+    let history = project_history(c, summary);
     let context=json!({"project_id":c.project_id,"goal":project.goal,"repositories":context,"tasks":task_context,"available_coding_models":models,"purpose":r.purpose}).to_string();
     if history.len() > 131_072 || context.len() > 262_144 {
-        return Err(CleanStoreError::BoundExceeded);
+        return Err(CleanStoreError::ContextBudget);
     }
-    Ok(ProjectAgentRequest {
+    let request = ProjectAgentRequest {
         run_id: r.id.clone(),
         project_id: c.project_id.clone(),
         model: r.model.clone(),
         history,
+        conversation_context,
         repositories,
         context,
         max_model_calls: calls,
         deadline_seconds: deadline,
-    })
+    };
+    if serde_json::to_vec(&request)
+        .map_err(|_| CleanStoreError::CorruptState)?
+        .len()
+        > 512 * 1024
+    {
+        return Err(CleanStoreError::ContextBudget);
+    }
+    Ok(request)
+}
+
+fn project_history(c: &v1::ProjectConversation, summary: &str) -> String {
+    let mut used = 0usize;
+    let mut messages = Vec::new();
+    for message in c.messages.iter().rev() {
+        let value = format!(
+            "[message:{}] {}: {}",
+            message.id, message.role, message.content
+        );
+        if used + value.len() > 96_000 {
+            break;
+        }
+        used += value.len();
+        messages.push(value);
+    }
+    messages.reverse();
+    format!(
+        "Working summary (extractive index):\n{summary}\nRecent messages ({} of {} recent messages included; retrieve original archive records for omitted history):\n{}",
+        messages.len(),
+        c.messages.len(),
+        messages.join("\n")
+    )
 }
 
 fn research_repositories(
@@ -532,6 +574,7 @@ mod tests {
             project_id: conversation.project_id.clone(),
             model: run.model,
             history: "user: Inspect this repository".into(),
+            conversation_context: serde_json::Value::Null,
             repositories,
             context: json!({"repositories":context}).to_string(),
             max_model_calls: 24,
@@ -658,5 +701,24 @@ mod tests {
             assert_eq!(context["goal"], "Deliver safer payments");
         }
         Ok(())
+    }
+    #[test]
+    fn recent_prompt_keeps_newest_question_with_bounded_utf8_and_escaped_content() {
+        let c = v1::ProjectConversation {
+            messages: (0..16)
+                .map(|i| v1::ProjectMessage {
+                    id: format!("message-{i}"),
+                    role: "user".into(),
+                    content: format!("{} question-{i}", "\"λ\n".repeat(2500)),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let prompt = project_history(&c, "Extractive index");
+        assert!(prompt.len() < 100_000);
+        assert!(prompt.contains("question-15"));
+        assert!(!prompt.contains("question-0"));
+        assert!(prompt.contains("retrieve original archive records"));
     }
 }

@@ -97,6 +97,7 @@ async fn research_plan(
                 project_id: conversation.project_id.clone(),
                 model: MODEL.into(),
                 history: String::new(),
+            conversation_context: serde_json::Value::Null,
                 repositories: inputs.iter().map(|(repository_id, profile_id, _, _)| ResearchRepository {
                     id: repository_id.clone(),
                     repository_url: "https://github.com/test-org/repository.git".into(),
@@ -302,5 +303,85 @@ fn assert_reviewed_tasks(
             CONNECTION
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn conversation_archive_transport_preserves_old_context_and_rejects_project_mismatch()
+-> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("context.sqlite");
+    let (server, channel) = start_with_source(&path).await?;
+    let profile = create_profile(&server, channel.clone()).await?;
+    let mut client = ProjectConversationServiceClient::new(channel);
+    let c = client
+        .create_project_conversation(v1::CreateProjectConversationRequest {
+            idempotency_key: "archive-transport".into(),
+            project_id: profile.project.id.clone(),
+            title: "Read old decisions".into(),
+            repository_connection_ids: vec![profile.repository.id.clone()],
+        })
+        .await?
+        .into_inner()
+        .conversation
+        .ok_or("missing conversation")?;
+    let id = c.id.clone();
+    with_store(&server.state, move |store| {
+        let mut c = store.project_conversation(&id)?;
+        c.messages = (0..600)
+            .map(|i| v1::ProjectMessage {
+                id: format!("transport-{i}"),
+                role: "user".into(),
+                content: if i == 0 {
+                    "Keep the lavender decision".into()
+                } else {
+                    format!("Other topic {i}")
+                },
+                ..Default::default()
+            })
+            .collect();
+        store.save_conversation(&mut c)
+    })
+    .await?;
+    let request = v1::ListProjectConversationHistoryRequest {
+        project_id: c.project_id.clone(),
+        conversation_id: c.id.clone(),
+        query: "lavender".into(),
+        limit: 10,
+        ..Default::default()
+    };
+    let result = client
+        .list_project_conversation_history(request.clone())
+        .await?
+        .into_inner();
+    assert_eq!(result.records.len(), 1);
+    assert_eq!(result.records[0].source_id, "transport-0");
+    let context = client
+        .get_project_conversation_context(v1::GetProjectConversationContextRequest {
+            project_id: c.project_id.clone(),
+            conversation_id: c.id.clone(),
+        })
+        .await?
+        .into_inner();
+    assert_eq!(context.archive_record_count, 600);
+    assert_eq!(context.recent_message_limit, 16);
+    let mismatch = client
+        .list_project_conversation_history(v1::ListProjectConversationHistoryRequest {
+            project_id: "different-project".into(),
+            ..request.clone()
+        })
+        .await
+        .err()
+        .ok_or("project mismatch must fail")?;
+    assert_eq!(mismatch.code(), tonic::Code::FailedPrecondition);
+    drop(client);
+    server.stop().await?;
+    let (server, channel) = start_with_source(&path).await?;
+    let actual = ProjectConversationServiceClient::new(channel)
+        .list_project_conversation_history(request)
+        .await?
+        .into_inner();
+    assert_eq!(actual, result);
+    server.stop().await?;
     Ok(())
 }

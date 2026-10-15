@@ -61,9 +61,11 @@ The Planner interprets worker results so users can continue the discussion and d
 
 ### Durable context and reusable sessions
 
-User and assistant messages currently persist in SQLite on the Control Plane's persistent volume.
-Conversation messages are not currently JetStream events.
-Research uses a separate one-shot Kubernetes Job for each turn, and model input includes only the latest 32 messages.
+Conversation records persist in SQLite on the Control Plane's persistent volume,
+independently of planner Jobs. The archive retains messages, plan decisions,
+research references and worker outcomes; conversation messages are not JetStream events.
+Research uses a separate one-shot Kubernetes Job for each turn. Each run freezes
+a versioned working index, recent messages and relevant older records for bounded retrieval.
 
 Planned reusable sessions keep one live planner environment per conversation and process turns serially.
 Each conversation has a configurable idle timeout, including five minutes or 24 hours.
@@ -74,9 +76,11 @@ Session expiry does not interrupt an active turn.
 Per-turn deadlines and model-call budgets remain separate from the idle timeout.
 Repository observations and credentials are refreshed between turns.
 
-The planned context model includes messages, decisions, unresolved questions, research references, plans, approvals and worker outcomes.
-The model receives a compact working summary and recent messages, with retrieval of older context when needed.
-This replaces the fixed latest-32-messages approach while keeping durable history independent of the live session.
+The working index contains extractive excerpts with original record IDs and a
+source watermark. Decisions, questions and references remain in their original
+messages and research records. Search retrieves older records by relevance to the
+current question; a partial frozen selection explicitly reports that more history exists.
+Compaction keeps the original archive and cannot overwrite a newer index.
 
 ### Implementation sequence
 
