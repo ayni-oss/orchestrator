@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 21;
+pub(crate) const SCHEMA_VERSION: i64 = 22;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -57,6 +57,8 @@ const CLEAN_TABLES: &[&str] = &[
     "lifecycle_outbox",
     "page_snapshots",
     "project_agent_requests",
+    "project_context_records",
+    "project_context_summaries",
     "project_conversation_actions",
     "project_conversations",
     "project_outcome_summaries",
@@ -136,6 +138,14 @@ pub enum CleanStoreError {
     InvalidPageToken,
     #[error("the bounded result cannot be retained or returned safely")]
     BoundExceeded,
+    #[error(
+        "conversation capacity reached; original records are retained; start another conversation to continue"
+    )]
+    ConversationCapacity,
+    #[error(
+        "context request exceeds its byte or page budget; reduce the query, page size, or selected scope and retry"
+    )]
+    ContextBudget,
     #[error("the watch cursor has expired")]
     WatchCursorExpired,
     #[error("the clock is before the Unix epoch or outside SQLite range")]
@@ -399,6 +409,7 @@ mod tests {
     mod cutover;
     mod lifecycle;
     mod outbox;
+    mod project_context;
     mod project_conversations;
     mod projects;
     mod recovery;
@@ -440,3 +451,5 @@ mod verification_consumer;
 
 pub(crate) mod project_conversations;
 pub(crate) mod project_plans;
+
+pub(crate) mod project_context;

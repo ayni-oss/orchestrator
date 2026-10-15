@@ -114,3 +114,26 @@ test("outdated inputs block approval with a recovery message",async({page,reques
   await expect(page.getByText(/If its source or runtime has changed, request a revised plan before approving again/u)).toBeVisible();
   await expect(page.getByRole("region",{name:"Plan review",exact:true}).getByRole("link",{name:/View task/u})).toHaveCount(0);
 });
+
+test("older requirements remain searchable and paginated with summary provenance after reload",async({page,request})=>{
+  await page.goto("/projects/project:1");
+  await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Durable history");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
+  await request.post("http://127.0.0.1:50062/long-history");
+  await request.post("http://127.0.0.1:50062/restart-conversations");
+  await page.reload();
+  await expect(page.getByLabel("Conversation messages")).not.toContainText("Original compatibility constraint");
+  await page.getByText("Saved planning context and history",{exact:true}).click();
+  const panel=page.getByLabel("Saved planning context",{exact:true});
+  await expect(panel).toContainText("75 original records saved");await expect(panel).toContainText("Working summary · version 2");await expect(panel).toContainText("Summary watermark is current.");
+  await panel.getByText("Summary source references (1)",{exact:true}).click();await expect(panel).toContainText("record:message:1");
+  await panel.getByLabel("Search saved history",{exact:true}).fill("Original compatibility");await panel.getByRole("button",{name:"Search history",exact:true}).click();
+  await expect(panel.getByLabel("Saved history records")).toContainText("preserve legacy API behavior");await expect(panel).toContainText("All matching records loaded.");
+  await panel.getByRole("button",{name:"Browse saved history",exact:true}).click();
+  await expect(panel.getByLabel("Saved history records").getByRole("article")).toHaveCount(25);
+  await panel.getByRole("button",{name:"Load older records",exact:true}).click();
+  await expect(panel.getByLabel("Saved history records").getByRole("article")).toHaveCount(50);
+  await panel.getByRole("button",{name:"Load older records",exact:true}).click();
+  await expect(panel.getByLabel("Saved history records").getByRole("article")).toHaveCount(75);await expect(panel).toContainText("All saved records loaded.");
+  const denied=await page.request.get("/projects/project:other/conversations/conversation:1/history");expect(denied.status()).toBe(404);
+  const axe=await new AxeBuilder({page}).include("main").analyze();expect(axe.violations).toEqual([]);
+});

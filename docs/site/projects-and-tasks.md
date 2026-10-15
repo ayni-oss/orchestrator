@@ -33,7 +33,14 @@ needs its own approval. If source or runtime identity changed, the plan explains
 what needs refreshing; request new research before approving again. Dependency and
 environment findings describe impact and do not authorize environment changes.
 
-Conversations and task links survive reconnects. Task cards show progress and
+Conversations and task links survive reconnects and planner restarts. Use
+**Saved planning context and history** to inspect the working summary and search earlier messages,
+plan decisions and task outcomes. Search results preserve their original record
+identities; the summary is an index of excerpts, so consult original records for
+details. Decisions, unresolved questions and research references stay in the
+conversation history.
+
+Task cards show progress and
 results, with an automatic summary when an attempt finishes or needs your input.
 A summary does not start further work. To cancel or retry, name the task in your
 request and confirm the resulting action card. You can still use the task detail

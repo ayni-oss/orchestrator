@@ -4,6 +4,32 @@ use uuid::Uuid;
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for GrpcApi {
+    async fn get_project_conversation_context(
+        &self,
+        request: Request<v1::GetProjectConversationContextRequest>,
+    ) -> Result<Response<v1::GetProjectConversationContextResponse>, Status> {
+        let context = self.context(&request, "GetProjectConversationContext")?;
+        let message = request.into_inner();
+        let result = with_store(&self.state, move |s| {
+            s.project_conversation_context(&message.project_id, &message.conversation_id)
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?;
+        Ok(context.response(result))
+    }
+    async fn list_project_conversation_history(
+        &self,
+        request: Request<v1::ListProjectConversationHistoryRequest>,
+    ) -> Result<Response<v1::ListProjectConversationHistoryResponse>, Status> {
+        let context = self.context(&request, "ListProjectConversationHistory")?;
+        let message = request.into_inner();
+        let result = with_store(&self.state, move |s| {
+            s.project_conversation_history(&message)
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?;
+        Ok(context.response(result))
+    }
     type WatchProjectConversationStream =
         super::BoxGrpcStream<v1::WatchProjectConversationResponse>;
     async fn watch_project_conversation(

@@ -8,6 +8,9 @@ pub struct ProjectAgentRequest {
     pub project_id: String,
     pub model: String,
     pub history: String,
+    /// Frozen, credential-free conversation archive selected for this run.
+    #[serde(default)]
+    pub conversation_context: serde_json::Value,
     pub repositories: Vec<ResearchRepository>,
     /// Trusted application observations, including runtime readiness and task receipts.
     pub context: String,

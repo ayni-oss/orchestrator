@@ -355,7 +355,9 @@ impl RequestContext {
                 None,
                 None,
             ),
-            CleanStoreError::BoundExceeded => (
+            CleanStoreError::BoundExceeded
+            | CleanStoreError::ConversationCapacity
+            | CleanStoreError::ContextBudget => (
                 Code::ResourceExhausted,
                 v1::ErrorReason::BoundExceeded,
                 None,

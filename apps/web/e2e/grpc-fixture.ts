@@ -310,9 +310,22 @@ let stalePlan=false;
 const proposalTasks=new Map<string,string>();
 function changedConversation(c:ProjectConversation){c.updateCursor=String(Number(c.updateCursor)+1);}
 grpc.addService(ProjectConversationServiceService,{
+  getProjectConversationContext(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId&&c.projectId===call.request.projectId);
+    if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});
+    callback(null,{sourceWatermark:String(c.messages.length),archiveRecordCount:String(c.messages.length),capacityRecordLimit:"100000",recentMessageLimit:32,...(c.messages.length?{summary:{version:"2",sourceWatermark:String(c.messages.length),content:"Keep the original compatibility constraint in the plan.",sourceRecordIds:[`record:${c.messages[0]!.id}`]}}:{})});
+  },
+  listProjectConversationHistory(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId&&c.projectId===call.request.projectId);
+    if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});
+    const snapshot=Number(call.request.snapshotSequence)||c.messages.length,before=Number(call.request.beforeSequence)||snapshot+1;
+    const matches=c.messages.map((m,i)=>({sequence:String(i+1),id:`record:${m.id}`,kind:"message",sourceId:m.id,repositoryId:"",role:m.role,content:m.content})).filter(r=>Number(r.sequence)<=snapshot&&Number(r.sequence)<before&&r.content.toLowerCase().includes(call.request.query.toLowerCase())).reverse();
+    const records=matches.slice(0,call.request.limit||50);
+    callback(null,{records,snapshotSequence:String(snapshot),nextBeforeSequence:records.at(-1)?.sequence??"0",hasMore:matches.length>records.length,archiveRecordCount:String(c.messages.length)});
+  },
   createProjectConversation(call:any,callback:any){const c=ProjectConversation.fromPartial({id:`conversation:${conversations.length+1}`,projectId:call.request.projectId,title:call.request.title,repositoryConnectionIds:call.request.repositoryConnectionIds,updateCursor:"1",createdAt:now});conversations.push(c);callback(null,{conversation:c});},
   listProjectConversations(_call:any,callback:any){callback(null,{conversations:conversations.map(c=>ProjectConversation.fromPartial({id:c.id,projectId:c.projectId,title:c.title,repositoryConnectionIds:c.repositoryConnectionIds,updateCursor:c.updateCursor,createdAt:c.createdAt}))});},
-  getProjectConversation(call:any,callback:any){const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:c});},
+  getProjectConversation(call:any,callback:any){const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...c,messages:c.messages.slice(-32)}});},
   sendProjectMessage(call:any,callback:any){
     const c=conversations.find(c=>c.id===call.request.conversationId)!;
     c.messages.push({id:`message:${c.messages.length+1}`,role:"user",content:call.request.content,createdAt:now,runId:""});
@@ -409,6 +422,7 @@ const health = createServer((request, response) => {
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
    if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();stalePlan=false;}
+   if(url.pathname==="/long-history")for(const c of conversations){c.messages=Array.from({length:75},(_,i)=>({id:`message:${i+1}`,role:"user",content:i===0?"Original compatibility constraint: preserve legacy API behavior.":`Later discussion ${i+1}`,createdAt:now,runId:""}));changedConversation(c);}
    if(url.pathname==="/stale-plan")stalePlan=true;
    if(url.pathname==="/new-plan-version")for(const c of conversations){
      const previous=c.plan?.versions.at(-1);if(!previous)continue;

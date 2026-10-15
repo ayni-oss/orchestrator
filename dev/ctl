@@ -26,7 +26,7 @@ Local Docker Desktop development:
   purge NAMESPACE              Permanently delete an owned local namespace
   render CP WORKER_DIGEST WEB   Render the complete development chart
   dependencies                 Build locked Helm dependencies
-  test NAME                    Run: observability, custom-clients, jetstream, outbox, consumer, recovery or workspaces
+  test NAME                    Run: observability, custom-clients, jetstream, outbox, consumer, recovery, workspaces, plans or context
   help                         Show this help
 
 The default private env file is dev/.env. Override it with --env-file or set
@@ -183,15 +183,15 @@ case "$command" in
     ;;
   test)
     test_name="${1:-}"
-    [[ $# -eq 1 || ( $# -eq 3 && ( "$test_name" == outbox || "$test_name" == consumer || "$test_name" == recovery || "$test_name" == workspaces || "$test_name" == plans ) ) ]] || {
-      echo "usage: dev/ctl test {observability|custom-clients|jetstream|outbox|consumer|recovery|workspaces|plans}" >&2
+    [[ $# -eq 1 || ( $# -eq 3 && ( "$test_name" == outbox || "$test_name" == consumer || "$test_name" == recovery || "$test_name" == workspaces || "$test_name" == plans || "$test_name" == context ) ) ]] || {
+      echo "usage: dev/ctl test {observability|custom-clients|jetstream|outbox|consumer|recovery|workspaces|plans|context}" >&2
       exit 2
     }
     case "$test_name" in
       observability) "$scripts/check.sh" --observability-only ;;
       custom-clients) "$tests/check-custom-clients.sh" ;;
       jetstream) "$tests/jetstream.sh" ;;
-      outbox|consumer|recovery|workspaces|plans) "$tests/$1.sh" "${2:?control-plane image required}" "${3:?web image required}" ;;
+      outbox|consumer|recovery|workspaces|plans|context) "$tests/$1.sh" "${2:?control-plane image required}" "${3:?web image required}" ;;
       *)
         echo "unknown development test: $test_name" >&2
         exit 2

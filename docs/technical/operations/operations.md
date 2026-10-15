@@ -14,7 +14,7 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Schema 21 is the current database format. Recognized schemas 6–20 migrate in
+Schema 22 is the current database format. Recognized schemas 6–21 migrate in
 order before reconciliation. It retains typed preparation, authenticated
 verification/runtime-operation/coding inboxes, accepted decisions, outbox retry
 and acknowledgement state, and operator lifecycle journal/outbox records.
@@ -74,7 +74,7 @@ and quiescing the database. The legacy individual-proposal API remains available
 for lifecycle action cards and receipt replay; new task creation requires approval
 of the exact plan ID and current version. Retained proposal decisions preserve
 their receipts rather than duplicating admission. Earlier binaries do not support
-schema 21; follow the rollback procedure above.
+schema 21 and later; follow the rollback procedure above.
 
 Plan approval revalidates all proposed tasks before committing any of them.
 Source/runtime drift blocks approval with a refresh explanation; request
@@ -88,6 +88,41 @@ across control-plane restart on Docker Desktop. Runtime execution is disabled; t
 fixture proves API and retained-state behavior without provider or worker calls.
 Fresh atomic task admission is covered separately by SQLite repository tests; this
 fixture does not bypass provider source observation or model credential checks.
+
+## Conversation context upgrade
+
+The schema-21 to schema-22 migration archives retained conversation messages,
+plans, decisions and safe worker outcomes before reducing each conversation's
+message projection to its latest 16 messages. It preserves task snapshots,
+approval receipts, plan content and frozen research requests. Back up and quiesce
+SQLite before upgrading the control plane, workers, generated clients, BFF and UI
+together; older binaries cannot open schema 22.
+
+The context archive is authoritative SQLite state on the control-plane volume.
+It grows with accepted records and has no automatic deletion or retention policy.
+The 100,000-record conversation limit stops new writes with an actionable capacity
+error. A working index does not reclaim archive storage: operators must monitor
+volume capacity and retain trusted backups. Starting a new conversation gives new
+work its own capacity without deleting old evidence.
+
+Context records contain at most 64 KiB. Research requests carry a bounded frozen
+selection, and the worker reports when that selection omits archive records.
+Plans, proposals and run metadata still share the conversation payload's 3 MiB
+limit; plans retain at most 512 versions. Capacity errors leave accepted evidence
+intact. A migration that cannot preserve retained state aborts; repair or restore
+from a trusted backup instead of deleting history.
+
+The working index contains at most 16 excerpts with source IDs and a sequence
+watermark. Updating it neither deletes original records nor reclassifies every
+historical decision or question. Its version and watermark protect against stale
+compaction. Provider credential bindings, secret metadata, environment values and
+raw task snapshots are excluded from context records and frozen retrieval tools.
+
+`dev/ctl test context CONTROL_PLANE_IMAGE WEB_IMAGE` validates older-history search,
+scoped pagination, approval and message replay, frozen worker retrieval, schema-21
+migration and control-plane restart in a disposable Docker Desktop namespace.
+Runtime execution is disabled. Synthetic retained state proves API and durability
+behavior; it does not claim a live model or worker Job executed.
 
 ## Historical builder cutover
 

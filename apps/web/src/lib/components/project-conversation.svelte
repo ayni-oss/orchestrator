@@ -4,6 +4,7 @@
   import type { PageData } from "../../routes/projects/[projectId]/$types";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { enhance } from "$lib/forms.js";
+  import ConversationContext from "$lib/components/conversation-context.svelte";
   import ProjectProposal from "$lib/components/project-proposal.svelte";
   import ProjectPlanReview from "$lib/components/project-plan-review.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
@@ -52,6 +53,7 @@
   {#if conversation}
     <InformationCard title={conversation.title} status={running?"running":""}>
       <p class="text-sm text-muted-foreground">Researching {conversation.repositoryConnectionIds.map(name).join(", ")}. Tasks are submitted only after your approval.</p>
+      {#key conversation.id}<ConversationContext projectId={conversation.projectId} conversationId={conversation.id} updateCursor={conversation.updateCursor} />{/key}
       <div class="space-y-4" aria-label="Conversation messages" aria-live="polite" aria-relevant="additions text">
         {#each conversation.messages as message (message.id)}
           <article class={['rounded-lg border p-4',message.role==='user'&&'bg-muted/40']}><div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>{message.role==="user"?"You":message.role==="assistant"?"Project agent":words(message.role)}</span><time datetime={message.createdAt}>{formatDate(message.createdAt)}</time></div><p class="whitespace-pre-wrap break-words text-sm">{message.content}</p></article>

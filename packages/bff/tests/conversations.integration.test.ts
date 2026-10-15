@@ -11,6 +11,8 @@ describe("project conversation native gRPC boundary",()=>{
     requests=[];server=new Server();
     const methods:UntypedServiceImplementation={};
     for(const method of ["createProjectConversation","getProjectConversation","sendProjectMessage","decideProjectProposal","decideProjectPlan"]){methods[method]=(call:any,callback:any)=>{requests.push({method,request:call.request});callback(null,{conversation:conversation()});};}
+    methods.getProjectConversationContext=(call:any,callback:any)=>{requests.push({method:"getProjectConversationContext",request:call.request});callback(null,{sourceWatermark:"75",archiveRecordCount:"75",capacityRecordLimit:"64",recentMessageLimit:32,summary:{version:"9007199254740993",sourceWatermark:"75",content:"Keep original constraint",sourceRecordIds:["record:1"],providerCredentials:{secretName:"private-summary-secret"}}});};
+    methods.listProjectConversationHistory=(call:any,callback:any)=>{requests.push({method:"listProjectConversationHistory",request:call.request});callback(null,{records:[{sequence:"1",id:"record:1",kind:"message",sourceId:"message:1",repositoryId:"",role:"user",content:"Keep original constraint",providerCredentials:{secretName:"private-archive-secret"}}],snapshotSequence:"75",nextBeforeSequence:"1",hasMore:false,archiveRecordCount:"75"});};
     methods.listProjectConversations=(call:any,callback:any)=>{requests.push({method:"listProjectConversations",request:call.request});callback(null,{conversations:[conversation()]});};
     methods.watchProjectConversation=(call:any)=>{requests.push({method:"watchProjectConversation",request:call.request});call.write({conversation:conversation()});call.end();};
     server.addService(ProjectConversationServiceService,methods);
@@ -26,6 +28,14 @@ describe("project conversation native gRPC boundary",()=>{
     expect(result.plan?.versions[0]).toMatchObject({version:"9007199254740993",findings:"Researched repository",proposalIds:["proposal:1"],dependencyEnvironmentImpact:""});
     expect(result.runs[0]?.usage?.totalTokens).toBe("123");
     expect(JSON.stringify(result)).not.toContain("private-");
+  });
+  it("retrieves original records with a frozen scope and safe summary provenance",async()=>{
+    const summary=await bff.getProjectConversationContext({projectId:"project:1",conversationId:"conversation:1"},context);
+    const history=await bff.listProjectConversationHistory({projectId:"project:1",conversationId:"conversation:1",query:"constraint",beforeSequence:"50",snapshotSequence:"75",limit:25},context);
+    expect(summary.summary).toEqual({version:"9007199254740993",sourceWatermark:"75",content:"Keep original constraint",sourceRecordIds:["record:1"]});
+    expect(history.records[0]).toEqual({sequence:"1",id:"record:1",kind:"message",sourceId:"message:1",repositoryId:"",role:"user",content:"Keep original constraint"});
+    expect(requests.at(-1)?.request).toEqual({projectId:"project:1",conversationId:"conversation:1",query:"constraint",beforeSequence:"50",snapshotSequence:"75",limit:25});
+    expect(JSON.stringify({summary,history})).not.toContain("private-");
   });
   it("preserves conversation membership and action idempotency keys",async()=>{
     await bff.createProjectConversation({idempotencyKey:"create-key",projectId:"project:1",title:"Research",repositoryConnectionIds:["repository:1","repository:2"]},context);

@@ -130,6 +130,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl render CP WORKER_DIGEST WEB` | Render the complete Helm composition for inspection |
 | `dev/ctl dependencies` | Rebuild ignored chart archives from `Chart.lock` |
 | `dev/ctl test plans CP WEB` | Validate plan review, approval replay, migration and restart persistence in a disposable namespace |
+| `dev/ctl test context CP WEB` | Validate older context retrieval, scope, migration, replay and restart persistence in a disposable namespace |
 | `dev/ctl test workspaces CP WEB` | Validate workspace ownership, admission and persistence across a control-plane restart in a disposable namespace |
 | `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
 
@@ -185,7 +186,7 @@ managed runtime defaults to native `linux/arm64` and disables architecture emula
 Intel hosts must select `linux/amd64` explicitly. A connection test requires
 `connections.testImage` set to a digest-pinned control-plane image.
 
-Recognized SQLite schemas 6–20 migrate to schema 21 before reconciliation. Back up
+Recognized SQLite schemas 6–21 migrate to schema 22 before reconciliation. Back up
 and quiesce state before upgrading; malformed or unsupported state aborts startup.
 Follow the [upgrade procedure](../docs/technical/operations/operations.md) and obtain
 explicit approval before deleting application data. Runtime outputs and
@@ -241,3 +242,13 @@ credential checks.
 No provider credentials or live research are used, and it claims no worker execution
 coverage. Its unique namespace and retained claims are cleaned up on failure as well
 as success.
+
+The conversation context gate runs as `dev/ctl test context CONTROL_PLANE_IMAGE
+WEB_IMAGE`. It exports synthetic current and schema-21 SQLite state, checks the
+control-plane-produced retrieval request against the worker's typed tool contract,
+and deploys the production images using the local Helm chart. The API checks older
+records beyond the recent-message projection, scoped pagination and search,
+summary provenance, receipt replay and restart persistence. Stopped SQLite checks
+compare original context records, frozen requests, task snapshots, plans and action
+receipts. The gate uses no provider credentials or calls and claims no live model
+execution. Its unique namespace and retained claims are removed on every exit.

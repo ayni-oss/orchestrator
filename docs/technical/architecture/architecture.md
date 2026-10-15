@@ -33,7 +33,7 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 21 retains preparation state,
+and pull request receipts. SQLite schema version 22 retains preparation state,
 authenticated result inboxes, accepted decisions, transactional outboxes and
 operator lifecycle facts. Recognized versions 6–20 migrate in order before
 reconciliation; malformed retained state aborts the upgrade. Older and unknown
@@ -270,7 +270,28 @@ current decision. Each run prepares at most one task per repository;
 cross-repository dependency execution remains outside this contract. Accepted
 attempt outcomes schedule bounded summaries with durable deduplication.
 
-SQLite owns the authoritative conversation state. A resumable full-state stream
+SQLite owns the authoritative conversation state. Its append-only context archive
+stores safe projections of messages, plans, approval decisions, proposals and worker
+outcomes. Messages retain decisions, unresolved questions and research references
+without model-generated classification. The conversation payload exposes only its
+latest 16 messages; the scoped history API pages original records at a frozen
+sequence watermark.
+
+A versioned working index selects at most 16 extractive excerpts, prioritizing
+plans, approvals and outcomes. It stores original record IDs and its source
+watermark. Compaction commits with the archive update, checks the previous summary
+version and cannot replace a newer watermark. It retains all original records;
+this is bounded indexing, not lossless summarization or archive deletion.
+
+Each research request freezes a scoped, credential-free selection of relevant older
+records and recent context. Read-only worker tools search that selection or retrieve
+an exact included record. They cannot query another project, expand repository
+scope or read a live database. Partial selections explicitly report their archive
+count and ask for a refined conversation question when missing context is needed.
+A retained request without a selection remains readable and reports unavailable
+retrieval until a new turn refreshes its inputs.
+
+SQLite owns the authoritative archive independently of Job memory. A resumable full-state stream
 updates browser cards, while periodic reconciliation recovers missed observations
 and broker outages. Research result collection verifies the single Job-owned Pod
 and bounded run-bound receipt before persistence. Cleanup follows durable

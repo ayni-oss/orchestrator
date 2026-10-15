@@ -6,6 +6,8 @@ import "google/protobuf/timestamp.proto";
 
 // Trusted operator conversation API; not available on the custom-client listener.
 service ProjectConversationService {
+  rpc GetProjectConversationContext(GetProjectConversationContextRequest) returns (GetProjectConversationContextResponse);
+  rpc ListProjectConversationHistory(ListProjectConversationHistoryRequest) returns (ListProjectConversationHistoryResponse);
   rpc WatchProjectConversation(WatchProjectConversationRequest) returns (stream WatchProjectConversationResponse);
   rpc CreateProjectConversation(CreateProjectConversationRequest) returns (CreateProjectConversationResponse);
   rpc ListProjectConversations(ListProjectConversationsRequest) returns (ListProjectConversationsResponse);
@@ -136,4 +138,47 @@ message DecideProjectPlanRequest {
 }
 message DecideProjectPlanResponse {
   ProjectConversation conversation = 1;
+}
+
+// Archive records are immutable safe projections, scoped to one conversation.
+message ProjectContextRecord {
+  uint64 sequence = 1;
+  string id = 2;
+  string kind = 3;
+  string source_id = 4;
+  string repository_id = 5;
+  string role = 6;
+  string content = 7;
+}
+message ProjectConversationSummary {
+  uint64 version = 1;
+  uint64 source_watermark = 2;
+  string content = 3;
+  repeated string source_record_ids = 4;
+}
+message GetProjectConversationContextRequest {
+  string project_id = 1;
+  string conversation_id = 2;
+}
+message GetProjectConversationContextResponse {
+  ProjectConversationSummary summary = 1;
+  uint64 source_watermark = 2;
+  uint64 archive_record_count = 3;
+  uint64 capacity_record_limit = 4;
+  uint32 recent_message_limit = 5;
+}
+message ListProjectConversationHistoryRequest {
+  string project_id = 1;
+  string conversation_id = 2;
+  uint64 before_sequence = 3;
+  uint64 snapshot_sequence = 4;
+  string query = 5;
+  uint32 limit = 6;
+}
+message ListProjectConversationHistoryResponse {
+  repeated ProjectContextRecord records = 1;
+  uint64 snapshot_sequence = 2;
+  uint64 next_before_sequence = 3;
+  bool has_more = 4;
+  uint64 archive_record_count = 5;
 }
