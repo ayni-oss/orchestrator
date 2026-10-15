@@ -1,3 +1,4 @@
+import {mapWorkerUpdate} from "./worker-evidence.js";
 import type { ProjectConversation } from "@ayni-orchestrator/grpc-bindings/server";
 import type { ProjectConversationDto } from "./dto.js";
 import { BffMappingError } from "./mapping.js";
@@ -28,7 +29,7 @@ export function mapConversation(value:ProjectConversation):ProjectConversationDt
       }} : {}),
     };
   });
-  return {id:value.id,projectId:value.projectId,title:value.title,repositoryConnectionIds:[...value.repositoryConnectionIds],updateCursor:value.updateCursor,createdAt:required(value.createdAt).toISOString(),
+  return {workerUpdates:value.workerUpdates.map(update=>mapWorkerUpdate(update,value.projectId,value.id)),id:value.id,projectId:value.projectId,title:value.title,repositoryConnectionIds:[...value.repositoryConnectionIds],updateCursor:value.updateCursor,createdAt:required(value.createdAt).toISOString(),
     ...(value.plannerIdleTimeoutSeconds===undefined?{}:{plannerIdleTimeoutSeconds:value.plannerIdleTimeoutSeconds}),
     effectivePlannerIdleTimeoutSeconds:value.effectivePlannerIdleTimeoutSeconds||300,
     ...(value.plannerSession?{plannerSession:{state:value.plannerSession.state,generation:value.plannerSession.generation,activeRunId:value.plannerSession.activeRunId,...(value.plannerSession.lastActivityAt?{lastActivityAt:value.plannerSession.lastActivityAt.toISOString()}:{}),...(value.plannerSession.idleExpiresAt?{idleExpiresAt:value.plannerSession.idleExpiresAt.toISOString()}: {})}}:{}),

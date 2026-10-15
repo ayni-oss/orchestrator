@@ -36,7 +36,18 @@ pub struct DeadlineDuration {
     pub nanos: i32,
 }
 
+/// Immutable planning provenance, assigned only after control-plane approval.
+pub struct TaskOrigin {
+    pub project_id: String,
+    pub conversation_id: String,
+    pub plan_id: String,
+    pub plan_version: u64,
+    pub proposal_id: String,
+    pub research_run_id: String,
+}
+
 pub struct AdmitTask {
+    pub origin: Option<TaskOrigin>,
     pub identity: RequestIdentity,
     pub project_id: String,
     pub repository_id: String,
@@ -81,6 +92,7 @@ pub struct AdmissionFacts {
 }
 
 pub struct FrozenTask {
+    pub origin: Option<TaskOrigin>,
     pub project_id: String,
     pub repository_id: String,
     pub snapshot_id: String,
@@ -182,6 +194,7 @@ pub fn admit<R: TaskRepository>(
         .transpose()
         .map_err(|()| AdmissionError::Clock)?;
     let frozen = FrozenTask {
+        origin: command.origin,
         project_id: command.project_id,
         repository_id: facts.repository_id,
         snapshot_id: facts.snapshot_id,

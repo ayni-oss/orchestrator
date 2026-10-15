@@ -10,6 +10,11 @@ approving the change.
 | Quality | Full repository-check outcome, completion counts and actionable findings |
 | Pull request | Draft link, publication failure or an outcome where publication did not apply |
 
+Project conversations show these outcomes in **Worker updates**, with links to
+the exact attempt and approved plan version. Ordinary retries appear as separate
+attempts; a publication retry updates the same attempt using retained work.
+Missing or mismatched quality evidence appears as unavailable.
+
 ## Choose the next action
 
 ```mermaid

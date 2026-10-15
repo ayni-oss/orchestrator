@@ -1,4 +1,5 @@
 <script lang="ts">
+  import {projectHref} from "$lib/project-navigation.js";
   import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import type { PageProps } from "./$types";
@@ -38,8 +39,12 @@
   {#if data.task}
     {@const task = data.task}
     {@const terminal = terminalStates.includes(task.state)}
-    <Button href={`/projects/${encodeURIComponent(task.projectId)}?view=tasks`} variant="outline">Project tasks</Button>
+    <Button href={projectHref(task.projectId,"tasks",task.snapshot.origin?.conversationId)} variant="outline">Project tasks</Button>
     <PageHeader eyebrow="Task" title={task.snapshot.request} />
+    {#if task.snapshot.origin}
+      {@const origin=task.snapshot.origin}
+      <nav class="flex flex-wrap gap-3 text-sm" aria-label="Task origin"><a class="underline" href={projectHref(origin.projectId,"overview",origin.conversationId)}>Originating conversation</a><a class="underline" href={projectHref(origin.projectId,"plans",origin.conversationId,undefined,origin.planVersion)}>Approved plan · version {origin.planVersion}</a></nav>
+    {/if}
     <section class="space-y-4" aria-labelledby="task-information-title">
       <div class="flex flex-wrap items-center justify-between gap-2"><h2 id="task-information-title" class="text-lg font-semibold">Information</h2>{#key task.id}<TaskUpdateStatus taskId={task.id} resourceVersion={task.resourceVersion} />{/key}</div>
       <InformationCard title="Task" status={task.state} actions={[
@@ -85,7 +90,7 @@
     <section class="space-y-4" aria-labelledby="task-progress-title">
       <h2 id="task-progress-title" class="text-lg font-semibold">Progress</h2>
       {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
-        <InformationCard title={`Attempt ${attempt.attemptNumber}${attempt.publicationOnly ? " · publication retry" : ""}`} status={attempt.state}>
+        <div id={`attempt-${attempt.id}`} class="scroll-mt-20"><InformationCard title={`Attempt ${attempt.attemptNumber}${attempt.publicationOnly ? " · publication retry" : ""}`} status={attempt.state}>
           <InformationTable rows={[
             { label: "Stage", value: words(attempt.progress?.phase ?? "unavailable") },
             { label: "Iterations used", value: `${attempt.result?.codingTurnsConsumed ?? attempt.progress?.codingTurnsConsumed ?? "Unavailable"} / ${attempt.snapshot.limits.codingTurns}` },
@@ -108,7 +113,7 @@
               {:else}<li class="text-muted-foreground">No worker activity has been retained for this attempt yet.</li>{/each}
             </ol>
           </details>
-        </InformationCard>
+        </InformationCard></div>
       {:else}<EmptyState title="Waiting for the first attempt" description="Progress will appear when the worker starts." />{/each}
     </section>
 

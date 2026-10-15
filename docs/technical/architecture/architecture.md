@@ -33,9 +33,9 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 22 retains preparation state,
+and pull request receipts. SQLite schema version 24 retains preparation state,
 authenticated result inboxes, accepted decisions, transactional outboxes and
-operator lifecycle facts. Recognized versions 6–20 migrate in order before
+operator lifecycle facts. Recognized versions 6–23 migrate in order before
 reconciliation; malformed retained state aborts the upgrade. Older and unknown
 versions are rejected. See [operations](../operations/operations.md) for upgrade
 and rollback requirements. Credentials remain separate inputs and are never worker output.

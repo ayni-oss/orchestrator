@@ -92,6 +92,7 @@ impl CleanStore {
     pub(super) fn validate_durable_state(&self) -> Result<(), CleanStoreError> {
         self.validate_workspaces()?;
         self.validate_project_conversations()?;
+        self.validate_project_worker_evidence()?;
         self.validate_verification_inbox()?;
         self.validate_coding_events()?;
         self.validate_lifecycle_events()?;

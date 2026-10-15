@@ -385,6 +385,23 @@ fn spawn_project_agent_loop(
     state: AppState,
     shutdown: &watch::Receiver<bool>,
 ) -> Result<(), io::Error> {
+    let evidence_state = state.clone();
+    background.spawn_periodic(
+        "project-worker-evidence",
+        Duration::from_secs(5),
+        shutdown.clone(),
+        move || {
+            let state = evidence_state.clone();
+            async move {
+                if let Err(reason) = ProjectAgentReconciler::return_worker_evidence(&state).await {
+                    warn!(
+                        reason_code = reason,
+                        "worker conversation evidence deferred"
+                    );
+                }
+            }
+        },
+    );
     if let Some(agents) =
         ProjectAgentReconciler::from_environment(state).map_err(io::Error::other)?
     {

@@ -1,3 +1,4 @@
+import {mapTaskOrigin} from "./task-origin.js";
 import { mapCertificate } from "./certificates.js";
 import { safeText, safeGithubLink, safeReconciliation } from "./onboarding.js";
 import {
@@ -291,6 +292,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
       platform: mapPlatform(required(runtime.platform)),
     },
     agent: { provider: agent.provider, agent: agent.agent, model: agent.model },
+    ...(value.origin?{origin:mapTaskOrigin(value.origin)}:{}),
     ...(value.providerCredentials ? {providerBinding:{connectionId:value.providerCredentials.connectionId,credentialRevision:value.providerCredentials.credentialRevision}} : {}),
     request: value.request,
     limits: { codingTurns: required(value.limits).codingTurns, qualityRepairLimit: required(value.limits).qualityRepairLimit, deadlineAt: date(value.limits?.deadlineAt) },
@@ -301,6 +303,7 @@ export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentS
 }
 
 export function mapDevelopmentTask(value: DevelopmentTask): DevelopmentTaskDto {
+  if(value.snapshot?.origin&&value.snapshot.origin.projectId!==value.projectId)throw new BffMappingError();
   return {
     projectId: value.projectId,
     id: value.id,

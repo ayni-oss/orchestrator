@@ -185,7 +185,17 @@ export interface FrozenRuntimeDto {
   platform: OciPlatformDto;
 }
 
+export interface TaskOriginDto {
+  projectId:string; conversationId:string; planId:string; planVersion:string; proposalId:string; researchRunId:string;
+}
+export interface ProjectWorkerUpdateDto {
+  origin:TaskOriginDto; taskId:string; attemptId:string; attemptNumber:number; resourceVersion:string;
+  state:DevelopmentAttemptStateDto; publicationOnly:boolean; requestedInput?:string|undefined;
+  progress?:WorkerProgressDto|undefined; result?:WorkerResultDto|undefined; pullRequest?:PullRequestReceiptDto|undefined;
+  failure:string; updatedAt?:string|undefined;
+}
 export interface DevelopmentSnapshotDto {
+  origin?:TaskOriginDto;
   providerBinding?: {connectionId:string;credentialRevision:string};
   repository: FrozenRepositoryDto;
   runtime: FrozenRuntimeDto;
@@ -361,6 +371,7 @@ export interface ProjectPlanVersionDto {
 }
 
 export interface ProjectConversationDto {
+  workerUpdates:ProjectWorkerUpdateDto[];
   plannerIdleTimeoutSeconds?: number;
   effectivePlannerIdleTimeoutSeconds: number;
   plannerSession?: {state:string;generation:string;activeRunId:string;lastActivityAt?:string;idleExpiresAt?:string};

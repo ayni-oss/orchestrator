@@ -65,13 +65,18 @@ After idle expiry, send another message to resume with saved history. Session
 details show its state and expiry. Use the planner's cancel action to stop an
 active research turn; cancelling research preserves the conversation and its plans.
 
-Approved plan cards link to tasks and their retained results. The **Tasks** view
-shows execution attempt counts and links to the approved version when it belongs
-to the selected conversation. Task details link back to the project task list.
-An automatic conversation summary appears when an attempt finishes or needs your input.
-A summary does not start further work. To cancel or retry, name the task in your
-request and confirm the resulting action card. You can still use the task detail
-page directly.
+Approved plan cards link to tasks and their retained results. Task details link
+back to the originating conversation and approved plan version, including after a
+retry. **Worker updates** in that conversation show accepted progress, questions,
+findings, changes, quality evidence and draft pull requests. Read execution,
+quality and publication separately; a draft is not quality or merge approval.
+Updates refresh without starting a planner turn. Earlier evidence remains searchable
+in conversation history.
+
+Choose **Discuss this question** to bring a worker question into the planner
+conversation. Sending your answer requests a follow-up plan for review and fresh
+approval; it does not resume the waiting attempt. Cancel or retry through task
+details, or request the action in chat and confirm its action card.
 
 One interaction prepares at most one task per repository. Tasks across repositories
 run independently; coordinate dependent changes after reviewing the earlier result.

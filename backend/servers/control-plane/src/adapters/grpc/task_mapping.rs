@@ -16,6 +16,7 @@ pub fn task_command(
         .ok_or(CleanStoreError::CorruptState)?;
     let payload = request.encode_to_vec();
     Ok(AdmitTask {
+        origin: None,
         identity: RequestIdentity {
             key: key.into(),
             digest: crate::adapters::sqlite::request_digest("CreateDevelopmentTask", request),

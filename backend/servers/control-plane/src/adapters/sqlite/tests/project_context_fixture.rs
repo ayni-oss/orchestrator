@@ -56,6 +56,7 @@ fn export_project_context_fixture() -> Result<(), CleanStoreError> {
     // Reconstruct a valid schema-21 payload before exporting the migration input.
     // No production database or running writer is modified by this exporter.
     current.messages = all_messages;
+    current.worker_updates.clear();
     store
         .connection
         .execute(
@@ -63,7 +64,7 @@ fn export_project_context_fixture() -> Result<(), CleanStoreError> {
             params![current.encode_to_vec(), c.id],
         )
         .map_err(CleanStoreError::Database)?;
-    store.connection.execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=21 WHERE component='control_plane';").map_err(CleanStoreError::Database)?;
+    store.connection.execute_batch("DROP TABLE project_worker_updates; DROP TABLE project_task_origins; DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; UPDATE clean_schema SET version=21 WHERE component='control_plane';").map_err(CleanStoreError::Database)?;
     store
         .connection
         .execute("VACUUM INTO ?1", [&legacy_path])
@@ -88,15 +89,7 @@ fn complete_cancelled_outcome(
             development_task_id: approved.proposals[0].task_id.clone(),
         },
     )?;
-    summary_defaults(store, approved)?;
     store.queue_project_outcome_summaries()?;
-    let summary_run = store
-        .queued_project_runs()?
-        .into_iter()
-        .next()
-        .ok_or(CleanStoreError::CorruptState)?
-        .1;
-    store.complete_project_run(ProjectAgentResult {run_id:summary_run.id,message:"Execution cancelled. Quality and publication did not execute. Research reference: docs/storage.md at the frozen repository revision.".into(),proposals:vec![],model_calls:1,token_usage:ayni_orchestrator_domain::ProviderTokenUsage::default()})?;
     Ok(())
 }
 fn append_interrupted_turns(

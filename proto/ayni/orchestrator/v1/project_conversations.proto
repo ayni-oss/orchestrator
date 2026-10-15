@@ -32,6 +32,8 @@ message ProjectConversation {
   optional uint32 planner_idle_timeout_seconds = 11;
   uint32 effective_planner_idle_timeout_seconds = 12;
   ProjectPlannerSession planner_session = 13;
+  // Latest accepted state per execution attempt; older evidence stays in history.
+  repeated ProjectWorkerUpdate worker_updates = 14;
 }
 message ProjectMessage {
   string id = 1;
@@ -222,4 +224,21 @@ message CancelProjectAgentRunRequest {
 }
 message CancelProjectAgentRunResponse {
   ProjectConversation conversation = 1;
+}
+
+// Derived from retained, accepted attempts. Model prose is never an outcome source.
+message ProjectWorkerUpdate {
+  TaskOrigin origin = 1;
+  string task_id = 2;
+  string attempt_id = 3;
+  uint32 attempt_number = 4;
+  uint64 resource_version = 5;
+  DevelopmentAttemptState state = 6;
+  optional string requested_input = 7;
+  WorkerProgress progress = 8;
+  WorkerResult result = 9;
+  PullRequestReceipt pull_request = 10;
+  bool publication_only = 11;
+  string failure = 12;
+  google.protobuf.Timestamp updated_at = 13;
 }

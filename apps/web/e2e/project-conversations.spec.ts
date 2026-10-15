@@ -51,7 +51,7 @@ test("project chat persists requirements, requires approval, links results, and 
   await expect(proposal.getByRole("link",{name:/View task/u})).toBeVisible();
   await expect(proposal).toContainText("Quality");
   await expect(proposal.getByRole("link",{name:"Open draft PR #9",exact:true})).toHaveAttribute("href","https://github.com/ayni-oss/sandbox/pull/9");
-  await expect(page.getByText("Execution succeeded. Quality checks failed. A draft PR was published; review its findings before merging.",{exact:true})).toBeVisible();
+  await expect(page.getByRole("region",{name:"Worker updates",exact:true})).toContainText("Repair the failing compatibility test");
   await expect(page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true})).toHaveCount(0);
   const results=await new AxeBuilder({page}).include("main").analyze();expect(results.violations).toEqual([]);
   await page.getByRole("button",{name:"New task",exact:true}).click();
