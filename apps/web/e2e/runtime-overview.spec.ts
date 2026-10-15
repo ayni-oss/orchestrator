@@ -76,7 +76,8 @@ test("repository overview shows identity and readiness separately from runtime c
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  // Success toasts expire automatically; dedicated notification tests verify dismissal.
+  await page.mouse.move(10,10);
+  // Success toasts expire when the pointer is outside the notification region.
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toHaveCount(0, {timeout:10_000});
 });
 

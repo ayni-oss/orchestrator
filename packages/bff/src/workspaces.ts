@@ -1,6 +1,6 @@
 import {mapProfileSettings} from "./agent-profiles.js";
 import type {Metadata,CallOptions,ClientUnaryCall,ServiceError} from "@grpc/grpc-js";
-import {ProjectState,WorkspaceState,type Project,type Workspace,type ProjectServiceClient,type CreateWorkspaceResponse,type GetWorkspaceResponse,type ListWorkspacesResponse,type UpdateWorkspaceResponse,type ArchiveWorkspaceResponse} from "@ayni-orchestrator/grpc-bindings/server";
+import {ProjectState,WorkspaceState,type Project,type Workspace,type ProjectServiceClient,type ProjectAgentDefaults,type CreateWorkspaceResponse,type GetWorkspaceResponse,type ListWorkspacesResponse,type UpdateWorkspaceResponse,type ArchiveWorkspaceResponse} from "@ayni-orchestrator/grpc-bindings/server";
 import type {PageInput,ProjectDto,WorkspaceDto,ProjectAgentDefaultsDto,RequestContext} from "./dto.js";
 import {BffMappingError} from "./mapping.js";
 export type UnaryInvoker<T> = (
@@ -12,14 +12,20 @@ export type UnaryInvoker<T> = (
 type Unary=<T>(context:RequestContext,invoke:UnaryInvoker<T>)=>Promise<T>;
 function required<T>(value:T|undefined):T {if(value===undefined)throw new BffMappingError();return value;}
 function pageDto(value:{nextPageToken:string;snapshotCursor:string}|undefined){return {...required(value)};}
-function mapWorkspace(value:Workspace):WorkspaceDto {
+export function mapWorkspace(value:Workspace):WorkspaceDto {
   if(value.repositoryConnectionIds.length<1 || value.repositoryConnectionIds.length>100 || new Set(value.repositoryConnectionIds).size!==value.repositoryConnectionIds.length || ![WorkspaceState.WORKSPACE_STATE_ACTIVE,WorkspaceState.WORKSPACE_STATE_ARCHIVED].includes(value.state))throw new BffMappingError();
-  return {plannerIdleTimeoutSeconds:value.plannerIdleTimeoutSeconds||300,id:value.id,displayName:value.displayName,state:value.state===WorkspaceState.WORKSPACE_STATE_ACTIVE?"active":"archived",repositoryConnectionIds:[...value.repositoryConnectionIds],resourceVersion:value.resourceVersion,...(value.agentDefaults?{agentDefaults:{projectConnectionId:value.agentDefaults.projectConnectionId,projectModel:value.agentDefaults.projectModel,codingConnectionId:value.agentDefaults.codingConnectionId,codingModel:value.agentDefaults.codingModel,...(value.agentDefaults.plannerProfile?{plannerProfile:mapProfileSettings(value.agentDefaults.plannerProfile)}:{}),...(value.agentDefaults.workerProfile?{workerProfile:mapProfileSettings(value.agentDefaults.workerProfile)}:{})}}:{})};
+  return {plannerIdleTimeoutSeconds:value.plannerIdleTimeoutSeconds||300,id:value.id,displayName:value.displayName,state:value.state===WorkspaceState.WORKSPACE_STATE_ACTIVE?"active":"archived",repositoryConnectionIds:[...value.repositoryConnectionIds],resourceVersion:value.resourceVersion,...(value.agentDefaults?{agentDefaults:mapAgentDefaults(value.agentDefaults)}:{})};
+}
+
+export function mapAgentDefaults(value: ProjectAgentDefaults): ProjectAgentDefaultsDto {
+  return {projectConnectionId:value.projectConnectionId,projectModel:value.projectModel,codingConnectionId:value.codingConnectionId,codingModel:value.codingModel,
+    ...(value.plannerProfile?{plannerProfile:mapProfileSettings(value.plannerProfile)}:{}),
+    ...(value.workerProfile?{workerProfile:mapProfileSettings(value.workerProfile)}:{})};
 }
 
 export function mapProject(value: Project): ProjectDto {
   if (value.repositoryConnectionIds.length < 1 || value.repositoryConnectionIds.length > 100 || new Set(value.repositoryConnectionIds).size !== value.repositoryConnectionIds.length || ![ProjectState.PROJECT_STATE_ACTIVE, ProjectState.PROJECT_STATE_ARCHIVED].includes(value.state)) throw new BffMappingError();
-  return {workspaceId:value.workspaceId, goal:value.goal, id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion, ...(value.agentDefaults ? {agentDefaults:{projectConnectionId:value.agentDefaults.projectConnectionId,projectModel:value.agentDefaults.projectModel,codingConnectionId:value.agentDefaults.codingConnectionId,codingModel:value.agentDefaults.codingModel,...(value.agentDefaults.plannerProfile?{plannerProfile:mapProfileSettings(value.agentDefaults.plannerProfile)}:{}),...(value.agentDefaults.workerProfile?{workerProfile:mapProfileSettings(value.agentDefaults.workerProfile)}:{})}} : {})};
+  return {workspaceId:value.workspaceId, goal:value.goal, id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion, ...(value.agentDefaults ? {agentDefaults:mapAgentDefaults(value.agentDefaults)} : {})};
 }
 
 export function workspaceOperations(client:ProjectServiceClient,unary:Unary){
@@ -27,6 +33,10 @@ export function workspaceOperations(client:ProjectServiceClient,unary:Unary){
   async listWorkspaces(selection:Required<PageInput>, context:RequestContext, activeOnly=false) {
     const response=await unary<ListWorkspacesResponse>(context,(m,o,c)=>client.listWorkspaces({page:selection,...(activeOnly?{state:WorkspaceState.WORKSPACE_STATE_ACTIVE}:{})},m,o,c));
     return {workspaces:response.workspaces.map(mapWorkspace),page:pageDto(response.page)};
+  },
+  async getWorkspaceConfiguration(workspaceId:string,context:RequestContext) {
+    const response=await unary<GetWorkspaceResponse>(context,(m,o,c)=>client.getWorkspace({workspaceId},m,o,c));
+    return {workspace:mapWorkspace(required(response.workspace)),effective:mapAgentDefaults(required(response.effectiveAgentDefaults))};
   },
   async getWorkspace(workspaceId:string,context:RequestContext):Promise<WorkspaceDto> {
     const response=await unary<GetWorkspaceResponse>(context,(m,o,c)=>client.getWorkspace({workspaceId},m,o,c));

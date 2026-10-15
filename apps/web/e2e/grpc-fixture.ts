@@ -1,10 +1,11 @@
-import {effectiveProfiles,freezeProfile} from "./agent-profile-fixture.js";
+import {capabilities,effectiveProfiles,freezeProfile} from "./agent-profile-fixture.js";
 import {setWorkerEvidence} from "./worker-evidence-fixture.js";
 import { createServer } from "node:http";
 import { Server, ServerCredentials, status, type ServerWritableStream, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import {
   CertificateServiceService, Certificate,
-  ConnectionServiceService, type Connection,
+  ConnectionServiceService, Connection,
+  AgentProfileServiceService,
   ProjectServiceService, ProjectState, WorkspaceState,
   ProjectConversationServiceService, ProjectConversation,
   DevelopmentAttemptState,
@@ -290,12 +291,14 @@ grpc.addService(CertificateServiceService,{
   replaceCertificate:certificateMutation("replace"),renameCertificate:certificateMutation("rename"),setCertificateEnabled:certificateMutation("toggle"),setDefaultCertificate:certificateMutation("default"),deleteCertificate:certificateMutation("delete"),
 });
 grpc.addService(ConnectionServiceService,connectionService);
+let capabilitiesUnavailable=false;
+grpc.addService(AgentProfileServiceService,{getAgentCapabilities(_call:any,callback:any){if(capabilitiesUnavailable)return callback({code:status.UNAVAILABLE,message:"Configuration unavailable"});callback(null,{roles:Object.entries(capabilities.roles).map(([role,defaults])=>({role,defaults})),limits:capabilities.limits});}});
 grpc.addService(ProjectServiceService, {
-  createWorkspace(call:any,callback:any){workspace={...workspace,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds,state:WorkspaceState.WORKSPACE_STATE_ACTIVE,resourceVersion:"1"};callback(null,{workspace});},
+  createWorkspace(call:any,callback:any){workspace={...workspace,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds,state:WorkspaceState.WORKSPACE_STATE_ACTIVE,resourceVersion:"1"};callback(null,{workspace,effectiveAgentDefaults:effectiveProfiles(undefined,workspace.agentDefaults)});},
   listWorkspaces(_call:any,callback:any){callback(null,{workspaces:[workspace],page});},
-  getWorkspace(_call:any,callback:any){callback(null,{workspace});},
-  updateWorkspace(call:any,callback:any){workspace={...workspace,...(call.request.plannerIdleTimeoutSeconds===undefined?{}:{plannerIdleTimeoutSeconds:call.request.plannerIdleTimeoutSeconds}),...(call.request.agentDefaults?{agentDefaults:call.request.agentDefaults}:{}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length?call.request.repositoryConnectionIds:workspace.repositoryConnectionIds,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
-  archiveWorkspace(_call:any,callback:any){workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
+  getWorkspace(_call:any,callback:any){callback(null,{workspace,effectiveAgentDefaults:effectiveProfiles(undefined,workspace.agentDefaults)});},
+  updateWorkspace(call:any,callback:any){workspace={...workspace,...(call.request.plannerIdleTimeoutSeconds===undefined?{}:{plannerIdleTimeoutSeconds:call.request.plannerIdleTimeoutSeconds}),...(call.request.agentDefaults?{agentDefaults:call.request.agentDefaults}:{}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length?call.request.repositoryConnectionIds:workspace.repositoryConnectionIds,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace,effectiveAgentDefaults:effectiveProfiles(undefined,workspace.agentDefaults)});},
+  archiveWorkspace(_call:any,callback:any){workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace,effectiveAgentDefaults:effectiveProfiles(undefined,workspace.agentDefaults)});},
   watchProjects(call:any) { resourceWatch(call, "project", () => [project]); },
   listProjectSummaries(_call:any,callback:any){
     const members=project.repositoryConnectionIds.map((id:string)=>runtimeSummary(id));
@@ -303,7 +306,7 @@ grpc.addService(ProjectServiceService, {
     callback(null,{summaries:[{project,repositoryNames:project.repositoryConnectionIds.map((id:string)=>id===repositoryId ? repository.displayName : secondRepository.displayName),runtime:{complete:true,ready:members.every((member:any)=>member.ready),operationalProfiles:members.reduce((n:number,member:any)=>n+member.operationalProfiles,0),readyProfiles:members.reduce((n:number,member:any)=>n+member.readyProfiles,0)},tasksComplete:true,latestTask:latest ? {id:latest.id,state:latest.state,request:latest.snapshot.request,createdAt:latest.createdAt} : undefined}],page});
   },
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
-  getProject(_call:any,callback:any){callback(null,{project});},
+  getProject(_call:any,callback:any){callback(null,{project,effectiveAgentDefaults:effectiveProfiles(project.agentDefaults,workspace.agentDefaults)});},
   createProject(call:any,callback:any){project={...project,workspaceId:call.request.workspaceId,goal:call.request.goal,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
   updateProject(call:any,callback:any){project={...project,...(call.request.goal!==undefined?{goal:call.request.goal}:{}),...(call.request.agentDefaults ? {agentDefaults:call.request.agentDefaults} : {}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
   archiveProject(_call:any,callback:any){project={...project,state:ProjectState.PROJECT_STATE_ARCHIVED,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
@@ -406,6 +409,8 @@ function certificateFixture(pathname: string): void {
  if(pathname==="/custom-profile") profile.kind=RuntimeProfileKind.RUNTIME_PROFILE_KIND_CUSTOM_RUNTIME;
 }
 function connectionFixture(url: URL): void {
+ if(url.pathname==="/seed-task-models"&&!connections.some(c=>c.id==="connection:task-models")) connections.push(Connection.fromPartial({id:"connection:task-models",kind:"openai",displayName:"Task models",enabled:true,status:"ready",resourceVersion:"1"}));
+ if(url.pathname==="/capabilities-unavailable")capabilitiesUnavailable=true;
  if(url.pathname==="/reset-connections") {connections=[];rejectConnectionMutation=false;}
  if(url.pathname==="/reject-connection-mutation") rejectConnectionMutation=true;
  if(url.pathname==="/connection-state" && connections[0]) {
@@ -456,7 +461,7 @@ const health = createServer((request, response) => {
    if(url.pathname==="/worker-evidence")updateWorkerEvidence(url);
    if(url.pathname==="/conversation-unavailable")conversationUnavailable=url.searchParams.get("value")!=="false";
    if(url.pathname==="/append-message")for(const c of conversations){c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"Additional research update. ".repeat(200),createdAt:now,runId:""});changedConversation(c);}
-   if (url.pathname === "/reset-project") {conversationUnavailable=false;conversations=[];proposalTasks.clear();stalePlan=false;}
+   if (url.pathname === "/reset-project") {capabilitiesUnavailable=false;conversationUnavailable=false;conversations=[];proposalTasks.clear();stalePlan=false;}
    if(url.pathname==="/planner-queued")for(const c of conversations){c.plannerSession=undefined;c.runs.push(ProjectConversation.fromPartial({runs:[{id:"run:queued",state:"queued",model:"gpt-5.6-sol",connectionId:"connection:1",createdAt:now}]}).runs[0]!);changedConversation(c);}
    if(url.pathname==="/archive-workspace")workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED};
    if(url.pathname==="/expire-planner")for(const c of conversations){if(c.plannerSession)c.plannerSession={...c.plannerSession,state:"expired",activeRunId:""};changedConversation(c);}

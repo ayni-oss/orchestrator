@@ -4,16 +4,16 @@
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { enhance } from "$lib/forms.js";
-  import type { PageData } from "../../routes/projects/[projectId]/$types";
+  import type {ProjectViewData} from "$lib/project-view.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { words } from "$lib/presentation.js";
-  let {project,repositories,profiles,models,provider,idempotencyKey,onSubmitted,connections=[],catalogues={}} : {project:NonNullable<PageData["project"]>;repositories:PageData["repositories"];profiles:PageData["profiles"];models:PageData["models"];provider:string;idempotencyKey:string;onSubmitted?:()=>Promise<void>;connections?:PageData["llmConnections"];catalogues?:PageData["connectionModels"]} = $props();
-  let selectedConnection=$state(untrack(()=>project.agentDefaults?.codingConnectionId??""));
+  let {project,repositories,profiles,models,provider,idempotencyKey,onSubmitted,connections=[],catalogues={},effectiveDefaults,configured=false} : {project:NonNullable<ProjectViewData["project"]>;repositories:ProjectViewData["repositories"];profiles:ProjectViewData["profiles"];models:ProjectViewData["models"];provider:string;idempotencyKey:string;onSubmitted?:()=>Promise<void>;connections?:ProjectViewData["llmConnections"];catalogues?:ProjectViewData["connectionModels"];effectiveDefaults?:import("@ayni-orchestrator/bff/server").ProjectAgentDefaultsDto|undefined;configured?:boolean} = $props();
+  let selectedConnection=$state(untrack(()=>effectiveDefaults?.codingConnectionId??""));
   const selectedModels=$derived(selectedConnection ? catalogues[selectedConnection]?.models??[] : models);
-  let selectedModel=$state(untrack(()=>project.agentDefaults?.codingModel??""));
+  let selectedModel=$state(untrack(()=>effectiveDefaults?.codingModel??""));
   let choice=$state("");
   const repository=$derived(project.repositoryConnectionIds.includes(choice) ? choice : project.repositoryConnectionIds.length===1 ? project.repositoryConnectionIds[0]! : "");
   const ready=$derived(profiles.filter(profile => profile.repositoryConnectionId===repository && profile.support==="operational" && profile.state==="ready"));
@@ -71,6 +71,6 @@
       </div>
     </div>
   </ThemedSection>
-  <p class="text-xs text-muted-foreground">Work targets the selected repository and is published as a draft PR with its actual check results.</p>
-  <Button type="submit" class="w-full" disabled={pending || !ready.length || !selectedModels.length}>{pending ? "Submitting…" : "Submit task"}</Button>
+  <p class="text-xs text-muted-foreground">Submitting directly authorizes the displayed task inputs without a plan. This task has no originating plan. Work is published as a draft PR with its actual check results.</p>
+  <Button type="submit" class="w-full" disabled={pending || !configured || !ready.length || !selectedModels.length || !selectedConnection || !selectedModels.some(model=>model.id===selectedModel)}>{pending ? "Submitting…" : "Submit task"}</Button>
 </form>

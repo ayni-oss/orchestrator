@@ -3,7 +3,7 @@
   import { projectHref } from "$lib/project-navigation.js";
   import InformationTable from "$lib/components/information-table.svelte";
   import {untrack} from "svelte";
-  import type {PageData} from "../../routes/projects/[projectId]/$types";
+  import type {ProjectViewData} from "$lib/project-view.js";
   import type {SubmitFunction} from "@sveltejs/kit";
   import {enhance} from "$lib/forms.js";
   import InformationCard from "$lib/components/information-card.svelte";
@@ -13,14 +13,14 @@
   import {Label} from "$lib/components/ui/label/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import {formatDate,words} from "$lib/presentation.js";
-  let {data}:{data:PageData}=$props();
+  let {data}:{data:ProjectViewData}=$props();
   const conversation=$derived(data.conversation!);
   const plan=$derived(conversation.plan!);
   let selected=$state(untrack(()=>data.planVersion||data.conversation?.plan?.versions.at(-1)?.version||""));
   const latest=$derived(plan.versions.at(-1));
   const version=$derived(plan.versions.find(v=>v.version===selected));
   const current=$derived(version?.version===latest?.version);
-  const reviewable=$derived(current&&version?.state==="pending"&&data.project?.state==="active"&&data.workspace?.state==="active");
+  const reviewable=$derived(current&&version?.state==="pending"&&data.project?.state==="active"&&data.workspace?.state==="active"&&!!data.agentConfiguration);
   const run=$derived(conversation.runs.find(run=>run.id===version?.runId));
   let pending=$state(false);
   const submit:SubmitFunction=()=>{pending=true;return async({update})=>{try{await update({reset:false});}finally{pending=false;}};};

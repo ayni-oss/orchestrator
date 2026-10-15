@@ -3,9 +3,7 @@
   import { tick } from "svelte";
   import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import type { PageData } from "../../routes/repositories/[repositoryId]/$types";
-  type RuntimeProfileDto = PageData["runtimeProfiles"][number];
-  type RepositoryConnectionDto = NonNullable<PageData["repositoryConnection"]>;
+  import type {RuntimeProfileDto,RepositoryConnectionDto} from "@ayni-orchestrator/bff/server";
   import { registryImageRepository } from "$lib/connection.js";
   import type { ConnectionView } from "$lib/connection.js";
   import type { CertificateView } from "$lib/certificate.js";

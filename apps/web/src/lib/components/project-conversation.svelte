@@ -4,7 +4,7 @@
   import WorkerUpdates from "$lib/components/worker-updates.svelte";
   import { projectHref } from "$lib/project-navigation.js";
   import { invalidate } from "$app/navigation";
-  import type { PageData } from "../../routes/projects/[projectId]/$types";
+  import type {ProjectViewData} from "$lib/project-view.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { enhance } from "$lib/forms.js";
   import PlannerSession from "$lib/components/planner-session.svelte";
@@ -21,13 +21,13 @@
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { formatDate, words } from "$lib/presentation.js";
-  let {data}:{data:PageData}=$props();
+  let {data}:{data:ProjectViewData}=$props();
   let createOpen=$state(false),members=$state<string[]>([]),content=$state(""),pending=$state(false);
   const conversation=$derived(data.conversation);
   const active=$derived(data.project?.state==="active"&&data.workspace?.state==="active");
   const running=$derived(conversation?.runs.some(r=>r.state==="queued"||r.state==="running")??false);
   const submit:SubmitFunction=()=>{pending=true;return async({result,update})=>{try{if(result.type==="success")content="";await update({reset:false});}finally{pending=false;}};};
-  async function discuss(update:NonNullable<PageData["conversation"]>["workerUpdates"][number]){
+  async function discuss(update:NonNullable<ProjectViewData["conversation"]>["workerUpdates"][number]){
     content=`For task ${update.taskId}, attempt ${update.attemptId}, approved plan version ${update.origin.planVersion}:\nWorker question: ${update.requestedInput??update.result?.requestedInput??""}\nMy answer: `;
     await tick();
     const composer=document.getElementById("project-message");composer?.focus();composer?.scrollIntoView({block:"center",behavior:"smooth"});
@@ -57,7 +57,7 @@
       {#each conversation.runs.filter(r=>r.state==="failed"||r.state==="interrupted") as run (run.id)}<Feedback kind="warning" title={`Agent run ${words(run.state)}`} message={run.failure||"Send a message to explicitly retry. Previously approved tasks remain linked below."} />{/each}
       {#if running}<p role="status" class="text-sm text-muted-foreground">The agent is researching your request. You can return later; this conversation is saved.</p>{/if}
       </div>
-      {#if active}<form method="POST" action="?/sendMessage" use:enhance={submit} class="space-y-3"><input type="hidden" name="idempotencyKey" value={key(`message-${conversation.id}-${conversation.updateCursor}`)} /><input type="hidden" name="conversationId" value={conversation.id} /><Label for="project-message">Message</Label><Textarea id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} placeholder="Describe the work, ask a question, or request a revision…" /><div class="flex flex-wrap justify-between gap-3"><p class="text-xs text-muted-foreground">To cancel or retry work, explicitly request the action here and approve its confirmation card.</p><Button type="submit" disabled={pending||running||!content.trim()||!data.project?.agentDefaults}>{pending?"Sending…":"Send message"}</Button></div>{#if !data.project?.agentDefaults}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Project settings or workspace defaults before sending a message.</p>{/if}</form>{/if}
+      {#if active}<form method="POST" action="?/sendMessage" use:enhance={submit} class="space-y-3"><input type="hidden" name="idempotencyKey" value={key(`message-${conversation.id}-${conversation.updateCursor}`)} /><input type="hidden" name="conversationId" value={conversation.id} /><Label for="project-message">Message</Label><Textarea id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} placeholder="Describe the work, ask a question, or request a revision…" /><div class="flex flex-wrap justify-between gap-3"><p class="text-xs text-muted-foreground">To cancel or retry work, explicitly request the action here and approve its confirmation card.</p><Button type="submit" disabled={pending||running||!content.trim()||!data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}>{pending?"Sending…":"Send message"}</Button></div>{#if !data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Project settings or workspace defaults before sending a message.</p>{/if}</form>{/if}
     </InformationCard>
     {/if}
     {#if conversation.plan}{#key `${conversation.plan.id}-${data.planVersion}`}<ProjectPlanReview {data} />{/key}{:else}<p class="text-sm text-muted-foreground">No plan yet. Discuss the project goal in <a class="underline" href={projectHref(data.project!.id,"overview",conversation.id)}>Overview</a> to prepare a plan for review.</p>{/if}

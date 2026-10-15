@@ -1,4 +1,5 @@
-import {workspaceOperations,mapProject,type WorkspaceOperations,type UnaryInvoker} from "./workspaces.js";
+import {readAgentCapabilities} from "./agent-configuration.js";
+import {workspaceOperations,mapProject,mapAgentDefaults,type WorkspaceOperations,type UnaryInvoker} from "./workspaces.js";
 import { conversationOperations, type ConversationOperations } from "./conversation-transport.js";
 import { type ProjectConversationResponse } from "./conversations.js";
 import { mapSummaryReadiness } from "./summaries.js";
@@ -12,6 +13,7 @@ import {
 import {
   CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
   ConnectionServiceClient, type Connection, type CreateConnectionRequest, type ReplaceConnectionCredentialsRequest, type TestConnectionRequest, type DeleteConnectionRequest, type SetConnectionEnabledRequest,
+  AgentProfileServiceClient,
   ProjectServiceClient, ProjectState,
   ProjectConversationServiceClient,
   type ListProjectSummariesResponse, type ListRepositorySummariesResponse,
@@ -144,6 +146,7 @@ export class OrchestratorBff {
   readonly #connections: ConnectionServiceClient;
   readonly #workspaces:WorkspaceOperations;
   readonly #projects: ProjectServiceClient;
+  readonly #agents: AgentProfileServiceClient;
   readonly #conversations: ProjectConversationServiceClient;
   readonly #conversationOperations: ConversationOperations;
   readonly #repositories: RepositoryServiceClient;
@@ -162,6 +165,7 @@ export class OrchestratorBff {
     this.#certificates = new CertificateServiceClient(address, channelCredentials, options);
     this.#connections = new ConnectionServiceClient(address, channelCredentials, options);
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
+    this.#agents = new AgentProfileServiceClient(address, channelCredentials, options);
     this.#workspaces=workspaceOperations(this.#projects,<T>(context:RequestContext,invoke:UnaryInvoker<T>)=>this.#unary(context,invoke));
     this.#conversations = new ProjectConversationServiceClient(address, channelCredentials, options);
     this.#conversationOperations = conversationOperations(this.#conversations, <T>(context:RequestContext,invoke:UnaryInvoker<T>)=>this.#unary(context,invoke));
@@ -242,6 +246,12 @@ export class OrchestratorBff {
     return {summaries:response.summaries.map(summary => ({repository:mapRepositoryConnection(required(summary.repositoryConnection)),runtime:mapSummaryReadiness(summary.runtime)})),page:pageDto(response.page)};
   }
   listWorkspaces(selection:PageInput,context:RequestContext,activeOnly=false){return this.#workspaces.listWorkspaces(page(selection),context,activeOnly);}
+  getWorkspaceConfiguration(workspaceId:string,context:RequestContext){return this.#workspaces.getWorkspaceConfiguration(workspaceId,context);}
+  getAgentCapabilities(context:RequestContext){return readAgentCapabilities(this.#agents,<T>(ctx:RequestContext,invoke:UnaryInvoker<T>)=>this.#unary(ctx,invoke),context);}
+  async getProjectConfiguration(projectId:string,context:RequestContext) {
+    const response=await this.#unary<GetProjectResponse>(context,(m,o,c)=>this.#projects.getProject({projectId},m,o,c));
+    return {project:mapProject(required(response.project)),effective:mapAgentDefaults(required(response.effectiveAgentDefaults))};
+  }
   getWorkspace(workspaceId:string,context:RequestContext){return this.#workspaces.getWorkspace(workspaceId,context);}
   createWorkspace(input:Parameters<WorkspaceOperations["createWorkspace"]>[0],context:RequestContext){return this.#workspaces.createWorkspace(input,context);}
   updateWorkspace(input:Parameters<WorkspaceOperations["updateWorkspace"]>[0],context:RequestContext){return this.#workspaces.updateWorkspace(input,context);}
@@ -301,6 +311,7 @@ export class OrchestratorBff {
     this.#certificates.close();
     this.#connections.close();
     this.#projects.close();
+    this.#agents.close();
     this.#conversations.close();
     this.#repositories.close();
     this.#profiles.close();

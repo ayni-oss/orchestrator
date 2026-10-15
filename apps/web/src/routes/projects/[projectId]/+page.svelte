@@ -1,4 +1,8 @@
 <script lang="ts">
+  import {page} from "$app/state";
+  import {untrack} from "svelte";
+  import {projectHref as discussHref} from "$lib/project-navigation.js";
+  import TaskIdentity from "$lib/components/task-identity.svelte";
   import { enhance } from "$lib/forms.js";
   import type { PageProps } from "./$types";
   import {projectHref,projectViews} from "$lib/project-navigation.js";
@@ -36,17 +40,18 @@
   }
   let settingsError=$state("");
   let editProject=$state(false), archiveProject=$state(false), saving=$state(false);
-  let newTask=$state(false), members=$state<string[]>([]), editing=$state(false);
+  let newTask=$state(untrack(()=>page.url.searchParams.get("directTask")==="1")), members=$state<string[]>([]), editing=$state(false);
   const selectedMembers=$derived(editing ? members : data.project?.repositoryConnectionIds ?? []);
 </script>
 <svelte:head><title>{data.project?.displayName ?? "Project unavailable"} · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8">
 
   {#if data.project}
-    <PageHeader eyebrow={data.project.state === "archived" ? "Archived project" : "Project"} title={data.project.displayName} description={data.project.goal}>{#snippet actions()}{#if data.project?.state === "active" && data.workspace?.state === "active"}<Button onclick={() => newTask=true}>New task</Button>
+    <PageHeader eyebrow={data.project.state === "archived" ? "Archived project" : "Project"} title={data.project.displayName} description={data.project.goal}>{#snippet actions()}{#if data.project?.state === "active" && data.workspace?.state === "active"}<Button href={discussHref(data.project.id,"overview",data.conversation?.id)}>Discuss project</Button>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={`${data.project.displayName} project actions`}><EllipsisVertical aria-hidden="true" /></Button>{/snippet}</DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" preventScroll={false}>
+          <DropdownMenu.Item disabled={!data.agentConfiguration} onSelect={()=>newTask=true}>Submit task directly</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => { members=[...data.project!.repositoryConnectionIds]; editing=true; settingsError=""; editProject=true; }}>Project settings</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => archiveProject=true}>Archive</DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -57,14 +62,12 @@
       {#each projectViews as view (view)}<Button variant={data.view===view?"secondary":"ghost"} href={projectHref(data.project.id,view,data.conversation?.id)} data-sveltekit-keepfocus aria-current={data.view===view?"page":undefined}>{view.charAt(0).toUpperCase()+view.slice(1)}</Button>{/each}
     </nav>
     <ProjectUpdates {data} />
+    {#if data.configurationError}<Feedback kind="warning" title="Agent configuration unavailable" message={data.configurationError.message} />{/if}
     {#if data.view!=="tasks"}
       {#key `${data.project.id}-${data.conversation?.id??""}`}<ProjectConversation {data} />{/key}
     {:else}
     <section class="space-y-4"><h2 class="text-lg font-semibold">Tasks</h2><p class="text-sm text-muted-foreground">Open a task to inspect its execution attempts, quality results, and pull request.</p><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {#each data.tasks as task (task.id)}<Card.Root><Card.Header><Card.Title class="text-base"><a href={`/tasks/${encodeURIComponent(task.id)}`} class="hover:underline">{task.snapshot.request}</a></Card.Title><Card.Description>{data.repositories.find(repo=>repo.id===task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</Card.Description></Card.Header><Card.Content class="space-y-3 text-sm"><StatusBadge status={task.state} tone={statusTone(task.state)} /><p class="text-muted-foreground">Created {formatDate(task.createdAt)}</p>{@const proposal=data.conversation?.proposals.find(proposal=>proposal.taskId===task.id)}
-        {@const version=data.conversation?.plan?.versions.find(version=>proposal&&version.proposalIds.includes(proposal.id))}
-        {#if task.snapshot.origin}<a class="underline" href={projectHref(data.project.id,"plans",task.snapshot.origin.conversationId,undefined,task.snapshot.origin.planVersion)}>Approved plan · version {task.snapshot.origin.planVersion}</a>{:else if version}<a class="underline" href={projectHref(data.project.id,"plans",data.conversation?.id,undefined,version.version)}>Approved plan · version {version.version}</a>{/if}
-        <p class="text-muted-foreground">{task.attemptCount} execution {task.attemptCount===1?"attempt":"attempts"} · Usage and PR results in task details</p></Card.Content></Card.Root>{:else}<p class="text-sm text-muted-foreground">No tasks yet.</p>{/each}
+      {#each data.tasks as task (task.id)}<Card.Root><Card.Header><Card.Title class="text-base"><TaskIdentity {task} /></Card.Title><Card.Description>{data.repositories.find(repo=>repo.id===task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</Card.Description></Card.Header><Card.Content class="space-y-3 text-sm"><StatusBadge status={task.state} tone={statusTone(task.state)} /><p class="text-muted-foreground">Created {formatDate(task.createdAt)}</p>        <p class="text-muted-foreground">{task.attemptCount} execution {task.attemptCount===1?"attempt":"attempts"} · Usage and PR results in task details</p></Card.Content></Card.Root>{:else}<p class="text-sm text-muted-foreground">No tasks yet.</p>{/each}
     </div>{#if data.nextPageToken}<Button variant="outline" href={projectHref(data.project.id,"tasks",data.conversation?.id,data.nextPageToken)}>More tasks</Button>{/if}</section>
     {/if}
     {#if data.project.state === "active"}
@@ -84,7 +87,7 @@
           <section class="space-y-3" aria-label="Project repositories"><h2 class="font-semibold">Selected repositories</h2><p class="text-sm text-muted-foreground">Open a repository to inspect its shared runtimes.</p>
             {#each data.repositories as repository (repository.id)}<a class="flex items-center gap-2 break-all text-sm underline" href={`/repositories/${encodeURIComponent(repository.id)}`}>{repository.displayName}{#if repository.useAyni !== false}<AyniIcon class="size-4 shrink-0" role="img" aria-label="Ayni enabled" />{/if}</a>{/each}
           </section>
-          {#if data.workspace?.state === "active"}{#key data.project.id}<ProjectAgentSettings project={data.project} inherited={!data.overrides?.projectConnectionId&&!data.overrides?.codingConnectionId} configuredDefaults={data.overrides} workspaceId={data.workspace.id} connections={data.llmConnections} catalogues={data.connectionModels} idempotencyKey={data.idempotencyKey} />{/key}{/if}
+          {#if data.workspace?.state === "active"}{#key data.project.id}<ProjectAgentSettings capabilities={data.capabilities} configuration={data.agentConfiguration} project={data.project} inherited={!data.project.agentDefaults?.projectConnectionId&&!data.project.agentDefaults?.codingConnectionId} workspaceId={data.workspace.id} connections={data.llmConnections} catalogues={data.connectionModels} idempotencyKey={data.idempotencyKey} />{/key}{/if}
         </Dialog.Content>
       </Dialog.Root>
       <Dialog.Root bind:open={archiveProject} onOpenChangeComplete={open => { if(!open){finishArchiving?.();finishArchiving=undefined;} }}>
@@ -97,6 +100,6 @@
         </Dialog.Content>
       </Dialog.Root>
     {/if}
-    <Dialog.Root bind:open={newTask} onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>New task</Dialog.Title><Dialog.Description>Choose a repository and describe the work for {data.project.displayName}.</Dialog.Description></Dialog.Header><NewTaskForm project={data.project} repositories={data.repositories.filter(repository=>data.workspace?.repositoryConnectionIds.includes(repository.id))} profiles={data.profiles} models={data.models} connections={data.llmConnections} catalogues={data.connectionModels} provider={data.provider} idempotencyKey={data.taskKey} onSubmitted={closeTask} /></Dialog.Content></Dialog.Root>
+    <Dialog.Root bind:open={newTask} onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>Submit task directly</Dialog.Title><Dialog.Description>Choose a repository and describe the work for {data.project.displayName}.</Dialog.Description></Dialog.Header><NewTaskForm project={data.project} repositories={data.repositories.filter(repository=>data.workspace?.repositoryConnectionIds.includes(repository.id))} profiles={data.profiles} models={data.models} connections={data.llmConnections} catalogues={data.connectionModels} provider={data.provider} configured={!!data.agentConfiguration} effectiveDefaults={data.agentConfiguration?.effective} idempotencyKey={data.taskKey} onSubmitted={closeTask} /></Dialog.Content></Dialog.Root>
   {/if}
 </div>

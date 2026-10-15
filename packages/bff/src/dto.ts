@@ -415,3 +415,14 @@ export interface ConversationHistoryDto {
 export interface ConversationHistoryInput {
   projectId:string;conversationId:string;beforeSequence?:string;snapshotSequence?:string;query?:string;limit?:number;
 }
+
+/** Backend-owned editor metadata; never an authorization grant. */
+export interface AgentCapabilitiesDto {
+  roles: Record<"planner" | "worker", AgentProfileSettingsDto>;
+  limits: {maxInstructionBytes:number;maxSkills:number;maxRepositories:number;maxModelCalls:number;maxDeadlineSeconds:string;maxIdentifierBytes:number};
+}
+export interface AgentConfigurationDto {
+  configured?: ProjectAgentDefaultsDto | undefined;
+  inherited: ProjectAgentDefaultsDto;
+  effective: ProjectAgentDefaultsDto;
+}

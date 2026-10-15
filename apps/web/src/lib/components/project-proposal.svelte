@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type {PageData} from "../../routes/projects/[projectId]/$types";
+  import type {ProjectViewData} from "$lib/project-view.js";
   import type {SubmitFunction} from "@sveltejs/kit";
   import {enhance} from "$lib/forms.js";
   import ProposalModelRevision from "$lib/components/proposal-model-revision.svelte";
@@ -8,9 +8,9 @@
   import Feedback from "$lib/components/feedback.svelte";
   import {Button} from "$lib/components/ui/button/index.js";
   import {words} from "$lib/presentation.js";
-  let {data,proposal,allowDecision=true,modelRevision=false,planVersion=""}:{data:PageData;proposal:NonNullable<PageData["conversation"]>["proposals"][number];allowDecision?:boolean;modelRevision?:boolean;planVersion?:string}=$props();
+  let {data,proposal,allowDecision=true,modelRevision=false,planVersion=""}:{data:ProjectViewData;proposal:NonNullable<ProjectViewData["conversation"]>["proposals"][number];allowDecision?:boolean;modelRevision?:boolean;planVersion?:string}=$props();
   const conversation=$derived(data.conversation!);
-  const active=$derived(data.project?.state==="active"&&data.workspace?.state==="active");
+  const active=$derived(data.project?.state==="active"&&data.workspace?.state==="active"&&!!data.agentConfiguration);
   let pending=$state(false);
   const submit:SubmitFunction=()=>{pending=true;return async({update})=>{try{await update({reset:false});}finally{pending=false;}};};
   function key(suffix:string){return `${data.idempotencyKey}-${suffix}`;}

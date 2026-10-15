@@ -1,3 +1,4 @@
+import {loadAgentConfiguration,loadAgentModels} from "$lib/server/agent-configuration.js";
 import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
 import {fail} from "@sveltejs/kit";
 import type {Actions,PageServerLoad} from "./$types";
@@ -12,12 +13,10 @@ export const load:PageServerLoad=async({locals,params,depends,setHeaders})=>{
   const base={idempotencyKey:actionKey(),requestId:locals.requestId};
   try{
     const bff=getBff(),ctx=requestContext(locals),workspace=await bff.getWorkspace(params.workspaceId,ctx);
-    const [repositories,projects,allConnections]=await Promise.all([projectRepositoryChoices(ctx),workspaceProjects(workspace.id,ctx),bff.listConnections(ctx).catch(()=>[])]);
-    const connections=allConnections.filter(c=>c.kind==="openai"&&c.enabled&&c.status==="ready");
-    const catalogues:Record<string,ProviderModelPageDto>={};
-    await Promise.all(connections.map(async connection=>{try{catalogues[connection.id]=await bff.listProviderModels({pageSize:100},ctx,connection.id);}catch{/* Unavailable models cannot be selected. */}}));
-    return {...base,workspace,repositories,projects,nextPageToken:"",connections,catalogues};
-  }catch(error){return {...base,workspace:undefined,repositories:[],projects:[],nextPageToken:"",connections:[],catalogues:{} as Record<string,ProviderModelPageDto>,error:safeError(error,locals.requestId)};}
+    const [repositories,projects,agentModels]=await Promise.all([projectRepositoryChoices(ctx),workspaceProjects(workspace.id,ctx),loadAgentModels(ctx).catch(()=>({connections:[],catalogues:{} as Record<string,ProviderModelPageDto>}))]);
+    const configuration=await loadAgentConfiguration("workspace",workspace.id,ctx);
+    return {...base,...configuration,workspace,repositories,projects,nextPageToken:"",connections:agentModels.connections,catalogues:agentModels.catalogues};
+  }catch(error){return {...base,agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,workspace:undefined,repositories:[],projects:[],nextPageToken:"",connections:[],catalogues:{} as Record<string,ProviderModelPageDto>,error:safeError(error,locals.requestId)};}
 };
 export const actions:Actions={
   agentProfiles:async event=>saveAgentProfiles(event,"workspace"),

@@ -2,13 +2,13 @@
   import type {SubmitFunction} from "@sveltejs/kit";
   import Feedback from "$lib/components/feedback.svelte";
   import {untrack} from "svelte";
-  import type {PageData} from "../../routes/projects/[projectId]/$types";
+  import type {ProjectViewData} from "$lib/project-view.js";
   import {enhance} from "$lib/forms.js";
   import {Button} from "$lib/components/ui/button/index.js";
   import {Label} from "$lib/components/ui/label/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import {formatDate,words} from "$lib/presentation.js";
-  let {data}:{data:PageData}=$props();
+  let {data}:{data:ProjectViewData}=$props();
   const conversation=$derived(data.conversation!);
   const session=$derived(conversation.plannerSession);
   const cancellableRun=$derived(conversation.runs.find(run=>run.state==="queued"||run.state==="running"));
