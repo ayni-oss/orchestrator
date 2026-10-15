@@ -192,6 +192,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Initialize report
         run: printf 'Ayni did not produce a report. See the workflow log for details.\n' > "$RUNNER_TEMP/ayni.md"
@@ -222,6 +223,12 @@ jobs:
           tar --extract --gzip --strip-components=1 --file "$archive" --directory "$install_root"
           install --mode=0755 "$install_root/ayni" "$bin_root/ayni"
           echo "cli=$bin_root/ayni" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USERNAME: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
 
       - name: Reuse or build the locked repository environment
         uses: ayni-oss/ayni/.github/actions/managed-check@82966446499f11f5668dd314a432c8ab74788c3d # shared CI

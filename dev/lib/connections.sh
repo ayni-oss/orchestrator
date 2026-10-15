@@ -27,7 +27,7 @@ dev_bootstrap_connection_values() {
     echo "Skipping GHCR administrator registration without valid bootstrap metadata." >&2
     return
   fi
-  DEV_ADMIN_REGISTRIES="$(python3 -c 'import json,sys; print(json.dumps([{"id":"registry-admin-local-ghcr","displayName":"Local GHCR","imageNamespace":sys.argv[1],"username":sys.argv[2],"pushSecretName":"runtime-push","pullSecretName":"runtime-pull"}],separators=(",",":")))' "$image_namespace" "$username")"
+  DEV_ADMIN_REGISTRIES="$(python3 -c 'import json,sys; print(json.dumps([{"id":"registry-admin-local-ghcr","displayName":"Local GHCR","imageNamespace":sys.argv[1].removeprefix("ghcr.io/"),"username":sys.argv[2],"pushSecretName":"runtime-push","pullSecretName":"runtime-pull"}],separators=(",",":")))' "$image_namespace" "$username")"
 }
 
 # Pass these safe reference-only values directly to Helm without an env file.

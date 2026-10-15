@@ -13,27 +13,29 @@ Ordinary tasks currently protect `.ayni.toml` and `.ayni.lock`; those protection
 
 1. Admit explicit environment-change scope and freeze the baseline source, policy, runtime, and supported Ayni tooling.
 2. Change the native dependency lock, such as `Cargo.lock`, and any required source.
-3. Run supported `ayni env lock` tooling to regenerate the derived `.ayni.lock` and create a draft PR containing both changes.
-4. Build an isolated candidate environment for the exact proposed revision and run full candidate checks inside it.
-5. Require repository-owner review and merge; never activate the candidate merely because its build succeeded.
-6. Reconcile the actual merged revision, build or safely reuse an equivalent artifact, verify it, and activate the shared runtime.
+3. Run supported `ayni env lock` tooling to regenerate the derived `.ayni.lock`.
+4. Install dependencies locally in the worker's working environment and run applicable checks against the proposed source.
+5. Create a draft PR containing the source and lock changes with truthful check evidence, then require repository-owner review and merge.
+6. On the next repository sync, reconcile the actual merged inputs. Reuse a verified compatible artifact or build, verify, and activate a new shared runtime.
 
-A check inside the old runtime cannot validate the new locked environment.
-If candidate execution is unavailable, the PR must report that limitation and remain blocked where validation is required.
+The worker does not build or publish a proposed runtime image before merge.
+The plan identifies dependency and environment impact; approval authorizes the affected files and fields.
+Unplanned environment requirements return for a plan amendment and approval.
 Policy thresholds and trusted keys require separate authorization; derived lock regeneration must not silently change them.
 
-## Candidate and active environments
+## Local checks and runtime certification
 
-| Proposed candidate | Approved active runtime |
+| Pre-merge worker checks | Post-merge runtime preparation |
 | --- | --- |
-| Bound to an exact PR revision and proposed lock | Bound to accepted repository inputs and verified digest |
-| Isolated validation with candidate-scoped authority | Available for new task admission under repository trust policy |
-| Cannot request the normal signing seed or publish trusted default-branch identity | Uses the reviewed trusted build and publication path |
-| Retained or cleaned up under a candidate policy | Reconciled for every project using the repository runtime |
+| Use the admitted baseline runtime with dependencies prepared locally | Use the actual merged source and committed environment inputs |
+| Record the proposed source and lock separately from the execution runtime | Verify the resulting image identity and immutable digest |
+| Establish the reported code-check outcomes within that working environment | Establish readiness for subsequent task admission |
+| Do not request image build, signing, publication, or activation | Use the trusted runtime build and publication path when needed |
 
-Research must choose candidate signing, separate trust, or unsigned isolated verification before implementation.
-The build mechanism may be reusable; the authority and activation rules must remain distinct.
-Moving a tag does not establish that a candidate artifact matches the merged source and inputs.
+Evidence binds the baseline source/runtime/policy, proposed lock, local dependency preparation, checked source, and final commit.
+Successful local checks do not claim certification of the future runtime image.
+If required tooling or checks cannot run locally, the PR reports blocked or unavailable evidence without weakening its requirements.
+Image building is not a fallback for unavailable pre-merge checks.
 
 ## Recovery and shared impact
 
@@ -47,6 +49,7 @@ The UI must expose the failing preparation stage, shared impact, and corrective 
 
 ## Design dependencies
 
-- [Execution isolation research #128](https://github.com/ayni-oss/orchestrator/issues/128) defines safe candidate execution and handoff options.
+- [Execution isolation research #128](https://github.com/ayni-oss/orchestrator/issues/128) retains broader isolation and handoff research for later work.
+  A new VM backend or separated task-stage topology is not a prerequisite for this lifecycle.
 - [Assurance boundaries](../architecture/assurance.md) separates environment certification, quality evidence, independent assessment, and merge approval.
 - [Managed runtime execution](managed-runtime-execution.md) remains the current build and activation contract.

@@ -61,6 +61,8 @@ never remove retained claims without explicit approval.
 Register administrator GHCR connections explicitly with `connections.adminRegistries`:
 `id`, `displayName`, `imageNamespace`, `username`, `pullSecretName` and
 `pushSecretName`. These are safe metadata and references, never token values.
+Set `imageNamespace` to the owner, such as `ayni-oss`, without the `ghcr.io/`
+host prefix. The authentication `username` does not choose image ownership.
 Use separate pull and push Secrets; labels cannot substitute for explicit registration.
 
 

@@ -83,9 +83,9 @@ ghcr.io/ayni-oss/sandbox:ayni-arm64-717bea5f26efff5396bd50dbd1c9efa4a36f3ffc9f6a
 
 The ARM64 and AMD64 tags are 75 characters, below the 128-character tag bound.
 Repository paths are limited to 255 characters and complete references to 512.
-Invalid names fail instead of truncating identity. Registry routing remains
-operator-controlled; `ghcr.io/build-team/source-owner/repo` preserves cross-owner
-namespace isolation. GHCR is the currently supported registry provider.
+Invalid names fail instead of truncating identity. Images use the source
+repository owner and name. The selected connection supplies credentials with
+access to that destination. GHCR is the currently supported registry provider.
 
 ## Failure and recovery
 

@@ -123,11 +123,11 @@ repository processes cannot rewrite worker progress, publication intent, final
 evidence or receipts in the retained output directory. The Linux-only Landlock
 dependency belongs to this private worker; it does not change Ayni upstream.
 
-For a connection whose namespace matches the source owner, the computed runtime
-destination is `ghcr.io/<namespace>/<repository>`. Cross-owner destinations
-retain `ghcr.io/<namespace>/<source-owner>/<repository>` so repository names
-remain distinct. One backend helper derives build, pull, admission and read-only
-UI destinations. Deployment-only fallback settings retain their existing layout.
+Runtime images are published at `ghcr.io/<source-owner>/<repository>`.
+The selected GHCR connection supplies push and pull credentials; its authentication
+account and connection-test namespace do not alter the runtime destination. One
+backend helper derives build, pull, admission and read-only UI destinations.
+Deployment-only fallback settings retain their existing layout.
 Previously admitted tasks and pending Jobs retain their original frozen paths.
 
 
@@ -140,7 +140,7 @@ runtime revision and source identity gate admission. A later selection cannot be
 activated by a superseded Job. Tasks retain their frozen image digests.
 
 Discovery uses `ayni-<arch>-<full-lock-hash>` on the approved repository path.
-Source owners are retained beneath a different registry namespace. A tag is a
+The source repository owns the image path. A tag is a
 lookup key; only independently verified immutable manifest digests authorize work.
 [Managed runtime execution](../guides/managed-runtime-execution.md) defines recovery and
 credential boundaries. No GitHub workflow installation participates in readiness.

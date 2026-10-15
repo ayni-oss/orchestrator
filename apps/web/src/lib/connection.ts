@@ -27,3 +27,9 @@ export function registryConfiguration(connections: Pick<ConnectionView, "kind" |
   }
   return { status: "missing", description: registries.length ? "No container registry has verified pull access." : "No enabled container registry is configured." };
 }
+
+/** Preview only; the control plane validates and derives the publishing destination. */
+export function registryImageRepository(owner: string, repository: string): string {
+  if (!owner || !repository) return "";
+  return `ghcr.io/${owner.toLowerCase()}/${repository.toLowerCase()}`;
+}

@@ -274,18 +274,22 @@ fn quality_repairs_are_bounded() {
 }
 
 #[test]
-fn connection_destinations_remove_only_a_repeated_source_owner() -> Result<(), &'static str> {
+fn connection_destinations_use_repository_identity() -> Result<(), &'static str> {
     assert_eq!(
         connection_image_repository("ayni-oss", "AYNI-OSS", "Sandbox")?,
         "ghcr.io/ayni-oss/sandbox"
     );
     assert_eq!(
         connection_image_repository("runtimes", "ayni-oss", "sandbox")?,
-        "ghcr.io/runtimes/ayni-oss/sandbox"
+        "ghcr.io/ayni-oss/sandbox"
     );
     assert_eq!(
         connection_image_repository("ayni-oss/runtime", "ayni-oss", "sandbox")?,
-        "ghcr.io/ayni-oss/runtime/ayni-oss/sandbox"
+        "ghcr.io/ayni-oss/sandbox"
+    );
+    assert_eq!(
+        connection_image_repository("ghcr.io/credential-owner", "ayni-oss", "sandbox")?,
+        "ghcr.io/ayni-oss/sandbox"
     );
     assert_ne!(
         connection_image_repository("runtimes", "a-b", "c")?,

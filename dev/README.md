@@ -98,8 +98,10 @@ container starts and is never mounted into the application. Add a distinct
 `GHCR_PUSH_TOKEN` to create the separate `runtime-push` Docker config Secret.
 Deployment registers the GHCR connection only when both admin Secrets exist and
 valid namespace metadata is present. `GHCR_IMAGE_NAMESPACE` selects the owner
-namespace; it defaults to `ghcr.io/<GHCR_PULL_USERNAME>`. Set an organization
-namespace explicitly. Push credentials reach only trusted build/probe Jobs.
+namespace for connection probes and is required when `GHCR_PUSH_TOKEN` is
+supplied. Runtime images use `ghcr.io/<repository-owner>/<repository>`; the
+credential username is used only for authentication. Registration removes the `ghcr.io/` host prefix before
+sending the namespace to the control plane. Push credentials reach only trusted build/probe Jobs.
 Complete GitHub App ID/key credentials register automatically on the next deploy;
 installation bindings are still chosen through repository setup. OpenAI is registered
 only when the bootstrap Secret exists; otherwise configure it in LLM providers.

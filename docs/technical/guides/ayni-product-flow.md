@@ -82,12 +82,14 @@ Its execution design belongs to [research #128](https://github.com/ayni-oss/orch
 
 Ordinary tasks currently cannot change `.ayni.toml` or `.ayni.lock`.
 The agreed extension allows explicitly authorized native dependency changes, derived lock regeneration,
-candidate environment validation, and repository-owner review before merge.
+local dependency preparation and code checks, and repository-owner review before merge.
+The worker does not build a proposed runtime image before merge.
 Post-merge reconciliation activates a verified environment for all projects using that repository runtime.
 
 The [environment-change design](environment-changes.md) records the proposed lifecycle and current limits.
 [Issue #129](https://github.com/ayni-oss/orchestrator/issues/129) owns design and implementation acceptance.
-A successful check in the old environment cannot establish that the proposed environment works.
+Pre-merge evidence records the worker's execution runtime separately from the proposed lock.
+Certification of the new runtime image belongs to post-merge preparation.
 
 ## Execution research and scope
 
