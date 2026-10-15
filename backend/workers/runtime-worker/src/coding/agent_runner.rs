@@ -132,6 +132,7 @@ impl CodingAgentRunner for RigCodingAgent {
         let agent = builder
             .tool_server_handle(profile_tools(context).run())
             .add_hook(BudgetHook(context.clone()))
+            .add_hook(workflow_hook(context))
             .add_hook(context.activity.clone())
             .build();
         let prompt = format!(
@@ -195,3 +196,17 @@ impl CodingAgentRunner for RigCodingAgent {
 #[cfg(test)]
 #[path = "budget_tests.rs"]
 mod tests;
+
+fn workflow_hook(context: &Context) -> crate::workflow_trace::WorkflowHook {
+    crate::workflow_trace::WorkflowHook::new(ayni_orchestrator_observability::workflow::Workflow {
+        task_id: context.spec.task_id.clone(),
+        attempt_id: context.spec.attempt_id.clone(),
+        model: context.spec.model.clone(),
+        profile_revision: context
+            .spec
+            .profile
+            .as_ref()
+            .map_or_else(String::new, |p| p.revision.clone()),
+        ..Default::default()
+    })
+}

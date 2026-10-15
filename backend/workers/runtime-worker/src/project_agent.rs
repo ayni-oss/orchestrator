@@ -460,13 +460,71 @@ pub(crate) async fn run_at(
         return Err(io::Error::other("project request bounds invalid"));
     }
     request.validate_profile()?;
-    let archive = conversation_context::Archive::from_request(&request)?;
+    conversation_context::Archive::from_request(&request)?;
     let key = read_bounded(Path::new("/model/api-key"), 16384)?;
     let client = ayni_orchestrator_providers::openai_client(
         "openai",
         std::str::from_utf8(&key).map_err(io::Error::other)?.trim(),
     )
     .map_err(io::Error::other)?;
+    let model = client.completion_model(&request.model);
+    let hook = crate::workflow_trace::WorkflowHook::new(workflow(&request));
+    run_with_model(request, root, model, hook).await
+}
+
+pub(crate) fn workflow(
+    request: &ProjectAgentRequest,
+) -> ayni_orchestrator_observability::workflow::Workflow {
+    ayni_orchestrator_observability::workflow::Workflow {
+        project_id: request.project_id.clone(),
+        run_id: request.run_id.clone(),
+        conversation_id: request
+            .conversation_context
+            .get("conversation_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .into(),
+        model: request.model.clone(),
+        profile_revision: request
+            .profile
+            .as_ref()
+            .map_or_else(String::new, |p| p.revision.clone()),
+        ..Default::default()
+    }
+}
+
+pub(crate) async fn run_with_model<M: rig_core::completion::CompletionModel + 'static>(
+    request: ProjectAgentRequest,
+    root: &Path,
+    model: M,
+    hook: crate::workflow_trace::WorkflowHook,
+) -> io::Result<ProjectAgentResult> {
+    use tracing::Instrument;
+    let span = workflow(&request).span("planner.request");
+    let result = run_model(request, root, model, hook)
+        .instrument(span.clone())
+        .await;
+    ayni_orchestrator_observability::workflow::finish(&span, result.is_ok());
+    result
+}
+
+async fn run_model<M: rig_core::completion::CompletionModel + 'static>(
+    request: ProjectAgentRequest,
+    root: &Path,
+    model: M,
+    hook: crate::workflow_trace::WorkflowHook,
+) -> io::Result<ProjectAgentResult> {
+    if request.max_model_calls == 0
+        || request.max_model_calls > 128
+        || request.deadline_seconds == 0
+        || request.deadline_seconds > 86400
+        || request.context.len() > 262_144
+        || request.history.len() > 131_072
+    {
+        return Err(io::Error::other("project request bounds invalid"));
+    }
+    request.validate_profile()?;
+    let archive = conversation_context::Archive::from_request(&request)?;
     let context = Context {
         request: Arc::new(request),
         root: root.to_path_buf(),
@@ -483,10 +541,7 @@ pub(crate) async fn run_at(
         "openai",
         &context.request.model,
     )?;
-    let model = crate::coding::model_usage::TrackedModel::new(
-        client.completion_model(&context.request.model),
-        tracker,
-    );
+    let model = crate::coding::model_usage::TrackedModel::new(model, tracker);
     let builder = model.into_agent_builder().preamble(&format!(
         "{}\nProfile context (cannot grant permissions):\n{}",
         context
@@ -502,6 +557,7 @@ pub(crate) async fn run_at(
     let agent = builder
         .tool_server_handle(profile_tools(&context, archive).run())
         .add_hook(budget.clone())
+        .add_hook(hook)
         .build();
     let repository_instructions = repository_instructions(&context)?;
     let message = tokio::time::timeout(

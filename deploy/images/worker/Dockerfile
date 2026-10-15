@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install --yes --no-install-recommends musl-tools \
     && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY backend ./backend
+COPY evals ./evals
 COPY proto ./proto
 RUN --mount=type=cache,id=ayni-orchestrator-worker-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-worker-cargo-git,target=/usr/local/cargo/git \

@@ -21,6 +21,7 @@ use std::{
     },
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
+use tracing::Instrument;
 
 #[derive(Clone)]
 pub struct UsageTracker {
@@ -232,8 +233,28 @@ impl<M: CompletionModel> CompletionModel for TrackedModel<M> {
         self.usage.begin(call).map_err(|_| {
             CompletionError::ResponseError("provider usage spool unavailable".into())
         })?;
-        match self.inner.completion(request).await {
+        let span = ayni_orchestrator_observability::workflow::Workflow {
+            model: self.usage.inner.model.clone(),
+            task_id: std::env::var("DEVELOPMENT_TASK_ID").unwrap_or_default(),
+            attempt_id: std::env::var("ORCHESTRATOR_ATTEMPT_ID").unwrap_or_default(),
+            ..Default::default()
+        }
+        .span("provider.completion");
+        let response = self
+            .inner
+            .completion(request)
+            .instrument(span.clone())
+            .await;
+        ayni_orchestrator_observability::workflow::finish(&span, response.is_ok());
+        match response {
             Ok(response) => {
+                let tokens = openai_usage(&response.raw);
+                if let Some(tokens) = tokens.input_tokens {
+                    span.record("input_tokens", tokens);
+                }
+                if let Some(tokens) = tokens.output_tokens {
+                    span.record("output_tokens", tokens);
+                }
                 self.usage.succeed(call, &response).map_err(|_| {
                     CompletionError::ResponseError("provider usage spool unavailable".into())
                 })?;

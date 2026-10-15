@@ -3,6 +3,7 @@
 use std::env;
 use tracing_subscriber::{Layer, prelude::*};
 mod telemetry;
+pub mod workflow;
 pub use telemetry::{
     TelemetryGuard, TraceContext, current_context, event_context, exporter_endpoint,
     record_failure, verification_span, with_event_context,
@@ -34,7 +35,10 @@ pub fn init(service: &'static str) -> TelemetryGuard {
         tracing_opentelemetry::layer()
             .with_tracer(tracer)
             .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
-                metadata.target() == telemetry::TRACE_TARGET
+                matches!(
+                    metadata.target(),
+                    telemetry::TRACE_TARGET | workflow::WORKFLOW_TARGET
+                )
             }))
     });
     tracing_subscriber::registry()

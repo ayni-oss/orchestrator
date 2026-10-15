@@ -26,6 +26,7 @@ For product usage, start with the [user guide](../site/index.md).
 - [Ayni](reference/ayni-integration.md) and [official builders](reference/repository-builders.md).
 - [Custom clients](reference/custom-client-access.md) and [protocol tooling](../../proto/README.md).
 - [Verification](reference/verification-events.md), [runtime operations](reference/runtime-operation-events.md), and [coding](reference/coding-events.md).
+- [Workflow traces and evaluations](reference/workflow-evaluations.md): repeatable scenarios and retained comparisons.
 - [Operator projections](reference/operator-projections.md), [CloudEvents](reference/cloudevents-contract.md), and [observability](reference/observability-and-events.md).
 
 [Documentation authoring](contributing/documentation.md) defines the audience boundary.

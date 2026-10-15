@@ -110,6 +110,14 @@ impl CleanStore {
             .transpose()
     }
     fn save_planner_session(&self, s: &PlannerSession) -> Result<(), CleanStoreError> {
+        ayni_orchestrator_observability::workflow::Workflow {
+            conversation_id: s.conversation_id.clone(),
+            session_id: s.session_id.clone(),
+            generation: s.generation,
+            run_id: s.active_run_id.clone(),
+            ..Default::default()
+        }
+        .observe("planner.session", &s.state);
         let payload = serde_json::to_string(s).map_err(|_| CleanStoreError::CorruptState)?;
         self.connection.execute("INSERT INTO project_planner_sessions VALUES(?1,?2) ON CONFLICT(conversation_id) DO UPDATE SET payload=excluded.payload",params![s.conversation_id,payload]).map_err(CleanStoreError::Database)?;
         Ok(())

@@ -214,6 +214,9 @@ if [[ "${AYNI_SESSION_FIXTURE_PROFILES:-}" == 1 ]]; then
   # The safe profile projection carries binding revisions, never credential values or Secret references.
   jq -e '[.conversation.runs[]|{plannerProfile,workerProfile}]|tostring|contains("fixture-session-key")|not' "$scratch/conversation.json" >/dev/null
   jq -e '[.conversation.runs[]|{plannerProfile,workerProfile}]|tostring|test("secretName|secretUid")|not' "$scratch/conversation.json" >/dev/null
+  if [[ "${AYNI_SESSION_FIXTURE_EVALS:-}" == 1 ]]; then
+    "$root/dev/tests/workflow-evaluations.sh" "$namespace" "$root/.local/evals/kubernetes-$namespace"
+  fi
   echo 'Agent profiles passed: real resident model dispatch exposes only authorized tools; revisions and skills freeze across settings changes/restart; invalid planner mutation capabilities are rejected.'
   exit 0
 fi

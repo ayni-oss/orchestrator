@@ -51,6 +51,13 @@ with the Collector stopped. Its synthetic launch is labeled
 `verification-test-launcher`; provider admission and signed Ready acceptance are
 separate from that fixture.
 
+## Workflow diagnostics
+
+[Workflow traces and evaluations](workflow-evaluations.md) correlate project turns,
+research/tools, plan versions, approvals and returned task outcomes using durable
+identifiers. The same bounded exporter carries these spans. Retained local reports
+separate deterministic fixtures from explicitly selected provider evaluations.
+
 ## Architecture and remaining instrumentation
 
 Durable results and accepted transitions establish what happened and authorize

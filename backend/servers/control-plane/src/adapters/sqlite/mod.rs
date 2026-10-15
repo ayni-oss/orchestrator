@@ -466,3 +466,5 @@ mod project_summary_retirement;
 mod project_worker_evidence;
 
 mod agent_profiles;
+
+mod workflow_trace;

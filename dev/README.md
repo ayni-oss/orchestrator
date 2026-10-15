@@ -264,3 +264,10 @@ cancellation and lost workers. Control-plane checks separately cover persisted
 session state, idle expiry, durable context and restart recovery. Fixture inputs
 are synthetic; they do not attest live GitHub source observation or provider
 authentication. Cleanup targets only the gate's own namespace and resources.
+
+## Workflow evaluations
+
+Run `dev/ctl eval` for retained store, scripted-model and browser scenarios.
+Provider evaluation is optional and reported as unavailable unless explicitly selected.
+See [workflow evaluations](../docs/technical/reference/workflow-evaluations.md) for
+model runs, comparisons and the disposable `dev/ctl test workflow-evals` gate.
