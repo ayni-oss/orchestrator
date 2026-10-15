@@ -33,9 +33,21 @@ fn project_summary_uses_complete_history_and_preserves_member_readiness()
     assert_eq!(summary.repository_names, vec![repository.display_name]);
     let other = store.create_repository_connection("other", &repository_request("other", "456"))?;
     let project = summary.project.ok_or(CleanStoreError::CorruptState)?;
+    store.update_workspace(
+        "add-workspace-member",
+        &v1::UpdateWorkspaceRequest {
+            idempotency_key: "add-workspace-member".into(),
+            workspace_id: project.workspace_id.clone(),
+            expected_resource_version: 1,
+            display_name: project.display_name.clone(),
+            repository_connection_ids: vec![repository.id.clone(), other.id.clone()],
+            agent_defaults: None,
+        },
+    )?;
     store.update_project(
         "add-member",
         &v1::UpdateProjectRequest {
+            goal: None,
             agent_defaults: None,
             idempotency_key: "add-member".into(),
             project_id: project.id,
@@ -60,6 +72,8 @@ fn summary_pages_remain_frozen_after_profile_changes() -> Result<(), CleanStoreE
     store.create_project(
         "second",
         &v1::CreateProjectRequest {
+            workspace_id: String::new(),
+            goal: String::new(),
             idempotency_key: "second".into(),
             display_name: "Second".into(),
             repository_connection_id: repository.id,

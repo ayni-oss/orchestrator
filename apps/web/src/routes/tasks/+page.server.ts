@@ -15,7 +15,14 @@ async function listProjectChoices(context: RequestContext): Promise<ProjectDto[]
     values.push(...result.projects);
     pageToken = result.page.nextPageToken || undefined;
   } while (pageToken !== undefined && values.length < 1000);
-  return values;
+  const workspaces=new Map<string,Awaited<ReturnType<ReturnType<typeof getBff>["getWorkspace"]>>>();
+  await Promise.all([...new Set(values.map(project=>project.workspaceId))].map(async id=>{workspaces.set(id,await getBff().getWorkspace(id,context));}));
+  return values.flatMap(project=>{
+    const workspace=workspaces.get(project.workspaceId);
+    if(workspace?.state!=="active")return [];
+    const repositoryConnectionIds=project.repositoryConnectionIds.filter(id=>workspace.repositoryConnectionIds.includes(id));
+    return repositoryConnectionIds.length?[{...project,repositoryConnectionIds}]:[];
+  });
 }
 
 async function listProfileChoices(context: RequestContext): Promise<RuntimeProfileDto[]> {
@@ -45,7 +52,7 @@ async function listModelChoices(context: RequestContext): Promise<{ provider?: s
 }
 
 export const load: PageServerLoad = async ({ locals, setHeaders, url, depends }) => {
-  depends("app:tasks", "app:projects", "app:runtimes");
+  depends("app:workspaces", "app:tasks", "app:projects", "app:runtimes");
   setHeaders({ "cache-control": "no-store" });
   const token = url.searchParams.get("pageToken");
   const pageToken = token !== null && token.length <= 512 ? token : undefined;
@@ -84,6 +91,8 @@ async function taskSelection(projectId: string, repositoryConnectionId: string, 
   const bff = getBff();
   const project = await bff.getProject(projectId, context);
   if (project.state !== "active") return undefined;
+  const workspace=await bff.getWorkspace(project.workspaceId,context);
+  if(workspace.state!=="active"||!workspace.repositoryConnectionIds.includes(repositoryConnectionId))return undefined;
   if (!project.repositoryConnectionIds.includes(repositoryConnectionId)) return undefined;
   const profile = await bff.getRuntimeProfile(runtimeProfileId, context);
   if (profile.repositoryConnectionId !== repositoryConnectionId || profile.state !== "ready" || profile.support !== "operational" || !profile.activeRevisionId || !profile.activeRuntimeArtifactId) return undefined;

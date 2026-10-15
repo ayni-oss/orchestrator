@@ -3,7 +3,7 @@ import { Server, ServerCredentials, status, type ServerWritableStream, type Unty
 import {
   CertificateServiceService, Certificate,
   ConnectionServiceService, type Connection,
-  ProjectServiceService, ProjectState,
+  ProjectServiceService, ProjectState, WorkspaceState,
   ProjectConversationServiceService, ProjectConversation,
   DevelopmentAttemptState,
   DevelopmentTaskServiceService,
@@ -41,7 +41,8 @@ let repository: any = {
 };
 
 const secondRepository = {...repository,id:"repository:2",displayName:"ayni-oss/library",provider:{provider:{$case:"github",github:{...repository.provider.provider.github,repositoryId:"456",name:"library",htmlUrl:"https://github.com/ayni-oss/library"}}}};
-let project: any = {id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
+let workspace:any={id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
+let project: any = {workspaceId:workspace.id,goal:"Improve the sandbox",id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
 const profile: any = {
   id: profileId,
   repositoryConnectionId: repositoryId,
@@ -285,6 +286,11 @@ grpc.addService(CertificateServiceService,{
 });
 grpc.addService(ConnectionServiceService,connectionService);
 grpc.addService(ProjectServiceService, {
+  createWorkspace(call:any,callback:any){workspace={...workspace,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds,state:WorkspaceState.WORKSPACE_STATE_ACTIVE,resourceVersion:"1"};callback(null,{workspace});},
+  listWorkspaces(_call:any,callback:any){callback(null,{workspaces:[workspace],page});},
+  getWorkspace(_call:any,callback:any){callback(null,{workspace});},
+  updateWorkspace(call:any,callback:any){workspace={...workspace,...(call.request.agentDefaults?{agentDefaults:call.request.agentDefaults}:{}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length?call.request.repositoryConnectionIds:workspace.repositoryConnectionIds,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
+  archiveWorkspace(_call:any,callback:any){workspace={...workspace,state:WorkspaceState.WORKSPACE_STATE_ARCHIVED,resourceVersion:String(Number(workspace.resourceVersion)+1)};callback(null,{workspace});},
   watchProjects(call:any) { resourceWatch(call, "project", () => [project]); },
   listProjectSummaries(_call:any,callback:any){
     const members=project.repositoryConnectionIds.map((id:string)=>runtimeSummary(id));
@@ -293,8 +299,8 @@ grpc.addService(ProjectServiceService, {
   },
   listProjects(_call:any,callback:any){callback(null,{projects:[project],page});},
   getProject(_call:any,callback:any){callback(null,{project});},
-  createProject(call:any,callback:any){project={...project,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
-  updateProject(call:any,callback:any){project={...project,...(call.request.agentDefaults ? {agentDefaults:call.request.agentDefaults} : {}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
+  createProject(call:any,callback:any){project={...project,workspaceId:call.request.workspaceId,goal:call.request.goal,displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : [call.request.repositoryConnectionId],state:ProjectState.PROJECT_STATE_ACTIVE,resourceVersion:"1"};callback(null,{project});},
+  updateProject(call:any,callback:any){project={...project,...(call.request.goal!==undefined?{goal:call.request.goal}:{}),...(call.request.agentDefaults ? {agentDefaults:call.request.agentDefaults} : {}),displayName:call.request.displayName,repositoryConnectionIds:call.request.repositoryConnectionIds.length ? call.request.repositoryConnectionIds : project.repositoryConnectionIds,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
   archiveProject(_call:any,callback:any){project={...project,state:ProjectState.PROJECT_STATE_ARCHIVED,resourceVersion:String(Number(project.resourceVersion)+1)};callback(null,{project});},
 });
 // Conversation fixtures exercise real generated gRPC and browser/BFF boundaries.
@@ -383,7 +389,8 @@ const health = createServer((request, response) => {
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
    if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();}
-   if (url.pathname === "/reset-project") project = {id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
+   if (url.pathname === "/reset-project") workspace={id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
+   if (url.pathname === "/reset-project") project = {workspaceId:workspace.id,goal:"Improve the sandbox",id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
    certificateFixture(url.pathname);
    connectionFixture(url);
    profileFixture(url);

@@ -7,8 +7,13 @@ import "ayni/orchestrator/v1/development_tasks.proto";
 import "ayni/orchestrator/v1/repositories.proto";
 import "google/protobuf/timestamp.proto";
 
-// Projects are user-facing workspaces with shared, editable repository membership.
+// Goal-oriented projects select resources owned by a workspace.
 service ProjectService {
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse);
+  rpc UpdateWorkspace(UpdateWorkspaceRequest) returns (UpdateWorkspaceResponse);
+  rpc ArchiveWorkspace(ArchiveWorkspaceRequest) returns (ArchiveWorkspaceResponse);
   rpc WatchProjects(WatchProjectsRequest) returns (stream WatchProjectsResponse);
   rpc ListProjectSummaries(ListProjectSummariesRequest) returns (ListProjectSummariesResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
@@ -35,6 +40,8 @@ message Project {
   google.protobuf.Timestamp updated_at = 6;
   uint64 resource_version = 7;
   ProjectAgentDefaults agent_defaults = 8;
+  string workspace_id = 9;
+  string goal = 10;
 }
 
 message CreateProjectRequest {
@@ -45,6 +52,8 @@ message CreateProjectRequest {
   string repository_connection_id = 3;
   // Between 1 and 100 unique repository connections.
   repeated string repository_connection_ids = 4;
+  string workspace_id = 5;
+  string goal = 6;
 }
 message CreateProjectResponse {
   Project project = 1;
@@ -72,6 +81,7 @@ message UpdateProjectRequest {
   repeated string repository_connection_ids = 5;
   // Omitted preserves defaults; an empty message clears them.
   ProjectAgentDefaults agent_defaults = 6;
+  optional string goal = 7;
 }
 message UpdateProjectResponse {
   Project project = 1;
@@ -127,4 +137,65 @@ message ProjectAgentDefaults {
   string project_model = 2;
   string coding_connection_id = 3;
   string coding_model = 4;
+}
+
+// Workspaces own shared repository access and agent defaults. Repository runtimes
+// remain attached to repository connections and are never copied by membership.
+enum WorkspaceState {
+  WORKSPACE_STATE_UNSPECIFIED = 0;
+  WORKSPACE_STATE_ACTIVE = 1;
+  WORKSPACE_STATE_ARCHIVED = 2;
+}
+message Workspace {
+  string id = 1;
+  string display_name = 2;
+  WorkspaceState state = 3;
+  repeated string repository_connection_ids = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  uint64 resource_version = 7;
+  ProjectAgentDefaults agent_defaults = 8;
+}
+message CreateWorkspaceRequest {
+  string idempotency_key = 1;
+  string display_name = 2;
+  repeated string repository_connection_ids = 3;
+  ProjectAgentDefaults agent_defaults = 4;
+}
+message CreateWorkspaceResponse {
+  Workspace workspace = 1;
+}
+message ListWorkspacesRequest {
+  PageRequest page = 1;
+  optional WorkspaceState state = 2;
+}
+message ListWorkspacesResponse {
+  repeated Workspace workspaces = 1;
+  PageResponse page = 2;
+}
+message GetWorkspaceRequest {
+  string workspace_id = 1;
+}
+message GetWorkspaceResponse {
+  Workspace workspace = 1;
+}
+message UpdateWorkspaceRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  uint64 expected_resource_version = 3;
+  string display_name = 4;
+  // Empty preserves membership, matching the compatibility Project API.
+  repeated string repository_connection_ids = 5;
+  ProjectAgentDefaults agent_defaults = 6;
+}
+message UpdateWorkspaceResponse {
+  Workspace workspace = 1;
+}
+message ArchiveWorkspaceRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  uint64 expected_resource_version = 3;
+}
+message ArchiveWorkspaceResponse {
+  Workspace workspace = 1;
 }

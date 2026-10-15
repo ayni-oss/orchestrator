@@ -6,13 +6,14 @@
   import { Label } from "$lib/components/ui/label/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import InformationCard from "$lib/components/information-card.svelte";
-  let {project,connections,catalogues,idempotencyKey}:{project:NonNullable<PageData["project"]>;connections:PageData["llmConnections"];catalogues:PageData["connectionModels"];idempotencyKey:string}=$props();
+  let {project,connections,catalogues,idempotencyKey,inherited=false,workspaceId}:{project:{resourceVersion:string;agentDefaults?:NonNullable<PageData["project"]>["agentDefaults"]};connections:PageData["llmConnections"];catalogues:PageData["connectionModels"];idempotencyKey:string;inherited?:boolean;workspaceId?:string}=$props();
   let projectConnection=$state(untrack(()=>project.agentDefaults?.projectConnectionId??"")),codingConnection=$state(untrack(()=>project.agentDefaults?.codingConnectionId??""));
   let projectModel=$state(untrack(()=>project.agentDefaults?.projectModel??"")),codingModel=$state(untrack(()=>project.agentDefaults?.codingModel??""));
   let pending=$state(false);
   const options=$derived(connections.map(c=>({value:c.id,label:c.displayName})));
 </script>
 <InformationCard title="Agent models">
+  {#if workspaceId}<p class="mb-4 text-sm text-muted-foreground">{inherited?"Inherited from":"Overrides for"} the <a class="underline" href={`/workspaces/${encodeURIComponent(workspaceId)}`}>workspace defaults</a>.</p>{/if}
   <form method="POST" action="?/agentDefaults" use:enhance={()=>{pending=true;return async({update})=>{try{await update({reset:false});}finally{pending=false;}};}} class="space-y-4">
     <input type="hidden" name="idempotencyKey" value={idempotencyKey} /><input type="hidden" name="resourceVersion" value={project.resourceVersion} />
     <div class="grid gap-4 sm:grid-cols-2">
@@ -22,4 +23,5 @@
     {#if !connections.length}<p class="text-sm text-muted-foreground">Configure and test an <a href="/llm-providers/openai" class="underline">OpenAI connection</a> before selecting models.</p>{:else if (projectConnection&&!catalogues[projectConnection])||(codingConnection&&!catalogues[codingConnection])}<p role="status" class="text-sm text-muted-foreground">Models could not be loaded for the selected connection. Check connection access and reload.</p>{/if}
     <Button type="submit" disabled={pending||!projectConnection||!codingConnection||!projectModel||!codingModel}>Save agent defaults</Button>
   </form>
+  {#if workspaceId&&!inherited}<form method="POST" action="?/agentDefaults" use:enhance class="mt-3"><input type="hidden" name="idempotencyKey" value={`${idempotencyKey}`} /><input type="hidden" name="resourceVersion" value={project.resourceVersion} /><input type="hidden" name="inherit" value="true" /><Button variant="outline" type="submit">Use workspace defaults</Button></form>{/if}
 </InformationCard>

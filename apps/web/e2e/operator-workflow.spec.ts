@@ -84,6 +84,9 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", {name:"Create project",exact:true}).click();
   await page.getByLabel("Project name", { exact: true }).fill("Payments");
+  await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
+  await page.getByLabel("Workspace",{exact:true}).click();
+  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
   await page.getByRole("button", {name:"Repositories",exact:true}).click();
   await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
   await page.getByRole("button",{name:"Done",exact:true}).click();
@@ -106,6 +109,9 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", {name:"Create project",exact:true}).click();
   await page.getByLabel("Project name", { exact: true }).fill("Sandbox");
+  await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
+  await page.getByLabel("Workspace",{exact:true}).click();
+  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
   await page.getByRole("button", {name:"Repositories",exact:true}).click();
   await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
   await page.getByRole("button",{name:"Done",exact:true}).click();
@@ -118,6 +124,9 @@ test("projects select several repositories and tasks require one target",async({
  await page.goto("/projects");
  await page.getByRole("button",{name:"Create project",exact:true}).click();
  await page.getByLabel("Project name",{exact:true}).fill("Shared work");
+  await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
+  await page.getByLabel("Workspace",{exact:true}).click();
+  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
  await page.getByRole("button",{name:"Repositories",exact:true}).click();
  await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
  await page.getByRole("checkbox",{name:"ayni-oss/library",exact:true}).check();

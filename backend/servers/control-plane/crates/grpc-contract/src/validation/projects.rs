@@ -20,6 +20,10 @@ pub fn project_name(value: &str) -> Result<(), ValidationError> {
 pub fn create_project(value: &v1::CreateProjectRequest) -> Result<(), ValidationError> {
     idempotency_key(&value.idempotency_key)?;
     project_name(&value.display_name)?;
+    project_goal(&value.goal)?;
+    if !value.workspace_id.is_empty() {
+        resource_id(&value.workspace_id, "workspace_id")?;
+    }
     if value.repository_connection_ids.is_empty() {
         resource_id(&value.repository_connection_id, "repository_connection_id")
     } else {
@@ -69,6 +73,21 @@ pub fn project_members(values: &[String]) -> Result<(), ValidationError> {
     }
     for value in values {
         resource_id(value, "repository_connection_ids")?;
+    }
+    Ok(())
+}
+
+/// Validates bounded project intent text.
+///
+/// # Errors
+/// Returns invalid input for excessive length or unsupported control characters.
+pub fn project_goal(value: &str) -> Result<(), ValidationError> {
+    if value.len() > 16_384
+        || value
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\t')
+    {
+        return Err(ValidationError::new(v1::ErrorReason::InvalidInput, "goal"));
     }
     Ok(())
 }

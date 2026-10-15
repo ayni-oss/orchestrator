@@ -18,7 +18,7 @@
   let {data}:{data:PageData}=$props();
   let createOpen=$state(false),members=$state<string[]>([]),content=$state(""),pending=$state(false),refreshing=false;
   const conversation=$derived(data.conversation);
-  const active=$derived(data.project?.state==="active");
+  const active=$derived(data.project?.state==="active"&&data.workspace?.state==="active");
   const running=$derived(conversation?.runs.some(r=>r.state==="queued"||r.state==="running")??false);
   onMount(()=>{
     const timer=setInterval(async()=>{
@@ -46,7 +46,7 @@
   function actionTitle(action:string){return action==="create_task"?"Task plan":action==="cancel_task"?"Confirm cancellation":action==="retry_task"?"Confirm task retry":action==="retry_publication"?"Confirm publication retry":words(action);}
 </script>
 <section class="space-y-4" aria-label="Project conversations">
-  <div class="flex flex-wrap items-center justify-between gap-3"><h2 class="text-lg font-semibold">Conversations</h2><span class="text-xs text-muted-foreground">{live?"Live updates":"Reconnecting · periodic refresh"}</span>{#if active}<Button variant="outline" onclick={()=>{members=[...data.project!.repositoryConnectionIds];createOpen=true;}}>New conversation</Button>{/if}</div>
+  <div class="flex flex-wrap items-center justify-between gap-3"><h2 class="text-lg font-semibold">Conversations</h2><span class="text-xs text-muted-foreground">{live?"Live updates":"Reconnecting · periodic refresh"}</span>{#if active}<Button variant="outline" onclick={()=>{members=data.project!.repositoryConnectionIds.filter(id=>data.workspace?.repositoryConnectionIds.includes(id));createOpen=true;}}>New conversation</Button>{/if}</div>
   {#if data.conversationError}<Feedback kind="warning" title="Conversations unavailable" message={data.conversationError.message} />{/if}
   {#if data.conversations.length}<nav class="flex flex-wrap gap-2" aria-label="Conversation history">{#each data.conversations as c (c.id)}<Button variant={c.id===conversation?.id?"secondary":"outline"} href={`?conversation=${encodeURIComponent(c.id)}`} aria-current={c.id===conversation?.id?"page":undefined}>{c.title}</Button>{/each}</nav>{/if}
   {#if conversation}
@@ -99,5 +99,5 @@
   {:else if !data.conversationError}<p class="text-sm text-muted-foreground">Start a conversation to research a project change and prepare tasks for approval.</p>{/if}
 </section>
 <Dialog.Root bind:open={createOpen}><Dialog.Content><Dialog.Header><Dialog.Title>New conversation</Dialog.Title><Dialog.Description>Select repositories to research. Each approved interaction creates at most one task per repository.</Dialog.Description></Dialog.Header>
-  <form method="POST" action="?/createConversation" use:enhance={()=>{pending=true;return async({result,update})=>{try{if(result.type==="redirect")createOpen=false;await update({reset:false});}finally{pending=false;}};}} class="space-y-4"><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><Label for="conversation-title">Title</Label><Input id="conversation-title" name="title" required maxlength={256} /><Label for="conversation-repositories">Repositories</Label><RepositoryPicker id="conversation-repositories" repositories={data.repositories} value={members} onchange={value=>members=value} /><Dialog.Footer><Button type="button" variant="outline" onclick={()=>createOpen=false}>Cancel</Button><Button type="submit" disabled={pending||!members.length}>Create conversation</Button></Dialog.Footer></form>
+  <form method="POST" action="?/createConversation" use:enhance={()=>{pending=true;return async({result,update})=>{try{if(result.type==="redirect")createOpen=false;await update({reset:false});}finally{pending=false;}};}} class="space-y-4"><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><Label for="conversation-title">Title</Label><Input id="conversation-title" name="title" required maxlength={256} /><Label for="conversation-repositories">Repositories</Label><RepositoryPicker id="conversation-repositories" repositories={data.repositories.filter(repository=>data.workspace?.repositoryConnectionIds.includes(repository.id))} value={members} onchange={value=>members=value} /><Dialog.Footer><Button type="button" variant="outline" onclick={()=>createOpen=false}>Cancel</Button><Button type="submit" disabled={pending||!members.length}>Create conversation</Button></Dialog.Footer></form>
 </Dialog.Content></Dialog.Root>

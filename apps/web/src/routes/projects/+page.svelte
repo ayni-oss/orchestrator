@@ -7,6 +7,7 @@
   import { zodClient } from "sveltekit-superforms/adapters";
   import { projectSchema } from "$lib/project-schema.js";
   import PageHeader from "$lib/components/page-header.svelte";
+  import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -27,10 +28,13 @@
   }
   const projectForm = (() => superForm(data.form, {validators:zodClient(projectSchema), onError: ({result}) => notify("error", "Action failed", result.error.message), onResult:async ({result}) => {if(result.type === "redirect") { redirecting = true; await closeBeforeNavigation(); redirectNotification(result, new URL("?/create", window.location.href)); }}}))();
   const { form: values, enhance, submitting } = projectForm;
+  const workspace=$derived(data.workspaces.find(item=>item.id===$values.workspaceId));
+  const repositories=$derived(data.repositories.filter(item=>workspace?.repositoryConnectionIds.includes(item.id)));
+
 </script>
 <svelte:head><title>Projects · Ayni Orchestrator</title></svelte:head>
 <div data-refresh-paused={$submitting || redirecting ? "" : undefined} class="space-y-8">
-  <PageHeader title="Projects" description="Your repositories, environments, and development tasks.">
+  <PageHeader title="Projects" description="Goals, conversations, and development tasks within your workspaces.">
     {#snippet actions()}<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create project</Button>{/snippet}
   </PageHeader>
 
@@ -52,14 +56,16 @@
     {:else}{#if data.available}<div class="col-span-full rounded-xl border border-dashed p-12 text-center"><FolderGit2 class="mx-auto mb-4 size-8 text-muted-foreground" aria-hidden="true" /><h2 class="font-semibold">Create your first project</h2><p class="mt-2 text-sm text-muted-foreground">Group repositories and start work from one place.</p></div>{/if}{/each}
   </div>
   {#if data.nextPageToken}<Button href={`?pageToken=${encodeURIComponent(data.nextPageToken)}`} variant="outline">More projects</Button>{/if}
-  <Dialog.Root bind:open onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>Create project</Dialog.Title><Dialog.Description>Choose one or more repositories. Repositories and their runtime setup can be shared across projects.</Dialog.Description></Dialog.Header>
+  <Dialog.Root bind:open onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>Create project</Dialog.Title><Dialog.Description>Choose a workspace, describe your goal, and select repositories within it.</Dialog.Description></Dialog.Header>
     <form use:enhance method="POST" action="?/create" class="space-y-5">
       <input type="hidden" name="idempotencyKey" value={$values.idempotencyKey} />
+      <Form.Field form={projectForm} name="workspaceId"><Form.Control>{#snippet children({props})}<Form.Label>Workspace</Form.Label><ThemedSelect {...props} name="workspaceId" value={$values.workspaceId} onValueChange={value=>{$values.workspaceId=value;$values.repositoryConnectionIds=[];}} options={data.workspaces.map(item=>({value:item.id,label:item.displayName}))} placeholder="Choose workspace" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
+      <Form.Field form={projectForm} name="goal"><Form.Control>{#snippet children({props})}<Form.Label>Goal</Form.Label><Input {...props} bind:value={$values.goal} placeholder="What should this project achieve?" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
-      <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={data.repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
-      {#if !data.repositories.length}<p class="text-sm text-muted-foreground">Connect a repository in Repositories before creating a project.</p><Button href="/repositories" variant="outline">Connect repositories</Button>{/if}
+      <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
+      {#if !repositories.length}<p class="text-sm text-muted-foreground">Choose a workspace with connected repositories before creating a project.</p><Button href="/workspaces" variant="outline">Manage workspaces</Button>{/if}
 
-      <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={$submitting || !data.repositories.length}>{$submitting ? "Creating…" : "Create project"}</Button></Dialog.Footer>
+      <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={$submitting || !repositories.length}>{$submitting ? "Creating…" : "Create project"}</Button></Dialog.Footer>
     </form>
   </Dialog.Content></Dialog.Root>
 </div>

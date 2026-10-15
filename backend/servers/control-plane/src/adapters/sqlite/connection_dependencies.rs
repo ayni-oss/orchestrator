@@ -9,8 +9,8 @@ impl CleanStore {
         if !requested.is_empty() {
             return Ok(requested.into());
         }
-        if let Some(defaults) = project
-            .agent_defaults
+        if let Some(defaults) = self
+            .effective_project_defaults(project)?
             .as_ref()
             .filter(|defaults| !defaults.coding_connection_id.is_empty())
         {
@@ -54,6 +54,7 @@ impl CleanStore {
             "development_attempts" => "SELECT payload FROM development_attempts",
             "project_conversations" => "SELECT payload FROM project_conversations",
             "projects" => "SELECT payload FROM projects",
+            "workspaces" => "SELECT payload FROM workspaces",
             _ => return Err(CleanStoreError::CorruptState),
         };
         let mut statement = self
@@ -107,6 +108,15 @@ impl CleanStore {
         Ok(false)
     }
     pub(crate) fn provider_connection_in_use(&self, id: &str) -> Result<bool, CleanStoreError> {
+        for payload in self.connection_payloads("workspaces")? {
+            let workspace = v1::Workspace::decode(payload.as_slice())
+                .map_err(|_| CleanStoreError::CorruptState)?;
+            if workspace.agent_defaults.is_some_and(|defaults| {
+                defaults.project_connection_id == id || defaults.coding_connection_id == id
+            }) {
+                return Ok(true);
+            }
+        }
         for payload in self.connection_payloads("projects")? {
             let project = v1::Project::decode(payload.as_slice())
                 .map_err(|_| CleanStoreError::CorruptState)?;

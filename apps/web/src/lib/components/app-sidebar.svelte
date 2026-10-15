@@ -13,14 +13,16 @@
   const sourceControlActive = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
   const registriesActive = $derived(page.url.pathname.startsWith("/container-registries"));
   const ayniActive = $derived(page.url.pathname.startsWith("/ayni") || page.url.pathname.startsWith("/certificates"));
+  const workspacesActive = $derived(page.url.pathname.startsWith("/workspaces"));
   const projectsActive = $derived(page.url.pathname.startsWith("/projects") || page.url.pathname.startsWith("/tasks"));
   const sourceControlConfiguration = $derived(page.data.sourceControlConfiguration);
   const registryConfiguration = $derived(page.data.registryConfiguration);
   const certificateConfiguration = $derived(page.data.certificateConfiguration);
   onMount(() => {
+    const workspaces = subscribeRefresh("app:workspaces", { intervalMs: 30_000 });
     const certificates = subscribeRefresh("app:certificates", { intervalMs: 30_000 });
     const connections = subscribeRefresh("app:connections", { intervalMs: 30_000 });
-    return () => { certificates(); connections(); };
+    return () => { workspaces(); certificates(); connections(); };
   });
 </script>
 
@@ -35,6 +37,7 @@
     <Sidebar.Group>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
+          <Sidebar.MenuItem><Sidebar.MenuButton isActive={workspacesActive} tooltipContent="Workspaces">{#snippet child({props})}<a {...props} onclick={()=>sidebar.setOpenMobile(false)} href="/workspaces" aria-current={workspacesActive?"page":undefined}><FolderGit2 aria-hidden="true" /><span>Workspaces</span></a>{/snippet}</Sidebar.MenuButton></Sidebar.MenuItem>
           <Sidebar.MenuItem>
             <Sidebar.MenuButton isActive={projectsActive} tooltipContent="Projects">
               {#snippet child({ props })}

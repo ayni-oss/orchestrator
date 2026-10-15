@@ -33,9 +33,9 @@ publication. Retry publication uses retained final work without another coding
 session; ordinary task retry creates a new attempt.
 
 The API exposes frozen task snapshots and attempt-owned worker progress, results
-and pull request receipts. SQLite schema version 19 retains preparation state,
+and pull request receipts. SQLite schema version 20 retains preparation state,
 authenticated result inboxes, accepted decisions, transactional outboxes and
-operator lifecycle facts. Recognized versions 6–18 migrate in order before
+operator lifecycle facts. Recognized versions 6–19 migrate in order before
 reconciliation; malformed retained state aborts the upgrade. Older and unknown
 versions are rejected. See [operations](../operations/operations.md) for upgrade
 and rollback requirements. Credentials remain separate inputs and are never worker output.
@@ -214,11 +214,34 @@ collection. Execution adapters must implement every capability explicitly; missi
 production behavior cannot inherit a successful default.
 
 
+## Workspace and project ownership
+
+Workspaces own shared repository membership and research/coding agent defaults.
+Each project belongs to one workspace and selects a nonempty subset of its
+repositories. It records a goal alongside its conversations and tasks. Repository
+connections continue to own runtimes; workspace membership never copies a runtime.
+
+Removing workspace membership preserves historical project selections and blocks
+new work against the removed repository. New project selections must be a subset
+of current workspace membership. Project defaults override workspace defaults;
+omitted project settings inherit them.
+Task admission freezes the effective selections, so later settings changes do not
+rewrite admitted work.
+
+### API and lifecycle
+
+`ProjectService` exposes workspace CRUD and assigns a workspace when legacy project
+creation omits one. Writes use durable idempotency
+keys and resource versions for optimistic concurrency. Archival preserves projects,
+conversations and task history while gating new project creation, research and
+execution admission. Already admitted work retains its frozen inputs.
+
 ## Project conversations
 
 The trusted operator API persists project conversations, research runs, task
-proposals, approval receipts and linked outcomes. Project settings select distinct
-research and coding connection/model defaults. OpenAI is the enabled provider;
+proposals, approval receipts and linked outcomes. Workspace settings select distinct
+research and coding connection/model defaults, with optional project overrides.
+OpenAI is the enabled provider;
 Anthropic and Bedrock cards confer no backend capability. The shared provider
 library constructs Rig clients without importing server or worker policy.
 

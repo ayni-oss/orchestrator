@@ -2,6 +2,8 @@ use super::*;
 
 fn project_request(repository: &str, key: &str) -> v1::CreateProjectRequest {
     v1::CreateProjectRequest {
+        workspace_id: String::new(),
+        goal: String::new(),
         idempotency_key: key.into(),
         display_name: "Payments".into(),
         repository_connection_id: repository.into(),
@@ -28,6 +30,7 @@ fn project_membership_archive_and_reonboarding_preserve_history() -> Result<(), 
         Err(CleanStoreError::IdempotencyConflict)
     ));
     let rename = v1::UpdateProjectRequest {
+        goal: None,
         agent_defaults: None,
         idempotency_key: "rename".into(),
         project_id: project.id.clone(),
@@ -232,6 +235,8 @@ fn shared_membership_edits_preserve_task_history_and_block_removed_retries()
     let shared = store.create_project(
         "shared",
         &v1::CreateProjectRequest {
+            workspace_id: String::new(),
+            goal: String::new(),
             idempotency_key: "shared".into(),
             display_name: "Shared".into(),
             repository_connection_id: String::new(),
@@ -255,6 +260,7 @@ fn shared_membership_edits_preserve_task_history_and_block_removed_retries()
     store.transition_attempt(&attempt.id, 1, v1::DevelopmentAttemptState::Running, None)?;
     store.transition_attempt(&attempt.id, 2, v1::DevelopmentAttemptState::Failed, None)?;
     let edit = v1::UpdateProjectRequest {
+        goal: None,
         agent_defaults: None,
         idempotency_key: "remove".into(),
         project_id: shared.id.clone(),
@@ -308,6 +314,7 @@ fn shared_membership_edits_preserve_task_history_and_block_removed_retries()
     store.update_project(
         "add",
         &v1::UpdateProjectRequest {
+            goal: None,
             agent_defaults: None,
             idempotency_key: "add".into(),
             project_id: shared.id.clone(),
@@ -339,6 +346,8 @@ fn project_membership_validation_rejects_duplicates_and_missing_connections()
     let repository =
         store.create_repository_connection("repo", &repository_request("repo", "123"))?;
     let mut request = v1::CreateProjectRequest {
+        workspace_id: String::new(),
+        goal: String::new(),
         idempotency_key: "project".into(),
         display_name: "Project".into(),
         repository_connection_id: String::new(),

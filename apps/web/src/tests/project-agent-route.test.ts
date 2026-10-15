@@ -1,7 +1,8 @@
 import {beforeEach,describe,expect,it,vi} from "vitest";
 const metadata={id:"conversation:1",projectId:"project:1",title:"Research",repositoryConnectionIds:["repository:1"],updateCursor:"4",createdAt:"2026-10-13T00:00:00Z",messages:[],runs:[],proposals:[]};
-const project={id:"project:1",displayName:"Project",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
-const bff=vi.hoisted(()=>({getProject:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
+const workspace={id:"workspace:1",displayName:"Workspace",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1",agentDefaults:{projectConnectionId:"workspace-connection",projectModel:"workspace-model",codingConnectionId:"workspace-connection",codingModel:"workspace-model"}};
+const project={workspaceId:"workspace:1",goal:"Complete work",id:"project:1",displayName:"Project",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
+const bff=vi.hoisted(()=>({getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[]}));
 import {load,actions} from "../routes/projects/[projectId]/+page.server.js";
@@ -12,7 +13,7 @@ function event(fields:Record<string,string>={}){
 }
 describe("project agent operator routes",()=>{
   beforeEach(()=>{
-    vi.clearAllMocks();bff.getProject.mockResolvedValue(project);bff.getRepositoryConnection.mockResolvedValue({id:"repository:1"});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[]});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page:{nextPageToken:""}});bff.listProviderModels.mockResolvedValue({models:[],provider:"openai"});bff.listConnections.mockResolvedValue([]);bff.listProjectConversations.mockResolvedValue([metadata]);bff.getProjectConversation.mockResolvedValue({...metadata,messages:[{id:"message:1",role:"assistant",content:"Full conversation history",createdAt:metadata.createdAt,runId:"run:1"}],proposals:[{id:"proposal:1",action:"create_task",state:"pending"}]});
+    vi.clearAllMocks();bff.getProject.mockResolvedValue(project);bff.getWorkspace.mockResolvedValue(workspace);bff.getRepositoryConnection.mockResolvedValue({id:"repository:1"});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[]});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page:{nextPageToken:""}});bff.listProviderModels.mockResolvedValue({models:[],provider:"openai"});bff.listConnections.mockResolvedValue([]);bff.listProjectConversations.mockResolvedValue([metadata]);bff.getProjectConversation.mockResolvedValue({...metadata,messages:[{id:"message:1",role:"assistant",content:"Full conversation history",createdAt:metadata.createdAt,runId:"run:1"}],proposals:[{id:"proposal:1",action:"create_task",state:"pending"}]});
   });
   it("loads selected conversation details separately from metadata-only history",async()=>{
     const result=await load(event()) as {conversation?:{messages:Array<{content:string}>}};

@@ -22,6 +22,7 @@ pub(super) fn page_items_decode(method: &str, items: &[Vec<u8>]) -> bool {
         "ListRepositoryConnections" => all_decode!(v1::RepositoryConnection),
         "ListRepositorySnapshots" => all_decode!(v1::RepositorySnapshot),
         "ListProjects" => all_decode!(v1::Project),
+        "ListWorkspaces" => all_decode!(v1::Workspace),
         "ListRuntimeProfiles" => all_decode!(v1::RuntimeProfile),
         "ListRuntimeProfileRevisions" => all_decode!(v1::RuntimeProfileRevision),
         "ListRuntimeArtifacts" => all_decode!(v1::RuntimeArtifact),

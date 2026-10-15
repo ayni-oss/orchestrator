@@ -38,7 +38,7 @@
 <div class="space-y-8">
 
   {#if data.project}
-    <PageHeader eyebrow={data.project.state === "archived" ? "Archived project" : "Project"} title={data.project.displayName} description="Repositories, environments, and task history.">{#snippet actions()}{#if data.project?.state === "active"}<Button onclick={() => newTask=true}>New task</Button>
+    <PageHeader eyebrow={data.project.state === "archived" ? "Archived project" : "Project"} title={data.project.displayName} description={data.project.goal}>{#snippet actions()}{#if data.project?.state === "active" && data.workspace?.state === "active"}<Button onclick={() => newTask=true}>New task</Button>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={`${data.project.displayName} project actions`}><EllipsisVertical aria-hidden="true" /></Button>{/snippet}</DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" preventScroll={false}>
@@ -46,8 +46,9 @@
           <DropdownMenu.Item onSelect={() => archiveProject=true}>Archive</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>{/if}{/snippet}</PageHeader>
+    {#if data.workspace}<p class="text-sm text-muted-foreground">Workspace: <a class="underline" href={`/workspaces/${encodeURIComponent(data.workspace.id)}`}>{data.workspace.displayName}</a>{#if data.workspace.state === "archived"} · Archived: new work is disabled.{/if}</p>{/if}
     {#key `${data.project.id}-${data.conversation?.id??""}`}<ProjectConversation {data} />{/key}
-    {#if data.project.state === "active"}{#key data.project.id}<ProjectAgentSettings project={data.project} connections={data.llmConnections} catalogues={data.connectionModels} idempotencyKey={data.idempotencyKey} />{/key}{/if}
+    {#if data.project.state === "active" && data.workspace?.state === "active"}{#key data.project.id}<ProjectAgentSettings project={data.project} inherited={!data.overrides} workspaceId={data.workspace?.id} connections={data.llmConnections} catalogues={data.connectionModels} idempotencyKey={data.idempotencyKey} />{/key}{/if}
     <section class="space-y-4"><h2 class="text-lg font-semibold">Tasks</h2>{#if data.project.state === "archived"}<p>New tasks and retries are disabled for this archived project.</p>{/if}<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each data.tasks as task (task.id)}<Card.Root><Card.Header><Card.Title class="text-base"><a href={`/tasks/${encodeURIComponent(task.id)}`} class="hover:underline">{task.snapshot.request}</a></Card.Title><Card.Description>{data.repositories.find(repo=>repo.id===task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</Card.Description></Card.Header><Card.Content class="space-y-3 text-sm"><StatusBadge status={task.state} tone={statusTone(task.state)} /><p class="text-muted-foreground">Created {formatDate(task.createdAt)}</p><p class="text-muted-foreground">Usage and PR results available in task details</p></Card.Content></Card.Root>{:else}<p class="text-sm text-muted-foreground">No tasks yet.</p>{/each}
     </div>{#if data.nextPageToken}<Button variant="outline" href={`?pageToken=${encodeURIComponent(data.nextPageToken)}`}>More tasks</Button>{/if}</section>
@@ -72,6 +73,8 @@
           <Dialog.Header><Dialog.Title>Edit project</Dialog.Title><Dialog.Description>Membership changes retain task history. Removing a repository prevents new tasks and retries for it in this project.</Dialog.Description></Dialog.Header>
           <form use:enhance={() => async ({ result, update }) => { if(result.type === "success"){await closeEditor();editing=false;} await update({reset:false}); }} method="POST" action="?/update" class="space-y-3">
             <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.project.resourceVersion} />
+            <input type="hidden" name="workspaceId" value={data.project.workspaceId} />
+            <Label for="goal">Goal</Label><Input id="goal" name="goal" value={data.project.goal} required maxlength={16384} />
             <Label for="name">Project name</Label><Input id="name" name="displayName" value={data.project.displayName} required maxlength={256} />
             <Label for="members">Repositories</Label><RepositoryPicker id="members" repositories={data.choices} value={selectedMembers} onchange={value => {members=value;editing=true;}} />
             <Dialog.Footer><Button type="button" variant="outline" onclick={() => editProject=false}>Cancel</Button><Button type="submit">Save settings</Button></Dialog.Footer>
@@ -88,6 +91,6 @@
         </Dialog.Content>
       </Dialog.Root>
     {/if}
-    <Dialog.Root bind:open={newTask} onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>New task</Dialog.Title><Dialog.Description>Choose a repository and describe the work for {data.project.displayName}.</Dialog.Description></Dialog.Header><NewTaskForm project={data.project} repositories={data.repositories} profiles={data.profiles} models={data.models} connections={data.llmConnections} catalogues={data.connectionModels} provider={data.provider} idempotencyKey={data.taskKey} onSubmitted={closeTask} /></Dialog.Content></Dialog.Root>
+    <Dialog.Root bind:open={newTask} onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>New task</Dialog.Title><Dialog.Description>Choose a repository and describe the work for {data.project.displayName}.</Dialog.Description></Dialog.Header><NewTaskForm project={data.project} repositories={data.repositories.filter(repository=>data.workspace?.repositoryConnectionIds.includes(repository.id))} profiles={data.profiles} models={data.models} connections={data.llmConnections} catalogues={data.connectionModels} provider={data.provider} idempotencyKey={data.taskKey} onSubmitted={closeTask} /></Dialog.Content></Dialog.Root>
   {/if}
 </div>

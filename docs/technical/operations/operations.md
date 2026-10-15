@@ -14,7 +14,7 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Schema 19 is the current database format. Recognized schemas 6–18 migrate in
+Schema 20 is the current database format. Recognized schemas 6–19 migrate in
 order before reconciliation. It retains typed preparation, authenticated
 verification/runtime-operation/coding inboxes, accepted decisions, outbox retry
 and acknowledgement state, and operator lifecycle journal/outbox records.
@@ -34,6 +34,29 @@ accepted runtime activation and its durable cleanup intent now precede workload
 cleanup; cleanup completion cannot overwrite a replacement generation. Credential cleanup retains revisions
 referenced by preparation as well as pending Jobs, then releases preparation
 references once activation and workload cleanup complete.
+
+## Workspace ownership upgrade
+
+The schema-19 to schema-20 migration assigns each retained project a workspace,
+using `workspace-<project-id>` as its stable identifier. Repository membership,
+lifecycle state and timestamps carry over; agent defaults move to the workspace
+and the project inherits them.
+
+Existing project IDs, conversations, proposals, tasks and frozen execution inputs
+stay intact. Existing projects have an empty goal until edited. The migration
+creates no repository runtimes and reruns no work.
+
+### Upgrade procedure
+
+1. Back up and quiesce the database as described above.
+2. Upgrade the control plane, generated clients, BFF and UI together.
+3. Verify workspace membership and inherited agent settings after upgrading.
+   Preserve retained state when creating workspaces.
+
+Workspace writes use resource versions; refresh after a stale-write error.
+`dev/ctl test workspaces CONTROL_PLANE_IMAGE WEB_IMAGE` exercises ownership
+and restart persistence against the local Helm chart in an isolated Docker Desktop
+namespace, with runtime execution disabled.
 
 ## Historical builder cutover
 
