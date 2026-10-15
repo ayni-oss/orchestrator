@@ -32,6 +32,7 @@ pub(super) fn fixture(workspace: &Path) -> io::Result<WorkerSpec> {
         ],
     )?;
     Ok(WorkerSpec {
+        profile: None,
         task_id: "task-test".into(),
         attempt_id: "attempt-test".into(),
         execution: ExecutionRequest {

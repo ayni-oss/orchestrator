@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
+import "ayni/orchestrator/v1/agent_profiles.proto";
 import "ayni/orchestrator/v1/common.proto";
 import "ayni/orchestrator/v1/runtime_profiles.proto";
 import "google/protobuf/duration.proto";
@@ -148,6 +149,7 @@ message DevelopmentSnapshot {
   string publication_base_branch = 9;
   FrozenProviderCredentials provider_credentials = 10;
   TaskOrigin origin = 11;
+  FrozenAgentProfile agent_profile = 12;
 }
 
 // ProviderTokenUsage preserves independent counters; absence never means zero.

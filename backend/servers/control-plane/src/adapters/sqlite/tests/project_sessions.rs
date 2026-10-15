@@ -16,6 +16,36 @@ fn setup_session() -> Result<(CleanStore, v1::ProjectConversation), CleanStoreEr
             repository_connection_ids: vec![repository.id],
         },
     )?;
+    store.save_connection(&v1::Connection {
+        id: "connection".into(),
+        kind: "openai".into(),
+        resource_version: 1,
+        enabled: true,
+        status: "ready".into(),
+        secret_name: "planner-model".into(),
+        secret_uid: "model-uid".into(),
+        observed_revision: "1".into(),
+        ..Default::default()
+    })?;
+    let project = store.project(&c.project_id)?;
+    let workspace = store.workspace(&project.workspace_id)?;
+    store.update_workspace(
+        "session-agent-defaults",
+        &v1::UpdateWorkspaceRequest {
+            idempotency_key: "session-agent-defaults".into(),
+            workspace_id: workspace.id,
+            expected_resource_version: workspace.resource_version,
+            display_name: workspace.display_name,
+            agent_defaults: Some(v1::ProjectAgentDefaults {
+                project_connection_id: "connection".into(),
+                project_model: "model".into(),
+                coding_connection_id: "connection".into(),
+                coding_model: "model".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )?;
     Ok((store, c))
 }
 fn enqueue(
@@ -35,6 +65,11 @@ fn enqueue(
         secret_uid: "model-uid".into(),
         credential_revision: revision.into(),
     };
+    let mut provider = store.get_connection(&binding.connection_id)?;
+    if provider.observed_revision != revision {
+        provider.observed_revision = revision.into();
+        store.save_connection(&provider)?;
+    }
     store.send_project_message(
         id,
         &message,
@@ -434,6 +469,8 @@ fn schema_twenty_two_upgrade_preserves_legacy_frozen_requests_and_receipts()
     };
     store.send_project_message("legacy", &request, legacy)?;
     let frozen = ayni_orchestrator_runtime::project_agent::ProjectAgentRequest {
+        worker_profile: None,
+        profile: None,
         run_id: "legacy-run".into(),
         project_id: c.project_id.clone(),
         model: "legacy-model".into(),

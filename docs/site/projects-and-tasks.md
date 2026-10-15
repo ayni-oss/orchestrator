@@ -34,6 +34,19 @@ workspace settings, choose separate models for repository research and coding.
 Projects inherit these settings and can override them in project settings.
 Anthropic Claude and AWS Bedrock are shown as unavailable.
 
+In **Agent capability profiles**, workspace settings can select instructions,
+pinned skill revisions, tools, repository scope and budget ceilings for the planner
+and worker. Project settings can narrow those selections and add project
+instructions. Model choices remain separate. Leave inheritance enabled to use
+workspace or application capabilities.
+
+New research turns and tasks freeze their effective profiles. Inspect the frozen
+revision in research-run details or task details. Later settings changes apply to
+new work. If the worker profile changes before a plan is approved, request fresh
+research and review the new plan. Instructions and skills cannot grant permissions;
+never put credential values in them. The planner can read scoped source and prepare
+proposals. Worker tools stay within the approved task and sandbox.
+
 Start a conversation and choose the repositories it can research. Describe the
 outcome you want. The project agent reads an immutable checkout and asks for missing
 requirements. It cannot edit the checkout or execute repository code. Research can

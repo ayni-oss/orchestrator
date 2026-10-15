@@ -132,6 +132,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl test plans CP WEB` | Validate plan review, approval replay, migration and restart persistence in a disposable namespace |
 | `dev/ctl test worker-evidence CP WEB` | Validate accepted worker evidence, origin backfill, retries and restart persistence in a disposable namespace |
 | `dev/ctl test context CP WEB` | Validate older context retrieval, scope, migration, replay and restart persistence in a disposable namespace |
+| `dev/ctl test agent-profiles CP WEB WORKER` | Validate frozen profiles and real planner tool registration in a disposable namespace |
 | `dev/ctl test sessions CP WEB WORKER` | Validate resident planner reuse, expiry, recreation, rotation, cancellation and recovery in a disposable namespace |
 | `dev/ctl test workspaces CP WEB` | Validate workspace ownership, admission and persistence across a control-plane restart in a disposable namespace |
 | `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
@@ -188,7 +189,7 @@ managed runtime defaults to native `linux/arm64` and disables architecture emula
 Intel hosts must select `linux/amd64` explicitly. A connection test requires
 `connections.testImage` set to a digest-pinned control-plane image.
 
-Recognized SQLite schemas 6–23 migrate to schema 24 before reconciliation. Back up
+Recognized SQLite schemas 6–24 migrate to schema 25 before reconciliation. Back up
 and quiesce state before upgrading; malformed or unsupported state aborts startup.
 Follow the [upgrade procedure](../docs/technical/operations/operations.md) and obtain
 explicit approval before deleting application data. Runtime outputs and

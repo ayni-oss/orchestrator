@@ -12,7 +12,7 @@ use std::{
 
 pub const CHECK_RESERVE_SECONDS: u64 = 180;
 pub const PUBLICATION_RESERVE_SECONDS: u64 = 90;
-pub const INSTRUCTIONS: &str = "Read AGENTS.md and repository instructions. Make only the requested changes within the frozen constraints. Use ayni_verify for focused feedback and ayni_check for full checking. Never weaken .ayni.toml or .ayni.lock to silence findings. Use commit_changes for coherent feature milestones and actual quality repairs, with meaningful Conventional Commit subjects. The worker always runs a mandatory full check after you finish; complete your implementation and explain what changed. Do not access provider APIs, push branches or create PRs; the worker handles delivery. If essential information is missing respond INPUT_REQUIRED: followed by one concrete question.";
+pub use ayni_orchestrator_runtime::agent_profile::WORKER_INSTRUCTIONS as INSTRUCTIONS;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -48,6 +48,12 @@ pub struct Context {
     pub activity: ActivityLog,
 }
 impl Context {
+    pub fn authorize(&self, tool: &str) -> io::Result<()> {
+        if let Some(profile) = &self.spec.profile {
+            profile.authorize(tool, None)?;
+        }
+        Ok(())
+    }
     pub fn remaining(&self) -> io::Result<Duration> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

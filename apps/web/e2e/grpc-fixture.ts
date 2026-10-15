@@ -1,3 +1,4 @@
+import {effectiveProfiles,freezeProfile} from "./agent-profile-fixture.js";
 import {setWorkerEvidence} from "./worker-evidence-fixture.js";
 import { createServer } from "node:http";
 import { Server, ServerCredentials, status, type ServerWritableStream, type UntypedServiceImplementation } from "@grpc/grpc-js";
@@ -346,13 +347,13 @@ grpc.addService(ProjectConversationServiceService,{
   listProjectConversations(_call:any,callback:any){callback(null,{conversations:conversations.map(c=>ProjectConversation.fromPartial({id:c.id,projectId:c.projectId,title:c.title,repositoryConnectionIds:c.repositoryConnectionIds,updateCursor:c.updateCursor,createdAt:c.createdAt}))});},
   getProjectConversation(call:any,callback:any){if(conversationUnavailable)return callback({code:status.UNAVAILABLE,message:"Conversations temporarily unavailable"});const c=conversations.find(c=>c.id===call.request.conversationId);if(!c)return callback({code:status.NOT_FOUND,message:"Conversation not found"});callback(null,{conversation:{...conversationProjection(c),messages:c.messages.slice(-32)}});},
   sendProjectMessage(call:any,callback:any){
-    const defaults=project.agentDefaults??workspace.agentDefaults;
+    const defaults=effectiveProfiles(project.agentDefaults,workspace.agentDefaults)!;
     const c=conversations.find(c=>c.id===call.request.conversationId)!;
     c.messages.push({id:`message:${c.messages.length+1}`,role:"user",content:call.request.content,createdAt:now,runId:""});
     const runId=`run:${c.runs.length+1}`;
     const generation=c.plannerSession?.state==="idle"?c.plannerSession.generation:String(Number(c.plannerSession?.generation??0)+1);
     c.plannerSession={sessionId:`session:${c.id}`,generation,state:"idle",activeRunId:"",lastActivityAt:now,idleExpiresAt:new Date(now.getTime()+(c.plannerIdleTimeoutSeconds??workspace.plannerIdleTimeoutSeconds??300)*1000)};
-    c.runs.push({sessionId:c.plannerSession.sessionId,sessionGeneration:generation,sessionTurnSequence:String(c.runs.length+1),sessionManaged:true,id:runId,state:"completed",model:defaults.projectModel,connectionId:defaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
+    c.runs.push({plannerProfile:freezeProfile(defaults,"planner",c.repositoryConnectionIds),workerProfile:freezeProfile(defaults,"worker",c.repositoryConnectionIds),sessionId:c.plannerSession.sessionId,sessionGeneration:generation,sessionTurnSequence:String(c.runs.length+1),sessionManaged:true,id:runId,state:"completed",model:defaults.projectModel,connectionId:defaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
     c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"I read the repository instructions and implementation. Review the complete task plan below.",createdAt:now,runId});
     c.proposals.push({id:`proposal:${c.proposals.length+1}`,runId,state:"pending",action:"create_task",targetTaskId:"",taskId:"",attemptId:"",failure:"",request:{projectId:project.id,repositoryConnectionId:c.repositoryConnectionIds[0]!,repositoryRevision:revision,runtimeProfileId:profileId,connectionId:defaults.codingConnectionId,agent:{provider:"openai",agent:"coding-agent",model:call.request.content.includes("model gpt-5.6-luna")?"gpt-5.6-luna":defaults.codingModel},request:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],codingTurns:24,changeConstraints:{protectedPaths:["policy.toml"],allowTestEdits:true},deadline:{seconds:"3600",nanos:0}}});
     c.plan??={id:`plan:${c.id}`,versions:[]};
@@ -371,6 +372,7 @@ grpc.addService(ProjectConversationServiceService,{
       if(v.state==="approved"){
         const id=proposalTasks.get(p.id)??`00000000-0000-4000-8000-${String(50+proposalTasks.size).padStart(12,"0")}`;proposalTasks.set(p.id,id);
         const created=task(id,DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED,p.request!.request);
+        created.snapshot.agentProfile=c.runs.find(r=>r.id===v.runId)?.workerProfile;
         created.snapshot.origin={projectId:c.projectId,conversationId:c.id,planId:c.plan!.id,planVersion:v.version,proposalId:p.id,researchRunId:v.runId};
         tasks.set(id,created);p.taskId=id;p.attemptId=`attempt:${id}`;setWorkerEvidence(c,created,"failed_quality");
       }

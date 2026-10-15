@@ -156,6 +156,11 @@ impl CleanStore {
                 .clone_from(&request.repository_connection_ids);
         }
         if let Some(defaults) = &request.agent_defaults {
+            self.validate_agent_defaults(Some(defaults))?;
+            super::agent_profiles::validate_profile_scopes(
+                Some(defaults),
+                &project.repository_connection_ids,
+            )?;
             for (connection, model) in [
                 (&defaults.project_connection_id, &defaults.project_model),
                 (&defaults.coding_connection_id, &defaults.coding_model),
@@ -173,6 +178,7 @@ impl CleanStore {
                 }
             }
             project.agent_defaults = Some(defaults.clone());
+            self.effective_project_defaults(&project)?;
         }
         self.save_project("UpdateProject", key, request, &project, false)?;
         Ok(project)

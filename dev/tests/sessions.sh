@@ -195,6 +195,28 @@ project=$(jq -r '.projectId' "$scratch/state.json")
 seed; start
 printf '%s\n' 'Control-plane phase uses valid pre-frozen empty-repository fixture requests; normal GitHub admission is covered separately.'
 wait_state '.conversation.plannerSession.state=="idle" and (.conversation.runs|all(.state!="queued" and .state!="running"))'
+if [[ "${AYNI_SESSION_FIXTURE_PROFILES:-}" == 1 ]]; then
+  first_revision=$(jq -r '.conversation.runs[0].plannerProfile.revision' "$scratch/conversation.json")
+  jq -e '.conversation.runs[0].plannerProfile as $p | $p.role=="planner" and $p.policyRevision=="builtin-role-v1" and $p.settings.allowedTools==["inspect_project_context"] and $p.settings.skills[0].revision=="v1"' "$scratch/conversation.json" >/dev/null
+  curl --fail --silent "http://127.0.0.1:$stub_port/fixture/profile" | jq -e '.tools==["inspect_project_context"] and .revisionTwo==false' >/dev/null
+  stop; snapshot; mutate profiles; seed; start
+  get > "$scratch/unchanged-profile.json"
+  jq -e --arg revision "$first_revision" '.conversation.runs[0].plannerProfile.revision==$revision' "$scratch/unchanged-profile.json" >/dev/null
+  stop; snapshot; mutate next; seed; start
+  wait_state '.conversation.plannerSession.state=="idle" and (.conversation.runs|length)==2 and (.conversation.runs|all(.state=="completed"))'
+  jq -e --arg revision "$first_revision" '.conversation.runs[0].plannerProfile.revision==$revision and .conversation.runs[1].plannerProfile.revision!=$revision and .conversation.runs[1].plannerProfile.settings.skills[0].revision=="v2"' "$scratch/conversation.json" >/dev/null
+  curl --fail --silent "http://127.0.0.1:$stub_port/fixture/profile" | jq -e '.tools==["inspect_project_context"] and .revisionTwo==true' >/dev/null
+  workspace=$(jq -r '.workspaceId' "$scratch/state.json")
+  grpcurl -plaintext -max-time 10 -d "$(jq -nc --arg id "$workspace" '{workspaceId:$id}')" "127.0.0.1:$port" ayni.orchestrator.v1.ProjectService/GetWorkspace > "$scratch/workspace.json"
+  invalid=$(jq -c '{idempotencyKey:"fixture-forbidden-tool",workspaceId:.workspace.id,expectedResourceVersion:.workspace.resourceVersion,displayName:.workspace.displayName,agentDefaults:.workspace.agentDefaults}|.agentDefaults.plannerProfile.allowedTools=["run_command"]' "$scratch/workspace.json")
+  if grpcurl -plaintext -max-time 10 -d "$invalid" "127.0.0.1:$port" ayni.orchestrator.v1.ProjectService/UpdateWorkspace > "$scratch/rejected-profile.json" 2> "$scratch/rejected-profile-error"; then echo 'planner mutation capability was accepted' >&2; exit 1; fi
+  rg -q 'Code: FailedPrecondition' "$scratch/rejected-profile-error"
+  # The safe profile projection carries binding revisions, never credential values or Secret references.
+  jq -e '[.conversation.runs[]|{plannerProfile,workerProfile}]|tostring|contains("fixture-session-key")|not' "$scratch/conversation.json" >/dev/null
+  jq -e '[.conversation.runs[]|{plannerProfile,workerProfile}]|tostring|test("secretName|secretUid")|not' "$scratch/conversation.json" >/dev/null
+  echo 'Agent profiles passed: real resident model dispatch exposes only authorized tools; revisions and skills freeze across settings changes/restart; invalid planner mutation capabilities are rejected.'
+  exit 0
+fi
 workspace=$(jq -r '.workspaceId' "$scratch/state.json")
 grpcurl -plaintext -max-time 10 -d "$(jq -nc --arg id "$workspace" '{workspaceId:$id}')" "127.0.0.1:$port" ayni.orchestrator.v1.ProjectService/GetWorkspace > "$scratch/workspace.json"
 jq -e '.workspace.plannerIdleTimeoutSeconds==300' "$scratch/workspace.json" >/dev/null

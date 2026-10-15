@@ -26,7 +26,7 @@ Local Docker Desktop development:
   purge NAMESPACE              Permanently delete an owned local namespace
   render CP WORKER_DIGEST WEB   Render the complete development chart
   dependencies                 Build locked Helm dependencies
-  test NAME                    Run: observability, custom-clients, jetstream, outbox, consumer, recovery, workspaces, plans, context, sessions or worker-evidence
+  test NAME                    Run: observability, custom-clients, jetstream, outbox, consumer, recovery, workspaces, plans, context, sessions, agent-profiles or worker-evidence
   help                         Show this help
 
 The default private env file is dev/.env. Override it with --env-file or set
@@ -183,14 +183,15 @@ case "$command" in
     ;;
   test)
     test_name="${1:-}"
-    [[ $# -eq 1 || ( $# -eq 4 && "$test_name" == sessions ) || ( $# -eq 3 && ( "$test_name" == outbox || "$test_name" == consumer || "$test_name" == recovery || "$test_name" == workspaces || "$test_name" == plans || "$test_name" == context || "$test_name" == worker-evidence ) ) ]] || {
-      echo "usage: dev/ctl test {observability|custom-clients|jetstream|outbox|consumer|recovery|workspaces|plans|context|sessions|worker-evidence}" >&2
+    [[ $# -eq 1 || ( $# -eq 4 && ( "$test_name" == sessions || "$test_name" == agent-profiles ) ) || ( $# -eq 3 && ( "$test_name" == outbox || "$test_name" == consumer || "$test_name" == recovery || "$test_name" == workspaces || "$test_name" == plans || "$test_name" == context || "$test_name" == worker-evidence ) ) ]] || {
+      echo "usage: dev/ctl test {observability|custom-clients|jetstream|outbox|consumer|recovery|workspaces|plans|context|sessions|agent-profiles|worker-evidence}" >&2
       exit 2
     }
     case "$test_name" in
       observability) "$scripts/check.sh" --observability-only ;;
       custom-clients) "$tests/check-custom-clients.sh" ;;
       jetstream) "$tests/jetstream.sh" ;;
+      agent-profiles) AYNI_SESSION_FIXTURE_PROFILES=1 "$tests/sessions.sh" "${2:?control-plane image required}" "${3:?web image required}" "${4:?worker image required}" ;;
       sessions) "$tests/sessions.sh" "${2:?control-plane image required}" "${3:?web image required}" "${4:?worker image required}" ;;
       outbox|consumer|recovery|workspaces|plans|context|worker-evidence) "$tests/$1.sh" "${2:?control-plane image required}" "${3:?web image required}" ;;
       *)

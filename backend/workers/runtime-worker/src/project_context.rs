@@ -6,7 +6,10 @@ use serde_json::{Value, json};
 use std::{collections::BTreeSet, io, sync::Arc};
 
 #[derive(Clone, Default)]
-pub(super) struct Archive(Option<Arc<Bundle>>);
+pub(super) struct Archive(
+    Option<Arc<Bundle>>,
+    Option<ayni_orchestrator_runtime::agent_profile::FrozenProfile>,
+);
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Bundle {
@@ -114,7 +117,7 @@ fn validate_summary(bundle: &Bundle) -> io::Result<()> {
 impl Archive {
     pub(super) fn from_request(request: &ProjectAgentRequest) -> io::Result<Self> {
         if request.conversation_context.is_null() {
-            return Ok(Self::default());
+            return Ok(Self(None, request.profile.clone()));
         }
         if serde_json::to_vec(&request.conversation_context)
             .map_err(|_| invalid())?
@@ -128,7 +131,7 @@ impl Archive {
         validate_bundle_scope(&bundle, request)?;
         validate_records(&bundle)?;
         validate_summary(&bundle)?;
-        Ok(Self(Some(Arc::new(bundle))))
+        Ok(Self(Some(Arc::new(bundle)), request.profile.clone()))
     }
     fn result(&self, records: &[&Record], truncated: bool) -> Value {
         let Some(bundle) = &self.0 else {
@@ -211,6 +214,9 @@ impl Tool for SearchContext {
         json!({"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["query","limit"],"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, args: SearchArgs) -> io::Result<Value> {
+        if let Some(profile) = &self.0.1 {
+            profile.authorize(Self::NAME, None)?;
+        }
         self.0.search(&args)
     }
 }
@@ -228,6 +234,9 @@ impl Tool for GetContextRecord {
         json!({"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, args: GetArgs) -> io::Result<Value> {
+        if let Some(profile) = &self.0.1 {
+            profile.authorize(Self::NAME, None)?;
+        }
         self.0.get(&args)
     }
 }

@@ -195,6 +195,7 @@ export interface ProjectWorkerUpdateDto {
   failure:string; updatedAt?:string|undefined;
 }
 export interface DevelopmentSnapshotDto {
+  agentProfile?:FrozenAgentProfileDto;
   origin?:TaskOriginDto;
   providerBinding?: {connectionId:string;credentialRevision:string};
   repository: FrozenRepositoryDto;
@@ -298,7 +299,17 @@ export interface RequestContext {
   deadlineMs?: number;
 }
 
+export interface AgentProfileSettingsDto {
+  instructions:string; skills:Array<{id:string;revision:string;instructions:string}>;
+  allowedTools:string[]; repositoryIds:string[]; maxModelCalls:number; deadlineSeconds:string;
+}
+export interface FrozenAgentProfileDto {
+  revision:string;policyRevision:string;systemInstructions:string;role:string;provider:string;connectionId:string;credentialRevision:string;model:string;
+  repositoryIds:string[];settings:AgentProfileSettingsDto;
+}
 export interface ProjectAgentDefaultsDto {
+  plannerProfile?:AgentProfileSettingsDto|undefined;
+  workerProfile?:AgentProfileSettingsDto|undefined;
   projectConnectionId: string;
   projectModel: string;
   codingConnectionId: string;
@@ -383,7 +394,7 @@ export interface ProjectConversationDto {
   updateCursor: string;
   createdAt: string;
   messages: Array<{id:string;role:string;content:string;createdAt:string;runId:string}>;
-  runs: Array<{id:string;state:string;model:string;connectionId:string;modelCalls:number;failure:string;usage?:{inputTokens:string|undefined;outputTokens:string|undefined;totalTokens:string|undefined}}>;
+  runs: Array<{plannerProfile?:FrozenAgentProfileDto;workerProfile?:FrozenAgentProfileDto;id:string;state:string;model:string;connectionId:string;modelCalls:number;failure:string;usage?:{inputTokens:string|undefined;outputTokens:string|undefined;totalTokens:string|undefined}}>;
   proposals: Array<{id:string;runId:string;state:string;action:string;targetTaskId:string;taskId:string;attemptId:string;failure:string;runtime?:{profileRevisionId:string;artifactId:string;image:string;digest:string};request?:DevelopmentTaskInputDto}>;
 }
 

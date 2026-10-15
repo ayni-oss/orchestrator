@@ -1,6 +1,7 @@
 syntax = "proto3";
 package ayni.orchestrator.v1;
 
+import "ayni/orchestrator/v1/agent_profiles.proto";
 import "ayni/orchestrator/v1/development_tasks.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -59,6 +60,8 @@ message ProjectAgentRun {
   uint64 session_turn_sequence = 14;
   google.protobuf.Timestamp session_deadline_at = 15;
   bool session_managed = 16;
+  FrozenAgentProfile planner_profile = 17;
+  FrozenAgentProfile worker_profile = 18;
 }
 message ProjectTaskProposal {
   string id = 1;

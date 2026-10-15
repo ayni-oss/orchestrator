@@ -3,6 +3,7 @@ import type {ProjectAgentDefaultsDto} from "@ayni-orchestrator/bff/server";
 export function effectiveAgentDefaults(overrides:ProjectAgentDefaultsDto|undefined,workspace:ProjectAgentDefaultsDto|undefined):ProjectAgentDefaultsDto|undefined {
   const project=overrides?.projectConnectionId?overrides:workspace;
   const coding=overrides?.codingConnectionId?overrides:workspace;
-  if(!project?.projectConnectionId&&!coding?.codingConnectionId)return undefined;
-  return {projectConnectionId:project?.projectConnectionId??"",projectModel:project?.projectModel??"",codingConnectionId:coding?.codingConnectionId??"",codingModel:coding?.codingModel??""};
+  const plannerProfile=overrides?.plannerProfile??workspace?.plannerProfile,workerProfile=overrides?.workerProfile??workspace?.workerProfile;
+  if(!project?.projectConnectionId&&!coding?.codingConnectionId&&!plannerProfile&&!workerProfile)return undefined;
+  return {plannerProfile,workerProfile,projectConnectionId:project?.projectConnectionId??"",projectModel:project?.projectModel??"",codingConnectionId:coding?.codingConnectionId??"",codingModel:coding?.codingModel??""};
 }

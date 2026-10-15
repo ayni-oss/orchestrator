@@ -12,3 +12,5 @@ pub mod verification;
 pub mod operation;
 
 pub mod project_agent;
+
+pub mod agent_profile;

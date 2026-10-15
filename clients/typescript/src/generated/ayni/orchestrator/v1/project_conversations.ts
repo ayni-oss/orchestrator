@@ -21,6 +21,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
+import { FrozenAgentProfile } from "./agent_profiles";
 import {
   DevelopmentAttemptState,
   developmentAttemptStateFromJSON,
@@ -80,6 +81,8 @@ export interface ProjectAgentRun {
   sessionTurnSequence: string;
   sessionDeadlineAt?: Date | undefined;
   sessionManaged: boolean;
+  plannerProfile?: FrozenAgentProfile | undefined;
+  workerProfile?: FrozenAgentProfile | undefined;
 }
 
 export interface ProjectTaskProposal {
@@ -783,6 +786,8 @@ function createBaseProjectAgentRun(): ProjectAgentRun {
     sessionTurnSequence: "0",
     sessionDeadlineAt: undefined,
     sessionManaged: false,
+    plannerProfile: undefined,
+    workerProfile: undefined,
   };
 }
 
@@ -835,6 +840,12 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
     }
     if (message.sessionManaged !== false) {
       writer.uint32(128).bool(message.sessionManaged);
+    }
+    if (message.plannerProfile !== undefined) {
+      FrozenAgentProfile.encode(message.plannerProfile, writer.uint32(138).fork()).join();
+    }
+    if (message.workerProfile !== undefined) {
+      FrozenAgentProfile.encode(message.workerProfile, writer.uint32(146).fork()).join();
     }
     return writer;
   },
@@ -980,6 +991,22 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
             message.sessionManaged = reader.bool();
             continue;
           }
+          case 17: {
+            if (tag !== 138) {
+              break;
+            }
+
+            message.plannerProfile = FrozenAgentProfile.decode(reader, reader.uint32());
+            continue;
+          }
+          case 18: {
+            if (tag !== 146) {
+              break;
+            }
+
+            message.workerProfile = FrozenAgentProfile.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1054,6 +1081,16 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
         : isSet(object.session_managed)
         ? globalThis.Boolean(object.session_managed)
         : false,
+      plannerProfile: isSet(object.plannerProfile)
+        ? FrozenAgentProfile.fromJSON(object.plannerProfile)
+        : isSet(object.planner_profile)
+        ? FrozenAgentProfile.fromJSON(object.planner_profile)
+        : undefined,
+      workerProfile: isSet(object.workerProfile)
+        ? FrozenAgentProfile.fromJSON(object.workerProfile)
+        : isSet(object.worker_profile)
+        ? FrozenAgentProfile.fromJSON(object.worker_profile)
+        : undefined,
     };
   },
 
@@ -1107,6 +1144,12 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
     if (message.sessionManaged !== false) {
       obj.sessionManaged = message.sessionManaged;
     }
+    if (message.plannerProfile !== undefined) {
+      obj.plannerProfile = FrozenAgentProfile.toJSON(message.plannerProfile);
+    }
+    if (message.workerProfile !== undefined) {
+      obj.workerProfile = FrozenAgentProfile.toJSON(message.workerProfile);
+    }
     return obj;
   },
 
@@ -1135,6 +1178,12 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
     message.sessionTurnSequence = object.sessionTurnSequence ?? "0";
     message.sessionDeadlineAt = object.sessionDeadlineAt ?? undefined;
     message.sessionManaged = object.sessionManaged ?? false;
+    message.plannerProfile = (object.plannerProfile !== undefined && object.plannerProfile !== null)
+      ? FrozenAgentProfile.fromPartial(object.plannerProfile)
+      : undefined;
+    message.workerProfile = (object.workerProfile !== undefined && object.workerProfile !== null)
+      ? FrozenAgentProfile.fromPartial(object.workerProfile)
+      : undefined;
     return message;
   },
 };

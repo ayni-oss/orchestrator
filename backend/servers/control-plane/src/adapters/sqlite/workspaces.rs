@@ -83,6 +83,7 @@ impl CleanStore {
         } else {
             self.workspace(&project.workspace_id)?.agent_defaults
         };
+        let workspace_defaults = defaults.clone();
         if let Some(overrides) = &project.agent_defaults {
             let effective = defaults.get_or_insert_default();
             if !overrides.project_connection_id.is_empty() {
@@ -97,6 +98,13 @@ impl CleanStore {
                     .clone_from(&overrides.coding_connection_id);
                 effective.coding_model.clone_from(&overrides.coding_model);
             }
+        }
+        if let Some(effective) = defaults.as_mut() {
+            self.merge_agent_profiles(
+                workspace_defaults.as_ref(),
+                project.agent_defaults.as_ref(),
+                effective,
+            )?;
         }
         Ok(defaults)
     }
@@ -120,6 +128,16 @@ impl CleanStore {
         defaults: Option<&v1::ProjectAgentDefaults>,
     ) -> Result<(), CleanStoreError> {
         if let Some(defaults) = defaults {
+            crate::agent_profiles::selection(
+                defaults.planner_profile.as_ref(),
+                &ayni_orchestrator_runtime::agent_profile::Role::Planner,
+            )
+            .map_err(|_| CleanStoreError::InvalidTransition)?;
+            crate::agent_profiles::selection(
+                defaults.worker_profile.as_ref(),
+                &ayni_orchestrator_runtime::agent_profile::Role::Worker,
+            )
+            .map_err(|_| CleanStoreError::InvalidTransition)?;
             for (id, model) in [
                 (&defaults.project_connection_id, &defaults.project_model),
                 (&defaults.coding_connection_id, &defaults.coding_model),
@@ -151,6 +169,10 @@ impl CleanStore {
         }
         self.validate_workspace_members(&request.repository_connection_ids)?;
         self.validate_agent_defaults(request.agent_defaults.as_ref())?;
+        super::agent_profiles::validate_profile_scopes(
+            request.agent_defaults.as_ref(),
+            &request.repository_connection_ids,
+        )?;
         let now = timestamp(unix_seconds()?);
         let workspace = v1::Workspace {
             id: resource_id("workspace"),
@@ -208,6 +230,10 @@ impl CleanStore {
                 .clone_from(&request.repository_connection_ids);
         }
         if request.agent_defaults.is_some() {
+            super::agent_profiles::validate_profile_scopes(
+                request.agent_defaults.as_ref(),
+                &workspace.repository_connection_ids,
+            )?;
             self.validate_agent_defaults(request.agent_defaults.as_ref())?;
             workspace.agent_defaults.clone_from(&request.agent_defaults);
         }

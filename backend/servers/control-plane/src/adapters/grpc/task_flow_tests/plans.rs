@@ -100,6 +100,8 @@ async fn research_plan(
         store.save_project_run_request(
             &run.id,
             &ProjectAgentRequest {
+        worker_profile: None,
+            profile: None,
                 run_id: run.id.clone(),
                 project_id: conversation.project_id.clone(),
                 model: MODEL.into(),

@@ -1,3 +1,4 @@
+import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
 import {fail} from "@sveltejs/kit";
 import type {Actions,PageServerLoad} from "./$types";
 import type {ProviderModelPageDto} from "@ayni-orchestrator/bff/server";
@@ -19,6 +20,7 @@ export const load:PageServerLoad=async({locals,params,depends,setHeaders})=>{
   }catch(error){return {...base,workspace:undefined,repositories:[],projects:[],nextPageToken:"",connections:[],catalogues:{} as Record<string,ProviderModelPageDto>,error:safeError(error,locals.requestId)};}
 };
 export const actions:Actions={
+  agentProfiles:async event=>saveAgentProfiles(event,"workspace"),
   update:async event=>mutate(event,"update"),archive:async event=>mutate(event,"archive"),agentDefaults:async event=>mutate(event,"defaults"),
 };
 async function mutate({locals,params,request}:Parameters<NonNullable<Actions[string]>>[0],operation:"update"|"archive"|"defaults"){
@@ -38,7 +40,7 @@ async function mutate({locals,params,request}:Parameters<NonNullable<Actions[str
       const values=Object.fromEntries(fields.map(field=>[field,text(form,field,128)]));
       if(fields.some(field=>!values[field]))return fail(400,{error:{message:"Choose connections and available models for both agents.",requestId:locals.requestId}});
       const workspace=await bff.getWorkspace(input.workspaceId,ctx);
-      await bff.updateWorkspace({...input,displayName:workspace.displayName,agentDefaults:{projectConnectionId:values.projectConnectionId!,projectModel:values.projectModel!,codingConnectionId:values.codingConnectionId!,codingModel:values.codingModel!}},ctx);
+      await bff.updateWorkspace({...input,displayName:workspace.displayName,agentDefaults:{...workspace.agentDefaults,projectConnectionId:values.projectConnectionId!,projectModel:values.projectModel!,codingConnectionId:values.codingConnectionId!,codingModel:values.codingModel!}},ctx);
     }
     return {success:operation==="archive"?"Workspace archived. Project history is retained.":"Workspace settings updated."};
   }catch(error){const mapped=safeError(error,locals.requestId);return fail(mapped.status,{error:mapped});}

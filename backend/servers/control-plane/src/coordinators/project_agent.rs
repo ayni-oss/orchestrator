@@ -48,7 +48,7 @@ impl ProjectAgentReconciler {
         let Ok(_guard) = self.pass.try_lock() else {
             return;
         };
-        if let Err(error) = self.reconcile_pass().await {
+        if let Err(error) = Box::pin(self.reconcile_pass()).await {
             tracing::warn!(
                 reason_code = error,
                 "project research reconciliation deferred"
@@ -184,6 +184,16 @@ impl ProjectAgentReconciler {
         conversation: &v1::ProjectConversation,
         run: &v1::ProjectAgentRun,
     ) -> Result<ProjectAgentRequest, &'static str> {
+        if let Some(profile) = &run.planner_profile
+            && run.state == "queued"
+        {
+            let profile = profile.clone();
+            with_store_async(&self.state, move |s| {
+                s.validate_profile_connection(&profile)
+            })
+            .await
+            .map_err(|_| "project_model_binding_revoked")?;
+        }
         let id = run.id.clone();
         let existing = with_store_async(&self.state, move |s| s.project_run_request(&id))
             .await
@@ -203,17 +213,22 @@ impl ProjectAgentReconciler {
             }
         }
 
-        let project_id = conversation.project_id.clone();
-        let defaults = with_store_async(&self.state, move |store| {
-            let project = store.project(&project_id)?;
-            store.effective_project_defaults(&project)
-        })
-        .await
-        .map_err(|_| "project_store_unavailable")?
-        .ok_or("project_models_unconfigured")?;
+        let coding_connection = if let Some(profile) = &run.worker_profile {
+            profile.connection_id.clone()
+        } else {
+            let project_id = conversation.project_id.clone();
+            with_store_async(&self.state, move |store| {
+                let project = store.project(&project_id)?;
+                store.effective_project_defaults(&project)
+            })
+            .await
+            .map_err(|_| "project_store_unavailable")?
+            .ok_or("project_models_unconfigured")?
+            .coding_connection_id
+        };
         let catalog = self
             .state
-            .catalog_for_connection(&defaults.coding_connection_id)
+            .catalog_for_connection(&coding_connection)
             .await
             .map_err(|_| "project_coding_provider_unavailable")?;
         let models = catalog
@@ -324,9 +339,17 @@ fn prepare_request(
     source_snapshots: &BTreeMap<String, v1::RepositorySnapshot>,
 ) -> Result<ProjectAgentRequest, CleanStoreError> {
     let project = store.project(&c.project_id)?;
-    let defaults = store
-        .effective_project_defaults(&project)?
-        .ok_or(CleanStoreError::InvalidTransition)?;
+    let defaults = if let Some(worker) = &r.worker_profile {
+        v1::ProjectAgentDefaults {
+            coding_connection_id: worker.connection_id.clone(),
+            coding_model: worker.model.clone(),
+            ..Default::default()
+        }
+    } else {
+        store
+            .effective_project_defaults(&project)?
+            .ok_or(CleanStoreError::InvalidTransition)?
+    };
     let (repositories, context) = research_repositories(store, c, r, &defaults, source_snapshots)?;
     let tasks = store.list_development_tasks(
         Some(&c.project_id),
@@ -371,6 +394,12 @@ fn prepare_request(
         return Err(CleanStoreError::ContextBudget);
     }
     let request = ProjectAgentRequest {
+        worker_profile: r
+            .worker_profile
+            .as_ref()
+            .map(crate::agent_profiles::frozen)
+            .transpose()
+            .map_err(|_| CleanStoreError::CorruptState)?,
         run_id: r.id.clone(),
         project_id: c.project_id.clone(),
         model: r.model.clone(),
@@ -378,8 +407,22 @@ fn prepare_request(
         conversation_context,
         repositories,
         context,
-        max_model_calls: calls,
-        deadline_seconds: deadline,
+        profile: r
+            .planner_profile
+            .as_ref()
+            .map(crate::agent_profiles::frozen)
+            .transpose()
+            .map_err(|_| CleanStoreError::CorruptState)?,
+        max_model_calls: r
+            .planner_profile
+            .as_ref()
+            .and_then(|p| p.settings.as_ref())
+            .map_or(calls, |p| calls.min(p.max_model_calls)),
+        deadline_seconds: r
+            .planner_profile
+            .as_ref()
+            .and_then(|p| p.settings.as_ref())
+            .map_or(deadline, |p| deadline.min(p.deadline_seconds)),
     };
     if serde_json::to_vec(&request)
         .map_err(|_| CleanStoreError::CorruptState)?
@@ -560,6 +603,8 @@ mod tests {
             run.clone(),
         )?;
         let defaults = v1::ProjectAgentDefaults {
+            planner_profile: None,
+            worker_profile: None,
             project_connection_id: "project-provider".into(),
             project_model: "research-model".into(),
             coding_connection_id: "coding-provider".into(),
@@ -589,6 +634,8 @@ mod tests {
         assert!(repositories[0].runtime_profile_id.is_empty());
         assert!(context[0]["profiles"].as_array().is_some_and(Vec::is_empty));
         let request = ProjectAgentRequest {
+            worker_profile: None,
+            profile: None,
             run_id: run.id.clone(),
             project_id: conversation.project_id.clone(),
             model: run.model,
@@ -648,6 +695,7 @@ mod tests {
                     project_model: "workspace-research".into(),
                     coding_connection_id: "workspace-provider".into(),
                     coding_model: "workspace-coding".into(),
+                    ..Default::default()
                 }),
                 ..Default::default()
             },
@@ -740,6 +788,55 @@ mod tests {
         assert!(prompt.contains("question-15"));
         assert!(!prompt.contains("question-0"));
         assert!(prompt.contains("retrieve original archive records"));
+    }
+    #[test]
+    fn queued_research_uses_frozen_worker_bindings_without_reading_later_defaults()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use ayni_orchestrator_runtime::agent_profile::{FrozenProfile, Role, Settings};
+        let (mut store, repository, c) = plain_repository_fixture()?;
+        let source = store.observe_repository_snapshot(&repository.id, &"a".repeat(40))?;
+        let repositories = vec![repository.id.clone()];
+        let worker = FrozenProfile::freeze(
+            Role::Worker,
+            "original-worker".into(),
+            "original-revision".into(),
+            "original-model".into(),
+            Settings::defaults(&Role::Worker),
+            repositories.clone(),
+        )?;
+        let planner = FrozenProfile::freeze(
+            Role::Planner,
+            "original-planner".into(),
+            "original-revision".into(),
+            "planner-model".into(),
+            Settings::defaults(&Role::Planner),
+            repositories,
+        )?;
+        let run = v1::ProjectAgentRun {
+            id: "frozen-run".into(),
+            model: "planner-model".into(),
+            purpose: "research".into(),
+            planner_profile: Some(crate::agent_profiles::wire(&planner)),
+            worker_profile: Some(crate::agent_profiles::wire(&worker)),
+            ..Default::default()
+        };
+        let request = prepare_request(
+            &mut store,
+            &c,
+            &run,
+            4,
+            600,
+            "[]",
+            &BTreeMap::from([(repository.id, source)]),
+        )?;
+        request.validate_profile()?;
+        assert_eq!(
+            request.repositories[0].coding_connection_id,
+            "original-worker"
+        );
+        assert_eq!(request.repositories[0].coding_model, "original-model");
+        assert_eq!(request.worker_profile, Some(worker));
+        Ok(())
     }
 }
 

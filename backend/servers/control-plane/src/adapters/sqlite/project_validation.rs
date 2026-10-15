@@ -12,6 +12,19 @@ pub(super) fn valid_project(value: &v1::Project) -> bool {
         )
         && api_validation::project_members(&value.repository_connection_ids).is_ok()
         && value.agent_defaults.as_ref().is_none_or(|defaults| {
+            if crate::agent_profiles::selection(
+                defaults.planner_profile.as_ref(),
+                &ayni_orchestrator_runtime::agent_profile::Role::Planner,
+            )
+            .is_err()
+                || crate::agent_profiles::selection(
+                    defaults.worker_profile.as_ref(),
+                    &ayni_orchestrator_runtime::agent_profile::Role::Worker,
+                )
+                .is_err()
+            {
+                return false;
+            }
             [
                 (&defaults.project_connection_id, &defaults.project_model),
                 (&defaults.coding_connection_id, &defaults.coding_model),

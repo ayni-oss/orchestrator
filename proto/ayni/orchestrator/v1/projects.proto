@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
+import "ayni/orchestrator/v1/agent_profiles.proto";
 import "ayni/orchestrator/v1/common.proto";
 import "ayni/orchestrator/v1/development_tasks.proto";
 import "ayni/orchestrator/v1/repositories.proto";
@@ -137,6 +138,8 @@ message ProjectAgentDefaults {
   string project_model = 2;
   string coding_connection_id = 3;
   string coding_model = 4;
+  AgentProfileSettings planner_profile = 5;
+  AgentProfileSettings worker_profile = 6;
 }
 
 // Workspaces own shared repository access and agent defaults. Repository runtimes

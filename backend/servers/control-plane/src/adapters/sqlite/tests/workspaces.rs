@@ -168,6 +168,8 @@ fn workspace_defaults_are_inherited_by_pair_and_retained_as_connection_dependenc
         .map_err(CleanStoreError::Database)?;
     let mut request = workspace_request(vec![repository.id.clone()]);
     request.agent_defaults = Some(v1::ProjectAgentDefaults {
+        planner_profile: None,
+        worker_profile: None,
         project_connection_id: provider.id.clone(),
         project_model: "research-model".into(),
         coding_connection_id: provider.id.clone(),

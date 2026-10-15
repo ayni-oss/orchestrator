@@ -17,13 +17,6 @@ pub(crate) fn admission_error(error: AdmissionError<CleanStoreError>) -> CleanSt
     }
 }
 
-const fn to_wire_time(value: TimePoint) -> Timestamp {
-    Timestamp {
-        seconds: value.seconds,
-        nanos: value.nanos,
-    }
-}
-
 impl TaskRepository for CleanStore {
     type Error = CleanStoreError;
 
@@ -168,6 +161,8 @@ impl TaskRepository for CleanStore {
         {
             return Err(CleanStoreError::InvalidTransition);
         }
+        let (agent_profile, turns, deadline) =
+            self.freeze_task_agent(&frozen, &project, provider_credentials.as_ref(), created_at)?;
         let repository_id = frozen.repository_id;
         let profile_id = frozen.runtime.profile_id;
         let repository = self.repository_connection(&repository_id)?;
@@ -205,6 +200,7 @@ impl TaskRepository for CleanStore {
         });
         let snapshot = v1::DevelopmentSnapshot {
             origin: origin.clone(),
+            agent_profile: Some(agent_profile),
             repository: Some(v1::FrozenRepository {
                 repository_connection_id: repository_id.clone(),
                 repository_snapshot_id: frozen.snapshot_id,
@@ -246,17 +242,11 @@ impl TaskRepository for CleanStore {
                 protected_paths: c.protected_paths,
                 allow_test_edits: c.allow_test_edits,
             }),
-            deadline_at: frozen
-                .deadline_at
-                .map(to_wire_time)
-                .or_else(|| Some(timestamp(now + 3600))),
+            deadline_at: deadline,
             limits: Some(v1::WorkerLimits {
-                coding_turns: frozen.coding_turns.unwrap_or(self.coding_turns),
+                coding_turns: turns,
                 quality_repair_limit: self.quality_repair_limit,
-                deadline_at: frozen
-                    .deadline_at
-                    .map(to_wire_time)
-                    .or_else(|| Some(timestamp(now + 3600))),
+                deadline_at: deadline,
             }),
             publication_base_branch: frozen.base_branch,
             provider_credentials,
@@ -381,5 +371,54 @@ impl TaskRepository for CleanStore {
             task_id,
             attempt_id,
         })
+    }
+}
+
+impl CleanStore {
+    fn freeze_task_agent(
+        &self,
+        frozen: &FrozenTask,
+        project: &v1::Project,
+        provider_credentials: Option<&v1::FrozenProviderCredentials>,
+        created_at: TimePoint,
+    ) -> Result<(v1::FrozenAgentProfile, u32, Option<Timestamp>), CleanStoreError> {
+        let now = created_at.seconds;
+        let agent_profile = self.freeze_worker_profile(
+            project,
+            &frozen.repository_id,
+            frozen
+                .agent
+                .as_ref()
+                .map_or("unconfigured", |a| a.model.as_str()),
+            provider_credentials,
+            frozen.origin.as_ref(),
+        )?;
+        let settings = agent_profile
+            .settings
+            .as_ref()
+            .ok_or(CleanStoreError::CorruptState)?;
+        let ceiling =
+            i64::try_from(settings.deadline_seconds).map_err(|_| CleanStoreError::BoundExceeded)?;
+        let turns = frozen
+            .coding_turns
+            .unwrap_or_else(|| self.coding_turns.min(settings.max_model_calls));
+        let duration = frozen
+            .deadline_at
+            .map_or_else(|| 3600_i64.min(ceiling), |t| t.seconds - now);
+        if turns > settings.max_model_calls
+            || frozen.deadline_at.is_some_and(|deadline| {
+                (deadline.seconds, deadline.nanos) > (now + ceiling, created_at.nanos)
+            })
+        {
+            return Err(CleanStoreError::InvalidTransition);
+        }
+        let deadline = frozen
+            .deadline_at
+            .map(|t| Timestamp {
+                seconds: t.seconds,
+                nanos: t.nanos,
+            })
+            .or_else(|| Some(timestamp(now + duration)));
+        Ok((agent_profile, turns, deadline))
     }
 }

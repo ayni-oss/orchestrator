@@ -23,6 +23,8 @@ pub struct PublicationDestination {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerSpec<Profile> {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<crate::agent_profile::FrozenProfile>,
     pub task_id: String,
     pub attempt_id: String,
     pub execution: ExecutionRequest<Profile>,

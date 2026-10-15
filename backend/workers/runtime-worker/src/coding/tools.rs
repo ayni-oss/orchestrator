@@ -27,6 +27,7 @@ impl Tool for RunCommand {
         json!({"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, args: CommandArgs) -> io::Result<String> {
+        self.0.authorize(Self::NAME)?;
         let guard = self.0.serial.clone().lock_owned().await;
         if args.command.is_empty() || args.command.len() > 16384 {
             return Err(io::Error::other("command exceeds bound"));
@@ -168,6 +169,7 @@ impl Tool for AyniVerify {
         }
     }
     async fn call(&self, _: &mut ToolContext, args: VerifyArgs) -> io::Result<String> {
+        self.0.authorize(Self::NAME)?;
         let _guard = self.0.serial.lock().await;
         let report = crate::profiles::ayni::invoke(
             &self.0.spec.execution,
@@ -197,6 +199,7 @@ impl Tool for AyniCheck {
         json!({"type":"object","properties":{},"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, _: CheckArgs) -> io::Result<String> {
+        self.0.authorize(Self::NAME)?;
         let _guard = self.0.serial.lock().await;
         let report = crate::profiles::ayni::invoke(
             &self.0.spec.execution,
@@ -231,6 +234,7 @@ impl Tool for CommitChanges {
         json!({"type":"object","properties":{"message":{"type":"string"}},"required":["message"],"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, args: CommitArgs) -> io::Result<String> {
+        self.0.authorize(Self::NAME)?;
         let guard = self.0.serial.clone().lock_owned().await;
         self.0.coding_time()?;
         let context = self.0.clone();
