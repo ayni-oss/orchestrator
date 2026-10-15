@@ -37,6 +37,7 @@ mod tests {
         assert_eq!(
             services,
             BTreeSet::from([
+                "AgentProfileService",
                 "CertificateService",
                 "ConnectionService",
                 "DevelopmentTaskService",

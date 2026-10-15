@@ -11,11 +11,6 @@ impl CleanStore {
         effective: &mut v1::ProjectAgentDefaults,
     ) -> Result<(), CleanStoreError> {
         for role in [Role::Planner, Role::Worker] {
-            if workspace.and_then(|d| profile_setting(d, &role)).is_none()
-                && project.and_then(|d| profile_setting(d, &role)).is_none()
-            {
-                continue;
-            }
             let base = selection(workspace.and_then(|d| profile_setting(d, &role)), &role)
                 .map_err(|_| CleanStoreError::InvalidTransition)?;
             let profile = if let Some(selected) = project.and_then(|d| profile_setting(d, &role)) {

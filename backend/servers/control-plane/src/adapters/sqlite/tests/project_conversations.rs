@@ -280,9 +280,9 @@ fn accepted_attempt_outcomes_return_once_without_starting_agent_actions()
             development_task_id: c.proposals[0].task_id.clone(),
         },
     )?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let cursor = store.project_conversation(&c.id)?.update_cursor;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let updated = store.project_conversation(&c.id)?;
     assert_eq!(updated.update_cursor, cursor);
     assert_eq!(updated.worker_updates.len(), 1);

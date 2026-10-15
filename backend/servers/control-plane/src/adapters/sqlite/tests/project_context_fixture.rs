@@ -89,7 +89,7 @@ fn complete_cancelled_outcome(
             development_task_id: approved.proposals[0].task_id.clone(),
         },
     )?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     Ok(())
 }
 fn append_interrupted_turns(

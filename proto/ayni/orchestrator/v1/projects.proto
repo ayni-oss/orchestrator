@@ -72,6 +72,8 @@ message GetProjectRequest {
 }
 message GetProjectResponse {
   Project project = 1;
+  // Read projection only; raw overrides remain on the resource.
+  ProjectAgentDefaults effective_agent_defaults = 2;
 }
 message UpdateProjectRequest {
   string idempotency_key = 1;
@@ -183,6 +185,8 @@ message GetWorkspaceRequest {
 }
 message GetWorkspaceResponse {
   Workspace workspace = 1;
+  // Read projection only; raw overrides remain on the resource.
+  ProjectAgentDefaults effective_agent_defaults = 2;
 }
 message UpdateWorkspaceRequest {
   string idempotency_key = 1;

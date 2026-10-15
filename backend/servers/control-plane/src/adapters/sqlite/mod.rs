@@ -461,7 +461,6 @@ pub(crate) mod project_context;
 pub(crate) mod project_sessions;
 
 mod project_origins;
-mod project_summaries;
 mod project_summary_retirement;
 mod project_worker_evidence;
 

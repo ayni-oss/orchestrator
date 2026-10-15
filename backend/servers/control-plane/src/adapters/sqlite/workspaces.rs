@@ -84,6 +84,7 @@ impl CleanStore {
             self.workspace(&project.workspace_id)?.agent_defaults
         };
         let workspace_defaults = defaults.clone();
+        defaults.get_or_insert_default();
         if let Some(overrides) = &project.agent_defaults {
             let effective = defaults.get_or_insert_default();
             if !overrides.project_connection_id.is_empty() {
@@ -106,6 +107,14 @@ impl CleanStore {
                 effective,
             )?;
         }
+        Ok(defaults)
+    }
+    pub(crate) fn effective_workspace_defaults(
+        &self,
+        workspace: &v1::Workspace,
+    ) -> Result<v1::ProjectAgentDefaults, CleanStoreError> {
+        let mut defaults = workspace.agent_defaults.clone().unwrap_or_default();
+        self.merge_agent_profiles(workspace.agent_defaults.as_ref(), None, &mut defaults)?;
         Ok(defaults)
     }
     pub(crate) fn replay_workspace(

@@ -80,6 +80,8 @@ pub(super) async fn native_server_exposes_clean_services_and_provider_catalog()
         );
     }
 
+    assert_agent_capabilities(channel.clone()).await?;
+
     let mut provider = v1::provider_service_client::ProviderServiceClient::new(channel.clone());
     let models = provider
         .list_provider_models(v1::ListProviderModelsRequest {
@@ -468,5 +470,36 @@ async fn workspace_api_preserves_project_history(
         .project,
         Some(child)
     );
+    Ok(())
+}
+
+async fn assert_agent_capabilities(
+    channel: tonic::transport::Channel,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut agents =
+        v1::agent_profile_service_client::AgentProfileServiceClient::new(channel.clone());
+    let capabilities = agents
+        .get_agent_capabilities(v1::GetAgentCapabilitiesRequest {})
+        .await?
+        .into_inner();
+    assert_eq!(capabilities.roles.len(), 2);
+    for role in capabilities.roles {
+        let role_kind = if role.role == "planner" {
+            ayni_orchestrator_runtime::agent_profile::Role::Planner
+        } else {
+            ayni_orchestrator_runtime::agent_profile::Role::Worker
+        };
+        assert_eq!(
+            role.defaults,
+            Some(crate::agent_profiles::wire_settings(
+                &ayni_orchestrator_runtime::agent_profile::Settings::defaults(&role_kind)
+            ))
+        );
+    }
+    assert_eq!(
+        capabilities.limits.map(|l| l.max_instruction_bytes),
+        Some(8192)
+    );
+
     Ok(())
 }

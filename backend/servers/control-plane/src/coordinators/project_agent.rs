@@ -40,7 +40,7 @@ impl ProjectAgentReconciler {
     /// # Errors
     /// Returns a bounded storage classification; periodic reconciliation retries safely.
     pub async fn return_worker_evidence(state: &AppState) -> Result<(), &'static str> {
-        with_store_async(state, CleanStore::queue_project_outcome_summaries)
+        with_store_async(state, CleanStore::sync_project_worker_updates)
             .await
             .map_err(|_| "project_worker_evidence_unavailable")
     }

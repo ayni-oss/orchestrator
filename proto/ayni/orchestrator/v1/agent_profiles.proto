@@ -28,3 +28,25 @@ message FrozenAgentProfile {
   string policy_revision = 9;
   string system_instructions = 10;
 }
+
+// Read-only application capability metadata; selections never grant authority.
+service AgentProfileService {
+  rpc GetAgentCapabilities(GetAgentCapabilitiesRequest) returns (GetAgentCapabilitiesResponse);
+}
+message GetAgentCapabilitiesRequest {}
+message AgentProfileLimits {
+  uint32 max_instruction_bytes = 1;
+  uint32 max_skills = 2;
+  uint32 max_repositories = 3;
+  uint32 max_model_calls = 4;
+  uint64 max_deadline_seconds = 5;
+  uint32 max_identifier_bytes = 6;
+}
+message AgentRoleCapabilities {
+  string role = 1;
+  AgentProfileSettings defaults = 2;
+}
+message GetAgentCapabilitiesResponse {
+  repeated AgentRoleCapabilities roles = 1;
+  AgentProfileLimits limits = 2;
+}
