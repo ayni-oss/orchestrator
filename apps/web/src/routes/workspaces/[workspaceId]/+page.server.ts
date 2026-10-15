@@ -30,7 +30,9 @@ async function mutate({locals,params,request}:Parameters<NonNullable<Actions[str
     else if(operation==="update"){
       const parsed=workspaceSchema.safeParse({idempotencyKey,displayName:form.get("displayName"),repositoryConnectionIds:form.getAll("repositoryConnectionIds")});
       if(!parsed.success)return fail(400,{error:{message:"Enter a workspace name and select unique repositories.",requestId:locals.requestId}});
-      await bff.updateWorkspace({...input,...parsed.data},ctx);
+      const timeout=form.get("plannerIdleTimeoutSeconds");
+      if(timeout!==null&&timeout!=="300"&&timeout!=="86400")return fail(400,{error:{message:"Choose a planner idle timeout of 5 minutes or 24 hours.",requestId:locals.requestId}});
+      await bff.updateWorkspace({...input,...parsed.data,...(timeout===null?{}:{plannerIdleTimeoutSeconds:Number(timeout)})},ctx);
     }else{
       const fields=["projectConnectionId","projectModel","codingConnectionId","codingModel"] as const;
       const values=Object.fromEntries(fields.map(field=>[field,text(form,field,128)]));

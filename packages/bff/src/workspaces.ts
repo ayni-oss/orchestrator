@@ -13,7 +13,7 @@ function required<T>(value:T|undefined):T {if(value===undefined)throw new BffMap
 function pageDto(value:{nextPageToken:string;snapshotCursor:string}|undefined){return {...required(value)};}
 function mapWorkspace(value:Workspace):WorkspaceDto {
   if(value.repositoryConnectionIds.length<1 || value.repositoryConnectionIds.length>100 || new Set(value.repositoryConnectionIds).size!==value.repositoryConnectionIds.length || ![WorkspaceState.WORKSPACE_STATE_ACTIVE,WorkspaceState.WORKSPACE_STATE_ARCHIVED].includes(value.state))throw new BffMappingError();
-  return {id:value.id,displayName:value.displayName,state:value.state===WorkspaceState.WORKSPACE_STATE_ACTIVE?"active":"archived",repositoryConnectionIds:[...value.repositoryConnectionIds],resourceVersion:value.resourceVersion,...(value.agentDefaults?{agentDefaults:{...value.agentDefaults}}:{})};
+  return {plannerIdleTimeoutSeconds:value.plannerIdleTimeoutSeconds||300,id:value.id,displayName:value.displayName,state:value.state===WorkspaceState.WORKSPACE_STATE_ACTIVE?"active":"archived",repositoryConnectionIds:[...value.repositoryConnectionIds],resourceVersion:value.resourceVersion,...(value.agentDefaults?{agentDefaults:{...value.agentDefaults}}:{})};
 }
 
 export function mapProject(value: Project): ProjectDto {
@@ -31,11 +31,11 @@ export function workspaceOperations(client:ProjectServiceClient,unary:Unary){
     const response=await unary<GetWorkspaceResponse>(context,(m,o,c)=>client.getWorkspace({workspaceId},m,o,c));
     return mapWorkspace(required(response.workspace));
   },
-  async createWorkspace(input:{idempotencyKey:string;displayName:string;repositoryConnectionIds:string[]},context:RequestContext):Promise<WorkspaceDto> {
+  async createWorkspace(input:{idempotencyKey:string;displayName:string;repositoryConnectionIds:string[];plannerIdleTimeoutSeconds?:number},context:RequestContext):Promise<WorkspaceDto> {
     const response=await unary<CreateWorkspaceResponse>(context,(m,o,c)=>client.createWorkspace(input,m,o,c));
     return mapWorkspace(required(response.workspace));
   },
-  async updateWorkspace(input:{idempotencyKey:string;workspaceId:string;expectedResourceVersion:string;displayName:string;repositoryConnectionIds?:string[];agentDefaults?:ProjectAgentDefaultsDto},context:RequestContext):Promise<WorkspaceDto> {
+  async updateWorkspace(input:{idempotencyKey:string;workspaceId:string;expectedResourceVersion:string;displayName:string;repositoryConnectionIds?:string[];agentDefaults?:ProjectAgentDefaultsDto;plannerIdleTimeoutSeconds?:number},context:RequestContext):Promise<WorkspaceDto> {
     const response=await unary<UpdateWorkspaceResponse>(context,(m,o,c)=>client.updateWorkspace({...input,repositoryConnectionIds:input.repositoryConnectionIds??[]},m,o,c));
     return mapWorkspace(required(response.workspace));
   },

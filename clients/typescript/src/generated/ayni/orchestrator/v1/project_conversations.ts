@@ -39,6 +39,9 @@ export interface ProjectConversation {
   updateCursor: string;
   createdAt?: Date | undefined;
   plan?: ProjectPlan | undefined;
+  plannerIdleTimeoutSeconds?: number | undefined;
+  effectivePlannerIdleTimeoutSeconds: number;
+  plannerSession?: ProjectPlannerSession | undefined;
 }
 
 export interface ProjectMessage {
@@ -61,6 +64,11 @@ export interface ProjectAgentRun {
   providerCredentials?: FrozenProviderCredentials | undefined;
   purpose: string;
   tokenUsage?: ProviderTokenUsage | undefined;
+  sessionId: string;
+  sessionGeneration: string;
+  sessionTurnSequence: string;
+  sessionDeadlineAt?: Date | undefined;
+  sessionManaged: boolean;
 }
 
 export interface ProjectTaskProposal {
@@ -82,6 +90,7 @@ export interface CreateProjectConversationRequest {
   projectId: string;
   title: string;
   repositoryConnectionIds: string[];
+  plannerIdleTimeoutSeconds?: number | undefined;
 }
 
 export interface WatchProjectConversationResponse {
@@ -219,6 +228,40 @@ export interface ListProjectConversationHistoryResponse {
   archiveRecordCount: string;
 }
 
+/** Logical lifecycle only: credential and Kubernetes identities remain private. */
+export interface ProjectPlannerSession {
+  sessionId: string;
+  generation: string;
+  state: string;
+  lastActivityAt?: Date | undefined;
+  idleExpiresAt?: Date | undefined;
+  activeRunId: string;
+}
+
+export interface UpdateProjectConversationSettingsRequest {
+  idempotencyKey: string;
+  projectId: string;
+  conversationId: string;
+  expectedUpdateCursor: string;
+  plannerIdleTimeoutSeconds?: number | undefined;
+  inheritWorkspaceTimeout: boolean;
+}
+
+export interface UpdateProjectConversationSettingsResponse {
+  conversation?: ProjectConversation | undefined;
+}
+
+export interface CancelProjectAgentRunRequest {
+  idempotencyKey: string;
+  projectId: string;
+  conversationId: string;
+  runId: string;
+}
+
+export interface CancelProjectAgentRunResponse {
+  conversation?: ProjectConversation | undefined;
+}
+
 function createBaseProjectConversation(): ProjectConversation {
   return {
     id: "",
@@ -231,6 +274,9 @@ function createBaseProjectConversation(): ProjectConversation {
     updateCursor: "0",
     createdAt: undefined,
     plan: undefined,
+    plannerIdleTimeoutSeconds: undefined,
+    effectivePlannerIdleTimeoutSeconds: 0,
+    plannerSession: undefined,
   };
 }
 
@@ -265,6 +311,15 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     }
     if (message.plan !== undefined) {
       ProjectPlan.encode(message.plan, writer.uint32(82).fork()).join();
+    }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      writer.uint32(88).uint32(message.plannerIdleTimeoutSeconds);
+    }
+    if (message.effectivePlannerIdleTimeoutSeconds !== 0) {
+      writer.uint32(96).uint32(message.effectivePlannerIdleTimeoutSeconds);
+    }
+    if (message.plannerSession !== undefined) {
+      ProjectPlannerSession.encode(message.plannerSession, writer.uint32(106).fork()).join();
     }
     return writer;
   },
@@ -362,6 +417,30 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
             message.plan = ProjectPlan.decode(reader, reader.uint32());
             continue;
           }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.plannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.effectivePlannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.plannerSession = ProjectPlannerSession.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -408,6 +487,21 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
         ? fromJsonTimestamp(object.created_at)
         : undefined,
       plan: isSet(object.plan) ? ProjectPlan.fromJSON(object.plan) : undefined,
+      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
+        : isSet(object.planner_idle_timeout_seconds)
+        ? globalThis.Number(object.planner_idle_timeout_seconds)
+        : undefined,
+      effectivePlannerIdleTimeoutSeconds: isSet(object.effectivePlannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.effectivePlannerIdleTimeoutSeconds)
+        : isSet(object.effective_planner_idle_timeout_seconds)
+        ? globalThis.Number(object.effective_planner_idle_timeout_seconds)
+        : 0,
+      plannerSession: isSet(object.plannerSession)
+        ? ProjectPlannerSession.fromJSON(object.plannerSession)
+        : isSet(object.planner_session)
+        ? ProjectPlannerSession.fromJSON(object.planner_session)
+        : undefined,
     };
   },
 
@@ -443,6 +537,15 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     if (message.plan !== undefined) {
       obj.plan = ProjectPlan.toJSON(message.plan);
     }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
+    }
+    if (message.effectivePlannerIdleTimeoutSeconds !== 0) {
+      obj.effectivePlannerIdleTimeoutSeconds = Math.round(message.effectivePlannerIdleTimeoutSeconds);
+    }
+    if (message.plannerSession !== undefined) {
+      obj.plannerSession = ProjectPlannerSession.toJSON(message.plannerSession);
+    }
     return obj;
   },
 
@@ -462,6 +565,11 @@ export const ProjectConversation: MessageFns<ProjectConversation> = {
     message.createdAt = object.createdAt ?? undefined;
     message.plan = (object.plan !== undefined && object.plan !== null)
       ? ProjectPlan.fromPartial(object.plan)
+      : undefined;
+    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
+    message.effectivePlannerIdleTimeoutSeconds = object.effectivePlannerIdleTimeoutSeconds ?? 0;
+    message.plannerSession = (object.plannerSession !== undefined && object.plannerSession !== null)
+      ? ProjectPlannerSession.fromPartial(object.plannerSession)
       : undefined;
     return message;
   },
@@ -621,6 +729,11 @@ function createBaseProjectAgentRun(): ProjectAgentRun {
     providerCredentials: undefined,
     purpose: "",
     tokenUsage: undefined,
+    sessionId: "",
+    sessionGeneration: "0",
+    sessionTurnSequence: "0",
+    sessionDeadlineAt: undefined,
+    sessionManaged: false,
   };
 }
 
@@ -658,6 +771,21 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
     }
     if (message.tokenUsage !== undefined) {
       ProviderTokenUsage.encode(message.tokenUsage, writer.uint32(90).fork()).join();
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(98).string(message.sessionId);
+    }
+    if (message.sessionGeneration !== "0") {
+      writer.uint32(104).uint64(message.sessionGeneration);
+    }
+    if (message.sessionTurnSequence !== "0") {
+      writer.uint32(112).uint64(message.sessionTurnSequence);
+    }
+    if (message.sessionDeadlineAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.sessionDeadlineAt), writer.uint32(122).fork()).join();
+    }
+    if (message.sessionManaged !== false) {
+      writer.uint32(128).bool(message.sessionManaged);
     }
     return writer;
   },
@@ -763,6 +891,46 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
             message.tokenUsage = ProviderTokenUsage.decode(reader, reader.uint32());
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.sessionId = reader.string();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.sessionGeneration = reader.uint64().toString();
+            continue;
+          }
+          case 14: {
+            if (tag !== 112) {
+              break;
+            }
+
+            message.sessionTurnSequence = reader.uint64().toString();
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.sessionDeadlineAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 16: {
+            if (tag !== 128) {
+              break;
+            }
+
+            message.sessionManaged = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -812,6 +980,31 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
         : isSet(object.token_usage)
         ? ProviderTokenUsage.fromJSON(object.token_usage)
         : undefined,
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+      sessionGeneration: isSet(object.sessionGeneration)
+        ? globalThis.String(object.sessionGeneration)
+        : isSet(object.session_generation)
+        ? globalThis.String(object.session_generation)
+        : "0",
+      sessionTurnSequence: isSet(object.sessionTurnSequence)
+        ? globalThis.String(object.sessionTurnSequence)
+        : isSet(object.session_turn_sequence)
+        ? globalThis.String(object.session_turn_sequence)
+        : "0",
+      sessionDeadlineAt: isSet(object.sessionDeadlineAt)
+        ? fromJsonTimestamp(object.sessionDeadlineAt)
+        : isSet(object.session_deadline_at)
+        ? fromJsonTimestamp(object.session_deadline_at)
+        : undefined,
+      sessionManaged: isSet(object.sessionManaged)
+        ? globalThis.Boolean(object.sessionManaged)
+        : isSet(object.session_managed)
+        ? globalThis.Boolean(object.session_managed)
+        : false,
     };
   },
 
@@ -850,6 +1043,21 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
     if (message.tokenUsage !== undefined) {
       obj.tokenUsage = ProviderTokenUsage.toJSON(message.tokenUsage);
     }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.sessionGeneration !== "0") {
+      obj.sessionGeneration = message.sessionGeneration;
+    }
+    if (message.sessionTurnSequence !== "0") {
+      obj.sessionTurnSequence = message.sessionTurnSequence;
+    }
+    if (message.sessionDeadlineAt !== undefined) {
+      obj.sessionDeadlineAt = message.sessionDeadlineAt.toISOString();
+    }
+    if (message.sessionManaged !== false) {
+      obj.sessionManaged = message.sessionManaged;
+    }
     return obj;
   },
 
@@ -873,6 +1081,11 @@ export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
     message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
       ? ProviderTokenUsage.fromPartial(object.tokenUsage)
       : undefined;
+    message.sessionId = object.sessionId ?? "";
+    message.sessionGeneration = object.sessionGeneration ?? "0";
+    message.sessionTurnSequence = object.sessionTurnSequence ?? "0";
+    message.sessionDeadlineAt = object.sessionDeadlineAt ?? undefined;
+    message.sessionManaged = object.sessionManaged ?? false;
     return message;
   },
 };
@@ -1126,7 +1339,13 @@ export const ProjectTaskProposal: MessageFns<ProjectTaskProposal> = {
 };
 
 function createBaseCreateProjectConversationRequest(): CreateProjectConversationRequest {
-  return { idempotencyKey: "", projectId: "", title: "", repositoryConnectionIds: [] };
+  return {
+    idempotencyKey: "",
+    projectId: "",
+    title: "",
+    repositoryConnectionIds: [],
+    plannerIdleTimeoutSeconds: undefined,
+  };
 }
 
 export const CreateProjectConversationRequest: MessageFns<CreateProjectConversationRequest> = {
@@ -1142,6 +1361,9 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
     }
     for (const v of message.repositoryConnectionIds) {
       writer.uint32(34).string(v!);
+    }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      writer.uint32(40).uint32(message.plannerIdleTimeoutSeconds);
     }
     return writer;
   },
@@ -1191,6 +1413,14 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
             message.repositoryConnectionIds.push(reader.string());
             continue;
           }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.plannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1221,6 +1451,11 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
         : globalThis.Array.isArray(object?.repository_connection_ids)
         ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
         : [],
+      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
+        : isSet(object.planner_idle_timeout_seconds)
+        ? globalThis.Number(object.planner_idle_timeout_seconds)
+        : undefined,
     };
   },
 
@@ -1238,6 +1473,9 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
     if (message.repositoryConnectionIds?.length) {
       obj.repositoryConnectionIds = message.repositoryConnectionIds;
     }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
+    }
     return obj;
   },
 
@@ -1250,6 +1488,7 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
     message.projectId = object.projectId ?? "";
     message.title = object.title ?? "";
     message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
+    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
     return message;
   },
 };
@@ -3556,9 +3795,658 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
   },
 };
 
+function createBaseProjectPlannerSession(): ProjectPlannerSession {
+  return {
+    sessionId: "",
+    generation: "0",
+    state: "",
+    lastActivityAt: undefined,
+    idleExpiresAt: undefined,
+    activeRunId: "",
+  };
+}
+
+export const ProjectPlannerSession: MessageFns<ProjectPlannerSession> = {
+  encode(message: ProjectPlannerSession, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sessionId !== "") {
+      writer.uint32(10).string(message.sessionId);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(16).uint64(message.generation);
+    }
+    if (message.state !== "") {
+      writer.uint32(26).string(message.state);
+    }
+    if (message.lastActivityAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.lastActivityAt), writer.uint32(34).fork()).join();
+    }
+    if (message.idleExpiresAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.idleExpiresAt), writer.uint32(42).fork()).join();
+    }
+    if (message.activeRunId !== "") {
+      writer.uint32(50).string(message.activeRunId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectPlannerSession {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectPlannerSession();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.sessionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.lastActivityAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.idleExpiresAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.activeRunId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectPlannerSession {
+    return {
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      lastActivityAt: isSet(object.lastActivityAt)
+        ? fromJsonTimestamp(object.lastActivityAt)
+        : isSet(object.last_activity_at)
+        ? fromJsonTimestamp(object.last_activity_at)
+        : undefined,
+      idleExpiresAt: isSet(object.idleExpiresAt)
+        ? fromJsonTimestamp(object.idleExpiresAt)
+        : isSet(object.idle_expires_at)
+        ? fromJsonTimestamp(object.idle_expires_at)
+        : undefined,
+      activeRunId: isSet(object.activeRunId)
+        ? globalThis.String(object.activeRunId)
+        : isSet(object.active_run_id)
+        ? globalThis.String(object.active_run_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ProjectPlannerSession): unknown {
+    const obj: any = {};
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.lastActivityAt !== undefined) {
+      obj.lastActivityAt = message.lastActivityAt.toISOString();
+    }
+    if (message.idleExpiresAt !== undefined) {
+      obj.idleExpiresAt = message.idleExpiresAt.toISOString();
+    }
+    if (message.activeRunId !== "") {
+      obj.activeRunId = message.activeRunId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectPlannerSession>): ProjectPlannerSession {
+    return ProjectPlannerSession.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectPlannerSession>): ProjectPlannerSession {
+    const message = createBaseProjectPlannerSession();
+    message.sessionId = object.sessionId ?? "";
+    message.generation = object.generation ?? "0";
+    message.state = object.state ?? "";
+    message.lastActivityAt = object.lastActivityAt ?? undefined;
+    message.idleExpiresAt = object.idleExpiresAt ?? undefined;
+    message.activeRunId = object.activeRunId ?? "";
+    return message;
+  },
+};
+
+function createBaseUpdateProjectConversationSettingsRequest(): UpdateProjectConversationSettingsRequest {
+  return {
+    idempotencyKey: "",
+    projectId: "",
+    conversationId: "",
+    expectedUpdateCursor: "0",
+    plannerIdleTimeoutSeconds: undefined,
+    inheritWorkspaceTimeout: false,
+  };
+}
+
+export const UpdateProjectConversationSettingsRequest: MessageFns<UpdateProjectConversationSettingsRequest> = {
+  encode(message: UpdateProjectConversationSettingsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.expectedUpdateCursor !== "0") {
+      writer.uint32(32).uint64(message.expectedUpdateCursor);
+    }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      writer.uint32(40).uint32(message.plannerIdleTimeoutSeconds);
+    }
+    if (message.inheritWorkspaceTimeout !== false) {
+      writer.uint32(48).bool(message.inheritWorkspaceTimeout);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateProjectConversationSettingsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateProjectConversationSettingsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.expectedUpdateCursor = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.plannerIdleTimeoutSeconds = reader.uint32();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.inheritWorkspaceTimeout = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UpdateProjectConversationSettingsRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      expectedUpdateCursor: isSet(object.expectedUpdateCursor)
+        ? globalThis.String(object.expectedUpdateCursor)
+        : isSet(object.expected_update_cursor)
+        ? globalThis.String(object.expected_update_cursor)
+        : "0",
+      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
+        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
+        : isSet(object.planner_idle_timeout_seconds)
+        ? globalThis.Number(object.planner_idle_timeout_seconds)
+        : undefined,
+      inheritWorkspaceTimeout: isSet(object.inheritWorkspaceTimeout)
+        ? globalThis.Boolean(object.inheritWorkspaceTimeout)
+        : isSet(object.inherit_workspace_timeout)
+        ? globalThis.Boolean(object.inherit_workspace_timeout)
+        : false,
+    };
+  },
+
+  toJSON(message: UpdateProjectConversationSettingsRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.expectedUpdateCursor !== "0") {
+      obj.expectedUpdateCursor = message.expectedUpdateCursor;
+    }
+    if (message.plannerIdleTimeoutSeconds !== undefined) {
+      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
+    }
+    if (message.inheritWorkspaceTimeout !== false) {
+      obj.inheritWorkspaceTimeout = message.inheritWorkspaceTimeout;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<UpdateProjectConversationSettingsRequest>): UpdateProjectConversationSettingsRequest {
+    return UpdateProjectConversationSettingsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<UpdateProjectConversationSettingsRequest>): UpdateProjectConversationSettingsRequest {
+    const message = createBaseUpdateProjectConversationSettingsRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.expectedUpdateCursor = object.expectedUpdateCursor ?? "0";
+    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
+    message.inheritWorkspaceTimeout = object.inheritWorkspaceTimeout ?? false;
+    return message;
+  },
+};
+
+function createBaseUpdateProjectConversationSettingsResponse(): UpdateProjectConversationSettingsResponse {
+  return { conversation: undefined };
+}
+
+export const UpdateProjectConversationSettingsResponse: MessageFns<UpdateProjectConversationSettingsResponse> = {
+  encode(message: UpdateProjectConversationSettingsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.conversation !== undefined) {
+      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateProjectConversationSettingsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateProjectConversationSettingsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.conversation = ProjectConversation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UpdateProjectConversationSettingsResponse {
+    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
+  },
+
+  toJSON(message: UpdateProjectConversationSettingsResponse): unknown {
+    const obj: any = {};
+    if (message.conversation !== undefined) {
+      obj.conversation = ProjectConversation.toJSON(message.conversation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<UpdateProjectConversationSettingsResponse>): UpdateProjectConversationSettingsResponse {
+    return UpdateProjectConversationSettingsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(
+    object: DeepPartial<UpdateProjectConversationSettingsResponse>,
+  ): UpdateProjectConversationSettingsResponse {
+    const message = createBaseUpdateProjectConversationSettingsResponse();
+    message.conversation = (object.conversation !== undefined && object.conversation !== null)
+      ? ProjectConversation.fromPartial(object.conversation)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCancelProjectAgentRunRequest(): CancelProjectAgentRunRequest {
+  return { idempotencyKey: "", projectId: "", conversationId: "", runId: "" };
+}
+
+export const CancelProjectAgentRunRequest: MessageFns<CancelProjectAgentRunRequest> = {
+  encode(message: CancelProjectAgentRunRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.runId !== "") {
+      writer.uint32(34).string(message.runId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelProjectAgentRunRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelProjectAgentRunRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.runId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelProjectAgentRunRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      runId: isSet(object.runId)
+        ? globalThis.String(object.runId)
+        : isSet(object.run_id)
+        ? globalThis.String(object.run_id)
+        : "",
+    };
+  },
+
+  toJSON(message: CancelProjectAgentRunRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.runId !== "") {
+      obj.runId = message.runId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelProjectAgentRunRequest>): CancelProjectAgentRunRequest {
+    return CancelProjectAgentRunRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelProjectAgentRunRequest>): CancelProjectAgentRunRequest {
+    const message = createBaseCancelProjectAgentRunRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.runId = object.runId ?? "";
+    return message;
+  },
+};
+
+function createBaseCancelProjectAgentRunResponse(): CancelProjectAgentRunResponse {
+  return { conversation: undefined };
+}
+
+export const CancelProjectAgentRunResponse: MessageFns<CancelProjectAgentRunResponse> = {
+  encode(message: CancelProjectAgentRunResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.conversation !== undefined) {
+      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelProjectAgentRunResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelProjectAgentRunResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.conversation = ProjectConversation.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelProjectAgentRunResponse {
+    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
+  },
+
+  toJSON(message: CancelProjectAgentRunResponse): unknown {
+    const obj: any = {};
+    if (message.conversation !== undefined) {
+      obj.conversation = ProjectConversation.toJSON(message.conversation);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelProjectAgentRunResponse>): CancelProjectAgentRunResponse {
+    return CancelProjectAgentRunResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelProjectAgentRunResponse>): CancelProjectAgentRunResponse {
+    const message = createBaseCancelProjectAgentRunResponse();
+    message.conversation = (object.conversation !== undefined && object.conversation !== null)
+      ? ProjectConversation.fromPartial(object.conversation)
+      : undefined;
+    return message;
+  },
+};
+
 /** Trusted operator conversation API; not available on the custom-client listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
+  updateProjectConversationSettings: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/UpdateProjectConversationSettings" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateProjectConversationSettingsRequest): Buffer =>
+      Buffer.from(UpdateProjectConversationSettingsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateProjectConversationSettingsRequest =>
+      UpdateProjectConversationSettingsRequest.decode(value),
+    responseSerialize: (value: UpdateProjectConversationSettingsResponse): Buffer =>
+      Buffer.from(UpdateProjectConversationSettingsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateProjectConversationSettingsResponse =>
+      UpdateProjectConversationSettingsResponse.decode(value),
+  },
+  cancelProjectAgentRun: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/CancelProjectAgentRun" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CancelProjectAgentRunRequest): Buffer =>
+      Buffer.from(CancelProjectAgentRunRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelProjectAgentRunRequest => CancelProjectAgentRunRequest.decode(value),
+    responseSerialize: (value: CancelProjectAgentRunResponse): Buffer =>
+      Buffer.from(CancelProjectAgentRunResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CancelProjectAgentRunResponse => CancelProjectAgentRunResponse.decode(value),
+  },
   getProjectConversationContext: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/GetProjectConversationContext" as const,
     requestStream: false as const,
@@ -3672,6 +4560,11 @@ export const ProjectConversationServiceService = {
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
+  updateProjectConversationSettings: handleUnaryCall<
+    UpdateProjectConversationSettingsRequest,
+    UpdateProjectConversationSettingsResponse
+  >;
+  cancelProjectAgentRun: handleUnaryCall<CancelProjectAgentRunRequest, CancelProjectAgentRunResponse>;
   getProjectConversationContext: handleUnaryCall<
     GetProjectConversationContextRequest,
     GetProjectConversationContextResponse
@@ -3693,6 +4586,36 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
 }
 
 export interface ProjectConversationServiceClient extends Client {
+  updateProjectConversationSettings(
+    request: UpdateProjectConversationSettingsRequest,
+    callback: (error: ServiceError | null, response: UpdateProjectConversationSettingsResponse) => void,
+  ): ClientUnaryCall;
+  updateProjectConversationSettings(
+    request: UpdateProjectConversationSettingsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateProjectConversationSettingsResponse) => void,
+  ): ClientUnaryCall;
+  updateProjectConversationSettings(
+    request: UpdateProjectConversationSettingsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateProjectConversationSettingsResponse) => void,
+  ): ClientUnaryCall;
+  cancelProjectAgentRun(
+    request: CancelProjectAgentRunRequest,
+    callback: (error: ServiceError | null, response: CancelProjectAgentRunResponse) => void,
+  ): ClientUnaryCall;
+  cancelProjectAgentRun(
+    request: CancelProjectAgentRunRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CancelProjectAgentRunResponse) => void,
+  ): ClientUnaryCall;
+  cancelProjectAgentRun(
+    request: CancelProjectAgentRunRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CancelProjectAgentRunResponse) => void,
+  ): ClientUnaryCall;
   getProjectConversationContext(
     request: GetProjectConversationContextRequest,
     callback: (error: ServiceError | null, response: GetProjectConversationContextResponse) => void,

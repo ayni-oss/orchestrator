@@ -40,6 +40,13 @@ identities; the summary is an index of excerpts, so consult original records for
 details. Decisions, unresolved questions and research references stay in the
 conversation history.
 
+The planner stays available between messages. Choose **5 minutes** or **24 hours**
+in workspace settings to control how long it stays warm while idle; conversations
+can inherit or override that choice. An active turn keeps its own deadline.
+After idle expiry, send another message to resume with saved history. Session
+details show its state and expiry. Use the planner's cancel action to stop an
+active research turn; cancelling research preserves the conversation and its plans.
+
 Task cards show progress and
 results, with an automatic summary when an attempt finishes or needs your input.
 A summary does not start further work. To cancel or retry, name the task in your

@@ -41,21 +41,28 @@ async fn start_with_source(path: &Path) -> TestResult<(Server, Channel)> {
     Server::start_state(state).await
 }
 
+fn plan_conversation_request(
+    profiles: &[(&RuntimeFixture, &v1::RuntimeArtifact)],
+) -> v1::CreateProjectConversationRequest {
+    v1::CreateProjectConversationRequest {
+        planner_idle_timeout_seconds: None,
+        idempotency_key: "conversation".into(),
+        project_id: profiles[0].0.project.id.clone(),
+        title: "Review the exact task set".into(),
+        repository_connection_ids: profiles
+            .iter()
+            .map(|(p, _)| p.repository.id.clone())
+            .collect(),
+    }
+}
+
 async fn research_plan(
     server: &Server,
     channel: Channel,
     profiles: &[(&RuntimeFixture, &v1::RuntimeArtifact)],
 ) -> TestResult<v1::ProjectConversation> {
     let conversation = ProjectConversationServiceClient::new(channel)
-        .create_project_conversation(v1::CreateProjectConversationRequest {
-            idempotency_key: "conversation".into(),
-            project_id: profiles[0].0.project.id.clone(),
-            title: "Review the exact task set".into(),
-            repository_connection_ids: profiles
-                .iter()
-                .map(|(p, _)| p.repository.id.clone())
-                .collect(),
-        })
+        .create_project_conversation(plan_conversation_request(profiles))
         .await?
         .into_inner()
         .conversation
@@ -316,6 +323,7 @@ async fn conversation_archive_transport_preserves_old_context_and_rejects_projec
     let mut client = ProjectConversationServiceClient::new(channel);
     let c = client
         .create_project_conversation(v1::CreateProjectConversationRequest {
+            planner_idle_timeout_seconds: None,
             idempotency_key: "archive-transport".into(),
             project_id: profile.project.id.clone(),
             title: "Read old decisions".into(),

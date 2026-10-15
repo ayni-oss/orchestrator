@@ -4,6 +4,41 @@ use uuid::Uuid;
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for GrpcApi {
+    async fn update_project_conversation_settings(
+        &self,
+        request: Request<v1::UpdateProjectConversationSettingsRequest>,
+    ) -> Result<Response<v1::UpdateProjectConversationSettingsResponse>, Status> {
+        let context = self.context(&request, "UpdateProjectConversationSettings")?;
+        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let message = request.into_inner();
+        let c = with_store(&self.state, move |s| {
+            s.update_project_conversation_settings(&key, &message)
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?;
+        Ok(
+            context.response(v1::UpdateProjectConversationSettingsResponse {
+                conversation: Some(c),
+            }),
+        )
+    }
+    async fn cancel_project_agent_run(
+        &self,
+        request: Request<v1::CancelProjectAgentRunRequest>,
+    ) -> Result<Response<v1::CancelProjectAgentRunResponse>, Status> {
+        let context = self.context(&request, "CancelProjectAgentRun")?;
+        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let message = request.into_inner();
+        let c = with_store(&self.state, move |s| {
+            s.cancel_project_agent_run(&key, &message)
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?;
+        Ok(context.response(v1::CancelProjectAgentRunResponse {
+            conversation: Some(c),
+        }))
+    }
+
     async fn get_project_conversation_context(
         &self,
         request: Request<v1::GetProjectConversationContextRequest>,
@@ -146,6 +181,7 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
             credential_revision: binding.credential_revision.clone(),
             provider_credentials: Some(binding),
             purpose: "research".into(),
+            session_managed: true,
             created_at: Some(prost_types::Timestamp {
                 seconds: crate::adapters::sqlite::unix_seconds()
                     .map_err(|e| context.store_error(&e))?,

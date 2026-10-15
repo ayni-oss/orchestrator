@@ -29,6 +29,7 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), CleanStoreError> {
             updated_at: project.updated_at,
             resource_version: 1,
             agent_defaults: project.agent_defaults.take(),
+            planner_idle_timeout_seconds: super::project_sessions::DEFAULT_IDLE_SECONDS,
         };
         transaction
             .execute(
@@ -54,12 +55,17 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), CleanStoreError> {
 
 impl CleanStore {
     pub(crate) fn workspace(&self, id: &str) -> Result<v1::Workspace, CleanStoreError> {
-        get_payload(
+        let mut workspace: v1::Workspace = get_payload(
             &self.connection,
             "SELECT payload FROM workspaces WHERE id=?1",
             id,
             "workspace",
-        )
+        )?;
+        if workspace.planner_idle_timeout_seconds == 0 {
+            workspace.planner_idle_timeout_seconds = super::project_sessions::DEFAULT_IDLE_SECONDS;
+        }
+        super::project_sessions::idle_timeout(workspace.planner_idle_timeout_seconds)?;
+        Ok(workspace)
     }
     pub(crate) fn active_workspace(&self, id: &str) -> Result<v1::Workspace, CleanStoreError> {
         let workspace = self.workspace(id)?;
@@ -155,6 +161,11 @@ impl CleanStore {
             updated_at: Some(now),
             resource_version: 1,
             agent_defaults: request.agent_defaults.clone(),
+            planner_idle_timeout_seconds: super::project_sessions::idle_timeout(
+                request
+                    .planner_idle_timeout_seconds
+                    .unwrap_or(super::project_sessions::DEFAULT_IDLE_SECONDS),
+            )?,
         };
         self.save_workspace("CreateWorkspace", key, request, &workspace, true)?;
         Ok(workspace)
@@ -199,6 +210,10 @@ impl CleanStore {
         if request.agent_defaults.is_some() {
             self.validate_agent_defaults(request.agent_defaults.as_ref())?;
             workspace.agent_defaults.clone_from(&request.agent_defaults);
+        }
+        if let Some(timeout) = request.planner_idle_timeout_seconds {
+            workspace.planner_idle_timeout_seconds =
+                super::project_sessions::idle_timeout(timeout)?;
         }
         self.save_workspace("UpdateWorkspace", key, request, &workspace, false)?;
         Ok(workspace)
@@ -286,7 +301,8 @@ impl CleanStore {
                 agent_defaults: workspace.agent_defaults.clone(),
                 ..Default::default()
             };
-            if !super::valid_project(&shape)
+            if !matches!(workspace.planner_idle_timeout_seconds, 300 | 86400)
+                || !super::valid_project(&shape)
                 || workspace.id != id
                 || workspace.state != state
                 || i64::try_from(workspace.resource_version).ok() != Some(version)

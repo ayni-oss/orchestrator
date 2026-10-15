@@ -399,6 +399,38 @@ fn project_job(
         .map(|mut job:Job|{job.metadata.namespace=Some(namespace.into());job}).map_err(|_|"project_job_invalid")
 }
 
+impl RuntimeKubernetes {
+    /// Stop a retained one-shot research Job before retiring its immutable inputs.
+    /// # Errors
+    /// Foreign ownership or unavailable Kubernetes prevents cancellation acknowledgement.
+    pub async fn cancel_project_agent(&self, name: &str) -> Result<bool, &'static str> {
+        let jobs: Api<Job> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        let pods: Api<Pod> = Api::namespaced(self.client.clone(), &self.configuration.namespace);
+        if let Some(job) = jobs
+            .get_opt(name)
+            .await
+            .map_err(|_| "kubernetes_unavailable")?
+        {
+            let mut deletion = delete_owned(&job.metadata, name)?;
+            deletion.propagation_policy = Some(kube::api::PropagationPolicy::Foreground);
+            ignore_absent(jobs.delete(name, &deletion).await.map(|_| ()))?;
+            return Ok(false);
+        }
+        let remaining = pods
+            .list(
+                &kube::api::ListParams::default()
+                    .labels(&format!("ayni.io/runtime-operation={name}")),
+            )
+            .await
+            .map_err(|_| "kubernetes_unavailable")?;
+        if !remaining.items.is_empty() {
+            return Ok(false);
+        }
+        self.cleanup_project_agent(name).await?;
+        Ok(true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

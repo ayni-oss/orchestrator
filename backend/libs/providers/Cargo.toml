@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 rig-core.workspace = true
+url.workspace = true
 
 [lints]
 workspace = true

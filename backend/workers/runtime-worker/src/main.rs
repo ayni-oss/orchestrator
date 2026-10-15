@@ -18,6 +18,28 @@ fn main() -> ExitCode {
         }
         return ExitCode::FAILURE;
     }
+    if env::args()
+        .nth(1)
+        .is_some_and(|operation| operation.starts_with("project-session-"))
+    {
+        let result = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_or_else(
+                |_| Err(io::Error::other("project_session_runtime_unavailable")),
+                |runtime| {
+                    runtime.block_on(ayni_orchestrator_worker::project_session::command(
+                        &env::args().nth(1).unwrap_or_default(),
+                    ))
+                },
+            );
+        return if result.is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            eprintln!("project_session_failed");
+            ExitCode::FAILURE
+        };
+    }
     let telemetry = ayni_orchestrator_observability::init("runtime-worker");
     let result = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

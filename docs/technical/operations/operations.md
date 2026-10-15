@@ -14,7 +14,7 @@ and resource cleanup follows durable collection.
 
 ## Preparation state upgrade
 
-Schema 22 is the current database format. Recognized schemas 6–21 migrate in
+Schema 23 is the current database format. Recognized schemas 6–22 migrate in
 order before reconciliation. It retains typed preparation, authenticated
 verification/runtime-operation/coding inboxes, accepted decisions, outbox retry
 and acknowledgement state, and operator lifecycle journal/outbox records.
@@ -123,6 +123,53 @@ scoped pagination, approval and message replay, frozen worker retrieval, schema-
 migration and control-plane restart in a disposable Docker Desktop namespace.
 Runtime execution is disabled. Synthetic retained state proves API and durability
 behavior; it does not claim a live model or worker Job executed.
+
+## Planner session upgrade
+
+Schema 23 adds durable planner session identity, generation, turn ownership and
+idle deadlines. Existing workspaces receive a five-minute idle default;
+conversations inherit it unless an override is saved. The supported values are
+300 and 86,400 seconds. Upgrade the control plane, generated clients, BFF, web and
+worker together after backing up and quiescing SQLite.
+
+Retained one-shot turns keep their frozen requests and finish through the legacy
+collection path. Migration does not create warm Pods or repeat model calls. New
+turns use resident sessions. History, plan decisions, task inputs and receipts
+remain authoritative SQLite records, independent of any session's lifetime.
+
+The control plane removes an expired environment only when it has no queued or
+active turn. An accepted message resets activity; its idempotent replay does not.
+Completion starts a new idle period. Changing a workspace or conversation timeout
+does not change an active turn's frozen deadline or model-call budget.
+
+After controller restart, surviving owned sessions are adopted using their
+persisted identity and generation. A lost active Pod interrupts its turn; send a
+new message to continue from durable context. Cancellation records the terminal
+decision before stopping the Pod, so a late result cannot replace that decision.
+A changed model credential binding also requires stopping the old generation
+before a replacement can execute a turn.
+
+Session transport uses fixed, bounded Kubernetes exec commands and scoped Pod
+ownership checks. The control plane needs the chart's `pods/exec` permission in
+its trusted namespace. The runtime controller Role grants both `get` and `create`: the
+client uses WebSocket GET, while Kubernetes 1.35+ additionally checks CREATE under
+[compound authorization](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/#AuthorizePodWebsocketUpgradeCreatePermission).
+Worker containers have no Kubernetes API token, and model tools receive no exec authority. Checkout receives source credentials separately
+from the research container's model credential mount. Do not grant untrusted
+actors Pod creation or exec access in this namespace.
+
+The shared completion client honors `OPENAI_BASE_URL` from its trusted process
+environment. The default remains OpenAI; an override must be an HTTP(S) URL
+without user information, a query or a fragment. The mounted API key remains the
+credential source. Conversation input and model tools cannot configure this
+endpoint. Configure overrides only in trusted deployment images or process
+environments.
+
+`dev/ctl test sessions CONTROL_PLANE_IMAGE WEB_IMAGE WORKER_IMAGE` exercises the
+local Helm topology with synthetic model responses. Its fixture image sets this
+endpoint to the isolated model stub. Its runtime and durable-state
+checks distinguish resident worker execution from seeded control-plane fixtures;
+they do not claim live provider authentication or GitHub source observation.
 
 ## Historical builder cutover
 

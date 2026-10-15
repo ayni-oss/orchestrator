@@ -155,12 +155,14 @@ message Workspace {
   google.protobuf.Timestamp updated_at = 6;
   uint64 resource_version = 7;
   ProjectAgentDefaults agent_defaults = 8;
+  uint32 planner_idle_timeout_seconds = 9;
 }
 message CreateWorkspaceRequest {
   string idempotency_key = 1;
   string display_name = 2;
   repeated string repository_connection_ids = 3;
   ProjectAgentDefaults agent_defaults = 4;
+  optional uint32 planner_idle_timeout_seconds = 5;
 }
 message CreateWorkspaceResponse {
   Workspace workspace = 1;
@@ -187,6 +189,7 @@ message UpdateWorkspaceRequest {
   // Empty preserves membership, matching the compatibility Project API.
   repeated string repository_connection_ids = 5;
   ProjectAgentDefaults agent_defaults = 6;
+  optional uint32 planner_idle_timeout_seconds = 7;
 }
 message UpdateWorkspaceResponse {
   Workspace workspace = 1;

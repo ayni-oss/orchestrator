@@ -286,6 +286,8 @@ export class OrchestratorBff {
     });
   }
 
+  updateProjectConversationSettings(...args:Parameters<ConversationOperations["updateProjectConversationSettings"]>){return this.#conversationOperations.updateProjectConversationSettings(...args);}
+  cancelProjectAgentRun(...args:Parameters<ConversationOperations["cancelProjectAgentRun"]>){return this.#conversationOperations.cancelProjectAgentRun(...args);}
   getProjectConversationContext(...args:Parameters<ConversationOperations["getProjectConversationContext"]>){return this.#conversationOperations.getProjectConversationContext(...args);}
   listProjectConversationHistory(...args:Parameters<ConversationOperations["listProjectConversationHistory"]>){return this.#conversationOperations.listProjectConversationHistory(...args);}
   listProjectConversations(...args:Parameters<ConversationOperations["listProjectConversations"]>){return this.#conversationOperations.listProjectConversations(...args);}

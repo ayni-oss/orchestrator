@@ -296,6 +296,7 @@ export interface ProjectAgentDefaultsDto {
 }
 
 export interface WorkspaceDto {
+  plannerIdleTimeoutSeconds: number;
   agentDefaults?: ProjectAgentDefaultsDto;
   id: string;
   displayName: string;
@@ -360,6 +361,9 @@ export interface ProjectPlanVersionDto {
 }
 
 export interface ProjectConversationDto {
+  plannerIdleTimeoutSeconds?: number;
+  effectivePlannerIdleTimeoutSeconds: number;
+  plannerSession?: {state:string;generation:string;activeRunId:string;lastActivityAt?:string;idleExpiresAt?:string};
   plan?: {id: string; versions: ProjectPlanVersionDto[]};
   id: string;
   projectId: string;

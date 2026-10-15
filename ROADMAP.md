@@ -62,19 +62,21 @@ The Planner interprets worker results so users can continue the discussion and d
 ### Durable context and reusable sessions
 
 Conversation records persist in SQLite on the Control Plane's persistent volume,
-independently of planner Jobs. The archive retains messages, plan decisions,
+independently of planner environments. The archive retains messages, plan decisions,
 research references and worker outcomes; conversation messages are not JetStream events.
-Research uses a separate one-shot Kubernetes Job for each turn. Each run freezes
+Each run freezes
 a versioned working index, recent messages and relevant older records for bounded retrieval.
 
-Planned reusable sessions keep one live planner environment per conversation and process turns serially.
-Each conversation has a configurable idle timeout, including five minutes or 24 hours.
+Reusable sessions keep one live planner environment per conversation and process turns serially.
+Workspace idle timeouts default to five minutes and can be set to 24 hours.
+Conversations inherit that setting or override it with either preset.
 Accepted user messages reset the idle timeout; an expired session is removed once it has no active turn.
 A later message recreates the session and restores its context without losing history.
 
 Session expiry does not interrupt an active turn.
 Per-turn deadlines and model-call budgets remain separate from the idle timeout.
-Repository observations and credentials are refreshed between turns.
+Repository observations and credentials are refreshed between turns. Changed model
+credential bindings replace the session generation before the next turn.
 
 The working index contains extractive excerpts with original record IDs and a
 source watermark. Decisions, questions and references remain in their original
@@ -108,7 +110,6 @@ Tool and skill evaluations also cover activation boundaries and successful execu
 
 ### Open choices and delivery boundary
 
-The default conversation idle timeout remains undecided.
 Moving conversation history to JetStream and adopting a provider-specific agent framework have not been decided.
 Custom Runtime and coordinated multi-repository task dependencies remain separate work.
 

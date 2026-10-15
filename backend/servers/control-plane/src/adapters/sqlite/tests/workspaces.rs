@@ -2,6 +2,7 @@ use super::*;
 
 fn workspace_request(repositories: Vec<String>) -> v1::CreateWorkspaceRequest {
     v1::CreateWorkspaceRequest {
+        planner_idle_timeout_seconds: None,
         idempotency_key: "workspace".into(),
         display_name: "Payments workspace".into(),
         repository_connection_ids: repositories,
@@ -47,6 +48,7 @@ fn workspace_membership_gates_new_work_and_preserves_shared_runtime_and_admitted
     let conversation = store.create_project_conversation(
         "research",
         &v1::CreateProjectConversationRequest {
+            planner_idle_timeout_seconds: None,
             idempotency_key: "research".into(),
             project_id: project.id.clone(),
             title: "Research".into(),
@@ -54,6 +56,7 @@ fn workspace_membership_gates_new_work_and_preserves_shared_runtime_and_admitted
         },
     )?;
     let update = v1::UpdateWorkspaceRequest {
+        planner_idle_timeout_seconds: None,
         idempotency_key: "remove".into(),
         workspace_id: workspace.id.clone(),
         expected_resource_version: 1,
@@ -220,7 +223,7 @@ fn workspace_migration_preserves_frozen_work_and_is_restart_safe() -> Result<(),
         .map_err(CleanStoreError::Database)?;
     store
         .connection
-        .execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; UPDATE clean_schema SET version=19;")
+        .execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; UPDATE clean_schema SET version=19;")
         .map_err(CleanStoreError::Database)?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
@@ -269,7 +272,7 @@ fn invalid_legacy_project_rolls_back_workspace_migration() -> Result<(), CleanSt
     let path = directory.path().join("migration-rollback.sqlite");
     let mut store = CleanStore::open(&path, 3)?;
     ready_profile(&mut store)?;
-    store.connection.execute_batch("DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; UPDATE clean_schema SET version=19; UPDATE projects SET payload=x'ff';").map_err(CleanStoreError::Database)?;
+    store.connection.execute_batch("DROP TABLE project_planner_sessions; DROP TABLE project_context_summaries; DROP TABLE project_context_records; DROP TABLE workspaces; UPDATE clean_schema SET version=19; UPDATE projects SET payload=x'ff';").map_err(CleanStoreError::Database)?;
     drop(store);
     assert!(matches!(
         CleanStore::open(&path, 3),

@@ -181,8 +181,8 @@ jobs:
         with:
           package-manager: pnpm
           node-version: 24.14.0
-      - name: Test NATS fault injector framing
-        run: node --test dev/tests/nats-fault-proxy.test.mjs
+      - name: Test local protocol fixtures
+        run: node --test dev/tests/nats-fault-proxy.test.mjs dev/tests/planner-stub.test.mjs
       - name: Test compatibility drain inventory
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/operations -p 'test_*.py'
 

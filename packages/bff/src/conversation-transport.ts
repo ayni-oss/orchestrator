@@ -1,4 +1,4 @@
-import type {ProjectConversationServiceClient,ListProjectConversationsResponse,GetProjectConversationContextResponse,ListProjectConversationHistoryResponse} from "@ayni-orchestrator/grpc-bindings/server";
+import type {ProjectConversationServiceClient,ListProjectConversationsResponse,GetProjectConversationContextResponse,ListProjectConversationHistoryResponse,UpdateProjectConversationSettingsRequest,CancelProjectAgentRunRequest} from "@ayni-orchestrator/grpc-bindings/server";
 import type {ProjectConversationDto,RequestContext,ConversationContextDto,ConversationHistoryDto,ConversationHistoryInput} from "./dto.js";
 import type {UnaryInvoker} from "./workspaces.js";
 import {mapConversation,type ProjectConversationResponse} from "./conversations.js";
@@ -6,6 +6,14 @@ import {BffMappingError} from "./mapping.js";
 type Unary=<T>(context:RequestContext,invoke:UnaryInvoker<T>)=>Promise<T>;
 function required<T>(value:T|undefined):T{if(value===undefined)throw new BffMappingError();return value;}
 export function conversationOperations(client:ProjectConversationServiceClient,unary:Unary){return {
+  async updateProjectConversationSettings(input:UpdateProjectConversationSettingsRequest,context:RequestContext):Promise<ProjectConversationDto>{
+    const response=await unary<ProjectConversationResponse>(context,(m,o,c)=>client.updateProjectConversationSettings(input,m,o,c));
+    return mapConversation(required(response.conversation));
+  },
+  async cancelProjectAgentRun(input:CancelProjectAgentRunRequest,context:RequestContext):Promise<ProjectConversationDto>{
+    const response=await unary<ProjectConversationResponse>(context,(m,o,c)=>client.cancelProjectAgentRun(input,m,o,c));
+    return mapConversation(required(response.conversation));
+  },
   async getProjectConversationContext(input:{projectId:string;conversationId:string},context:RequestContext):Promise<ConversationContextDto>{
     const value=await unary<GetProjectConversationContextResponse>(context,(m,o,c)=>client.getProjectConversationContext(input,m,o,c));
     return {sourceWatermark:value.sourceWatermark,archiveRecordCount:value.archiveRecordCount,capacityRecordLimit:value.capacityRecordLimit,recentMessageLimit:value.recentMessageLimit,
@@ -24,7 +32,7 @@ export function conversationOperations(client:ProjectConversationServiceClient,u
     const response=await unary<ProjectConversationResponse>(context,(m,o,c)=>client.getProjectConversation({conversationId},m,o,c));
     return mapConversation(required(response.conversation));
   },
-  async createProjectConversation(input:{idempotencyKey:string;projectId:string;title:string;repositoryConnectionIds:string[]},context:RequestContext):Promise<ProjectConversationDto> {
+  async createProjectConversation(input:{idempotencyKey:string;projectId:string;title:string;repositoryConnectionIds:string[];plannerIdleTimeoutSeconds?:number},context:RequestContext):Promise<ProjectConversationDto> {
     const response=await unary<ProjectConversationResponse>(context,(m,o,c)=>client.createProjectConversation(input,m,o,c));
     return mapConversation(required(response.conversation));
   },
