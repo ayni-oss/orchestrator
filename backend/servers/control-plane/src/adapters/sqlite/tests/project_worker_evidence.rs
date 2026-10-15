@@ -100,7 +100,7 @@ fn worker_outcomes_preserve_independent_evidence_and_do_not_start_agents() -> Te
         let (mut store, c, attempt) = approved()?;
         let result = worker_result(&attempt, execution, quality, publication);
         store.collect_worker(&attempt.id, None, Some(result.clone()))?;
-        store.queue_project_outcome_summaries()?;
+        store.sync_project_worker_updates()?;
         let updated = store.project_conversation(&c.id)?;
         let evidence = updated.worker_updates.first().ok_or("missing evidence")?;
         let observed = evidence.result.as_ref().ok_or("missing result")?;
@@ -115,7 +115,7 @@ fn worker_outcomes_preserve_independent_evidence_and_do_not_start_agents() -> Te
         assert_eq!(evidence.pull_request, result.pull_request);
         assert_eq!(observed.changed_paths, ["src/lib.rs"]);
         let cursor = updated.update_cursor;
-        store.queue_project_outcome_summaries()?;
+        store.sync_project_worker_updates()?;
         assert_eq!(store.project_conversation(&c.id)?.update_cursor, cursor);
         assert!(store.queued_project_runs()?.is_empty());
         store.validate_durable_state()?;
@@ -140,7 +140,7 @@ fn retry_origin_and_publication_retry_stay_bound_to_the_approved_version() -> Te
             v1::PublicationOutcome::NotRequired,
         )),
     )?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let next = store.retry_development_task(
         "retry-evidence",
         &v1::RetryDevelopmentTaskRequest {
@@ -162,7 +162,7 @@ fn retry_origin_and_publication_retry_stay_bound_to_the_approved_version() -> Te
             v1::PublicationOutcome::Failed,
         )),
     )?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let retry = store.retry_task_publication(
         "retry-publication-evidence",
         &v1::RetryTaskPublicationRequest {
@@ -185,7 +185,7 @@ fn retry_origin_and_publication_retry_stay_bound_to_the_approved_version() -> Te
             v1::PublicationOutcome::Published,
         )),
     )?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let c = store.project_conversation(&c.id)?;
     assert_eq!(c.worker_updates.len(), 2);
     assert!(c.worker_updates.iter().any(|u| {
@@ -231,7 +231,7 @@ fn stale_observations_and_restart_do_not_replace_newer_outcomes_or_duplicate_arc
         .execute("VACUUM INTO ?1", [path.to_string_lossy().as_ref()])?;
     drop(store);
     let mut store = CleanStore::open(&path, 3)?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     assert_eq!(store.project_conversation(&c.id)?, saved);
     assert_eq!(
         store
@@ -247,7 +247,7 @@ fn evidence_and_history_roll_back_together_when_conversation_save_fails() -> Tes
     let (mut store, c, attempt) = approved()?;
     let prior = store.project_conversation_context(&c.project_id, &c.id)?;
     store.connection.execute_batch("CREATE TRIGGER block_evidence BEFORE UPDATE ON project_conversations BEGIN SELECT RAISE(ABORT,'injected'); END;")?;
-    assert!(store.queue_project_outcome_summaries().is_err());
+    assert!(store.sync_project_worker_updates().is_err());
     let count: i64 =
         store
             .connection
@@ -262,7 +262,7 @@ fn evidence_and_history_roll_back_together_when_conversation_save_fails() -> Tes
     store
         .connection
         .execute_batch("DROP TRIGGER block_evidence")?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     assert_eq!(
         store.project_conversation(&c.id)?.worker_updates[0].attempt_id,
         attempt.id
@@ -330,7 +330,7 @@ fn schema_upgrade_backfills_origins_without_changing_active_execution_authority(
         c.id
     );
     assert!(store.queued_project_runs()?.is_empty());
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     store.validate_durable_state()?;
     Ok(())
 }
@@ -390,7 +390,7 @@ fn duplicate_and_reordered_coding_deliveries_return_only_the_latest_accepted_evi
         vec![],
         usage.clone()
     )?);
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let final_report = report(257, CodingReportKind::Final as i32);
     let final_id = identity("00000000-0000-4000-8000-000000000002");
     store.receive_coding(&final_id, &final_report)?;
@@ -407,7 +407,7 @@ fn duplicate_and_reordered_coding_deliveries_return_only_the_latest_accepted_evi
         vec![],
         usage.clone()
     )?);
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let saved = store.project_conversation(&c.id)?;
     assert!(!store.commit_coding_report(
         &final_id,
@@ -436,7 +436,7 @@ fn duplicate_and_reordered_coding_deliveries_return_only_the_latest_accepted_evi
         vec![],
         usage
     )?);
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     assert_eq!(store.project_conversation(&c.id)?, saved);
     assert_eq!(saved.worker_updates.len(), 1);
     store.validate_durable_state()?;
@@ -472,7 +472,7 @@ fn missing_or_mismatched_retained_evidence_cannot_become_passing_planner_context
         attempt.resource_version,
         &task,
     )?;
-    store.queue_project_outcome_summaries()?;
+    store.sync_project_worker_updates()?;
     let c = store.project_conversation(&c.id)?;
     assert_eq!(
         c.worker_updates[0]

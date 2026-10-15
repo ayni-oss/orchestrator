@@ -120,6 +120,11 @@ pub async fn serve(
             .max_decoding_message_size(MAX_REQUEST_BYTES)
             .max_encoding_message_size(MAX_RESPONSE_BYTES),
         )
+        .add_service(
+            v1::agent_profile_service_server::AgentProfileServiceServer::new(api.clone())
+                .max_decoding_message_size(MAX_REQUEST_BYTES)
+                .max_encoding_message_size(MAX_RESPONSE_BYTES),
+        )
         .add_service(project_server(api.clone()))
         .add_service(repository_server(api.clone()))
         .add_service(profile_server(api.clone()))
@@ -438,6 +443,7 @@ impl RequestContext {
     }
 }
 
+mod agent_profiles;
 mod projects;
 pub mod task_mapping;
 #[cfg(test)]

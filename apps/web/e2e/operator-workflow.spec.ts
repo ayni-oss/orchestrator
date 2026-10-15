@@ -9,7 +9,8 @@ async function choose(page: Page, label: string, option: string): Promise<void> 
 }
 
 
-test("operator inspects profile readiness and submits frozen work", async ({ page }) => {
+test("operator inspects profile readiness and submits frozen work", async ({ page,request }) => {
+  await request.post("http://127.0.0.1:50062/seed-task-models");
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await expect(page.getByRole("heading", { name: "Projects", exact:true })).toBeVisible();
@@ -19,10 +20,10 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await expect(page.getByRole("heading", { name: "Runtimes" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Ayni managed", exact: true }).getByText("Ready", { exact: true }).first()).toBeVisible();
 
-  await page.goto("/tasks");
-  await choose(page, "Project", "Sandbox");
+  await page.goto("/tasks?project=project:1");
   await choose(page, "Runtime profile", "Ayni managed");
-  await choose(page, "Model", "Sol");
+  await choose(page, "Coding connection", "Task models");
+ await choose(page, "Model", "gpt-5.6-sol");
   await page.getByLabel("Request").fill("Document the bounded retry behavior");
   await page.getByLabel("Acceptance criteria").fill("Retry count is explicit\nExisting behavior remains covered");
   await page.getByRole("button", { name: "Submit task" }).click();
@@ -104,23 +105,11 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await expect(page.getByText("New tasks and retries are disabled for this archived project.", {exact:true})).toBeVisible();
   await expect(page.getByRole("link", { name: "New task", exact: true })).toHaveCount(0);
   await page.screenshot({path:"/tmp/orchestrator-project-ui.png",fullPage:true});
-  // Restore the shared browser fixture for later scenarios; real lifecycle is tested natively.
-  await page.goto("/projects");
-  await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
-  await page.getByRole("button", {name:"Create project",exact:true}).click();
-  await page.getByLabel("Project name", { exact: true }).fill("Sandbox");
-  await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
-  await page.getByLabel("Workspace",{exact:true}).click();
-  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
-  await page.getByRole("button", {name:"Repositories",exact:true}).click();
-  await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
-  await page.getByRole("button",{name:"Done",exact:true}).click();
-  await expect(page.getByRole("button",{name:"Done",exact:true})).toBeHidden();
-  await page.getByRole("dialog").getByRole("button", { name: "Create project", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Sandbox", exact: true })).toBeVisible();
+
 });
 
-test("projects select several repositories and tasks require one target",async({page})=>{
+test("projects select several repositories and tasks require one target",async({page,request})=>{
+ await request.post("http://127.0.0.1:50062/seed-task-models");
  await page.goto("/projects");
  await page.getByRole("button",{name:"Create project",exact:true}).click();
  await page.getByLabel("Project name",{exact:true}).fill("Shared work");
@@ -134,12 +123,14 @@ test("projects select several repositories and tasks require one target",async({
  await expect(page.getByRole("button",{name:"Done",exact:true})).toBeHidden();
  await page.getByRole("dialog").getByRole("button",{name:"Create project",exact:true}).click();
  await expect(page.getByRole("heading",{name:"Shared work",exact:true})).toBeVisible();
- await page.getByRole("button",{name:"New task",exact:true}).click();
+ await page.getByRole("button",{name:/project actions$/}).click();
+ await page.getByRole("menuitem",{name:"Submit task directly",exact:true}).click();
  await expect(page.getByLabel("Repository",{exact:true})).toHaveText("Select a repository");
  await choose(page, "Repository", "ayni-oss/library");
  await expect(page.getByRole("button",{name:"Submit task",exact:true})).toBeDisabled();
  await choose(page, "Repository", "ayni-oss/sandbox");
  await choose(page, "Runtime profile", "Ayni managed");
+ await choose(page, "Coding connection", "Task models");
  await choose(page, "Model", "gpt-5.6-sol");
  await expect(page.getByLabel("Agent iterations",{exact:true})).toHaveValue("24");
  await page.getByLabel("Agent iterations",{exact:true}).fill("17");

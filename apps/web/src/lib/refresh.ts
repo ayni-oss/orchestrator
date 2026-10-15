@@ -2,7 +2,7 @@ import { navigating } from "$app/state";
 import { invalidate } from "$app/navigation";
 import { createResourceWatch } from "./resource-watch.js";
 
-export type RefreshScope = "app:workspaces" | "app:runtimes" | "app:tasks" | "app:connections" | "app:certificates" | "app:projects" | "app:repositories";
+export type RefreshScope = "app:conversations" | "app:workspaces" | "app:runtimes" | "app:tasks" | "app:connections" | "app:certificates" | "app:projects" | "app:repositories";
 type Subscriber = { intervalMs: number; onResult?: ((ok: boolean) => void) | undefined };
 type Entry = { subscribers: Set<Subscriber>; timer?: ReturnType<typeof setInterval> | undefined; pending?: Promise<void> | undefined; queued?: Promise<void> | undefined; stopStream?: (() => void) | undefined; streamHealthy?: boolean | undefined; dirty?: boolean | undefined };
 
@@ -30,6 +30,10 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
     }
     value.pending = Promise.resolve().then(() => refresh(scope)).finally(() => {
       value.pending = undefined;
+      if(value.dirty && !value.queued && value.subscribers.size && canRefresh()){
+        value.dirty=false;
+        void request(scope).catch(()=>{for(const subscriber of value.subscribers)subscriber.onResult?.(false);});
+      }
       if (!value.subscribers.size && !value.queued) entries.delete(scope);
     });
     return value.pending;
@@ -45,7 +49,7 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
     clearInterval(value.timer);
     value.timer = undefined;
     if (!value.subscribers.size) { value.stopStream?.(); value.stopStream = undefined; if (!value.pending && !value.queued) entries.delete(scope); return; }
-    const streaming = watch !== undefined && scope !== "app:tasks" && scope !== "app:workspaces";
+    const streaming = watch !== undefined && scope !== "app:tasks" && scope !== "app:workspaces" && scope !== "app:conversations";
     if (streaming && !value.stopStream) value.stopStream = watch(scope, () => event(scope), ok => {
       value.streamHealthy = ok;
       for (const subscriber of value.subscribers) subscriber.onResult?.(ok);
@@ -79,7 +83,7 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
 // Avoid replacing resource versions or form defaults while an editor is active.
 const resourceWatch = createResourceWatch(() => new EventSource("/updates/all"));
 export function watchRefreshScope(scope: RefreshScope, changed: () => void, status: (ok: boolean) => void): () => void {
-  if (scope === "app:tasks" || scope === "app:workspaces") return () => {};
+  if (scope === "app:tasks" || scope === "app:workspaces" || scope === "app:conversations") return () => {};
   return resourceWatch(scope, changed, status);
 }
 

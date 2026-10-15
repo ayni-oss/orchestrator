@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type {PageData} from "../../routes/projects/[projectId]/$types";
-  type ProjectWorkerUpdateDto=NonNullable<PageData["conversation"]>["workerUpdates"][number];
+  import type {ProjectViewData} from "$lib/project-view.js";
+  type ProjectWorkerUpdateDto=NonNullable<ProjectViewData["conversation"]>["workerUpdates"][number];
+  import ExecutionOutcomes from "$lib/components/execution-outcomes.svelte";
   import InformationCard from "$lib/components/information-card.svelte";
   import InformationTable from "$lib/components/information-table.svelte";
   import Feedback from "$lib/components/feedback.svelte";
@@ -19,12 +20,7 @@
       {@const question=update.requestedInput??update.result?.requestedInput}
       <InformationCard title={`Task attempt ${update.attemptNumber}${update.publicationOnly?" · publication retry":""}`} status={update.state}>
         <p class="break-all text-xs text-muted-foreground">Task {update.taskId} · Attempt {update.attemptId}{update.updatedAt?` · ${formatDate(update.updatedAt)}`:""}</p>
-        <InformationTable rows={[
-          {label:"Progress",value:words(update.progress?.phase??update.state)},
-          {label:"Execution",value:words(update.result?.execution??update.state)},
-          {label:"Quality",value:words(quality?.outcome??"unavailable")},
-          {label:"Publication",value:update.publicationOnly&&["queued","running"].includes(update.state)?"Retry in progress":words(update.result?.publication??update.progress?.publication??"unavailable")},
-        ]} />
+        <ExecutionOutcomes progress={update.progress?.phase??update.state} execution={update.result?.execution??update.state} quality={quality?.outcome??"unavailable"} publication={update.publicationOnly&&["queued","running"].includes(update.state)?"Retry in progress":update.result?.publication??update.progress?.publication??"unavailable"} />
         {#if update.failure}<Feedback kind="warning" title="Execution needs attention" message={update.failure} />{/if}
         {#if question}
           <Feedback kind="warning" title="Worker question" message={question} />

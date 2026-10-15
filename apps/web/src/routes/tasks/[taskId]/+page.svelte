@@ -12,6 +12,7 @@
   import TaskUpdateStatus from "$lib/components/task-update-status.svelte";
   import { onMount } from "svelte";
   import { subscribeRefresh } from "$lib/refresh.js";
+  import ExecutionOutcomes from "$lib/components/execution-outcomes.svelte";
   import QualitySignal from "$lib/components/quality-signal.svelte";
   import EmptyState from "$lib/components/empty-state.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -46,7 +47,7 @@
     {#if task.snapshot.origin}
       {@const origin=task.snapshot.origin}
       <nav class="flex flex-wrap gap-3 text-sm" aria-label="Task origin"><a class="underline" href={projectHref(origin.projectId,"overview",origin.conversationId)}>Originating conversation</a><a class="underline" href={projectHref(origin.projectId,"plans",origin.conversationId,undefined,origin.planVersion)}>Approved plan · version {origin.planVersion}</a></nav>
-    {/if}
+    {:else}<p class="text-sm text-muted-foreground">Direct submission · no originating plan</p>{/if}
     <section class="space-y-4" aria-labelledby="task-information-title">
       <div class="flex flex-wrap items-center justify-between gap-2"><h2 id="task-information-title" class="text-lg font-semibold">Information</h2>{#key task.id}<TaskUpdateStatus taskId={task.id} resourceVersion={task.resourceVersion} />{/key}</div>
       <InformationCard title="Task" status={task.state} actions={[
@@ -92,13 +93,13 @@
     <section class="space-y-4" aria-labelledby="task-progress-title">
       <h2 id="task-progress-title" class="text-lg font-semibold">Progress</h2>
       {#each data.progress?.attempts ?? [] as attempt (attempt.id)}
+        <ExecutionOutcomes execution={attempt.result?.execution??attempt.state} quality={attempt.result?.quality?.outcome??attempt.progress?.latestFullCheck?.outcome??"unavailable"} publication={attempt.result?.publication??attempt.progress?.publication??"unavailable"} />
         <div id={`attempt-${attempt.id}`} class="scroll-mt-20"><InformationCard title={`Attempt ${attempt.attemptNumber}${attempt.publicationOnly ? " · publication retry" : ""}`} status={attempt.state}>
           <InformationTable rows={[
             { label: "Stage", value: words(attempt.progress?.phase ?? "unavailable") },
             { label: "Iterations used", value: `${attempt.result?.codingTurnsConsumed ?? attempt.progress?.codingTurnsConsumed ?? "Unavailable"} / ${attempt.snapshot.limits.codingTurns}` },
             { label: "Quality round", value: String(attempt.result?.qualityRound ?? attempt.progress?.qualityRound ?? "Unavailable") },
             { label: "Repair limit", value: String(attempt.snapshot.limits.qualityRepairLimit) },
-            { label: "Execution", value: words(attempt.result?.execution ?? attempt.state) },
             { label: "Reporting", value: words(attempt.reportingState) },
             { label: "Cleanup", value: words(attempt.cleanupState) },
             { label: "Input tokens", value: formatTokens(attempt.usage.input) },

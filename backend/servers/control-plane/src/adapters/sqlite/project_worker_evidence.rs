@@ -5,7 +5,7 @@ use super::{
 };
 
 impl CleanStore {
-    pub(super) fn sync_project_worker_updates(&mut self) -> Result<(), CleanStoreError> {
+    pub(crate) fn sync_project_worker_updates(&mut self) -> Result<(), CleanStoreError> {
         let payloads=self.connection.prepare("SELECT a.payload FROM development_attempts a JOIN project_task_origins o ON o.task_id=a.development_task_id LEFT JOIN project_worker_updates u ON u.attempt_id=a.id WHERE a.resource_version>COALESCE(u.resource_version,0) ORDER BY a.id LIMIT 128").map_err(CleanStoreError::Database)?.query_map([],|r|r.get::<_,Vec<u8>>(0)).map_err(CleanStoreError::Database)?.collect::<Result<Vec<_>,_>>().map_err(CleanStoreError::Database)?;
         for payload in payloads {
             self.record_project_worker_update(&decode(&payload)?)?;

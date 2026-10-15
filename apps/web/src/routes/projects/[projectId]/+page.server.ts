@@ -1,6 +1,7 @@
 import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
 import {projectView} from "$lib/project-navigation.js";
-import {effectiveAgentDefaults} from "$lib/server/agent-defaults.js";
+import {loadAgentConfiguration,loadAgentModels} from "$lib/server/agent-configuration.js";
+import {submitDirectTask} from "$lib/server/tasks.js";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
@@ -9,7 +10,7 @@ import { isResourceVersion, isCanonicalIdentifier } from "$lib/server/validation
 import { projectRepositoryChoices } from "$lib/server/project-choices.js";
 import { projectSchema } from "$lib/project-schema.js";
 import type { ProjectConversationDto, ProviderModelPageDto, RequestContext } from "@ayni-orchestrator/bff/server";
-import { actions as taskActions } from "../../tasks/+page.server.js";
+
 export const load: PageServerLoad = async ({ locals, depends, params, setHeaders, url }) => {
   depends("app:workspaces", "app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
   depends("app:repositories");
@@ -19,19 +20,18 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     const context = requestContext(locals), bff = getBff();
     const storedProject = await bff.getProject(params.projectId, context);
     const workspace = await bff.getWorkspace(storedProject.workspaceId,context);
-    const project = {...storedProject,agentDefaults:effectiveAgentDefaults(storedProject.agentDefaults,workspace.agentDefaults)};
-    const [repositories, profiles, tasks, choices, models, allConnections, conversationResult] = await Promise.all([
+    const project = storedProject;
+    const configuration=await loadAgentConfiguration("project",project.id,context);
+    const [repositories, profiles, tasks, choices, agentModels, conversationResult] = await Promise.all([
       Promise.all(project.repositoryConnectionIds.map(id => bff.getRepositoryConnection(id, context))),
       Promise.all(project.repositoryConnectionIds.map(id => bff.listRuntimeProfiles(id, { pageSize: 100 }, context))),
       bff.listDevelopmentTasks({ pageSize: 100, pageToken: url.searchParams.get("pageToken") ?? "" }, context, project.id),
       projectRepositoryChoices(context).then(choices=>choices.filter(choice=>workspace.repositoryConnectionIds.includes(choice.id))),
-      bff.listProviderModels({pageSize:100},context,project.agentDefaults?.codingConnectionId).catch(() => undefined),
-      bff.listConnections(context).catch(() => undefined),
+      loadAgentModels(context).catch(()=>({connections:[],catalogues:{} as Record<string,ProviderModelPageDto>})),
       bff.listProjectConversations(project.id,context).then(conversations=>({conversations,error:undefined})).catch(error=>({conversations:[],error:safeError(error,locals.requestId)})),
     ]);
-    const llmConnections=allConnections?.filter(c=>c.kind==="openai" && c.enabled && c.status==="ready") ?? [];
-    const connectionModels:Record<string,ProviderModelPageDto>={};
-    await Promise.all(llmConnections.map(async c=>{try{connectionModels[c.id]=await bff.listProviderModels({pageSize:100},context,c.id);}catch{/* A missing catalogue disables model selection for this connection. */}}));
+    const llmConnections=agentModels.connections,connectionModels=agentModels.catalogues;
+    const codingCatalogue=connectionModels[configuration.agentConfiguration?.effective.codingConnectionId??""];
     const conversationId=url.searchParams.get("conversation");
     const selectedConversation=conversationId ? conversationResult.conversations.find(c=>c.id===conversationId) : conversationResult.conversations[0];
     let conversation:ProjectConversationDto|undefined,conversationError=conversationResult.error;
@@ -43,9 +43,9 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     const taskProgress:Record<string,Awaited<ReturnType<typeof bff.taskProgress>>>={};
     const taskIds=new Set([...tasks.developmentTasks.map(task=>task.id),...(conversation?.proposals.flatMap(proposal=>proposal.taskId?[proposal.taskId]:[])??[])]);
     await Promise.allSettled([...taskIds].map(async id=>{taskProgress[id]=await bff.taskProgress(id,context);}));
-    return { ...base, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, workspace, overrides:storedProject.agentDefaults?.projectConnectionId||storedProject.agentDefaults?.codingConnectionId||storedProject.agentDefaults?.plannerProfile||storedProject.agentDefaults?.workerProfile?storedProject.agentDefaults:undefined, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:models?.models ?? [], provider:models?.provider ?? "" };
+    return { ...base, ...configuration, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, workspace, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:codingCatalogue?.models ?? [], provider:codingCatalogue?.provider ?? "" };
   } catch (error) {
-    return { ...base, llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, workspace:undefined, overrides:undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };
+    return { ...base, agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, workspace:undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };
   }
 };
 export const actions: Actions = {
@@ -72,11 +72,7 @@ export const actions: Actions = {
   },
   update: async (event) => mutate(event, false),
   archive: async (event) => mutate(event, true),
-  createTask: async event => {
-    const form = await event.request.clone().formData();
-    if (form.get("projectId") !== event.params.projectId) return fail(400, {error:{message:"Select this project to submit work.",requestId:event.locals.requestId}});
-    return taskActions.create!(event as never);
-  },
+  createTask:submitDirectTask,
 };
 async function mutate({ locals, params, request }: Parameters<NonNullable<Actions[string]>>[0], archive: boolean) {
   const form = await request.formData();

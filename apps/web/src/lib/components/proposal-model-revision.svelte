@@ -1,12 +1,12 @@
 <script lang="ts">
   import {untrack} from "svelte";
-  import type {PageData} from "../../routes/projects/[projectId]/$types";
+  import type {ProjectViewData} from "$lib/project-view.js";
   import {enhance} from "$lib/forms.js";
   import {Button} from "$lib/components/ui/button/index.js";
   import {Label} from "$lib/components/ui/label/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import Section from "$lib/components/ui/collapsible/section.svelte";
-  let {proposal,connections,catalogues,conversationId,idempotencyKey,planId="",planVersion=""}:{proposal:PageData["conversations"][number]["proposals"][number];connections:PageData["llmConnections"];catalogues:PageData["connectionModels"];conversationId:string;idempotencyKey:string;planId?:string;planVersion?:string}=$props();
+  let {proposal,connections,catalogues,conversationId,idempotencyKey,planId="",planVersion=""}:{proposal:ProjectViewData["conversations"][number]["proposals"][number];connections:ProjectViewData["llmConnections"];catalogues:ProjectViewData["connectionModels"];conversationId:string;idempotencyKey:string;planId?:string;planVersion?:string}=$props();
   let connection=$state(untrack(()=>proposal.request?.connectionId??"")),model=$state(untrack(()=>proposal.request?.agent.model??"")),pending=$state(false);
 </script>
 <Section title="Change coding model">

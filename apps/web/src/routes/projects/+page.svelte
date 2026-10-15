@@ -33,7 +33,7 @@
 
 </script>
 <svelte:head><title>Projects · Ayni Orchestrator</title></svelte:head>
-<div data-refresh-paused={$submitting || redirecting ? "" : undefined} class="space-y-8">
+<div data-refresh-paused={open || $submitting || redirecting ? "" : undefined} class="space-y-8">
   <PageHeader title="Projects" description="Goals, conversations, and development tasks within your workspaces.">
     {#snippet actions()}<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create project</Button>{/snippet}
   </PageHeader>

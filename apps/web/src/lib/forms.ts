@@ -7,6 +7,7 @@ export function enhance(form: HTMLFormElement, submit?: SubmitFunction) {
   return kitEnhance<Record<string, unknown>, Record<string, unknown>>(form, async input => {
     const complete = await submit?.(input);
     return async event => {
+      if((event.result.type==="success"||event.result.type==="failure")&&event.result.data)event.result.data.notificationId=crypto.randomUUID();
       if (event.result.type === "error") {
         notify("error", "Action failed", event.result.error.message || "The request could not be completed. Try again.");
         // Keep the editor and its fields available; Kit would otherwise navigate

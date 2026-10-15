@@ -6,6 +6,18 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import {
+  type CallOptions,
+  type ChannelCredentials,
+  Client,
+  type ClientOptions,
+  type ClientUnaryCall,
+  type handleUnaryCall,
+  makeGenericClientConstructor,
+  type Metadata,
+  type ServiceError,
+  type UntypedServiceImplementation,
+} from "@grpc/grpc-js";
 
 /**
  * Configuration is context plus a selection from the application's fixed role catalog.
@@ -37,6 +49,28 @@ export interface FrozenAgentProfile {
   repositoryIds: string[];
   policyRevision: string;
   systemInstructions: string;
+}
+
+export interface GetAgentCapabilitiesRequest {
+}
+
+export interface AgentProfileLimits {
+  maxInstructionBytes: number;
+  maxSkills: number;
+  maxRepositories: number;
+  maxModelCalls: number;
+  maxDeadlineSeconds: string;
+  maxIdentifierBytes: number;
+}
+
+export interface AgentRoleCapabilities {
+  role: string;
+  defaults?: AgentProfileSettings | undefined;
+}
+
+export interface GetAgentCapabilitiesResponse {
+  roles: AgentRoleCapabilities[];
+  limits?: AgentProfileLimits | undefined;
 }
 
 function createBaseAgentSkillRevision(): AgentSkillRevision {
@@ -551,6 +585,461 @@ export const FrozenAgentProfile: MessageFns<FrozenAgentProfile> = {
     message.systemInstructions = object.systemInstructions ?? "";
     return message;
   },
+};
+
+function createBaseGetAgentCapabilitiesRequest(): GetAgentCapabilitiesRequest {
+  return {};
+}
+
+export const GetAgentCapabilitiesRequest: MessageFns<GetAgentCapabilitiesRequest> = {
+  encode(_: GetAgentCapabilitiesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAgentCapabilitiesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetAgentCapabilitiesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): GetAgentCapabilitiesRequest {
+    return {};
+  },
+
+  toJSON(_: GetAgentCapabilitiesRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetAgentCapabilitiesRequest>): GetAgentCapabilitiesRequest {
+    return GetAgentCapabilitiesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<GetAgentCapabilitiesRequest>): GetAgentCapabilitiesRequest {
+    const message = createBaseGetAgentCapabilitiesRequest();
+    return message;
+  },
+};
+
+function createBaseAgentProfileLimits(): AgentProfileLimits {
+  return {
+    maxInstructionBytes: 0,
+    maxSkills: 0,
+    maxRepositories: 0,
+    maxModelCalls: 0,
+    maxDeadlineSeconds: "0",
+    maxIdentifierBytes: 0,
+  };
+}
+
+export const AgentProfileLimits: MessageFns<AgentProfileLimits> = {
+  encode(message: AgentProfileLimits, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.maxInstructionBytes !== 0) {
+      writer.uint32(8).uint32(message.maxInstructionBytes);
+    }
+    if (message.maxSkills !== 0) {
+      writer.uint32(16).uint32(message.maxSkills);
+    }
+    if (message.maxRepositories !== 0) {
+      writer.uint32(24).uint32(message.maxRepositories);
+    }
+    if (message.maxModelCalls !== 0) {
+      writer.uint32(32).uint32(message.maxModelCalls);
+    }
+    if (message.maxDeadlineSeconds !== "0") {
+      writer.uint32(40).uint64(message.maxDeadlineSeconds);
+    }
+    if (message.maxIdentifierBytes !== 0) {
+      writer.uint32(48).uint32(message.maxIdentifierBytes);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentProfileLimits {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentProfileLimits();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.maxInstructionBytes = reader.uint32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.maxSkills = reader.uint32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.maxRepositories = reader.uint32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.maxModelCalls = reader.uint32();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.maxDeadlineSeconds = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.maxIdentifierBytes = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentProfileLimits {
+    return {
+      maxInstructionBytes: isSet(object.maxInstructionBytes)
+        ? globalThis.Number(object.maxInstructionBytes)
+        : isSet(object.max_instruction_bytes)
+        ? globalThis.Number(object.max_instruction_bytes)
+        : 0,
+      maxSkills: isSet(object.maxSkills)
+        ? globalThis.Number(object.maxSkills)
+        : isSet(object.max_skills)
+        ? globalThis.Number(object.max_skills)
+        : 0,
+      maxRepositories: isSet(object.maxRepositories)
+        ? globalThis.Number(object.maxRepositories)
+        : isSet(object.max_repositories)
+        ? globalThis.Number(object.max_repositories)
+        : 0,
+      maxModelCalls: isSet(object.maxModelCalls)
+        ? globalThis.Number(object.maxModelCalls)
+        : isSet(object.max_model_calls)
+        ? globalThis.Number(object.max_model_calls)
+        : 0,
+      maxDeadlineSeconds: isSet(object.maxDeadlineSeconds)
+        ? globalThis.String(object.maxDeadlineSeconds)
+        : isSet(object.max_deadline_seconds)
+        ? globalThis.String(object.max_deadline_seconds)
+        : "0",
+      maxIdentifierBytes: isSet(object.maxIdentifierBytes)
+        ? globalThis.Number(object.maxIdentifierBytes)
+        : isSet(object.max_identifier_bytes)
+        ? globalThis.Number(object.max_identifier_bytes)
+        : 0,
+    };
+  },
+
+  toJSON(message: AgentProfileLimits): unknown {
+    const obj: any = {};
+    if (message.maxInstructionBytes !== 0) {
+      obj.maxInstructionBytes = Math.round(message.maxInstructionBytes);
+    }
+    if (message.maxSkills !== 0) {
+      obj.maxSkills = Math.round(message.maxSkills);
+    }
+    if (message.maxRepositories !== 0) {
+      obj.maxRepositories = Math.round(message.maxRepositories);
+    }
+    if (message.maxModelCalls !== 0) {
+      obj.maxModelCalls = Math.round(message.maxModelCalls);
+    }
+    if (message.maxDeadlineSeconds !== "0") {
+      obj.maxDeadlineSeconds = message.maxDeadlineSeconds;
+    }
+    if (message.maxIdentifierBytes !== 0) {
+      obj.maxIdentifierBytes = Math.round(message.maxIdentifierBytes);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentProfileLimits>): AgentProfileLimits {
+    return AgentProfileLimits.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentProfileLimits>): AgentProfileLimits {
+    const message = createBaseAgentProfileLimits();
+    message.maxInstructionBytes = object.maxInstructionBytes ?? 0;
+    message.maxSkills = object.maxSkills ?? 0;
+    message.maxRepositories = object.maxRepositories ?? 0;
+    message.maxModelCalls = object.maxModelCalls ?? 0;
+    message.maxDeadlineSeconds = object.maxDeadlineSeconds ?? "0";
+    message.maxIdentifierBytes = object.maxIdentifierBytes ?? 0;
+    return message;
+  },
+};
+
+function createBaseAgentRoleCapabilities(): AgentRoleCapabilities {
+  return { role: "", defaults: undefined };
+}
+
+export const AgentRoleCapabilities: MessageFns<AgentRoleCapabilities> = {
+  encode(message: AgentRoleCapabilities, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.role !== "") {
+      writer.uint32(10).string(message.role);
+    }
+    if (message.defaults !== undefined) {
+      AgentProfileSettings.encode(message.defaults, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentRoleCapabilities {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentRoleCapabilities();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.role = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.defaults = AgentProfileSettings.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentRoleCapabilities {
+    return {
+      role: isSet(object.role) ? globalThis.String(object.role) : "",
+      defaults: isSet(object.defaults) ? AgentProfileSettings.fromJSON(object.defaults) : undefined,
+    };
+  },
+
+  toJSON(message: AgentRoleCapabilities): unknown {
+    const obj: any = {};
+    if (message.role !== "") {
+      obj.role = message.role;
+    }
+    if (message.defaults !== undefined) {
+      obj.defaults = AgentProfileSettings.toJSON(message.defaults);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentRoleCapabilities>): AgentRoleCapabilities {
+    return AgentRoleCapabilities.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentRoleCapabilities>): AgentRoleCapabilities {
+    const message = createBaseAgentRoleCapabilities();
+    message.role = object.role ?? "";
+    message.defaults = (object.defaults !== undefined && object.defaults !== null)
+      ? AgentProfileSettings.fromPartial(object.defaults)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetAgentCapabilitiesResponse(): GetAgentCapabilitiesResponse {
+  return { roles: [], limits: undefined };
+}
+
+export const GetAgentCapabilitiesResponse: MessageFns<GetAgentCapabilitiesResponse> = {
+  encode(message: GetAgentCapabilitiesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.roles) {
+      AgentRoleCapabilities.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.limits !== undefined) {
+      AgentProfileLimits.encode(message.limits, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAgentCapabilitiesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetAgentCapabilitiesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.roles.push(AgentRoleCapabilities.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.limits = AgentProfileLimits.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetAgentCapabilitiesResponse {
+    return {
+      roles: globalThis.Array.isArray(object?.roles)
+        ? object.roles.map((e: any) => AgentRoleCapabilities.fromJSON(e))
+        : [],
+      limits: isSet(object.limits) ? AgentProfileLimits.fromJSON(object.limits) : undefined,
+    };
+  },
+
+  toJSON(message: GetAgentCapabilitiesResponse): unknown {
+    const obj: any = {};
+    if (message.roles?.length) {
+      obj.roles = message.roles.map((e) => AgentRoleCapabilities.toJSON(e));
+    }
+    if (message.limits !== undefined) {
+      obj.limits = AgentProfileLimits.toJSON(message.limits);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetAgentCapabilitiesResponse>): GetAgentCapabilitiesResponse {
+    return GetAgentCapabilitiesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetAgentCapabilitiesResponse>): GetAgentCapabilitiesResponse {
+    const message = createBaseGetAgentCapabilitiesResponse();
+    message.roles = object.roles?.map((e) => AgentRoleCapabilities.fromPartial(e)) || [];
+    message.limits = (object.limits !== undefined && object.limits !== null)
+      ? AgentProfileLimits.fromPartial(object.limits)
+      : undefined;
+    return message;
+  },
+};
+
+/** Read-only application capability metadata; selections never grant authority. */
+export type AgentProfileServiceService = typeof AgentProfileServiceService;
+export const AgentProfileServiceService = {
+  getAgentCapabilities: {
+    path: "/ayni.orchestrator.v1.AgentProfileService/GetAgentCapabilities" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetAgentCapabilitiesRequest): Buffer =>
+      Buffer.from(GetAgentCapabilitiesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetAgentCapabilitiesRequest => GetAgentCapabilitiesRequest.decode(value),
+    responseSerialize: (value: GetAgentCapabilitiesResponse): Buffer =>
+      Buffer.from(GetAgentCapabilitiesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetAgentCapabilitiesResponse => GetAgentCapabilitiesResponse.decode(value),
+  },
+} as const;
+
+export interface AgentProfileServiceServer extends UntypedServiceImplementation {
+  getAgentCapabilities: handleUnaryCall<GetAgentCapabilitiesRequest, GetAgentCapabilitiesResponse>;
+}
+
+export interface AgentProfileServiceClient extends Client {
+  getAgentCapabilities(
+    request: GetAgentCapabilitiesRequest,
+    callback: (error: ServiceError | null, response: GetAgentCapabilitiesResponse) => void,
+  ): ClientUnaryCall;
+  getAgentCapabilities(
+    request: GetAgentCapabilitiesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetAgentCapabilitiesResponse) => void,
+  ): ClientUnaryCall;
+  getAgentCapabilities(
+    request: GetAgentCapabilitiesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetAgentCapabilitiesResponse) => void,
+  ): ClientUnaryCall;
+}
+
+export const AgentProfileServiceClient = makeGenericClientConstructor(
+  AgentProfileServiceService,
+  "ayni.orchestrator.v1.AgentProfileService",
+) as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AgentProfileServiceClient;
+  service: typeof AgentProfileServiceService;
+  serviceName: string;
 };
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;

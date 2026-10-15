@@ -160,3 +160,13 @@ it("keeps an event dirty if editing starts while the earlier read is pending", a
   expect(invalidate).toHaveBeenCalledTimes(2);
   stop();
 });
+
+it("follows conversation events received during a read with one trailing refresh",async()=>{
+ let finish!:()=>void;
+ const invalidate=vi.fn().mockImplementationOnce(()=>new Promise<void>(resolve=>finish=resolve)).mockResolvedValue(undefined);
+ const refresh=createRefreshCoordinator(invalidate,()=>true);
+ const stop=refresh.subscribe("app:conversations",{intervalMs:120_000});
+ const first=refresh.request("app:conversations");await Promise.resolve();
+ refresh.event("app:conversations");refresh.event("app:conversations");finish();await first;await Promise.resolve();
+ expect(invalidate).toHaveBeenCalledTimes(2);stop();
+});

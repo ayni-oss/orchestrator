@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("task details use bounded repair while task lists retain new-task discovery", async ({ page }) => {
+test("task details and task history share bounded repair", async ({ page }) => {
   await page.clock.install();
   // Keep this browser's event streams quiet so only the repair policy triggers
   // task reads. The real task stream and snapshot relay have separate tests.
@@ -25,7 +25,7 @@ test("task details use bounded repair while task lists retain new-task discovery
   await page.goto("/tasks");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   reads = 0;
-  await page.clock.runFor(29_000);
+  await page.clock.runFor(119_000);
   expect(reads).toBe(0);
   await page.clock.runFor(1_000);
   await expect.poll(() => reads).toBeGreaterThan(0);

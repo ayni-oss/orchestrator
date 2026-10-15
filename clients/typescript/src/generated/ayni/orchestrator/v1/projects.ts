@@ -154,7 +154,11 @@ export interface GetProjectRequest {
 }
 
 export interface GetProjectResponse {
-  project?: Project | undefined;
+  project?:
+    | Project
+    | undefined;
+  /** Read projection only; raw overrides remain on the resource. */
+  effectiveAgentDefaults?: ProjectAgentDefaults | undefined;
 }
 
 export interface UpdateProjectRequest {
@@ -276,7 +280,11 @@ export interface GetWorkspaceRequest {
 }
 
 export interface GetWorkspaceResponse {
-  workspace?: Workspace | undefined;
+  workspace?:
+    | Workspace
+    | undefined;
+  /** Read projection only; raw overrides remain on the resource. */
+  effectiveAgentDefaults?: ProjectAgentDefaults | undefined;
 }
 
 export interface UpdateWorkspaceRequest {
@@ -1051,13 +1059,16 @@ export const GetProjectRequest: MessageFns<GetProjectRequest> = {
 };
 
 function createBaseGetProjectResponse(): GetProjectResponse {
-  return { project: undefined };
+  return { project: undefined, effectiveAgentDefaults: undefined };
 }
 
 export const GetProjectResponse: MessageFns<GetProjectResponse> = {
   encode(message: GetProjectResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.project !== undefined) {
       Project.encode(message.project, writer.uint32(10).fork()).join();
+    }
+    if (message.effectiveAgentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.effectiveAgentDefaults, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -1083,6 +1094,14 @@ export const GetProjectResponse: MessageFns<GetProjectResponse> = {
             message.project = Project.decode(reader, reader.uint32());
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.effectiveAgentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1096,13 +1115,23 @@ export const GetProjectResponse: MessageFns<GetProjectResponse> = {
   },
 
   fromJSON(object: any): GetProjectResponse {
-    return { project: isSet(object.project) ? Project.fromJSON(object.project) : undefined };
+    return {
+      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
+      effectiveAgentDefaults: isSet(object.effectiveAgentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.effectiveAgentDefaults)
+        : isSet(object.effective_agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.effective_agent_defaults)
+        : undefined,
+    };
   },
 
   toJSON(message: GetProjectResponse): unknown {
     const obj: any = {};
     if (message.project !== undefined) {
       obj.project = Project.toJSON(message.project);
+    }
+    if (message.effectiveAgentDefaults !== undefined) {
+      obj.effectiveAgentDefaults = ProjectAgentDefaults.toJSON(message.effectiveAgentDefaults);
     }
     return obj;
   },
@@ -1115,6 +1144,10 @@ export const GetProjectResponse: MessageFns<GetProjectResponse> = {
     message.project = (object.project !== undefined && object.project !== null)
       ? Project.fromPartial(object.project)
       : undefined;
+    message.effectiveAgentDefaults =
+      (object.effectiveAgentDefaults !== undefined && object.effectiveAgentDefaults !== null)
+        ? ProjectAgentDefaults.fromPartial(object.effectiveAgentDefaults)
+        : undefined;
     return message;
   },
 };
@@ -3096,13 +3129,16 @@ export const GetWorkspaceRequest: MessageFns<GetWorkspaceRequest> = {
 };
 
 function createBaseGetWorkspaceResponse(): GetWorkspaceResponse {
-  return { workspace: undefined };
+  return { workspace: undefined, effectiveAgentDefaults: undefined };
 }
 
 export const GetWorkspaceResponse: MessageFns<GetWorkspaceResponse> = {
   encode(message: GetWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.workspace !== undefined) {
       Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
+    }
+    if (message.effectiveAgentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.effectiveAgentDefaults, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -3128,6 +3164,14 @@ export const GetWorkspaceResponse: MessageFns<GetWorkspaceResponse> = {
             message.workspace = Workspace.decode(reader, reader.uint32());
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.effectiveAgentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3141,13 +3185,23 @@ export const GetWorkspaceResponse: MessageFns<GetWorkspaceResponse> = {
   },
 
   fromJSON(object: any): GetWorkspaceResponse {
-    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
+    return {
+      workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined,
+      effectiveAgentDefaults: isSet(object.effectiveAgentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.effectiveAgentDefaults)
+        : isSet(object.effective_agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.effective_agent_defaults)
+        : undefined,
+    };
   },
 
   toJSON(message: GetWorkspaceResponse): unknown {
     const obj: any = {};
     if (message.workspace !== undefined) {
       obj.workspace = Workspace.toJSON(message.workspace);
+    }
+    if (message.effectiveAgentDefaults !== undefined) {
+      obj.effectiveAgentDefaults = ProjectAgentDefaults.toJSON(message.effectiveAgentDefaults);
     }
     return obj;
   },
@@ -3160,6 +3214,10 @@ export const GetWorkspaceResponse: MessageFns<GetWorkspaceResponse> = {
     message.workspace = (object.workspace !== undefined && object.workspace !== null)
       ? Workspace.fromPartial(object.workspace)
       : undefined;
+    message.effectiveAgentDefaults =
+      (object.effectiveAgentDefaults !== undefined && object.effectiveAgentDefaults !== null)
+        ? ProjectAgentDefaults.fromPartial(object.effectiveAgentDefaults)
+        : undefined;
     return message;
   },
 };

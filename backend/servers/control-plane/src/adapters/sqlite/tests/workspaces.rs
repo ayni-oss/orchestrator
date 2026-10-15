@@ -182,7 +182,7 @@ fn workspace_defaults_are_inherited_by_pair_and_retained_as_connection_dependenc
     )?;
     assert_eq!(
         store.effective_project_defaults(&project)?,
-        workspace.agent_defaults
+        Some(store.effective_workspace_defaults(&workspace)?)
     );
     assert_eq!(store.resolve_task_provider(&project, "")?, provider.id);
     assert!(store.provider_connection_in_use(&provider.id)?);
@@ -286,5 +286,37 @@ fn invalid_legacy_project_rolls_back_workspace_migration() -> Result<(), CleanSt
         .map_err(CleanStoreError::Database)?;
     assert_eq!(version, 19);
     assert!(!existing_tables(&connection)?.contains(&"workspaces".into()));
+    Ok(())
+}
+
+#[test]
+fn effective_reads_expose_application_profiles_without_persisting_overrides()
+-> Result<(), CleanStoreError> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, _, _) = ready_profile(&mut store)?;
+    let workspace = store.create_workspace(
+        "configuration",
+        &workspace_request(vec![repository.id.clone()]),
+    )?;
+    let project = store.create_project(
+        "configuration-project",
+        &workspace_project(&workspace, &repository.id, "configuration-project"),
+    )?;
+    let effective = store
+        .effective_project_defaults(&project)?
+        .ok_or(CleanStoreError::CorruptState)?;
+    assert!(effective.project_connection_id.is_empty());
+    assert!(effective.coding_connection_id.is_empty());
+    assert_eq!(
+        effective.planner_profile,
+        Some(crate::agent_profiles::wire_settings(
+            &ayni_orchestrator_runtime::agent_profile::Settings::defaults(
+                &ayni_orchestrator_runtime::agent_profile::Role::Planner
+            )
+        ))
+    );
+    assert!(effective.worker_profile.is_some());
+    assert!(store.project(&project.id)?.agent_defaults.is_none());
+    assert!(store.workspace(&workspace.id)?.agent_defaults.is_none());
     Ok(())
 }

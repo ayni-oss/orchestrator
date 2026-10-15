@@ -54,9 +54,17 @@ test("project chat persists requirements, requires approval, links results, and 
   await expect(page.getByRole("region",{name:"Worker updates",exact:true})).toContainText("Repair the failing compatibility test");
   await expect(page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true})).toHaveCount(0);
   const results=await new AxeBuilder({page}).include("main").analyze();expect(results.violations).toEqual([]);
-  await page.getByRole("button",{name:"New task",exact:true}).click();
+  await page.getByRole("button",{name:/project actions$/}).click();
+ await page.getByRole("menuitem",{name:"Submit task directly",exact:true}).click();
   await expect(page.getByLabel("Coding connection",{exact:true})).toContainText("Admin App");
   await expect(page.getByLabel("Model",{exact:true})).toContainText("gpt-5.6-sol");
+  const direct=page.getByRole("dialog");
+  await direct.getByLabel("Request",{exact:true}).fill("Keep this draft while evidence updates");
+  const key=await direct.locator('input[name="idempotencyKey"]').inputValue();
+  await request.post("http://127.0.0.1:50062/append-message");
+  await page.waitForTimeout(1500);
+  await expect(direct.getByLabel("Request",{exact:true})).toHaveValue("Keep this draft while evidence updates");
+  await expect(direct.locator('input[name="idempotencyKey"]')).toHaveValue(key);
   await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).click();
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);

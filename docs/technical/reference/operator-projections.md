@@ -60,9 +60,9 @@ coordinator and can refresh explicitly after saving.
 
 Task details retain their stream through reporting and cleanup with a 120-second
 repair interval. Global subscriptions do not shorten that interval. Task lists
-and project task summaries keep 30-second discovery reads because no global task
-watch API exists. The task-list loader declares task, project and runtime
-dependencies so these reads refresh its data. Stream interruption remains visible
+and project task summaries use 120-second repair reads; project conversation
+events request earlier refresh through the same coordinator. The task-list loader
+declares task and project dependencies. Stream interruption remains visible
 after a successful repair read; a read does not establish stream health. Repository onboarding retains its own stream cursor independently
 from runtime-profile updates.
 
@@ -104,3 +104,16 @@ Legacy collector and polling retirement remains governed by
 See the [protocol contract](../../../proto/README.md),
 [local development](../operations/local-development.md) and
 [event platform implementation proposal](../history/event-platform/event-platform-implementation.md).
+
+## Configuration and direct submission
+
+The project Overview is the primary discussion surface. Direct submission is a
+project action using one task form and server handler; global Tasks is history.
+Direct tasks have no plan provenance. Task and conversation views share the same
+execution, quality and publication vocabulary.
+
+Capability metadata and effective defaults come from backend read projections.
+Missing metadata disables affected submissions instead of substituting browser
+capabilities. Editors preserve raw overrides separately from inherited and
+resolved settings. Conversation SSE events enter the shared refresh coordinator,
+which defers reads during edits and repairs disconnected streams periodically.

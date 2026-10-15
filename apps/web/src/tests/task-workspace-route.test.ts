@@ -1,20 +1,20 @@
 import {beforeEach,describe,expect,it,vi} from "vitest";
-const bff=vi.hoisted(()=>({getProject:vi.fn(),getRuntimeProfile:vi.fn(),createDevelopmentTask:vi.fn(),listProjects:vi.fn(),getWorkspace:vi.fn(),listDevelopmentTasks:vi.fn(),listRuntimeProfiles:vi.fn(),listProviderModels:vi.fn()}));
+const bff=vi.hoisted(()=>({getProject:vi.fn(),getRuntimeProfile:vi.fn(),createDevelopmentTask:vi.fn(),getWorkspace:vi.fn(),listDevelopmentTasks:vi.fn(),getAgentCapabilities:vi.fn(),getProjectConfiguration:vi.fn(),listConnections:vi.fn(),listProviderModels:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-import {load,actions} from "../routes/tasks/+page.server.js";
-const project={id:"project:1",workspaceId:"workspace:1",displayName:"Project",goal:"Goal",state:"active",repositoryConnectionIds:["repository:1","repository:removed"],resourceVersion:"1"};
-const workspace={id:"workspace:1",displayName:"Workspace",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
+import {load} from "../routes/tasks/+page.server.js";
+import {submitDirectTask} from "$lib/server/tasks.js";
+const project={id:"project:1",workspaceId:"workspace:1",state:"active",repositoryConnectionIds:["repository:1"]};
+const workspace={id:"workspace:1",state:"active",repositoryConnectionIds:["repository:1"]};
 const page={nextPageToken:"",snapshotCursor:"1"};
-beforeEach(()=>{vi.clearAllMocks();bff.getProject.mockResolvedValue(project);bff.listProjects.mockResolvedValue({projects:[project],page});bff.getWorkspace.mockResolvedValue(workspace);bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[],page});bff.listProviderModels.mockResolvedValue({models:[],page});});
-function event(){return {locals:{requestId:"task-workspace",requestSignal:new AbortController().signal},url:new URL("http://localhost/tasks"),setHeaders:vi.fn(),depends:vi.fn()} as never;}
-describe("task workspace choices",()=>{
-  it("offers only repositories still owned by the project's workspace",async()=>{expect(await load(event())).toMatchObject({projects:[{...project,repositoryConnectionIds:["repository:1"]}]});});
-  it("excludes projects in archived workspaces",async()=>{bff.getWorkspace.mockResolvedValueOnce({...workspace,state:"archived"});expect(await load(event())).toMatchObject({projects:[]});});
-  it("excludes projects with no remaining usable workspace repositories",async()=>{bff.getWorkspace.mockResolvedValueOnce({...workspace,repositoryConnectionIds:["repository:other"]});expect(await load(event())).toMatchObject({projects:[]});});
-  it.each(["archived","removed"])("rejects a direct task POST for %s workspace access",async condition=>{
-    bff.getWorkspace.mockResolvedValueOnce(condition==="archived"?{...workspace,state:"archived"}:{...workspace,repositoryConnectionIds:[]});
-    const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",projectId:project.id,repositoryConnectionId:"repository:1",runtimeProfileId:"profile:1",provider:"openai",model:"coding",request:"Ship work",acceptanceCriteria:"Behavior works"}))form.set(key,value);
-    expect(await actions.create!({locals:{requestId:"task-workspace",requestSignal:new AbortController().signal},request:new Request("http://localhost/tasks",{method:"POST",body:form})} as never)).toMatchObject({status:409});
-    expect(bff.getRuntimeProfile).not.toHaveBeenCalled();expect(bff.createDevelopmentTask).not.toHaveBeenCalled();
-  });
+beforeEach(()=>{vi.resetAllMocks();bff.getProject.mockResolvedValue(project);bff.getWorkspace.mockResolvedValue(workspace);bff.getAgentCapabilities.mockResolvedValue({});bff.getProjectConfiguration.mockResolvedValue({project});bff.listConnections.mockResolvedValue([{id:"coding",kind:"openai",enabled:true,status:"ready"}]);bff.listProviderModels.mockResolvedValue({models:[{id:"coding"}],page});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page});});
+const locals=()=>({requestId:"task-workspace",requestSignal:new AbortController().signal});
+describe("task history and direct submission",()=>{
+ it("loads history without task-creation configuration",async()=>{await load({locals:locals(),url:new URL("http://localhost/tasks"),setHeaders:vi.fn(),depends:vi.fn()} as never);expect(bff.listConnections).not.toHaveBeenCalled();expect(bff.getAgentCapabilities).not.toHaveBeenCalled();});
+ it("redirects a project bookmark into its direct-task dialog",async()=>{await expect(load({locals:locals(),url:new URL("http://localhost/tasks?project=project:1"),setHeaders:vi.fn(),depends:vi.fn()} as never)).rejects.toMatchObject({status:303,location:"/projects/project%3A1?directTask=1"});});
+ it.each(["archived","removed"])("rejects direct submission for %s workspace access",async condition=>{
+   bff.getWorkspace.mockResolvedValueOnce(condition==="archived"?{...workspace,state:"archived"}:{...workspace,repositoryConnectionIds:[]});
+   const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",projectId:project.id,repositoryConnectionId:"repository:1",runtimeProfileId:"profile:1",connectionId:"coding",provider:"openai",model:"coding",request:"Ship work",acceptanceCriteria:"Behavior works"}))form.set(key,value);
+   expect(await submitDirectTask({locals:locals(),params:{projectId:project.id},request:new Request("http://localhost/projects/project:1",{method:"POST",body:form})} as never)).toMatchObject({status:409});
+   expect(bff.getRuntimeProfile).not.toHaveBeenCalled();expect(bff.createDevelopmentTask).not.toHaveBeenCalled();
+ });
 });

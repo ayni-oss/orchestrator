@@ -63,10 +63,15 @@ impl v1::project_service_server::ProjectService for GrpcApi {
         api_validation::resource_id(&request.get_ref().workspace_id, "workspace_id")
             .map_err(|e| context.validation(&e))?;
         let message = request.into_inner();
-        let workspace = with_store(&self.state, move |s| s.workspace(&message.workspace_id))
-            .await
-            .map_err(|e| context.store_error(&e))?;
+        let (workspace, effective_agent_defaults) = with_store(&self.state, move |s| {
+            let value = s.workspace(&message.workspace_id)?;
+            let effective = s.effective_workspace_defaults(&value)?;
+            Ok((value, effective))
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::GetWorkspaceResponse {
+            effective_agent_defaults: Some(effective_agent_defaults),
             workspace: Some(workspace),
         }))
     }
@@ -222,10 +227,15 @@ impl v1::project_service_server::ProjectService for GrpcApi {
         api_validation::resource_id(&request.get_ref().project_id, "project_id")
             .map_err(|e| context.validation(&e))?;
         let message = request.into_inner();
-        let project = with_store(&self.state, move |s| s.project(&message.project_id))
-            .await
-            .map_err(|e| context.store_error(&e))?;
+        let (project, effective_agent_defaults) = with_store(&self.state, move |s| {
+            let value = s.project(&message.project_id)?;
+            let effective = s.effective_project_defaults(&value)?;
+            Ok((value, effective))
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?;
         Ok(context.response(v1::GetProjectResponse {
+            effective_agent_defaults,
             project: Some(project),
         }))
     }
