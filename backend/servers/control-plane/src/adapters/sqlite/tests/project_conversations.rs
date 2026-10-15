@@ -253,10 +253,10 @@ fn schema_eighteen_upgrade_preserves_existing_projects() -> Result<(), CleanStor
     let path = directory.path().join("state.db");
     let mut store = CleanStore::open(&path, 3)?;
     let (repository, _, _) = ready_profile(&mut store)?;
-    store.connection.execute_batch("DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; UPDATE clean_schema SET version=18;").map_err(CleanStoreError::Database)?;
+    store.connection.execute_batch("DROP TABLE workspaces; DROP TABLE project_conversation_actions; DROP TABLE project_conversations; DROP TABLE project_agent_requests; DROP TABLE project_outcome_summaries; UPDATE clean_schema SET version=18;").map_err(CleanStoreError::Database)?;
     drop(store);
     let store = CleanStore::open(&path, 3)?;
-    assert_eq!(store.schema_version()?, 19);
+    assert_eq!(store.schema_version()?, SCHEMA_VERSION);
     assert_eq!(
         store.repository_connection(&repository.id)?.id,
         repository.id
@@ -283,6 +283,8 @@ fn repository_proposals_admit_independently_and_replay_partial_success()
     let project = store.create_project(
         "multi-project",
         &v1::CreateProjectRequest {
+            workspace_id: String::new(),
+            goal: String::new(),
             idempotency_key: "multi".into(),
             display_name: "Multi repository".into(),
             repository_connection_id: String::new(),

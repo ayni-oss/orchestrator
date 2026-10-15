@@ -182,13 +182,13 @@ impl ProjectAgentReconciler {
         }
 
         let project_id = conversation.project_id.clone();
-        let project = with_store_async(&self.state, move |s| s.project(&project_id))
-            .await
-            .map_err(|_| "project_store_unavailable")?;
-        let defaults = project
-            .agent_defaults
-            .as_ref()
-            .ok_or("project_models_unconfigured")?;
+        let defaults = with_store_async(&self.state, move |store| {
+            let project = store.project(&project_id)?;
+            store.effective_project_defaults(&project)
+        })
+        .await
+        .map_err(|_| "project_store_unavailable")?
+        .ok_or("project_models_unconfigured")?;
         let catalog = self
             .state
             .catalog_for_connection(&defaults.coding_connection_id)
@@ -298,11 +298,10 @@ fn prepare_request(
     source_snapshots: &BTreeMap<String, v1::RepositorySnapshot>,
 ) -> Result<ProjectAgentRequest, CleanStoreError> {
     let project = store.project(&c.project_id)?;
-    let defaults = project
-        .agent_defaults
-        .as_ref()
+    let defaults = store
+        .effective_project_defaults(&project)?
         .ok_or(CleanStoreError::InvalidTransition)?;
-    let (repositories, context) = research_repositories(store, c, r, defaults, source_snapshots)?;
+    let (repositories, context) = research_repositories(store, c, r, &defaults, source_snapshots)?;
     let tasks = store.list_development_tasks(
         Some(&c.project_id),
         None,
@@ -339,7 +338,7 @@ fn prepare_request(
         .map(|m| format!("{}: {}", m.role, m.content))
         .collect::<Vec<_>>()
         .join("\n");
-    let context=json!({"project_id":c.project_id,"repositories":context,"tasks":task_context,"available_coding_models":models,"purpose":r.purpose}).to_string();
+    let context=json!({"project_id":c.project_id,"goal":project.goal,"repositories":context,"tasks":task_context,"available_coding_models":models,"purpose":r.purpose}).to_string();
     if history.len() > 131_072 || context.len() > 262_144 {
         return Err(CleanStoreError::BoundExceeded);
     }
@@ -459,6 +458,8 @@ mod tests {
         let project = store.create_project(
             "plain-project",
             &v1::CreateProjectRequest {
+                workspace_id: String::new(),
+                goal: String::new(),
                 idempotency_key: "plain-project".into(),
                 display_name: "Plain research".into(),
                 repository_connection_id: repository.id.clone(),
@@ -553,6 +554,109 @@ mod tests {
                 .items
                 .is_empty()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn planner_inputs_inherit_workspace_defaults_and_project_goal_with_pair_overrides()
+    -> Result<(), CleanStoreError> {
+        let (mut store, repository, conversation) = plain_repository_fixture()?;
+        for id in ["workspace-provider", "project-provider"] {
+            store.save_connection(&v1::Connection {
+                id: id.into(),
+                kind: "openai".into(),
+                enabled: true,
+                status: "ready".into(),
+                resource_version: 1,
+                ..Default::default()
+            })?;
+        }
+        let project = store.project(&conversation.project_id)?;
+        let workspace = store.workspace(&project.workspace_id)?;
+        store.update_workspace(
+            "workspace-defaults",
+            &v1::UpdateWorkspaceRequest {
+                idempotency_key: "workspace-defaults".into(),
+                workspace_id: workspace.id,
+                expected_resource_version: workspace.resource_version,
+                display_name: workspace.display_name,
+                agent_defaults: Some(v1::ProjectAgentDefaults {
+                    project_connection_id: "workspace-provider".into(),
+                    project_model: "workspace-research".into(),
+                    coding_connection_id: "workspace-provider".into(),
+                    coding_model: "workspace-coding".into(),
+                }),
+                ..Default::default()
+            },
+        )?;
+        let source = store.observe_repository_snapshot(&repository.id, &"a".repeat(40))?;
+        let snapshots = BTreeMap::from([(repository.id, source)]);
+        let overrides = [
+            (None, "workspace-provider", "workspace-coding"),
+            (
+                Some(v1::ProjectAgentDefaults {
+                    project_connection_id: "project-provider".into(),
+                    project_model: "project-research".into(),
+                    ..Default::default()
+                }),
+                "workspace-provider",
+                "workspace-coding",
+            ),
+            (
+                Some(v1::ProjectAgentDefaults {
+                    coding_connection_id: "project-provider".into(),
+                    coding_model: "project-coding".into(),
+                    ..Default::default()
+                }),
+                "project-provider",
+                "project-coding",
+            ),
+        ];
+        for (index, (defaults, coding_connection, coding_model)) in
+            overrides.into_iter().enumerate()
+        {
+            let project = store.project(&conversation.project_id)?;
+            let key = format!("project-settings-{index}");
+            let project = store.update_project(
+                &key,
+                &v1::UpdateProjectRequest {
+                    idempotency_key: key.clone(),
+                    project_id: project.id,
+                    expected_resource_version: project.resource_version,
+                    display_name: project.display_name,
+                    agent_defaults: defaults,
+                    goal: Some("Deliver safer payments".into()),
+                    ..Default::default()
+                },
+            )?;
+            let effective = store
+                .effective_project_defaults(&project)?
+                .ok_or(CleanStoreError::CorruptState)?;
+            let run = v1::ProjectAgentRun {
+                id: format!("run-{index}"),
+                purpose: "research".into(),
+                model: effective.project_model.clone(),
+                ..Default::default()
+            };
+            let request =
+                prepare_request(&mut store, &conversation, &run, 24, 600, "[]", &snapshots)?;
+            assert_eq!(
+                request.model,
+                if index == 1 {
+                    "project-research"
+                } else {
+                    "workspace-research"
+                }
+            );
+            assert_eq!(
+                request.repositories[0].coding_connection_id,
+                coding_connection
+            );
+            assert_eq!(request.repositories[0].coding_model, coding_model);
+            let context: serde_json::Value = serde_json::from_str(&request.context)
+                .map_err(|_| CleanStoreError::CorruptState)?;
+            assert_eq!(context["goal"], "Deliver safer payments");
+        }
         Ok(())
     }
 }

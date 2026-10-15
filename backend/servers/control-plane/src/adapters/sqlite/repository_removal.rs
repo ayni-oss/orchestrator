@@ -129,9 +129,9 @@ impl CleanStore {
             "SELECT EXISTS(SELECT 1 FROM project_repositories WHERE repository_connection_id=?1)",
             [id], |row| row.get(0),
         ).map_err(CleanStoreError::Database)?;
-        if referenced {
+        if referenced || self.workspace_repository_in_use(id)? {
             return Err(CleanStoreError::RepositoryRemovalBlocked(
-                "Remove this repository from its projects before removing its onboarding configuration. Archived project references are also retained.",
+                "Remove this repository from its workspaces and projects before removing its onboarding configuration. Archived project references are also retained.",
             ));
         }
         let tasks: bool = self

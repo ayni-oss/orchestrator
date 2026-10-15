@@ -129,6 +129,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl purge ayni-orchestrator-dev` | Permanently remove the labeled namespace and all local state |
 | `dev/ctl render CP WORKER_DIGEST WEB` | Render the complete Helm composition for inspection |
 | `dev/ctl dependencies` | Rebuild ignored chart archives from `Chart.lock` |
+| `dev/ctl test workspaces CP WEB` | Validate workspace ownership, admission and persistence across a control-plane restart in a disposable namespace |
 | `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
 
 `purge` is deliberately explicit because it deletes credentials and retained
@@ -218,3 +219,12 @@ The proxy parser has standalone segmentation, selective-drop and buffer-budget
 tests (`node --test dev/tests/nats-fault-proxy.test.mjs`), also run by PR validation.
 Namespace/PVC cleanup runs on failure as well as success. Remove the gate's own
 host and node image tags after use; avoid broad Docker pruning.
+
+The workspace API gate runs as `dev/ctl test workspaces CONTROL_PLANE_IMAGE
+WEB_IMAGE` with current production images loaded into Docker Desktop. It installs
+the local Helm chart with runtime execution disabled and checks shared repository
+membership, project goals, idempotent replay, stale-write rejection, restart
+persistence and workspace archival. It uses no provider credentials and makes no
+provider calls. Its unique disposable namespace and retained claims are removed
+on success or failure. This gate does not claim worker or provider execution
+coverage.

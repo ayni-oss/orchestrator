@@ -65,6 +65,49 @@ export function projectStateToJSON(object: ProjectState): string {
   }
 }
 
+/**
+ * Workspaces own shared repository access and agent defaults. Repository runtimes
+ * remain attached to repository connections and are never copied by membership.
+ */
+export enum WorkspaceState {
+  WORKSPACE_STATE_UNSPECIFIED = 0,
+  WORKSPACE_STATE_ACTIVE = 1,
+  WORKSPACE_STATE_ARCHIVED = 2,
+  UNRECOGNIZED = -1,
+}
+
+export function workspaceStateFromJSON(object: any): WorkspaceState {
+  switch (object) {
+    case 0:
+    case "WORKSPACE_STATE_UNSPECIFIED":
+      return WorkspaceState.WORKSPACE_STATE_UNSPECIFIED;
+    case 1:
+    case "WORKSPACE_STATE_ACTIVE":
+      return WorkspaceState.WORKSPACE_STATE_ACTIVE;
+    case 2:
+    case "WORKSPACE_STATE_ARCHIVED":
+      return WorkspaceState.WORKSPACE_STATE_ARCHIVED;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return WorkspaceState.UNRECOGNIZED;
+  }
+}
+
+export function workspaceStateToJSON(object: WorkspaceState): string {
+  switch (object) {
+    case WorkspaceState.WORKSPACE_STATE_UNSPECIFIED:
+      return "WORKSPACE_STATE_UNSPECIFIED";
+    case WorkspaceState.WORKSPACE_STATE_ACTIVE:
+      return "WORKSPACE_STATE_ACTIVE";
+    case WorkspaceState.WORKSPACE_STATE_ARCHIVED:
+      return "WORKSPACE_STATE_ARCHIVED";
+    case WorkspaceState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 export interface Project {
   id: string;
   displayName: string;
@@ -75,6 +118,8 @@ export interface Project {
   updatedAt?: Date | undefined;
   resourceVersion: string;
   agentDefaults?: ProjectAgentDefaults | undefined;
+  workspaceId: string;
+  goal: string;
 }
 
 export interface CreateProjectRequest {
@@ -85,6 +130,8 @@ export interface CreateProjectRequest {
   repositoryConnectionId: string;
   /** Between 1 and 100 unique repository connections. */
   repositoryConnectionIds: string[];
+  workspaceId: string;
+  goal: string;
 }
 
 export interface CreateProjectResponse {
@@ -118,6 +165,7 @@ export interface UpdateProjectRequest {
   repositoryConnectionIds: string[];
   /** Omitted preserves defaults; an empty message clears them. */
   agentDefaults?: ProjectAgentDefaults | undefined;
+  goal?: string | undefined;
 }
 
 export interface UpdateProjectResponse {
@@ -186,6 +234,70 @@ export interface ProjectAgentDefaults {
   codingModel: string;
 }
 
+export interface Workspace {
+  id: string;
+  displayName: string;
+  state: WorkspaceState;
+  repositoryConnectionIds: string[];
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  resourceVersion: string;
+  agentDefaults?: ProjectAgentDefaults | undefined;
+}
+
+export interface CreateWorkspaceRequest {
+  idempotencyKey: string;
+  displayName: string;
+  repositoryConnectionIds: string[];
+  agentDefaults?: ProjectAgentDefaults | undefined;
+}
+
+export interface CreateWorkspaceResponse {
+  workspace?: Workspace | undefined;
+}
+
+export interface ListWorkspacesRequest {
+  page?: PageRequest | undefined;
+  state?: WorkspaceState | undefined;
+}
+
+export interface ListWorkspacesResponse {
+  workspaces: Workspace[];
+  page?: PageResponse | undefined;
+}
+
+export interface GetWorkspaceRequest {
+  workspaceId: string;
+}
+
+export interface GetWorkspaceResponse {
+  workspace?: Workspace | undefined;
+}
+
+export interface UpdateWorkspaceRequest {
+  idempotencyKey: string;
+  workspaceId: string;
+  expectedResourceVersion: string;
+  displayName: string;
+  /** Empty preserves membership, matching the compatibility Project API. */
+  repositoryConnectionIds: string[];
+  agentDefaults?: ProjectAgentDefaults | undefined;
+}
+
+export interface UpdateWorkspaceResponse {
+  workspace?: Workspace | undefined;
+}
+
+export interface ArchiveWorkspaceRequest {
+  idempotencyKey: string;
+  workspaceId: string;
+  expectedResourceVersion: string;
+}
+
+export interface ArchiveWorkspaceResponse {
+  workspace?: Workspace | undefined;
+}
+
 function createBaseProject(): Project {
   return {
     id: "",
@@ -196,6 +308,8 @@ function createBaseProject(): Project {
     updatedAt: undefined,
     resourceVersion: "0",
     agentDefaults: undefined,
+    workspaceId: "",
+    goal: "",
   };
 }
 
@@ -224,6 +338,12 @@ export const Project: MessageFns<Project> = {
     }
     if (message.agentDefaults !== undefined) {
       ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(66).fork()).join();
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(74).string(message.workspaceId);
+    }
+    if (message.goal !== "") {
+      writer.uint32(82).string(message.goal);
     }
     return writer;
   },
@@ -305,6 +425,22 @@ export const Project: MessageFns<Project> = {
             message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.goal = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -351,6 +487,12 @@ export const Project: MessageFns<Project> = {
         : isSet(object.agent_defaults)
         ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
         : undefined,
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
     };
   },
 
@@ -380,6 +522,12 @@ export const Project: MessageFns<Project> = {
     if (message.agentDefaults !== undefined) {
       obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
     }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
     return obj;
   },
 
@@ -398,12 +546,21 @@ export const Project: MessageFns<Project> = {
     message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
       ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
       : undefined;
+    message.workspaceId = object.workspaceId ?? "";
+    message.goal = object.goal ?? "";
     return message;
   },
 };
 
 function createBaseCreateProjectRequest(): CreateProjectRequest {
-  return { idempotencyKey: "", displayName: "", repositoryConnectionId: "", repositoryConnectionIds: [] };
+  return {
+    idempotencyKey: "",
+    displayName: "",
+    repositoryConnectionId: "",
+    repositoryConnectionIds: [],
+    workspaceId: "",
+    goal: "",
+  };
 }
 
 export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
@@ -419,6 +576,12 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     }
     for (const v of message.repositoryConnectionIds) {
       writer.uint32(34).string(v!);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(42).string(message.workspaceId);
+    }
+    if (message.goal !== "") {
+      writer.uint32(50).string(message.goal);
     }
     return writer;
   },
@@ -468,6 +631,22 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
             message.repositoryConnectionIds.push(reader.string());
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.goal = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -502,6 +681,12 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
         : globalThis.Array.isArray(object?.repository_connection_ids)
         ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
         : [],
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : "",
     };
   },
 
@@ -519,6 +704,12 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     if (message.repositoryConnectionIds?.length) {
       obj.repositoryConnectionIds = message.repositoryConnectionIds;
     }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.goal !== "") {
+      obj.goal = message.goal;
+    }
     return obj;
   },
 
@@ -531,6 +722,8 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     message.displayName = object.displayName ?? "";
     message.repositoryConnectionId = object.repositoryConnectionId ?? "";
     message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
+    message.workspaceId = object.workspaceId ?? "";
+    message.goal = object.goal ?? "";
     return message;
   },
 };
@@ -928,6 +1121,7 @@ function createBaseUpdateProjectRequest(): UpdateProjectRequest {
     displayName: "",
     repositoryConnectionIds: [],
     agentDefaults: undefined,
+    goal: undefined,
   };
 }
 
@@ -950,6 +1144,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     }
     if (message.agentDefaults !== undefined) {
       ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(50).fork()).join();
+    }
+    if (message.goal !== undefined) {
+      writer.uint32(58).string(message.goal);
     }
     return writer;
   },
@@ -1015,6 +1212,14 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
             message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.goal = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1059,6 +1264,7 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
         : isSet(object.agent_defaults)
         ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
         : undefined,
+      goal: isSet(object.goal) ? globalThis.String(object.goal) : undefined,
     };
   },
 
@@ -1082,6 +1288,9 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     if (message.agentDefaults !== undefined) {
       obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
     }
+    if (message.goal !== undefined) {
+      obj.goal = message.goal;
+    }
     return obj;
   },
 
@@ -1098,6 +1307,7 @@ export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
     message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
       ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
       : undefined;
+    message.goal = object.goal ?? undefined;
     return message;
   },
 };
@@ -2112,9 +2322,1234 @@ export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
   },
 };
 
-/** Projects are user-facing workspaces with shared, editable repository membership. */
+function createBaseWorkspace(): Workspace {
+  return {
+    id: "",
+    displayName: "",
+    state: 0,
+    repositoryConnectionIds: [],
+    createdAt: undefined,
+    updatedAt: undefined,
+    resourceVersion: "0",
+    agentDefaults: undefined,
+  };
+}
+
+export const Workspace: MessageFns<Workspace> = {
+  encode(message: Workspace, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.state !== 0) {
+      writer.uint32(24).int32(message.state);
+    }
+    for (const v of message.repositoryConnectionIds) {
+      writer.uint32(34).string(v!);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(42).fork()).join();
+    }
+    if (message.updatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(50).fork()).join();
+    }
+    if (message.resourceVersion !== "0") {
+      writer.uint32(56).uint64(message.resourceVersion);
+    }
+    if (message.agentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(66).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Workspace {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWorkspace();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.repositoryConnectionIds.push(reader.string());
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.resourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Workspace {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      state: isSet(object.state) ? workspaceStateFromJSON(object.state) : 0,
+      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
+        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.repository_connection_ids)
+        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
+        : [],
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+      updatedAt: isSet(object.updatedAt)
+        ? fromJsonTimestamp(object.updatedAt)
+        : isSet(object.updated_at)
+        ? fromJsonTimestamp(object.updated_at)
+        : undefined,
+      resourceVersion: isSet(object.resourceVersion)
+        ? globalThis.String(object.resourceVersion)
+        : isSet(object.resource_version)
+        ? globalThis.String(object.resource_version)
+        : "0",
+      agentDefaults: isSet(object.agentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
+        : isSet(object.agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
+        : undefined,
+    };
+  },
+
+  toJSON(message: Workspace): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.state !== 0) {
+      obj.state = workspaceStateToJSON(message.state);
+    }
+    if (message.repositoryConnectionIds?.length) {
+      obj.repositoryConnectionIds = message.repositoryConnectionIds;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    if (message.updatedAt !== undefined) {
+      obj.updatedAt = message.updatedAt.toISOString();
+    }
+    if (message.resourceVersion !== "0") {
+      obj.resourceVersion = message.resourceVersion;
+    }
+    if (message.agentDefaults !== undefined) {
+      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<Workspace>): Workspace {
+    return Workspace.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<Workspace>): Workspace {
+    const message = createBaseWorkspace();
+    message.id = object.id ?? "";
+    message.displayName = object.displayName ?? "";
+    message.state = object.state ?? 0;
+    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
+    message.createdAt = object.createdAt ?? undefined;
+    message.updatedAt = object.updatedAt ?? undefined;
+    message.resourceVersion = object.resourceVersion ?? "0";
+    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
+      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCreateWorkspaceRequest(): CreateWorkspaceRequest {
+  return { idempotencyKey: "", displayName: "", repositoryConnectionIds: [], agentDefaults: undefined };
+}
+
+export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
+  encode(message: CreateWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    for (const v of message.repositoryConnectionIds) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.agentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWorkspaceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateWorkspaceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.repositoryConnectionIds.push(reader.string());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CreateWorkspaceRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
+        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.repository_connection_ids)
+        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
+        : [],
+      agentDefaults: isSet(object.agentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
+        : isSet(object.agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
+        : undefined,
+    };
+  },
+
+  toJSON(message: CreateWorkspaceRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.repositoryConnectionIds?.length) {
+      obj.repositoryConnectionIds = message.repositoryConnectionIds;
+    }
+    if (message.agentDefaults !== undefined) {
+      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CreateWorkspaceRequest>): CreateWorkspaceRequest {
+    return CreateWorkspaceRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CreateWorkspaceRequest>): CreateWorkspaceRequest {
+    const message = createBaseCreateWorkspaceRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.displayName = object.displayName ?? "";
+    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
+    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
+      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCreateWorkspaceResponse(): CreateWorkspaceResponse {
+  return { workspace: undefined };
+}
+
+export const CreateWorkspaceResponse: MessageFns<CreateWorkspaceResponse> = {
+  encode(message: CreateWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspace !== undefined) {
+      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWorkspaceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateWorkspaceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspace = Workspace.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CreateWorkspaceResponse {
+    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
+  },
+
+  toJSON(message: CreateWorkspaceResponse): unknown {
+    const obj: any = {};
+    if (message.workspace !== undefined) {
+      obj.workspace = Workspace.toJSON(message.workspace);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CreateWorkspaceResponse>): CreateWorkspaceResponse {
+    return CreateWorkspaceResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CreateWorkspaceResponse>): CreateWorkspaceResponse {
+    const message = createBaseCreateWorkspaceResponse();
+    message.workspace = (object.workspace !== undefined && object.workspace !== null)
+      ? Workspace.fromPartial(object.workspace)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseListWorkspacesRequest(): ListWorkspacesRequest {
+  return { page: undefined, state: undefined };
+}
+
+export const ListWorkspacesRequest: MessageFns<ListWorkspacesRequest> = {
+  encode(message: ListWorkspacesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    }
+    if (message.state !== undefined) {
+      writer.uint32(16).int32(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListWorkspacesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListWorkspacesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.page = PageRequest.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.state = reader.int32() as any;
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListWorkspacesRequest {
+    return {
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
+      state: isSet(object.state) ? workspaceStateFromJSON(object.state) : undefined,
+    };
+  },
+
+  toJSON(message: ListWorkspacesRequest): unknown {
+    const obj: any = {};
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    if (message.state !== undefined) {
+      obj.state = workspaceStateToJSON(message.state);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListWorkspacesRequest>): ListWorkspacesRequest {
+    return ListWorkspacesRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListWorkspacesRequest>): ListWorkspacesRequest {
+    const message = createBaseListWorkspacesRequest();
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    message.state = object.state ?? undefined;
+    return message;
+  },
+};
+
+function createBaseListWorkspacesResponse(): ListWorkspacesResponse {
+  return { workspaces: [], page: undefined };
+}
+
+export const ListWorkspacesResponse: MessageFns<ListWorkspacesResponse> = {
+  encode(message: ListWorkspacesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.workspaces) {
+      Workspace.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListWorkspacesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListWorkspacesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaces.push(Workspace.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.page = PageResponse.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListWorkspacesResponse {
+    return {
+      workspaces: globalThis.Array.isArray(object?.workspaces)
+        ? object.workspaces.map((e: any) => Workspace.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListWorkspacesResponse): unknown {
+    const obj: any = {};
+    if (message.workspaces?.length) {
+      obj.workspaces = message.workspaces.map((e) => Workspace.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListWorkspacesResponse>): ListWorkspacesResponse {
+    return ListWorkspacesResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListWorkspacesResponse>): ListWorkspacesResponse {
+    const message = createBaseListWorkspacesResponse();
+    message.workspaces = object.workspaces?.map((e) => Workspace.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetWorkspaceRequest(): GetWorkspaceRequest {
+  return { workspaceId: "" };
+}
+
+export const GetWorkspaceRequest: MessageFns<GetWorkspaceRequest> = {
+  encode(message: GetWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetWorkspaceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetWorkspaceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetWorkspaceRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetWorkspaceRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetWorkspaceRequest>): GetWorkspaceRequest {
+    return GetWorkspaceRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetWorkspaceRequest>): GetWorkspaceRequest {
+    const message = createBaseGetWorkspaceRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetWorkspaceResponse(): GetWorkspaceResponse {
+  return { workspace: undefined };
+}
+
+export const GetWorkspaceResponse: MessageFns<GetWorkspaceResponse> = {
+  encode(message: GetWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspace !== undefined) {
+      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetWorkspaceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetWorkspaceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspace = Workspace.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetWorkspaceResponse {
+    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
+  },
+
+  toJSON(message: GetWorkspaceResponse): unknown {
+    const obj: any = {};
+    if (message.workspace !== undefined) {
+      obj.workspace = Workspace.toJSON(message.workspace);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetWorkspaceResponse>): GetWorkspaceResponse {
+    return GetWorkspaceResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetWorkspaceResponse>): GetWorkspaceResponse {
+    const message = createBaseGetWorkspaceResponse();
+    message.workspace = (object.workspace !== undefined && object.workspace !== null)
+      ? Workspace.fromPartial(object.workspace)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateWorkspaceRequest(): UpdateWorkspaceRequest {
+  return {
+    idempotencyKey: "",
+    workspaceId: "",
+    expectedResourceVersion: "0",
+    displayName: "",
+    repositoryConnectionIds: [],
+    agentDefaults: undefined,
+  };
+}
+
+export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
+  encode(message: UpdateWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(34).string(message.displayName);
+    }
+    for (const v of message.repositoryConnectionIds) {
+      writer.uint32(42).string(v!);
+    }
+    if (message.agentDefaults !== undefined) {
+      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWorkspaceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateWorkspaceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.repositoryConnectionIds.push(reader.string());
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UpdateWorkspaceRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
+        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.repository_connection_ids)
+        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
+        : [],
+      agentDefaults: isSet(object.agentDefaults)
+        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
+        : isSet(object.agent_defaults)
+        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
+        : undefined,
+    };
+  },
+
+  toJSON(message: UpdateWorkspaceRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.repositoryConnectionIds?.length) {
+      obj.repositoryConnectionIds = message.repositoryConnectionIds;
+    }
+    if (message.agentDefaults !== undefined) {
+      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<UpdateWorkspaceRequest>): UpdateWorkspaceRequest {
+    return UpdateWorkspaceRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<UpdateWorkspaceRequest>): UpdateWorkspaceRequest {
+    const message = createBaseUpdateWorkspaceRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    message.displayName = object.displayName ?? "";
+    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
+    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
+      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateWorkspaceResponse(): UpdateWorkspaceResponse {
+  return { workspace: undefined };
+}
+
+export const UpdateWorkspaceResponse: MessageFns<UpdateWorkspaceResponse> = {
+  encode(message: UpdateWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspace !== undefined) {
+      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWorkspaceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateWorkspaceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspace = Workspace.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UpdateWorkspaceResponse {
+    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
+  },
+
+  toJSON(message: UpdateWorkspaceResponse): unknown {
+    const obj: any = {};
+    if (message.workspace !== undefined) {
+      obj.workspace = Workspace.toJSON(message.workspace);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<UpdateWorkspaceResponse>): UpdateWorkspaceResponse {
+    return UpdateWorkspaceResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<UpdateWorkspaceResponse>): UpdateWorkspaceResponse {
+    const message = createBaseUpdateWorkspaceResponse();
+    message.workspace = (object.workspace !== undefined && object.workspace !== null)
+      ? Workspace.fromPartial(object.workspace)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseArchiveWorkspaceRequest(): ArchiveWorkspaceRequest {
+  return { idempotencyKey: "", workspaceId: "", expectedResourceVersion: "0" };
+}
+
+export const ArchiveWorkspaceRequest: MessageFns<ArchiveWorkspaceRequest> = {
+  encode(message: ArchiveWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.expectedResourceVersion !== "0") {
+      writer.uint32(24).uint64(message.expectedResourceVersion);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ArchiveWorkspaceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseArchiveWorkspaceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.expectedResourceVersion = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ArchiveWorkspaceRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      expectedResourceVersion: isSet(object.expectedResourceVersion)
+        ? globalThis.String(object.expectedResourceVersion)
+        : isSet(object.expected_resource_version)
+        ? globalThis.String(object.expected_resource_version)
+        : "0",
+    };
+  },
+
+  toJSON(message: ArchiveWorkspaceRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.expectedResourceVersion !== "0") {
+      obj.expectedResourceVersion = message.expectedResourceVersion;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ArchiveWorkspaceRequest>): ArchiveWorkspaceRequest {
+    return ArchiveWorkspaceRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ArchiveWorkspaceRequest>): ArchiveWorkspaceRequest {
+    const message = createBaseArchiveWorkspaceRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
+    return message;
+  },
+};
+
+function createBaseArchiveWorkspaceResponse(): ArchiveWorkspaceResponse {
+  return { workspace: undefined };
+}
+
+export const ArchiveWorkspaceResponse: MessageFns<ArchiveWorkspaceResponse> = {
+  encode(message: ArchiveWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspace !== undefined) {
+      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ArchiveWorkspaceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseArchiveWorkspaceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspace = Workspace.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ArchiveWorkspaceResponse {
+    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
+  },
+
+  toJSON(message: ArchiveWorkspaceResponse): unknown {
+    const obj: any = {};
+    if (message.workspace !== undefined) {
+      obj.workspace = Workspace.toJSON(message.workspace);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ArchiveWorkspaceResponse>): ArchiveWorkspaceResponse {
+    return ArchiveWorkspaceResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ArchiveWorkspaceResponse>): ArchiveWorkspaceResponse {
+    const message = createBaseArchiveWorkspaceResponse();
+    message.workspace = (object.workspace !== undefined && object.workspace !== null)
+      ? Workspace.fromPartial(object.workspace)
+      : undefined;
+    return message;
+  },
+};
+
+/** Goal-oriented projects select resources owned by a workspace. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
+  createWorkspace: {
+    path: "/ayni.orchestrator.v1.ProjectService/CreateWorkspace" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateWorkspaceRequest): Buffer =>
+      Buffer.from(CreateWorkspaceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateWorkspaceRequest => CreateWorkspaceRequest.decode(value),
+    responseSerialize: (value: CreateWorkspaceResponse): Buffer =>
+      Buffer.from(CreateWorkspaceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CreateWorkspaceResponse => CreateWorkspaceResponse.decode(value),
+  },
+  listWorkspaces: {
+    path: "/ayni.orchestrator.v1.ProjectService/ListWorkspaces" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListWorkspacesRequest): Buffer =>
+      Buffer.from(ListWorkspacesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListWorkspacesRequest => ListWorkspacesRequest.decode(value),
+    responseSerialize: (value: ListWorkspacesResponse): Buffer =>
+      Buffer.from(ListWorkspacesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListWorkspacesResponse => ListWorkspacesResponse.decode(value),
+  },
+  getWorkspace: {
+    path: "/ayni.orchestrator.v1.ProjectService/GetWorkspace" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetWorkspaceRequest): Buffer => Buffer.from(GetWorkspaceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetWorkspaceRequest => GetWorkspaceRequest.decode(value),
+    responseSerialize: (value: GetWorkspaceResponse): Buffer =>
+      Buffer.from(GetWorkspaceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetWorkspaceResponse => GetWorkspaceResponse.decode(value),
+  },
+  updateWorkspace: {
+    path: "/ayni.orchestrator.v1.ProjectService/UpdateWorkspace" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateWorkspaceRequest): Buffer =>
+      Buffer.from(UpdateWorkspaceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateWorkspaceRequest => UpdateWorkspaceRequest.decode(value),
+    responseSerialize: (value: UpdateWorkspaceResponse): Buffer =>
+      Buffer.from(UpdateWorkspaceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateWorkspaceResponse => UpdateWorkspaceResponse.decode(value),
+  },
+  archiveWorkspace: {
+    path: "/ayni.orchestrator.v1.ProjectService/ArchiveWorkspace" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ArchiveWorkspaceRequest): Buffer =>
+      Buffer.from(ArchiveWorkspaceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ArchiveWorkspaceRequest => ArchiveWorkspaceRequest.decode(value),
+    responseSerialize: (value: ArchiveWorkspaceResponse): Buffer =>
+      Buffer.from(ArchiveWorkspaceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ArchiveWorkspaceResponse => ArchiveWorkspaceResponse.decode(value),
+  },
   watchProjects: {
     path: "/ayni.orchestrator.v1.ProjectService/WatchProjects" as const,
     requestStream: false as const,
@@ -2189,6 +3624,11 @@ export const ProjectServiceService = {
 } as const;
 
 export interface ProjectServiceServer extends UntypedServiceImplementation {
+  createWorkspace: handleUnaryCall<CreateWorkspaceRequest, CreateWorkspaceResponse>;
+  listWorkspaces: handleUnaryCall<ListWorkspacesRequest, ListWorkspacesResponse>;
+  getWorkspace: handleUnaryCall<GetWorkspaceRequest, GetWorkspaceResponse>;
+  updateWorkspace: handleUnaryCall<UpdateWorkspaceRequest, UpdateWorkspaceResponse>;
+  archiveWorkspace: handleUnaryCall<ArchiveWorkspaceRequest, ArchiveWorkspaceResponse>;
   watchProjects: handleServerStreamingCall<WatchProjectsRequest, WatchProjectsResponse>;
   listProjectSummaries: handleUnaryCall<ListProjectSummariesRequest, ListProjectSummariesResponse>;
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
@@ -2199,6 +3639,81 @@ export interface ProjectServiceServer extends UntypedServiceImplementation {
 }
 
 export interface ProjectServiceClient extends Client {
+  createWorkspace(
+    request: CreateWorkspaceRequest,
+    callback: (error: ServiceError | null, response: CreateWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  createWorkspace(
+    request: CreateWorkspaceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CreateWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  createWorkspace(
+    request: CreateWorkspaceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CreateWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  listWorkspaces(
+    request: ListWorkspacesRequest,
+    callback: (error: ServiceError | null, response: ListWorkspacesResponse) => void,
+  ): ClientUnaryCall;
+  listWorkspaces(
+    request: ListWorkspacesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListWorkspacesResponse) => void,
+  ): ClientUnaryCall;
+  listWorkspaces(
+    request: ListWorkspacesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListWorkspacesResponse) => void,
+  ): ClientUnaryCall;
+  getWorkspace(
+    request: GetWorkspaceRequest,
+    callback: (error: ServiceError | null, response: GetWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  getWorkspace(
+    request: GetWorkspaceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  getWorkspace(
+    request: GetWorkspaceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  updateWorkspace(
+    request: UpdateWorkspaceRequest,
+    callback: (error: ServiceError | null, response: UpdateWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  updateWorkspace(
+    request: UpdateWorkspaceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  updateWorkspace(
+    request: UpdateWorkspaceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  archiveWorkspace(
+    request: ArchiveWorkspaceRequest,
+    callback: (error: ServiceError | null, response: ArchiveWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  archiveWorkspace(
+    request: ArchiveWorkspaceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ArchiveWorkspaceResponse) => void,
+  ): ClientUnaryCall;
+  archiveWorkspace(
+    request: ArchiveWorkspaceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ArchiveWorkspaceResponse) => void,
+  ): ClientUnaryCall;
   watchProjects(
     request: WatchProjectsRequest,
     options?: Partial<CallOptions>,

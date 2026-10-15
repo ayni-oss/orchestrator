@@ -1,13 +1,19 @@
 # Projects and tasks
 
-A project groups repositories around a purpose. Add a connected repository to a
-project, then describe work in a project conversation or create a task using one of
-its **Ready** runtimes.
+A workspace brings together connected repositories and shared agent settings.
+Create a project in a workspace, give it a goal, and select the repositories it
+needs. Several projects can share a repository and its runtime. Then describe work
+in a project conversation or create a task using one of its **Ready** runtimes.
+
+Existing projects keep their repositories, conversations and tasks in an
+automatically assigned workspace. Archiving a workspace blocks new work while
+preserving project history and tasks already admitted.
 
 ## Work through a project conversation
 
 Under **Config → LLM providers**, configure and test an OpenAI connection. In the
-project settings, choose separate models for repository research and coding.
+workspace settings, choose separate models for repository research and coding.
+Projects inherit these settings and can override them in project settings.
 Anthropic Claude and AWS Bedrock are shown as unavailable.
 
 Start a conversation and choose the repositories it can research. Describe the

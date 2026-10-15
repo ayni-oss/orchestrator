@@ -31,11 +31,23 @@ impl CleanStore {
         if project.state != v1::ProjectState::Active as i32 {
             return Err(CleanStoreError::ProjectArchived);
         }
+        let workspace = self.active_workspace(&project.workspace_id)?;
         // Legacy callers may omit the repository only for an unambiguous project.
         if repository.is_empty() && project.repository_connection_ids.len() == 1 {
-            return Ok(project.repository_connection_ids[0].clone());
+            let member = &project.repository_connection_ids[0];
+            if !workspace.repository_connection_ids.contains(member) {
+                return Err(CleanStoreError::ParentMismatch);
+            }
+            return Ok(member.clone());
         }
         if !project
+            .repository_connection_ids
+            .iter()
+            .any(|member| member == repository)
+        {
+            return Err(CleanStoreError::ParentMismatch);
+        }
+        if !workspace
             .repository_connection_ids
             .iter()
             .any(|member| member == repository)
@@ -82,6 +94,18 @@ impl CleanStore {
         for repository in &repositories {
             self.repository_connection(repository)?;
         }
+        let workspace_id = if request.workspace_id.is_empty() {
+            resource_id("workspace")
+        } else {
+            let workspace = self.active_workspace(&request.workspace_id)?;
+            if !repositories
+                .iter()
+                .all(|id| workspace.repository_connection_ids.contains(id))
+            {
+                return Err(CleanStoreError::ParentMismatch);
+            }
+            request.workspace_id.clone()
+        };
         let now = unix_seconds()?;
         let project = v1::Project {
             id: resource_id("project"),
@@ -92,6 +116,8 @@ impl CleanStore {
             updated_at: Some(timestamp(now)),
             resource_version: 1,
             agent_defaults: None,
+            workspace_id,
+            goal: request.goal.clone(),
         };
         self.save_project("CreateProject", key, request, &project, true)?;
         Ok(project)
@@ -109,8 +135,19 @@ impl CleanStore {
         let mut project =
             self.editable_project(&request.project_id, request.expected_resource_version)?;
         project.display_name.clone_from(&request.display_name);
+        if let Some(goal) = &request.goal {
+            project.goal.clone_from(goal);
+        }
+        let workspace = self.active_workspace(&project.workspace_id)?;
         if !request.repository_connection_ids.is_empty() {
             api_validation_members(&request.repository_connection_ids)?;
+            if !request
+                .repository_connection_ids
+                .iter()
+                .all(|id| workspace.repository_connection_ids.contains(id))
+            {
+                return Err(CleanStoreError::ParentMismatch);
+            }
             for repository in &request.repository_connection_ids {
                 self.repository_connection(repository)?;
             }
@@ -209,6 +246,26 @@ impl CleanStore {
             i64::try_from(project.resource_version).map_err(|_| CleanStoreError::BoundExceeded)?;
         let cursor = i64::try_from(cursor).map_err(|_| CleanStoreError::BoundExceeded)?;
         if create {
+            if !transaction
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?1)",
+                    [&project.workspace_id],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(CleanStoreError::Database)?
+            {
+                let workspace = v1::Workspace {
+                    id: project.workspace_id.clone(),
+                    display_name: project.display_name.clone(),
+                    state: project.state,
+                    repository_connection_ids: project.repository_connection_ids.clone(),
+                    created_at: project.created_at,
+                    updated_at: project.updated_at,
+                    resource_version: 1,
+                    agent_defaults: None,
+                };
+                transaction.execute("INSERT INTO workspaces(id,state,payload,resource_version) VALUES(?1,?2,?3,1)",params![workspace.id,workspace.state,workspace.encode_to_vec()]).map_err(CleanStoreError::Database)?;
+            }
             transaction.execute("INSERT INTO projects(id,state,payload,resource_version,event_cursor) VALUES (?1,?2,?3,?4,?5)",
                 params![project.id, project.state, project.encode_to_vec(), version, cursor]).map_err(CleanStoreError::Database)?;
         } else {

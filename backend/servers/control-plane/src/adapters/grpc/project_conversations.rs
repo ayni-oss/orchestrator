@@ -99,11 +99,14 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
         let project = with_store(&self.state, move |s| s.project(&c.project_id))
             .await
             .map_err(|e| context.store_error(&e))?;
-        let defaults = project.agent_defaults.ok_or_else(|| {
-            Status::failed_precondition(
-                "select project agent connection and model in project settings",
-            )
-        })?;
+        let defaults = with_store(&self.state, move |s| s.effective_project_defaults(&project))
+            .await
+            .map_err(|e| context.store_error(&e))?
+            .ok_or_else(|| {
+                Status::failed_precondition(
+                    "select project agent connection and model in project settings",
+                )
+            })?;
         let _connection = self.state.connection_lock.lock().await;
         let binding = self
             .state

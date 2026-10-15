@@ -30,7 +30,7 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 19;
+pub(crate) const SCHEMA_VERSION: i64 = 20;
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const PAGE_LIFETIME_SECONDS: i64 = 15 * 60;
@@ -74,6 +74,7 @@ const CLEAN_TABLES: &[&str] = &[
     "verification_inbox",
     "verification_journal",
     "verification_outbox",
+    "workspaces",
 ];
 
 pub(crate) const CONNECTION_SERVICE: &str = "connections";
@@ -202,6 +203,7 @@ mod verification_cutover;
 pub(crate) mod verification_inbox;
 pub(crate) mod verification_outbox;
 mod verification_tracing;
+mod workspaces;
 use validation::{
     collect_bounded_payloads, get_payload, persist_attempt_update, persist_task_update,
     query_payloads, valid_version_and_cursor, validate_durable_actions, validate_indexed_rows,
@@ -342,6 +344,8 @@ mod tests {
         store.create_project(
             "project-scope",
             &v1::CreateProjectRequest {
+                workspace_id: String::new(),
+                goal: String::new(),
                 idempotency_key: "project".into(),
                 display_name: "Sandbox".into(),
                 repository_connection_id: repository.id.clone(),
@@ -404,6 +408,7 @@ mod tests {
     mod runtime_registry;
     mod summaries;
     mod verification;
+    mod workspaces;
 }
 
 mod project_validation;

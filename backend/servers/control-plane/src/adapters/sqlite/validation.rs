@@ -206,6 +206,30 @@ pub(super) fn validate_durable_actions(connection: &Connection) -> Result<(), Cl
 
 pub(super) fn action_payload_is_valid(operation: &str, payload: &[u8]) -> bool {
     match operation {
+        "CreateWorkspace" => v1::CreateWorkspaceRequest::decode(payload).is_ok_and(|value| {
+            api_validation::idempotency_key(&value.idempotency_key).is_ok()
+                && api_validation::project_name(&value.display_name).is_ok()
+                && api_validation::project_members(&value.repository_connection_ids).is_ok()
+        }),
+        "UpdateWorkspace" => v1::UpdateWorkspaceRequest::decode(payload).is_ok_and(|value| {
+            api_validation::project_mutation(
+                &value.idempotency_key,
+                &value.workspace_id,
+                value.expected_resource_version,
+            )
+            .is_ok()
+                && api_validation::project_name(&value.display_name).is_ok()
+                && (value.repository_connection_ids.is_empty()
+                    || api_validation::project_members(&value.repository_connection_ids).is_ok())
+        }),
+        "ArchiveWorkspace" => v1::ArchiveWorkspaceRequest::decode(payload).is_ok_and(|value| {
+            api_validation::project_mutation(
+                &value.idempotency_key,
+                &value.workspace_id,
+                value.expected_resource_version,
+            )
+            .is_ok()
+        }),
         "CreateProject" => v1::CreateProjectRequest::decode(payload)
             .is_ok_and(|v| api_validation::create_project(&v).is_ok()),
         "UpdateProject" => v1::UpdateProjectRequest::decode(payload).is_ok_and(|v| {

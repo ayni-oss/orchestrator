@@ -1,13 +1,12 @@
+import {workspaceOperations,mapProject,type WorkspaceOperations,type UnaryInvoker} from "./workspaces.js";
 import { mapConversation, type ProjectConversationResponse } from "./conversations.js";
 import { mapSummaryReadiness } from "./summaries.js";
 import { mapCertificate } from "./certificates.js";
 import {
   credentials,
   Metadata,
-  type CallOptions,
   type ClientOptions,
   type ClientUnaryCall,
-  type ServiceError,
 } from "@grpc/grpc-js";
 import {
   CertificateServiceClient, type Certificate, type CreateCertificateRequest, type ReplaceCertificateRequest, type RenameCertificateRequest, type SetCertificateEnabledRequest, type SetDefaultCertificateRequest, type DeleteCertificateRequest, type SetRuntimeCertificateResponse,
@@ -15,7 +14,7 @@ import {
   ProjectServiceClient, ProjectState,
   ProjectConversationServiceClient, type ListProjectConversationsResponse,
   type ListProjectSummariesResponse, type ListRepositorySummariesResponse,
-  type Project, type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
+  type CreateProjectResponse, type GetProjectResponse, type ListProjectsResponse, type UpdateProjectResponse, type ArchiveProjectResponse,
   DevelopmentTaskServiceClient,
   type InspectAyniRepositoryResponse, type GetRuntimeProfileRevisionResponse,
 
@@ -97,12 +96,6 @@ const MAX_UINT64 = 18_446_744_073_709_551_615n;
 
 interface BffClientConfiguration { address?: string }
 
-type UnaryInvoker<T> = (
-  metadata: Metadata,
-  options: Partial<CallOptions>,
-  callback: (error: ServiceError | null, response: T) => void,
-) => ClientUnaryCall;
-
 function required<T>(value: T | null | undefined): T {
   if (value === undefined || value === null) throw new BffMappingError();
   return value;
@@ -146,14 +139,10 @@ function pageDto(value: { nextPageToken: string; snapshotCursor: string } | unde
   return { nextPageToken: page.nextPageToken, snapshotCursor: page.snapshotCursor };
 }
 
-function mapProject(value: Project): ProjectDto {
-  if (value.repositoryConnectionIds.length < 1 || value.repositoryConnectionIds.length > 100 || new Set(value.repositoryConnectionIds).size !== value.repositoryConnectionIds.length || ![ProjectState.PROJECT_STATE_ACTIVE, ProjectState.PROJECT_STATE_ARCHIVED].includes(value.state)) throw new BffMappingError();
-  return {id:value.id, displayName:value.displayName, state:value.state === ProjectState.PROJECT_STATE_ACTIVE ? "active" : "archived", repositoryConnectionIds:[...value.repositoryConnectionIds], resourceVersion:value.resourceVersion, ...(value.agentDefaults ? {agentDefaults:{...value.agentDefaults}} : {})};
-}
-
 export class OrchestratorBff {
   readonly #certificates: CertificateServiceClient;
   readonly #connections: ConnectionServiceClient;
+  readonly #workspaces:WorkspaceOperations;
   readonly #projects: ProjectServiceClient;
   readonly #conversations: ProjectConversationServiceClient;
   readonly #repositories: RepositoryServiceClient;
@@ -172,6 +161,7 @@ export class OrchestratorBff {
     this.#certificates = new CertificateServiceClient(address, channelCredentials, options);
     this.#connections = new ConnectionServiceClient(address, channelCredentials, options);
     this.#projects = new ProjectServiceClient(address, channelCredentials, options);
+    this.#workspaces=workspaceOperations(this.#projects,<T>(context:RequestContext,invoke:UnaryInvoker<T>)=>this.#unary(context,invoke));
     this.#conversations = new ProjectConversationServiceClient(address, channelCredentials, options);
     this.#repositories = new RepositoryServiceClient(address, channelCredentials, options);
     this.#profiles = new RuntimeProfileServiceClient(address, channelCredentials, options);
@@ -249,6 +239,12 @@ export class OrchestratorBff {
     const response = await this.#unary<ListRepositorySummariesResponse>(context, (m,o,c) => this.#repositories.listRepositorySummaries({page:page(selection)},m,o,c));
     return {summaries:response.summaries.map(summary => ({repository:mapRepositoryConnection(required(summary.repositoryConnection)),runtime:mapSummaryReadiness(summary.runtime)})),page:pageDto(response.page)};
   }
+  listWorkspaces(selection:PageInput,context:RequestContext,activeOnly=false){return this.#workspaces.listWorkspaces(page(selection),context,activeOnly);}
+  getWorkspace(workspaceId:string,context:RequestContext){return this.#workspaces.getWorkspace(workspaceId,context);}
+  createWorkspace(input:Parameters<WorkspaceOperations["createWorkspace"]>[0],context:RequestContext){return this.#workspaces.createWorkspace(input,context);}
+  updateWorkspace(input:Parameters<WorkspaceOperations["updateWorkspace"]>[0],context:RequestContext){return this.#workspaces.updateWorkspace(input,context);}
+  archiveWorkspace(input:Parameters<WorkspaceOperations["archiveWorkspace"]>[0],context:RequestContext){return this.#workspaces.archiveWorkspace(input,context);}
+
   async listProjects(selection: PageInput, context: RequestContext, activeOnly = false) {
     const response = await this.#unary<ListProjectsResponse>(context, (m,o,c) => this.#projects.listProjects({page:page(selection), ...(activeOnly ? {state:ProjectState.PROJECT_STATE_ACTIVE} : {})},m,o,c));
     return {projects:response.projects.map(mapProject), page:pageDto(response.page)};
@@ -257,11 +253,11 @@ export class OrchestratorBff {
     const response = await this.#unary<GetProjectResponse>(context,(m,o,c)=>this.#projects.getProject({projectId},m,o,c));
     return mapProject(required(response.project));
   }
-  async createProject(input:{idempotencyKey:string;displayName:string;repositoryConnectionIds:string[]}, context:RequestContext):Promise<ProjectDto> {
+  async createProject(input:{idempotencyKey:string;displayName:string;repositoryConnectionIds:string[];workspaceId:string;goal:string}, context:RequestContext):Promise<ProjectDto> {
     const response = await this.#unary<CreateProjectResponse>(context,(m,o,c)=>this.#projects.createProject({...input,repositoryConnectionId:""},m,o,c));
     return mapProject(required(response.project));
   }
-  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string;repositoryConnectionIds?:string[];agentDefaults?:ProjectAgentDefaultsDto}, context:RequestContext):Promise<ProjectDto> {
+  async updateProject(input:{idempotencyKey:string;projectId:string;expectedResourceVersion:string;displayName:string;goal?:string;repositoryConnectionIds?:string[];agentDefaults?:ProjectAgentDefaultsDto}, context:RequestContext):Promise<ProjectDto> {
     const response = await this.#unary<UpdateProjectResponse>(context,(m,o,c)=>this.#projects.updateProject({...input,repositoryConnectionIds:input.repositoryConnectionIds ?? []},m,o,c));
     return mapProject(required(response.project));
   }

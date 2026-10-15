@@ -34,6 +34,9 @@ test("project creation supports keyboard selection and accessible validation", a
  await page.getByRole("button",{name:"Create project",exact:true}).click();
  await expectAccessible(page);
  await page.getByLabel("Project name",{exact:true}).fill("Keyboard project");
+  await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
+  await page.getByLabel("Workspace",{exact:true}).click();
+  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
  await page.getByRole("button",{name:"Repositories",exact:true}).click();
  await page.getByRole("textbox",{name:"Search repositories",exact:true}).fill("sandbox");
  await expectAccessible(page);

@@ -1,3 +1,4 @@
+import {effectiveAgentDefaults} from "$lib/server/agent-defaults.js";
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
@@ -8,18 +9,20 @@ import { projectSchema } from "$lib/project-schema.js";
 import type { ProjectConversationDto, ProviderModelPageDto, RequestContext } from "@ayni-orchestrator/bff/server";
 import { actions as taskActions } from "../../tasks/+page.server.js";
 export const load: PageServerLoad = async ({ locals, depends, params, setHeaders, url }) => {
-  depends("app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
+  depends("app:workspaces", "app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
   depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });
   const base = { idempotencyKey: actionKey(), taskKey: actionKey(), requestId: locals.requestId };
   try {
     const context = requestContext(locals), bff = getBff();
-    const project = await bff.getProject(params.projectId, context);
+    const storedProject = await bff.getProject(params.projectId, context);
+    const workspace = await bff.getWorkspace(storedProject.workspaceId,context);
+    const project = {...storedProject,agentDefaults:effectiveAgentDefaults(storedProject.agentDefaults,workspace.agentDefaults)};
     const [repositories, profiles, tasks, choices, models, allConnections, conversationResult] = await Promise.all([
       Promise.all(project.repositoryConnectionIds.map(id => bff.getRepositoryConnection(id, context))),
       Promise.all(project.repositoryConnectionIds.map(id => bff.listRuntimeProfiles(id, { pageSize: 100 }, context))),
       bff.listDevelopmentTasks({ pageSize: 100, pageToken: url.searchParams.get("pageToken") ?? "" }, context, project.id),
-      projectRepositoryChoices(context),
+      projectRepositoryChoices(context).then(choices=>choices.filter(choice=>workspace.repositoryConnectionIds.includes(choice.id))),
       bff.listProviderModels({pageSize:100},context,project.agentDefaults?.codingConnectionId).catch(() => undefined),
       bff.listConnections(context).catch(() => undefined),
       bff.listProjectConversations(project.id,context).then(conversations=>({conversations,error:undefined})).catch(error=>({conversations:[],error:safeError(error,locals.requestId)})),
@@ -36,9 +39,9 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     }
     const taskProgress:Record<string,Awaited<ReturnType<typeof bff.taskProgress>>>={};
     await Promise.allSettled(tasks.developmentTasks.map(async task=>{taskProgress[task.id]=await bff.taskProgress(task.id,context);}));
-    return { ...base, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:models?.models ?? [], provider:models?.provider ?? "" };
+    return { ...base, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, workspace, overrides:storedProject.agentDefaults?.projectConnectionId||storedProject.agentDefaults?.codingConnectionId?storedProject.agentDefaults:undefined, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:models?.models ?? [], provider:models?.provider ?? "" };
   } catch (error) {
-    return { ...base, llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };
+    return { ...base, llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, workspace:undefined, overrides:undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };
   }
 };
 export const actions: Actions = {
@@ -48,13 +51,14 @@ export const actions: Actions = {
   decideProposal: async event => conversationAction(event,"decide"),
   agentDefaults: async ({locals,params,request}) => {
     const form=await request.formData();
+    const inherit=form.get("inherit")==="true";
     const fields=["projectConnectionId","projectModel","codingConnectionId","codingModel"] as const;
     const values=Object.fromEntries(fields.map(field=>[field,text(form,field,128)]));
     const idempotencyKey=text(form,"idempotencyKey",36), expectedResourceVersion=text(form,"resourceVersion",20);
-    if(!idempotencyKey || !isCanonicalIdentifier(idempotencyKey) || !expectedResourceVersion || fields.some(field=>!values[field]))return fail(400,{error:{message:"Choose a connection and an available model for both agents.",requestId:locals.requestId}});
+    if(!idempotencyKey || !isCanonicalIdentifier(idempotencyKey) || !expectedResourceVersion || (!inherit&&fields.some(field=>!values[field])))return fail(400,{error:{message:"Choose a connection and an available model for both agents.",requestId:locals.requestId}});
     try {
       const bff=getBff(),ctx={...requestContext(locals),deadlineMs:30_000},project=await bff.getProject(params.projectId,ctx);
-      await bff.updateProject({idempotencyKey,projectId:project.id,expectedResourceVersion,displayName:project.displayName,agentDefaults:{projectConnectionId:values.projectConnectionId!,projectModel:values.projectModel!,codingConnectionId:values.codingConnectionId!,codingModel:values.codingModel!}},ctx);
+      await bff.updateProject({idempotencyKey,projectId:project.id,expectedResourceVersion,displayName:project.displayName,agentDefaults:inherit?{projectConnectionId:"",projectModel:"",codingConnectionId:"",codingModel:""}:{projectConnectionId:values.projectConnectionId!,projectModel:values.projectModel!,codingConnectionId:values.codingConnectionId!,codingModel:values.codingModel!}},ctx);
       return {success:"Agent defaults updated."};
     }catch(error){const mapped=safeError(error,locals.requestId);return fail(mapped.status,{error:mapped});}
   },
@@ -70,12 +74,17 @@ async function mutate({ locals, params, request }: Parameters<NonNullable<Action
   const form = await request.formData();
   const idempotencyKey = text(form, "idempotencyKey", 36);
   const expectedResourceVersion = text(form, "resourceVersion", 20);
-  const parsed = projectSchema.safeParse({idempotencyKey,displayName:form.get("displayName"),repositoryConnectionIds:form.getAll("repositoryConnectionIds")});
+  const parsed = projectSchema.safeParse({idempotencyKey,displayName:form.get("displayName"),workspaceId:form.get("workspaceId"),goal:form.get("goal"),repositoryConnectionIds:form.getAll("repositoryConnectionIds")});
   if (!idempotencyKey || !isCanonicalIdentifier(idempotencyKey) || !expectedResourceVersion || !/^[1-9][0-9]{0,18}$/u.test(expectedResourceVersion) || (!archive && !parsed.success)) return fail(400, { error: { message: "Enter a project name, select at least one repository, and reload if settings have changed.", requestId: locals.requestId } });
   try {
     const input = { idempotencyKey, projectId: params.projectId!, expectedResourceVersion };
     if (archive) await getBff().archiveProject(input, requestContext(locals));
-    else if (parsed.success) await getBff().updateProject({ ...input, displayName: parsed.data.displayName, repositoryConnectionIds:parsed.data.repositoryConnectionIds }, requestContext(locals));
+    else if (parsed.success) {
+      const context=requestContext(locals), bff=getBff();
+      const project=await bff.getProject(params.projectId!,context),workspace=await bff.getWorkspace(project.workspaceId,context);
+      if(parsed.data.workspaceId!==workspace.id || workspace.state!=="active" || parsed.data.repositoryConnectionIds.some(id=>!workspace.repositoryConnectionIds.includes(id)))return fail(400,{error:{message:"Choose repositories in this project's active workspace.",requestId:locals.requestId}});
+      await bff.updateProject({ ...input, displayName: parsed.data.displayName, goal:parsed.data.goal, repositoryConnectionIds:parsed.data.repositoryConnectionIds }, context);
+    }
     return { success: archive ? "Project archived. History is retained." : "Project updated." };
   } catch (error) {
     const mapped = safeError(error, locals.requestId);

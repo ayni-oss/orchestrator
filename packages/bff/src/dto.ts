@@ -295,7 +295,18 @@ export interface ProjectAgentDefaultsDto {
   codingModel: string;
 }
 
+export interface WorkspaceDto {
+  agentDefaults?: ProjectAgentDefaultsDto;
+  id: string;
+  displayName: string;
+  state: "active" | "archived";
+  repositoryConnectionIds: string[];
+  resourceVersion: string;
+}
+
 export interface ProjectDto {
+  workspaceId: string;
+  goal: string;
   agentDefaults?: ProjectAgentDefaultsDto;
   id: string;
   displayName: string;

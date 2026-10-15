@@ -106,6 +106,8 @@ async fn create_profile(server: &Server, channel: Channel) -> TestResult<Runtime
         .ok_or("repository missing")?;
     let project = v1::project_service_client::ProjectServiceClient::new(channel.clone())
         .create_project(v1::CreateProjectRequest {
+            workspace_id: String::new(),
+            goal: String::new(),
             idempotency_key: "project".into(),
             display_name: "Task flow project".into(),
             repository_connection_id: repository.id.clone(),

@@ -282,6 +282,8 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
     let api = GrpcApi::new(state, shutdown);
     let invalid = api
         .create_project(Request::new(v1::CreateProjectRequest {
+            workspace_id: String::new(),
+            goal: String::new(),
             idempotency_key: "project".into(),
             display_name: "   ".into(),
             repository_connection_id: "repository:1".into(),
@@ -318,6 +320,8 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
         .ok_or("missing repository")?;
     let project = api
         .create_project(Request::new(v1::CreateProjectRequest {
+            workspace_id: String::new(),
+            goal: String::new(),
             idempotency_key: "project".into(),
             display_name: "Sandbox".into(),
             repository_connection_id: repo.id,
@@ -329,6 +333,7 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
         .ok_or("missing project")?;
     let rename = api
         .update_project(Request::new(v1::UpdateProjectRequest {
+            goal: None,
             agent_defaults: None,
             idempotency_key: "rename".into(),
             project_id: project.id.clone(),
@@ -360,5 +365,107 @@ pub(super) async fn project_api_validates_membership_versions_and_archive()
         .await?
         .into_inner();
     assert_eq!(listed.projects, vec![archived]);
+    workspace_api_preserves_project_history(&api, &project).await?;
+    Ok(())
+}
+
+async fn workspace_api_preserves_project_history(
+    api: &GrpcApi,
+    project: &v1::Project,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use v1::project_service_server::ProjectService;
+    let workspace = api
+        .get_workspace(Request::new(v1::GetWorkspaceRequest {
+            workspace_id: project.workspace_id.clone(),
+        }))
+        .await?
+        .into_inner()
+        .workspace
+        .ok_or("missing workspace")?;
+    let create = v1::CreateProjectRequest {
+        idempotency_key: "goal-project".into(),
+        display_name: "Goal project".into(),
+        workspace_id: workspace.id.clone(),
+        goal: "Ship a bounded improvement".into(),
+        repository_connection_ids: workspace.repository_connection_ids.clone(),
+        ..Default::default()
+    };
+    let child = api
+        .create_project(Request::new(create.clone()))
+        .await?
+        .into_inner()
+        .project
+        .ok_or("missing child")?;
+    assert_eq!(child.workspace_id, workspace.id);
+    assert_eq!(child.goal, "Ship a bounded improvement");
+    let update = v1::UpdateWorkspaceRequest {
+        idempotency_key: "rename-workspace".into(),
+        workspace_id: workspace.id.clone(),
+        expected_resource_version: workspace.resource_version,
+        display_name: "Renamed workspace".into(),
+        repository_connection_ids: vec![],
+        agent_defaults: None,
+    };
+    let renamed = api
+        .update_workspace(Request::new(update.clone()))
+        .await?
+        .into_inner()
+        .workspace
+        .ok_or("missing renamed workspace")?;
+    assert_eq!(
+        api.update_workspace(Request::new(update))
+            .await?
+            .into_inner()
+            .workspace,
+        Some(renamed.clone())
+    );
+    let archived_workspace = api
+        .archive_workspace(Request::new(v1::ArchiveWorkspaceRequest {
+            idempotency_key: "archive-workspace".into(),
+            workspace_id: workspace.id.clone(),
+            expected_resource_version: renamed.resource_version,
+        }))
+        .await?
+        .into_inner()
+        .workspace
+        .ok_or("missing archived workspace")?;
+    assert_eq!(
+        archived_workspace.state,
+        v1::WorkspaceState::Archived as i32
+    );
+    assert_eq!(
+        api.create_project(Request::new(create.clone()))
+            .await?
+            .into_inner()
+            .project,
+        Some(child.clone())
+    );
+    let mut new_create = create;
+    new_create.idempotency_key = "new-after-archive".into();
+    assert_eq!(
+        api.create_project(Request::new(new_create))
+            .await
+            .err()
+            .ok_or("must block archived workspace")?
+            .code(),
+        Code::FailedPrecondition
+    );
+    let listed = api
+        .list_workspaces(Request::new(v1::ListWorkspacesRequest {
+            state: Some(v1::WorkspaceState::Archived as i32),
+            page: None,
+        }))
+        .await?
+        .into_inner();
+    assert_eq!(listed.workspaces, vec![archived_workspace]);
+    assert_eq!(
+        api.get_project(Request::new(v1::GetProjectRequest {
+            project_id: child.id.clone()
+        }))
+        .await?
+        .into_inner()
+        .project,
+        Some(child)
+    );
     Ok(())
 }

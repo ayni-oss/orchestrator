@@ -220,13 +220,14 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
         .execute_batch(CLEAN_SCHEMA)
         .map_err(CleanStoreError::Database)?;
     super::project_conversations::migrate(connection)?;
+    super::workspaces::migrate(connection)?;
     Ok(())
 }
 
 type SchemaMigration = fn(&Connection) -> Result<(), CleanStoreError>;
 
 fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64, CleanStoreError> {
-    let migrations: [(i64, SchemaMigration); 12] = [
+    let migrations: [(i64, SchemaMigration); 13] = [
         (7, migrate_schema_seven),
         (8, super::builder_cutover::migrate),
         (9, super::preparation_migration::migrate),
@@ -239,6 +240,7 @@ fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64
         (16, super::coding_events::migrate),
         (17, super::lifecycle_events::migrate),
         (18, super::project_conversations::migrate),
+        (19, super::workspaces::migrate),
     ];
     for (source_version, migrate) in migrations {
         if version == source_version {
@@ -270,6 +272,7 @@ fn migrate_schema_six(connection: &Connection, tables: &[String]) -> Result<(), 
                     | "project_conversations"
                     | "project_conversation_actions"
                     | "project_outcome_summaries"
+                    | "workspaces"
             )
         })
         .map(ToString::to_string)
@@ -303,6 +306,7 @@ fn migrate_schema_seven(connection: &Connection) -> Result<(), CleanStoreError> 
                     | "project_conversations"
                     | "project_conversation_actions"
                     | "project_outcome_summaries"
+                    | "workspaces"
             )
         })
         .map(ToString::to_string)
