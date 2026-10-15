@@ -236,7 +236,7 @@ impl Tool for PrepareProposal {
         "Prepare a complete task or an explicitly requested lifecycle action for human approval. This never executes the proposed action.".into()
     }
     fn parameters(&self) -> serde_json::Value {
-        json!({"type":"object","properties":{"repository_id":{"type":"string"},"revision":{"type":"string"},"runtime_profile_id":{"type":"string"},"coding_connection_id":{"type":"string"},"coding_model":{"type":"string"},"request":{"type":"string"},"acceptance_criteria":{"type":"array","items":{"type":"string"}},"allowed_paths":{"type":"array","items":{"type":"string"}},"allow_test_edits":{"type":"boolean"},"forbidden_paths":{"type":"array","items":{"type":"string"}},"coding_turns":{"type":"integer","minimum":1,"maximum":128},"deadline_seconds":{"type":"integer","minimum":1,"maximum":86400},"action":{"type":"string","enum":["create_task","cancel_task","retry_task","retry_publication"]},"target_task_id":{"type":"string"}},"required":["repository_id","revision","runtime_profile_id","coding_connection_id","coding_model","request","acceptance_criteria","allowed_paths","allow_test_edits","forbidden_paths","coding_turns","deadline_seconds","action","target_task_id"],"additionalProperties":false})
+        json!({"type":"object","properties":{"findings":{"type":"string"},"scope":{"type":"string"},"dependency_environment_impact":{"type":"string"},"repository_id":{"type":"string"},"revision":{"type":"string"},"runtime_profile_id":{"type":"string"},"coding_connection_id":{"type":"string"},"coding_model":{"type":"string"},"request":{"type":"string"},"acceptance_criteria":{"type":"array","items":{"type":"string"}},"allowed_paths":{"type":"array","items":{"type":"string"}},"allow_test_edits":{"type":"boolean"},"forbidden_paths":{"type":"array","items":{"type":"string"}},"coding_turns":{"type":"integer","minimum":1,"maximum":128},"deadline_seconds":{"type":"integer","minimum":1,"maximum":86400},"action":{"type":"string","enum":["create_task","cancel_task","retry_task","retry_publication"]},"target_task_id":{"type":"string"}},"required":["findings","scope","dependency_environment_impact","repository_id","revision","runtime_profile_id","coding_connection_id","coding_model","request","acceptance_criteria","allowed_paths","allow_test_edits","forbidden_paths","coding_turns","deadline_seconds","action","target_task_id"],"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, args: ResearchProposal) -> io::Result<String> {
         let repo = self
@@ -270,7 +270,10 @@ impl Tool for PrepareProposal {
                 ));
             }
         }
-        if args.request.trim().is_empty()
+        if args.findings.len() > 16384
+            || args.scope.len() > 16384
+            || args.dependency_environment_impact.len() > 16384
+            || args.request.trim().is_empty()
             || args.request.len() > 16384
             || args.acceptance_criteria.is_empty()
             || args.acceptance_criteria.len() > 20
@@ -465,6 +468,58 @@ pub async fn run(request: ProjectAgentRequest) -> io::Result<ProjectAgentResult>
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn verify_tool_schema<T: Tool>(tool: &T) -> io::Result<()> {
+        let schema = tool.parameters();
+        let mut args = serde_json::Map::new();
+        for key in schema["required"]
+            .as_array()
+            .ok_or_else(|| io::Error::other("required arguments missing"))?
+        {
+            let key = key
+                .as_str()
+                .ok_or_else(|| io::Error::other("required key invalid"))?;
+            let property = &schema["properties"][key];
+            let value = match property["type"].as_str() {
+                Some("string") => json!(
+                    property["enum"]
+                        .as_array()
+                        .and_then(|v| v.first())
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("value")
+                ),
+                Some("integer") => json!(1),
+                Some("boolean") => json!(false),
+                Some("array") => json!([]),
+                _ => return Err(io::Error::other("unsupported argument type")),
+            };
+            args.insert(key.into(), value);
+        }
+        serde_json::from_value::<T::Args>(serde_json::Value::Object(args))
+            .map_err(io::Error::other)?;
+        Ok(())
+    }
+    #[test]
+    fn advertised_research_tool_arguments_match_deserialization_contracts() -> io::Result<()> {
+        let context = Context {
+            request: Arc::new(ProjectAgentRequest {
+                run_id: "run".into(),
+                project_id: "project".into(),
+                model: "model".into(),
+                history: String::new(),
+                context: String::new(),
+                repositories: vec![],
+                max_model_calls: 24,
+                deadline_seconds: 600,
+            }),
+            root: PathBuf::from("/workspace"),
+            proposals: Arc::default(),
+        };
+        verify_tool_schema(&ListFiles(context.clone()))?;
+        verify_tool_schema(&ReadFile(context.clone()))?;
+        verify_tool_schema(&SearchFiles(context.clone()))?;
+        verify_tool_schema(&PrepareProposal(context))?;
+        Ok(())
+    }
     #[test]
     fn logical_repository_ids_use_safe_storage_keys() -> io::Result<()> {
         let directory = tempfile::tempdir()?;

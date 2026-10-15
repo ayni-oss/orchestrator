@@ -17,15 +17,21 @@ Projects inherit these settings and can override them in project settings.
 Anthropic Claude and AWS Bedrock are shown as unavailable.
 
 Start a conversation and choose the repositories it can research. Describe the
-outcome you want. The project agent reads an immutable checkout, asks for missing
-requirements, and prepares a task for each target repository. It cannot edit the
-checkout or execute repository code. Research can begin before a coding runtime
-is ready; starting a task requires a ready runtime.
+outcome you want. The project agent reads an immutable checkout and asks for missing
+requirements. It cannot edit the checkout or execute repository code. Research can
+begin before a coding runtime is ready; starting a task requires a ready runtime.
 
-Review the repository revision, runtime, coding model, request, acceptance criteria,
-constraints and limits on the proposal card. **Approve** starts the exact task
-shown; **Reject** discards the proposal, and a new message can request revisions.
-If the source or runtime changed, refresh the proposal before approving it.
+Review the plan's findings, scope, acceptance criteria, proposed tasks and dependency
+or environment impact. Each revision keeps the earlier versions available. Expand
+the proposed tasks to review each repository revision, runtime, coding model,
+request, constraints and limits.
+
+**Approve** starts all proposed tasks in the exact plan version shown. **Reject**
+closes that version without starting work; **Request revision** closes it for
+revision, then send a message describing the changes you want. A newer plan version
+needs its own approval. If source or runtime identity changed, the plan explains
+what needs refreshing; request new research before approving again. Dependency and
+environment findings describe impact and do not authorize environment changes.
 
 Conversations and task links survive reconnects. Task cards show progress and
 results, with an automatic summary when an attempt finishes or needs your input.
@@ -35,7 +41,7 @@ page directly.
 
 One interaction prepares at most one task per repository. Tasks across repositories
 run independently; coordinate dependent changes after reviewing the earlier result.
-A failed task submission does not undo another repository's admitted task.
+Plan approval validates all proposed tasks before admitting them together.
 
 ## Describe the work
 

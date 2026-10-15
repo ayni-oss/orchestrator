@@ -136,6 +136,101 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
             conversation: Some(c),
         }))
     }
+    async fn decide_project_plan(
+        &self,
+        request: Request<v1::DecideProjectPlanRequest>,
+    ) -> Result<Response<v1::DecideProjectPlanResponse>, Status> {
+        let context = self.context(&request, "DecideProjectPlan")?;
+        let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
+        let message = request.into_inner();
+        let replay_key = key.clone();
+        let replay_message = message.clone();
+        if let Some(c) = with_store(&self.state, move |s| {
+            s.replay_conversation(&replay_key, &replay_message)
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?
+        {
+            return Ok(context.response(v1::DecideProjectPlanResponse {
+                conversation: Some(c),
+            }));
+        }
+        let lifecycle = self.state.repository_lifecycle.read().await;
+        let _connection = self.state.connection_lock.lock().await;
+        if message.decision == "approve" {
+            let id = message.conversation_id.clone();
+            let c = with_store(&self.state, move |s| s.project_conversation(&id))
+                .await
+                .map_err(|e| context.store_error(&e))?;
+            let plan = c
+                .plan
+                .as_ref()
+                .ok_or_else(|| Status::not_found("plan not found"))?;
+            if plan.id != message.plan_id {
+                return Err(Status::not_found("plan not found"));
+            }
+            let version = plan
+                .versions
+                .iter()
+                .find(|v| v.version == message.version)
+                .ok_or_else(|| {
+                    Status::aborted("plan version changed; review the latest version")
+                })?;
+            if version.state == "pending" {
+                if plan
+                    .versions
+                    .last()
+                    .is_none_or(|v| v.version != message.version)
+                {
+                    return Err(Status::aborted(
+                        "plan version changed; review the latest version",
+                    ));
+                }
+                for proposal in c
+                    .proposals
+                    .iter()
+                    .filter(|p| version.proposal_ids.contains(&p.id) && p.state != "approved")
+                {
+                    let requested = proposal
+                        .request
+                        .as_ref()
+                        .ok_or_else(|| Status::internal("proposal invalid"))?;
+                    let observed = self
+                        .state
+                        .observe_project_repository_head_guarded(
+                            &c.project_id,
+                            &requested.repository_connection_id,
+                            &lifecycle,
+                        )
+                        .await
+                        .map_err(Status::failed_precondition)?;
+                    if observed.revision != requested.repository_revision {
+                        return Err(Status::aborted(
+                            "repository source changed; request a revised plan and review its new version",
+                        ));
+                    }
+                    let model = requested
+                        .agent
+                        .as_ref()
+                        .ok_or_else(|| Status::failed_precondition("coding model required"))?;
+                    self.state
+                        .freeze_provider_credentials(&requested.connection_id, &model.model)
+                        .await?;
+                }
+            }
+        }
+        let c = with_store(&self.state, move |s| s.decide_project_plan(&key, &message))
+            .await
+            .map_err(|e| match e {
+            crate::adapters::sqlite::CleanStoreError::StaleVersion => Status::aborted("plan, source, or runtime changed; request a revised plan and review its new version"),
+            crate::adapters::sqlite::CleanStoreError::ProfileNotReady => Status::failed_precondition("runtime is no longer ready; restore readiness and request a revised plan"),
+            _ => context.store_error(&e),
+        })?;
+        drop(lifecycle);
+        Ok(context.response(v1::DecideProjectPlanResponse {
+            conversation: Some(c),
+        }))
+    }
     async fn decide_project_proposal(
         &self,
         request: Request<v1::DecideProjectProposalRequest>,
@@ -143,6 +238,18 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
         let context = self.context(&request, "DecideProjectProposal")?;
         let key = context.idempotency_key(&request.get_ref().idempotency_key)?;
         let message = request.into_inner();
+        let replay_key = key.clone();
+        let replay_message = message.clone();
+        if let Some(c) = with_store(&self.state, move |s| {
+            s.replay_conversation(&replay_key, &replay_message)
+        })
+        .await
+        .map_err(|e| context.store_error(&e))?
+        {
+            return Ok(context.response(v1::DecideProjectProposalResponse {
+                conversation: Some(c),
+            }));
+        }
         let lifecycle = self.state.repository_lifecycle.read().await;
         let _connection = self.state.connection_lock.lock().await;
         if message.decision == "approve" {
@@ -156,31 +263,9 @@ impl v1::project_conversation_service_server::ProjectConversationService for Grp
                 .find(|p| p.id == message.proposal_id)
                 .ok_or_else(|| Status::not_found("proposal not found"))?;
             if proposal.state == "pending" && proposal.action == "create_task" {
-                let requested = proposal
-                    .request
-                    .as_ref()
-                    .ok_or_else(|| Status::internal("proposal invalid"))?;
-                let observed = self
-                    .state
-                    .observe_project_repository_head_guarded(
-                        &c.project_id,
-                        &requested.repository_connection_id,
-                        &lifecycle,
-                    )
-                    .await
-                    .map_err(Status::failed_precondition)?;
-                if observed.revision != requested.repository_revision {
-                    return Err(Status::aborted(
-                        "repository source changed; request a refreshed proposal",
-                    ));
-                }
-                let model = requested
-                    .agent
-                    .as_ref()
-                    .ok_or_else(|| Status::failed_precondition("coding model required"))?;
-                self.state
-                    .freeze_provider_credentials(&requested.connection_id, &model.model)
-                    .await?;
+                return Err(Status::failed_precondition(
+                    "review the exact plan version and use DecideProjectPlan before approving tasks",
+                ));
             }
         }
         let c = with_store(&self.state, move |s| {

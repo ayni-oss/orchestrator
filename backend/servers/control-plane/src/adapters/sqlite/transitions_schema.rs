@@ -221,13 +221,14 @@ pub(super) fn initialize_schema(connection: &Connection) -> Result<(), CleanStor
         .map_err(CleanStoreError::Database)?;
     super::project_conversations::migrate(connection)?;
     super::workspaces::migrate(connection)?;
+    super::project_plans::migrate(connection)?;
     Ok(())
 }
 
 type SchemaMigration = fn(&Connection) -> Result<(), CleanStoreError>;
 
 fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64, CleanStoreError> {
-    let migrations: [(i64, SchemaMigration); 13] = [
+    let migrations: [(i64, SchemaMigration); 14] = [
         (7, migrate_schema_seven),
         (8, super::builder_cutover::migrate),
         (9, super::preparation_migration::migrate),
@@ -241,6 +242,7 @@ fn upgrade_clean_schema(connection: &Connection, mut version: i64) -> Result<i64
         (17, super::lifecycle_events::migrate),
         (18, super::project_conversations::migrate),
         (19, super::workspaces::migrate),
+        (20, super::project_plans::migrate),
     ];
     for (source_version, migrate) in migrations {
         if version == source_version {

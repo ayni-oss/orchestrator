@@ -306,6 +306,7 @@ grpc.addService(ProjectServiceService, {
 // Conversation fixtures exercise real generated gRPC and browser/BFF boundaries.
 // LLM and Kubernetes behavior is validated by native and cluster tests.
 let conversations:ProjectConversation[]=[];
+let stalePlan=false;
 const proposalTasks=new Map<string,string>();
 function changedConversation(c:ProjectConversation){c.updateCursor=String(Number(c.updateCursor)+1);}
 grpc.addService(ProjectConversationServiceService,{
@@ -319,6 +320,25 @@ grpc.addService(ProjectConversationServiceService,{
     c.runs.push({id:runId,state:"completed",model:project.agentDefaults.projectModel,connectionId:project.agentDefaults.projectConnectionId,credentialRevision:"private-credential-revision",modelCalls:3,failure:"",createdAt:now});
     c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"I read the repository instructions and implementation. Review the complete task plan below.",createdAt:now,runId});
     c.proposals.push({id:`proposal:${c.proposals.length+1}`,runId,state:"pending",action:"create_task",targetTaskId:"",taskId:"",attemptId:"",failure:"",request:{projectId:project.id,repositoryConnectionId:c.repositoryConnectionIds[0]!,repositoryRevision:revision,runtimeProfileId:profileId,connectionId:project.agentDefaults.codingConnectionId,agent:{provider:"openai",agent:"coding-agent",model:call.request.content.includes("model gpt-5.6-luna")?"gpt-5.6-luna":project.agentDefaults.codingModel},request:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],codingTurns:24,changeConstraints:{protectedPaths:["policy.toml"],allowTestEdits:true},deadline:{seconds:"3600",nanos:0}}});
+    c.plan??={id:`plan:${c.id}`,versions:[]};
+    const prior=c.plan.versions.at(-1);if(prior?.state==="pending")prior.state="superseded";
+    c.plan.versions.push({version:String(c.plan.versions.length+1),runId,state:"pending",findings:"Repository instructions and implementation reviewed.",scope:call.request.content,acceptanceCriteria:["Requested behavior is implemented","Required checks pass"],proposalIds:[c.proposals.at(-1)!.id],dependencyEnvironmentImpact:"",createdAt:now,failure:""});
+    changedConversation(c);callback(null,{conversation:c});
+  },
+  decideProjectPlan(call:any,callback:any){
+    const c=conversations.find(c=>c.id===call.request.conversationId)!;
+    const v=c.plan?.versions.find(v=>v.version===call.request.version);
+    if(c.plan?.id!==call.request.planId||!v||v!==c.plan.versions.at(-1)||v.state!=="pending")return callback({code:status.ABORTED,message:"Reload the latest plan"});
+    if(stalePlan)return callback({code:status.FAILED_PRECONDITION,message:"Source or runtime changed"});
+    v.state=call.request.decision==="approve"?"approved":call.request.decision==="reject"?"rejected":"revise";
+    for(const p of c.proposals.filter(p=>v.proposalIds.includes(p.id))){
+      p.state=v.state;
+      if(v.state==="approved"){
+        const id=proposalTasks.get(p.id)??`00000000-0000-4000-8000-${String(50+proposalTasks.size).padStart(12,"0")}`;proposalTasks.set(p.id,id);
+        tasks.set(id,task(id,DevelopmentTaskState.DEVELOPMENT_TASK_STATE_SUCCEEDED,p.request!.request));p.taskId=id;p.attemptId=`attempt:${id}`;
+      }
+    }
+    if(v.state==="approved")c.messages.push({id:`message:${c.messages.length+1}`,role:"assistant",content:"Execution succeeded. Quality checks failed. A draft PR was published; review its findings before merging.",createdAt:now,runId:v.runId});
     changedConversation(c);callback(null,{conversation:c});
   },
   decideProjectProposal(call:any,callback:any){
@@ -388,7 +408,17 @@ const health = createServer((request, response) => {
  const url=new URL(request.url ?? "/","http://127.0.0.1");
  if(request.method==="POST") {
    if (url.pathname === "/reset-project") tasks.set("00000000-0000-4000-8000-000000000043", task("00000000-0000-4000-8000-000000000043", DevelopmentTaskState.DEVELOPMENT_TASK_STATE_RUNNING, "Active task for cancellation"));
-   if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();}
+   if (url.pathname === "/reset-project") {conversations=[];proposalTasks.clear();stalePlan=false;}
+   if(url.pathname==="/stale-plan")stalePlan=true;
+   if(url.pathname==="/new-plan-version")for(const c of conversations){
+     const previous=c.plan?.versions.at(-1);if(!previous)continue;
+     previous.state="superseded";
+     const runId=`run:${c.runs.length+1}`;c.runs.push({...c.runs.at(-1)!,id:runId});
+     const proposalIds=previous.proposalIds.map(id=>{const p=c.proposals.find(p=>p.id===id)!;const next={...p,id:`proposal:${c.proposals.length+1}`,runId,state:"pending",taskId:"",attemptId:""};c.proposals.push(next);return next.id;});
+     c.plan!.versions.push({...previous,version:String(Number(previous.version)+1),runId,state:"pending",scope:"Newer scope requires a fresh review",proposalIds});
+     changedConversation(c);
+   }
+   if(url.pathname==="/restart-conversations")conversations=conversations.map(c=>ProjectConversation.decode(ProjectConversation.encode(c).finish()));
    if (url.pathname === "/reset-project") workspace={id:"workspace:1",displayName:"Shared workspace",state:WorkspaceState.WORKSPACE_STATE_ACTIVE,repositoryConnectionIds:[repositoryId,"repository:2"],resourceVersion:"1",createdAt:now,updatedAt:now};
    if (url.pathname === "/reset-project") project = {workspaceId:workspace.id,goal:"Improve the sandbox",id:"project:1", displayName:"Sandbox", state:ProjectState.PROJECT_STATE_ACTIVE, repositoryConnectionIds:[repositoryId], resourceVersion:"1", createdAt:now, updatedAt:now};
    certificateFixture(url.pathname);

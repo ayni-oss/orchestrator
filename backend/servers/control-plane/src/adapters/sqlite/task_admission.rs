@@ -292,7 +292,7 @@ impl TaskRepository for CleanStore {
         };
         let transaction = self
             .connection
-            .transaction()
+            .savepoint()
             .map_err(CleanStoreError::Database)?;
         transaction
             .execute(
