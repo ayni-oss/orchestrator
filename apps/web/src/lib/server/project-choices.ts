@@ -11,3 +11,5 @@ export async function workspaceProjectCounts(context:RequestContext){
   for(const project of projects)counts[project.workspaceId]=(counts[project.workspaceId]??0)+1;
   return counts;
 }
+
+export function repositorySummaryChoices(context:RequestContext){return collectChoices(async pageToken=>{const p=await getBff().listRepositorySummaries({pageSize:100,pageToken},context);return {items:p.summaries,nextPageToken:p.page.nextPageToken};});}

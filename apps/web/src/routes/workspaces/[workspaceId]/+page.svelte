@@ -7,7 +7,8 @@
   import type {PageProps} from "./$types";
   import Feedback from "$lib/components/feedback.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
-  import RepositoryPicker from "$lib/components/repository-picker.svelte";
+  import ManageWorkspaceRepositories from "$lib/components/manage-workspace-repositories.svelte";
+  import RepositoryCard from "$lib/components/repository-card.svelte";
   import ProjectAgentSettings from "$lib/components/project-agent-settings.svelte";
   import {Button} from "$lib/components/ui/button/index.js";
   import {Input} from "$lib/components/ui/input/index.js";
@@ -18,7 +19,7 @@
   let {data}:PageProps=$props();
   const view=$derived(["repositories","settings"].includes(page.url.searchParams.get("view")??"") ? page.url.searchParams.get("view")! : "projects");
   let settingsError=$state(""),settingsSuccess=$state("");
-  let saving=$state(false),archiving=$state(false),members=$state<{workspaceId:string;ids:string[]}|undefined>();
+  let saving=$state(false),archiving=$state(false);
   let finishArchiving:(()=>void)|undefined;
   async function closeArchive(){await new Promise<void>(resolve=>{finishArchiving=resolve;archiving=false;});}
 </script>
@@ -43,24 +44,20 @@
   </div>{#if data.nextPageToken}<Button variant="outline" href={`?pageToken=${encodeURIComponent(data.nextPageToken)}`}>More projects</Button>{/if}</section>
   </Tabs.Content>
   <Tabs.Content value="repositories">
-  <section class="space-y-4"><h2 class="text-lg font-semibold">Repositories</h2>
-    <p class="text-sm text-muted-foreground">Projects can use these repositories. Runtime configuration is shared wherever a repository is used.</p>
-    <Button variant="outline" href="/repositories">Open repository catalog</Button>
-    {#if data.workspace.state==="active"}
-      <form method="POST" action="?/update" use:enhance={()=>{saving=true;settingsError="";settingsSuccess="";return async({result,update})=>{try{if(result.type==="failure")settingsError=String(result.data?.error?.message??"Workspace settings could not be saved. Try again.");if(result.type==="success")settingsSuccess=String(result.data?.success??"Workspace settings saved.");await update({reset:false});}finally{saving=false;}};}} class="space-y-4 rounded-xl border p-5">
-        <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} />
-        <input type="hidden" name="resourceVersion" value={data.workspace.resourceVersion} />
-        <input type="hidden" name="displayName" value={data.workspace.displayName} />
-        <Label for="workspace-repositories">Add or remove existing repositories</Label>
-        <RepositoryPicker id="workspace-repositories" repositories={data.repositories} value={members?.workspaceId===data.workspace.id?members.ids:data.workspace.repositoryConnectionIds} onchange={value=>members={workspaceId:data.workspace!.id,ids:value}} />
-        <p class="text-sm text-muted-foreground">Connect new repositories in the global repository catalog. Removing a repository here prevents new work using it in this workspace and preserves existing history.</p>
-        <Button type="submit" disabled={saving}>{saving?"Saving…":"Save repository membership"}</Button>
-        {#if settingsError}<Feedback kind="error" title="Repository membership not saved" message={settingsError} />{:else if settingsSuccess}<p role="status">{settingsSuccess}</p>{/if}
-      </form>
-    {/if}
-    <div class="grid gap-4 md:grid-cols-2">{#each data.workspace.repositoryConnectionIds as id (id)}
-      <Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/repositories/${encodeURIComponent(id)}`}>{data.repositories.find(repository=>repository.id===id)?.displayName??id}</a></Card.Title><Card.Description>View shared runtimes and readiness</Card.Description></Card.Header></Card.Root>
-    {/each}</div>
+  <section class="space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <h2 class="text-lg font-semibold">Repositories</h2>
+      {#if data.workspace.state==="active"}{#key data.workspace.id}<ManageWorkspaceRepositories {data} />{/key}{/if}
+    </div>
+    <p class="text-sm text-muted-foreground">Projects can use these repositories. Runtime configuration is shared wherever a repository is used. Connect new repositories in the <a href="/repositories" class="text-foreground underline underline-offset-4 hover:text-primary">repository catalog</a>.</p>
+    <div class="grid gap-4 lg:grid-cols-2">
+      {#each data.repositorySummaries as summary (summary.repository.id)}
+        <RepositoryCard {summary} />
+      {/each}
+      {#each data.workspace.repositoryConnectionIds.filter(id=>!data.repositorySummaries.some(summary=>summary.repository.id===id)) as id (id)}
+        <Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/repositories/${encodeURIComponent(id)}`}>{id}</a></Card.Title><Card.Description>Repository details are unavailable.</Card.Description></Card.Header></Card.Root>
+      {/each}
+    </div>
   </section>
   </Tabs.Content>
   <Tabs.Content value="settings">

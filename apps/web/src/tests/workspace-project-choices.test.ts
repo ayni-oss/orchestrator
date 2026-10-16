@@ -1,7 +1,7 @@
 import {beforeEach,describe,expect,it,vi} from "vitest";
-const bff=vi.hoisted(()=>({listProjects:vi.fn()}));
+const bff=vi.hoisted(()=>({listProjects:vi.fn(),listRepositorySummaries:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-import {workspaceProjects,workspaceProjectCounts} from "$lib/server/project-choices.js";
+import {workspaceProjects,workspaceProjectCounts,repositorySummaryChoices} from "$lib/server/project-choices.js";
 const context={requestId:"workspace-projects"};
 beforeEach(()=>vi.clearAllMocks());
 describe("workspace project discovery",()=>{
@@ -21,5 +21,13 @@ describe("workspace project discovery",()=>{
   it("fails instead of reporting a partial project list for looping pagination",async()=>{
     bff.listProjects.mockResolvedValue({projects:[],page:{nextPageToken:"same"}});
     await expect(workspaceProjects("workspace:1",context)).rejects.toThrow("could not be loaded completely");
+  });
+});
+
+describe("repository summary discovery",()=>{
+  it("loads repository cards and membership choices across every page",async()=>{
+    bff.listRepositorySummaries.mockResolvedValueOnce({summaries:[{repository:{id:"first"}}],page:{nextPageToken:"next"}}).mockResolvedValueOnce({summaries:[{repository:{id:"last"}}],page:{nextPageToken:""}});
+    expect(await repositorySummaryChoices(context)).toEqual([{repository:{id:"first"}},{repository:{id:"last"}}]);
+    expect(bff.listRepositorySummaries).toHaveBeenLastCalledWith({pageSize:100,pageToken:"next"},context);
   });
 });
