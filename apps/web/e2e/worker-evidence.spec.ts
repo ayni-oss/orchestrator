@@ -7,8 +7,7 @@ async function approved(page:Page){
  await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
  await expect(page.getByRole("region",{name:"Workspace agent defaults",exact:true})).toContainText("Workspace settings updated.");
- await page.goto("/projects/project:1");await page.getByRole("button",{name:"New conversation",exact:true}).click();
- await page.getByLabel("Title",{exact:true}).fill("Worker evidence");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
+ await page.goto("/projects/project:1");await page.getByRole("button",{name:"New conversation",exact:true}).click();await expect(page).toHaveURL(/new=/u);
  await page.getByLabel("Message",{exact:true}).fill("Preserve API compatibility");await page.getByRole("button",{name:"Send message",exact:true}).click();
  await page.getByRole("tab",{name:"Plans",exact:true}).click();
  await page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true}).click();

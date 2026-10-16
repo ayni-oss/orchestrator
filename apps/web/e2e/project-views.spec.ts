@@ -14,11 +14,9 @@ async function startPlan(page:Page,message="Make the outcome easy to follow"){
   await choose(page,"Coding agent model","gpt-5.6-sol");
   await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
   await expect(page.getByRole("region",{name:"Project agent models",exact:true})).toContainText("Agent defaults updated.");
-  await page.getByRole("tab",{name:"Overview",exact:true}).click();
+  await page.getByRole("tab",{name:"Conversation",exact:true}).click();
   if (!await page.getByRole("button",{name:"New conversation",exact:true}).isVisible()) await page.getByRole("button",{name:"Toggle Sidebar",exact:true}).last().click();
-  await page.getByRole("button",{name:"New conversation",exact:true}).click();
-  await page.getByLabel("Title",{exact:true}).fill("Project layout");
-  await page.getByRole("button",{name:"Create conversation",exact:true}).click();
+  await page.getByRole("button",{name:"New conversation",exact:true}).click();await expect(page).toHaveURL(/new=/u);
   await page.getByLabel("Message",{exact:true}).fill(message);
   await page.getByRole("button",{name:"Send message",exact:true}).click();
   await expect(page.getByRole("region",{name:"Conversation timeline",exact:true})).toBeVisible();
@@ -117,7 +115,7 @@ test("settings expose ownership, saving, failure, and focus recovery",async({pag
   await expect(settings.getByRole("alert")).toContainText("Reload before saving these settings.");
   await expect(settings.getByLabel("Goal and planning instructions",{exact:true})).toHaveValue("Retain my unsaved planning instructions");
   await expect(settings.getByRole("button",{name:"Save settings",exact:true})).toBeEnabled();
-  await page.getByRole("tab",{name:"Overview",exact:true}).click();await expect(page.getByRole("tab",{name:"Overview",exact:true})).toHaveAttribute("aria-selected","true");
+  await page.getByRole("tab",{name:"Conversation",exact:true}).click();await expect(page.getByRole("tab",{name:"Conversation",exact:true})).toHaveAttribute("aria-selected","true");
 });
 
 

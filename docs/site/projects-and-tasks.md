@@ -2,8 +2,8 @@
 
 A workspace brings together connected repositories and shared agent settings.
 Create a project in a workspace, give it a goal, and select the repositories it
-needs. Several projects can share a repository and its runtime. Then describe work
-with **Discuss project**, review the versioned plan, and approve its tasks.
+needs. Several projects can share a repository and its runtime. Then open
+**Conversation**, describe the work, review the versioned plan, and approve its tasks.
 
 Existing projects keep their repositories, conversations and tasks in an
 automatically assigned workspace. Archiving a workspace blocks new work while
@@ -13,7 +13,7 @@ preserving project history and tasks already admitted.
 
 | View | Use it to |
 | --- | --- |
-| Overview | Read and send messages in the conversation. Load earlier messages when you need older history. |
+| Conversation | Read and send messages in the conversation. Load earlier messages when you need older history. |
 | Plans | Review saved plan versions, inspect the research run, and approve the exact tasks shown. Version links can be bookmarked. |
 | Tasks | Follow project tasks, worker questions, execution attempts, quality results, and pull requests. |
 | Settings | Edit the project goal, repositories, agent models and capabilities, and the selected conversation’s planner timeout. |
@@ -33,9 +33,15 @@ shows saving progress and reports failures so you can retry.
 
 The sidebar's **Conversations** section lists history across the selected workspace,
 with each conversation's project beneath its title. Select **New conversation**
-to choose a project and repositories. Without a selected workspace, the section
-stays visible and creation is disabled. Selecting a conversation opens its project's
-**Overview**; use **Plans** and **Tasks** to review the related work.
+to open a blank composer in the current project, or choose a project when
+working from a workspace. Conversations inherit the project’s repositories.
+Type your first message.
+Press **Enter** to send and create the conversation; **Shift+Enter** adds a new
+line. Titles use the first 30 characters of the message. Opening a blank composer
+does not create a saved conversation. The sidebar shows the current project,
+or **No project** outside a project. Without a selected workspace, creation
+is disabled. Selecting a conversation opens its project's
+**Conversation**; use **Plans** and **Tasks** to review the related work.
 
 Under **Config → LLM providers**, configure and test an OpenAI connection. In the
 workspace settings, choose separate models for repository research and coding.
