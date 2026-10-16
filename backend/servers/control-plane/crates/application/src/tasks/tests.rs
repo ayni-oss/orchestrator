@@ -206,3 +206,43 @@ fn invalid_duration_cannot_create_a_task() {
         assert!(repository.committed.is_none());
     }
 }
+
+#[test]
+fn invalid_environment_authority_is_rejected_before_admission_reads_or_commit() {
+    use ayni_orchestrator_domain::{ChangeConstraints, EnvironmentChangeAuthorization};
+    for paths in [
+        vec![".ayni.toml"],
+        vec![".ayni.lock"],
+        vec!["src/main.rs"],
+        vec!["Cargo.lock", "Cargo.lock"],
+    ] {
+        let mut repository = Repository::ready(ProfileKind::AyniManaged);
+        let mut request = command();
+        request.constraints = Some(ChangeConstraints {
+            environment_change: Some(EnvironmentChangeAuthorization {
+                dependency_paths: paths.into_iter().map(str::to_owned).collect(),
+            }),
+            ..ChangeConstraints::default()
+        });
+        assert!(matches!(
+            admit(&mut repository, request),
+            Err(AdmissionError::InvalidConstraints)
+        ));
+        assert_eq!(repository.reads.get(), 0);
+        assert!(repository.committed.is_none());
+    }
+    let mut repository = Repository::ready(ProfileKind::AyniManaged);
+    let mut request = command();
+    request.constraints = Some(ChangeConstraints {
+        protected_paths: vec!["Cargo.lock".into()],
+        environment_change: Some(EnvironmentChangeAuthorization {
+            dependency_paths: vec!["Cargo.lock".into()],
+        }),
+        ..ChangeConstraints::default()
+    });
+    assert!(matches!(
+        admit(&mut repository, request),
+        Err(AdmissionError::InvalidConstraints)
+    ));
+    assert!(repository.committed.is_none());
+}

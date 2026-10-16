@@ -258,19 +258,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         if cursor.next_at > time {
             return Ok(());
         }
-        if cursor.pending.is_none() && !registry.registry_connection_id.is_empty() {
-            self.registry_ready(&registry.registry_connection_id)
-                .await?;
-        }
-        let mut runtime = if let Some(frozen) = cursor
-            .pending
-            .as_ref()
-            .and_then(|p| p.frozen_runtime.clone())
-        {
-            frozen
-        } else {
-            self.configured_profile(id).await?
-        };
+        let mut runtime = self.preparation_runtime(id, &cursor, &registry).await?;
         let github = configuration::github_identity(repository.provider)?;
         let token = self
             .source

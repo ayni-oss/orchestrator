@@ -121,6 +121,8 @@ pub enum AdmissionError<E> {
     ParentMismatch,
     #[error("the runtime profile has no ready matching verified artifact")]
     ProfileNotReady,
+    #[error("task change constraints are invalid")]
+    InvalidConstraints,
     #[error("task deadline is outside the supported clock range")]
     Clock,
 }
@@ -158,7 +160,7 @@ pub trait TaskRepository {
 /// Admit or replay one task while preserving its exact source and runtime identity.
 ///
 /// # Errors
-/// Rejects mismatched parents, unavailable artifacts, invalid deadlines and storage failures.
+/// Rejects invalid change constraints, mismatched parents, unavailable artifacts, invalid deadlines and storage failures.
 pub fn admit<R: TaskRepository>(
     repository: &mut R,
     command: AdmitTask,
@@ -168,6 +170,13 @@ pub fn admit<R: TaskRepository>(
         .map_err(AdmissionError::Storage)?
     {
         return Ok(receipt);
+    }
+    if command
+        .constraints
+        .as_ref()
+        .is_some_and(|constraints| constraints.validate().is_err())
+    {
+        return Err(AdmissionError::InvalidConstraints);
     }
     let facts = repository
         .admission_facts(&command)

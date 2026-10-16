@@ -227,7 +227,6 @@ dependencies = [
 name = "ayni-orchestrator-api"
 version = "0.1.0"
 dependencies = [
- "ayni-orchestrator-domain",
  "ayni-orchestrator-oci",
  "prost",
  "prost-build",

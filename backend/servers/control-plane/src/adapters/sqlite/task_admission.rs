@@ -14,6 +14,7 @@ pub(crate) fn admission_error(error: AdmissionError<CleanStoreError>) -> CleanSt
         AdmissionError::ParentMismatch => CleanStoreError::ParentMismatch,
         AdmissionError::ProfileNotReady => CleanStoreError::ProfileNotReady,
         AdmissionError::Clock => CleanStoreError::Clock,
+        AdmissionError::InvalidConstraints => CleanStoreError::InvalidTransition,
     }
 }
 
