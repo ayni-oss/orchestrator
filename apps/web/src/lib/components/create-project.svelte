@@ -9,6 +9,7 @@
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Form from "$lib/components/ui/form/index.js";
   let { data }: { data: PageData } = $props();
@@ -34,8 +35,8 @@
       <input type="hidden" name="idempotencyKey" value={$values.idempotencyKey} />
       <input type="hidden" name="workspaceId" value={data.workspace?.id} />
       <p class="text-sm text-muted-foreground">Workspace: {data.workspace?.displayName}</p>
-      <Form.Field form={projectForm} name="goal"><Form.Control>{#snippet children({props})}<Form.Label>Goal</Form.Label><Input {...props} bind:value={$values.goal} placeholder="What should this project achieve?" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
-      <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
+      <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} placeholder="A short title for your project" autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
+      <Form.Field form={projectForm} name="goal"><Form.Control>{#snippet children({props})}<Form.Label>Goal</Form.Label><Textarea {...props} bind:value={$values.goal} rows={4} class="min-h-28 resize-y" placeholder="Describe what this project should achieve and why." />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       {#if !repositories.length}<p class="text-sm text-muted-foreground">Choose a workspace with connected repositories before creating a project.</p><Button href="/workspaces" variant="outline">Manage workspaces</Button>{/if}
 
