@@ -87,6 +87,14 @@ async fn prepare_with(
     let base = baseline_base(&old)?;
     let started = std::time::Instant::now();
     let generated = runner.generate(context, &base, deadline).await;
+    match &generated {
+        Err(error) => context.activity.error(error),
+        Ok(false) => context.activity.failure_detail(
+            ayni_orchestrator_runtime::activity::Failure::CommandExit,
+            "Worker-owned ayni env lock exited unsuccessfully; restoring baseline lock",
+        ),
+        Ok(true) => {}
+    }
     validate_policy(context)?;
     if generated.as_ref().is_err() || generated.as_ref().is_ok_and(|success| !success) {
         // An unavailable generator cannot authorize an agent-written derived lock.
@@ -103,10 +111,22 @@ async fn prepare_with(
             &proposed,
             &context.spec.execution.expected.platform,
         )
-        .is_ok_and(|envelope| {
-            envelope.contract_version == context.spec.execution.expected.ayni_version
+        .and_then(|envelope| {
+            if envelope.contract_version == context.spec.execution.expected.ayni_version {
+                Ok(())
+            } else {
+                Err("generated_lock_cli_version_mismatch")
+            }
         });
-        if !valid {
+        if let Err(reason) = valid {
+            context.activity.failure_detail(
+                ayni_orchestrator_runtime::activity::Failure::LockContract,
+                &format!(
+                    "Generated .ayni.lock rejected: {reason}; expected CLI {} on {}",
+                    context.spec.execution.expected.ayni_version,
+                    context.spec.execution.expected.platform
+                ),
+            );
             recovery::atomic_write(&context.workspace.join(".ayni.lock"), &baseline)?;
             return Err(io::Error::other(
                 "protected generated lock contract is invalid",

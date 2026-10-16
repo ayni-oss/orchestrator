@@ -210,7 +210,7 @@ it("retains bounded activity on failed attempts for task polling and watch updat
   expect(mapped.agentActivity[0]?.sequence).toBe(45);
   expect(mapped.agentActivity.at(-1)).toEqual({
     sequence: 300, observedAt: original.createdAt?.toISOString(),
-    message: "Waiting for a model response", failed: true,
+    message: "Waiting for a model response", failed: true, details: "", truncated: false,
   });
 });
 
@@ -241,4 +241,16 @@ describe("worker quality evidence", () => {
       }
     }
   });
+});
+
+
+it("preserves diagnostic text as untrusted text and marks oversized details", () => {
+  const original = task();
+  const mapped = mapDevelopmentAttempt(DevelopmentAttempt.fromPartial({
+    id:"attempt:diagnostics", snapshot:original.snapshot, createdAt:original.createdAt, updatedAt:original.updatedAt,
+    agentActivity:[{sequence:1,message:"Agent tool returned",failed:true,details:"<script>alert(1)</script>"},{sequence:2,details:"x".repeat(9000)}],
+  }));
+  expect(mapped.agentActivity[0]?.details).toBe("<script>alert(1)</script>");
+  expect(mapped.agentActivity[1]?.details).toHaveLength(8192);
+  expect(mapped.agentActivity[1]?.truncated).toBe(true);
 });

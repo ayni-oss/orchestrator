@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WorkerActivity from "$lib/components/worker-activity.svelte";
   import AgentProfileSummary from "$lib/components/agent-profile-summary.svelte";
   import {projectHref} from "$lib/project-navigation.js";
   import { enhance } from "$lib/forms.js";
@@ -107,15 +108,7 @@
             { label: "Model interactions", value: String(attempt.usage.interactions ?? "Unavailable") },
           ]} />
           {#if attempt.failure}<Feedback kind="error" title="Attempt needs attention" message={attempt.failure.message} />{/if}
-          <details class="rounded-lg border p-3">
-            <summary class="cursor-pointer text-sm font-medium">Worker activity · {attempt.agentActivity?.length ?? 0} events</summary>
-            <p class="my-3 text-xs text-muted-foreground">Activity omits private reasoning, prompts, and command output.</p>
-            <ol class="max-h-80 space-y-3 overflow-auto text-sm" aria-label={`Activity for attempt ${attempt.attemptNumber}`}>
-              {#each attempt.agentActivity ?? [] as event (event.sequence)}
-                <li class="border-l-2 pl-3"><p class={event.failed ? "text-destructive" : ""}>{event.message}{event.failed ? " — failed" : ""}</p><time class="text-xs text-muted-foreground" datetime={event.observedAt}>{event.observedAt ? formatDate(event.observedAt) : "Time unavailable"}</time></li>
-              {:else}<li class="text-muted-foreground">No worker activity has been retained for this attempt yet.</li>{/each}
-            </ol>
-          </details>
+          <WorkerActivity events={attempt.agentActivity ?? []} attemptNumber={attempt.attemptNumber} />
         </InformationCard></div>
       {:else}<EmptyState title="Waiting for the first attempt" description="Progress will appear when the worker starts." />{/each}
     </section>
