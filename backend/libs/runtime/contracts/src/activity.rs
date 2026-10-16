@@ -1,7 +1,9 @@
-//! Bounded, content-free worker activity. These records are advisory, never evidence.
+//! Bounded worker diagnostics. These records are advisory, never quality evidence.
 use serde::{Deserialize, Serialize};
 
 pub const MAX_EVENTS: usize = 256;
+pub const MAX_ACTIVITY_BYTES: usize = 196_608;
+pub const MAX_DETAIL_BYTES: usize = 8_192;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -16,6 +18,8 @@ pub enum Stage {
     ModelExecution,
     ModelRequest,
     ModelResponse,
+    AgentMessage,
+    ReasoningSummary,
     ToolStarted,
     ToolFinished,
     Checkpoint,
@@ -37,6 +41,8 @@ impl Stage {
             Self::ModelCredentials => "Loading model credentials and configuring the client",
             Self::ModelExecution => "Running the coding agent",
             Self::ModelRequest => "Waiting for a model response",
+            Self::AgentMessage => "Agent message",
+            Self::ReasoningSummary => "Provider reasoning summary",
             Self::ModelResponse => "Received a model response",
             Self::ToolStarted => "Running an agent tool",
             Self::ToolFinished => "Agent tool returned",
@@ -57,15 +63,20 @@ pub struct Activity {
     pub failed: bool,
     #[serde(default)]
     pub failure: Option<Failure>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub details: String,
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 /// Reject malformed, reordered, oversized, or future schema data at the collector boundary.
 #[must_use]
 pub fn valid(events: &[Activity]) -> bool {
     events.len() <= MAX_EVENTS
-        && events
-            .iter()
-            .all(|event| event.sequence > 0 && event.timestamp_ms > 0)
+        && serde_json::to_vec(events).is_ok_and(|bytes| bytes.len() <= MAX_ACTIVITY_BYTES)
+        && events.iter().all(|event| {
+            event.sequence > 0 && event.timestamp_ms > 0 && event.details.len() <= MAX_DETAIL_BYTES
+        })
         && events
             .windows(2)
             .all(|pair| pair[0].sequence < pair[1].sequence)
@@ -82,12 +93,19 @@ pub enum Failure {
     InvalidResponse,
     InvalidRequest,
     TurnLimit,
+    Deadline,
     InvalidTool,
     Cancelled,
     MissingFile,
     PermissionDenied,
     InvalidInput,
     Internal,
+    CommandExit,
+    PolicyChanged,
+    LockContract,
+    LockEvidenceMissing,
+    LockEvidenceMismatch,
+    DependencyScope,
     NoChanges,
     ProtectedPath,
     TestEdits,
@@ -113,6 +131,7 @@ impl Failure {
             Self::Transport => "Model transport failed",
             Self::InvalidResponse => "Model response could not be decoded",
             Self::InvalidRequest => "Model request could not be constructed",
+            Self::Deadline => "Worker operation reached its time limit",
             Self::TurnLimit => "Agent reached the frozen turn limit",
             Self::InvalidTool => "Agent requested an unavailable tool",
             Self::Cancelled => "Agent run cancelled",
@@ -132,6 +151,18 @@ impl Failure {
             Self::ProtectedPath => "Work changes a protected path",
             Self::TestEdits => "Work changes tests without authorization",
             Self::RuntimeMismatch => "Runtime verification detected changed or mismatched source",
+            Self::CommandExit => "Command exited unsuccessfully",
+            Self::PolicyChanged => "Protected environment policy changed",
+            Self::LockContract => {
+                "Regenerated environment lock violates the admitted CLI or platform contract"
+            }
+            Self::LockEvidenceMissing => {
+                "Changed environment lock lacks worker regeneration evidence"
+            }
+            Self::LockEvidenceMismatch => {
+                "Environment lock regeneration evidence does not match final dependency inputs"
+            }
+            Self::DependencyScope => "Dependency change is outside the approved environment scope",
             Self::Internal => "Worker operation failed",
         }
     }
@@ -145,7 +176,7 @@ mod tests {
     {
         assert!(
             serde_json::from_str::<Activity>(
-                r#"{"sequence":1,"timestamp_ms":1,"stage":"secret prompt","failed":false}"#
+                r#"{"sequence":1,"timestamp_ms":1,"stage":"unknown stage","failed":false}"#
             )
             .is_err()
         );

@@ -743,7 +743,7 @@ export interface DevelopmentTask {
   resourceVersion: string;
 }
 
-/** AgentActivity is an advisory, content-free worker lifecycle observation. */
+/** AgentActivity is an advisory worker diagnostic, never quality evidence. */
 export interface AgentActivity {
   sequence: number;
   observedAt?:
@@ -752,6 +752,9 @@ export interface AgentActivity {
   /** message is a collector-owned description, never model or tool content. */
   message: string;
   failed: boolean;
+  /** Redacted interaction or error text, rendered as untrusted plain text. */
+  details: string;
+  truncated: boolean;
 }
 
 /** DevelopmentAttempt is one immutable-snapshot execution of a task. */
@@ -3581,7 +3584,7 @@ export const DevelopmentTask: MessageFns<DevelopmentTask> = {
 };
 
 function createBaseAgentActivity(): AgentActivity {
-  return { sequence: 0, observedAt: undefined, message: "", failed: false };
+  return { sequence: 0, observedAt: undefined, message: "", failed: false, details: "", truncated: false };
 }
 
 export const AgentActivity: MessageFns<AgentActivity> = {
@@ -3597,6 +3600,12 @@ export const AgentActivity: MessageFns<AgentActivity> = {
     }
     if (message.failed !== false) {
       writer.uint32(32).bool(message.failed);
+    }
+    if (message.details !== "") {
+      writer.uint32(42).string(message.details);
+    }
+    if (message.truncated !== false) {
+      writer.uint32(48).bool(message.truncated);
     }
     return writer;
   },
@@ -3646,6 +3655,22 @@ export const AgentActivity: MessageFns<AgentActivity> = {
             message.failed = reader.bool();
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.details = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.truncated = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3668,6 +3693,8 @@ export const AgentActivity: MessageFns<AgentActivity> = {
         : undefined,
       message: isSet(object.message) ? globalThis.String(object.message) : "",
       failed: isSet(object.failed) ? globalThis.Boolean(object.failed) : false,
+      details: isSet(object.details) ? globalThis.String(object.details) : "",
+      truncated: isSet(object.truncated) ? globalThis.Boolean(object.truncated) : false,
     };
   },
 
@@ -3685,6 +3712,12 @@ export const AgentActivity: MessageFns<AgentActivity> = {
     if (message.failed !== false) {
       obj.failed = message.failed;
     }
+    if (message.details !== "") {
+      obj.details = message.details;
+    }
+    if (message.truncated !== false) {
+      obj.truncated = message.truncated;
+    }
     return obj;
   },
 
@@ -3697,6 +3730,8 @@ export const AgentActivity: MessageFns<AgentActivity> = {
     message.observedAt = object.observedAt ?? undefined;
     message.message = object.message ?? "";
     message.failed = object.failed ?? false;
+    message.details = object.details ?? "";
+    message.truncated = object.truncated ?? false;
     return message;
   },
 };

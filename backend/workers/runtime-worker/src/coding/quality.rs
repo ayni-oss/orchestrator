@@ -90,7 +90,8 @@ async fn full(context: &Context, runner: &impl Runner) -> io::Result<QualityResu
             {
                 return Err(error);
             }
-            Err(_) => {
+            Err(error) => {
+                context.activity.error(&error);
                 latest = unavailable(
                     "Full check execution or evidence validation failed; measurements are unavailable",
                 );
@@ -166,7 +167,7 @@ async fn coordinate_with(context: &Context, runner: &impl Runner) -> io::Result<
             }
             Ok(None) => {}
             Err(error) => {
-                context.activity.fail(super::activity::io_failure(&error));
+                context.activity.error(&error);
                 context.state.lock().await.repair_stopped = true;
                 context.phase(WorkerPhase::Checking).await?;
             }

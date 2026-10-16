@@ -611,6 +611,8 @@ fn activity_survives_restart_and_retry_keeps_separate_logs()
         observed_at: Some(timestamp(1)),
         message: "Waiting for a model response".into(),
         failed: false,
+        details: "command failed: exit 1".into(),
+        truncated: false,
     }];
     let observed = store.coding_activity(&attempt.id, events.clone())?;
     assert_eq!(

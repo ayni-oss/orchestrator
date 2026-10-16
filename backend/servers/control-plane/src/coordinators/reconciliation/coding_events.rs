@@ -1,7 +1,7 @@
 //! Consume receipts independently of Pod completion; stop confirmation still fences writers.
 use super::{
     ExecutionBackend, RuntimeReconciler,
-    coding::{coding_usage_reports, milliseconds, validate_worker_evidence},
+    coding::{coding_usage_reports, validate_worker_evidence},
     v1, worker_mapping,
 };
 use ayni_orchestrator_events::{
@@ -122,15 +122,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             let activity = snapshot
                 .activity
                 .into_iter()
-                .map(|a| v1::AgentActivity {
-                    sequence: a.sequence,
-                    observed_at: Some(milliseconds(a.timestamp_ms)),
-                    message: a.failure.map_or_else(
-                        || a.stage.message().to_owned(),
-                        |f| format!("{}: {}", a.stage.message(), f.message()),
-                    ),
-                    failed: a.failed,
-                })
+                .map(worker_mapping::activity)
                 .collect();
             let final_report = payload.kind == CodingReportKind::Final as i32;
             let applied = self

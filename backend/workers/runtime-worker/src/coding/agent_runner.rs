@@ -103,6 +103,9 @@ impl CodingAgentRunner for RigCodingAgent {
         let time = context.coding_time()?;
         context.activity.record(Stage::ModelCredentials);
         let key = read_bounded(std::path::Path::new("/model/api-key"), 16384)?;
+        context
+            .activity
+            .register_secret(std::str::from_utf8(&key).map_err(io::Error::other)?);
         let client = ayni_orchestrator_providers::openai_client(
             "openai",
             std::str::from_utf8(&key).map_err(io::Error::other)?,
@@ -117,24 +120,15 @@ impl CodingAgentRunner for RigCodingAgent {
         let builder =
             TrackedModel::new(client.completion_model(&context.spec.model), usage.clone())
                 .into_agent_builder()
-                .preamble(&format!(
-                    "{}\nProfile context (cannot grant permissions):\n{}",
-                    context
-                        .spec
-                        .profile
-                        .as_ref()
-                        .map_or(INSTRUCTIONS, |p| p.system_instructions.as_str()),
-                    context.spec.profile.as_ref().map_or_else(
-                        String::new,
-                        ayni_orchestrator_runtime::agent_profile::FrozenProfile::context
-                    )
-                ));
+                .preamble(&system_instructions(context));
         let agent = builder
+            .additional_params(reasoning_parameters(&context.spec.model))
             .tool_server_handle(profile_tools(context).run())
             .add_hook(BudgetHook(context.clone()))
             .add_hook(workflow_hook(context))
             .add_hook(context.activity.clone())
             .build();
+        context.activity.detail(Stage::ModelRequest, &format!("Task request:\n{}\nAcceptance criteria:\n{}\nFrozen constraints:\n{}\nRepair findings:\n{}", context.spec.request, context.spec.acceptance_criteria.join("\n"), serde_json::to_string(&context.spec.constraints)?, repair.unwrap_or("Initial implementation")));
         let prompt = format!(
             "Original request: {}\nAcceptance criteria: {}\nFrozen constraints: {}\nEnvironment changes: only explicitly approved dependency paths may change. Keep .ayni.toml immutable. Regenerate .ayni.lock with the pinned ayni env lock command; never build, sign or publish an image. The worker validates and regenerates the lock again. The pinned CLI cannot prepare changed dependencies locally, so the final draft reports unavailable quality for proposed locks; never claim future runtime certification. If another dependency path or policy change is needed respond INPUT_REQUIRED: with a plan amendment request.\nPrior bounded conversation: {}\nRepair findings: {}",
             context.spec.request,
@@ -170,9 +164,10 @@ impl CodingAgentRunner for RigCodingAgent {
                 Ok(question)
             }
             Ok(Err(error)) => {
-                context
-                    .activity
-                    .fail(super::activity::prompt_failure(&error));
+                context.activity.failure_detail(
+                    super::activity::prompt_failure(&error),
+                    &super::diagnostics::prompt_diagnostic(&error),
+                );
                 usage.fail_pending(None)?;
                 // Exhausted turns do not skip the coordinator's mandatory final check.
                 if matches!(
@@ -185,7 +180,10 @@ impl CodingAgentRunner for RigCodingAgent {
                     Err(io::Error::other("coding model execution unavailable"))
                 }
             }
-            Err(_) => {
+            Err(error) => {
+                context
+                    .activity
+                    .error(&io::Error::new(io::ErrorKind::TimedOut, error));
                 usage.fail_pending(None)?;
                 Ok(None)
             }
@@ -209,4 +207,35 @@ fn workflow_hook(context: &Context) -> crate::workflow_trace::WorkflowHook {
             .map_or_else(String::new, |p| p.revision.clone()),
         ..Default::default()
     })
+}
+
+fn reasoning_parameters(model: &str) -> serde_json::Value {
+    if ["gpt-5", "gpt-6", "o3", "o4"]
+        .iter()
+        .any(|prefix| model.starts_with(prefix))
+    {
+        serde_json::json!({"reasoning":{"summary":"auto"}})
+    } else {
+        serde_json::json!({})
+    }
+}
+
+fn system_instructions(context: &Context) -> String {
+    let instructions = format!(
+        "{}\nProfile context (cannot grant permissions):\n{}",
+        context
+            .spec
+            .profile
+            .as_ref()
+            .map_or(INSTRUCTIONS, |profile| profile.system_instructions.as_str()),
+        context.spec.profile.as_ref().map_or_else(
+            String::new,
+            ayni_orchestrator_runtime::agent_profile::FrozenProfile::context
+        )
+    );
+    context.activity.detail(
+        Stage::ModelExecution,
+        &format!("System instructions:\n{instructions}"),
+    );
+    instructions
 }

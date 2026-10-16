@@ -14,6 +14,7 @@ use std::{fs, io, path::Path, sync::Arc};
 
 pub mod activity;
 mod commits;
+mod diagnostics;
 mod environment;
 mod events;
 pub mod model_usage;
@@ -55,14 +56,12 @@ pub async fn run(
     #[cfg(not(unix))]
     let error = operation.await.err();
     if let Some(error) = error {
-        context.activity.fail(activity::io_failure(&error));
+        context.activity.error(&error);
         let phase = context.state.lock().await.progress.phase.clone();
         if result.execution != ExecutionOutcome::Cancelled {
             result.execution = if error.kind() == io::ErrorKind::TimedOut {
                 ExecutionOutcome::DeadlineExceeded
-            } else if error.to_string().contains("protected")
-                || error.to_string().contains("test edits")
-            {
+            } else if activity::unsafe_change(&error) {
                 ExecutionOutcome::UnsafeChanges
             } else if matches!(phase, WorkerPhase::Admission | WorkerPhase::Checkout) {
                 ExecutionOutcome::AdmissionFailed
@@ -110,6 +109,7 @@ async fn execute(context: &Context, result: &mut WorkerResult) -> io::Result<()>
     }
     prepare_workspace(context).await?;
     let coding_failed = code_source(context, result).await?;
+    context.activity.record(Stage::Finalization);
     let spec = context.spec.clone();
     let workspace = context.workspace.clone();
     tokio::task::spawn_blocking(move || {
@@ -176,7 +176,8 @@ async fn code_source(context: &Context, result: &mut WorkerResult) -> io::Result
             Ok(question) => {
                 result.requested_input = question;
             }
-            Err(_) => {
+            Err(error) => {
+                context.activity.error(&error);
                 coding_failed = true;
             }
         }
@@ -201,7 +202,7 @@ async fn probe_sandbox(context: &Context) -> io::Result<()> {
 async fn deliver_final(context: &Context, result: &mut WorkerResult) -> io::Result<()> {
     context.phase(WorkerPhase::Publishing).await?;
     if let Err(error) = publication::deliver(context, result).await {
-        context.activity.fail(activity::io_failure(&error));
+        context.activity.error(&error);
         if result.publication != PublicationOutcome::Conflict {
             result.publication = PublicationOutcome::Failed;
         }

@@ -1,3 +1,4 @@
+use super::worker_mapping;
 use super::{
     ExecutionBackend, ExecutionRequest, RuntimeExpectation, RuntimeReconciler, now, operation_name,
     v1,
@@ -354,31 +355,20 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             .join(name)
             .join("activity.json");
         let events = tokio::task::spawn_blocking(move || {
-            read_bounded(&path, 65536)
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<Vec<Activity>>(&bytes).ok())
-                .filter(|events| valid(events))
+            read_bounded(
+                &path,
+                ayni_orchestrator_runtime::activity::MAX_ACTIVITY_BYTES,
+            )
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Vec<Activity>>(&bytes).ok())
+            .filter(|events| valid(events))
         })
         .await
         .map_err(|_| "coding_output_unavailable")?;
         let Some(events) = events else {
             return Ok(attempt);
         };
-        let activity = events
-            .into_iter()
-            .map(|event| v1::AgentActivity {
-                sequence: event.sequence,
-                observed_at: Some(prost_types::Timestamp {
-                    seconds: event.timestamp_ms / 1000,
-                    nanos: i32::try_from((event.timestamp_ms % 1000) * 1_000_000).unwrap_or(0),
-                }),
-                message: event.failure.map_or_else(
-                    || event.stage.message().to_owned(),
-                    |failure| format!("{}: {}", event.stage.message(), failure.message()),
-                ),
-                failed: event.failed,
-            })
-            .collect();
+        let activity = events.into_iter().map(worker_mapping::activity).collect();
         self.with_database(move |store| {
             store
                 .coding_activity(&attempt.id, activity)
