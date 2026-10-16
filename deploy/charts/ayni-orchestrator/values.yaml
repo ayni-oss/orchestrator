@@ -7,7 +7,8 @@ runtime:
   outputClaim: runtime-outputs
   outputSize: 4Gi
   modelSecret: openai-api
-  intervalSeconds: 300
+  # Re-verify ready runtimes hourly, with per-profile scheduling jitter.
+  intervalSeconds: 3600
   requestTimeoutSeconds: 30
   codingTurns: 24
   qualityRepairLimit: 3

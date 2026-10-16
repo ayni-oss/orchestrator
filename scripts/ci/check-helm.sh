@@ -70,6 +70,10 @@ helm template runtime "$application_chart" --namespace runtime-test \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set-string 'runtime.serviceAccounts.imagePullSecrets[0].name=registry-pull' \
   >"$scratch/runtime.yaml"
+if ! grep -Fq '\"interval_seconds\":3600' "$scratch/runtime.yaml"; then
+  echo 'Default runtime re-verification interval must be one hour.' >&2
+  exit 1
+fi
 helm template runtime "$application_chart" --namespace runtime-test \
   --set runtime.enabled=true --set runtime.serviceAccounts.create=false \
   --set-string runtime.workerImage=registry.example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \

@@ -97,7 +97,7 @@ fn external_engine_mode() -> String {
 }
 
 const fn interval() -> u64 {
-    60
+    3600
 }
 fn runtime_account() -> String {
     "runtime-coding".into()

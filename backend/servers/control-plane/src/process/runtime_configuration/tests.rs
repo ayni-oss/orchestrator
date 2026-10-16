@@ -196,7 +196,7 @@ fn operator_json_preserves_scheduling_and_workload_defaults()
         }}
     }))?;
     configuration.validate()?;
-    assert_eq!(configuration.interval_seconds, 60);
+    assert_eq!(configuration.interval_seconds, 3600);
     assert_eq!(configuration.request_timeout_seconds, 30);
     assert_eq!(configuration.coding_turns, 24);
     assert_eq!(configuration.quality_repair_limit, 3);
