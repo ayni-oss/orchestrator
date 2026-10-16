@@ -43,6 +43,14 @@ explicit **Rebuild**; rebuilding cannot bypass missing setup.
 | Certificate selection or key changes | Review the proposed trust update, then wait for verification |
 | A task was already admitted | It keeps its selected source, runtime and limits |
 
+An approved task can update repository dependencies and regenerate `.ayni.lock`
+when its plan includes that work. Review and merge its pull request as usual.
+Periodic reconciliation observes the default branch, marks the shared environment
+**Updating**, and prepares and verifies the matching runtime. A matching image
+can be reused; a missing image is built. New tasks in every project sharing the
+repository wait for verification. The task that proposed the change keeps its
+original runtime.
+
 Use **Analyze repository** to inspect setup, **Sync** to reconcile source, and
 **Rebuild** when you explicitly want to replace a mismatching image. Findings
 stay visible until resolved; stale background work cannot restore an older selection.

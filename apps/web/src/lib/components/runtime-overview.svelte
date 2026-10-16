@@ -68,6 +68,7 @@
   {#each profiles as profile (profile.id)}
     {@const revision=revisions[profile.id]}
     <InformationCard title={words(profile.kind)} navigationHref={`/profiles/${encodeURIComponent(profile.id)}`} status={profile.state} actions={[{ label: "Edit", onSelect: () => edit(profile), disabled: busy }]}>
+      {#if profile.state === "updating"}<p class="text-sm text-muted-foreground" role="status">The environment needs an update. New tasks wait until preparation and verification complete.</p>{/if}
       {#each profile.findings as finding (finding.code)}<div class="text-sm" role="status"><p class="text-destructive">{finding.message}</p><p class="text-muted-foreground">{finding.remediation}</p></div>{/each}
       <InformationTable rows={[
         ...(profile.preparationPhase ? [{ label: "Preparation", value: words(profile.preparationPhase) }] : []),

@@ -132,6 +132,7 @@
             { label: "Agent iterations", value: String(task.snapshot.limits.codingTurns) },
             { label: "Deadline", value: task.snapshot.deadlineAt ? formatDate(task.snapshot.deadlineAt) : "None" },
             { label: "Test edits", value: task.snapshot.changeConstraints.allowTestEdits ? "Authorized" : "Protected" },
+            { label: "Environment changes", value: task.snapshot.changeConstraints.environmentChange ? `Regenerate .ayni.lock for: ${task.snapshot.changeConstraints.environmentChange.dependencyPaths.join(", ")}` : "Protected" },
           ]} />
           <div class="space-y-2 text-sm"><h4 class="font-medium">Acceptance criteria</h4><ol class="list-decimal space-y-1 pl-5">{#each task.snapshot.acceptanceCriteria as criterion, index (index)}<li>{criterion}</li>{:else}<li class="list-none text-muted-foreground">None specified.</li>{/each}</ol></div>
           <div class="space-y-2 text-sm"><h4 class="font-medium">Protected paths</h4><ul class="space-y-1 font-mono text-xs [overflow-wrap:anywhere]">{#each task.snapshot.changeConstraints.protectedPaths as path, index (index)}<li>{path}</li>{:else}<li class="font-sans text-muted-foreground">None specified.</li>{/each}</ul></div>

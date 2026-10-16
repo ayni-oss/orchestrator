@@ -118,6 +118,28 @@ pub(super) struct ProfileSelection {
 }
 
 impl<E: ExecutionBackend> RuntimeReconciler<E> {
+    /// Keep in-flight cleanup bound to its admitted runtime and credentials.
+    pub(super) async fn preparation_runtime(
+        &self,
+        id: &str,
+        cursor: &RuntimeCursor,
+        registry: &v1::RuntimeRegistrySelection,
+    ) -> Result<ProfileRuntime, &'static str> {
+        if cursor.pending.is_none() && !registry.registry_connection_id.is_empty() {
+            self.registry_ready(&registry.registry_connection_id)
+                .await?;
+        }
+        if let Some(frozen) = cursor
+            .pending
+            .as_ref()
+            .and_then(|pending| pending.frozen_runtime.clone())
+        {
+            Ok(frozen)
+        } else {
+            self.configured_profile(id).await
+        }
+    }
+
     pub(super) async fn select_profile(
         &self,
         id: &str,

@@ -550,6 +550,11 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             constraints: ayni_orchestrator_domain::ChangeConstraints {
                 protected_paths: constraints.protected_paths.clone(),
                 allow_test_edits: constraints.allow_test_edits,
+                environment_change: constraints.environment_change.as_ref().map(|scope| {
+                    ayni_orchestrator_domain::EnvironmentChangeAuthorization {
+                        dependency_paths: scope.dependency_paths.clone(),
+                    }
+                }),
             },
         };
         // Select authority before Kubernetes creation; crash replay adopts the same generation.

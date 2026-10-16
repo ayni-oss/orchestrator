@@ -14,6 +14,7 @@ use std::{fs, io, path::Path, sync::Arc};
 
 pub mod activity;
 mod commits;
+mod environment;
 mod events;
 pub mod model_usage;
 mod publication;
@@ -221,7 +222,16 @@ async fn prepare_workspace(context: &Context) -> io::Result<()> {
         .await?;
         tracing::info!("frozen source checkout completed");
     }
-    preflight(&context.spec.execution, &context.workspace)?;
+    if context.spec.constraints.environment_change.is_some()
+        && !matches!(
+            context.state.lock().await.progress.phase,
+            WorkerPhase::Admission | WorkerPhase::Checkout
+        )
+    {
+        environment::validate_policy(context)?;
+    } else {
+        preflight(&context.spec.execution, &context.workspace)?;
+    }
     tracing::info!("protected source inputs verified");
     let phase = context.state.lock().await.progress.phase.clone();
     if matches!(phase, WorkerPhase::Admission | WorkerPhase::Checkout) {
@@ -243,6 +253,7 @@ async fn prepare_workspace(context: &Context) -> io::Result<()> {
     Ok(())
 }
 fn validate_retained(context: &Context, result: &WorkerResult) -> io::Result<()> {
+    environment::validate_retained(context)?;
     if result.commit.as_deref() != Some(git(&context.workspace, &["rev-parse", "HEAD"])?.as_str())
         || !git(&context.workspace, &["diff", "--name-only", "HEAD"])?.is_empty()
         || !git(

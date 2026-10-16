@@ -984,3 +984,5 @@ async fn repository_removal_cleanup_retries_after_restart_and_releases_credentia
 mod retries;
 
 mod cutover;
+
+mod source_selection;

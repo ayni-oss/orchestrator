@@ -14,6 +14,7 @@ pub(crate) fn admission_error(error: AdmissionError<CleanStoreError>) -> CleanSt
         AdmissionError::ParentMismatch => CleanStoreError::ParentMismatch,
         AdmissionError::ProfileNotReady => CleanStoreError::ProfileNotReady,
         AdmissionError::Clock => CleanStoreError::Clock,
+        AdmissionError::InvalidConstraints => CleanStoreError::InvalidTransition,
     }
 }
 
@@ -241,6 +242,11 @@ impl TaskRepository for CleanStore {
             change_constraints: frozen.constraints.map(|c| v1::ChangeConstraints {
                 protected_paths: c.protected_paths,
                 allow_test_edits: c.allow_test_edits,
+                environment_change: c.environment_change.map(|scope| {
+                    v1::EnvironmentChangeAuthorization {
+                        dependency_paths: scope.dependency_paths,
+                    }
+                }),
             }),
             deadline_at: deadline,
             limits: Some(v1::WorkerLimits {

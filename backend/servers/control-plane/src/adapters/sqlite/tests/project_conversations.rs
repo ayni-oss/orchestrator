@@ -48,6 +48,16 @@ fn complete(
     run: &v1::ProjectAgentRun,
     profile: &v1::RuntimeProfile,
 ) -> Result<(), CleanStoreError> {
+    complete_with_environment(store, c, run, profile, None, "")
+}
+fn complete_with_environment(
+    store: &mut CleanStore,
+    c: &v1::ProjectConversation,
+    run: &v1::ProjectAgentRun,
+    profile: &v1::RuntimeProfile,
+    environment_change: Option<ayni_orchestrator_domain::EnvironmentChangeAuthorization>,
+    impact: &str,
+) -> Result<(), CleanStoreError> {
     let artifact = store.runtime_artifact(
         profile
             .active_runtime_artifact_id
@@ -89,7 +99,8 @@ fn complete(
         proposals: vec![ResearchProposal {
             findings: String::new(),
             scope: String::new(),
-            dependency_environment_impact: String::new(),
+            dependency_environment_impact: impact.into(),
+            environment_change,
             repository_id: c.repository_connection_ids[0].clone(),
             revision: REVISION.into(),
             runtime_profile_id: profile.id.clone(),
@@ -107,6 +118,9 @@ fn complete(
         }],
     })
 }
+#[path = "project_environment_changes.rs"]
+mod environment_changes;
+
 #[test]
 fn messages_are_durable_and_serialized_with_idempotent_replay() -> Result<(), CleanStoreError> {
     let (mut store, c, run, _) = setup()?;
@@ -397,6 +411,7 @@ fn whole_plan_approval_rolls_back_when_second_repository_is_stale() -> Result<()
             findings: String::new(),
             scope: String::new(),
             dependency_environment_impact: String::new(),
+            environment_change: None,
             repository_id: profile.repository_connection_id.clone(),
             revision: REVISION.into(),
             runtime_profile_id: profile.id.clone(),

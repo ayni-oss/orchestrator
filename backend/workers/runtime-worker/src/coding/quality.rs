@@ -39,6 +39,9 @@ trait Runner: Sync {
 struct NativeRunner;
 impl Runner for NativeRunner {
     async fn check(&self, context: &Context, deadline: Duration) -> io::Result<QualityResult> {
+        if let Some(unavailable) = super::environment::prepare(context, deadline).await? {
+            return Ok(unavailable);
+        }
         let (report, markdown) = crate::profiles::ayni::invoke_markdown(
             &context.spec.execution,
             &context.workspace,
@@ -181,6 +184,7 @@ async fn coordinate_with(context: &Context, runner: &impl Runner) -> io::Result<
 async fn freeze(context: &Context, result: QualityResult) -> io::Result<QualityResult> {
     context.phase(WorkerPhase::Finalizing).await?;
     context.activity.record(Stage::Finalization);
+    super::environment::freeze(context)?;
     let report_path = context.output.join("evidence/report.json");
     if report_path.exists() {
         std::fs::remove_file(&report_path)?;

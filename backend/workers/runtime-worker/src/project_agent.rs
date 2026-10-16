@@ -249,7 +249,7 @@ impl Tool for PrepareProposal {
         "Prepare a complete task or an explicitly requested lifecycle action for human approval. This never executes the proposed action.".into()
     }
     fn parameters(&self) -> serde_json::Value {
-        json!({"type":"object","properties":{"findings":{"type":"string"},"scope":{"type":"string"},"dependency_environment_impact":{"type":"string"},"repository_id":{"type":"string"},"revision":{"type":"string"},"runtime_profile_id":{"type":"string"},"coding_connection_id":{"type":"string"},"coding_model":{"type":"string"},"request":{"type":"string"},"acceptance_criteria":{"type":"array","items":{"type":"string"}},"allowed_paths":{"type":"array","items":{"type":"string"}},"allow_test_edits":{"type":"boolean"},"forbidden_paths":{"type":"array","items":{"type":"string"}},"coding_turns":{"type":"integer","minimum":1,"maximum":128},"deadline_seconds":{"type":"integer","minimum":1,"maximum":86400},"action":{"type":"string","enum":["create_task","cancel_task","retry_task","retry_publication"]},"target_task_id":{"type":"string"}},"required":["findings","scope","dependency_environment_impact","repository_id","revision","runtime_profile_id","coding_connection_id","coding_model","request","acceptance_criteria","allowed_paths","allow_test_edits","forbidden_paths","coding_turns","deadline_seconds","action","target_task_id"],"additionalProperties":false})
+        json!({"type":"object","properties":{"findings":{"type":"string"},"scope":{"type":"string"},"dependency_environment_impact":{"type":"string"},"environment_change":{"anyOf":[{"type":"null"},{"type":"object","properties":{"dependency_paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100}},"required":["dependency_paths"],"additionalProperties":false}]},"repository_id":{"type":"string"},"revision":{"type":"string"},"runtime_profile_id":{"type":"string"},"coding_connection_id":{"type":"string"},"coding_model":{"type":"string"},"request":{"type":"string"},"acceptance_criteria":{"type":"array","items":{"type":"string"}},"allowed_paths":{"type":"array","items":{"type":"string"}},"allow_test_edits":{"type":"boolean"},"forbidden_paths":{"type":"array","items":{"type":"string"}},"coding_turns":{"type":"integer","minimum":1,"maximum":128},"deadline_seconds":{"type":"integer","minimum":1,"maximum":86400},"action":{"type":"string","enum":["create_task","cancel_task","retry_task","retry_publication"]},"target_task_id":{"type":"string"}},"required":["findings","scope","dependency_environment_impact","environment_change","repository_id","revision","runtime_profile_id","coding_connection_id","coding_model","request","acceptance_criteria","allowed_paths","allow_test_edits","forbidden_paths","coding_turns","deadline_seconds","action","target_task_id"],"additionalProperties":false})
     }
     async fn call(&self, _: &mut ToolContext, args: ResearchProposal) -> io::Result<String> {
         self.0.authorize(Self::NAME, Some(&args.repository_id))?;
@@ -283,6 +283,15 @@ impl Tool for PrepareProposal {
                     "lifecycle action requires explicit user request naming the task",
                 ));
             }
+        }
+        if args.environment_change.as_ref().is_some_and(|scope| {
+            !scope.is_valid()
+                || args.dependency_environment_impact.trim().is_empty()
+                || args.action != "create_task"
+        }) {
+            return Err(io::Error::other(
+                "environment changes require explicit dependency scope and impact",
+            ));
         }
         if args.findings.len() > 16384
             || args.scope.len() > 16384
@@ -623,6 +632,12 @@ mod tests {
                 Some("integer") => json!(1),
                 Some("boolean") => json!(false),
                 Some("array") => json!([]),
+                None if property["anyOf"].as_array().is_some_and(|variants| {
+                    variants.iter().any(|variant| variant["type"] == "null")
+                }) =>
+                {
+                    serde_json::Value::Null
+                }
                 _ => return Err(io::Error::other("unsupported argument type")),
             };
             args.insert(key.into(), value);

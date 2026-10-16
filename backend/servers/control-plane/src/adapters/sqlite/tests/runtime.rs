@@ -50,6 +50,165 @@ fn admission_requires_the_verified_source_revision() -> Result<(), CleanStoreErr
 }
 
 #[test]
+fn observed_source_blocks_shared_repository_admission_before_preparation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut store = CleanStore::in_memory()?;
+    let (repository, profile, _) = ready_profile(&mut store)?;
+    let initial = task_request(&store, &repository.id, &profile.id, "initial")?;
+    let (task, attempt) = store.create_development_task("initial", &initial)?;
+    let other = store.create_project(
+        "shared",
+        &v1::CreateProjectRequest {
+            idempotency_key: "shared".into(),
+            display_name: "Another project".into(),
+            repository_connection_id: repository.id,
+            ..Default::default()
+        },
+    )?;
+    let registry = store.runtime_registry(&profile)?;
+    let mut command = crate::profiles::ayni::runtime_selection::command(
+        &profile.id,
+        SECOND_REVISION,
+        &"e".repeat(64),
+        "registry.test/team/runtime",
+        "",
+        "0.15.0",
+    )?;
+    command.identity.source_digest = None;
+    let selected =
+        store.observe_runtime_source(&command, profile.active_revision_id.as_deref(), &registry)?;
+    let updating = store.runtime_profile(&profile.id)?;
+    assert_eq!(updating.state, v1::RuntimeProfileState::Updating as i32);
+    assert!(updating.active_runtime_artifact_id.is_none());
+    assert_eq!(
+        store
+            .runtime_profile_revision(&selected)?
+            .repository_revision,
+        SECOND_REVISION
+    );
+    for (index, project) in [&task.project_id, &other.id].iter().enumerate() {
+        let key = format!("blocked-{index}");
+        let mut request = initial.clone();
+        request.idempotency_key = key.clone();
+        request
+            .request
+            .as_mut()
+            .ok_or("request missing")?
+            .project_id
+            .clone_from(project);
+        assert!(matches!(
+            store.create_development_task(&key, &request),
+            Err(CleanStoreError::ProfileNotReady)
+        ));
+    }
+    assert!(
+        activate(
+            &mut store,
+            &profile.id,
+            profile
+                .active_revision_id
+                .as_deref()
+                .ok_or("revision missing")?,
+            "registry.test/team/runtime:stable",
+            DIGEST,
+            &report(REVISION),
+        )
+        .is_err()
+    );
+    assert_eq!(store.development_task(&task.id)?, task);
+    assert_eq!(store.development_attempt(&attempt.id)?, attempt);
+    // Repeated observations retain the pending selection and emit no new versions.
+    assert_eq!(
+        store.observe_runtime_source(&command, Some(&selected), &registry)?,
+        selected
+    );
+    assert_eq!(store.runtime_profile(&profile.id)?, updating);
+    // An old observation cannot replace the newly selected source.
+    assert!(matches!(
+        store.observe_runtime_source(&command, profile.active_revision_id.as_deref(), &registry,),
+        Err(CleanStoreError::StaleVersion)
+    ));
+    Ok(())
+}
+
+#[test]
+fn unchanged_source_keeps_verified_runtime_ready() -> Result<(), Box<dyn std::error::Error>> {
+    let mut store = CleanStore::in_memory()?;
+    let (_, profile, _) = ready_profile(&mut store)?;
+    let registry = store.runtime_registry(&profile)?;
+    let mut command = crate::profiles::ayni::runtime_selection::command(
+        &profile.id,
+        REVISION,
+        &"c".repeat(64),
+        "registry.test/team/runtime",
+        "",
+        "0.15.0",
+    )?;
+    command.identity.source_digest = None;
+    assert_eq!(
+        store.observe_runtime_source(&command, profile.active_revision_id.as_deref(), &registry,)?,
+        profile
+            .active_revision_id
+            .clone()
+            .ok_or("revision missing")?
+    );
+    assert_eq!(store.runtime_profile(&profile.id)?, profile);
+    Ok(())
+}
+
+#[test]
+fn observed_source_survives_restart_and_resolves_a_reusable_runtime()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempdir()?;
+    let path = directory.path().join("runtime.sqlite");
+    let mut store = CleanStore::open(&path, 3)?;
+    let (_, profile, _) = ready_profile(&mut store)?;
+    let registry = store.runtime_registry(&profile)?;
+    let mut command = crate::profiles::ayni::runtime_selection::command(
+        &profile.id,
+        SECOND_REVISION,
+        &"c".repeat(64),
+        "registry.test/team/runtime",
+        "",
+        "0.15.0",
+    )?;
+    command.identity.source_digest = None;
+    let selected =
+        store.observe_runtime_source(&command, profile.active_revision_id.as_deref(), &registry)?;
+    drop(store);
+    let mut store = CleanStore::open(&path, 3)?;
+    assert_eq!(
+        store.observe_runtime_source(&command, Some(&selected), &registry)?,
+        selected
+    );
+    let prepared = select(
+        &mut store,
+        &profile.id,
+        SECOND_REVISION,
+        &"c".repeat(64),
+        "registry.test/team/runtime",
+        DIGEST,
+    )?;
+    assert_ne!(selected, prepared);
+    activate(
+        &mut store,
+        &profile.id,
+        &prepared,
+        "registry.test/team/runtime:stable",
+        DIGEST,
+        &report(SECOND_REVISION),
+    )?;
+    let ready = store.runtime_profile(&profile.id)?;
+    assert_eq!(ready.state, v1::RuntimeProfileState::Ready as i32);
+    assert_eq!(
+        store.observe_runtime_source(&command, Some(&prepared), &registry)?,
+        prepared
+    );
+    assert_eq!(store.runtime_profile(&profile.id)?, ready);
+    Ok(())
+}
+
+#[test]
 fn fresh_source_verification_reuses_digest_but_not_stale_revision() -> Result<(), CleanStoreError> {
     let mut store = CleanStore::in_memory()?;
     let (repository, profile, _) = ready_profile(&mut store)?;

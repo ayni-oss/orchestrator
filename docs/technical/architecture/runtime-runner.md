@@ -2,7 +2,7 @@
 
 This is the implemented worker contract. Optional independent assessment and separate task-stage pods remain
 [execution-isolation research](https://github.com/ayni-oss/orchestrator/issues/128).
-Ordinary lock protections remain until the [environment-change flow](../guides/environment-changes.md) is implemented.
+Ordinary tasks preserve policy and lock inputs. The [environment-change flow](../guides/environment-changes.md) permits explicitly reviewed dependency files and derived lock regeneration; candidate full checks remain unavailable with the pinned runtime contract.
 
 One worker owns runtime admission, checkout, coding, commits, full quality
 checking, repair, push and draft creation. Kubernetes fixes the image digest,

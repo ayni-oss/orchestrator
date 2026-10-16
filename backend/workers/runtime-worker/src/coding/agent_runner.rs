@@ -136,7 +136,7 @@ impl CodingAgentRunner for RigCodingAgent {
             .add_hook(context.activity.clone())
             .build();
         let prompt = format!(
-            "Original request: {}\nAcceptance criteria: {}\nFrozen constraints: {}\nPrior bounded conversation: {}\nRepair findings: {}",
+            "Original request: {}\nAcceptance criteria: {}\nFrozen constraints: {}\nEnvironment changes: only explicitly approved dependency paths may change. Keep .ayni.toml immutable. Regenerate .ayni.lock with the pinned ayni env lock command; never build, sign or publish an image. The worker validates and regenerates the lock again. The pinned CLI cannot prepare changed dependencies locally, so the final draft reports unavailable quality for proposed locks; never claim future runtime certification. If another dependency path or policy change is needed respond INPUT_REQUIRED: with a plan amendment request.\nPrior bounded conversation: {}\nRepair findings: {}",
             context.spec.request,
             serde_json::to_string(&context.spec.acceptance_criteria)?,
             serde_json::to_string(&context.spec.constraints)?,

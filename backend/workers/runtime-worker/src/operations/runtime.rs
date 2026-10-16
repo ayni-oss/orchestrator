@@ -302,6 +302,12 @@ pub(crate) fn success(command: &mut Command) -> io::Result<()> {
 }
 
 pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
+    String::from_utf8(git_bytes(workspace, arguments)?)
+        .map(|value| value.trim_end_matches('\n').to_owned())
+        .map_err(io::Error::other)
+}
+
+pub(crate) fn git_bytes(workspace: &Path, arguments: &[&str]) -> io::Result<Vec<u8>> {
     #[cfg(all(target_os = "linux", not(test)))]
     let mut git_process = super::sandbox::command("git", workspace)?;
     #[cfg(any(not(target_os = "linux"), test))]
@@ -362,9 +368,7 @@ pub(crate) fn git(workspace: &Path, arguments: &[&str]) -> io::Result<String> {
             tracing::error!(operation, exit_code = status.code(), failure = ?failure, "git operation failed");
             return Err(io::Error::other(GitFailure(failure)));
         }
-        String::from_utf8(bytes)
-            .map(|value| value.trim_end_matches('\n').to_owned())
-            .map_err(io::Error::other)
+        Ok(bytes)
     })
 }
 

@@ -2,7 +2,7 @@ import {mapFrozenProfile} from "./agent-profiles.js";
 import {mapWorkerUpdate} from "./worker-evidence.js";
 import type { ProjectConversation } from "@ayni-orchestrator/grpc-bindings/server";
 import type { ProjectConversationDto } from "./dto.js";
-import { BffMappingError } from "./mapping.js";
+import { BffMappingError, mapChangeConstraints } from "./mapping.js";
 
 export type ProjectConversationResponse = { conversation?: ProjectConversation | undefined };
 
@@ -24,7 +24,7 @@ export function mapConversation(value:ProjectConversation):ProjectConversationDt
         repositoryRevision:request.repositoryRevision,runtimeProfileId:request.runtimeProfileId,
         connectionId:request.connectionId,agent:required(request.agent),request:request.request,
         acceptanceCriteria:[...request.acceptanceCriteria],
-        changeConstraints:request.changeConstraints ? {protectedPaths:[...request.changeConstraints.protectedPaths],allowTestEdits:request.changeConstraints.allowTestEdits} : {protectedPaths:[],allowTestEdits:true},
+        changeConstraints:request.changeConstraints ? mapChangeConstraints(request.changeConstraints) : {protectedPaths:[],allowTestEdits:true},
         ...(request.codingTurns===undefined ? {} : {codingTurns:request.codingTurns}),
         ...(request.deadline ? {deadlineSeconds:Number(request.deadline.seconds)} : {}),
       }} : {}),

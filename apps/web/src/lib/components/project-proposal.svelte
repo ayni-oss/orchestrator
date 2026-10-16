@@ -31,6 +31,7 @@
             {label:"Deadline",value:`${request.deadlineSeconds??3600} seconds`},
             {label:"Protected paths",value:request.changeConstraints.protectedPaths.join(", ")||"Default protections"},
             {label:"Test edits",value:request.changeConstraints.allowTestEdits?"Allowed":"Protected"},
+            {label:"Environment changes",value:request.changeConstraints.environmentChange?`Regenerate .ayni.lock for: ${request.changeConstraints.environmentChange.dependencyPaths.join(", ")}`:"Protected"},
           ]} />
           <div class="space-y-2"><h4 class="text-sm font-semibold">Implementation request</h4><p class="whitespace-pre-wrap break-words text-sm">{request.request}</p><h4 class="text-sm font-semibold">Acceptance criteria</h4><ul class="list-disc space-y-1 pl-5 text-sm">{#each request.acceptanceCriteria as criterion}<li>{criterion}</li>{/each}</ul></div>
         {:else}<p class="text-sm">{proposal.action==="cancel_task"?"Cancel the running task and retain its history.":proposal.action==="retry_publication"?"Retry publishing the retained result; coding will not run again.":"Start a new coding attempt using this task’s frozen inputs."} <a class="underline" href={`/tasks/${encodeURIComponent(proposal.targetTaskId)}`}>Open target task</a></p>{/if}

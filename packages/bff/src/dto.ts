@@ -145,6 +145,7 @@ export interface RuntimeArtifactPageDto {
 }
 
 export interface ChangeConstraintsDto {
+  environmentChange?: { dependencyPaths: string[] };
   protectedPaths: string[];
   allowTestEdits: boolean;
 }
