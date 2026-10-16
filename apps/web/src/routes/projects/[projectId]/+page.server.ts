@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     const llmConnections=agentModels.connections,connectionModels=agentModels.catalogues;
     const codingCatalogue=connectionModels[configuration.agentConfiguration?.effective.codingConnectionId??""];
     const conversationId=url.searchParams.get("conversation");
-    const selectedConversation=conversationId ? conversationResult.conversations.find(c=>c.id===conversationId) : conversationResult.conversations[0];
+    const selectedConversation=conversationId ? conversationResult.conversations.find(c=>c.id===conversationId) : undefined;
     let conversation:ProjectConversationDto|undefined,conversationError=conversationResult.error;
     if(conversationId && !selectedConversation && !conversationError)conversationError={status:404,reason:"resource_not_found",message:"This conversation is no longer available in this project. Choose another conversation or start a new one.",requestId:locals.requestId,retryable:false};
     if(selectedConversation){
@@ -132,10 +132,13 @@ function conversationInputError(requestId:string,message:string){
 }
 
 async function createConversation({form,idempotencyKey,projectId,requestId,ctx}:ConversationActionContext){
-  const title=text(form,"title",256),ids=form.getAll("repositoryConnectionIds");
+  const content=text(form,"content",16384);
+  if(!content)return conversationInputError(requestId,"Enter a message of at most 16384 characters.");
+  const title=Array.from(content.replace(/\s+/gu," ")).slice(0,30).join(""),ids=form.getAll("repositoryConnectionIds");
   const bff=getBff(),project=await bff.getProject(projectId,ctx);
-  if(!title || !ids.length || ids.length>100 || ids.some(id=>typeof id!=="string"||!project.repositoryConnectionIds.includes(id)) || new Set(ids).size!==ids.length)return conversationInputError(requestId,"Enter a conversation title and choose project repositories.");
+  if(!title || !ids.length || ids.length>100 || ids.some(id=>typeof id!=="string"||!project.repositoryConnectionIds.includes(id)) || new Set(ids).size!==ids.length)return conversationInputError(requestId,"Choose at least one repository in this project.");
   const conversation=await bff.createProjectConversation({idempotencyKey,projectId:project.id,title,repositoryConnectionIds:ids as string[]},ctx);
+  await bff.sendProjectMessage({idempotencyKey:`${idempotencyKey}-message`,conversationId:conversation.id,content},ctx);
   redirect(303,`/projects/${encodeURIComponent(project.id)}?conversation=${encodeURIComponent(conversation.id)}`);
 }
 

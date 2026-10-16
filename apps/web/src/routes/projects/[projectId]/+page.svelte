@@ -52,7 +52,7 @@
     <ProjectUpdates {data} />
     {#if data.configurationError}<Feedback kind="warning" title="Agent configuration unavailable" message={data.configurationError.message} />{/if}
     <Tabs.Root value={data.view} onValueChange={view=>{void goto(projectHref(data.project!.id,view as typeof data.view,data.conversation?.id),{keepFocus:true,noScroll:true});}} class="min-h-0 flex-1 gap-5">
-      <Tabs.List aria-label="Project views">{#each projectViews as view (view)}<Tabs.Trigger value={view}>{view.charAt(0).toUpperCase()+view.slice(1)}</Tabs.Trigger>{/each}</Tabs.List>
+      <Tabs.List aria-label="Project views">{#each projectViews as view (view)}<Tabs.Trigger value={view}>{view==="overview"?"Conversation":view.charAt(0).toUpperCase()+view.slice(1)}</Tabs.Trigger>{/each}</Tabs.List>
       {#each projectViews as view (view)}
         <Tabs.Content value={view} class="min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
           {#if data.view===view}
@@ -61,7 +61,7 @@
           {:else if view==="plans"}
             <ProjectPlans {data} />
           {:else if view==="overview"}
-            {#key `${data.project.id}-${data.conversation?.id??""}`}<ProjectConversation {data} />{/key}
+            {#key `${data.project.id}-${data.conversation?.id??page.url.searchParams.get("new")??""}`}<ProjectConversation {data} />{/key}
           {:else}
     <section class="space-y-4"><h2 class="text-lg font-semibold">Tasks</h2><p class="text-sm text-muted-foreground">Open a task to inspect its execution attempts, quality results, and pull request.</p><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each data.tasks as task (task.id)}<Card.Root><Card.Header><Card.Title class="text-base"><TaskIdentity {task} /></Card.Title><Card.Description>{data.repositories.find(repo=>repo.id===task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</Card.Description></Card.Header><Card.Content class="space-y-3 text-sm"><StatusBadge status={task.state} tone={statusTone(task.state)} /><p class="text-muted-foreground">Created {formatDate(task.createdAt)}</p>        <p class="text-muted-foreground">{task.attemptCount} execution {task.attemptCount===1?"attempt":"attempts"} · Usage and PR results in task details</p></Card.Content></Card.Root>{:else}<p class="text-sm text-muted-foreground">No tasks yet.</p>{/each}

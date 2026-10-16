@@ -1,7 +1,7 @@
 import type { LayoutServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { loadConversationSidebar } from "$lib/server/conversation-sidebar.js";
-import { actionKey, requestContext } from "$lib/server/page.js";
+import { requestContext } from "$lib/server/page.js";
 import { registryConfiguration } from "$lib/connection.js";
 
 export const load: LayoutServerLoad = async ({ locals, depends, params }) => {
@@ -26,7 +26,6 @@ export const load: LayoutServerLoad = async ({ locals, depends, params }) => {
   return {
     conversationSidebar: sidebar.status === "fulfilled" ? sidebar.value : undefined,
     conversationSidebarError: sidebar.status === "rejected",
-    conversationKey: actionKey(),
     sourceControlConfiguration,
     llmConfiguration: connections.status === "rejected" ? {status:"warning",description:"LLM provider status is unavailable."} : connections.value.some(c=>c.kind==="openai" && c.enabled && c.status==="ready") ? {status:"ready",description:"An LLM connection is ready."} : {status:"missing",description:"No enabled LLM connection is ready."},
     registryConfiguration: connections.status === "fulfilled" ? registryConfiguration(connections.value) : { status: "warning", description: "Container registry permission status is unavailable." },

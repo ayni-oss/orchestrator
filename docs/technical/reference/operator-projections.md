@@ -107,7 +107,7 @@ See the [protocol contract](../../../proto/README.md),
 
 ## Configuration and direct submission
 
-The project Overview is the primary discussion surface. Direct submission is a
+The project Conversation tab is the primary discussion surface. Direct submission is a
 project action using one task form and server handler; global Tasks is history.
 Direct tasks have no plan provenance. Task and conversation views share the same
 execution, quality and publication vocabulary.

@@ -4,7 +4,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import NewConversationDialog from "$lib/components/new-conversation-dialog.svelte";
   import { projectHref } from "$lib/project-navigation.js";
-  import { invalidate } from "$app/navigation";
+  import { goto, invalidate } from "$app/navigation";
   import { onMount } from "svelte";
   import { subscribeRefresh } from "$lib/refresh.js";
   import AyniIcon from "$lib/components/ayni-icon.svelte";
@@ -16,11 +16,13 @@
   let newConversationOpen = $state(false);
   let openAfterSidebar = false;
   function newConversation() {
+    if(page.params.projectId){sidebar.setOpenMobile(false);void goto(`${projectHref(page.params.projectId,"overview")}&new=${crypto.randomUUID()}`);return;}
     if (sidebar.isMobile) { openAfterSidebar = true; sidebar.setOpenMobile(false); }
     else newConversationOpen = true;
   }
   const history: ConversationSidebarData | undefined = $derived(page.data.conversationSidebar);
-  const canCreate = $derived(history?.workspace.state === "active" && history.projects.some(project => project.state === "active" && project.repositoryConnectionIds.length));
+  const currentProject=$derived(history?.projects.find(project=>project.id===page.params.projectId));
+  const canCreate = $derived(history?.workspace.state === "active" && (page.params.projectId ? currentProject?.state==="active"&&!!currentProject.repositoryConnectionIds.length : history.projects.some(project => project.state === "active" && project.repositoryConnectionIds.length)));
   const sidebar = Sidebar.useSidebar();
   const repositoriesActive = $derived(page.url.pathname.startsWith("/repositories") || page.url.pathname.startsWith("/profiles"));
   const sourceControlActive = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
@@ -95,6 +97,7 @@
         <Sidebar.Menu>
           <Sidebar.MenuItem><Sidebar.MenuButton disabled={!canCreate} onclick={newConversation} tooltipContent="New conversation"><Plus aria-hidden="true" /><span>New conversation</span></Sidebar.MenuButton></Sidebar.MenuItem>
         </Sidebar.Menu>
+        <p class="px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden" aria-label="Current project">{currentProject?.displayName??"No project"}</p>
         <div class="h-72 overflow-y-auto group-data-[collapsible=icon]:hidden">
           {#if history}
             <p class="px-2 py-2 text-xs text-muted-foreground">{history.workspace.displayName}</p>
@@ -104,7 +107,7 @@
                 {#each history.conversations as conversation (conversation.id)}
                   {@const selected = page.params.projectId === conversation.projectId && page.data.conversation?.id === conversation.id}
                   <Sidebar.MenuItem><Sidebar.MenuButton isActive={selected} tooltipContent={conversation.title} class="h-12 py-1.5">
-                    {#snippet child({ props })}<a {...props} href={projectHref(conversation.projectId,"overview",conversation.id)} aria-current={selected ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}><MessageSquare aria-hidden="true" /><span class="min-w-0"><span class="block truncate">{conversation.title}</span><span class="block truncate text-xs font-normal text-muted-foreground">{conversation.projectName}</span></span></a>{/snippet}
+                    {#snippet child({ props })}<a {...props} href={projectHref(conversation.projectId,"overview",conversation.id)} aria-current={selected ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}><MessageSquare aria-hidden="true" /><span class="min-w-0"><span class="block truncate">{Array.from(conversation.title).slice(0,30).join("")}</span><span class="block truncate text-xs font-normal text-muted-foreground">{conversation.projectName}</span></span></a>{/snippet}
                   </Sidebar.MenuButton></Sidebar.MenuItem>
                 {:else}<li class="px-2 py-3 text-xs text-muted-foreground">{history.incomplete ? "History unavailable." : "No conversations yet."}</li>{/each}
               </Sidebar.Menu>
@@ -121,5 +124,5 @@
 </Sidebar.Root>
 
 {#if history}
-  {#key `${history.workspace.id}-${page.params.projectId??""}`}<NewConversationDialog data={history} idempotencyKey={page.data.conversationKey} projectId={page.params.projectId} bind:open={newConversationOpen} />{/key}
+  {#key `${history.workspace.id}-${page.params.projectId??""}`}<NewConversationDialog data={history} projectId={page.params.projectId} bind:open={newConversationOpen} />{/key}
 {/if}

@@ -15,7 +15,7 @@
     <p class="text-sm text-muted-foreground">{data.conversation.title}</p>
     {#if data.conversation.plan}{#key `${data.conversation.plan.id}-${data.planVersion}`}<ProjectPlanReview {data} />{/key}
     {:else}
-      <p class="text-sm text-muted-foreground">No plan yet. Discuss the project goal in <a class="underline" href={projectHref(data.project!.id,"overview",data.conversation.id)}>Overview</a> to prepare a plan for review.</p>
+      <p class="text-sm text-muted-foreground">No plan yet. Discuss the project goal in <a class="underline" href={projectHref(data.project!.id,"overview",data.conversation.id)}>Conversation</a> to prepare a plan for review.</p>
       {#each data.conversation.proposals.filter(proposal=>proposal.action==="create_task") as proposal (proposal.id)}<ProjectProposal {data} {proposal} allowDecision={false} />{/each}
     {/if}
   {/if}

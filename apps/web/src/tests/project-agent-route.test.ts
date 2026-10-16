@@ -3,18 +3,50 @@ import {beforeEach,describe,expect,it,vi} from "vitest";
 const metadata={id:"conversation:1",projectId:"project:1",title:"Research",repositoryConnectionIds:["repository:1"],updateCursor:"4",createdAt:"2026-10-13T00:00:00Z",messages:[],runs:[],proposals:[],plan:{id:"plan:1",versions:[{version:"1",state:"superseded",proposalIds:["proposal:1"]},{version:"2",state:"pending",proposalIds:["proposal:2"]}]}};
 const workspace={id:"workspace:1",displayName:"Workspace",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1",agentDefaults:{projectConnectionId:"workspace-connection",projectModel:"workspace-model",codingConnectionId:"workspace-connection",codingModel:"workspace-model"}};
 const project={workspaceId:"workspace:1",goal:"Complete work",id:"project:1",displayName:"Project",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
-const bff=vi.hoisted(()=>({getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),updateProjectConversationSettings:vi.fn(),cancelProjectAgentRun:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
+const bff=vi.hoisted(()=>({createProjectConversation:vi.fn(),getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),updateProjectConversationSettings:vi.fn(),cancelProjectAgentRun:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[]}));
 import {load,actions} from "../routes/projects/[projectId]/+page.server.js";
 import {connectionActions} from "$lib/server/connections.js";
-function event(fields:Record<string,string>={}){
+function event(fields:Record<string,string>={},url="http://localhost/projects/project:1?conversation=conversation:1"){
   const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",...fields}))form.set(key,value);
-  return {params:{projectId:"project:1"},url:new URL("http://localhost/projects/project:1?conversation=conversation:1"),locals:{requestId:"route-test",requestSignal:new AbortController().signal},request:new Request("http://localhost/projects/project:1",{method:"POST",body:form}),setHeaders:()=>{},depends:()=>{}} as never;
+  return {params:{projectId:"project:1"},url:new URL(url),locals:{requestId:"route-test",requestSignal:new AbortController().signal},request:new Request("http://localhost/projects/project:1",{method:"POST",body:form}),setHeaders:()=>{},depends:()=>{}} as never;
 }
 describe("project agent operator routes",()=>{
   beforeEach(()=>{
-    vi.clearAllMocks();bff.getProject.mockResolvedValue(project);bff.getWorkspace.mockResolvedValue(workspace);bff.getRepositoryConnection.mockResolvedValue({id:"repository:1"});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[]});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page:{nextPageToken:""}});bff.listProviderModels.mockResolvedValue({models:[],provider:"openai"});bff.listConnections.mockResolvedValue([]);bff.listProjectConversations.mockResolvedValue([metadata]);bff.getProjectConversation.mockResolvedValue({...metadata,runs:[{id:"run:1",state:"running"}],messages:[{id:"message:1",role:"assistant",content:"Full conversation history",createdAt:metadata.createdAt,runId:"run:1"}],proposals:[{id:"proposal:1",action:"create_task",state:"pending"}]});
+    vi.clearAllMocks();bff.createProjectConversation.mockResolvedValue(metadata);bff.getProject.mockResolvedValue(project);bff.getWorkspace.mockResolvedValue(workspace);bff.getRepositoryConnection.mockResolvedValue({id:"repository:1"});bff.listRuntimeProfiles.mockResolvedValue({runtimeProfiles:[]});bff.listDevelopmentTasks.mockResolvedValue({developmentTasks:[],page:{nextPageToken:""}});bff.listProviderModels.mockResolvedValue({models:[],provider:"openai"});bff.listConnections.mockResolvedValue([]);bff.listProjectConversations.mockResolvedValue([metadata]);bff.getProjectConversation.mockResolvedValue({...metadata,runs:[{id:"run:1",state:"running"}],messages:[{id:"message:1",role:"assistant",content:"Full conversation history",createdAt:metadata.createdAt,runId:"run:1"}],proposals:[{id:"proposal:1",action:"create_task",state:"pending"}]});
+  });
+  it("opens a blank composer when no conversation is selected, retaining history",async()=>{
+    expect(await load(event({},"http://localhost/projects/project:1?view=overview&new=fresh"))).toMatchObject({conversation:undefined,conversations:[metadata]});
+    expect(bff.getProjectConversation).not.toHaveBeenCalled();
+  });
+  it("derives a 30-character title and sends the full first message before redirecting",async()=>{
+    const content="Research  the next API improvement\r\nwith backwards compatibility";
+    await expect(actions.createConversation!(event({content,repositoryConnectionIds:"repository:1"}))).rejects.toMatchObject({status:303,location:"/projects/project%3A1?conversation=conversation%3A1"});
+    expect(bff.createProjectConversation).toHaveBeenCalledWith(expect.objectContaining({title:"Research the next API improvem",repositoryConnectionIds:["repository:1"]}),expect.anything());
+    expect(bff.sendProjectMessage).toHaveBeenCalledWith(expect.objectContaining({conversationId:metadata.id,content,idempotencyKey:"00000000-0000-4000-8000-000000000001-message"}),expect.anything());
+  });
+  it("keeps Unicode characters intact in generated conversation titles",async()=>{
+    const content="🚀".repeat(35);
+    await expect(actions.createConversation!(event({content,repositoryConnectionIds:"repository:1"}))).rejects.toMatchObject({status:303});
+    expect(bff.createProjectConversation).toHaveBeenCalledWith(expect.objectContaining({title:"🚀".repeat(30)}),expect.anything());
+  });
+  it.each(["", " ", "x".repeat(16385)])("rejects empty or oversized first messages before creating a conversation",async content=>{
+    expect(await actions.createConversation!(event({content,repositoryConnectionIds:"repository:1"}))).toMatchObject({status:400});
+    expect(bff.createProjectConversation).not.toHaveBeenCalled();
+    expect(bff.sendProjectMessage).not.toHaveBeenCalled();
+  });
+  it("rejects repositories outside the project before creating or sending",async()=>{
+    expect(await actions.createConversation!(event({content:"Research changes",repositoryConnectionIds:"repository:other"}))).toMatchObject({status:400});
+    expect(bff.createProjectConversation).not.toHaveBeenCalled();
+    expect(bff.sendProjectMessage).not.toHaveBeenCalled();
+  });
+  it("reuses creation and message idempotency keys after a first-message failure",async()=>{
+    bff.sendProjectMessage.mockRejectedValueOnce(new BffError({status:503,reason:"unavailable",message:"Try again",retryable:true}));
+    const fields={content:"Retry research",repositoryConnectionIds:"repository:1"};
+    expect(await actions.createConversation!(event(fields))).toMatchObject({status:503});
+    await expect(actions.createConversation!(event(fields))).rejects.toMatchObject({status:303});
+    for(const method of [bff.createProjectConversation,bff.sendProjectMessage])expect(method.mock.calls[0]?.[0]).toEqual(method.mock.calls[1]?.[0]);
   });
   it("loads selected conversation details separately from metadata-only history",async()=>{
     const result=await load(event()) as {conversation?:{messages:Array<{content:string}>}};

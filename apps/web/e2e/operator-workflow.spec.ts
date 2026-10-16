@@ -163,7 +163,7 @@ test("project views separate planning, tasks and project settings on desktop and
   await expect(page.getByRole("tab", {name:"Tasks",exact:true})).toHaveAttribute("aria-selected","true");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await expect(page.getByRole("region",{name:"Project repositories",exact:true})).toContainText("ayni-oss/sandbox");
-  await page.getByRole("tab",{name:"Overview",exact:true}).click();
+  await page.getByRole("tab",{name:"Conversation",exact:true}).click();
   await page.setViewportSize({width:375,height:720});
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
