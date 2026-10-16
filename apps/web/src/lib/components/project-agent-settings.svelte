@@ -15,6 +15,17 @@
   let projectModel=$state(untrack(()=>configuration?.effective.projectModel??"")),codingModel=$state(untrack(()=>configuration?.effective.codingModel??""));
   let pending=$state(false);
   let error=$state(""),success=$state("");
+  let profileError=$state(""),profileSuccess=$state("");
+  const submitProfiles:SubmitFunction=()=>{
+    pending=true;profileError="";profileSuccess="";
+    return async({result,update})=>{
+      try {
+        if(result.type==="failure")profileError=String(result.data?.error?.message??"Agent profiles could not be saved. Try again.");
+        if(result.type==="success")profileSuccess=String(result.data?.success??"Agent profiles saved.");
+        await update({reset:false});
+      } finally {pending=false;}
+    };
+  };
   const submit:SubmitFunction=({formData})=>{const inherit=formData.get("inherit")==="true";pending=true;error="";success="";return async({result,update})=>{try{if(result.type==="failure")error=String(result.data?.error?.message??"Settings could not be saved. Try again.");if(result.type==="success")success=String(result.data?.success??"Agent defaults saved.");await update({reset:false});if(inherit&&result.type==="success"){await tick();projectConnection=configuration?.effective.projectConnectionId??"";codingConnection=configuration?.effective.codingConnectionId??"";projectModel=configuration?.effective.projectModel??"";codingModel=configuration?.effective.codingModel??"";}}finally{pending=false;}};};
   const options=$derived(connections.map(c=>({value:c.id,label:c.displayName})));
 </script>
@@ -31,10 +42,12 @@
     <Button type="submit" disabled={pending||!configuration||!projectConnection||!codingConnection||!projectModel||!codingModel}>{pending?"Saving…":"Save agent defaults"}</Button>
   </form>
   {#if workspaceId&&!inherited}<form method="POST" action="?/agentDefaults" use:enhance={submit} class="mt-3"><input type="hidden" name="idempotencyKey" value={`${idempotencyKey}`} /><input type="hidden" name="resourceVersion" value={project.resourceVersion} /><input type="hidden" name="inherit" value="true" /><Button variant="outline" type="submit" disabled={pending||!configuration}>Use workspace defaults</Button></form>{/if}
-<details class="mt-4 space-y-3"><summary class="cursor-pointer font-medium">Agent capability profiles</summary><p class="text-sm text-muted-foreground">New executions freeze effective profiles. {workspaceId?"Project selections can narrow workspace tools, scope, budgets and skill revisions.":"Workspace selections stay within the application's planner and worker capabilities."}</p>
-<form method="POST" action="?/agentProfiles" use:enhance={submit} class="space-y-3"><input type="hidden" name="idempotencyKey" value={idempotencyKey} /><input type="hidden" name="resourceVersion" value={project.resourceVersion} />
+{#if error}<Feedback kind="error" title="Agent defaults not saved" message={error} />{:else if success}<p role="status" class="text-sm">{success}</p>{/if}
+</InformationCard>
+<InformationCard title="Agent capability profiles"><p class="text-sm text-muted-foreground">New executions freeze effective profiles. {workspaceId?"Project selections can narrow workspace tools, scope, budgets and skill revisions.":"Workspace selections stay within the application's planner and worker capabilities."}</p>
+<form method="POST" action="?/agentProfiles" use:enhance={submitProfiles} class="space-y-3"><input type="hidden" name="idempotencyKey" value={idempotencyKey} /><input type="hidden" name="resourceVersion" value={project.resourceVersion} />
 {#if capabilities&&configuration}<AgentProfileFields role="planner" {capabilities} configured={configuration.configured?.plannerProfile} inherited={configuration.inherited.plannerProfile} effective={configuration.effective.plannerProfile} repositories={project.repositoryConnectionIds??[]} project={!!workspaceId} />
 <AgentProfileFields role="worker" {capabilities} configured={configuration.configured?.workerProfile} inherited={configuration.inherited.workerProfile} effective={configuration.effective.workerProfile} repositories={project.repositoryConnectionIds??[]} project={!!workspaceId} />{:else}<p role="status">Configuration unavailable. Reload before editing profiles.</p>{/if}
-<Button type="submit" disabled={pending||!configuration}>{pending?"Saving…":"Save agent profiles"}</Button></form></details>
-{#if error}<Feedback kind="error" title="Agent defaults not saved" message={error} />{:else if success}<p role="status" class="text-sm">{success}</p>{/if}
+<Button type="submit" disabled={pending||!configuration}>{pending?"Saving…":"Save agent profiles"}</Button></form>
+{#if profileError}<Feedback kind="error" title="Agent profiles not saved" message={profileError} />{:else if profileSuccess}<p role="status" class="text-sm">{profileSuccess}</p>{/if}
 </InformationCard>

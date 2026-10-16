@@ -6,6 +6,8 @@
   import {enhance} from "$lib/forms.js";
   import type {PageProps} from "./$types";
   import Feedback from "$lib/components/feedback.svelte";
+  import InformationCard from "$lib/components/information-card.svelte";
+  import InformationTable from "$lib/components/information-table.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
   import ManageWorkspaceRepositories from "$lib/components/manage-workspace-repositories.svelte";
   import RepositoryCard from "$lib/components/repository-card.svelte";
@@ -64,7 +66,6 @@
   <section class="space-y-4" aria-label="Workspace settings">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <h2 class="text-lg font-semibold">Settings</h2>
-      {#if data.workspace.state==="active"}<Button variant="outline" onclick={()=>archiving=true}>Archive workspace</Button>{/if}
     </div><p class="text-sm text-muted-foreground">Projects inherit agent settings and planner defaults from this workspace.</p>
   {#if data.workspace.state==="active"}
     <Card.Root><Card.Header><Card.Title>Workspace settings</Card.Title><Card.Description>Name this workspace and choose how long idle planner sessions remain ready.</Card.Description></Card.Header><Card.Content>
@@ -80,7 +81,17 @@
     </Card.Content></Card.Root>
     {#key data.workspace.id}{#if data.configurationError}<p role="alert">{data.configurationError.message}</p>{/if}
     <ProjectAgentSettings capabilities={data.capabilities} configuration={data.agentConfiguration} project={data.workspace} connections={data.connections} catalogues={data.catalogues} idempotencyKey={data.idempotencyKey} />{/key}
-    <Dialog.Root bind:open={archiving} onOpenChangeComplete={open=>{if(!open){finishArchiving?.();finishArchiving=undefined;}}}><Dialog.Content><Dialog.Header><Dialog.Title>Archive workspace</Dialog.Title><Dialog.Description>Archiving {data.workspace.displayName} prevents new work across its projects. Existing work and history are retained.</Dialog.Description></Dialog.Header><form method="POST" action="?/archive" use:enhance={()=>async({result,update})=>{if(result.type==="success")await closeArchive();await update();}}><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.workspace.resourceVersion} /><Dialog.Footer><Button type="button" variant="outline" onclick={()=>archiving=false}>Cancel</Button><Button type="submit">Archive workspace</Button></Dialog.Footer></form></Dialog.Content></Dialog.Root>
+    <section class="space-y-4" aria-labelledby="workspace-danger-zone-title">
+      <h2 id="workspace-danger-zone-title" class="text-lg font-semibold">Danger zone</h2>
+      <InformationCard title="Archive workspace" danger>
+        <InformationTable rows={[
+          {label:"Disables",value:"New work across this workspace and its projects."},
+          {label:"Keeps",value:"Existing tasks, projects, and conversation history."},
+        ]} />
+        <div class="flex justify-end"><Button variant="destructive" onclick={()=>archiving=true}>Archive workspace</Button></div>
+      </InformationCard>
+    </section>
+    <Dialog.Root bind:open={archiving} onOpenChangeComplete={open=>{if(!open){finishArchiving?.();finishArchiving=undefined;}}}><Dialog.Content><Dialog.Header><Dialog.Title>Archive workspace</Dialog.Title><Dialog.Description>Archiving {data.workspace.displayName} prevents new work across its projects. Existing work and history are retained.</Dialog.Description></Dialog.Header><form method="POST" action="?/archive" use:enhance={()=>async({result,update})=>{if(result.type==="success")await closeArchive();await update();}}><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.workspace.resourceVersion} /><Dialog.Footer><Button type="button" variant="outline" onclick={()=>archiving=false}>Cancel</Button><Button type="submit" variant="destructive">Archive workspace</Button></Dialog.Footer></form></Dialog.Content></Dialog.Root>
   {/if}
   </section>
   </Tabs.Content>

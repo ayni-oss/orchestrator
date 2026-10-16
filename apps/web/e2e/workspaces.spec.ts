@@ -27,7 +27,7 @@ test("workspace membership and archive retain project links, goals and task hist
   await expect(page.getByRole("checkbox",{name:"ayni-oss/library",exact:true})).toHaveCount(0);
   await page.keyboard.press("Escape");await page.keyboard.press("Escape");
   await page.goto("/workspaces/workspace%3A1?view=settings");
-  await page.getByRole("button",{name:"Archive workspace",exact:true}).click();
+  await page.getByRole("region",{name:"Danger zone",exact:true}).getByRole("button",{name:"Archive workspace",exact:true}).click();
   await page.getByRole("dialog").getByRole("button",{name:"Archive workspace",exact:true}).click();
   await expect(page.getByText("New work is disabled. Existing tasks and project history are retained.",{exact:true})).toBeVisible();
   await page.getByRole("tablist",{name:"Workspace views"}).getByRole("tab",{name:"Projects",exact:true}).click();

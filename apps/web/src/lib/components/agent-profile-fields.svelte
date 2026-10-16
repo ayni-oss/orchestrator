@@ -1,5 +1,6 @@
 <script lang="ts">
   import {untrack} from "svelte";
+  import AgentProfileSettingsSummary from "$lib/components/agent-profile-settings-summary.svelte";
   import {type ProfileRole} from "$lib/agent-profiles.js";
   import {Input} from "$lib/components/ui/input/index.js";
   import {Textarea} from "$lib/components/ui/textarea/index.js";
@@ -18,8 +19,14 @@
   <legend class="px-2 font-medium">{role==="planner"?"Planner profile":"Worker profile"}</legend>
   <label class="flex items-center gap-2 text-sm"><input type="checkbox" name={`${role}.inherit`} value="true" bind:checked={useInherited} />{project?"Use workspace capabilities":"Use application capabilities"}</label>
   <p class="text-xs text-muted-foreground">{role==="planner"?"Research tools can read selected repositories and prepare proposals. They cannot edit repositories or execute commands.":"Worker tools operate inside the approved task and sandbox. The worker always performs its mandatory final quality check."}</p>
-  {#if useInherited}<p class="break-words text-xs text-muted-foreground">Inherited tools: {(inherited??defaults).allowedTools.join(", ")} · Up to {(inherited??defaults).maxModelCalls} model calls · {(inherited??defaults).deadlineSeconds} seconds</p>{/if}
-  {#if effective}<details class="text-xs"><summary>Effective settings for new executions</summary><p>Tools: {effective.allowedTools.join(", ")} · {effective.maxModelCalls} calls · {effective.deadlineSeconds} seconds</p><p class="whitespace-pre-wrap">{effective.instructions||"Application role instructions"}</p></details>{/if}
+  {#if useInherited}<AgentProfileSettingsSummary profile={inherited??defaults} />{/if}
+  {#if effective}
+    <details class="group space-y-3 rounded-lg border p-3">
+      <summary class="cursor-pointer rounded-sm text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">Effective settings for new executions</summary>
+      <p class="text-xs leading-relaxed text-muted-foreground">Saved settings used when a new execution starts. Save profile changes to update them.</p>
+      <AgentProfileSettingsSummary profile={effective} detailed />
+    </details>
+  {/if}
   <div class={useInherited?"hidden":"space-y-3"}>
     <Label for={`${role}-instructions`}>{project?"Additional instructions":"Instructions"}</Label><Textarea id={`${role}-instructions`} name={`${role}.instructions`} value={configured?.instructions??""} maxlength={limits.maxInstructionBytes} rows={3} />
     <p class="text-xs text-muted-foreground">Instructions and skills are model context. They cannot add permissions. Do not include credential values.</p>
