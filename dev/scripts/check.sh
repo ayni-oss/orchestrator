@@ -63,6 +63,8 @@ dev_check_observability() (
       "http://127.0.0.1:$prometheus_port/-/ready" >/dev/null || return 1
     for job in \
       ayni-orchestrator-control-plane \
+      ayni-orchestrator-otel-collector \
+      ayni-orchestrator-jaeger \
       ayni-orchestrator-jetstream \
       ayni-orchestrator-cadvisor \
       ayni-orchestrator-node-storage \
@@ -80,6 +82,13 @@ dev_check_observability() (
     dashboard="$(curl "${curl_options[@]}" \
       "http://127.0.0.1:$grafana_port/api/dashboards/uid/ayni-orchestrator-tasks-resources")" || return 1
     grep -Fq '"uid":"ayni-orchestrator-tasks-resources"' <<<"$dashboard" || return 1
+    observability_stage="Grafana execution traces dashboard"
+    dashboard="$(curl "${curl_options[@]}" \
+      "http://127.0.0.1:$grafana_port/api/dashboards/uid/ayni-orchestrator-traces")" || return 1
+    grep -Fq '"uid":"ayni-orchestrator-traces"' <<<"$dashboard" || return 1
+    observability_stage="Jaeger service search"
+    curl "${curl_options[@]}" \
+      "http://127.0.0.1:$grafana_port/api/datasources/uid/jaeger/resources/services" >/dev/null || return 1
     observability_stage="Grafana JetStream dashboard"
     dashboard="$(curl "${curl_options[@]}" \
       "http://127.0.0.1:$grafana_port/api/dashboards/uid/ayni-orchestrator-jetstream")" || return 1

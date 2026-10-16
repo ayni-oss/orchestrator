@@ -32,6 +32,14 @@ data:
           max_interval: 5s
           max_elapsed_time: 10s
     service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
       pipelines:
         traces:
           receivers: [otlp]
@@ -59,6 +67,14 @@ data:
       jaeger_storage_exporter:
         trace_storage: primary
     service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
       extensions: [jaeger_storage, jaeger_query]
       pipelines:
         traces:
@@ -114,6 +130,7 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           ports:
+            - {name: metrics, containerPort: 8888}
             {{- if eq $name "jaeger" }}
             - {name: otlp, containerPort: 4317}
             - {name: query, containerPort: 16686}
@@ -137,6 +154,7 @@ spec:
   selector:
     app.kubernetes.io/name: {{ $name }}
   ports:
+    - {name: metrics, port: 8888, targetPort: metrics}
     {{- if eq $name "jaeger" }}
     - {name: query, port: 16686, targetPort: query}
     - {name: otlp, port: 4317, targetPort: otlp}

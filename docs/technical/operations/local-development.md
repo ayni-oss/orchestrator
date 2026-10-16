@@ -85,16 +85,40 @@ task or verification Jobs. Never delete retained task data to make validation pa
 ## Metrics and verification traces
 
 The local observability stack uses Prometheus for application and kubelet/cAdvisor
-metrics, plus an OpenTelemetry Collector and Jaeger for verification traces.
+metrics, plus the existing OpenTelemetry Collector and Jaeger for verification
+and agent-workflow traces.
 Grafana reserves 256 MiB of memory with a 512 MiB limit and a 500m CPU limit.
-Its Go memory target is 384 MiB, leaving headroom for the executable, native
-allocations and its 64 MiB in-memory data volume. A tight container limit can
+The upstream chart derives its Go memory target from the container limit. The
+budget must also cover the executable, native allocations and the 64 MiB
+in-memory data volume. A tight container limit can
 cause repeated file-page reclaim and CPU throttling, making the UI and health
 probes time out even without an OOM kill. Check container memory events and
 pressure alongside restart counts when diagnosing an unresponsive local UI.
 
-Grafana provides the shared UI: select the Jaeger datasource in Explore for traces
-and Prometheus for metrics. The chart no longer deploys kube-state-metrics or
+Grafana provisions three linked dashboards:
+
+- **System Overview** shows scrape health, container CPU usage and throttling,
+  memory usage versus limits, working set/RSS, OOM events, storage and API outcomes.
+- **Execution Traces** searches Jaeger by service, span attributes and minimum
+  duration. Select a trace ID to open its timeline in Explore. Example filters:
+  `stage=agent.tool`, `outcome=failed`, or `task_id=<id>`. Collector receive/export
+  rates and delivery failures show whether telemetry is flowing; these panels
+  cover all services, independently of the search filters.
+- **Event Delivery** shows JetStream storage, backlog and acknowledgement health.
+
+Prometheus scrapes Collector and Jaeger internal metrics on their cluster-only
+port 8888. An exporter success confirms delivery, not permanent retention.
+Jaeger searches only matching retained traces; an empty search is not evidence
+of application health. Container memory usage includes reclaimable cache, so
+compare it with working set/RSS and failures rather than treating it as pressure.
+The existing dashboard UIDs remain stable for saved links.
+
+Run `dev/ctl test telemetry` for an isolated synthetic OTLP-to-Jaeger-to-Grafana
+check, including attribute/duration searches, pipeline counters and infrastructure
+queries. Its dedicated namespace is removed on exit. `dev/ctl test observability`
+checks the running development stack without injecting traces.
+
+For ad-hoc queries, select Jaeger in Explore for traces and Prometheus for metrics. The chart no longer deploys kube-state-metrics or
 plots provisioned PVC requests; kubelet volume measurements and the existing
 Docker Desktop disk fallback remain available.
 
@@ -188,7 +212,7 @@ publishers in an environment that runs untrusted repository code, require tested
 network enforcement and authenticated, subject-scoped clients. Production also
 requires TLS, replicated storage, backup/restore and availability validation.
 
-Grafana provisions **Ayni Orchestrator JetStream** alongside the existing overview.
+Grafana provisions **Event Delivery** alongside **System Overview** and **Execution Traces**.
 It shows exporter reachability, JetStream enablement, broker storage budget and
 stream message/byte occupancy. Consumer pending/unacknowledged panels populate
 when consumers exist. Publisher panels show pending count, pending bytes, oldest

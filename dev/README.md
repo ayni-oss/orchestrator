@@ -135,6 +135,7 @@ AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-alice \
 | `dev/ctl test agent-profiles CP WEB WORKER` | Validate frozen profiles and real planner tool registration in a disposable namespace |
 | `dev/ctl test sessions CP WEB WORKER` | Validate resident planner reuse, expiry, recreation, rotation, cancellation and recovery in a disposable namespace |
 | `dev/ctl test workspaces CP WEB` | Validate workspace ownership, admission and persistence across a control-plane restart in a disposable namespace |
+| `dev/ctl test telemetry` | Validate OTLP collection, Jaeger searches, Grafana timelines and infrastructure metrics in a disposable namespace |
 | `dev/ctl test jetstream` | Validate local broker persistence, bounded saturation and metrics in one disposable namespace with automatic cleanup |
 
 `purge` is deliberately explicit because it deletes credentials and retained
@@ -167,7 +168,11 @@ Long-form behavior, security boundaries, and troubleshooting remain in
 [`docs/technical/operations/local-development.md`](../docs/technical/operations/local-development.md) and
 [`docs/technical/operations/operations.md`](../docs/technical/operations/operations.md).
 
-The local stack includes persistent NATS JetStream and its Grafana dashboard.
+The local stack includes **System Overview**, **Execution Traces** and **Event Delivery**
+Grafana dashboards. Execution Traces searches the existing OpenTelemetry spans
+stored by Jaeger; logs are outside this pipeline.
+
+The local stack includes persistent NATS JetStream and its Event Delivery dashboard.
 Normal cleanup retains `jetstream-data`; `jetstream.enabled=false` disables the
 transport independently. See [persistent local JetStream](../docs/technical/operations/local-development.md#persistent-local-jetstream)
 for limits, replay expiry, trusted-development access and recovery boundaries.
