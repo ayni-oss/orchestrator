@@ -3,7 +3,6 @@ const bff=vi.hoisted(()=>({getWorkspace:vi.fn(),listProjects:vi.fn(),listConnect
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[{id:"repository:1"},{id:"repository:outside"}],workspaceChoices:async()=>[],workspaceProjects:async()=>[{id:"project:1",workspaceId:"workspace:1"}]}));
 import {load,actions} from "../routes/workspaces/[workspaceId]/+page.server.js";
-import {actions as projectActions} from "../routes/projects/+page.server.js";
 const workspace={id:"workspace:1",displayName:"Shared",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"3"};
 function event(fields:Record<string,string|string[]>={}){
   const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",resourceVersion:"3",...fields}))for(const item of Array.isArray(value)?value:[value])form.append(key,item);
@@ -29,8 +28,8 @@ describe("workspace operator routes",()=>{
     expect(await actions.archive!(event())).toMatchObject({success:expect.stringContaining("history is retained")});
     expect(bff.archiveWorkspace).toHaveBeenCalledWith(expect.objectContaining({workspaceId:workspace.id,expectedResourceVersion:"3"}),expect.anything());expect(bff.updateWorkspace).not.toHaveBeenCalled();
   });
-  it.each(["outside","archived"])("rejects project creation for %s workspace resources",async kind=>{
+  it.each(["outside","archived","mismatched"])("rejects project creation for %s workspace resources",async kind=>{
     if(kind==="archived")bff.getWorkspace.mockResolvedValueOnce({...workspace,state:"archived"});
-    expect(await projectActions.create!(event({displayName:"Project",workspaceId:workspace.id,goal:"Ship work",repositoryConnectionIds:[kind==="outside"?"repository:outside":"repository:1"]}))).toMatchObject({status:400});expect(bff.createProject).not.toHaveBeenCalled();
+    expect(await actions.create!(event({displayName:"Project",workspaceId:kind==="mismatched"?"workspace:other":workspace.id,goal:"Ship work",repositoryConnectionIds:[kind==="outside"?"repository:outside":"repository:1"]}))).toMatchObject({status:400});expect(bff.createProject).not.toHaveBeenCalled();
   });
 });

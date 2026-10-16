@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/site/public/ayni-logo-dark.svg">
-  <img src="docs/site/public/ayni-logo.svg" alt="Ayni icon" width="64" height="64">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/site/public/ayni-orchestrator-dark.svg">
+  <img src="docs/site/public/ayni-orchestrator.svg" alt="Ayni Orchestrator logo" width="64" height="64">
 </picture>
 
 # Ayni Orchestrator

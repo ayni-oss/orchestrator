@@ -4,6 +4,20 @@ A repository connection gives Ayni Orchestrator access to source. Its runtime
 provides the tools and dependencies needed to work on that source. A connected
 repository can still need runtime setup before tasks can start.
 
+Connect repositories in the global **Repositories** catalog. Add an existing
+connection from a workspace’s **Repositories** view to make it available to that
+workspace’s projects. Connections and runtime configuration are shared across
+workspaces; removing workspace membership retains the connection and history.
+
+## Registry connection status
+
+Registry details separate **Current credentials** from **Last test results**. Passing
+results describe the last probe; they do not confirm current access when the
+connection is unavailable or being checked. If configured credential Secrets
+become unavailable, the controller rechecks automatically. Restoring the same
+verified credentials restores readiness; changed credentials require a new probe.
+**Cleanup required** is separate: a temporary test image could not be deleted.
+
 ## Prepare a runtime
 
 ```mermaid

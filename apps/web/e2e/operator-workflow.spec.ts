@@ -13,7 +13,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
   await request.post("http://127.0.0.1:50062/seed-task-models");
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
-  await expect(page.getByRole("heading", { name: "Projects", exact:true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workspaces", exact:true })).toBeVisible();
 
   await page.goto("/repositories");
   await page.getByRole("link", { name: "Open repository ayni-oss/sandbox" }).first().click();
@@ -81,13 +81,11 @@ test("every managed profile state explains the next step",async({page,request})=
 });
 
 test("projects retain identity through rename and archive", async ({ page }) => {
-  await page.goto("/projects");
+  await page.goto("/workspaces/workspace:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", {name:"Create project",exact:true}).click();
   await page.getByLabel("Project name", { exact: true }).fill("Payments");
   await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
-  await page.getByLabel("Workspace",{exact:true}).click();
-  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
   await page.getByRole("button", {name:"Repositories",exact:true}).click();
   await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
   await page.getByRole("button",{name:"Done",exact:true}).click();
@@ -110,12 +108,10 @@ test("projects retain identity through rename and archive", async ({ page }) => 
 
 test("projects select several repositories and tasks require one target",async({page,request})=>{
  await request.post("http://127.0.0.1:50062/seed-task-models");
- await page.goto("/projects");
+ await page.goto("/workspaces/workspace:1");
  await page.getByRole("button",{name:"Create project",exact:true}).click();
  await page.getByLabel("Project name",{exact:true}).fill("Shared work");
   await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
-  await page.getByLabel("Workspace",{exact:true}).click();
-  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
  await page.getByRole("button",{name:"Repositories",exact:true}).click();
  await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
  await page.getByRole("checkbox",{name:"ayni-oss/library",exact:true}).check();

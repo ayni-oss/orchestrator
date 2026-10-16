@@ -2,7 +2,7 @@ import {test,expect,type Page} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 async function choose(page:Page,label:string,option:string){await page.getByLabel(label,{exact:true}).click();await page.getByRole("option",{name:option,exact:true}).click();}
 async function setup(page:Page){
- await page.goto("/workspaces/workspace:1");
+ await page.goto("/workspaces/workspace:1?view=settings");
  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("status")).toContainText("Workspace settings updated");
  await page.getByText("Agent capability profiles",{exact:true}).click();
@@ -28,7 +28,7 @@ test("research and tasks expose frozen profiles after later settings edits",asyn
  await page.getByRole("link",{name:"Plans",exact:true}).click();await page.getByText("Research run · Completed",{exact:true}).click();const summary=page.locator("summary").filter({hasText:/^Frozen planner profile/});await expect(summary).toBeVisible();await summary.click();await expect(page.getByText("compatibility @ v1",{exact:true})).toBeVisible();
  await page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true}).click();await page.getByRole("link",{name:"Return to conversation",exact:true}).click();await page.getByRole("link",{name:"Open execution attempt",exact:true}).click();await expect(page).toHaveURL(/\/tasks\//);await expect(page.locator("summary").filter({hasText:/^Frozen worker profile/})).toBeVisible();
  const taskUrl=page.url(),frozenSummary=await page.locator("summary").filter({hasText:/^Frozen worker profile/}).textContent();
- await page.goto("/workspaces/workspace:1");await page.getByText("Agent capability profiles",{exact:true}).click();
+ await page.goto("/workspaces/workspace:1?view=settings");await page.getByText("Agent capability profiles",{exact:true}).click();
  const worker=page.getByRole("group",{name:"Worker profile",exact:true});await worker.getByLabel("Use application capabilities").uncheck();await worker.getByLabel("Instructions",{exact:true}).fill("New worker instructions apply to new tasks.");await page.getByRole("button",{name:"Save agent profiles"}).click();await expect(page.getByRole("status").filter({hasText:"Agent profiles saved"})).toBeVisible();
  await page.goto(taskUrl);await expect(page.locator("summary").filter({hasText:/^Frozen worker profile/})).toHaveText(frozenSummary!);await page.locator("summary").filter({hasText:/^Frozen worker profile/}).click();await expect(page.getByText("New worker instructions apply to new tasks.",{exact:true})).toHaveCount(0);
 

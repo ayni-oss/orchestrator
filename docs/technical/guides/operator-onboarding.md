@@ -8,9 +8,11 @@ Start the control plane without a GitHub App, registry or model credentials to
 configure connections through the trusted operator UI. Model credentials are
 required when admitting model-backed work, not when opening onboarding.
 
-The sidebar exposes **Workspaces**, **Projects**, **Repositories**, and **Config**. Config
+The sidebar exposes **Workspaces**, **Repositories**, and **Config**. Config
 contains Source control, Container registries and Ayni; certificates are reached
-from the Ayni overview. These navigation groups do not change credential ownership.
+from the Ayni overview. Projects are created and opened inside a workspace. Workspace views separate
+Projects, Repositories, and Settings; repository onboarding remains in the global
+Repositories catalog. These navigation groups do not change credential ownership.
 
 Under **Config → Source control → GitHub**, create a customer-owned App through the
 manifest flow or import its App ID and PEM key. The server stores credentials in

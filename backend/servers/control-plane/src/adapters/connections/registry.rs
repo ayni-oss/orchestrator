@@ -3,7 +3,9 @@ use super::{AppState, Status, retire_candidate, retired, secrets, v1};
 use crate::registry_probe::RegistryTestReport;
 impl AppState {
     pub(super) async fn reconcile_registry(&self, mut value: v1::Connection) -> Result<(), Status> {
-        self.refresh_registry_state(&mut value).await?;
+        if !self.refresh_registry_state(&mut value).await? {
+            return Ok(());
+        }
         if !value.enabled || (value.candidate_secret_name.is_empty() && value.status != "pending") {
             return Ok(());
         }
@@ -16,10 +18,7 @@ impl AppState {
         {
             return Ok(());
         }
-        let cleanup_only = value.test_authentication == "passed"
-            && value.test_push == "passed"
-            && value.test_pull == "passed"
-            && value.test_cleanup == "failed";
+        let cleanup_only = cleanup_retry(&value, &candidate);
         match crate::adapters::ghcr::test_report(&namespace, &candidate, cleanup_only).await {
             Ok(Some((operation, report))) => {
                 let completed = apply_registry_report(value, candidate, report);
@@ -36,34 +35,26 @@ impl AppState {
         }
         Ok(())
     }
-    async fn refresh_registry_state(&self, value: &mut v1::Connection) -> Result<(), Status> {
-        if !value.enabled || value.status != "ready" {
-            return Ok(());
+    async fn refresh_registry_state(&self, value: &mut v1::Connection) -> Result<bool, Status> {
+        if !refresh_registry_metadata(value) {
+            return Ok(true);
         }
         let adapter = secrets()?;
-        let owner = owned(value, &value.secret_uid);
-        let pull_owner = owned(value, &value.pull_secret_uid);
-        match (
-            adapter.metadata(&value.secret_name, owner).await,
-            adapter.metadata(&value.pull_secret_name, pull_owner).await,
-        ) {
-            (Ok((uid, revision)), Ok((pull_uid, pull_revision))) => {
-                let revision = format!("{uid}:{revision}:{pull_uid}:{pull_revision}");
-                if value.management_source == "admin" && value.observed_revision != revision {
-                    value.secret_uid = uid;
-                    value.pull_secret_uid = pull_uid;
-                    value.desired_revision = revision;
-                    value.status = "pending".into();
-                    self.persist_connection(value.clone()).await?;
-                }
-            }
-            _ => {
-                value.status = "failed".into();
-                value.failure_reason = "connection_secret_unavailable".into();
-                self.persist_connection(value.clone()).await?;
-            }
+        let push = adapter
+            .metadata(&value.secret_name, owned(value, &value.secret_uid))
+            .await;
+        let pull = adapter
+            .metadata(
+                &value.pull_secret_name,
+                owned(value, &value.pull_secret_uid),
+            )
+            .await;
+        let previous = value.clone();
+        apply_registry_metadata(value, push, pull);
+        if *value != previous {
+            return self.persist_current_registry(value.clone()).await;
         }
-        Ok(())
+        Ok(true)
     }
     async fn recover_registry_metadata(
         &self,
@@ -127,6 +118,53 @@ impl AppState {
         retire_candidate(&mut value);
         self.persist_current_registry(value).await?;
         Ok(())
+    }
+}
+fn refresh_registry_metadata(value: &v1::Connection) -> bool {
+    value.enabled
+        && !value.secret_name.is_empty()
+        && !value.pull_secret_name.is_empty()
+        && (value.status == "ready"
+            || (value.status == "failed"
+                && value.failure_reason == "connection_secret_unavailable"))
+}
+fn probe_passed(value: &v1::Connection) -> bool {
+    value.test_authentication == "passed"
+        && value.test_push == "passed"
+        && value.test_pull == "passed"
+}
+fn cleanup_retry(value: &v1::Connection, candidate: &v1::Connection) -> bool {
+    value.candidate_secret_name.is_empty()
+        && !value.observed_revision.is_empty()
+        && candidate.observed_revision == value.observed_revision
+        && probe_passed(value)
+        && value.test_cleanup == "failed"
+}
+fn apply_registry_metadata(
+    value: &mut v1::Connection,
+    push: Result<(String, String), &'static str>,
+    pull: Result<(String, String), &'static str>,
+) {
+    let (Ok((uid, revision)), Ok((pull_uid, pull_revision))) = (push, pull) else {
+        value.status = "failed".into();
+        value.failure_reason = "connection_secret_unavailable".into();
+        return;
+    };
+    let revision = format!("{uid}:{revision}:{pull_uid}:{pull_revision}");
+    let recovering = value.status == "failed";
+    let changed = revision != value.observed_revision;
+    if recovering || (value.management_source == "admin" && changed) {
+        value.secret_uid = uid;
+        value.pull_secret_uid = pull_uid;
+        value.desired_revision = revision;
+        // Only the previously verified credential pair can regain readiness without a new probe.
+        value.status = if !changed && probe_passed(value) {
+            "ready"
+        } else {
+            "pending"
+        }
+        .into();
+        value.failure_reason.clear();
     }
 }
 fn owned<'a>(value: &'a v1::Connection, uid: &'a str) -> Option<(&'a str, &'a str)> {
@@ -214,7 +252,138 @@ fn apply_registry_report(
 }
 #[cfg(test)]
 mod tests {
-    use super::{RegistryTestReport, apply_registry_report, v1};
+    use super::{
+        RegistryTestReport, apply_registry_metadata, apply_registry_report, cleanup_retry,
+        refresh_registry_metadata, v1,
+    };
+    fn verified() -> v1::Connection {
+        v1::Connection {
+            enabled: true,
+            management_source: "admin".into(),
+            status: "ready".into(),
+            secret_name: "push".into(),
+            pull_secret_name: "pull".into(),
+            secret_uid: "push-uid".into(),
+            pull_secret_uid: "pull-uid".into(),
+            observed_revision: "push-uid:1:pull-uid:2".into(),
+            desired_revision: "push-uid:1:pull-uid:2".into(),
+            test_authentication: "passed".into(),
+            test_push: "passed".into(),
+            test_pull: "passed".into(),
+            test_cleanup: "failed".into(),
+            test_artifact_digest: "sha256:retained".into(),
+            test_cleanup_failure_reason: "registry_cleanup_permission_required".into(),
+            ..Default::default()
+        }
+    }
+    fn metadata(push_revision: &str) -> (String, String) {
+        ("push-uid".into(), push_revision.into())
+    }
+    fn pull_metadata() -> (String, String) {
+        ("pull-uid".into(), "2".into())
+    }
+    #[test]
+    fn restored_verified_credentials_recover_without_repeating_a_probe_or_cleanup() {
+        let mut value = verified();
+        apply_registry_metadata(
+            &mut value,
+            Err("connection_secret_unavailable"),
+            Ok(pull_metadata()),
+        );
+        assert_eq!(value.status, "failed");
+        assert!(refresh_registry_metadata(&value));
+        apply_registry_metadata(&mut value, Ok(metadata("1")), Ok(pull_metadata()));
+        assert_eq!(value.status, "ready");
+        assert!(value.failure_reason.is_empty());
+        assert_eq!(value.test_cleanup, "failed");
+        assert_eq!(value.test_artifact_digest, "sha256:retained");
+        assert_eq!(
+            value.test_cleanup_failure_reason,
+            "registry_cleanup_permission_required"
+        );
+    }
+    #[test]
+    fn changed_credentials_require_a_full_probe_even_when_prior_tests_passed() {
+        for recovering in [false, true] {
+            let mut value = verified();
+            if recovering {
+                value.status = "failed".into();
+                value.failure_reason = "connection_secret_unavailable".into();
+            }
+            apply_registry_metadata(&mut value, Ok(metadata("3")), Ok(pull_metadata()));
+            assert_eq!(value.status, "pending");
+            assert_eq!(value.desired_revision, "push-uid:3:pull-uid:2");
+            assert_eq!(value.observed_revision, "push-uid:1:pull-uid:2");
+            let mut candidate = value.clone();
+            candidate
+                .observed_revision
+                .clone_from(&value.desired_revision);
+            assert!(!cleanup_retry(&value, &candidate));
+        }
+    }
+    #[test]
+    fn missing_pull_credentials_remain_failed_with_historical_results() {
+        let mut value = verified();
+        apply_registry_metadata(
+            &mut value,
+            Ok(metadata("1")),
+            Err("connection_secret_unavailable"),
+        );
+        assert_eq!(value.status, "failed");
+        assert_eq!(value.test_pull, "passed");
+        apply_registry_metadata(
+            &mut value,
+            Ok(metadata("1")),
+            Err("connection_secret_unavailable"),
+        );
+        assert_eq!(value.failure_reason, "connection_secret_unavailable");
+    }
+    #[test]
+    fn recovery_without_successful_probe_evidence_requires_validation() {
+        let mut value = verified();
+        value.status = "failed".into();
+        value.failure_reason = "connection_secret_unavailable".into();
+        value.test_pull = "not_run".into();
+        apply_registry_metadata(&mut value, Ok(metadata("1")), Ok(pull_metadata()));
+        assert_eq!(value.status, "pending");
+    }
+    #[test]
+    fn disabled_and_authentication_failed_connections_do_not_restart_automatically() {
+        let mut value = verified();
+        value.enabled = false;
+        assert!(!refresh_registry_metadata(&value));
+        value.enabled = true;
+        value.status = "failed".into();
+        value.failure_reason = "registry_authentication_failed".into();
+        assert!(!refresh_registry_metadata(&value));
+    }
+    #[test]
+    fn cleanup_only_reuses_evidence_only_for_the_same_credential_pair() {
+        let mut value = verified();
+        assert!(cleanup_retry(&value, &value));
+        value.candidate_secret_name = "replacement".into();
+        assert!(!cleanup_retry(&value, &value));
+    }
+    #[tokio::test]
+    async fn stale_registry_refresh_cannot_overwrite_a_concurrent_disable()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let state = super::AppState::open(directory.path().join("state.db"), 3)?;
+        let mut snapshot = verified();
+        snapshot.id = "registry".into();
+        snapshot.kind = "ghcr".into();
+        snapshot.resource_version = 1;
+        state.persist_connection(snapshot.clone()).await?;
+        let mut disabled = snapshot.clone();
+        disabled.enabled = false;
+        disabled.status = "disabled".into();
+        disabled.resource_version = 2;
+        state.persist_connection(disabled).await?;
+        assert!(!state.persist_current_registry(snapshot).await?);
+        assert!(!state.connection("registry".into()).await?.enabled);
+        state.shutdown_database().await?;
+        Ok(())
+    }
     #[test]
     fn failed_authentication_keeps_unattempted_checks_distinct() {
         let value = v1::Connection {

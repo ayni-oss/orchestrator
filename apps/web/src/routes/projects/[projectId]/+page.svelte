@@ -74,7 +74,7 @@
     {#if data.project.state === "active"}
       <Dialog.Root bind:open={editProject} onOpenChangeComplete={open=>{if(!open){finishEditing?.();finishEditing=undefined;}}}>
         <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-          <Dialog.Header><Dialog.Title>Project settings</Dialog.Title><Dialog.Description>The goal guides planning. Repositories and model overrides apply to this project. Shared runtime and connection settings belong to the workspace.</Dialog.Description></Dialog.Header>
+          <Dialog.Header><Dialog.Title>Project settings</Dialog.Title><Dialog.Description>The goal guides planning. Repositories and model overrides apply to this project. Shared runtimes are configured on repository pages; provider connections are configured globally.</Dialog.Description></Dialog.Header>
           <form use:enhance={() => {saving=true;settingsError="";return async ({ result, update }) => {try{if(result.type === "failure")settingsError=String(result.data?.error?.message??"Settings could not be saved. Try again.");if(result.type === "success"){await closeEditor();editing=false;}await update({reset:false});}finally{saving=false;}};}} method="POST" action="?/update" class="space-y-3">
             <input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.project.resourceVersion} />
             <input type="hidden" name="workspaceId" value={data.project.workspaceId} />

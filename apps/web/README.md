@@ -15,7 +15,9 @@ exercise the operator workflow against a deterministic native-gRPC fixture.
 
 ## Product identity
 
-Use **Ayni Orchestrator** for the application name and the shared Ayni icon in
-the header and favicon. `AyniIcon` uses the same geometry as the documentation
-site and README logo; it follows the current text color. The `Ayni` configuration
-section refers specifically to CLI runtime certificates.
+Use **Ayni Orchestrator** for the application name. The header, favicon,
+documentation site, and README use the Orchestrator mark. `AyniIcon` defaults to
+the CLI mark for the Ayni configuration entry and repository runtime badges;
+`variant="orchestrator"` selects the application mark. Inline icons follow the
+current text color, and favicons adapt to the browser's light or dark preference.
+The `Ayni` configuration section refers specifically to CLI runtime certificates.

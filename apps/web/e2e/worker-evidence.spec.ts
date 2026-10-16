@@ -2,7 +2,7 @@ import {test,expect,type Page} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 async function choose(page:Page,label:string,option:string){await page.getByLabel(label,{exact:true}).click();await page.getByRole("option",{name:option,exact:true}).click();}
 async function approved(page:Page){
- await page.goto("/workspaces/workspace:1");
+ await page.goto("/workspaces/workspace:1?view=settings");
  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
  await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();

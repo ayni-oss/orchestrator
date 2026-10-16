@@ -223,3 +223,26 @@ test("operator stream reconnect opens fresh snapshots without a shared Last-Even
   expect(headers[1]?.["last-event-id"]).toBeUndefined();
   await expect(page.getByRole("region", { name: "Admin App" }).getByText("Ready", { exact: true })).toBeVisible();
 });
+
+
+test("registry Secret outages distinguish retained test results and recover independently of cleanup",async({page,request})=>{
+  await createRegistry(page);
+  const row=page.getByRole("region",{name:"Team images"});
+  await request.post("http://127.0.0.1:50062/connection-state?status=failed&cleanup=failed&failure=connection_secret_unavailable");
+  await expect(row.getByText("Failed",{exact:true})).toBeVisible();
+  await expect(row.getByText("Unavailable",{exact:true})).toBeVisible();
+  await expect(row.getByText("Cleanup required",{exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:/Container registries Container registry credential Secrets are unavailable/})).toBeVisible();
+  await row.getByRole("button",{name:"Team images actions",exact:true}).click();
+  await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await expect(dialog.getByRole("heading",{name:"Last test results",exact:true})).toBeVisible();
+  await expect(dialog.getByRole("region",{name:"Last registry test results"})).toContainText("passed");
+  await expect(dialog).toContainText("Earlier test results do not confirm current access");
+  await dialog.getByRole("button",{name:"Close",exact:true}).click();
+  await request.post("http://127.0.0.1:50062/connection-state?status=ready&cleanup=failed");
+  await expect(row.getByText("Ready",{exact:true})).toBeVisible();
+  await expect(row.getByText("Available",{exact:true})).toBeVisible();
+  await expect(row.getByText("Cleanup required",{exact:true})).toBeVisible();
+  await expect(row).not.toContainText("could not read");
+});

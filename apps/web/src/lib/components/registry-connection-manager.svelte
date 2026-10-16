@@ -3,7 +3,7 @@
   import { enhance } from "$lib/forms.js";
   import { refreshScope, subscribeRefresh } from "$lib/refresh.js";
   import type { SubmitFunction } from "@sveltejs/kit";
-  import type { ConnectionView } from "$lib/connection.js";
+  import { registryCredentialStatus, registryFailureMessage, type ConnectionView } from "$lib/connection.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -75,10 +75,11 @@
     <InformationCard title={connection.displayName} status={connection.enabled ? connection.status : "disabled"} actions={[{ label: connection.managementSource === "admin" ? "Details" : "Edit", onSelect: () => openEdit(connection.id) }]}>
       <InformationTable rows={[
         { label: "Image namespace", value: `ghcr.io/${connection.imageNamespace}` },
+        { label: "Current credentials", value: registryCredentialStatus(connection) },
         ...(connection.testCleanup === "failed" ? [{ label: "Test cleanup", value: cleanupStatus }] : []),
         ...(connection.managementSource === "admin" ? [{ label: "Managed by", value: "Your administrator" }] : []),
       ]} />
-      {#if connection.failureReason}<Feedback kind="warning" title="Latest operation needs attention" message={connection.failureReason} />{/if}
+      {#if connection.failureReason}<Feedback kind="warning" title="Latest operation needs attention" message={registryFailureMessage(connection)} />{/if}
     </InformationCard>
   {/each}
 </div>
@@ -116,12 +117,17 @@
 
     {#if selected}
       <div class="flex flex-wrap gap-2"><StatusBadge status={selected.enabled ? selected.status : "disabled"} tone={statusTone(selected.enabled ? selected.status : "disabled")} />{#if selected.testCleanup === "failed"}<StatusBadge status="cleanup_required" tone="warning" />{/if}</div>
+      <p class="text-sm"><span class="text-muted-foreground">Current credentials:</span> {registryCredentialStatus(selected)}</p>
+      <section aria-label="Last registry test results" class="space-y-2">
+      <h3 class="font-medium">Last test results</h3>
+      <p class="text-sm text-muted-foreground">These are retained results from the last probe. They do not confirm access while the connection is unavailable or being checked.</p>
       <dl class="grid grid-cols-2 gap-2 text-sm">
         {#each [["Authentication", selected.testAuthentication], ["Push", selected.testPush], ["Pull", selected.testPull], ["Cleanup", selected.testCleanup]] as [label, status] (label)}
           <dt class="text-muted-foreground">{label}</dt><dd>{status || "Not tested"}</dd>
         {/each}
       </dl>
-      {#if selected.failureReason}<Feedback kind="warning" title="Connection needs attention" message={selected.failureReason} />{/if}
+      </section>
+      {#if selected.failureReason}<Feedback kind="warning" title="Connection needs attention" message={registryFailureMessage(selected)} />{/if}
       {#if selected.testCleanupFailureReason}<Feedback kind="warning" title="Artifact cleanup required" message={`${selected.testCleanupFailureReason}. Retry after restoring package deletion permission.`} />{/if}
       {#if selected.managementSource === "admin"}
         <p>Managed by your administrator. Update credentials in your deployment’s secret store.</p>

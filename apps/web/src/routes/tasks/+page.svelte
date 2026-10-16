@@ -20,7 +20,7 @@ onMount(()=>{redirectLegacyHash();return subscribeRefresh("app:tasks",{intervalM
 <svelte:head><title>Task history · Ayni Orchestrator</title></svelte:head>
 <div class="space-y-8" data-bff-status={data.backend}>
 <PageHeader eyebrow="Execution" title="Task history" description="Follow execution across projects. Discuss and approve new work within a project." />
-<p><a class="underline" href="/projects">Choose a project to start work</a></p>
+<p><a class="underline" href="/workspaces">Choose a workspace and project to start work</a></p>
 {#if data.legacy}<section aria-label="Choose a project"><h2 class="font-semibold">Choose a project to submit directly</h2>{#each data.projects as project (project.id)}<p><a class="underline" href={`/projects/${encodeURIComponent(project.id)}?directTask=1`}>{project.displayName}</a></p>{:else}<p>No active projects available.</p>{/each}</section>{/if}
     <section class="space-y-4"><div><h2 class="text-lg font-semibold">Execution records</h2><p class="text-sm text-muted-foreground">Status and worker phase show delivery progress. Quality and publication have separate outcomes.</p></div>
       {#if data.tasks.length === 0}<EmptyState title="No tasks submitted" description="Start a conversation in a project to plan work." />{:else}

@@ -39,12 +39,10 @@ test("safe settings errors keep the dialog open and provide retry feedback", asy
 });
 
 test("creation redirects preserve the success toast after the dialog closes", async ({ page }) => {
-  await page.goto("/projects");
+  await page.goto("/workspaces/workspace:1");
   await page.getByRole("button", { name: "Create project", exact: true }).click();
   await page.getByLabel("Project name", { exact: true }).fill("Notification project");
   await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
-  await page.getByLabel("Workspace",{exact:true}).click();
-  await page.getByRole("option",{name:"Shared workspace",exact:true}).click();
   await page.getByRole("button", { name: "Repositories", exact: true }).click();
   await page.getByRole("checkbox", { name: "ayni-oss/sandbox", exact: true }).check();
   await page.getByRole("button", { name: "Done", exact: true }).click();
