@@ -232,6 +232,7 @@ test("registry Secret outages distinguish retained test results and recover inde
   await expect(row.getByText("Failed",{exact:true})).toBeVisible();
   await expect(row.getByText("Unavailable",{exact:true})).toBeVisible();
   await expect(row.getByText("Cleanup required",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Config",exact:true}).click();
   await expect(page.getByRole("link",{name:/Container registries Container registry credential Secrets are unavailable/})).toBeVisible();
   await row.getByRole("button",{name:"Team images actions",exact:true}).click();
   await page.getByRole("menuitem",{name:"Edit",exact:true}).click();

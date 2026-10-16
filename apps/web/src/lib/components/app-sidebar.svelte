@@ -31,10 +31,10 @@
   const registryConfiguration = $derived(page.data.registryConfiguration);
   const certificateConfiguration = $derived(page.data.certificateConfiguration);
   onMount(() => {
-    const workspaces = subscribeRefresh("app:workspaces", { intervalMs: 30_000 });
+    const workspaces = subscribeRefresh("app:workspaces", { intervalMs: 120_000 });
     const certificates = subscribeRefresh("app:certificates", { intervalMs: 30_000 });
     const connections = subscribeRefresh("app:connections", { intervalMs: 30_000 });
-    const conversations = subscribeRefresh("app:conversations", { intervalMs: 30_000 });
+    const conversations = subscribeRefresh("app:conversations", { intervalMs: 120_000 });
     return () => { workspaces(); certificates(); connections(); conversations(); };
   });
 </script>
@@ -110,7 +110,7 @@
               </Sidebar.Menu>
             </nav>
           {:else}
-            <p class="px-2 py-3 text-xs text-muted-foreground opacity-60">{page.data.conversationSidebarError ? "Conversations unavailable." : "Select a workspace to view conversations."}</p>
+            <p class="px-2 py-3 text-xs text-muted-foreground">{page.data.conversationSidebarError ? "Conversations unavailable." : "Select a workspace to view conversations."}</p>
             {#if page.data.conversationSidebarError}<Button variant="link" size="sm" class="px-2 text-xs" onclick={() => invalidate("app:conversations")}>Retry history</Button>{/if}
           {/if}
         </div>
