@@ -105,7 +105,9 @@ shows recovery feedback instead of silently selecting a different record.
 
 The Conversation tab retains `view=overview` links. Without a selected
 `conversation`, it shows a blank composer; the first message creates the
-conversation and sends that message with separate stable idempotency keys.
+conversation with the project’s repositories and sends that message with separate
+stable idempotency keys. Repository scope comes from the saved project on the
+server; the composer does not submit a repository selection.
 Titles are derived from the message and limited to 30 Unicode code points.
 Enter sends a message and Shift+Enter inserts a newline.
 

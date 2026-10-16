@@ -22,28 +22,34 @@ describe("project agent operator routes",()=>{
   });
   it("derives a 30-character title and sends the full first message before redirecting",async()=>{
     const content="Research  the next API improvement\r\nwith backwards compatibility";
-    await expect(actions.createConversation!(event({content,repositoryConnectionIds:"repository:1"}))).rejects.toMatchObject({status:303,location:"/projects/project%3A1?conversation=conversation%3A1"});
+    await expect(actions.createConversation!(event({content}))).rejects.toMatchObject({status:303,location:"/projects/project%3A1?conversation=conversation%3A1"});
     expect(bff.createProjectConversation).toHaveBeenCalledWith(expect.objectContaining({title:"Research the next API improvem",repositoryConnectionIds:["repository:1"]}),expect.anything());
     expect(bff.sendProjectMessage).toHaveBeenCalledWith(expect.objectContaining({conversationId:metadata.id,content,idempotencyKey:"00000000-0000-4000-8000-000000000001-message"}),expect.anything());
   });
   it("keeps Unicode characters intact in generated conversation titles",async()=>{
     const content="🚀".repeat(35);
-    await expect(actions.createConversation!(event({content,repositoryConnectionIds:"repository:1"}))).rejects.toMatchObject({status:303});
+    await expect(actions.createConversation!(event({content}))).rejects.toMatchObject({status:303});
     expect(bff.createProjectConversation).toHaveBeenCalledWith(expect.objectContaining({title:"🚀".repeat(30)}),expect.anything());
   });
   it.each(["", " ", "x".repeat(16385)])("rejects empty or oversized first messages before creating a conversation",async content=>{
-    expect(await actions.createConversation!(event({content,repositoryConnectionIds:"repository:1"}))).toMatchObject({status:400});
+    expect(await actions.createConversation!(event({content}))).toMatchObject({status:400});
     expect(bff.createProjectConversation).not.toHaveBeenCalled();
     expect(bff.sendProjectMessage).not.toHaveBeenCalled();
   });
-  it("rejects repositories outside the project before creating or sending",async()=>{
-    expect(await actions.createConversation!(event({content:"Research changes",repositoryConnectionIds:"repository:other"}))).toMatchObject({status:400});
+  it.each(["repository:1","repository:other"])("inherits every project repository regardless of submitted selection %s",async repositoryConnectionIds=>{
+    bff.getProject.mockResolvedValueOnce({...project,repositoryConnectionIds:["repository:1","repository:2"]});
+    await expect(actions.createConversation!(event({content:"Research changes",repositoryConnectionIds}))).rejects.toMatchObject({status:303});
+    expect(bff.createProjectConversation).toHaveBeenCalledWith(expect.objectContaining({repositoryConnectionIds:["repository:1","repository:2"]}),expect.anything());
+  });
+  it("requires project repositories before starting a conversation",async()=>{
+    bff.getProject.mockResolvedValueOnce({...project,repositoryConnectionIds:[]});
+    expect(await actions.createConversation!(event({content:"Research changes"}))).toMatchObject({status:400});
     expect(bff.createProjectConversation).not.toHaveBeenCalled();
     expect(bff.sendProjectMessage).not.toHaveBeenCalled();
   });
   it("reuses creation and message idempotency keys after a first-message failure",async()=>{
     bff.sendProjectMessage.mockRejectedValueOnce(new BffError({status:503,reason:"unavailable",message:"Try again",retryable:true}));
-    const fields={content:"Retry research",repositoryConnectionIds:"repository:1"};
+    const fields={content:"Retry research"};
     expect(await actions.createConversation!(event(fields))).toMatchObject({status:503});
     await expect(actions.createConversation!(event(fields))).rejects.toMatchObject({status:303});
     for(const method of [bff.createProjectConversation,bff.sendProjectMessage])expect(method.mock.calls[0]?.[0]).toEqual(method.mock.calls[1]?.[0]);

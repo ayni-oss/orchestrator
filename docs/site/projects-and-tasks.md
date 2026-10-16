@@ -34,7 +34,8 @@ shows saving progress and reports failures so you can retry.
 The sidebar's **Conversations** section lists history across the selected workspace,
 with each conversation's project beneath its title. Select **New conversation**
 to open a blank composer in the current project, or choose a project when
-working from a workspace. Choose repositories and type your first message.
+working from a workspace. Conversations inherit the project’s repositories.
+Type your first message.
 Press **Enter** to send and create the conversation; **Shift+Enter** adds a new
 line. Titles use the first 30 characters of the message. Opening a blank composer
 does not create a saved conversation. The sidebar shows the current project,

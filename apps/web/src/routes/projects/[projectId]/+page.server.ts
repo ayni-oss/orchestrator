@@ -134,10 +134,10 @@ function conversationInputError(requestId:string,message:string){
 async function createConversation({form,idempotencyKey,projectId,requestId,ctx}:ConversationActionContext){
   const content=text(form,"content",16384);
   if(!content)return conversationInputError(requestId,"Enter a message of at most 16384 characters.");
-  const title=Array.from(content.replace(/\s+/gu," ")).slice(0,30).join(""),ids=form.getAll("repositoryConnectionIds");
+  const title=Array.from(content.replace(/\s+/gu," ")).slice(0,30).join("");
   const bff=getBff(),project=await bff.getProject(projectId,ctx);
-  if(!title || !ids.length || ids.length>100 || ids.some(id=>typeof id!=="string"||!project.repositoryConnectionIds.includes(id)) || new Set(ids).size!==ids.length)return conversationInputError(requestId,"Choose at least one repository in this project.");
-  const conversation=await bff.createProjectConversation({idempotencyKey,projectId:project.id,title,repositoryConnectionIds:ids as string[]},ctx);
+  if(!project.repositoryConnectionIds.length)return conversationInputError(requestId,"Add repositories in project settings before starting a conversation.");
+  const conversation=await bff.createProjectConversation({idempotencyKey,projectId:project.id,title,repositoryConnectionIds:project.repositoryConnectionIds},ctx);
   await bff.sendProjectMessage({idempotencyKey:`${idempotencyKey}-message`,conversationId:conversation.id,content},ctx);
   redirect(303,`/projects/${encodeURIComponent(project.id)}?conversation=${encodeURIComponent(conversation.id)}`);
 }

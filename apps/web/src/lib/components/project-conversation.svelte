@@ -6,7 +6,6 @@
   import type {ProjectViewData} from "$lib/project-view.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { enhance } from "$lib/forms.js";
-  import RepositoryPicker from "$lib/components/repository-picker.svelte";
   import ProjectProposal from "$lib/components/project-proposal.svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import StatusBadge from "$lib/components/status-badge.svelte";
@@ -22,11 +21,10 @@
   let composer:HTMLTextAreaElement|null=$state(null);
   onMount(()=>{if(page.url.searchParams.has("question"))composer?.focus();});
   const newConversationKey=untrack(()=>data.idempotencyKey);
-  let members=$state(untrack(()=>[...(data.project?.repositoryConnectionIds??[])]));
   const conversation=$derived(data.conversation);
   const active=$derived(data.project?.state==="active"&&data.workspace?.state==="active");
   const running=$derived(conversation?.runs.some(r=>r.state==="queued"||r.state==="running")??false);
-  const canSend=$derived(active&&!pending&&!running&&!!content.trim()&&!!data.agentConfiguration?.effective.projectModel&&!!data.agentConfiguration?.effective.codingModel&&(!!conversation||members.length>0));
+  const canSend=$derived(active&&!pending&&!running&&!!content.trim()&&!!data.agentConfiguration?.effective.projectModel&&!!data.agentConfiguration?.effective.codingModel&&(!!conversation||!!data.project?.repositoryConnectionIds.length));
   function sendOnEnter(event:KeyboardEvent){
     if(event.key!=="Enter"||event.shiftKey||event.isComposing)return;
     event.preventDefault();
@@ -52,9 +50,7 @@
       </div>
       {#if active}<form method="POST" action={conversation?"?/sendMessage":"?/createConversation"} use:enhance={submit} class="shrink-0 space-y-3" data-refresh-paused={pending||content?"":undefined}>
         <input type="hidden" name="idempotencyKey" value={conversation?key(`message-${conversation.id}-${conversation.updateCursor}`):newConversationKey} />
-        {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{:else}
-          <Label for="conversation-repositories">Repositories</Label><RepositoryPicker id="conversation-repositories" repositories={data.repositories} bind:value={members} />
-        {/if}
+        {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{/if}
         <Label for="project-message">Message</Label><Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} onkeydown={sendOnEnter} placeholder="Describe the work, ask a question, or request a revision…" />
         <div class="flex flex-wrap justify-between gap-3"><p class="text-xs text-muted-foreground">Enter to send · Shift+Enter for a new line</p><Button type="submit" disabled={!canSend}>{pending?"Sending…":"Send message"}</Button></div>
         {#if conversation}<p class="text-xs text-muted-foreground">To cancel or retry work, explicitly request the action here and approve its confirmation card.</p>{/if}

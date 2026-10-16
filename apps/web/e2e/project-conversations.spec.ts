@@ -181,6 +181,8 @@ test("first Enter creates a titled conversation and New conversation opens a fre
   await page.goto("/projects/project:1");
   const message=page.getByLabel("Message",{exact:true});
   await expect(message).toBeVisible();
+  await expect(page.getByRole("button",{name:"Repositories",exact:true})).toHaveCount(0);
+  await expect(page.locator('input[name="repositoryConnectionIds"]')).toHaveCount(0);
   await expect(page.getByRole("button",{name:"Send message",exact:true})).toBeDisabled();
   await expect(page.getByLabel("Current project",{exact:true})).toHaveText("Sandbox");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
