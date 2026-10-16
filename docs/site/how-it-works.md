@@ -7,7 +7,6 @@ runs the work, checks the result and creates a draft for you to review.
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---
@@ -30,7 +29,6 @@ flowchart TD
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---

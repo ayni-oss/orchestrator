@@ -23,7 +23,6 @@ verified credentials restores readiness; changed credentials require a new probe
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---

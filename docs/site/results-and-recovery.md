@@ -20,7 +20,6 @@ Missing or mismatched quality evidence appears as unavailable.
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---
