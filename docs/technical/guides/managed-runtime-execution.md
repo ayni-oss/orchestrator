@@ -17,6 +17,11 @@ The Helm runtime configuration exposes `codingTurns: 24`,
 0 to 10. Changes to deployment defaults affect newly admitted tasks; frozen
 attempt limits remain unchanged after restart.
 
+Ready runtimes are re-verified hourly by default (`runtime.intervalSeconds: 3600`
+in Helm, `interval_seconds` in operator JSON), plus per-profile scheduling jitter.
+Initial preparation and explicit Retry or Rebuild requests do not wait for this
+periodic interval. In-progress operations continue to be observed independently.
+
 Local execution uses the Docker Desktop umbrella chart described in
 [local development](../operations/local-development.md). Production retains platform node
 selection, digest pinning and resource limits; emulation is a local policy.
