@@ -29,7 +29,7 @@
   const { form: values, enhance, submitting } = workspaceForm;
 </script>
 <svelte:head><title>Workspaces · Ayni Orchestrator</title></svelte:head>
-<div data-refresh-paused={$submitting || redirecting ? "" : undefined} class="space-y-8">
+<div data-refresh-paused={open || $submitting || redirecting ? "" : undefined} class="space-y-8">
   <PageHeader title="Workspaces" description="Your projects, available repositories, and shared agent settings.">
     {#snippet actions()}<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create workspace</Button>{/snippet}
   </PageHeader>

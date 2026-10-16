@@ -4,10 +4,12 @@ test("workspace membership and archive retain project links, goals and task hist
   await page.goto("/workspaces");
   await page.getByRole("button",{name:"Create workspace",exact:true}).click();
   await page.getByLabel("Workspace name",{exact:true}).fill("Shared engineering");
+  await expect(page.getByLabel("Workspace name",{exact:true})).toHaveValue("Shared engineering");
   await page.getByRole("button",{name:"Repositories",exact:true}).click();
   await page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true}).check();
   await page.getByRole("button",{name:"Done",exact:true}).click();
   await expect(page.getByRole("button",{name:"Done",exact:true})).toBeHidden();
+  await expect(page.getByLabel("Workspace name",{exact:true})).toHaveValue("Shared engineering");
   await page.getByRole("dialog").getByRole("button",{name:"Create workspace",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Shared engineering",exact:true})).toBeVisible();
   await page.getByRole("navigation",{name:"Workspace views"}).getByRole("link",{name:"Settings",exact:true}).click();
@@ -49,7 +51,7 @@ test("workspaces scope navigation, project creation, and existing repository mem
   const views=page.getByRole("navigation",{name:"Workspace views"});
   await views.getByRole("link",{name:"Repositories",exact:true}).click();
   await expect(page.getByRole("button",{name:"Connect repository",exact:true})).toHaveCount(0);
-  await page.getByRole("button",{name:/^Repositories/,exact:false}).click();
+  await page.getByLabel("Add or remove existing repositories",{exact:true}).click();
   await page.getByRole("checkbox",{name:"ayni-oss/library",exact:true}).uncheck();
   await page.getByRole("button",{name:"Done",exact:true}).click();
   await page.getByRole("button",{name:"Save repository membership",exact:true}).click();
