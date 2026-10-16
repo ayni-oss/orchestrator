@@ -64,7 +64,13 @@ replacement keeps the previous valid revision active and exposes its failure.
 Missing or disabled active credentials block new authenticated operations.
 
 GHCR authentication, push, pull and artifact cleanup run in scoped, digest-pinned
-probe Jobs. Probe results are persisted before Job cleanup. Push credentials go
+probe Jobs. Probe results are persisted before Job cleanup. A Secret-access failure retains
+historical probe results but revokes current readiness. Reconciliation keeps
+checking the referenced metadata: the same previously verified credential pair
+can regain readiness without another probe; changed revisions require full
+validation and cannot reuse a cleanup-only probe. Disabled connections and
+credential authentication failures do not restart automatically. Metadata refresh
+and probe completion respect optimistic concurrency against operator edits. Push credentials go
 only to trusted builders and probes; candidate workloads receive a separate
 pull-only Secret. Probe Jobs receive no Kubernetes API token, model or signing
 credentials. Each logical runtime profile selects an approved connection. The connection alone
