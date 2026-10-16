@@ -28,7 +28,7 @@
 <Sidebar.Root collapsible="icon" class="shrink-0">
   <Sidebar.Header>
     <a onclick={() => sidebar.setOpenMobile(false)} href="/workspaces" aria-label="Ayni Orchestrator home" class="flex h-10 items-center gap-2 px-2 font-semibold no-underline">
-      <AyniIcon class="size-5 shrink-0" aria-hidden="true" />
+      <AyniIcon variant="orchestrator" class="size-5 shrink-0" aria-hidden="true" />
       <span class="group-data-[collapsible=icon]:hidden">Ayni Orchestrator</span>
     </a>
   </Sidebar.Header>

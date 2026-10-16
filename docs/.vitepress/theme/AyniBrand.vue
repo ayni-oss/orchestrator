@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import source from '../../site/public/ayni-logo.svg?raw'
+import source from '../../site/public/ayni-orchestrator.svg?raw'
 
 withDefaults(defineProps<{ label?: string }>(), { label: 'Ayni Orchestrator' })
 const logo = source.replaceAll('fill="black"', 'fill="currentColor"').replaceAll('stroke="black"', 'stroke="currentColor"')
