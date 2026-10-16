@@ -1,6 +1,9 @@
 import {loadAgentConfiguration,loadAgentModels} from "$lib/server/agent-configuration.js";
 import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
-import {fail} from "@sveltejs/kit";
+import {superValidate,message} from "sveltekit-superforms";
+import {zod} from "sveltekit-superforms/adapters";
+import {projectSchema} from "$lib/project-schema.js";
+import {fail,redirect} from "@sveltejs/kit";
 import type {Actions,PageServerLoad} from "./$types";
 import type {ProviderModelPageDto} from "@ayni-orchestrator/bff/server";
 import {getBff} from "$lib/server/bff.js";
@@ -10,7 +13,7 @@ import {projectRepositoryChoices,workspaceProjects} from "$lib/server/project-ch
 import {workspaceSchema} from "$lib/workspace-schema.js";
 export const load:PageServerLoad=async({locals,params,depends,setHeaders})=>{
   depends("app:workspaces","app:projects","app:repositories","app:connections");setHeaders({"cache-control":"no-store"});
-  const base={idempotencyKey:actionKey(),requestId:locals.requestId};
+  const base={idempotencyKey:actionKey(),requestId:locals.requestId,form:await superValidate({idempotencyKey:actionKey(),workspaceId:params.workspaceId},zod(projectSchema))};
   try{
     const bff=getBff(),ctx=requestContext(locals),workspace=await bff.getWorkspace(params.workspaceId,ctx);
     const [repositories,projects,agentModels]=await Promise.all([projectRepositoryChoices(ctx),workspaceProjects(workspace.id,ctx),loadAgentModels(ctx).catch(()=>({connections:[],catalogues:{} as Record<string,ProviderModelPageDto>}))]);
@@ -19,6 +22,21 @@ export const load:PageServerLoad=async({locals,params,depends,setHeaders})=>{
   }catch(error){return {...base,agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,workspace:undefined,repositories:[],projects:[],nextPageToken:"",connections:[],catalogues:{} as Record<string,ProviderModelPageDto>,error:safeError(error,locals.requestId)};}
 };
 export const actions:Actions={
+  create: async ({ locals, request, params }) => {
+    const form = await superValidate(request, zod(projectSchema));
+    if (!form.valid || form.data.workspaceId !== params.workspaceId) return fail(400, {form});
+    let id: string;
+    try {
+      const context=requestContext(locals);
+      const workspace=await getBff().getWorkspace(form.data.workspaceId,context);
+      if(workspace.state!=="active" || form.data.repositoryConnectionIds.some(id=>!workspace.repositoryConnectionIds.includes(id)))return message(form,"Choose repositories in an active workspace.",{status:400});
+      id = (await getBff().createProject(form.data, context)).id;
+    } catch (error) {
+      const mapped = safeError(error, locals.requestId);
+      return message(form, mapped.message, {status:mapped.status as 400});
+    }
+    redirect(303, `/projects/${encodeURIComponent(id)}`);
+  },
   agentProfiles:async event=>saveAgentProfiles(event,"workspace"),
   update:async event=>mutate(event,"update"),archive:async event=>mutate(event,"archive"),agentDefaults:async event=>mutate(event,"defaults"),
 };

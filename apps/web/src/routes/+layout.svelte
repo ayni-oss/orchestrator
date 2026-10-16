@@ -21,7 +21,11 @@
 <ApplicationNotifications />
 <Sidebar.Provider><AppSidebar /><Sidebar.Inset class="min-w-0" id="main-content" tabindex={-1}>
   <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur sm:px-6">
-    <Sidebar.Trigger /><nav aria-label="Breadcrumb" class="flex-1 text-sm"><a class="text-muted-foreground hover:text-foreground" href={workspaces ? "/workspaces" : ayni ? "/ayni" : sourceControl ? "/source-control" : registries ? "/container-registries" : repositories ? "/repositories" : "/projects"}>{workspaces ? "Workspaces" : ayni ? "Ayni" : sourceControl ? "Source control" : registries ? "Container registries" : repositories ? "Repositories" : "Projects"}</a>{#if current}<span aria-hidden="true" class="mx-2 text-muted-foreground">/</span><span aria-current="page">{current}</span>{/if}</nav><ThemeToggle />
+    <Sidebar.Trigger /><nav aria-label="Breadcrumb" class="flex-1 text-sm">{#if page.data.workspace}
+      <a class="text-muted-foreground hover:text-foreground" href="/workspaces">Workspaces</a><span aria-hidden="true" class="mx-2 text-muted-foreground">/</span>
+      {#if page.data.project}<a class="text-muted-foreground hover:text-foreground" href={`/workspaces/${encodeURIComponent(page.data.workspace.id)}`}>{page.data.workspace.displayName}</a><span aria-hidden="true" class="mx-2 text-muted-foreground">/</span><span aria-current="page">{page.data.project.displayName}</span>
+      {:else}<span aria-current="page">{page.data.workspace.displayName}</span>{/if}
+    {:else}<a class="text-muted-foreground hover:text-foreground" href={workspaces ? "/workspaces" : ayni ? "/ayni" : sourceControl ? "/source-control" : registries ? "/container-registries" : repositories ? "/repositories" : "/workspaces"}>{workspaces ? "Workspaces" : ayni ? "Ayni" : sourceControl ? "Source control" : registries ? "Container registries" : repositories ? "Repositories" : "Workspaces"}</a>{#if current}<span aria-hidden="true" class="mx-2 text-muted-foreground">/</span><span aria-current="page">{current}</span>{/if}{/if}</nav><ThemeToggle />
   </header>
   <div class="min-w-0 flex-1 space-y-8 p-4 sm:p-6 lg:p-8">{@render children()}</div>
 </Sidebar.Inset></Sidebar.Provider>

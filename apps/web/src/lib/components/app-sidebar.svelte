@@ -13,8 +13,7 @@
   const sourceControlActive = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
   const registriesActive = $derived(page.url.pathname.startsWith("/container-registries"));
   const ayniActive = $derived(page.url.pathname.startsWith("/ayni") || page.url.pathname.startsWith("/certificates"));
-  const workspacesActive = $derived(page.url.pathname.startsWith("/workspaces"));
-  const projectsActive = $derived(page.url.pathname.startsWith("/projects") || page.url.pathname.startsWith("/tasks"));
+  const workspacesActive = $derived(page.url.pathname.startsWith("/workspaces") || page.url.pathname.startsWith("/projects") || page.url.pathname.startsWith("/tasks"));
   const sourceControlConfiguration = $derived(page.data.sourceControlConfiguration);
   const registryConfiguration = $derived(page.data.registryConfiguration);
   const certificateConfiguration = $derived(page.data.certificateConfiguration);
@@ -28,7 +27,7 @@
 
 <Sidebar.Root collapsible="icon" class="shrink-0">
   <Sidebar.Header>
-    <a onclick={() => sidebar.setOpenMobile(false)} href="/projects" aria-label="Ayni Orchestrator home" class="flex h-10 items-center gap-2 px-2 font-semibold no-underline">
+    <a onclick={() => sidebar.setOpenMobile(false)} href="/workspaces" aria-label="Ayni Orchestrator home" class="flex h-10 items-center gap-2 px-2 font-semibold no-underline">
       <AyniIcon class="size-5 shrink-0" aria-hidden="true" />
       <span class="group-data-[collapsible=icon]:hidden">Ayni Orchestrator</span>
     </a>
@@ -38,15 +37,6 @@
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           <Sidebar.MenuItem><Sidebar.MenuButton isActive={workspacesActive} tooltipContent="Workspaces">{#snippet child({props})}<a {...props} onclick={()=>sidebar.setOpenMobile(false)} href="/workspaces" aria-current={workspacesActive?"page":undefined}><FolderGit2 aria-hidden="true" /><span>Workspaces</span></a>{/snippet}</Sidebar.MenuButton></Sidebar.MenuItem>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={projectsActive} tooltipContent="Projects">
-              {#snippet child({ props })}
-                <a {...props} onclick={() => sidebar.setOpenMobile(false)} href="/projects" aria-current={projectsActive ? "page" : undefined}>
-                  <FolderGit2 aria-hidden="true" /><span>Projects</span>
-                </a>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
           <Sidebar.MenuItem>
             <Sidebar.MenuButton isActive={repositoriesActive} tooltipContent="Repositories">
               {#snippet child({ props })}

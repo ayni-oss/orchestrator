@@ -4,6 +4,11 @@ A repository connection gives Ayni Orchestrator access to source. Its runtime
 provides the tools and dependencies needed to work on that source. A connected
 repository can still need runtime setup before tasks can start.
 
+Connect repositories in the global **Repositories** catalog. Add an existing
+connection from a workspace’s **Repositories** view to make it available to that
+workspace’s projects. Connections and runtime configuration are shared across
+workspaces; removing workspace membership retains the connection and history.
+
 ## Prepare a runtime
 
 ```mermaid

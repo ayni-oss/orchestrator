@@ -95,8 +95,8 @@ test("conversation failures recover and invalid version links do not show a diff
 });
 
 test("settings expose ownership, saving, failure, and focus recovery",async({page})=>{
-  await page.goto("/workspaces/workspace:1");
-  await expect(page.getByRole("region",{name:"Shared configuration",exact:true})).toContainText("shared across projects");
+  await page.goto("/workspaces/workspace:1?view=settings");
+  await expect(page.getByRole("region",{name:"Workspace settings",exact:true})).toContainText("Projects inherit agent settings");
   await page.goto("/projects/project:1");
   const actions=page.getByRole("button",{name:"Sandbox project actions"});
   await actions.click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();

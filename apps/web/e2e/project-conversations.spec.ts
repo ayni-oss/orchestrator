@@ -151,7 +151,7 @@ test("older requirements remain searchable and paginated with summary provenance
 
 test("planner presets, warm reuse, expiry and cancellation preserve durable conversation history",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/workspaces/workspace:1");
+  await page.goto("/workspaces/workspace:1?view=settings");
   await choose(page,"Planner idle timeout","24 hours");await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();await expect(page.getByLabel("Planner idle timeout",{exact:true})).toContainText("24 hours");
   await page.goto("/projects/project:1");
   await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();

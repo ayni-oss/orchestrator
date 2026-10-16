@@ -30,13 +30,13 @@
 </script>
 <svelte:head><title>Workspaces · Ayni Orchestrator</title></svelte:head>
 <div data-refresh-paused={$submitting || redirecting ? "" : undefined} class="space-y-8">
-  <PageHeader title="Workspaces" description="Shared repositories and agent defaults for your projects.">
+  <PageHeader title="Workspaces" description="Your projects, available repositories, and shared agent settings.">
     {#snippet actions()}<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create workspace</Button>{/snippet}
   </PageHeader>
 
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {#each data.workspaces as workspace (workspace.id)}
-      <Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/workspaces/${encodeURIComponent(workspace.id)}`}>{workspace.displayName}</a></Card.Title><Card.Description>{workspace.repositoryConnectionIds.length} repositories</Card.Description></Card.Header><Card.Content><StatusBadge status={workspace.state} tone={statusTone(workspace.state)} /></Card.Content></Card.Root>
+      <Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/workspaces/${encodeURIComponent(workspace.id)}`}>{workspace.displayName}</a></Card.Title><Card.Description>{data.projectCounts ? `${data.projectCounts[workspace.id]??0} ${(data.projectCounts[workspace.id]??0)===1?"project":"projects"}` : "Project count unavailable"} · {workspace.repositoryConnectionIds.length} {workspace.repositoryConnectionIds.length===1?"repository":"repositories"}</Card.Description></Card.Header><Card.Content><StatusBadge status={workspace.state} tone={statusTone(workspace.state)} /></Card.Content></Card.Root>
     {:else}{#if data.available}<p class="text-sm text-muted-foreground">Create a workspace to share repositories and agent defaults across projects.</p>{/if}{/each}
   </div>
   {#if data.nextPageToken}<Button href={`?pageToken=${encodeURIComponent(data.nextPageToken)}`} variant="outline">More workspaces</Button>{/if}

@@ -22,9 +22,11 @@ project actions menu contains the goal and planning instructions, selected
 repositories, and model overrides. Repository instructions such as `AGENTS.md`
 remain in each repository.
 
-Open the workspace link for **Shared configuration**: repository membership,
-agent defaults, and the default planner idle timeout. Repository links lead to
-shared runtimes; connection links lead to provider setup. Each settings form
+Open **Workspaces** and choose a workspace. Its **Projects** view is the place
+to create projects; the workspace is fixed during creation. **Repositories**
+manages access to existing repository connections and links to shared runtimes.
+**Settings** contains agent defaults and the default planner idle timeout.
+Connect and prepare repositories through the global **Repositories** catalog. Each settings form
 shows saving progress and reports failures so you can retry.
 
 ## Work through a project conversation
