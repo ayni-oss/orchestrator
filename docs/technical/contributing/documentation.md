@@ -26,11 +26,15 @@ Every Mermaid fence starts with this configuration, also enforced by the link ch
 ```yaml
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---
 ```
+
+Published diagrams inherit the site’s light/dark theme; do not set a diagram-level
+`theme`, which would override the color-mode switch. Technical-only diagrams
+retain their neutral theme. The sites share a layout, with indigo for the CLI and
+complementary amber for Orchestrator.
 
 The theme disables Mermaid’s automatic page-load scanner before loading ELK;
 the VitePress components alone render the authored diagram source. This prevents

@@ -6,7 +6,6 @@ questions. Review each before relying on a delivered change.
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---
@@ -40,7 +39,6 @@ for infrastructure access and isolation.
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---

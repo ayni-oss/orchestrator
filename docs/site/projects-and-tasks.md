@@ -146,7 +146,6 @@ runtime changes do not rewrite those choices.
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---

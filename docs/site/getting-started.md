@@ -7,7 +7,6 @@ If you do not have a deployment, ask the person managing your installation to pr
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---

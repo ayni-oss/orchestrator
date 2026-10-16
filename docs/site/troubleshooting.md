@@ -6,7 +6,6 @@ cause before retrying, and keep the recorded result available for review.
 ```mermaid
 ---
 config:
-  theme: neutral
   look: classic
   layout: elk
 ---

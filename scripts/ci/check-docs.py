@@ -16,8 +16,9 @@ for filename in sorted(set(files)):
     contents = source.read_text()
     for diagram in re.findall(r'```mermaid\n(.*?)```', contents, flags=re.S):
         diagram_count += 1
-        if not diagram.startswith('---\nconfig:\n  theme: neutral\n  look: classic\n  layout: elk\n---\n'):
-            errors.append(f'{source.relative_to(root)}: diagram must use neutral/classic/elk')
+        theme = '' if source.is_relative_to(root / 'docs/site') else '  theme: neutral\n'
+        if not diagram.startswith(f'---\nconfig:\n{theme}  look: classic\n  layout: elk\n---\n'):
+            errors.append(f'{source.relative_to(root)}: diagram must use classic/elk and inherit the site color theme in docs/site')
     text = re.sub(r'```.*?```', '', source.read_text(), flags=re.S)
     for match in re.finditer(r'\]\((<[^>]+>|[^\s)]+)(?:\s+"[^"]*")?\)', text):
         target = match.group(1).strip('<>')
@@ -30,4 +31,4 @@ for filename in sorted(set(files)):
 if errors:
     raise SystemExit('\n'.join(errors))
 print('Repository Markdown link targets are valid.')
-print(f'Mermaid styling is valid: {diagram_count} diagrams use neutral/classic/elk.')
+print(f'Mermaid styling is valid: {diagram_count} diagrams use classic/elk; published diagrams inherit the site color theme.')
