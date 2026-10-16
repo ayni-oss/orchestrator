@@ -1,7 +1,8 @@
 <script lang="ts">
   import {page} from "$app/state";
   import {untrack} from "svelte";
-  import {projectHref as discussHref} from "$lib/project-navigation.js";
+  import {goto} from "$app/navigation";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   import TaskIdentity from "$lib/components/task-identity.svelte";
   import { enhance } from "$lib/forms.js";
   import type { PageProps } from "./$types";
@@ -48,7 +49,7 @@
 <div class="space-y-8">
 
   {#if data.project}
-    <PageHeader eyebrow={data.project.state === "archived" ? "Archived project" : "Project"} title={data.project.displayName} description={data.project.goal}>{#snippet actions()}{#if data.project?.state === "active" && data.workspace?.state === "active"}<Button href={discussHref(data.project.id,"overview",data.conversation?.id)}>Discuss project</Button>
+    <PageHeader eyebrow={data.project.state === "archived" ? "Archived project" : "Project"} title={data.project.displayName} description={data.project.goal}>{#snippet actions()}{#if data.project?.state === "active" && data.workspace?.state === "active"}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={`${data.project.displayName} project actions`}><EllipsisVertical aria-hidden="true" /></Button>{/snippet}</DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" preventScroll={false}>
@@ -59,18 +60,24 @@
       </DropdownMenu.Root>{/if}{/snippet}</PageHeader>
     {#if data.workspace}<p class="text-sm text-muted-foreground">Workspace: <a class="underline" href={`/workspaces/${encodeURIComponent(data.workspace.id)}`}>{data.workspace.displayName}</a>{#if data.workspace.state === "archived"} · Archived: new work is disabled.{/if}</p>{/if}
     {#if data.project.state==="archived"}<p>New tasks and retries are disabled for this archived project.</p>{/if}
-    <nav class="flex gap-2 border-b pb-3" aria-label="Project views">
-      {#each projectViews as view (view)}<Button variant={data.view===view?"secondary":"ghost"} href={projectHref(data.project.id,view,data.conversation?.id)} data-sveltekit-keepfocus aria-current={data.view===view?"page":undefined}>{view.charAt(0).toUpperCase()+view.slice(1)}</Button>{/each}
-    </nav>
     <ProjectUpdates {data} />
     {#if data.configurationError}<Feedback kind="warning" title="Agent configuration unavailable" message={data.configurationError.message} />{/if}
-    {#if data.view!=="tasks"}
-      {#key `${data.project.id}-${data.conversation?.id??""}`}<ProjectConversation {data} />{/key}
-    {:else}
+    <Tabs.Root value={data.view} onValueChange={view=>{void goto(projectHref(data.project!.id,view as typeof data.view,data.conversation?.id),{keepFocus:true,noScroll:true});}} class="gap-6">
+      <Tabs.List aria-label="Project views">{#each projectViews as view (view)}<Tabs.Trigger value={view}>{view.charAt(0).toUpperCase()+view.slice(1)}</Tabs.Trigger>{/each}</Tabs.List>
+      {#each projectViews as view (view)}
+        <Tabs.Content value={view}>
+          {#if data.view===view}
+          {#if view!=="tasks"}
+            {#key `${data.project.id}-${data.conversation?.id??""}`}<ProjectConversation {data} />{/key}
+          {:else}
     <section class="space-y-4"><h2 class="text-lg font-semibold">Tasks</h2><p class="text-sm text-muted-foreground">Open a task to inspect its execution attempts, quality results, and pull request.</p><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {#each data.tasks as task (task.id)}<Card.Root><Card.Header><Card.Title class="text-base"><TaskIdentity {task} /></Card.Title><Card.Description>{data.repositories.find(repo=>repo.id===task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</Card.Description></Card.Header><Card.Content class="space-y-3 text-sm"><StatusBadge status={task.state} tone={statusTone(task.state)} /><p class="text-muted-foreground">Created {formatDate(task.createdAt)}</p>        <p class="text-muted-foreground">{task.attemptCount} execution {task.attemptCount===1?"attempt":"attempts"} · Usage and PR results in task details</p></Card.Content></Card.Root>{:else}<p class="text-sm text-muted-foreground">No tasks yet.</p>{/each}
     </div>{#if data.nextPageToken}<Button variant="outline" href={projectHref(data.project.id,"tasks",data.conversation?.id,data.nextPageToken)}>More tasks</Button>{/if}</section>
-    {/if}
+          {/if}
+          {/if}
+        </Tabs.Content>
+      {/each}
+    </Tabs.Root>
     {#if data.project.state === "active"}
       <Dialog.Root bind:open={editProject} onOpenChangeComplete={open=>{if(!open){finishEditing?.();finishEditing=undefined;}}}>
         <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl">

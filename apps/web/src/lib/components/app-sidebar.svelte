@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { FolderGit2, BookOpen, GitBranch, Container, Settings, BrainCircuit } from "@lucide/svelte";
+  import { FolderGit2, BookOpen, GitBranch, Container, Settings, BrainCircuit, MessageSquare, Plus } from "@lucide/svelte";
+  import type { ConversationSidebarData } from "$lib/conversation-sidebar.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import NewConversationDialog from "$lib/components/new-conversation-dialog.svelte";
+  import { projectHref } from "$lib/project-navigation.js";
+  import { invalidate } from "$app/navigation";
   import { onMount } from "svelte";
   import { subscribeRefresh } from "$lib/refresh.js";
   import AyniIcon from "$lib/components/ayni-icon.svelte";
@@ -8,6 +13,14 @@
   import SidebarStatus from "$lib/components/sidebar-status.svelte";
   import SidebarNavGroup from "$lib/components/sidebar-nav-group.svelte";
 
+  let newConversationOpen = $state(false);
+  let openAfterSidebar = false;
+  function newConversation() {
+    if (sidebar.isMobile) { openAfterSidebar = true; sidebar.setOpenMobile(false); }
+    else newConversationOpen = true;
+  }
+  const history: ConversationSidebarData | undefined = $derived(page.data.conversationSidebar);
+  const canCreate = $derived(history?.workspace.state === "active" && history.projects.some(project => project.state === "active" && project.repositoryConnectionIds.length));
   const sidebar = Sidebar.useSidebar();
   const repositoriesActive = $derived(page.url.pathname.startsWith("/repositories") || page.url.pathname.startsWith("/profiles"));
   const sourceControlActive = $derived(page.url.pathname.startsWith("/source-control") || page.url.pathname.startsWith("/setup/github"));
@@ -21,11 +34,12 @@
     const workspaces = subscribeRefresh("app:workspaces", { intervalMs: 30_000 });
     const certificates = subscribeRefresh("app:certificates", { intervalMs: 30_000 });
     const connections = subscribeRefresh("app:connections", { intervalMs: 30_000 });
-    return () => { workspaces(); certificates(); connections(); };
+    const conversations = subscribeRefresh("app:conversations", { intervalMs: 30_000 });
+    return () => { workspaces(); certificates(); connections(); conversations(); };
   });
 </script>
 
-<Sidebar.Root collapsible="icon" class="shrink-0">
+<Sidebar.Root collapsible="icon" class="shrink-0" onMobileClose={() => { if (openAfterSidebar) { openAfterSidebar = false; newConversationOpen = true; } }}>
   <Sidebar.Header>
     <a onclick={() => sidebar.setOpenMobile(false)} href="/workspaces" aria-label="Ayni Orchestrator home" class="flex h-10 items-center gap-2 px-2 font-semibold no-underline">
       <AyniIcon variant="orchestrator" class="size-5 shrink-0" aria-hidden="true" />
@@ -76,6 +90,38 @@
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
+    <Sidebar.Separator />
+    <Sidebar.Group class="min-h-64 flex-1" role="region" aria-label="Workspace conversations">
+      <Sidebar.GroupLabel>Conversations</Sidebar.GroupLabel>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          <Sidebar.MenuItem><Sidebar.MenuButton disabled={!canCreate} onclick={newConversation} tooltipContent="New conversation"><Plus aria-hidden="true" /><span>New conversation</span></Sidebar.MenuButton></Sidebar.MenuItem>
+        </Sidebar.Menu>
+        <div class="group-data-[collapsible=icon]:hidden">
+          {#if history}
+            <p class="px-2 py-2 text-xs text-muted-foreground">{history.workspace.displayName}</p>
+            {#if history.incomplete}<p class="px-2 text-xs text-muted-foreground">Some conversations could not be loaded.</p><Button variant="link" size="sm" class="px-2 text-xs" onclick={() => invalidate("app:conversations")}>Retry history</Button>{/if}
+            <nav aria-label="Conversation history">
+              <Sidebar.Menu>
+                {#each history.conversations as conversation (conversation.id)}
+                  {@const selected = page.params.projectId === conversation.projectId && page.data.conversation?.id === conversation.id}
+                  <Sidebar.MenuItem><Sidebar.MenuButton isActive={selected} tooltipContent={conversation.title} class="h-auto min-h-12">
+                    {#snippet child({ props })}<a {...props} href={projectHref(conversation.projectId,"overview",conversation.id)} aria-current={selected ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}><MessageSquare aria-hidden="true" /><span class="min-w-0"><span class="block truncate">{conversation.title}</span><span class="block truncate text-xs font-normal text-muted-foreground">{conversation.projectName}</span></span></a>{/snippet}
+                  </Sidebar.MenuButton></Sidebar.MenuItem>
+                {:else}<li class="px-2 py-3 text-xs text-muted-foreground">{history.incomplete ? "History unavailable." : "No conversations yet."}</li>{/each}
+              </Sidebar.Menu>
+            </nav>
+          {:else}
+            <p class="px-2 py-3 text-xs text-muted-foreground opacity-60">{page.data.conversationSidebarError ? "Conversations unavailable." : "Select a workspace to view conversations."}</p>
+            {#if page.data.conversationSidebarError}<Button variant="link" size="sm" class="px-2 text-xs" onclick={() => invalidate("app:conversations")}>Retry history</Button>{/if}
+          {/if}
+        </div>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
   </Sidebar.Content>
   <Sidebar.Rail />
 </Sidebar.Root>
+
+{#if history}
+  {#key `${history.workspace.id}-${page.params.projectId??""}`}<NewConversationDialog data={history} idempotencyKey={page.data.conversationKey} projectId={page.params.projectId} bind:open={newConversationOpen} />{/key}
+{/if}

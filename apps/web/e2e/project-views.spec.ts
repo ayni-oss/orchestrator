@@ -16,6 +16,7 @@ async function startPlan(page:Page,message="Make the outcome easy to follow"){
   await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
   await expect(page.getByRole("dialog")).toContainText("Agent defaults updated.");
   await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
+  if (!await page.getByRole("button",{name:"New conversation",exact:true}).isVisible()) await page.getByRole("button",{name:"Toggle Sidebar",exact:true}).last().click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();
   await page.getByLabel("Title",{exact:true}).fill("Project layout");
   await page.getByRole("button",{name:"Create conversation",exact:true}).click();
@@ -24,13 +25,13 @@ async function startPlan(page:Page,message="Make the outcome easy to follow"){
   await expect(page.getByRole("region",{name:"Plan review",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Sending…",exact:true})).toHaveCount(0);
 }
-function view(page:Page,name:string){return page.getByRole("navigation",{name:"Project views"}).getByRole("link",{name,exact:true});}
+function view(page:Page,name:string){return page.getByRole("tablist",{name:"Project views"}).getByRole("tab",{name,exact:true});}
 test.beforeEach(async({request})=>{
   await request.post("http://127.0.0.1:50062/reset-project");
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
 });
 
-for(const width of [1280,390])test(`chat scrolls independently above a stable plan at ${width}px`,async({page,request})=>{
+for(const width of [1280,390])test(`conversation scrolls independently above a stable plan at ${width}px`,async({page,request})=>{
   await page.setViewportSize({width,height:900});
   await startPlan(page);
   const timeline=page.getByRole("region",{name:"Conversation timeline",exact:true});
@@ -58,7 +59,7 @@ test("plans, research runs, approved tasks, and execution attempts remain naviga
   await view(page,"Plans").focus();
   await expect(view(page,"Plans")).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(view(page,"Plans")).toHaveAttribute("aria-current","page");
+  await expect(view(page,"Plans")).toHaveAttribute("aria-selected","true");
   await expect(page.getByLabel("Message",{exact:true})).toHaveCount(0);
   await page.getByText("Research run · Completed",{exact:true}).click();
   await expect(page.getByRole("region",{name:"Plan review",exact:true})).toContainText("run:1");
@@ -73,7 +74,7 @@ test("plans, research runs, approved tasks, and execution attempts remain naviga
   await expect(page).toHaveURL(new RegExp(taskHref!.replace(/\//gu,"\\/"),"u"));
   await expect(page.getByRole("heading",{name:"Progress",exact:true})).toBeVisible();
   await page.getByRole("link",{name:"Project tasks",exact:true}).click();
-  await expect(view(page,"Tasks")).toHaveAttribute("aria-current","page");
+  await expect(view(page,"Tasks")).toHaveAttribute("aria-selected","true");
   await page.goBack();await expect(page.getByRole("heading",{name:"Progress",exact:true})).toBeVisible();
 });
 

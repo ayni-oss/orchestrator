@@ -1,0 +1,21 @@
+import { expect, test } from "@playwright/test";
+test.beforeEach(async ({ request }) => { await request.post("http://127.0.0.1:50062/reset-project"); });
+test("workspace conversation history stays in the sidebar and opens the selected project", async ({ page }) => {
+ await page.goto("/workspaces");
+ await expect(page.getByRole("button", {name:"New conversation",exact:true})).toBeDisabled();
+ await expect(page.getByText("Select a workspace to view conversations.", {exact:true})).toBeVisible();
+ await page.goto("/workspaces/workspace:1");
+ await page.getByRole("button", {name:"New conversation",exact:true}).click();
+ const dialog=page.getByRole("dialog", {name:"New conversation",exact:true});
+ await expect(dialog.getByLabel("Project", {exact:true})).toContainText("Sandbox");
+ await dialog.getByLabel("Title", {exact:true}).fill("Workspace discussion");
+ await dialog.getByRole("button", {name:"Create conversation",exact:true}).click();
+ await expect(page).toHaveURL(/\/projects\/project%3A1\?conversation=conversation%3A1/);
+ await expect(page.getByRole("heading", {name:"Workspace discussion",exact:true})).toBeVisible();
+ const history=page.getByRole("navigation", {name:"Conversation history",exact:true});
+ await expect(history.getByRole("link", {name:"Workspace discussion Sandbox",exact:true})).toHaveAttribute("aria-current","page");
+ await page.getByRole("tab", {name:"Tasks",exact:true}).click();
+ await history.getByRole("link", {name:"Workspace discussion Sandbox",exact:true}).click();
+ await expect(page.getByRole("tab", {name:"Overview",exact:true})).toHaveAttribute("aria-selected","true");
+ await expect(page.getByRole("region", {name:"Conversation",exact:true})).toBeVisible();
+});

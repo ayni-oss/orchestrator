@@ -33,10 +33,10 @@ test("workspace membership and archive retain project links, goals and task hist
   await page.getByRole("tablist",{name:"Workspace views"}).getByRole("tab",{name:"Projects",exact:true}).click();
   await page.getByRole("link",{name:"Sandbox",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Sandbox",exact:true})).toBeVisible();
-  await page.getByRole("navigation",{name:"Project views"}).getByRole("link",{name:"Tasks",exact:true}).click();
+  await page.getByRole("tablist",{name:"Project views"}).getByRole("tab",{name:"Tasks",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Tasks",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"New task",exact:true})).toHaveCount(0);
-  await expect(page.getByRole("button",{name:"New conversation",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"New conversation",exact:true})).toBeDisabled();
   await page.goto("/tasks");
   await expect(page.getByRole("heading",{name:"Task history",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Submit task",exact:true})).toHaveCount(0);

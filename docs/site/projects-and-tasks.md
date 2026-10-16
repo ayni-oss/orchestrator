@@ -13,7 +13,7 @@ preserving project history and tasks already admitted.
 
 | View | Use it to |
 | --- | --- |
-| Overview | Discuss the goal in a fixed-height chat above the current plan. Scroll the timeline to read messages, session details, and saved history. |
+| Overview | Discuss the goal in a fixed-height conversation above the current plan. Scroll the timeline to read messages, session details, and saved history. |
 | Plans | Review saved plan versions, inspect the research run, and approve the exact tasks shown. Version links can be bookmarked. |
 | Tasks | Follow project tasks and open their execution attempts, quality results, and pull requests. |
 
@@ -30,6 +30,13 @@ Connect and prepare repositories through the global **Repositories** catalog. Ea
 shows saving progress and reports failures so you can retry.
 
 ## Work through a project conversation
+
+
+The sidebar's **Conversations** section lists history across the selected workspace,
+with each conversation's project beneath its title. Select **New conversation**
+to choose a project and repositories. Without a selected workspace, the section
+stays visible and creation is disabled. Selecting a conversation opens its project's
+**Overview**; use **Plans** and **Tasks** to review the related work.
 
 Under **Config → LLM providers**, configure and test an OpenAI connection. In the
 workspace settings, choose separate models for repository research and coding.
