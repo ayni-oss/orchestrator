@@ -8,5 +8,5 @@ test("global history routes old creation bookmarks into project selection",async
 test("configuration failures disable creation without inventing browser capabilities",async({page,request})=>{
  await request.post("http://127.0.0.1:50062/capabilities-unavailable");await page.goto("/projects/project:1");await expect(page.getByText("Agent configuration unavailable",{exact:true})).toBeVisible();
  await page.getByRole("button",{name:"Sandbox project actions",exact:true}).click();await expect(page.getByRole("menuitem",{name:"Submit task directly",exact:true})).toBeDisabled();
- await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();await expect(page.getByRole("region",{name:"Agent capability profiles",exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"Save planner profile",exact:true})).toBeDisabled();
+ await page.getByRole("tab",{name:"Settings",exact:true}).click();await expect(page.getByRole("region",{name:"Agent capability profiles",exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"Save planner profile",exact:true})).toBeDisabled();
 });

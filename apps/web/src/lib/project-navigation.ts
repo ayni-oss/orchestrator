@@ -1,4 +1,4 @@
-export const projectViews = ["overview", "plans", "tasks"] as const;
+export const projectViews = ["overview", "plans", "tasks", "settings"] as const;
 export type ProjectView = (typeof projectViews)[number];
 
 export function projectView(value: string | null): ProjectView {

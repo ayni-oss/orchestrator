@@ -90,22 +90,20 @@
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
-    <Sidebar.Separator />
-    <Sidebar.Group class="min-h-64 flex-1" role="region" aria-label="Workspace conversations">
-      <Sidebar.GroupLabel>Conversations</Sidebar.GroupLabel>
+    <Sidebar.Group class="mt-auto shrink-0" role="region" aria-label="Workspace conversations">
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           <Sidebar.MenuItem><Sidebar.MenuButton disabled={!canCreate} onclick={newConversation} tooltipContent="New conversation"><Plus aria-hidden="true" /><span>New conversation</span></Sidebar.MenuButton></Sidebar.MenuItem>
         </Sidebar.Menu>
-        <div class="group-data-[collapsible=icon]:hidden">
+        <div class="h-72 overflow-y-auto group-data-[collapsible=icon]:hidden">
           {#if history}
             <p class="px-2 py-2 text-xs text-muted-foreground">{history.workspace.displayName}</p>
             {#if history.incomplete}<p class="px-2 text-xs text-muted-foreground">Some conversations could not be loaded.</p><Button variant="link" size="sm" class="px-2 text-xs" onclick={() => invalidate("app:conversations")}>Retry history</Button>{/if}
-            <nav aria-label="Conversation history">
+            <nav aria-label="Conversation history" class="h-60 overflow-y-auto">
               <Sidebar.Menu>
                 {#each history.conversations as conversation (conversation.id)}
                   {@const selected = page.params.projectId === conversation.projectId && page.data.conversation?.id === conversation.id}
-                  <Sidebar.MenuItem><Sidebar.MenuButton isActive={selected} tooltipContent={conversation.title} class="h-auto min-h-12">
+                  <Sidebar.MenuItem><Sidebar.MenuButton isActive={selected} tooltipContent={conversation.title} class="h-12 py-1.5">
                     {#snippet child({ props })}<a {...props} href={projectHref(conversation.projectId,"overview",conversation.id)} aria-current={selected ? "page" : undefined} onclick={() => sidebar.setOpenMobile(false)}><MessageSquare aria-hidden="true" /><span class="min-w-0"><span class="block truncate">{conversation.title}</span><span class="block truncate text-xs font-normal text-muted-foreground">{conversation.projectName}</span></span></a>{/snippet}
                   </Sidebar.MenuButton></Sidebar.MenuItem>
                 {:else}<li class="px-2 py-3 text-xs text-muted-foreground">{history.incomplete ? "History unavailable." : "No conversations yet."}</li>{/each}

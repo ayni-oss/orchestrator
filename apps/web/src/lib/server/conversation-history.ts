@@ -4,7 +4,7 @@ import {getBff} from "$lib/server/bff.js";
 import {requestContext,safeError} from "$lib/server/page.js";
 import {isResourceVersion} from "$lib/server/validation.js";
 const RESOURCE_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
-export async function conversationHistory(event:RequestEvent,operation:"context"|"history"){
+export async function conversationHistory(event:RequestEvent){
   const {params,url,locals}=event;
   const headers={"cache-control":"no-store"};
   const projectId=params.projectId??"",conversationId=params.conversationId??"";
@@ -15,9 +15,9 @@ export async function conversationHistory(event:RequestEvent,operation:"context"
   }
   try {
     const bff=getBff(),context=requestContext(locals),scope={projectId,conversationId};
-    const result=operation==="context"?await bff.getProjectConversationContext(scope,context):await bff.listProjectConversationHistory({...scope,beforeSequence,snapshotSequence,query,limit},context);
+    const result=await bff.listProjectConversationHistory({...scope,beforeSequence,snapshotSequence,query,limit},context);
     return json(result,{headers});
   }catch(error){const mapped=safeError(error,locals.requestId);return json({error:mapped},{status:mapped.status,headers});}
 }
 
-export type {ConversationContextDto,ConversationHistoryDto,ConversationRecordDto} from "@ayni-orchestrator/bff/server";
+export type {ConversationHistoryDto,ConversationRecordDto} from "@ayni-orchestrator/bff/server";

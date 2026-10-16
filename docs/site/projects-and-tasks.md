@@ -13,14 +13,13 @@ preserving project history and tasks already admitted.
 
 | View | Use it to |
 | --- | --- |
-| Overview | Discuss the goal in a fixed-height conversation above the current plan. Scroll the timeline to read messages, session details, and saved history. |
+| Overview | Read and send messages in the conversation. Load earlier messages when you need older history. |
 | Plans | Review saved plan versions, inspect the research run, and approve the exact tasks shown. Version links can be bookmarked. |
-| Tasks | Follow project tasks and open their execution attempts, quality results, and pull requests. |
+| Tasks | Follow project tasks, worker questions, execution attempts, quality results, and pull requests. |
+| Settings | Edit the project goal, repositories, agent models and capabilities, and the selected conversation’s planner timeout. |
 
-The selected conversation follows you between views. **Project settings** in the
-project actions menu contains the goal and planning instructions, selected
-repositories, and model overrides. Repository instructions such as `AGENTS.md`
-remain in each repository.
+The selected conversation follows you between views. Repository instructions such
+as `AGENTS.md` remain in each repository.
 
 Open **Workspaces** and choose a workspace. Its **Projects** view is the place
 to create projects; the workspace is fixed during creation. **Repositories**
@@ -88,22 +87,18 @@ and merge the PR before repository reconciliation prepares the matching shared
 runtime for future tasks.
 
 Conversations and task links survive reconnects and planner restarts. Use
-**Saved planning context and history** to inspect the working summary and search earlier messages,
-plan decisions and task outcomes. Search results preserve their original record
-identities; the summary is an index of excerpts, so consult original records for
-details. Decisions, unresolved questions and research references stay in the
-conversation history.
+**Load earlier messages** in the conversation to read older discussion.
 
 The planner stays available between messages. Choose **5 minutes** or **24 hours**
-in workspace settings to control how long it stays warm while idle; conversations
-can inherit or override that choice. An active turn keeps its own deadline.
-After idle expiry, send another message to resume with saved history. Session
-details show its state and expiry. Use the planner's cancel action to stop an
-active research turn; cancelling research preserves the conversation and its plans.
+in workspace settings to control its idle timeout. The selected conversation can
+inherit or override that choice under **Settings → Conversation settings**.
+After idle expiry, send another message to resume with saved history. The same
+settings card lets you cancel an active research turn while preserving the
+conversation and its plans.
 
 Approved plan cards link to tasks and their retained results. Task details link
 back to the originating conversation and approved plan version, including after a
-retry. **Worker updates** in that conversation show accepted progress, questions,
+retry. **Worker updates** in the **Tasks** tab show accepted progress, questions,
 findings, changes, quality evidence and draft pull requests. Read execution,
 quality and publication separately; a draft is not quality or merge approval.
 Updates refresh without starting a planner turn. Earlier evidence remains searchable
