@@ -1,5 +1,5 @@
 import {loadAgentConfiguration,loadAgentModels} from "$lib/server/agent-configuration.js";
-import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
+import {saveAgentProfile} from "$lib/server/agent-profiles.js";
 import {superValidate,message} from "sveltekit-superforms";
 import {zod} from "sveltekit-superforms/adapters";
 import {projectSchema} from "$lib/project-schema.js";
@@ -37,7 +37,7 @@ export const actions:Actions={
     }
     redirect(303, `/projects/${encodeURIComponent(id)}`);
   },
-  agentProfiles:async event=>saveAgentProfiles(event,"workspace"),
+  agentProfile:async event=>saveAgentProfile(event,"workspace"),
   update:async event=>mutate(event,"update"),archive:async event=>mutate(event,"archive"),agentDefaults:async event=>mutate(event,"defaults"),
 };
 async function mutate({locals,params,request}:Parameters<NonNullable<Actions[string]>>[0],operation:"update"|"archive"|"defaults"){

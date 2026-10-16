@@ -40,9 +40,10 @@ In **Agent capability profiles**, workspace settings can select instructions,
 pinned skill revisions, tools, repository scope and budget ceilings for the planner
 and worker. Project settings can narrow those selections and add project
 instructions. Model choices remain separate. Leave inheritance enabled to use
-workspace or application capabilities. Expand **Effective settings for new executions**
-to see the resolved instructions, tools and budgets. If configuration cannot load,
-reload before changing profiles or submitting work.
+workspace or application capabilities. Each profile has its own form and save button.
+Review the current and proposed values in the confirmation dialog before saving.
+Returning to the form keeps your edits. If configuration cannot load, reload before
+changing profiles or submitting work.
 
 New research turns and tasks freeze their effective profiles. Inspect the frozen
 revision in research-run details or task details. Later settings changes apply to

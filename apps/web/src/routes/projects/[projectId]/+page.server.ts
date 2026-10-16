@@ -1,4 +1,4 @@
-import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
+import {saveAgentProfile} from "$lib/server/agent-profiles.js";
 import {projectView} from "$lib/project-navigation.js";
 import {loadAgentConfiguration,loadAgentModels} from "$lib/server/agent-configuration.js";
 import {submitDirectTask} from "$lib/server/tasks.js";
@@ -49,7 +49,7 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
   }
 };
 export const actions: Actions = {
-  agentProfiles:async event=>saveAgentProfiles(event,"project"),
+  agentProfile:async event=>saveAgentProfile(event,"project"),
   plannerSettings: async event => conversationAction(event,"settings"),
   cancelPlannerTurn: async event => conversationAction(event,"cancel"),
   createConversation: async event => conversationAction(event,"create"),
