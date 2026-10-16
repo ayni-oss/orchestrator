@@ -10,7 +10,9 @@ async function approved(page:Page){
  await page.goto("/projects/project:1");await page.getByRole("button",{name:"New conversation",exact:true}).click();
  await page.getByLabel("Title",{exact:true}).fill("Worker evidence");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
  await page.getByLabel("Message",{exact:true}).fill("Preserve API compatibility");await page.getByRole("button",{name:"Send message",exact:true}).click();
+ await page.getByRole("tab",{name:"Plans",exact:true}).click();
  await page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true}).click();
+ await page.getByRole("tab",{name:"Tasks",exact:true}).click();
  await expect(page.getByRole("region",{name:"Worker updates",exact:true})).toBeVisible();
 }
 test.beforeEach(async({request})=>{await request.post("http://127.0.0.1:50062/reset-project");await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");});
@@ -41,17 +43,19 @@ test("worker questions preserve provenance, drafts, and explicit follow-up appro
  await request.post("http://127.0.0.1:50062/worker-evidence?case=input_required");
  const updates=page.getByRole("region",{name:"Worker updates",exact:true});
  await expect(updates).toContainText("Which API compatibility behavior should be preserved?");
- await updates.getByRole("button",{name:"Discuss this question",exact:true}).click();
+ await updates.getByRole("link",{name:"Discuss this question",exact:true}).click();
  const composer=page.getByLabel("Message",{exact:true});await expect(composer).toBeFocused();
  await expect(composer).toHaveValue(/For task .*attempt .*approved plan version 1/u);
  await composer.fill((await composer.inputValue())+"Preserve API v1.");
  await request.post("http://127.0.0.1:50062/worker-evidence?case=input_required&version=100");
  await expect(composer).toHaveValue(/Preserve API v1\./u);
  await page.getByRole("button",{name:"Send message",exact:true}).click();
+ await page.getByRole("tab",{name:"Plans",exact:true}).click();
  await choose(page,"Plan version","Version 2 · Pending");
  await expect(page.getByRole("region",{name:"Plan review",exact:true})).toContainText("Preserve API v1.");
  await expect(page.getByRole("button",{name:"Approve version 2 and submit tasks",exact:true})).toBeVisible();
  await request.post("http://127.0.0.1:50062/restart-conversations");await page.reload();
+ await page.getByRole("tab",{name:"Tasks",exact:true}).click();
  await expect(updates.getByRole("region",{name:"Task attempt 1",exact:true})).toHaveCount(1);
  await page.setViewportSize({width:390,height:844});
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

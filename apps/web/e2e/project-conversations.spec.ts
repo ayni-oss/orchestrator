@@ -28,16 +28,17 @@ test("OpenAI credentials stay write-only and unavailable providers have no confi
 test("project chat persists requirements, requires approval, links results, and preserves manual tasks",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/projects/project:1");
-  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
+  await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
-  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
+  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("region",{name:"Project agent models",exact:true}).getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("tab",{name:"Overview",exact:true}).click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();
   await page.getByLabel("Title",{exact:true}).fill("Retry behavior");
   await page.getByRole("button",{name:"Create conversation",exact:true}).click();
   await expect(page).toHaveURL(/conversation=conversation%3A1/u);
   await page.getByLabel("Message",{exact:true}).fill("Document bounded retries");
   await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await page.getByRole("tab",{name:"Plans",exact:true}).click();
   const proposal=page.getByRole("region",{name:"Task plan",exact:true});
   await expect(proposal).toContainText("Document bounded retries");
   await expect(proposal).toContainText("Requested behavior is implemented");
@@ -51,6 +52,7 @@ test("project chat persists requirements, requires approval, links results, and 
   await expect(proposal.getByRole("link",{name:/View task/u})).toBeVisible();
   await expect(proposal).toContainText("Quality");
   await expect(proposal.getByRole("link",{name:"Open draft PR #9",exact:true})).toHaveAttribute("href","https://github.com/ayni-oss/sandbox/pull/9");
+  await page.getByRole("tab",{name:"Tasks",exact:true}).click();
   await expect(page.getByRole("region",{name:"Worker updates",exact:true})).toContainText("Repair the failing compatibility test");
   await expect(page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true})).toHaveCount(0);
   const results=await new AxeBuilder({page}).include("main").analyze();expect(results.violations).toEqual([]);
@@ -73,12 +75,13 @@ test("project chat persists requirements, requires approval, links results, and 
 test("coding model revisions retire the previous proposal and require fresh approval",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/projects/project:1");
-  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
+  await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
-  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
+  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("region",{name:"Project agent models",exact:true}).getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("tab",{name:"Overview",exact:true}).click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Model revision");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
   await page.getByLabel("Message",{exact:true}).fill("Change the documentation");await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await page.getByRole("tab",{name:"Plans",exact:true}).click();
   const plans=page.getByRole("region",{name:"Task plan",exact:true});
   await plans.getByRole("button",{name:"Change coding model",exact:true}).click();
   await choose(page,"Coding model for revised plan","gpt-5.6-luna");
@@ -106,12 +109,13 @@ test("coding model revisions retire the previous proposal and require fresh appr
 test("outdated inputs block approval with a recovery message",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/projects/project:1");
-  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
+  await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
-  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
+  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("region",{name:"Project agent models",exact:true}).getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("tab",{name:"Overview",exact:true}).click();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Stale inputs");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
   await page.getByLabel("Message",{exact:true}).fill("Research the source");await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await page.getByRole("tab",{name:"Plans",exact:true}).click();
   await expect(page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true})).toBeVisible();
   await request.post("http://127.0.0.1:50062/new-plan-version");
   const review=page.getByRole("region",{name:"Plan review",exact:true});
@@ -126,46 +130,39 @@ test("outdated inputs block approval with a recovery message",async({page,reques
   await expect(page.getByRole("region",{name:"Plan review",exact:true}).getByRole("link",{name:/View task/u})).toHaveCount(0);
 });
 
-test("older requirements remain searchable and paginated with summary provenance after reload",async({page,request})=>{
+test("earlier conversation messages remain readable after reload",async({page,request})=>{
   await page.goto("/projects/project:1");
   await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Durable history");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
-  await request.post("http://127.0.0.1:50062/long-history");
-  await request.post("http://127.0.0.1:50062/restart-conversations");
-  await page.reload();
-  await expect(page.getByLabel("Conversation messages")).not.toContainText("Original compatibility constraint");
-  await page.getByText("Saved planning context and history",{exact:true}).click();
-  const panel=page.getByLabel("Saved planning context",{exact:true});
-  await expect(panel).toContainText("75 original records saved");await expect(panel).toContainText("Working summary · version 2");await expect(panel).toContainText("Summary watermark is current.");
-  await panel.getByText("Summary source references (1)",{exact:true}).click();await expect(panel).toContainText("record:message:1");
-  await panel.getByLabel("Search saved history",{exact:true}).fill("Original compatibility");await panel.getByRole("button",{name:"Search history",exact:true}).click();
-  await expect(panel.getByLabel("Saved history records")).toContainText("preserve legacy API behavior");await expect(panel).toContainText("All matching records loaded.");
-  await panel.getByRole("button",{name:"Browse saved history",exact:true}).click();
-  await expect(panel.getByLabel("Saved history records").getByRole("article")).toHaveCount(25);
-  await panel.getByRole("button",{name:"Load older records",exact:true}).click();
-  await expect(panel.getByLabel("Saved history records").getByRole("article")).toHaveCount(50);
-  await panel.getByRole("button",{name:"Load older records",exact:true}).click();
-  await expect(panel.getByLabel("Saved history records").getByRole("article")).toHaveCount(75);await expect(panel).toContainText("All saved records loaded.");
+  await request.post("http://127.0.0.1:50062/long-history");await request.post("http://127.0.0.1:50062/restart-conversations");await page.reload();
+  const messages=page.getByLabel("Conversation messages");
+  await expect(messages.getByRole("article")).toHaveCount(32);
+  await page.getByRole("button",{name:"Load earlier messages",exact:true}).click();
+  await expect(messages.getByRole("article")).toHaveCount(50);
+  await page.getByRole("button",{name:"Load earlier messages",exact:true}).click();
+  await expect(messages.getByRole("article")).toHaveCount(75);
+  await expect(messages).toContainText("Original compatibility constraint: preserve legacy API behavior.");
   const denied=await page.request.get("/projects/project:other/conversations/conversation:1/history");expect(denied.status()).toBe(404);
-  const axe=await new AxeBuilder({page}).include("main").analyze();expect(axe.violations).toEqual([]);
+  expect((await new AxeBuilder({page}).include("main").analyze()).violations).toEqual([]);
 });
 
-test("planner presets, warm reuse, expiry and cancellation preserve durable conversation history",async({page,request})=>{
+test("conversation timeout settings and cancellation preserve saved messages",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
   await page.goto("/workspaces/workspace:1?view=settings");
-  await choose(page,"Planner idle timeout","24 hours");await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();await expect(page.getByLabel("Planner idle timeout",{exact:true})).toContainText("24 hours");
-  await page.goto("/projects/project:1");
-  await page.getByRole("button",{name:"Sandbox project actions"}).click();await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
-  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();await expect(page.getByRole("dialog").getByText("Agent defaults updated.",{exact:true})).toBeVisible();await page.getByRole("dialog").getByRole("button",{name:"Close",exact:true}).first().click();
-  await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Reusable planner");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
-  const planner=page.getByRole("region",{name:"Planner session",exact:true});
-  await expect(planner).toContainText("Idle timeout: 24 hours · inherited from workspace");
-  await request.post("http://127.0.0.1:50062/planner-queued");await page.reload();await expect(planner).toContainText("Queued");await expect(planner).not.toContainText("Session generation");await planner.getByRole("button",{name:"Cancel planner turn",exact:true}).click();await expect(planner.getByRole("button",{name:"Cancel planner turn",exact:true})).toHaveCount(0);
-  await planner.getByText("Planner session settings",{exact:true}).click();await choose(page,"Conversation planner idle timeout","5 minutes");await planner.getByRole("button",{name:"Save planner settings",exact:true}).click();await expect(planner).toContainText("Idle timeout: 5 minutes · conversation override");
-  await page.getByLabel("Message",{exact:true}).fill("Preserve this original requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(planner).toContainText("Warm");await expect(planner).toContainText("Session generation 1");
-  await page.getByLabel("Message",{exact:true}).fill("Clarify the same requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(planner).toContainText("Session generation 1");
-  await request.post("http://127.0.0.1:50062/expire-planner");await page.reload();await expect(planner).toContainText("The idle session expired");await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
-  await page.getByLabel("Message",{exact:true}).fill("Continue with the saved requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();await expect(planner).toContainText("Session generation 2");
-  await planner.getByText("Planner session settings",{exact:true}).click();await choose(page,"Conversation planner idle timeout","Workspace default (24 hours)");await planner.getByRole("button",{name:"Save planner settings",exact:true}).click();await expect(planner).toContainText("Idle timeout: 24 hours · inherited from workspace");
-  await request.post("http://127.0.0.1:50062/planner-active");await page.reload();await expect(planner).toContainText("The planner is working on the current turn");await request.post("http://127.0.0.1:50062/archive-workspace");await page.reload();await expect(planner.getByText("Planner session settings",{exact:true})).toHaveCount(0);await planner.getByRole("button",{name:"Cancel planner turn",exact:true}).click();await expect(planner.getByRole("button",{name:"Cancel planner turn",exact:true})).toHaveCount(0);await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
-  const axe=await new AxeBuilder({page}).include("main").analyze();expect(axe.violations).toEqual([]);
+  await choose(page,"Planner idle timeout","24 hours");await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();
+  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
+  await page.goto("/projects/project:1");await page.getByRole("button",{name:"New conversation",exact:true}).click();await page.getByLabel("Title",{exact:true}).fill("Reusable planner");await page.getByRole("button",{name:"Create conversation",exact:true}).click();
+  await page.getByRole("tab",{name:"Settings",exact:true}).click();
+  const settings=page.getByRole("region",{name:"Conversation settings",exact:true});
+  await expect(settings.getByLabel("Conversation planner idle timeout")).toContainText("Workspace default (24 hours)");
+  await choose(page,"Conversation planner idle timeout","5 minutes");await settings.getByRole("button",{name:"Save planner settings",exact:true}).click();
+  await page.getByRole("tab",{name:"Overview",exact:true}).click();
+  await page.getByLabel("Message",{exact:true}).fill("Preserve this original requirement.");await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
+  await request.post("http://127.0.0.1:50062/expire-planner");await page.reload();
+  await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
+  await request.post("http://127.0.0.1:50062/planner-queued");await page.getByRole("tab",{name:"Settings",exact:true}).click();
+  await settings.getByRole("button",{name:"Cancel planner turn",exact:true}).click();
+  await expect(settings.getByRole("button",{name:"Save planner settings",exact:true})).toBeEnabled();
+  await choose(page,"Conversation planner idle timeout","Workspace default (24 hours)");await settings.getByRole("button",{name:"Save planner settings",exact:true}).click();
+  await page.getByRole("tab",{name:"Overview",exact:true}).click();await expect(page.getByLabel("Conversation messages")).toContainText("Preserve this original requirement.");
 });

@@ -12,8 +12,10 @@
 		collapsible = "offcanvas",
 		class: className,
 		children,
+		onMobileClose,
 		...restProps
 	}: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+		onMobileClose?: () => void;
 		side?: "left" | "right";
 		variant?: "sidebar" | "floating" | "inset";
 		collapsible?: "offcanvas" | "icon" | "none";
@@ -35,7 +37,7 @@
 		{@render children?.()}
 	</div>
 {:else if sidebar.isMobile}
-	<Sheet.Root bind:open={() => sidebar.openMobile, (v) => sidebar.setOpenMobile(v)} {...restProps}>
+	<Sheet.Root bind:open={() => sidebar.openMobile, (v) => sidebar.setOpenMobile(v)} onOpenChangeComplete={open => { if (!open) onMobileClose?.(); }} {...restProps}>
 		<Sheet.Content
 			preventScroll={false}
 			bind:ref

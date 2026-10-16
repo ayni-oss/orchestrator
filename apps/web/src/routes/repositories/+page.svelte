@@ -6,11 +6,9 @@
   import { enhance } from "$lib/forms.js";
   import { Plus } from "@lucide/svelte";
   import type { PageProps } from "./$types";
-  import AyniIcon from "$lib/components/ayni-icon.svelte";
+  import RepositoryCard from "$lib/components/repository-card.svelte";
   import EmptyState from "$lib/components/empty-state.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
-  import InformationCard from "$lib/components/information-card.svelte";
-  import InformationTable from "$lib/components/information-table.svelte";
   import SubmitButton from "$lib/components/submit-button.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -68,20 +66,7 @@
     {:else}
       <div class="grid gap-4 lg:grid-cols-2">
         {#each data.summaries as summary (summary.repository.id)}
-          {@const item = summary.repository}
-          {@const readiness = !summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : item.useAyni === false ? "Ayni not enabled" : "Setup required"}
-          {@const repositoryHref = `/repositories/${encodeURIComponent(item.id)}`}
-          <a href={repositoryHref} aria-label={`Open repository ${item.displayName}`} class="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>div]:h-full [&>div]:transition-colors hover:[&>div]:bg-accent/30">
-          <InformationCard title={item.displayName} status={readiness} tone={summary.runtime.ready ? "success" : "warning"}>
-            {#snippet titleAccessory()}
-              {#if item.useAyni !== false}<AyniIcon class="size-5 shrink-0 text-muted-foreground" role="img" aria-label="Ayni enabled" />{/if}
-            {/snippet}
-            <InformationTable rows={[
-              { label: "Default branch", value: item.defaultBranch },
-              { label: "Runtimes", value: summary.runtime.complete ? `${summary.runtime.readyProfiles} of ${summary.runtime.operationalProfiles} operational runtimes ready` : "Unavailable" },
-            ]} />
-          </InformationCard>
-          </a>
+          <RepositoryCard {summary} />
         {/each}
       </div>
       {#if nextPageHref}<div class="flex justify-end"><Button href={nextPageHref} variant="outline">Next page</Button></div>{/if}

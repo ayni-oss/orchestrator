@@ -2,6 +2,7 @@ import type {AgentCapabilitiesDto,AgentConfigurationDto,BrowserErrorDto,Developm
 import type {ProjectView} from "../project-navigation.js";
 export type ConnectionChoice=Pick<Awaited<ReturnType<OrchestratorBff["listConnections"]>>[number],"id"|"displayName">;
 export type ModelCatalogues=Record<string,ProviderModelPageDto>;
+export type RepositorySummary=Awaited<ReturnType<OrchestratorBff["listRepositorySummaries"]>>["summaries"][number];
 /** Feature projection assembled by routes; no generated route types in components. */
 export interface ProjectViewData {
   project:ProjectDto|undefined; workspace:WorkspaceDto|undefined;

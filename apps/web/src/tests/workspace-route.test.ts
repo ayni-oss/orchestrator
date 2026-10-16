@@ -1,7 +1,7 @@
 import {beforeEach,describe,expect,it,vi} from "vitest";
 const bff=vi.hoisted(()=>({getWorkspace:vi.fn(),listProjects:vi.fn(),listConnections:vi.fn(),listProviderModels:vi.fn(),updateWorkspace:vi.fn(),archiveWorkspace:vi.fn(),createProject:vi.fn(),listWorkspaces:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[{id:"repository:1"},{id:"repository:outside"}],workspaceChoices:async()=>[],workspaceProjects:async()=>[{id:"project:1",workspaceId:"workspace:1"}]}));
+vi.mock("$lib/server/project-choices.js",()=>({repositorySummaryChoices:async()=>[{repository:{id:"repository:1"}},{repository:{id:"repository:outside"}}],workspaceChoices:async()=>[],workspaceProjects:async()=>[{id:"project:1",workspaceId:"workspace:1"}]}));
 import {load,actions} from "../routes/workspaces/[workspaceId]/+page.server.js";
 const workspace={id:"workspace:1",displayName:"Shared",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"3"};
 function event(fields:Record<string,string|string[]>={}){
@@ -11,7 +11,7 @@ function event(fields:Record<string,string|string[]>={}){
 beforeEach(()=>{vi.clearAllMocks();bff.getWorkspace.mockResolvedValue(workspace);bff.listConnections.mockResolvedValue([]);bff.listProjects.mockResolvedValue({projects:[{id:"project:1",workspaceId:workspace.id},{id:"project:other",workspaceId:"workspace:other"}],page:{nextPageToken:"next"}});});
 describe("workspace operator routes",()=>{
   it("keeps existing project links scoped to their workspace",async()=>{
-    expect(await load(event())).toMatchObject({workspace,projects:[{id:"project:1"}],nextPageToken:""});
+    expect(await load(event())).toMatchObject({workspace,repositorySummaries:[{repository:{id:"repository:1"}}],repositories:[{id:"repository:1"},{id:"repository:outside"}],projects:[{id:"project:1"}],nextPageToken:""});
   });
   it("updates repository membership with optimistic concurrency",async()=>{
     await actions.update!(event({displayName:"Renamed",repositoryConnectionIds:["repository:1","repository:outside"]}));

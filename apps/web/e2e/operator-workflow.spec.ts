@@ -92,8 +92,7 @@ test("projects retain identity through rename and archive", async ({ page }) => 
   await expect(page.getByRole("button",{name:"Done",exact:true})).toBeHidden();
   await page.getByRole("dialog").getByRole("button", { name: "Create project", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Payments", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Payments project actions" }).click();
-  await page.getByRole("menuitem", { name: "Project settings", exact: true }).click();
+  await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await page.getByLabel("Project name", { exact: true }).fill("Ledger");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Ledger", exact: true })).toBeVisible();
@@ -156,18 +155,15 @@ test("publication retry resumes retained final work and is distinct from task re
 test("project views separate planning, tasks and project settings on desktop and mobile", async ({ page }) => {
   await page.setViewportSize({ width: 1185, height: 1071 });
   await page.goto("/projects/project:1");
-  await expect(page.getByRole("heading", {name:"Conversations",exact:true})).toBeVisible();
+  await expect(page.getByRole("button", {name:"New conversation",exact:true})).toBeVisible();
   await expect(page.getByRole("heading", {name:"Tasks",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button", {name:"Save settings",exact:true})).toHaveCount(0);
-  await page.getByRole("navigation",{name:"Project views"}).getByRole("link",{name:"Tasks",exact:true}).click();
+  await page.getByRole("tablist",{name:"Project views"}).getByRole("tab",{name:"Tasks",exact:true}).click();
   await expect(page.getByRole("heading", {name:"Tasks",exact:true})).toBeVisible();
-  await expect(page.getByRole("heading", {name:"Conversations",exact:true})).toHaveCount(0);
-  await page.getByRole("button", {name:/project actions$/u}).click();
-  await page.getByRole("menuitem", {name:"Project settings",exact:true}).click();
+  await expect(page.getByRole("tab", {name:"Tasks",exact:true})).toHaveAttribute("aria-selected","true");
+  await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await expect(page.getByRole("region",{name:"Project repositories",exact:true})).toContainText("ayni-oss/sandbox");
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("button",{name:/project actions$/u})).toBeFocused();
+  await page.getByRole("tab",{name:"Overview",exact:true}).click();
   await page.setViewportSize({width:375,height:720});
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

@@ -19,6 +19,7 @@ test("shell remains operable at a narrow viewport with reduced motion", async ({
   await page.getByRole("button", { name: "Toggle color theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/u);
   await page.getByRole("button",{name:"Toggle Sidebar",exact:true}).first().click();
+  await page.getByRole("button",{name:"Config",exact:true}).click();
   await expect(page.getByRole("link",{name:/^Source control/u})).toBeVisible();
   await page.getByRole("link",{name:/^Source control/u}).click();
   await page.keyboard.press("Escape");

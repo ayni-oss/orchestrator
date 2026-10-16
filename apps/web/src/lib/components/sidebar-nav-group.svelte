@@ -6,7 +6,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
 
   let { title, icon, status, children }: { title: string; icon: Snippet; status?: { status: string; description: string }; children: Snippet } = $props();
-  let open = $state(true);
+  let open = $state(false);
   const sidebar = Sidebar.useSidebar();
 
   function expandSidebar() {

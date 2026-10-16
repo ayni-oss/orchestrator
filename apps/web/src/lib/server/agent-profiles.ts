@@ -21,18 +21,20 @@ export function parseProfile(form:FormData,role:ProfileRole,capabilities:AgentCa
   }
   return {instructions,skills,allowedTools,repositoryIds,maxModelCalls,deadlineSeconds};
 }
-export async function saveAgentProfiles(event:RequestEvent,scope:"workspace"|"project") {
+export async function saveAgentProfile(event:RequestEvent,scope:"workspace"|"project") {
   const {locals,params,request}=event,form=await request.formData();
   const idempotencyKey=text(form,"idempotencyKey",36),expectedResourceVersion=text(form,"resourceVersion",20);
   if(!idempotencyKey||!isCanonicalIdentifier(idempotencyKey)||!expectedResourceVersion)return fail(400,{error:{message:"Reload agent profiles and try again.",requestId:locals.requestId}});
-  let plannerProfile,workerProfile;
-  try{const capabilities=await getBff().getAgentCapabilities(requestContext(locals));plannerProfile=parseProfile(form,"planner",capabilities);workerProfile=parseProfile(form,"worker",capabilities);}catch{return fail(400,{error:{message:"Select allowed tools, valid budgets, and a revision for every skill.",requestId:locals.requestId}});}
+  const role=form.get("role");
+  if(role!=="planner"&&role!=="worker")return fail(400,{error:{message:"Choose a planner or worker profile.",requestId:locals.requestId}});
+  let profile;
+  try{const capabilities=await getBff().getAgentCapabilities(requestContext(locals));profile=parseProfile(form,role,capabilities);}catch{return fail(400,{error:{message:"Select allowed tools, valid budgets, and a revision for every skill.",requestId:locals.requestId}});}
   try{
     const bff=getBff(),ctx=requestContext(locals);
     const current=scope==="workspace"?await bff.getWorkspace(params.workspaceId!,ctx):await bff.getProject(params.projectId!,ctx);
-    const agentDefaults={projectConnectionId:"",projectModel:"",codingConnectionId:"",codingModel:"",...current.agentDefaults,plannerProfile,workerProfile};
+    const agentDefaults={projectConnectionId:"",projectModel:"",codingConnectionId:"",codingModel:"",...current.agentDefaults,[`${role}Profile`]:profile};
     if(scope==="workspace")await bff.updateWorkspace({workspaceId:current.id,idempotencyKey,expectedResourceVersion,displayName:current.displayName,agentDefaults},ctx);
     else await bff.updateProject({projectId:current.id,idempotencyKey,expectedResourceVersion,displayName:current.displayName,agentDefaults},ctx);
-    return {success:"Agent profiles saved. New executions freeze these selections; admitted work keeps its profile."};
+    return {success:`${role==="planner"?"Planner":"Worker"} profile saved. New executions use these settings; existing work keeps its profile.`};
   }catch(error){const mapped=safeError(error,locals.requestId);return fail(mapped.status,{error:mapped});}
 }

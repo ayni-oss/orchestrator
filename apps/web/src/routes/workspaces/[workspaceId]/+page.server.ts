@@ -1,5 +1,5 @@
 import {loadAgentConfiguration,loadAgentModels} from "$lib/server/agent-configuration.js";
-import {saveAgentProfiles} from "$lib/server/agent-profiles.js";
+import {saveAgentProfile} from "$lib/server/agent-profiles.js";
 import {superValidate,message} from "sveltekit-superforms";
 import {zod} from "sveltekit-superforms/adapters";
 import {projectSchema} from "$lib/project-schema.js";
@@ -9,17 +9,17 @@ import type {ProviderModelPageDto} from "@ayni-orchestrator/bff/server";
 import {getBff} from "$lib/server/bff.js";
 import {actionKey,requestContext,safeError,text} from "$lib/server/page.js";
 import {isCanonicalIdentifier} from "$lib/server/validation.js";
-import {projectRepositoryChoices,workspaceProjects} from "$lib/server/project-choices.js";
+import {repositorySummaryChoices,workspaceProjects} from "$lib/server/project-choices.js";
 import {workspaceSchema} from "$lib/workspace-schema.js";
 export const load:PageServerLoad=async({locals,params,depends,setHeaders})=>{
-  depends("app:workspaces","app:projects","app:repositories","app:connections");setHeaders({"cache-control":"no-store"});
+  depends("app:workspaces","app:projects","app:repositories","app:runtimes","app:connections");setHeaders({"cache-control":"no-store"});
   const base={idempotencyKey:actionKey(),requestId:locals.requestId,form:await superValidate({idempotencyKey:actionKey(),workspaceId:params.workspaceId},zod(projectSchema))};
   try{
     const bff=getBff(),ctx=requestContext(locals),workspace=await bff.getWorkspace(params.workspaceId,ctx);
-    const [repositories,projects,agentModels]=await Promise.all([projectRepositoryChoices(ctx),workspaceProjects(workspace.id,ctx),loadAgentModels(ctx).catch(()=>({connections:[],catalogues:{} as Record<string,ProviderModelPageDto>}))]);
+    const [repositorySummaries,projects,agentModels]=await Promise.all([repositorySummaryChoices(ctx),workspaceProjects(workspace.id,ctx),loadAgentModels(ctx).catch(()=>({connections:[],catalogues:{} as Record<string,ProviderModelPageDto>}))]);
     const configuration=await loadAgentConfiguration("workspace",workspace.id,ctx);
-    return {...base,...configuration,workspace,repositories,projects,nextPageToken:"",connections:agentModels.connections,catalogues:agentModels.catalogues};
-  }catch(error){return {...base,agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,workspace:undefined,repositories:[],projects:[],nextPageToken:"",connections:[],catalogues:{} as Record<string,ProviderModelPageDto>,error:safeError(error,locals.requestId)};}
+    return {...base,...configuration,workspace,repositorySummaries:repositorySummaries.filter(summary=>workspace.repositoryConnectionIds.includes(summary.repository.id)),repositories:repositorySummaries.map(summary=>summary.repository),projects,nextPageToken:"",connections:agentModels.connections,catalogues:agentModels.catalogues};
+  }catch(error){return {...base,agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,workspace:undefined,repositorySummaries:[],repositories:[],projects:[],nextPageToken:"",connections:[],catalogues:{} as Record<string,ProviderModelPageDto>,error:safeError(error,locals.requestId)};}
 };
 export const actions:Actions={
   create: async ({ locals, request, params }) => {
@@ -37,7 +37,7 @@ export const actions:Actions={
     }
     redirect(303, `/projects/${encodeURIComponent(id)}`);
   },
-  agentProfiles:async event=>saveAgentProfiles(event,"workspace"),
+  agentProfile:async event=>saveAgentProfile(event,"workspace"),
   update:async event=>mutate(event,"update"),archive:async event=>mutate(event,"archive"),agentDefaults:async event=>mutate(event,"defaults"),
 };
 async function mutate({locals,params,request}:Parameters<NonNullable<Actions[string]>>[0],operation:"update"|"archive"|"defaults"){
