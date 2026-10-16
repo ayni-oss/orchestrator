@@ -245,7 +245,7 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             repository,
             mut cursor,
             registry,
-            selected_revision,
+            mut selected_revision,
             certificate,
         }) = self.select_profile(id).await?
         else {
@@ -295,6 +295,12 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
             &lock,
             &runtime.platform,
         )?;
+        // A changed main must stop admitting tasks before resolving/building its
+        // environment, even when that preparation takes several reconciliation passes.
+        selected_revision = Some(
+            self.observe_source_selection(id, &head, &lock_identity, selected_revision, &registry)
+                .await?,
+        );
         runtime = runtime.for_lock_fingerprint(&lock_identity.fingerprint)?;
         if !self
             .freeze_preparation(
@@ -363,6 +369,40 @@ impl<E: ExecutionBackend> RuntimeReconciler<E> {
         } else {
             self.begin_observation(&observation, &mut cursor).await
         }
+    }
+
+    async fn observe_source_selection(
+        &self,
+        id: &str,
+        head: &str,
+        lock_identity: &crate::profiles::ayni::environment::LockIdentity,
+        previous_revision: Option<String>,
+        registry: &v1::RuntimeRegistrySelection,
+    ) -> Result<String, &'static str> {
+        // Pending operations retain their old credentials/destination for cleanup;
+        // the new source must bind the repository's current desired destination.
+        let desired = self.configured_profile(id).await?;
+        let repository_image =
+            ayni_orchestrator_application::execution_settings::image_repository(&desired.image)
+                .ok_or("runtime_image_invalid")?;
+        let mut command = crate::profiles::ayni::runtime_selection::command(
+            id,
+            head,
+            &lock_identity.fingerprint,
+            repository_image,
+            "",
+            &lock_identity.ayni_version,
+        )
+        .map_err(|_| "runtime_revision_failed")?;
+        // The resolved infrastructure identity is selected after preparation.
+        command.identity.source_digest = None;
+        let registry = registry.clone();
+        self.with_database(move |store| {
+            store
+                .observe_runtime_source(&command, previous_revision.as_deref(), &registry)
+                .map_err(|_| "runtime_source_changed")
+        })
+        .await
     }
 
     async fn resume_profile_cleanup(

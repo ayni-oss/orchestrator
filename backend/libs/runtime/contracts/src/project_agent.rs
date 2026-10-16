@@ -50,6 +50,9 @@ pub struct ResearchProposal {
     pub scope: String,
     #[serde(default)]
     pub dependency_environment_impact: String,
+    /// Human approval of this proposal authorizes only these dependency inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment_change: Option<ayni_orchestrator_domain::EnvironmentChangeAuthorization>,
     pub repository_id: String,
     pub revision: String,
     pub runtime_profile_id: String,

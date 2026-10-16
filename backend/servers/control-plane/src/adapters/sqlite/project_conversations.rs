@@ -468,6 +468,13 @@ impl CleanStore {
             })
             .collect::<Vec<_>>();
         for proposal in result.proposals {
+            if proposal.environment_change.as_ref().is_some_and(|scope| {
+                !scope.is_valid()
+                    || proposal.dependency_environment_impact.trim().is_empty()
+                    || proposal.action != "create_task"
+            }) {
+                return Err(CleanStoreError::InvalidTransition);
+            }
             if proposal.findings.len() > 16384
                 || proposal.scope.len() > 16384
                 || proposal.dependency_environment_impact.len() > 16384
@@ -899,6 +906,11 @@ fn proposal_request(
         change_constraints: Some(v1::ChangeConstraints {
             protected_paths: p.forbidden_paths.clone(),
             allow_test_edits: p.allow_test_edits,
+            environment_change: p.environment_change.as_ref().map(|scope| {
+                v1::EnvironmentChangeAuthorization {
+                    dependency_paths: scope.dependency_paths.clone(),
+                }
+            }),
         }),
         coding_turns: Some(p.coding_turns),
         deadline: Some(prost_types::Duration {

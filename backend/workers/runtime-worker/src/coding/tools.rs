@@ -171,6 +171,11 @@ impl Tool for AyniVerify {
     async fn call(&self, _: &mut ToolContext, args: VerifyArgs) -> io::Result<String> {
         self.0.authorize(Self::NAME)?;
         let _guard = self.0.serial.lock().await;
+        if let Some(unavailable) =
+            super::environment::prepare(&self.0, self.0.coding_time()?).await?
+        {
+            return summary(&unavailable);
+        }
         let report = crate::profiles::ayni::invoke(
             &self.0.spec.execution,
             &self.0.workspace,
@@ -201,6 +206,11 @@ impl Tool for AyniCheck {
     async fn call(&self, _: &mut ToolContext, _: CheckArgs) -> io::Result<String> {
         self.0.authorize(Self::NAME)?;
         let _guard = self.0.serial.lock().await;
+        if let Some(unavailable) =
+            super::environment::prepare(&self.0, self.0.coding_time()?).await?
+        {
+            return summary(&unavailable);
+        }
         let report = crate::profiles::ayni::invoke(
             &self.0.spec.execution,
             &self.0.workspace,

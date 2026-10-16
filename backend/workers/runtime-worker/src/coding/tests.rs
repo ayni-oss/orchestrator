@@ -50,6 +50,7 @@ pub(super) fn fixture(workspace: &Path) -> io::Result<WorkerSpec> {
         constraints: ChangeConstraints {
             protected_paths: vec!["protected.txt".into()],
             allow_test_edits: true,
+            environment_change: None,
         },
         provider_credentials: None,
         model: "test-model".into(),

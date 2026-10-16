@@ -42,9 +42,23 @@ pub fn changed_paths(spec: &WorkerSpec, workspace: &Path) -> io::Result<Vec<Stri
     for path in &paths {
         if !ayni_orchestrator_domain::repository_path_is_valid(path)
             || spec.constraints.protecting_path(path).is_some()
-            || matches!(path.as_str(), ".ayni.lock" | ".ayni.toml")
+            || path == ".ayni.toml"
+            || (path == ".ayni.lock" && spec.constraints.environment_change.is_none())
         {
             return Err(io::Error::other("task changes a protected path"));
+        }
+        if spec
+            .constraints
+            .environment_change
+            .as_ref()
+            .is_some_and(|scope| {
+                ayni_orchestrator_domain::environment_dependency_path(path)
+                    && !scope.allows_dependency_path(path)
+            })
+        {
+            return Err(io::Error::other(
+                "task changes a protected dependency path outside reviewed environment scope",
+            ));
         }
         if !spec.constraints.allow_test_edits
             && (test_path(path)

@@ -25,7 +25,15 @@ export interface PageResponse {
   snapshotCursor: string;
 }
 
-/** ChangeConstraints freezes path and test-edit authority for a development task. */
+/**
+ * Exact dependency files reviewed for local preparation and derived lock regeneration.
+ * This scope never authorizes policy, trust, image publication or runtime activation.
+ */
+export interface EnvironmentChangeAuthorization {
+  dependencyPaths: string[];
+}
+
+/** ChangeConstraints freezes path, test-edit and environment-change authority. */
 export interface ChangeConstraints {
   /**
    * protected_paths contains at most 100 normalized repository-relative paths,
@@ -33,6 +41,8 @@ export interface ChangeConstraints {
    */
   protectedPaths: string[];
   allowTestEdits: boolean;
+  /** Absent preserves ordinary-task protection of .ayni.lock and .ayni.toml. */
+  environmentChange?: EnvironmentChangeAuthorization | undefined;
 }
 
 /** ResourceFailure is a bounded, credential-free failure attached to a resource. */
@@ -248,8 +258,81 @@ export const PageResponse: MessageFns<PageResponse> = {
   },
 };
 
+function createBaseEnvironmentChangeAuthorization(): EnvironmentChangeAuthorization {
+  return { dependencyPaths: [] };
+}
+
+export const EnvironmentChangeAuthorization: MessageFns<EnvironmentChangeAuthorization> = {
+  encode(message: EnvironmentChangeAuthorization, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.dependencyPaths) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EnvironmentChangeAuthorization {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseEnvironmentChangeAuthorization();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.dependencyPaths.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): EnvironmentChangeAuthorization {
+    return {
+      dependencyPaths: globalThis.Array.isArray(object?.dependencyPaths)
+        ? object.dependencyPaths.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.dependency_paths)
+        ? object.dependency_paths.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: EnvironmentChangeAuthorization): unknown {
+    const obj: any = {};
+    if (message.dependencyPaths?.length) {
+      obj.dependencyPaths = message.dependencyPaths;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<EnvironmentChangeAuthorization>): EnvironmentChangeAuthorization {
+    return EnvironmentChangeAuthorization.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<EnvironmentChangeAuthorization>): EnvironmentChangeAuthorization {
+    const message = createBaseEnvironmentChangeAuthorization();
+    message.dependencyPaths = object.dependencyPaths?.map((e) => e) || [];
+    return message;
+  },
+};
+
 function createBaseChangeConstraints(): ChangeConstraints {
-  return { protectedPaths: [], allowTestEdits: false };
+  return { protectedPaths: [], allowTestEdits: false, environmentChange: undefined };
 }
 
 export const ChangeConstraints: MessageFns<ChangeConstraints> = {
@@ -259,6 +342,9 @@ export const ChangeConstraints: MessageFns<ChangeConstraints> = {
     }
     if (message.allowTestEdits !== false) {
       writer.uint32(16).bool(message.allowTestEdits);
+    }
+    if (message.environmentChange !== undefined) {
+      EnvironmentChangeAuthorization.encode(message.environmentChange, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -292,6 +378,14 @@ export const ChangeConstraints: MessageFns<ChangeConstraints> = {
             message.allowTestEdits = reader.bool();
             continue;
           }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.environmentChange = EnvironmentChangeAuthorization.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -316,6 +410,11 @@ export const ChangeConstraints: MessageFns<ChangeConstraints> = {
         : isSet(object.allow_test_edits)
         ? globalThis.Boolean(object.allow_test_edits)
         : false,
+      environmentChange: isSet(object.environmentChange)
+        ? EnvironmentChangeAuthorization.fromJSON(object.environmentChange)
+        : isSet(object.environment_change)
+        ? EnvironmentChangeAuthorization.fromJSON(object.environment_change)
+        : undefined,
     };
   },
 
@@ -327,6 +426,9 @@ export const ChangeConstraints: MessageFns<ChangeConstraints> = {
     if (message.allowTestEdits !== false) {
       obj.allowTestEdits = message.allowTestEdits;
     }
+    if (message.environmentChange !== undefined) {
+      obj.environmentChange = EnvironmentChangeAuthorization.toJSON(message.environmentChange);
+    }
     return obj;
   },
 
@@ -337,6 +439,9 @@ export const ChangeConstraints: MessageFns<ChangeConstraints> = {
     const message = createBaseChangeConstraints();
     message.protectedPaths = object.protectedPaths?.map((e) => e) || [];
     message.allowTestEdits = object.allowTestEdits ?? false;
+    message.environmentChange = (object.environmentChange !== undefined && object.environmentChange !== null)
+      ? EnvironmentChangeAuthorization.fromPartial(object.environmentChange)
+      : undefined;
     return message;
   },
 };

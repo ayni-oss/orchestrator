@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-domain = { path = "../../../../libs/domain" }
 ayni-orchestrator-oci = { path = "../../../../libs/oci" }
 prost.workspace = true
 prost-types.workspace = true

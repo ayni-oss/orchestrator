@@ -225,6 +225,7 @@ fn task_request(profile: &RuntimeFixture, key: &str) -> v1::CreateDevelopmentTas
             change_constraints: Some(v1::ChangeConstraints {
                 protected_paths: vec!["policy".into()],
                 allow_test_edits: false,
+                environment_change: None,
             }),
             deadline: Some(prost_types::Duration {
                 seconds: 3_600,

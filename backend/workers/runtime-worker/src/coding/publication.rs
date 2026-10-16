@@ -434,8 +434,37 @@ fn description(context: &Context, journal: &Journal, result: &WorkerResult) -> S
         .evidence
         .as_ref()
         .map_or("unavailable", |v| v.signals_digest.as_str());
+    let environment = if context.spec.constraints.environment_change.is_some() {
+        recovery::read_json::<serde_json::Value>(
+            &context.output.join("evidence/environment-change.json"),
+        ).map_or_else(|_| String::new(), |evidence| format!(
+                "\n\n## Reviewed environment change\n\nBaseline runtime: `{}`\n\nProposed lock digest: `{}`\n\nLock regeneration: {}. Local dependency preparation: unavailable. Proposed runtime certification: not attempted.\n\n{}",
+                escape(
+                    evidence["baseline_runtime_digest"]
+                        .as_str()
+                        .unwrap_or("unavailable")
+                ),
+                escape(
+                    evidence["proposed_lock_digest"]
+                        .as_str()
+                        .unwrap_or("unavailable")
+                ),
+                escape(
+                    evidence["lock_regeneration"]
+                        .as_str()
+                        .unwrap_or("unavailable")
+                ),
+                escape(
+                    evidence["finding"]
+                        .as_str()
+                        .unwrap_or(super::environment::UNAVAILABLE)
+                ),
+            ))
+    } else {
+        String::new()
+    };
     format!(
-        "{}\n\n## Request\n\n{}\n\n## Implementation\n\n{}\n\nFinal commit: `{}`\n\n## Full quality check\n\nThis worker-run final check is independent of agent tool calls described above. Its result is the authoritative quality status for this draft.\n\nOutcome: {:?}\n\nCompleted targets: {} · skipped: {} · warnings: {} · failures: {}\n\nCoding turns: {} / {} · repair sessions: {} / {}\n\nEvidence digest: `{}`\n\n{}",
+        "{}\n\n## Request\n\n{}\n\n## Implementation\n\n{}\n\nFinal commit: `{}`\n\n## Full quality check\n\nThis worker-run final check is independent of agent tool calls described above. Its result is the authoritative quality status for this draft.\n\nOutcome: {:?}\n\nCompleted targets: {} · skipped: {} · warnings: {} · failures: {}\n\nCoding turns: {} / {} · repair sessions: {} / {}\n\nEvidence digest: `{}`\n\n{}{}",
         marker(journal),
         escape(&context.spec.request),
         escape(&context.state.try_lock().map_or_else(
@@ -453,7 +482,8 @@ fn description(context: &Context, journal: &Journal, result: &WorkerResult) -> S
         result.quality_round,
         context.spec.limits.quality_repair_limit,
         evidence,
-        findings
+        findings,
+        environment
     )
 }
 #[cfg(test)]

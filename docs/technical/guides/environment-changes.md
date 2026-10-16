@@ -1,20 +1,44 @@
 # Reviewed environment changes
 
-Accepted product direction, not implemented. [Issue #129](https://github.com/ayni-oss/orchestrator/issues/129)
-owns research, acceptance criteria, and implementation.
+Dependency proposal scope is implemented. [Issue #129](https://github.com/ayni-oss/orchestrator/issues/129)
+tracks the full reviewed-environment lifecycle, including supported local candidate
+checks and separately authorized policy changes.
 
 ## Outcome
 
 An authorized task can update dependencies and propose a matching Ayni environment without weakening its own quality or trust policy.
 The repository owner reviews the change; post-merge reconciliation activates a verified runtime shared by all consuming projects.
-Ordinary tasks currently protect `.ayni.toml` and `.ayni.lock`; those protections remain in force.
+Ordinary tasks protect `.ayni.toml` and `.ayni.lock`. An explicitly reviewed
+dependency task can regenerate the derived `.ayni.lock`; `.ayni.toml` remains
+immutable for every coding task.
 
-## Proposed lifecycle
+## Reviewed dependency scope
+
+The planner supplies optional `environment_change.dependency_paths` alongside the
+required dependency/environment impact assessment. This is an exact, bounded,
+unique set of supported native manifests and lockfiles; it cannot name policy,
+trust, worker internals or protected paths. Both the task proposal and task details
+show it before approval. Approval freezes that scope with the baseline source,
+runtime and policy; persisted requests without it retain ordinary protection.
+
+The worker regenerates the lock through the pinned supported Ayni CLI. It cannot
+change native dependency inputs outside the approved scope or weaken policy/trust
+while doing so. Unexpected needs require a revised plan and new approval.
+
+The pinned Ayni 0.15.0 contract does not provide a local candidate preparation and
+full-check mode against a lock different from its certified runtime. Such a
+proposal receives **Unavailable** full-check evidence and an explicit draft-PR
+explanation. It never presents baseline runtime certification as candidate
+certification, changes verification requirements, or builds a pre-merge image.
+Supported local candidate checks remain follow-up work rather than an invented
+CLI contract.
+
+## Target lifecycle
 
 1. Admit explicit environment-change scope and freeze the baseline source, policy, runtime, and supported Ayni tooling.
 2. Change the native dependency lock, such as `Cargo.lock`, and any required source.
 3. Run supported `ayni env lock` tooling to regenerate the derived `.ayni.lock`.
-4. Install dependencies locally in the worker's working environment and run applicable checks against the proposed source.
+4. Where supported tooling permits, install dependencies locally in the worker's working environment and run applicable checks against the proposed source; otherwise retain explicit unavailable evidence.
 5. Create a draft PR containing the source and lock changes with truthful check evidence, then require repository-owner review and merge.
 6. On the next repository sync, reconcile the actual merged inputs. Reuse a verified compatible artifact or build, verify, and activate a new shared runtime.
 
@@ -53,3 +77,15 @@ The UI must expose the failing preparation stage, shared impact, and corrective 
   A new VM backend or separated task-stage topology is not a prerequisite for this lifecycle.
 - [Assurance boundaries](../architecture/assurance.md) separates environment certification, quality evidence, independent assessment, and merge approval.
 - [Managed runtime execution](managed-runtime-execution.md) remains the current build and activation contract.
+
+## Local validation
+
+`dev/ctl test environment-changes WORKER_IMAGE RUNTIME_IMAGE` runs the pinned
+Ayni CLI through the actual worker sandbox in a disposable Docker Desktop
+Kubernetes pod. It verifies that native dependency edits change the derived lock,
+regeneration is repeatable, and policy and baseline runtime metadata stay unchanged.
+The images must already be available locally; the fixture never builds or publishes
+an image. It prints separate baseline/proposed lock and runtime metadata digests.
+This fixture exercises the supported CLI and sandbox boundary, not a complete
+model/provider task or certification of the proposed runtime. Worker tests cover
+scope rejection, unavailable regeneration, final commit evidence, and replay guards.

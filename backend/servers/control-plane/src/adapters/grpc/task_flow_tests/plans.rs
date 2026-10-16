@@ -134,7 +134,8 @@ async fn research_plan(
                 .map(|((repository_id, profile_id, _, _), request)| ResearchProposal {
                     findings: "Both examples need updating".into(),
                     scope: "Documentation examples".into(),
-                    dependency_environment_impact: "No environment change required".into(),
+                    dependency_environment_impact: if request == "Update the first example" { "Update Cargo dependencies and regenerate the derived environment lock" } else { "No environment change required" }.into(),
+                    environment_change: (request == "Update the first example").then(|| ayni_orchestrator_domain::EnvironmentChangeAuthorization { dependency_paths: vec!["Cargo.toml".into(), "Cargo.lock".into()] }),
                     repository_id: repository_id.clone(),
                     revision: SOURCE.into(),
                     runtime_profile_id: profile_id.clone(),
@@ -193,6 +194,7 @@ async fn concurrent_plan_approvals_admit_exactly_one_reviewed_task_set_and_repla
         &[(&profile, &artifact), (&second_profile, &second_artifact)],
     )
     .await?;
+    assert_reviewed_environment_scope(&reviewed)?;
     let plan = reviewed.plan.as_ref().ok_or("plan missing")?;
     assert_eq!(plan.versions.len(), 1);
     assert_eq!(plan.versions[0].state, "pending");
@@ -251,6 +253,27 @@ async fn concurrent_plan_approvals_admit_exactly_one_reviewed_task_set_and_repla
         .development_tasks;
     assert_eq!(after_restart, listed);
     restarted.stop().await
+}
+
+fn assert_reviewed_environment_scope(reviewed: &v1::ProjectConversation) -> TestResult {
+    let scopes = reviewed
+        .proposals
+        .iter()
+        .map(|p| {
+            p.request
+                .as_ref()
+                .and_then(|r| r.change_constraints.as_ref())
+                .and_then(|c| c.environment_change.as_ref())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        scopes[0]
+            .ok_or("reviewed dependency scope missing")?
+            .dependency_paths,
+        ["Cargo.toml", "Cargo.lock"]
+    );
+    assert!(scopes[1].is_none());
+    Ok(())
 }
 
 fn assert_reviewed_tasks(

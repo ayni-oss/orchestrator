@@ -30,4 +30,4 @@ it asserts `execution_mode: host` and does not build repository environment imag
 
 The official builder identity is resolved through the [supported builder catalog](repository-builders.md).
 Builder provenance, environment certification, and task evidence have different subjects; see [assurance boundaries](../architecture/assurance.md).
-The [environment-change flow](../guides/environment-changes.md) is planned work and does not relax current task lock protection.
+The [environment-change flow](../guides/environment-changes.md) permits reviewed dependency proposals and derived lock regeneration. Policy stays immutable; candidate checks report unavailable when the proposed lock differs from the certified baseline.

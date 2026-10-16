@@ -80,13 +80,14 @@ Its execution design belongs to [research #128](https://github.com/ayni-oss/orch
 
 ## Environment-changing tasks
 
-Ordinary tasks currently cannot change `.ayni.toml` or `.ayni.lock`.
-The agreed extension allows explicitly authorized native dependency changes, derived lock regeneration,
-local dependency preparation and code checks, and repository-owner review before merge.
+Ordinary tasks cannot change `.ayni.toml` or `.ayni.lock`.
+Explicitly reviewed dependency scope permits native dependency changes and derived lock regeneration,
+with repository-owner review before merge. Policy stays immutable. The pinned CLI cannot certify a
+proposed lock in the baseline runtime, so candidate full-check evidence is explicitly unavailable.
 The worker does not build a proposed runtime image before merge.
 Post-merge reconciliation activates a verified environment for all projects using that repository runtime.
 
-The [environment-change design](environment-changes.md) records the proposed lifecycle and current limits.
+The [environment-change design](environment-changes.md) records the implemented dependency proposal scope, target lifecycle and current limits.
 [Issue #129](https://github.com/ayni-oss/orchestrator/issues/129) owns design and implementation acceptance.
 Pre-merge evidence records the worker's execution runtime separately from the proposed lock.
 Certification of the new runtime image belongs to post-merge preparation.

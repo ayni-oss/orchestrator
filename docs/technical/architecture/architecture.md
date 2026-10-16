@@ -1,7 +1,7 @@
 # Architecture
 
 The [product flow](../guides/ayni-product-flow.md) defines shared repository/runtime ownership.
-[Assurance](assurance.md) and [environment changes](../guides/environment-changes.md) distinguish accepted direction from current execution.
+[Assurance](assurance.md) and [environment changes](../guides/environment-changes.md) describe current proposal support and the remaining candidate-check boundary.
 
 The [event platform](event-platform.md) describes implemented authenticated reporting,
 transactional acceptance, JetStream delivery and diagnostic tracing.

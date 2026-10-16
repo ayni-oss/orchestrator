@@ -39,6 +39,11 @@ pub fn task_command(
             .map(|c| ChangeConstraints {
                 protected_paths: c.protected_paths.clone(),
                 allow_test_edits: c.allow_test_edits,
+                environment_change: c.environment_change.as_ref().map(|scope| {
+                    ayni_orchestrator_domain::EnvironmentChangeAuthorization {
+                        dependency_paths: scope.dependency_paths.clone(),
+                    }
+                }),
             }),
         coding_turns: requested.coding_turns,
         deadline: requested.deadline.as_ref().map(|d| DeadlineDuration {

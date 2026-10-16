@@ -270,7 +270,7 @@ export function mapTaskState(value: DevelopmentTaskState): DevelopmentTaskStateD
 }
 
 export function mapChangeConstraints(value: ChangeConstraints): ChangeConstraintsDto {
-  return { protectedPaths: value.protectedPaths.map(String), allowTestEdits: value.allowTestEdits };
+  return { protectedPaths: value.protectedPaths.map(String), allowTestEdits: value.allowTestEdits, ...(value.environmentChange ? {environmentChange: {dependencyPaths: [...value.environmentChange.dependencyPaths]}} : {}) };
 }
 
 export function mapDevelopmentSnapshot(value: DevelopmentSnapshot): DevelopmentSnapshotDto {
@@ -374,6 +374,7 @@ export function toProtoTaskRequest(value: DevelopmentTaskInputDto): DevelopmentT
     changeConstraints: {
       protectedPaths: value.changeConstraints.protectedPaths.map(String),
       allowTestEdits: value.changeConstraints.allowTestEdits,
+      ...(value.changeConstraints.environmentChange ? {environmentChange: {dependencyPaths: [...value.changeConstraints.environmentChange.dependencyPaths]}} : {}),
     },
     codingTurns: value.codingTurns,
     ...(deadlineSeconds === undefined

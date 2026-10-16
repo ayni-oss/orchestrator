@@ -31,6 +31,88 @@ pub fn scope_violations_are_bounded(violations: &[String]) -> bool {
             .is_some_and(|total| total <= MAX_SCOPE_VIOLATION_BYTES)
 }
 
+/// Exact dependency files approved for local preparation and derived lock regeneration.
+/// Policy and runtime publication authority are deliberately excluded.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentChangeAuthorization {
+    pub dependency_paths: Vec<String>,
+}
+
+impl EnvironmentChangeAuthorization {
+    /// Return whether this exact dependency path was reviewed.
+    #[must_use]
+    pub fn allows_dependency_path(&self, path: &str) -> bool {
+        self.dependency_paths
+            .iter()
+            .any(|approved| approved == path)
+    }
+
+    /// Require a bounded set of supported native manifests and lockfiles.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        !self.dependency_paths.is_empty()
+            && self.dependency_paths.len() <= 100
+            && self.dependency_paths.iter().map(String::len).sum::<usize>() <= 16_384
+            && self.dependency_paths.iter().collect::<BTreeSet<_>>().len()
+                == self.dependency_paths.len()
+            && self.dependency_paths.iter().all(|path| {
+                environment_dependency_path(path)
+                    && !path.split('/').any(|part| {
+                        matches!(
+                            part,
+                            ".git" | ".ayni" | ".orchestrator" | ".ayni.toml" | ".ayni.lock"
+                        )
+                    })
+            })
+    }
+}
+
+/// Recognize native dependency inputs for the supported language adapters.
+#[must_use]
+pub fn environment_dependency_path(path: &str) -> bool {
+    if !repository_path_is_valid(path) {
+        return false;
+    }
+    let name = path.rsplit('/').next().unwrap_or_default();
+    matches!(
+        name,
+        "Cargo.toml"
+            | "Cargo.lock"
+            | "package.json"
+            | "package-lock.json"
+            | "npm-shrinkwrap.json"
+            | "pnpm-lock.yaml"
+            | "pnpm-workspace.yaml"
+            | "yarn.lock"
+            | "bun.lock"
+            | "bun.lockb"
+            | "go.mod"
+            | "go.sum"
+            | "go.work"
+            | "go.work.sum"
+            | "pyproject.toml"
+            | "uv.lock"
+            | "poetry.lock"
+            | "Pipfile"
+            | "Pipfile.lock"
+            | "requirements.txt"
+            | "requirements.in"
+            | "build.gradle"
+            | "build.gradle.kts"
+            | "settings.gradle"
+            | "settings.gradle.kts"
+            | "gradle.properties"
+            | "gradle.lockfile"
+            | "libs.versions.toml"
+            | "gradle-wrapper.properties"
+            | "pom.xml"
+    ) || (name.starts_with("requirements-")
+        && std::path::Path::new(name)
+            .extension()
+            .is_some_and(|extension| matches!(extension.to_str(), Some("txt" | "in"))))
+}
+
 /// Immutable limits on the files and test code a development task may change.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +123,9 @@ pub struct ChangeConstraints {
     /// Whether changes to dedicated or inline Rust tests are authorized.
     #[serde(default)]
     pub allow_test_edits: bool,
+    /// Explicitly reviewed dependency scope; absent preserves protected lock inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment_change: Option<EnvironmentChangeAuthorization>,
 }
 
 impl ChangeConstraints {
@@ -58,6 +143,16 @@ impl ChangeConstraints {
         }
         if self.protected_paths.iter().map(String::len).sum::<usize>() > 16_384 {
             return Err(ChangeConstraintsError::ProtectedPathsTooLarge);
+        }
+        if self.environment_change.as_ref().is_some_and(|scope| {
+            !scope.is_valid()
+                || scope
+                    .dependency_paths
+                    .iter()
+                    .any(|path| self.protecting_path(path).is_some())
+                || self.protecting_path(".ayni.lock").is_some()
+        }) {
+            return Err(ChangeConstraintsError::InvalidEnvironmentScope);
         }
         let mut unique = BTreeSet::new();
         for path in &self.protected_paths {
@@ -102,6 +197,9 @@ pub fn repository_path_is_valid(path: &str) -> bool {
 /// A submitted task's change constraints are unsafe or exceed supported bounds.
 #[derive(Debug, Error)]
 pub enum ChangeConstraintsError {
+    /// The reviewed environment scope is empty, unsafe, conflicting or oversized.
+    #[error("invalid reviewed environment dependency scope")]
+    InvalidEnvironmentScope,
     /// More protected paths were supplied than the bounded task model permits.
     #[error("at most 100 protected paths are allowed, got {0}")]
     TooManyProtectedPaths(usize),
@@ -125,6 +223,7 @@ mod tests {
         let constraints = ChangeConstraints {
             protected_paths: vec!["tests".into(), "src/generated.rs".into()],
             allow_test_edits: false,
+            environment_change: None,
         };
         assert!(constraints.validate().is_ok());
         assert_eq!(constraints.protecting_path("tests/api.rs"), Some("tests"));
@@ -146,6 +245,7 @@ mod tests {
                 ChangeConstraints {
                     protected_paths: vec![path.into()],
                     allow_test_edits: false,
+                    environment_change: None,
                 }
                 .validate()
                 .is_err(),
@@ -156,10 +256,54 @@ mod tests {
             ChangeConstraints {
                 protected_paths: vec!["tests".into(), "tests".into()],
                 allow_test_edits: false,
+                environment_change: None,
             }
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn environment_authorization_defaults_to_denied_and_requires_exact_safe_dependencies()
+    -> Result<(), serde_json::Error> {
+        use super::EnvironmentChangeAuthorization;
+        let ordinary: ChangeConstraints =
+            serde_json::from_str(r#"{"protected_paths":[],"allow_test_edits":false}"#)?;
+        assert!(ordinary.environment_change.is_none());
+        assert!(
+            serde_json::to_value(&ordinary)?
+                .get("environment_change")
+                .is_none()
+        );
+        let scope = EnvironmentChangeAuthorization {
+            dependency_paths: vec!["Cargo.toml".into(), "Cargo.lock".into()],
+        };
+        assert!(scope.is_valid());
+        assert!(scope.allows_dependency_path("Cargo.lock"));
+        assert!(!scope.allows_dependency_path("nested/Cargo.lock"));
+        for paths in [
+            vec![],
+            vec![".ayni.toml"],
+            vec![".ayni.lock"],
+            vec!["../Cargo.lock"],
+            vec![".git/Cargo.lock"],
+            vec!["src/main.rs"],
+            vec!["Cargo.lock", "Cargo.lock"],
+        ] {
+            assert!(
+                !EnvironmentChangeAuthorization {
+                    dependency_paths: paths.into_iter().map(str::to_owned).collect()
+                }
+                .is_valid()
+            );
+        }
+        let constraints = ChangeConstraints {
+            environment_change: Some(scope),
+            protected_paths: vec!["Cargo.lock".into()],
+            ..ordinary
+        };
+        assert!(constraints.validate().is_err());
+        Ok(())
     }
 
     #[test]

@@ -380,6 +380,21 @@ fn constraints(value: Option<&v1::ChangeConstraints>) -> Result<(), ValidationEr
             "change_constraints",
         ));
     };
+    let domain = ayni_orchestrator_domain::ChangeConstraints {
+        protected_paths: value.protected_paths.clone(),
+        allow_test_edits: value.allow_test_edits,
+        environment_change: value.environment_change.as_ref().map(|scope| {
+            ayni_orchestrator_domain::EnvironmentChangeAuthorization {
+                dependency_paths: scope.dependency_paths.clone(),
+            }
+        }),
+    };
+    if domain.validate().is_err() {
+        return Err(ValidationError::new(
+            v1::ErrorReason::InvalidInput,
+            "change_constraints",
+        ));
+    }
     if value.protected_paths.len() > 100
         || value.protected_paths.iter().map(String::len).sum::<usize>() > 16_384
         || value.protected_paths.iter().any(|path| {
@@ -483,6 +498,56 @@ pub use projects::*;
 mod tests {
     use super::*;
 
+    #[test]
+    fn reviewed_environment_scope_rejects_unsafe_empty_and_protected_dependencies()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut request = task_request();
+        let constraints = request
+            .request
+            .as_mut()
+            .ok_or("request missing")?
+            .change_constraints
+            .as_mut()
+            .ok_or("constraints missing")?;
+        constraints.environment_change = Some(v1::EnvironmentChangeAuthorization {
+            dependency_paths: vec!["Cargo.toml".into(), "Cargo.lock".into()],
+        });
+        assert!(create_development_task(&request).is_ok());
+        for paths in [
+            vec![],
+            vec![".ayni.toml"],
+            vec![".ayni.lock"],
+            vec!["../Cargo.lock"],
+            vec!["src/main.rs"],
+            vec!["Cargo.lock", "Cargo.lock"],
+        ] {
+            request
+                .request
+                .as_mut()
+                .ok_or("request missing")?
+                .change_constraints
+                .as_mut()
+                .ok_or("constraints missing")?
+                .environment_change = Some(v1::EnvironmentChangeAuthorization {
+                dependency_paths: paths.into_iter().map(str::to_owned).collect(),
+            });
+            assert!(create_development_task(&request).is_err());
+        }
+        let constraints = request
+            .request
+            .as_mut()
+            .ok_or("request missing")?
+            .change_constraints
+            .as_mut()
+            .ok_or("constraints missing")?;
+        constraints.environment_change = Some(v1::EnvironmentChangeAuthorization {
+            dependency_paths: vec!["Cargo.lock".into()],
+        });
+        constraints.protected_paths.push("Cargo.lock".into());
+        assert!(create_development_task(&request).is_err());
+        Ok(())
+    }
+
     fn github_provider() -> v1::RepositoryProvider {
         v1::RepositoryProvider {
             provider: Some(v1::repository_provider::Provider::Github(
@@ -517,6 +582,7 @@ mod tests {
                 change_constraints: Some(v1::ChangeConstraints {
                     protected_paths: vec!["docs/history".to_owned()],
                     allow_test_edits: true,
+                    environment_change: None,
                 }),
                 deadline: Some(prost_types::Duration {
                     seconds: 300,

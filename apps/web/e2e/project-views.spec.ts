@@ -5,7 +5,7 @@ async function choose(page:Page,label:string,option:string){
   await page.getByLabel(label,{exact:true}).click();
   await page.getByRole("option",{name:option,exact:true}).click();
 }
-async function startPlan(page:Page){
+async function startPlan(page:Page,message="Make the outcome easy to follow"){
   await page.goto("/projects/project:1");
   await page.getByRole("button",{name:"Sandbox project actions"}).click();
   await page.getByRole("menuitem",{name:"Project settings",exact:true}).click();
@@ -19,7 +19,7 @@ async function startPlan(page:Page){
   await page.getByRole("button",{name:"New conversation",exact:true}).click();
   await page.getByLabel("Title",{exact:true}).fill("Project layout");
   await page.getByRole("button",{name:"Create conversation",exact:true}).click();
-  await page.getByLabel("Message",{exact:true}).fill("Make the outcome easy to follow");
+  await page.getByLabel("Message",{exact:true}).fill(message);
   await page.getByRole("button",{name:"Send message",exact:true}).click();
   await expect(page.getByRole("region",{name:"Plan review",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Sending…",exact:true})).toHaveCount(0);
@@ -118,4 +118,15 @@ test("settings expose ownership, saving, failure, and focus recovery",async({pag
   await expect(settings.getByLabel("Goal and planning instructions",{exact:true})).toHaveValue("Retain my unsaved planning instructions");
   await expect(settings.getByRole("button",{name:"Save settings",exact:true})).toBeEnabled();
   await page.keyboard.press("Escape");await expect(actions).toBeFocused();
+});
+
+
+test("reviewed dependency scope stays visible through approval and task details",async({page})=>{
+  await startPlan(page,"Update Cargo dependencies and regenerate the derived environment lock");
+  const review=page.getByRole("region",{name:"Plan review",exact:true});
+  await expect(review).toContainText("Regenerate .ayni.lock for: Cargo.toml, Cargo.lock");
+  await expect(review).toContainText("Policy and trust settings remain protected.");
+  await review.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true}).click();
+  await page.getByRole("link",{name:/View task/u}).click();
+  await expect(page.locator("main")).toContainText("Regenerate .ayni.lock for: Cargo.toml, Cargo.lock");
 });

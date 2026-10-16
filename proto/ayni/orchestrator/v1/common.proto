@@ -21,12 +21,20 @@ message PageResponse {
   uint64 snapshot_cursor = 2;
 }
 
-// ChangeConstraints freezes path and test-edit authority for a development task.
+// Exact dependency files reviewed for local preparation and derived lock regeneration.
+// This scope never authorizes policy, trust, image publication or runtime activation.
+message EnvironmentChangeAuthorization {
+  repeated string dependency_paths = 1;
+}
+
+// ChangeConstraints freezes path, test-edit and environment-change authority.
 message ChangeConstraints {
   // protected_paths contains at most 100 normalized repository-relative paths,
   // each at most 512 bytes and at most 16,384 aggregate UTF-8 bytes.
   repeated string protected_paths = 1;
   bool allow_test_edits = 2;
+  // Absent preserves ordinary-task protection of .ayni.lock and .ayni.toml.
+  EnvironmentChangeAuthorization environment_change = 3;
 }
 
 // ResourceFailure is a bounded, credential-free failure attached to a resource.

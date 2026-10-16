@@ -63,8 +63,19 @@ request, constraints and limits.
 closes that version without starting work; **Request revision** closes it for
 revision, then send a message describing the changes you want. A newer plan version
 needs its own approval. If source or runtime identity changed, the plan explains
-what needs refreshing; request new research before approving again. Dependency and
-environment findings describe impact and do not authorize environment changes.
+what needs refreshing; request new research before approving again.
+
+For dependency updates that need a new environment lock, each proposed task lists
+**Environment changes** with the exact dependency manifests and lockfiles. Approval
+authorizes those files and regeneration of `.ayni.lock`. Quality policy and trust
+settings in `.ayni.toml` remain protected. An impact assessment alone grants no
+additional permission; request a revised plan for an unplanned environment change.
+
+The worker proposes the change in a draft PR using its original runtime. When the
+proposed lock differs from that runtime, full-check evidence is **Unavailable**:
+the draft explains that the candidate environment has not been certified. Review
+and merge the PR before repository reconciliation prepares the matching shared
+runtime for future tasks.
 
 Conversations and task links survive reconnects and planner restarts. Use
 **Saved planning context and history** to inspect the working summary and search earlier messages,

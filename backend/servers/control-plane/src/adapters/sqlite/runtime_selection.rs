@@ -11,6 +11,27 @@ pub(crate) fn selection_error(error: SelectionError<CleanStoreError>) -> CleanSt
     }
 }
 impl CleanStore {
+    /// Fence the previous source before slow builder resolution or trust preparation.
+    pub(crate) fn observe_runtime_source(
+        &mut self,
+        command: &SelectRuntimeRevision,
+        observed_revision: Option<&str>,
+        observed_registry: &v1::RuntimeRegistrySelection,
+    ) -> Result<String, CleanStoreError> {
+        let profile = self.runtime_profile(&command.profile_id)?;
+        if profile.active_revision_id.as_deref() != observed_revision
+            || self.runtime_registry(&profile)? != *observed_registry
+        {
+            return Err(CleanStoreError::StaleVersion);
+        }
+        let revision =
+            self.runtime_profile_revision(observed_revision.ok_or(CleanStoreError::CorruptState)?)?;
+        if revision.repository_revision == command.source_revision.as_str() {
+            return Ok(revision.id);
+        }
+        self.select_observed_runtime_revision(command, observed_revision, observed_registry)
+    }
+
     pub(crate) fn select_observed_runtime_revision(
         &mut self,
         command: &SelectRuntimeRevision,
