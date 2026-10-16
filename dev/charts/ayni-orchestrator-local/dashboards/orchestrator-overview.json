@@ -5,11 +5,33 @@
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "links": [],
+  "links": [
+    {
+      "title": "System Overview",
+      "type": "link",
+      "url": "/d/ayni-orchestrator-tasks-resources",
+      "includeVars": false,
+      "keepTime": true
+    },
+    {
+      "title": "Execution Traces",
+      "type": "link",
+      "url": "/d/ayni-orchestrator-traces",
+      "includeVars": false,
+      "keepTime": true
+    },
+    {
+      "title": "Event Delivery",
+      "type": "link",
+      "url": "/d/ayni-orchestrator-jetstream",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
   "panels": [
     {
       "id": 1,
-      "title": "Clean-v1 schema",
+      "title": "Monitoring targets",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -18,24 +40,43 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 8,
-        "h": 6
+        "w": 24,
+        "h": 5
       },
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -46,13 +87,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "orchestrator_clean_v1_schema_info",
-          "legendFormat": "version",
-          "range": true,
+          "expr": "up{job=~\"ayni-orchestrator-.*\"}",
+          "legendFormat": "{{job}}",
+          "range": false,
+          "instant": true,
           "refId": "A"
         }
       ],
-      "description": "The active durable schema marker; clean-v1 reports version 1.",
+      "description": "1 = reachable, 0 = scrape failed. Reachability does not establish application readiness.",
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -71,131 +113,7 @@
     },
     {
       "id": 2,
-      "title": "gRPC admissions",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 8,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (decision,code) (increase(orchestrator_grpc_admissions_total[$__range]))",
-          "legendFormat": "{{decision}} \u00b7 {{code}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "description": "Bounded admission decisions over the selected interval."
-    },
-    {
-      "id": 3,
-      "title": "gRPC completions",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 8,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (rpc,code) (increase(orchestrator_grpc_completions_total[$__range]))",
-          "legendFormat": "{{rpc}} \u00b7 {{code}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "description": "Completed product RPCs by canonical status over the selected interval."
-    },
-    {
-      "id": 18,
-      "title": "Retained storage pressure",
+      "title": "CPU usage",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -203,7 +121,460 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "cores",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}[$__rate_interval]))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 3,
+      "title": "CPU throttled periods",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.3
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod, container) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}[$__rate_interval])) / sum by (pod, container) (rate(container_cpu_cfs_periods_total{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}[$__rate_interval]))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Fraction of CPU quota periods throttled; this is not a percentage of CPU time."
+    },
+    {
+      "id": 4,
+      "title": "Memory usage / limit",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (pod, container) (container_memory_usage_bytes{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}) / (max by (pod, container) (container_spec_memory_limit_bytes{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}) > 0)",
+          "legendFormat": "{{pod}} / {{container}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Total charged memory including file cache and tmpfs, divided by the container limit. High usage alone is not proof of pressure; compare with working set, RSS and failures."
+    },
+    {
+      "id": 5,
+      "title": "Memory working set and RSS",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (pod, container) (container_memory_working_set_bytes{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "{{pod}} / {{container}} working set",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (pod, container) (container_memory_rss{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "{{pod}} / {{container}} RSS",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": ""
+    },
+    {
+      "id": 6,
+      "title": "OOM kills",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod, container) (increase(container_oom_events_total{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}[$__range]))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Container OOM events observed in the selected interval. A stalled service can have zero OOM events."
+    },
+    {
+      "id": 7,
+      "title": "Memory allocation failures",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (pod, container) (increase(container_memory_failcnt{namespace=\"__AYNI_NAMESPACE__\",container!=\"\",container!=\"POD\"}[$__range]))",
+          "legendFormat": "{{pod}} / {{container}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Kernel-reported limit hits, when supported by cAdvisor. This counter is not a complete memory-pressure measurement."
+    },
+    {
+      "id": 8,
+      "title": "Storage used",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
         "w": 12,
         "h": 8
       },
@@ -264,8 +635,8 @@
       "description": "Uses per-PVC kubelet volume stats when Docker Desktop exports them; otherwise shows Docker Desktop root-disk usage, which includes retained local PVC data."
     },
     {
-      "id": 19,
-      "title": "Retained storage growth",
+      "id": 9,
+      "title": "Storage growth",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -273,7 +644,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 6,
+        "y": 29,
         "w": 12,
         "h": 8
       },
@@ -332,25 +703,148 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 10,
+      "title": "API admission decisions",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (decision,code) (increase(orchestrator_grpc_admissions_total[$__range]))",
+          "legendFormat": "{{decision}} \u00b7 {{code}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "description": "Bounded admission decisions over the selected interval."
+    },
+    {
+      "id": 11,
+      "title": "API request outcomes",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (rpc,code) (increase(orchestrator_grpc_completions_total[$__range]))",
+          "legendFormat": "{{rpc}} \u00b7 {{code}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "description": "Completed product RPCs by canonical status over the selected interval."
     }
   ],
   "refresh": "15s",
   "schemaVersion": 41,
   "tags": [
-    "ayni-orchestrator",
-    "clean-v1",
+    "ayni",
     "local"
   ],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Ayni Orchestrator \u00b7 Clean-v1 control plane",
+  "title": "System Overview",
   "uid": "ayni-orchestrator-tasks-resources",
   "version": 1
 }

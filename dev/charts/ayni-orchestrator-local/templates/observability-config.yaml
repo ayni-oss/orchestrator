@@ -19,6 +19,12 @@ data:
         static_configs:
           - targets: ["jetstream:7777"]
       {{- end }}
+      - job_name: ayni-orchestrator-otel-collector
+        static_configs:
+          - targets: ["otel-collector:8888"]
+      - job_name: ayni-orchestrator-jaeger
+        static_configs:
+          - targets: ["jaeger:8888"]
       - job_name: ayni-orchestrator-control-plane
         metrics_path: /metrics
         static_configs:
@@ -37,7 +43,7 @@ data:
             target_label: node
         metric_relabel_configs:
           - source_labels: [__name__]
-            regex: container_cpu_usage_seconds_total|container_memory_working_set_bytes
+            regex: container_cpu_(usage_seconds_total|cfs_periods_total|cfs_throttled_periods_total)|container_memory_(working_set_bytes|usage_bytes|rss|failcnt)|container_spec_memory_limit_bytes|container_oom_events_total
             action: keep
           - source_labels: [namespace]
             regex: {{ .Release.Namespace }}
@@ -94,6 +100,8 @@ metadata:
 data:
   orchestrator-overview.json: |
 {{ .Files.Get "dashboards/orchestrator-overview.json" | replace "__AYNI_NAMESPACE__" .Release.Namespace | nindent 4 }}
+  execution-traces.json: |
+{{ .Files.Get "dashboards/execution-traces.json" | nindent 4 }}
   {{- if .Values.jetstream.enabled }}
   jetstream.json: |
 {{ .Files.Get "dashboards/jetstream.json" | nindent 4 }}

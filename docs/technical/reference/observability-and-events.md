@@ -16,7 +16,9 @@ Changing exporter configuration requires a control-plane restart. Existing Jobs
 retain their launch configuration.
 
 The local stack sends verification traces through an OpenTelemetry Collector to
-Jaeger. Grafana provisions both Prometheus and Jaeger: use Explore and select
+Jaeger. Grafana provisions both Prometheus and Jaeger. The **Execution Traces** dashboard
+searches retained spans by service, attributes and duration, alongside Collector
+receive/export/failure metrics. Use Explore and select
 Jaeger to search `runtime-worker` or `control-plane` traces. Jaeger retains up to
 1,000 traces in memory; a Jaeger restart loses them. Jaeger 2.20 retains the HTTP search endpoints required by pinned Grafana 12.1.1;
 Jaeger 2.21 and later require a compatible datasource upgrade. These diagnostic limits are

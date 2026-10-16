@@ -1,0 +1,411 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "System Overview",
+      "type": "link",
+      "url": "/d/ayni-orchestrator-tasks-resources",
+      "includeVars": false,
+      "keepTime": true
+    },
+    {
+      "title": "Execution Traces",
+      "type": "link",
+      "url": "/d/ayni-orchestrator-traces",
+      "includeVars": false,
+      "keepTime": true
+    },
+    {
+      "title": "Event Delivery",
+      "type": "link",
+      "url": "/d/ayni-orchestrator-jetstream",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Trace collection",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Traces come from the existing **control-plane** and **runtime-worker** instrumentation. Filter with `stage=agent.tool`, `outcome=failed` or a task/run identifier, then select a trace to inspect its spans. **Jaeger keeps at most 1,000 traces in memory; restarting Jaeger clears them.** Empty results mean no matching retained traces in the selected time range, not that the service is healthy."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Trace pipeline targets",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "up{job=~\"ayni-orchestrator-(otel-collector|jaeger)\"}",
+          "legendFormat": "{{job}}",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "description": "",
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "id": 3,
+      "title": "Spans received and exported",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(otelcol_receiver_accepted_spans{job=\"ayni-orchestrator-otel-collector\"}[$__rate_interval])) or (0 * min(up{job=\"ayni-orchestrator-otel-collector\"} == 1))",
+          "legendFormat": "received",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(otelcol_exporter_sent_spans{job=\"ayni-orchestrator-otel-collector\"}[$__rate_interval])) or (0 * min(up{job=\"ayni-orchestrator-otel-collector\"} == 1))",
+          "legendFormat": "exported",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Collector traffic across all services, independent of the trace search filter. Exported spans were delivered to Jaeger; these counters do not measure retention."
+    },
+    {
+      "id": 4,
+      "title": "Span delivery failures",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(otelcol_exporter_send_failed_spans{job=\"ayni-orchestrator-otel-collector\"}[$__rate_interval])) or (0 * min(up{job=\"ayni-orchestrator-otel-collector\"} == 1))",
+          "legendFormat": "export failures",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(otelcol_receiver_refused_spans{job=\"ayni-orchestrator-otel-collector\"}[$__rate_interval])) or (0 * min(up{job=\"ayni-orchestrator-otel-collector\"} == 1))",
+          "legendFormat": "receiver refusals",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(otelcol_exporter_enqueue_failed_spans{job=\"ayni-orchestrator-otel-collector\"}[$__rate_interval])) or (0 * min(up{job=\"ayni-orchestrator-otel-collector\"} == 1))",
+          "legendFormat": "enqueue failures",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Failed export attempts can be retried. Receiver refusals and enqueue failures can indicate dropped telemetry."
+    },
+    {
+      "id": 5,
+      "title": "Recent traces",
+      "type": "table",
+      "description": "Up to 50 matching traces from Jaeger. Click the trace ID to open its span timeline in Explore. Search filters apply here; pipeline panels cover all services.",
+      "datasource": {
+        "type": "jaeger",
+        "uid": "jaeger"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "jaeger",
+            "uid": "jaeger"
+          },
+          "queryType": "search",
+          "service": "$service",
+          "tags": "$tags",
+          "minDuration": "$minDuration",
+          "limit": 50
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Start time",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": [
+    "ayni",
+    "local"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "custom",
+        "query": "control-plane,runtime-worker",
+        "current": {
+          "text": "runtime-worker",
+          "value": "runtime-worker"
+        },
+        "options": [
+          {
+            "text": "control-plane",
+            "value": "control-plane",
+            "selected": false
+          },
+          {
+            "text": "runtime-worker",
+            "value": "runtime-worker",
+            "selected": true
+          }
+        ]
+      },
+      {
+        "name": "tags",
+        "label": "Span filters (e.g. stage=agent.tool)",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "minDuration",
+        "label": "Minimum duration (e.g. 1s)",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Execution Traces",
+  "uid": "ayni-orchestrator-traces",
+  "version": 1,
+  "description": "Existing OpenTelemetry spans collected through the Collector and retained by Jaeger. Select a service, filter by span attributes, and open a trace to inspect its timings. Only instrumented operations appear."
+}
