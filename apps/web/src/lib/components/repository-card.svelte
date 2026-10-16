@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { OrchestratorBff } from "@ayni-orchestrator/bff/server";
+  import type { RepositorySummary } from "$lib/server/view-types.js";
   import AyniIcon from "$lib/components/ayni-icon.svelte";
   import InformationCard from "$lib/components/information-card.svelte";
   import InformationTable from "$lib/components/information-table.svelte";
 
-  let { summary }: { summary: Awaited<ReturnType<OrchestratorBff["listRepositorySummaries"]>>["summaries"][number] } = $props();
+  let { summary }: { summary: RepositorySummary } = $props();
   const item = $derived(summary.repository);
   const readiness = $derived(!summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : item.useAyni === false ? "Ayni not enabled" : "Setup required");
   const repositoryHref = $derived(`/repositories/${encodeURIComponent(item.id)}`);
