@@ -86,6 +86,13 @@ task or verification Jobs. Never delete retained task data to make validation pa
 
 The local observability stack uses Prometheus for application and kubelet/cAdvisor
 metrics, plus an OpenTelemetry Collector and Jaeger for verification traces.
+Grafana reserves 256 MiB of memory with a 512 MiB limit and a 500m CPU limit.
+Its Go memory target is 384 MiB, leaving headroom for the executable, native
+allocations and its 64 MiB in-memory data volume. A tight container limit can
+cause repeated file-page reclaim and CPU throttling, making the UI and health
+probes time out even without an OOM kill. Check container memory events and
+pressure alongside restart counts when diagnosing an unresponsive local UI.
+
 Grafana provides the shared UI: select the Jaeger datasource in Explore for traces
 and Prometheus for metrics. The chart no longer deploys kube-state-metrics or
 plots provisioned PVC requests; kubelet volume measurements and the existing

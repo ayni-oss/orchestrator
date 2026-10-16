@@ -155,14 +155,16 @@ grafana:
       readOnly: false
   resources:
     requests:
-      cpu: 25m
-      memory: 96Mi
-    limits:
-      cpu: 250m
+      cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   env:
     # Bound Go scheduler parallelism within the local sub-core CPU quota.
     GOMAXPROCS: "1"
+    # Leave room for the binary, native allocations and the tmpfs data volume.
+    GOMEMLIMIT: "384MiB"
     GF_ANALYTICS_REPORTING_ENABLED: "false"
     GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     GF_AUTH_ANONYMOUS_ENABLED: "true"
