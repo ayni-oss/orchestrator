@@ -30,7 +30,6 @@
           <Dropdown.Item onclick={() => selectWorkspace(workspace.id)}>{workspace.displayName}{#if workspace.id === data.workspace?.id}<Check class="ml-auto size-4" />{/if}</Dropdown.Item>
         {/each}
         <Dropdown.Separator />
-        <Dropdown.Item onclick={() => goto(workspaceUrl)}>Manage current workspace</Dropdown.Item>
         <Dropdown.Item onclick={() => goto("/_old/workspaces")}><Plus size={15} /> Create workspace</Dropdown.Item>
       </Dropdown.Content>
     </Dropdown.Root>
