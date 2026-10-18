@@ -26,7 +26,10 @@ The `Ayni` configuration section refers specifically to CLI runtime certificates
 
 The workspace Projects view starts at `/`; `?workspace=<id>` selects its scope.
 It uses real workspace/project data and the existing validated creation flow.
-Project details and workspace configuration temporarily link into `/_old`.
+Project details temporarily link into `/_old`. Workspace settings live at
+`/workspaces/<id>/settings` inside the shared workspace shell; the header menu,
+sidebar, and workspace switcher all link there. Legacy settings bookmarks redirect
+to this canonical route.
 
 The previous application is preserved in `src/routes/_old/`, including its layout,
 server loads/actions, update streams, and GitHub manifest setup callbacks. Its

@@ -11,7 +11,8 @@ import {actionKey,requestContext,safeError,text} from "$lib/server/page.js";
 import {isCanonicalIdentifier} from "$lib/server/validation.js";
 import {repositorySummaryChoices,workspaceProjects} from "$lib/server/project-choices.js";
 import {workspaceSchema} from "$lib/workspace-schema.js";
-export const load:PageServerLoad=async({locals,params,depends,setHeaders})=>{
+export const load:PageServerLoad=async({locals,params,depends,setHeaders,url})=>{
+  if(url.searchParams.get("view")==="settings") redirect(307,`/workspaces/${encodeURIComponent(params.workspaceId)}/settings`);
   depends("app:workspaces","app:projects","app:repositories","app:runtimes","app:connections");setHeaders({"cache-control":"no-store"});
   const base={idempotencyKey:actionKey(),requestId:locals.requestId,form:await superValidate({idempotencyKey:actionKey(),workspaceId:params.workspaceId},zod(projectSchema))};
   try{
