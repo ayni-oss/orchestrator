@@ -138,15 +138,15 @@ impl Failure {
             Self::MissingFile => "Required file or executable is missing",
             Self::PermissionDenied => "Filesystem access denied",
             Self::InvalidInput => "Input is invalid",
-            Self::GitIndex => "Git could not reset the worker index",
-            Self::GitStage => "Git could not stage worker files",
-            Self::GitDiff => "Git could not inspect worker changes",
-            Self::GitCommit => "Git could not create the worker commit",
-            Self::GitSource => "Git source operation failed",
-            Self::GitIgnored => "Git rejected an explicitly staged ignored path",
-            Self::GitIndexLocked => "Git index is locked by another operation",
-            Self::GitIdentity => "Git commit identity is unavailable",
-            Self::GitPermissions => "Git cannot write to the checkout",
+            Self::GitIndex
+            | Self::GitStage
+            | Self::GitDiff
+            | Self::GitCommit
+            | Self::GitSource
+            | Self::GitIgnored
+            | Self::GitIndexLocked
+            | Self::GitIdentity
+            | Self::GitPermissions => self.git_message(),
             Self::NoChanges => "Work has no changed paths or exceeds path limits",
             Self::ProtectedPath => "Work changes a protected path",
             Self::TestEdits => "Work changes tests without authorization",
@@ -164,6 +164,20 @@ impl Failure {
             }
             Self::DependencyScope => "Dependency change is outside the approved environment scope",
             Self::Internal => "Worker operation failed",
+        }
+    }
+
+    const fn git_message(self) -> &'static str {
+        match self {
+            Self::GitIndex => "Git could not reset the worker index",
+            Self::GitStage => "Git could not stage worker files",
+            Self::GitDiff => "Git could not inspect worker changes",
+            Self::GitCommit => "Git could not create the worker commit",
+            Self::GitIgnored => "Git rejected an explicitly staged ignored path",
+            Self::GitIndexLocked => "Git index is locked by another operation",
+            Self::GitIdentity => "Git commit identity is unavailable",
+            Self::GitPermissions => "Git cannot write to the checkout",
+            _ => "Git source operation failed",
         }
     }
 }
