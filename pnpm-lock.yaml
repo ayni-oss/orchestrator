@@ -35,14 +35,14 @@ importers:
       '@ayni-orchestrator/bff':
         specifier: workspace:*
         version: link:../../packages/bff
+      '@fontsource-variable/alexandria':
+        specifier: ^5.2.0
+        version: 5.3.0
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource-variable/merriweather':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource-variable/outfit':
-        specifier: ^5.3.0
+      '@fontsource-variable/noto-serif':
+        specifier: ^5.2.0
         version: 5.3.0
       '@lucide/svelte':
         specifier: ^1.52.0
@@ -747,14 +747,14 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
+  '@fontsource-variable/alexandria@5.3.0':
+    resolution: {integrity: sha512-SIMkP0elELBKNl58Ak7IhTeLQqclV9ziwC/BAAF7n26cBIuz5kNFQdCUmbaHxLJW1WZlGbfK6WE3rdFmuJHC5A==}
+
   '@fontsource-variable/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
 
-  '@fontsource-variable/merriweather@5.3.0':
-    resolution: {integrity: sha512-wK7S4NtPXWUWll/sZCdub93pqSCnFkpKFbnoOE8fh+9Ut6JFjgkc9UlBxHJ0RVMkDpoWwGwMwYYTMvd3G9aAXA==}
-
-  '@fontsource-variable/outfit@5.3.0':
-    resolution: {integrity: sha512-fPb5XnYK0k7SbR++HEmm4+ZqDszmLKQ+sPRUr8oQ/KNC0vy6r6hazJFe8iYozv4cqlHbvJ/JECkJWrfDodUMVQ==}
+  '@fontsource-variable/noto-serif@5.3.0':
+    resolution: {integrity: sha512-GxGAScLRifXH02gDoJGroO/NIX83It7m1TYPPp1bhNPaii6/+GBYKxl/uL5GabFe0PBfiUV92wA4MdMdEDUu6A==}
 
   '@grpc/grpc-js@1.14.5':
     resolution: {integrity: sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw==}
@@ -3913,11 +3913,11 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
+  '@fontsource-variable/alexandria@5.3.0': {}
+
   '@fontsource-variable/jetbrains-mono@5.3.0': {}
 
-  '@fontsource-variable/merriweather@5.3.0': {}
-
-  '@fontsource-variable/outfit@5.3.0': {}
+  '@fontsource-variable/noto-serif@5.3.0': {}
 
   '@grpc/grpc-js@1.14.5':
     dependencies:
