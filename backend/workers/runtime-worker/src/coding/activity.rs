@@ -1,9 +1,12 @@
-//! Rig lifecycle observer that never retains model or tool content.
-use ayni_orchestrator_runtime::activity::{Activity, Failure, MAX_EVENTS, Stage};
+//! Redacted worker interactions and errors, retained independently of recovery history.
+use ayni_orchestrator_runtime::activity::{
+    Activity, Failure, MAX_ACTIVITY_BYTES, MAX_DETAIL_BYTES, MAX_EVENTS, Stage,
+};
 use rig_agent::agent::{
     AgentHook, CompletionCallAction, CompletionCallEvent, CompletionResponseEvent, HookContext,
     ObservationAction, ToolCall, ToolCallAction, ToolResultAction, ToolResultEvent,
 };
+use std::io::Write;
 use std::{
     fs,
     path::PathBuf,
@@ -20,37 +23,78 @@ struct State {
     events: Vec<Activity>,
     sequence: u32,
     stage: Option<Stage>,
+    secrets: Vec<String>,
 }
 
 impl ActivityLog {
     #[must_use]
     pub fn new(path: Option<PathBuf>) -> Self {
+        let events = path
+            .as_ref()
+            .and_then(|path| match fs::read(path) {
+                Ok(bytes) if bytes.len() <= MAX_ACTIVITY_BYTES => {
+                    serde_json::from_slice::<Vec<Activity>>(&bytes)
+                        .ok()
+                        .filter(|events| ayni_orchestrator_runtime::activity::valid(events))
+                }
+                Ok(_) => {
+                    tracing::error!("retained activity exceeds its byte limit");
+                    None
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => {
+                    tracing::error!(%error, "retained activity could not be read");
+                    None
+                }
+            })
+            .unwrap_or_default();
         Self(Arc::new(Mutex::new(State {
+            sequence: events.last().map_or(0, |event| event.sequence),
+            stage: events.last().map(|event| event.stage),
+            events,
             path,
             ..State::default()
         })))
     }
 
     pub fn record(&self, stage: Stage) {
-        self.emit(Some(stage), None);
+        self.emit(Some(stage), None, "");
     }
 
     pub fn fail(&self, failure: Failure) {
-        self.emit(None, Some(failure));
+        self.emit(None, Some(failure), "");
     }
 
-    fn emit(&self, stage: Option<Stage>, failure: Option<Failure>) {
+    pub(super) fn failure_detail(&self, failure: Failure, details: &str) {
+        self.emit(None, Some(failure), details);
+    }
+
+    pub fn error(&self, error: &std::io::Error) {
+        self.emit(None, Some(io_failure(error)), &error.to_string());
+    }
+
+    pub fn detail(&self, stage: Stage, details: &str) {
+        self.emit(Some(stage), None, details);
+    }
+
+    pub fn register_secret(&self, secret: &str) {
+        if !secret.trim().is_empty()
+            && let Ok(mut log) = self.0.lock()
+        {
+            log.secrets.push(secret.trim().to_owned());
+        }
+    }
+
+    fn emit(&self, stage: Option<Stage>, failure: Option<Failure>, details: &str) {
         let Ok(mut log) = self.0.lock() else {
             return;
         };
-        if failure.is_some() && log.events.last().is_some_and(|event| event.failed) {
-            return;
-        }
         let failed = failure.is_some();
         let stage = stage.or(log.stage).unwrap_or(Stage::Request);
         log.stage = Some(stage);
         log.sequence = log.sequence.saturating_add(1);
-        let event = Activity {
+        let details = super::diagnostics::redact(details, &log.secrets);
+        let mut event = Activity {
             sequence: log.sequence,
             timestamp_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -60,16 +104,41 @@ impl ActivityLog {
             stage,
             failed,
             failure,
+            details: details.clone(),
+            truncated: false,
         };
         if failed {
-            tracing::error!(stage = ?stage, failure = ?failure, sequence = event.sequence, "worker stage failed");
+            tracing::error!(stage = ?stage, failure = ?failure, sequence = event.sequence, details = %details, "worker stage failed");
         } else {
-            tracing::info!(stage = ?stage, sequence = event.sequence, message = stage.message());
+            tracing::info!(stage = ?stage, sequence = event.sequence, details = %details, message = stage.message());
         }
+        if let Some(path) = &log.path {
+            let result = serde_json::to_vec(&event)
+                .map_err(std::io::Error::other)
+                .and_then(|mut bytes| {
+                    bytes.push(b'\n');
+                    let mut file = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path.with_file_name("diagnostics.jsonl"))?;
+                    file.write_all(&bytes)?;
+                    file.sync_data()
+                });
+            if let Err(error) = result {
+                tracing::error!(%error, "worker diagnostic log persistence failed");
+            }
+        }
+        event.truncated = details.len() > MAX_DETAIL_BYTES;
+        event.details = super::diagnostics::truncate(&details, MAX_DETAIL_BYTES);
         if log.events.len() == MAX_EVENTS {
             log.events.remove(0);
         }
         log.events.push(event);
+        while serde_json::to_vec(&log.events).is_ok_and(|bytes| bytes.len() > MAX_ACTIVITY_BYTES)
+            && log.events.len() > 1
+        {
+            log.events.remove(0);
+        }
         if let Some(path) = &log.path {
             let result = serde_json::to_vec(&log.events)
                 .map_err(std::io::Error::other)
@@ -94,13 +163,29 @@ impl AgentHook for ActivityLog {
     async fn on_completion_response(
         &self,
         _: &HookContext,
-        _: CompletionResponseEvent<'_>,
+        event: CompletionResponseEvent<'_>,
     ) -> ObservationAction {
         self.record(Stage::ModelResponse);
+        for (summary, text) in super::diagnostics::assistant_content(event.content) {
+            self.detail(
+                if summary {
+                    Stage::ReasoningSummary
+                } else {
+                    Stage::AgentMessage
+                },
+                &text,
+            );
+        }
         ObservationAction::Continue
     }
-    async fn on_tool_call(&self, _: &HookContext, _: ToolCall<'_>) -> ToolCallAction {
-        self.record(Stage::ToolStarted);
+    async fn on_tool_call(&self, _: &HookContext, event: ToolCall<'_>) -> ToolCallAction {
+        self.detail(
+            Stage::ToolStarted,
+            &format!(
+                "{} [{}]\n{}",
+                event.tool_name, event.internal_call_id, event.args
+            ),
+        );
         ToolCallAction::Run
     }
     async fn on_tool_result(
@@ -108,26 +193,51 @@ impl AgentHook for ActivityLog {
         _: &HookContext,
         event: ToolResultEvent<'_>,
     ) -> ToolResultAction {
-        self.record(Stage::ToolFinished);
-        self.record_tool_failure(event.raw_result);
+        let output = event
+            .presentation
+            .as_text()
+            .map_or_else(|| "Non-text tool output".to_owned(), str::to_owned);
+        let details = format!(
+            "{} [{}]\n{}",
+            event.tool_name, event.internal_call_id, output
+        );
+        if let Some(error) = event
+            .raw_result
+            .error()
+            .or_else(|| event.raw_result.refusal())
+        {
+            self.emit(
+                Some(Stage::ToolFinished),
+                Some(tool_failure(error)),
+                &format!("{details}\n{}", error.message()),
+            );
+        } else if command_failed(event.tool_name, &output) {
+            self.emit(
+                Some(Stage::ToolFinished),
+                Some(Failure::CommandExit),
+                &details,
+            );
+        } else {
+            self.detail(Stage::ToolFinished, &details);
+        }
         ToolResultAction::Keep
     }
 }
 
-impl ActivityLog {
-    fn record_tool_failure(&self, result: &rig_agent::tool::ToolResult) {
-        use rig_agent::tool::ToolErrorKind;
-        if let Some(error) = result.error().or_else(|| result.refusal()) {
-            self.fail(match error.kind() {
-                ToolErrorKind::InvalidArgs => Failure::InvalidInput,
-                ToolErrorKind::Cancelled => Failure::Cancelled,
-                ToolErrorKind::NotFound => Failure::MissingFile,
-                ToolErrorKind::PermissionDenied => Failure::PermissionDenied,
-                ToolErrorKind::RateLimited => Failure::RateLimited,
-                ToolErrorKind::Network => Failure::Transport,
-                _ => Failure::Internal,
-            });
-        }
+fn command_failed(tool: &str, output: &str) -> bool {
+    tool == "run_command" && output.starts_with("exit=") && !output.starts_with("exit=Some(0)\n")
+}
+
+const fn tool_failure(error: &rig_agent::tool::ToolExecutionError) -> Failure {
+    use rig_agent::tool::ToolErrorKind;
+    match error.kind() {
+        ToolErrorKind::InvalidArgs => Failure::InvalidInput,
+        ToolErrorKind::Cancelled => Failure::Cancelled,
+        ToolErrorKind::NotFound => Failure::MissingFile,
+        ToolErrorKind::PermissionDenied => Failure::PermissionDenied,
+        ToolErrorKind::RateLimited => Failure::RateLimited,
+        ToolErrorKind::Network => Failure::Transport,
+        _ => Failure::Internal,
     }
 }
 
@@ -168,7 +278,7 @@ pub fn prompt_failure(error: &rig_agent::completion::PromptError) -> Failure {
     }
 }
 
-/// Map local errors to a fixed vocabulary; never emit arbitrary error text.
+/// Classify known failures while the diagnostic record retains redacted context.
 #[must_use]
 pub fn io_failure(error: &std::io::Error) -> Failure {
     use std::io::ErrorKind;
@@ -179,10 +289,23 @@ pub fn io_failure(error: &std::io::Error) -> Failure {
         return failure.0;
     }
     match error.kind() {
+        ErrorKind::TimedOut => Failure::Deadline,
         ErrorKind::NotFound => Failure::MissingFile,
         ErrorKind::PermissionDenied => Failure::PermissionDenied,
         ErrorKind::InvalidData | ErrorKind::InvalidInput => Failure::InvalidInput,
         _ => match error.to_string().as_str() {
+            "protected policy changed" => Failure::PolicyChanged,
+            "protected generated lock contract is invalid" => Failure::LockContract,
+            "protected proposed lock lacks worker regeneration evidence" => {
+                Failure::LockEvidenceMissing
+            }
+            "protected proposed lock regeneration evidence does not match final inputs" => {
+                Failure::LockEvidenceMismatch
+            }
+            "task changes a protected dependency path outside reviewed environment scope" => {
+                Failure::DependencyScope
+            }
+            "protected runtime inputs changed" => Failure::RuntimeMismatch,
             "changed paths outside bounds" => Failure::NoChanges,
             "task changes a protected path" => Failure::ProtectedPath,
             "task test edits are not authorized" => Failure::TestEdits,
@@ -197,117 +320,18 @@ pub fn io_failure(error: &std::io::Error) -> Failure {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rig_agent::{client::AgentModelExt, completion::Prompt};
-    use rig_core::{
-        completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
-        streaming::StreamingCompletionResponse,
-    };
-
-    struct RejectedModel;
-    impl CompletionModel for RejectedModel {
-        async fn completion(
-            &self,
-            _: CompletionRequest,
-        ) -> Result<CompletionResponse, CompletionError> {
-            Err(CompletionError::ProviderError(
-                "private body and credential".into(),
-            ))
-        }
-        async fn stream(
-            &self,
-            _: CompletionRequest,
-        ) -> Result<StreamingCompletionResponse, CompletionError> {
-            Err(CompletionError::ProviderError(
-                "private streaming body".into(),
-            ))
-        }
-    }
-
-    #[tokio::test]
-    async fn rig_failure_retains_stage_without_provider_content()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let root = tempfile::tempdir()?;
-        let path = root.path().join("activity.json");
-        let log = ActivityLog::new(Some(path.clone()));
-        let result = RejectedModel
-            .into_agent_builder()
-            .add_hook(log.clone())
-            .build()
-            .prompt("private prompt")
-            .await;
-        let error = result.err().ok_or("expected provider failure")?;
-        log.fail(prompt_failure(&error));
-        log.fail(Failure::Internal);
-        let bytes = fs::read_to_string(path)?;
-        assert!(!bytes.contains("private"));
-        let events: Vec<Activity> = serde_json::from_str(&bytes)?;
-        assert_eq!(events.len(), 2);
-        assert!(matches!(events[0].stage, Stage::ModelRequest));
-        assert!(matches!(events[1].failure, Some(Failure::ProviderRejected)));
-        assert!(ayni_orchestrator_runtime::activity::valid(&events));
-        Ok(())
-    }
-
-    #[test]
-    fn tool_errors_are_classified_without_retaining_arguments_or_output()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use rig_agent::tool::{ToolExecutionError, ToolOutput, ToolResult};
-        let root = tempfile::tempdir()?;
-        let path = root.path().join("activity.json");
-        let log = ActivityLog::new(Some(path.clone()));
-        log.record(Stage::ToolFinished);
-        log.record_tool_failure(&ToolResult::failed(ToolExecutionError::invalid_args(
-            "private arguments",
-        )));
-        log.record(Stage::ToolFinished);
-        log.record_tool_failure(&ToolResult::success(ToolOutput::text("private output")));
-        let bytes = fs::read_to_string(path)?;
-        let events: Vec<Activity> = serde_json::from_str(&bytes)?;
-        assert_eq!(events.len(), 3);
-        assert!(matches!(events[1].failure, Some(Failure::InvalidInput)));
-        assert!(!events[2].failed);
-        assert!(!bytes.contains("private"));
-        Ok(())
-    }
-
-    #[test]
-    fn provider_status_is_classified_without_reading_its_body()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use rig_core::ProviderResponseError;
-        for (status, expected) in [
-            ("401", "authentication"),
-            ("429", "rate_limited"),
-            ("503", "provider_unavailable"),
-            ("400", "provider_rejected"),
-        ] {
-            let error = rig_agent::completion::PromptError::CompletionError(
-                CompletionError::ProviderResponse(ProviderResponseError::new(
-                    status.parse()?,
-                    "private body",
-                )),
-            );
-            assert_eq!(serde_json::to_value(prompt_failure(&error))?, expected);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn bounded_log_keeps_latest_failure_and_order() -> Result<(), Box<dyn std::error::Error>> {
-        let root = tempfile::tempdir()?;
-        let path = root.path().join("activity.json");
-        let log = ActivityLog::new(Some(path.clone()));
-        for _ in 0..300 {
-            log.record(Stage::ToolStarted);
-        }
-        log.fail(Failure::PermissionDenied);
-        let events: Vec<Activity> = serde_json::from_slice(&fs::read(path)?)?;
-        assert_eq!(events.len(), MAX_EVENTS);
-        assert_eq!(events.last().map(|event| event.sequence), Some(301));
-        assert!(events.last().is_some_and(|event| event.failed));
-        assert!(ayni_orchestrator_runtime::activity::valid(&events));
-        Ok(())
-    }
+pub(super) fn unsafe_change(error: &std::io::Error) -> bool {
+    matches!(
+        io_failure(error),
+        Failure::ProtectedPath
+            | Failure::TestEdits
+            | Failure::PolicyChanged
+            | Failure::DependencyScope
+            | Failure::LockEvidenceMissing
+            | Failure::LockEvidenceMismatch
+    )
 }
+
+#[cfg(test)]
+#[path = "activity_tests.rs"]
+mod tests;

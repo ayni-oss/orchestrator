@@ -167,7 +167,11 @@ flowchart TD
 ```
 
 Open task details to see **Progress**, **Quality** and **Pull request**. Each attempt
-shows its activity, usage and consumed limits. Measurements that are unavailable
+shows its activity, usage and consumed limits. Expand **Worker activity** and an
+entry’s **View interaction details** to review agent messages, commands, results,
+errors, and provider reasoning summaries when available. Private reasoning is
+unavailable. Credentials are redacted; oversized entries and omitted earlier
+history are identified. Older attempts may contain only stage labels. Measurements that are unavailable
 remain unavailable rather than appearing as zero.
 
 A draft can contain failed or unavailable quality, disclosed in its results.

@@ -37,7 +37,7 @@ available without resurrecting cancelled or expired tasks.
 
 ## Progress, usage and publication
 
-The supervisor samples its own progress, safe activity, usage and deterministic
+The supervisor samples its own progress, redacted activity, usage and deterministic
 publication journal every two seconds. It retains at most 256 changed advisory
 snapshots per physical generation. Advisory delivery has a one-second timeout
 and cannot stop coding. Missing or reordered progress does not block final
@@ -98,3 +98,44 @@ cover transactional rollback, conflicting receipt replay, generation fencing,
 legacy migration, cancellation/deadline races and reordered advisory reports.
 Existing worker publication and recovery tests continue to cover deterministic
 intent, remote-head conflicts, uncertain-response readback and retained budgets.
+
+## Worker diagnostic logs
+
+Coding workers retain `diagnostics.jsonl` beside `activity.json` in their
+execution directory on the runtime-output claim. Each JSON line records the
+sequence, timestamp, stage, failure classification, and diagnostic text. This
+append-only interaction history survives recovery checkpoint rotation and worker
+cleanup. It includes effective system instructions, the frozen request and repair
+findings, assistant messages, tool names/correlation IDs/arguments/results, and
+local errors. Nonzero shell exits are failures even when tool dispatch succeeded.
+Provider failures retain classifications, HTTP status, and allowlisted structured
+error code/type/message fields; raw response bodies are excluded. Full command output remains subject to the command tool's
+existing output bound. This is advisory source content, never quality evidence.
+
+The activity projection exposes the newest 256 entries within 192 KiB. Individual
+details are bounded to 8 KiB on UTF-8 boundaries and explicitly marked truncated.
+The append-only log retains entries before projection truncation. The task view
+renders details as escaped plain text and identifies omitted earlier history.
+Both event receipt and legacy collection preserve these fields. Old content-free
+records remain readable; a coordinated worker/controller upgrade is required for
+the new internal activity schema.
+
+Known credentials and common API-token forms are redacted before persistence or
+tracing. Opaque encrypted/redacted reasoning, signatures, and private reasoning
+text are excluded. GPT-5/GPT-6 and o3/o4 coding requests opt into provider reasoning
+summaries with `reasoning.summary=auto`; a provider may return none. Provider
+summaries are labeled separately from agent messages. The operator diagnostics
+are distinct from the bounded provider conversation used for recovery.
+
+To review the complete log after cleanup, use the local chart's control-plane
+container and its read-only `/runtime-outputs` mount. List execution directories
+and read only the selected execution's `diagnostics.jsonl`, for example:
+
+```sh
+kubectl --context docker-desktop -n ayni-orchestrator-dev exec deployment/control-plane -c control-plane -- ls /runtime-outputs
+kubectl --context docker-desktop -n ayni-orchestrator-dev exec deployment/control-plane -c control-plane -- cat /runtime-outputs/EXECUTION/diagnostics.jsonl
+```
+
+Historical attempts have no reconstructed diagnostics when their original worker
+did not record them. Project research/planning sessions use their existing
+conversation/context archive; this coding-worker log does not replace that archive.

@@ -35,7 +35,10 @@
   },
   "pnpm": {
     "overrides": {
-      "vitepress>vite": "6.4.3"
+      "vitepress>vite": "6.4.3",
+      "source-map-js": "1.2.2",
+      "mermaid>katex": "0.18.2",
+      "@sveltejs/kit>cookie": "0.7.2"
     }
   }
 }

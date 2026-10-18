@@ -345,6 +345,7 @@ export function mapDevelopmentAttempt(value: DevelopmentAttempt): DevelopmentAtt
     agentActivity: (value.agentActivity ?? []).slice(-256).map(event => ({
       sequence: event.sequence, observedAt: date(event.observedAt),
       message: event.message.slice(0, 256), failed: event.failed,
+      details: (event.details ?? "").slice(0, 8192), truncated: event.truncated || (event.details?.length ?? 0) > 8192,
     })),
     id: value.id,
     developmentTaskId: value.developmentTaskId,

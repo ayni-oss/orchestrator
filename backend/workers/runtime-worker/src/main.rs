@@ -175,9 +175,7 @@ async fn worker_main() -> ExitCode {
                     )
                     .await;
                 }
-                activity.fail(ayni_orchestrator_worker::coding::activity::io_failure(
-                    &error,
-                ));
+                activity.error(&error);
                 tracing::error!(error_kind = ?error.kind(), "runtime_worker_failed");
                 ExitCode::FAILURE
             }

@@ -94,3 +94,20 @@ pub(super) fn result(
         quality_round: u32::from(value.quality_round),
     }
 }
+
+pub(super) fn activity(value: ayni_orchestrator_runtime::activity::Activity) -> v1::AgentActivity {
+    v1::AgentActivity {
+        sequence: value.sequence,
+        observed_at: Some(prost_types::Timestamp {
+            seconds: value.timestamp_ms / 1000,
+            nanos: i32::try_from((value.timestamp_ms % 1000) * 1_000_000).unwrap_or(0),
+        }),
+        message: value.failure.map_or_else(
+            || value.stage.message().to_owned(),
+            |failure| format!("{}: {}", value.stage.message(), failure.message()),
+        ),
+        failed: value.failed,
+        details: value.details,
+        truncated: value.truncated,
+    }
+}

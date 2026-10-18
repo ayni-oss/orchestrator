@@ -249,7 +249,7 @@ export interface DevelopmentAttemptDto {
   result?: WorkerResultDto;
   pullRequest?: PullRequestReceiptDto;
   publicationOnly: boolean;
-  agentActivity: Array<{ sequence: number; observedAt?: string; message: string; failed: boolean }>;
+  agentActivity: Array<{ sequence: number; observedAt?: string; message: string; failed: boolean; details?: string; truncated?: boolean }>;
   id: string;
   developmentTaskId: string;
   attemptNumber: number;

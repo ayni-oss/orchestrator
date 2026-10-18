@@ -796,13 +796,12 @@ fn separate_database_connections_serialize_duplicate_plan_approvals() -> Result<
     std::thread::scope(|scope| -> Result<(), CleanStoreError> {
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
         let mut handles = vec![];
-        for key in ["one", "two"] {
-            let path = path.clone();
+        let stores = [CleanStore::open(&path, 3)?, CleanStore::open(&path, 3)?];
+        for (key, mut store) in ["one", "two"].into_iter().zip(stores) {
             let command = command.clone();
             let barrier = barrier.clone();
             handles.push(scope.spawn(
                 move || -> Result<v1::ProjectConversation, CleanStoreError> {
-                    let mut store = CleanStore::open(&path, 3)?;
                     barrier.wait();
                     store.decide_project_plan(key, &command)
                 },

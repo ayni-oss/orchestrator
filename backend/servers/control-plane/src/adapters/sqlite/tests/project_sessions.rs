@@ -567,12 +567,14 @@ fn separate_connections_admit_only_one_concurrent_planner_turn() -> Result<(), C
     std::thread::scope(|scope| -> Result<(), CleanStoreError> {
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
         let mut handles = vec![];
-        for id in ["concurrent-first", "concurrent-second"] {
-            let path = path.clone();
+        let stores = [CleanStore::open(&path, 3)?, CleanStore::open(&path, 3)?];
+        for (id, mut store) in ["concurrent-first", "concurrent-second"]
+            .into_iter()
+            .zip(stores)
+        {
             let c = c.clone();
             let barrier = barrier.clone();
             handles.push(scope.spawn(move || {
-                let mut store = CleanStore::open(&path, 3)?;
                 barrier.wait();
                 enqueue(&mut store, &c, id, "1")
             }));
@@ -621,13 +623,13 @@ fn concurrent_settings_and_cancellation_never_resurrect_a_cancelled_turn()
     drop(store);
     std::thread::scope(|scope| -> Result<(), CleanStoreError> {
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
-        let settings_path = path.clone();
+        let mut settings_store = CleanStore::open(&path, 3)?;
+        let mut cancel_store = CleanStore::open(&path, 3)?;
         let settings_c = c.clone();
         let settings_barrier = barrier.clone();
         let settings = scope.spawn(move || {
-            let mut store = CleanStore::open(&settings_path, 3)?;
             settings_barrier.wait();
-            store.update_project_conversation_settings(
+            settings_store.update_project_conversation_settings(
                 "racing-settings",
                 &v1::UpdateProjectConversationSettingsRequest {
                     idempotency_key: "racing-settings".into(),
@@ -639,12 +641,10 @@ fn concurrent_settings_and_cancellation_never_resurrect_a_cancelled_turn()
                 },
             )
         });
-        let cancel_path = &path;
         let cancel_c = &c;
         let cancel = scope.spawn(move || {
-            let mut store = CleanStore::open(cancel_path, 3)?;
             barrier.wait();
-            store.cancel_project_agent_run(
+            cancel_store.cancel_project_agent_run(
                 "racing-cancel",
                 &v1::CancelProjectAgentRunRequest {
                     idempotency_key: "racing-cancel".into(),
