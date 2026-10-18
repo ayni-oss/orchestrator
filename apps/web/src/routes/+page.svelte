@@ -9,7 +9,7 @@
   let { data }: PageProps = $props();
   let search = $state("");
   const projects = $derived(data.projects.filter(project => `${project.displayName} ${project.goal}`.toLowerCase().includes(search.toLowerCase())));
-  const projectUrl = (id: string) => `/_old/projects/${encodeURIComponent(id)}`;
+  const projectUrl = (id: string) => `/projects/${encodeURIComponent(id)}`;
 </script>
 <svelte:head><title>{data.workspace ? `${data.workspace.displayName} · Projects` : "Projects"} · Ayni Orchestrator</title></svelte:head>
 <ApplicationNotifications />
@@ -29,7 +29,7 @@
           {/each}
         </div>
         {#if !projects.length}<section class="empty-state"><Layers size={32} /><h2>{search ? "No matching projects" : "Start with one clear goal"}</h2><p>{search ? "Try a different project name or goal." : "Create a project to bring your repositories, conversations, and plans together."}</p>{#if search}<Button variant="outline" onclick={() => search = ""}>Clear search</Button>{/if}</section>{/if}
-        <p class="view-note">Project details open in the previous application while we build the new experience.</p>
+
       {:else}<section class="empty-state"><Layers size={32} /><h2>A workspace for your projects</h2><p>Create a workspace and connect repositories to get started.</p></section>{/if}
 
 </WorkspaceShell>

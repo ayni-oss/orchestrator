@@ -41,6 +41,6 @@ export const actions: Actions = {
       const mapped = safeError(error, locals.requestId);
       return message(form, mapped.message, { status: mapped.status as 400 });
     }
-    redirect(303, `/_old/projects/${encodeURIComponent(id)}`);
+    redirect(303, `/projects/${encodeURIComponent(id)}`);
   },
 };
