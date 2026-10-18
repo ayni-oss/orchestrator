@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import type { WorkspaceDto, ProjectDto } from "@ayni-orchestrator/bff/server";
   import { goto } from "$app/navigation";
-  import { Layers, ChevronDown, Settings2, ArrowUpRight, Plus, Check, PanelLeftClose, Menu, EllipsisVertical } from "@lucide/svelte";
+  import { LayoutDashboard, Layers, ChevronDown, Settings2, ArrowUpRight, Plus, Check, PanelLeftClose, Menu, EllipsisVertical } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import * as Dropdown from "$lib/components/ui/dropdown-menu/index.js";
   let { data, title = "Projects", children }: { data: { workspace?: WorkspaceDto; workspaces: WorkspaceDto[]; projects: ProjectDto[] }; title?: string; children: Snippet } = $props();
@@ -10,7 +10,7 @@
   const workspaceUrl = $derived(data.workspace ? `/workspaces/${encodeURIComponent(data.workspace.id)}/settings` : "/_old/workspaces");
   async function selectWorkspace(id: string) {
     sidebarOpen = false;
-    await goto(title === "Settings" ? `/workspaces/${encodeURIComponent(id)}/settings` : `/?workspace=${encodeURIComponent(id)}`);
+    await goto(title === "Settings" ? `/workspaces/${encodeURIComponent(id)}/settings` : title === "Operations" ? `/operations?workspace=${encodeURIComponent(id)}` : `/?workspace=${encodeURIComponent(id)}`);
   }
 </script>
 <a class="skip" href="#main-content">Skip to content</a>
@@ -33,7 +33,7 @@
       </Dropdown.Content>
     </Dropdown.Root>
     <p class="section-label">Workspace</p>
-    <nav><a class={title === "Projects" ? "nav-item selected" : "nav-item"} href={data.workspace ? `/?workspace=${encodeURIComponent(data.workspace.id)}` : "/"} aria-current={title === "Projects" ? "page" : undefined}><Layers size={19} />Projects <span>{data.projects.length}</span></a></nav>
+    <nav><a class={title === "Operations" ? "nav-item selected" : "nav-item"} href={data.workspace ? `/operations?workspace=${encodeURIComponent(data.workspace.id)}` : "/operations"} aria-current={title === "Operations" ? "page" : undefined}><LayoutDashboard size={19} />Operations</a><a class={title === "Projects" ? "nav-item selected" : "nav-item"} href={data.workspace ? `/?workspace=${encodeURIComponent(data.workspace.id)}` : "/"} aria-current={title === "Projects" ? "page" : undefined}><Layers size={19} />Projects <span>{data.projects.length}</span></a></nav>
     <div class="sidebar-bottom"><a class="settings-link" href={workspaceUrl}><Settings2 size={17} />Workspace settings<ArrowUpRight size={13} /></a><div class="sidebar-footer"><span>AYNI ORCHESTRATOR</span><ThemeToggle /></div></div>
   </aside>
   {#if sidebarOpen}<button class="mobile-backdrop" onclick={() => sidebarOpen = false} aria-label="Close workspace navigation"></button>{/if}
