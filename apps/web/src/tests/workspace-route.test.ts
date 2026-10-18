@@ -2,7 +2,7 @@ import {beforeEach,describe,expect,it,vi} from "vitest";
 const bff=vi.hoisted(()=>({getWorkspace:vi.fn(),listProjects:vi.fn(),listConnections:vi.fn(),listProviderModels:vi.fn(),updateWorkspace:vi.fn(),archiveWorkspace:vi.fn(),createProject:vi.fn(),listWorkspaces:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({repositorySummaryChoices:async()=>[{repository:{id:"repository:1"}},{repository:{id:"repository:outside"}}],workspaceChoices:async()=>[],workspaceProjects:async()=>[{id:"project:1",workspaceId:"workspace:1"}]}));
-import {load,actions} from "../routes/workspaces/[workspaceId]/+page.server.js";
+import {load,actions} from "../routes/_old/workspaces/[workspaceId]/+page.server.js";
 const workspace={id:"workspace:1",displayName:"Shared",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"3"};
 function event(fields:Record<string,string|string[]>={}){
   const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",resourceVersion:"3",...fields}))for(const item of Array.isArray(value)?value:[value])form.append(key,item);

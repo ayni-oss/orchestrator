@@ -11,5 +11,5 @@ export function projectHref(projectId: string, view: ProjectView, conversationId
   if (conversationId) query.set("conversation", conversationId);
   if (view === "tasks" && pageToken) query.set("pageToken", pageToken);
   if (view === "plans" && version) query.set("version", version);
-  return `/projects/${encodeURIComponent(projectId)}?${query}`;
+  return `/_old/projects/${encodeURIComponent(projectId)}?${query}`;
 }

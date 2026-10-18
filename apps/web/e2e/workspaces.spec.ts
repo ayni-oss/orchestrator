@@ -1,7 +1,7 @@
 import {expect,test} from "@playwright/test";
 test.beforeEach(async({request})=>{await request.post("http://127.0.0.1:50062/reset-project");});
 test("workspace membership and archive retain project links, goals and task history",async({page})=>{
-  await page.goto("/workspaces");
+  await page.goto("/_old/workspaces");
   await page.getByRole("button",{name:"Create workspace",exact:true}).click();
   await page.getByLabel("Workspace name",{exact:true}).fill("Shared engineering");
   await expect(page.getByLabel("Workspace name",{exact:true})).toHaveValue("Shared engineering");
@@ -17,7 +17,7 @@ test("workspace membership and archive retain project links, goals and task hist
   await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Engineering workspace",exact:true})).toBeVisible();
   await page.getByRole("tablist",{name:"Workspace views"}).getByRole("tab",{name:"Projects",exact:true}).click();
-  await expect(page.getByRole("link",{name:"Sandbox",exact:true})).toHaveAttribute("href","/projects/project%3A1");
+  await expect(page.getByRole("link",{name:"Sandbox",exact:true})).toHaveAttribute("href","/_old/projects/project%3A1");
   await expect(page.getByText("Improve the sandbox",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Create project",exact:true}).click();
   await expect(page.getByRole("dialog")).toContainText("Workspace: Engineering workspace");
@@ -26,7 +26,7 @@ test("workspace membership and archive retain project links, goals and task hist
   await expect(page.getByRole("checkbox",{name:"ayni-oss/sandbox",exact:true})).toBeVisible();
   await expect(page.getByRole("checkbox",{name:"ayni-oss/library",exact:true})).toHaveCount(0);
   await page.keyboard.press("Escape");await page.keyboard.press("Escape");
-  await page.goto("/workspaces/workspace%3A1?view=settings");
+  await page.goto("/_old/workspaces/workspace%3A1?view=settings");
   await page.getByRole("region",{name:"Danger zone",exact:true}).getByRole("button",{name:"Archive workspace",exact:true}).click();
   await page.getByRole("dialog").getByRole("button",{name:"Archive workspace",exact:true}).click();
   await expect(page.getByText("New work is disabled. Existing tasks and project history are retained.",{exact:true})).toBeVisible();
@@ -37,13 +37,13 @@ test("workspace membership and archive retain project links, goals and task hist
   await expect(page.getByRole("heading",{name:"Tasks",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"New task",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button",{name:"New conversation",exact:true})).toBeDisabled();
-  await page.goto("/tasks");
+  await page.goto("/_old/tasks");
   await expect(page.getByRole("heading",{name:"Task history",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Submit task",exact:true})).toHaveCount(0);
 });
 
 test("workspaces scope navigation, project creation, and existing repository membership",async({page})=>{
-  await page.goto("/projects");
+  await page.goto("/_old/projects");
   await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.getByRole("link",{name:"Projects",exact:true})).toHaveCount(0);
   await expect(page.getByText("1 project · 2 repositories",{exact:true})).toBeVisible();
@@ -57,7 +57,7 @@ test("workspaces scope navigation, project creation, and existing repository mem
   await page.reload();
   await expect(views.getByRole("tab",{name:"Repositories",exact:true})).toHaveAttribute("aria-selected","true");
   await expect(page.getByRole("button",{name:"Connect repository",exact:true})).toHaveCount(0);
-  await expect(page.getByRole("link",{name:"repository catalog",exact:true})).toHaveAttribute("href","/repositories");
+  await expect(page.getByRole("link",{name:"repository catalog",exact:true})).toHaveAttribute("href","/_old/repositories");
   await expect(page.getByRole("region",{name:"ayni-oss/sandbox",exact:true})).toContainText("Default branch");
   await expect(page.getByRole("button",{name:"Save repository membership",exact:true})).toHaveCount(0);
   await page.getByRole("button",{name:"Manage repositories",exact:true}).click();

@@ -13,8 +13,8 @@ const bff = vi.hoisted(() => ({
   listGithubInstallationRepositories: vi.fn(),
 }));
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
-import { actions } from "../routes/repositories/+page.server.js";
-import { actions as runtimeActions } from "../routes/repositories/[repositoryId]/+page.server.js";
+import { actions } from "../routes/_old/repositories/+page.server.js";
+import { actions as runtimeActions } from "../routes/_old/repositories/[repositoryId]/+page.server.js";
 
 describe("repository connection route actions", () => {
   const requestSignal = new AbortController().signal;
@@ -30,7 +30,7 @@ describe("repository connection route actions", () => {
     if (action === undefined) throw new Error("connect action is absent");
     const result = await action({
       locals: { requestId: "repo-invalid", requestSignal },
-      request: new Request("http://127.0.0.1/repositories?/connect", { method: "POST", body: new URLSearchParams({ repositoryId: "not-numeric" }) }),
+      request: new Request("http://127.0.0.1/_old/repositories?/connect", { method: "POST", body: new URLSearchParams({ repositoryId: "not-numeric" }) }),
     } as never);
     expect(result).toMatchObject({ status: 400, data: { error: { reason: "invalid_input" } } });
     expect(bff.connectGithubRepository).not.toHaveBeenCalled();
@@ -45,7 +45,7 @@ describe("repository connection route actions", () => {
         installationId: "42", owner: "ayni-oss", repository: "sandbox",
         registryDestination: destination,
       });
-      const result = await action({ locals: { requestId: "registry-invalid", requestSignal }, request: new Request("http://127.0.0.1/repositories?/connect", { method: "POST", body }) } as never);
+      const result = await action({ locals: { requestId: "registry-invalid", requestSignal }, request: new Request("http://127.0.0.1/_old/repositories?/connect", { method: "POST", body }) } as never);
       expect(result).toMatchObject({ status: 400, data: { error: { reason: "unsupported_registry" } } });
     }
     expect(bff.listGithubInstallations).not.toHaveBeenCalled();
@@ -65,7 +65,7 @@ describe("repository connection route actions", () => {
       defaultBranch: "main",
       displayName: "ayni-oss/sandbox",
     });
-    const result = await action({ locals: { requestId: "repo-save", requestSignal }, request: new Request("http://127.0.0.1/repositories?/connect", { method: "POST", body }) } as never);
+    const result = await action({ locals: { requestId: "repo-save", requestSignal }, request: new Request("http://127.0.0.1/_old/repositories?/connect", { method: "POST", body }) } as never);
     expect(result).toEqual({ action: "connect", success: "Connected ayni-oss/sandbox." });
     expect(bff.connectGithubRepository).toHaveBeenCalledWith(expect.objectContaining({
       idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/u),
@@ -75,7 +75,7 @@ describe("repository connection route actions", () => {
   it("runtime selection ignores browser-provided namespace and forwards only the connection",async()=>{
     bff.getRuntimeProfile.mockResolvedValue({id:"profile:1",repositoryConnectionId:"repository:1"});
     const body=new URLSearchParams({profileId:"profile:1",idempotencyKey:"00000000-0000-4000-8000-000000000099",resourceVersion:"2",registryConnectionId:"connection:ghcr",imageNamespace:"forged-namespace"});
-    const result=await runtimeActions.registry!({params:{repositoryId:"repository:1"},locals:{requestId:"runtime-save",requestSignal},request:new Request("http://127.0.0.1/repositories/repository:1?/registry",{method:"POST",body})} as never);
+    const result=await runtimeActions.registry!({params:{repositoryId:"repository:1"},locals:{requestId:"runtime-save",requestSignal},request:new Request("http://127.0.0.1/_old/repositories/repository:1?/registry",{method:"POST",body})} as never);
     expect(result).toEqual({success:"Runtime image destination updated."});
     expect(bff.setRuntimeRegistry).toHaveBeenCalledWith({runtimeProfileId:"profile:1",idempotencyKey:"00000000-0000-4000-8000-000000000099",expectedResourceVersion:"2",registryConnectionId:"connection:ghcr"},expect.objectContaining({requestId:"runtime-save"}));
   });
@@ -96,7 +96,7 @@ describe("repository connection route actions", () => {
   });
   it("analysis retries onboarding without authorizing runtime replacement", async () => {
     const body = new URLSearchParams({ idempotencyKey: "analysis-1", forceRebuild: "true" });
-    const result = await runtimeActions.analyze!({ params: { repositoryId: "repository:1" }, locals: { requestId: "analysis", requestSignal }, request: new Request("http://127.0.0.1/repositories/repository:1?/analyze", { method: "POST", body }) } as never);
+    const result = await runtimeActions.analyze!({ params: { repositoryId: "repository:1" }, locals: { requestId: "analysis", requestSignal }, request: new Request("http://127.0.0.1/_old/repositories/repository:1?/analyze", { method: "POST", body }) } as never);
     expect(result).toEqual({ success: "Repository analysis requested." });
     expect(bff.analyzeRepository).toHaveBeenCalledWith("repository:1", "analysis-1", expect.objectContaining({ requestId: "analysis" }));
     expect(bff.reconcileProfile).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe("repository removal boundary", () => {
     expect(bff.removeRepository).not.toHaveBeenCalled();
   });
   it("forwards the observed version and redirects after confirmed removal", async () => {
-    await expect(runtimeActions.remove!(event("ayni-oss/sandbox"))).rejects.toMatchObject({ status: 303, location: "/repositories" });
+    await expect(runtimeActions.remove!(event("ayni-oss/sandbox"))).rejects.toMatchObject({ status: 303, location: "/_old/repositories" });
     expect(bff.removeRepository).toHaveBeenCalledWith({ repositoryConnectionId: "repository:1", expectedResourceVersion: "2", idempotencyKey: "00000000-0000-4000-8000-000000000099" }, expect.objectContaining({ requestId: "remove-repository" }));
   });
 });

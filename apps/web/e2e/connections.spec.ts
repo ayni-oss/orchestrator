@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 test.beforeEach(async ({request})=>{await request.post("http://127.0.0.1:50062/reset-connections");});
 test("GitHub import and rotation use dialogs and the canonical route",async ({page,request})=>{
-  await page.goto("/setup/github");
+  await page.goto("/_old/setup/github");
   await expect(page).toHaveURL(/\/source-control\/github$/u);
   await expect(page.getByRole("button",{name:"Enroll a repository"})).toHaveCount(0);
   await expect(page.getByLabel("Private key (PEM)")).toHaveCount(0);
@@ -37,7 +37,7 @@ test("GitHub import and rotation use dialogs and the canonical route",async ({pa
   await expect(page.getByRole("heading",{name:"My App"})).toHaveCount(0);
 });
 test("admin GitHub App has a compact read-only details dialog",async ({page,request})=>{
-  await request.post("http://127.0.0.1:50062/admin-connection");await page.goto("/source-control/github");
+  await request.post("http://127.0.0.1:50062/admin-connection");await page.goto("/_old/source-control/github");
   await expect(page.getByText("Your administrator",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:/ actions$/u}).first().click();await page.getByRole("menuitem",{name:"Details",exact:true}).click();
   await expect(page.getByRole("dialog").getByText("Managed by your administrator.",{exact:false})).toBeVisible();
@@ -45,13 +45,13 @@ test("admin GitHub App has a compact read-only details dialog",async ({page,requ
   await expect(page.getByLabel("Private key (PEM)")).toHaveCount(0);
 });
 test("GitHub setup dialog clears dismissed credentials and prepares a canonical manifest",async ({page})=>{
-  await page.goto("/source-control/github");
+  await page.goto("/_old/source-control/github");
   await page.getByRole("button",{name:"Add GitHub App",exact:true}).click();
   await page.getByLabel("GitHub organization").fill("example-org");
   const create = page.getByRole("button",{name:"Create App for example-org"});
   await expect(create).toBeVisible();
   const manifest=JSON.parse(await page.locator('input[name="manifest"]').first().inputValue());
-  expect(manifest.redirect_url).toBe(`${new URL(page.url()).origin}/source-control/github/complete`);
+  expect(manifest.redirect_url).toBe(`${new URL(page.url()).origin}/_old/source-control/github/complete`);
   expect(manifest.default_permissions).toEqual({contents:"write",metadata:"read",pull_requests:"write"});
   await page.getByRole("tab",{name:"Import existing App"}).click();
   await page.getByLabel("Private key (PEM)").fill("discarded-secret");
@@ -61,11 +61,11 @@ test("GitHub setup dialog clears dismissed credentials and prepares a canonical 
   await expect(page.getByLabel("Private key (PEM)")).toHaveValue("");
 });
 test("canonical and legacy manifest callbacks enforce session state and reject replay",async ({page})=>{
-  await page.goto("/source-control/github");
+  await page.goto("/_old/source-control/github");
   const origin=new URL(page.url()).origin;
-  const foreign=await page.request.post("/source-control/github/start",{headers:{origin:"https://foreign.example"}});
+  const foreign=await page.request.post("/_old/source-control/github/start",{headers:{origin:"https://foreign.example"}});
   expect(foreign.status()).toBe(403);
-  for(const prefix of ["/source-control/github","/setup/github"]){
+  for(const prefix of ["/_old/source-control/github","/_old/setup/github"]){
     const missing=await page.request.get(`${prefix}/complete?code=fixture-code`);
     expect(missing.status()).toBe(400);
     const start=await page.request.post(`${prefix}/start`,{headers:{origin}});
@@ -88,7 +88,7 @@ async function fillRegistry(page: Page, name = "Team images") {
   await dialog.getByLabel("Separate pull-only token", {exact:true}).fill("pull-only-value");
 }
 async function createRegistry(page: Page) {
-  await page.goto("/container-registries/github");
+  await page.goto("/_old/container-registries/github");
   await page.getByRole("button", {name:"Add connection",exact:true}).click();
   await fillRegistry(page);
   await page.getByRole("dialog").getByRole("button", {name:"Save and test"}).click();
@@ -97,7 +97,7 @@ async function createRegistry(page: Page) {
 }
 
 test("GHCR creation lives in a dialog and clears credentials on close and rejected submission", async ({page,request})=>{
-  await page.goto("/container-registries/github");
+  await page.goto("/_old/container-registries/github");
   await expect(page.getByLabel("Push token", {exact:true})).toHaveCount(0);
   await page.getByRole("button", {name:"Add connection",exact:true}).click();
   await fillRegistry(page);
@@ -186,7 +186,7 @@ test("GHCR editing preserves inputs until close and refreshes new revisions befo
 
 test("GHCR administrator connections expose status and readonly details", async ({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
-  await page.goto("/container-registries/github");
+  await page.goto("/_old/container-registries/github");
   const row=page.getByRole("region", {name:"Admin App"});
   await expect(row.getByText("Your administrator", {exact:true})).toBeVisible();
   await expect(row.getByRole("button", {name:"Edit",exact:true})).toHaveCount(0);
@@ -210,7 +210,7 @@ test("live connection updates retain ready identity and surface rejected replace
 test("operator stream reconnect opens fresh snapshots without a shared Last-Event-ID", async ({ page, request }) => {
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
   const headers: Array<Record<string, string>> = [];
-  await page.route("**/updates/all", async route => {
+  await page.route("**/_old/updates/all", async route => {
     headers.push(route.request().headers());
     // Combined streams cannot emit one cursor for independently versioned
     // scopes. A failed upstream watch closes the relay and every scope takes
@@ -218,7 +218,7 @@ test("operator stream reconnect opens fresh snapshots without a shared Last-Even
     if (headers.length === 1) return route.fulfill({ status: 200, contentType: "text/event-stream", body: 'event: error\ndata: {"reason":"watch_cursor_expired"}\n\n' });
     return route.continue();
   });
-  await page.goto("/container-registries/github");
+  await page.goto("/_old/container-registries/github");
   await expect.poll(() => headers.length).toBeGreaterThanOrEqual(2);
   expect(headers[1]?.["last-event-id"]).toBeUndefined();
   await expect(page.getByRole("region", { name: "Admin App" }).getByText("Ready", { exact: true })).toBeVisible();

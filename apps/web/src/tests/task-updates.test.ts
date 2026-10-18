@@ -31,7 +31,7 @@ const bff = vi.hoisted(() => ({
 }));
 
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
-import { GET } from "../routes/tasks/[taskId]/updates/+server.js";
+import { GET } from "../routes/_old/tasks/[taskId]/updates/+server.js";
 
 const taskId = "00000000-0000-4000-8000-000000000001";
 function locals(): { requestId: string; requestSignal: AbortSignal } {
@@ -46,7 +46,7 @@ describe("same-origin task update relay", () => {
   it("forwards the resume cursor and closes with a retryable error when the bounded buffer fills", async () => {
     const response = await GET({
       locals: locals(), params: { taskId },
-      request: new Request(`http://127.0.0.1/tasks/${taskId}/updates`, { headers: { "last-event-id": "7" } }),
+      request: new Request(`http://127.0.0.1/_old/tasks/${taskId}/updates`, { headers: { "last-event-id": "7" } }),
     } as never);
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -61,21 +61,21 @@ describe("same-origin task update relay", () => {
   it.each(["not-a-version", "18446744073709551616"])(
     "rejects malformed or overflowing resume cursor %s before gRPC",
     async (cursor) => {
-      const response = await GET({ locals: locals(), params: { taskId }, request: new Request(`http://127.0.0.1/tasks/${taskId}/updates`, { headers: { "last-event-id": cursor } }) } as never);
+      const response = await GET({ locals: locals(), params: { taskId }, request: new Request(`http://127.0.0.1/_old/tasks/${taskId}/updates`, { headers: { "last-event-id": cursor } }) } as never);
       expect(response.status).toBe(400);
       expect(bff.watchDevelopmentTask).not.toHaveBeenCalled();
     },
   );
 
   it("rejects a malformed task identifier before gRPC", async () => {
-    const response = await GET({ locals: locals(), params: { taskId: "------------------------------------" }, request: new Request("http://127.0.0.1/tasks/invalid/updates") } as never);
+    const response = await GET({ locals: locals(), params: { taskId: "------------------------------------" }, request: new Request("http://127.0.0.1/_old/tasks/invalid/updates") } as never);
     expect(response.status).toBe(400);
     expect(bff.watchDevelopmentTask).not.toHaveBeenCalled();
   });
 
   it("cancels the gRPC stream when the SSE reader disconnects", async () => {
     const streamingTaskId = "00000000-0000-4000-8000-000000000002";
-    const response = await GET({ locals: locals(), params: { taskId: streamingTaskId }, request: new Request(`http://127.0.0.1/tasks/${streamingTaskId}/updates`) } as never);
+    const response = await GET({ locals: locals(), params: { taskId: streamingTaskId }, request: new Request(`http://127.0.0.1/_old/tasks/${streamingTaskId}/updates`) } as never);
     await response.body?.cancel();
     const context = bff.watchDevelopmentTask.mock.calls[0]?.[2];
     expect(context?.signal?.aborted).toBe(true);

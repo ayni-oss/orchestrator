@@ -11,16 +11,16 @@ async function choose(page: Page, label: string, option: string): Promise<void> 
 
 test("operator inspects profile readiness and submits frozen work", async ({ page,request }) => {
   await request.post("http://127.0.0.1:50062/seed-task-models");
-  await page.goto("/");
+  await page.goto("/_old");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await expect(page.getByRole("heading", { name: "Workspaces", exact:true })).toBeVisible();
 
-  await page.goto("/repositories");
+  await page.goto("/_old/repositories");
   await page.getByRole("link", { name: "Open repository ayni-oss/sandbox" }).first().click();
   await expect(page.getByRole("heading", { name: "Runtimes" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Ayni managed", exact: true }).getByText("Ready", { exact: true }).first()).toBeVisible();
 
-  await page.goto("/tasks?project=project:1");
+  await page.goto("/_old/tasks?project=project:1");
   await choose(page, "Runtime profile", "Ayni managed");
   await choose(page, "Coding connection", "Task models");
  await choose(page, "Model", "gpt-5.6-sol");
@@ -35,7 +35,7 @@ test("operator inspects profile readiness and submits frozen work", async ({ pag
 
 // Provider operations are fixture-backed; this tests browser/BFF behavior, not live GitHub.
 test("connected runtime and truthful worker draft delivery are visible", async ({ page }) => {
- await page.goto("/tasks/00000000-0000-4000-8000-000000000039");
+ await page.goto("/_old/tasks/00000000-0000-4000-8000-000000000039");
  await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
  await expect(page.getByRole("link", {name:"Open pull request #9",exact:true})).toHaveAttribute("href", "https://github.com/ayni-oss/sandbox/pull/9");
  const delivery = page.getByRole("region",{name:"Pull request · attempt 1",exact:true});
@@ -74,14 +74,14 @@ test("every managed profile state explains the next step",async({page,request})=
  const states=["Repository setup is required before runtime preparation can proceed.", "Review and merge the repository setup pull request.", "Resolving and verifying the registry image for this exact lock fingerprint. A missing image is built by an Orchestrator-managed Kubernetes Job.", "The signed runtime image matches the checked lock and is ready for use.", "A new lock fingerprint is being resolved. Existing requests retain their frozen image.", "Repair provider access, registry access, build configuration or certificate trust, then retry reconciliation.", "The committed Ayni configuration or runtime image could not be verified. Review the failure and retry after repair."];
  try { for(let index=0;index<states.length;index++) {
   await request.post(`http://127.0.0.1:50062/profile-state?value=${index+1}`);
-  await page.goto("/profiles/profile:1");
+  await page.goto("/_old/profiles/profile:1");
   await expect(page.getByText(states[index]!,{exact:false}).first()).toBeVisible();
   if(index!==3) await expect(page.getByRole("link",{name:"New request",exact:true})).toHaveCount(0);
  } } finally { await request.post("http://127.0.0.1:50062/profile-state?value=4"); }
 });
 
 test("projects retain identity through rename and archive", async ({ page }) => {
-  await page.goto("/workspaces/workspace:1");
+  await page.goto("/_old/workspaces/workspace:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", {name:"Create project",exact:true}).click();
   await page.getByLabel("Project name", { exact: true }).fill("Payments");
@@ -107,7 +107,7 @@ test("projects retain identity through rename and archive", async ({ page }) => 
 
 test("projects select several repositories and tasks require one target",async({page,request})=>{
  await request.post("http://127.0.0.1:50062/seed-task-models");
- await page.goto("/workspaces/workspace:1");
+ await page.goto("/_old/workspaces/workspace:1");
  await page.getByRole("button",{name:"Create project",exact:true}).click();
  await page.getByLabel("Project name",{exact:true}).fill("Shared work");
   await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");
@@ -143,7 +143,7 @@ test("projects select several repositories and tasks require one target",async({
 });
 
 test("publication retry resumes retained final work and is distinct from task retry", async ({page}) => {
- await page.goto("/tasks/00000000-0000-4000-8000-000000000044");
+ await page.goto("/_old/tasks/00000000-0000-4000-8000-000000000044");
  await page.getByRole("button",{name:"Task actions",exact:true}).click();
  await expect(page.getByRole("menuitem",{name:"Retry task · new attempt",exact:true})).toBeVisible();
  await page.getByRole("menuitem",{name:"Retry publication",exact:true}).click();
@@ -154,7 +154,7 @@ test("publication retry resumes retained final work and is distinct from task re
 
 test("project views separate planning, tasks and project settings on desktop and mobile", async ({ page }) => {
   await page.setViewportSize({ width: 1185, height: 1071 });
-  await page.goto("/projects/project:1");
+  await page.goto("/_old/projects/project:1");
   await expect(page.getByRole("button", {name:"New conversation",exact:true})).toBeVisible();
   await expect(page.getByRole("heading", {name:"Tasks",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button", {name:"Save settings",exact:true})).toHaveCount(0);

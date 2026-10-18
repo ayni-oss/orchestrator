@@ -1,7 +1,7 @@
 import {beforeEach,describe,expect,it,vi} from "vitest";
 const bff=vi.hoisted(()=>({getProject:vi.fn(),getRuntimeProfile:vi.fn(),createDevelopmentTask:vi.fn(),getWorkspace:vi.fn(),listDevelopmentTasks:vi.fn(),getAgentCapabilities:vi.fn(),getProjectConfiguration:vi.fn(),listConnections:vi.fn(),listProviderModels:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-import {load} from "../routes/tasks/+page.server.js";
+import {load} from "../routes/_old/tasks/+page.server.js";
 import {submitDirectTask} from "$lib/server/tasks.js";
 const project={id:"project:1",workspaceId:"workspace:1",state:"active",repositoryConnectionIds:["repository:1"]};
 const workspace={id:"workspace:1",state:"active",repositoryConnectionIds:["repository:1"]};
@@ -10,7 +10,7 @@ beforeEach(()=>{vi.resetAllMocks();bff.getProject.mockResolvedValue(project);bff
 const locals=()=>({requestId:"task-workspace",requestSignal:new AbortController().signal});
 describe("task history and direct submission",()=>{
  it("loads history without task-creation configuration",async()=>{await load({locals:locals(),url:new URL("http://localhost/tasks"),setHeaders:vi.fn(),depends:vi.fn()} as never);expect(bff.listConnections).not.toHaveBeenCalled();expect(bff.getAgentCapabilities).not.toHaveBeenCalled();});
- it("redirects a project bookmark into its direct-task dialog",async()=>{await expect(load({locals:locals(),url:new URL("http://localhost/tasks?project=project:1"),setHeaders:vi.fn(),depends:vi.fn()} as never)).rejects.toMatchObject({status:303,location:"/projects/project%3A1?directTask=1"});});
+ it("redirects a project bookmark into its direct-task dialog",async()=>{await expect(load({locals:locals(),url:new URL("http://localhost/tasks?project=project:1"),setHeaders:vi.fn(),depends:vi.fn()} as never)).rejects.toMatchObject({status:303,location:"/_old/projects/project%3A1?directTask=1"});});
  it.each(["archived","removed"])("rejects direct submission for %s workspace access",async condition=>{
    bff.getWorkspace.mockResolvedValueOnce(condition==="archived"?{...workspace,state:"archived"}:{...workspace,repositoryConnectionIds:[]});
    const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",projectId:project.id,repositoryConnectionId:"repository:1",runtimeProfileId:"profile:1",connectionId:"coding",provider:"openai",model:"coding",request:"Ship work",acceptanceCriteria:"Behavior works"}))form.set(key,value);

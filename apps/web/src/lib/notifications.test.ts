@@ -19,18 +19,18 @@ describe("notification events", () => {
   });
   it("deduplicates polling failures despite changing request identifiers, then notifies after recovery", () => {
     const events = createNotificationEvents();
-    events.load("/repositories", { error: { message: "Unavailable", requestId: "1" } });
-    events.load("/repositories", { error: { message: "Unavailable", requestId: "2" } });
+    events.load("/_old/repositories", { error: { message: "Unavailable", requestId: "1" } });
+    events.load("/_old/repositories", { error: { message: "Unavailable", requestId: "2" } });
     expect(toast.error).toHaveBeenCalledTimes(1);
-    events.load("/repositories", {});
-    events.load("/repositories", { error: { message: "Unavailable" } });
+    events.load("/_old/repositories", {});
+    events.load("/_old/repositories", { error: { message: "Unavailable" } });
     expect(toast.error).toHaveBeenCalledTimes(2);
-    events.load("/certificates", { error: { message: "Unavailable" } });
+    events.load("/_old/certificates", { error: { message: "Unavailable" } });
     expect(toast.error).toHaveBeenCalledTimes(3);
   });
   it("handles auxiliary loader failures without toasting resource readiness or validation", () => {
     const events = createNotificationEvents();
-    events.load("/repositories", { registryError: { message: "Registry unavailable" }, profile: { failure: { message: "Runtime needs repair" } } });
+    events.load("/_old/repositories", { registryError: { message: "Registry unavailable" }, profile: { failure: { message: "Runtime needs repair" } } });
     events.action({ form: { errors: { displayName: ["Required"] } } });
     expect(toast.error).toHaveBeenCalledTimes(1);
     events.action({ form: { message: "Project could not be saved" } });
@@ -48,7 +48,7 @@ it("notifies completed redirect mutations without claiming failed actions succee
   const action = new URL("https://example.test/repositories/repository:1?/remove");
   redirectNotification({ type: "failure", status: 409, data: {} }, action);
   expect(toast.success).not.toHaveBeenCalled();
-  redirectNotification({ type: "redirect", status: 303, location: "/repositories" }, action);
+  redirectNotification({ type: "redirect", status: 303, location: "/_old/repositories" }, action);
   expect(toast.success).toHaveBeenCalledWith("Repository removed.", { duration: 6000 });
 });
 

@@ -4,7 +4,7 @@ test("certificate trust proposal and progress appear in Ayni onboarding", async 
   const href = "https://github.com/ayni-oss/sandbox/pull/17";
   try {
     await request.post(`http://127.0.0.1:50062/certificate-trust?state=open&href=${encodeURIComponent(href)}`);
-    await page.goto("/repositories/repository:1");
+    await page.goto("/_old/repositories/repository:1");
     const onboarding = page.getByRole("region", {name:"Ayni onboarding",exact:true});
     await expect(onboarding).toContainText("Setup PR open");
     await expect(onboarding).toContainText("Review and merge");
@@ -23,9 +23,9 @@ test("certificate trust proposal and progress appear in Ayni onboarding", async 
       await expect(onboarding).toContainText(description!);
       await expect(onboarding.getByRole("link", {name:"Review certificate trust update"})).toHaveCount(0);
       if (["merged","verified"].includes(state!)) {
-        await page.goto("/profiles/profile:1");
+        await page.goto("/_old/profiles/profile:1");
         await expect(page.getByRole("link",{name:"Review certificate trust update"})).toHaveCount(0);
-        await page.goto("/repositories/repository:1");
+        await page.goto("/_old/repositories/repository:1");
       }
     }
   } finally {
@@ -35,7 +35,7 @@ test("certificate trust proposal and progress appear in Ayni onboarding", async 
 
 test("repository overview shows identity and readiness separately from runtime configuration",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=ghcr");
-  await page.goto("/repositories/repository:1");
+  await page.goto("/_old/repositories/repository:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
   const header=page.locator("main header").filter({has:page.getByRole("heading",{name:"ayni-oss/sandbox"})});
   await expect(header.getByRole("heading",{name:"ayni-oss/sandbox"})).toBeVisible();
@@ -85,7 +85,7 @@ test("repository overview shows identity and readiness separately from runtime c
 test("runtime preparation shows progress, findings and guarded corrective actions", async({page,request}) => {
   await request.post("http://127.0.0.1:50062/admin-certificate");
   await request.post("http://127.0.0.1:50062/preparation?phase=building");
-  await page.goto("/repositories/repository:1");
+  await page.goto("/_old/repositories/repository:1");
   await expect(page.getByRole("region", {name:"Ayni managed", exact:true})).toContainText("Preparation Building");
   for(const phase of ["publishing", "verifying", "ready"]) {
     await request.post(`http://127.0.0.1:50062/preparation?phase=${phase}`);
@@ -109,7 +109,7 @@ test("runtime preparation shows progress, findings and guarded corrective action
 
 
 test("repository analysis retains onboarding independently of connection access", async ({ page }) => {
-  await page.goto("/repositories/repository:1");
+  await page.goto("/_old/repositories/repository:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   const onboarding = page.getByRole("region", { name: "Ayni onboarding" });
   await expect(onboarding).toContainText("Awaiting trust");
@@ -125,7 +125,7 @@ test("repository analysis retains onboarding independently of connection access"
 test("exhausted runtime offers explicit retry without an automatic timestamp", async ({page, request}) => {
   try {
     await request.post("http://127.0.0.1:50062/preparation?phase=verifying&retry=operator_required");
-    await page.goto("/profiles/profile:1");
+    await page.goto("/_old/profiles/profile:1");
     await expect(page.getByText("Manual retry required", {exact:true})).toBeVisible();
     await expect(page.getByText("runtime_verification_failed", {exact:true})).toBeVisible();
     await expect(page.getByText("Next retry", {exact:true})).toHaveCount(0);
@@ -144,7 +144,7 @@ test("repository dialogs preview publishing ownership without exposing the authe
     ["ghcr.io/credential-owner", "ghcr.io/ayni-oss/sandbox"],
   ]) {
     await request.post(`http://127.0.0.1:50062/admin-connection?kind=ghcr&namespace=${namespace}`);
-    const response = await page.goto("/repositories");
+    const response = await page.goto("/_old/repositories");
     expect(await response!.text()).not.toContain("registry-auth-account");
     await page.getByRole("button", {name:"Connect repository", exact:true}).click();
     const dialog = page.getByRole("dialog");
@@ -156,7 +156,7 @@ test("repository dialogs preview publishing ownership without exposing the authe
     await expect(dialog.getByText(`Image destination: ${destination}`, {exact:true})).toBeVisible();
     await page.screenshot({path:`/tmp/orchestrator-registry-${namespace}.png`});
     await page.keyboard.press("Escape");
-    await page.goto("/repositories/repository:1");
+    await page.goto("/_old/repositories/repository:1");
     await page.getByRole("button", {name:"Ayni managed actions", exact:true}).click();
     await page.getByRole("menuitem", {name:"Edit", exact:true}).click();
     await dialog.getByLabel("GHCR connection").click();

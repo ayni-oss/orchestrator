@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PageData } from "../../routes/workspaces/[workspaceId]/$types";
+  import type { PageData } from "../../routes/_old/workspaces/[workspaceId]/$types";
   import { enhance } from "$lib/forms.js";
   import Feedback from "$lib/components/feedback.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";

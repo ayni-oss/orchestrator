@@ -4,9 +4,9 @@ const bff=vi.hoisted(()=>({
   watchProjectConversation:vi.fn(async(_id:string,_cursor:string|undefined,_ctx:{requestId:string;signal?:AbortSignal},changed:(cursor:string)=>void)=>{changed("9");}),
 }));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-import {GET} from "../routes/projects/[projectId]/conversations/[conversationId]/updates/+server.js";
+import {GET} from "../routes/_old/projects/[projectId]/conversations/[conversationId]/updates/+server.js";
 function event(cursor="8",projectId="project:1"){
-  const url=new URL("http://127.0.0.1/projects/project:1/conversations/conversation:1/updates?after=7");
+  const url=new URL("http://127.0.0.1/_old/projects/project:1/conversations/conversation:1/updates?after=7");
   return {params:{projectId,conversationId:"conversation:1"},url,locals:{requestId:"request:1",requestSignal:new AbortController().signal},request:new Request(url,{headers:{"last-event-id":cursor}})} as never;
 }
 describe("conversation update relay",()=>{

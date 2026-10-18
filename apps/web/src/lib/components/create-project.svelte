@@ -1,7 +1,7 @@
 <script lang="ts">
   import { notify, redirectNotification } from "$lib/notifications.js";
   import { tick } from "svelte";
-  import type { PageData } from "../../routes/workspaces/[workspaceId]/$types";
+  import type { PageData } from "../../routes/_old/workspaces/[workspaceId]/$types";
   import { Plus } from "@lucide/svelte";
   import { superForm } from "sveltekit-superforms";
   import { zodClient } from "sveltekit-superforms/adapters";
@@ -12,7 +12,7 @@
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as Form from "$lib/components/ui/form/index.js";
-  let { data }: { data: PageData } = $props();
+  let { data, label = "Create project" }: { data: Pick<PageData, "form" | "workspace" | "repositories">; label?: string } = $props();
   let open = $state(false);
   let redirecting = $state(false);
   let finishClosing: (() => void) | undefined;
@@ -29,7 +29,7 @@
 
 </script>
 <div data-refresh-paused={open || $submitting || redirecting ? "" : undefined}>
-<Button onclick={() => open = true}><Plus aria-hidden="true" /> Create project</Button>
+<Button onclick={() => open = true}><Plus aria-hidden="true" /> {label}</Button>
   <Dialog.Root bind:open onOpenChangeComplete={value=>{if(!value){finishClosing?.();finishClosing=undefined;}}}><Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-xl"><Dialog.Header><Dialog.Title>Create project</Dialog.Title><Dialog.Description>Describe your goal and select repositories available in this workspace.</Dialog.Description></Dialog.Header>
     <form use:enhance method="POST" action="?/create" class="space-y-5">
       <input type="hidden" name="idempotencyKey" value={$values.idempotencyKey} />
@@ -38,7 +38,7 @@
       <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} placeholder="A short title for your project" autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="goal"><Form.Control>{#snippet children({props})}<Form.Label>Goal</Form.Label><Textarea {...props} bind:value={$values.goal} rows={4} class="min-h-28 resize-y" placeholder="Describe what this project should achieve and why." />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
-      {#if !repositories.length}<p class="text-sm text-muted-foreground">Choose a workspace with connected repositories before creating a project.</p><Button href="/workspaces" variant="outline">Manage workspaces</Button>{/if}
+      {#if !repositories.length}<p class="text-sm text-muted-foreground">Choose a workspace with connected repositories before creating a project.</p><Button href="/_old/workspaces" variant="outline">Manage workspaces</Button>{/if}
 
       <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={$submitting || !repositories.length}>{$submitting ? "Creating…" : "Create project"}</Button></Dialog.Footer>
     </form>

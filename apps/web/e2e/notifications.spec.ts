@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("action results show one dismissible toast per request, including consecutive saves", async ({ page }) => {
-  await page.goto("/projects/project:1");
+  await page.goto("/_old/projects/project:1");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
@@ -18,9 +18,9 @@ test("action results show one dismissible toast per request, including consecuti
 });
 
 test("safe settings errors keep the form available and provide retry feedback", async ({ page }) => {
-  await page.goto("/projects/project:1");
+  await page.goto("/_old/projects/project:1");
   // Intercept only this isolated browser's POST; do not mutate the fixture or a real project.
-  await page.route("**/projects/*?*/update", async route => {
+  await page.route("**/_old/projects/*?*/update", async route => {
     if (route.request().method() !== "POST") return route.continue();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ type: "failure", status: 409, data: '[{"error":1},{"message":2,"requestId":3},"Refresh and try again.","notification-test"]' }) });
   });
@@ -36,7 +36,7 @@ test("safe settings errors keep the form available and provide retry feedback", 
 });
 
 test("creation redirects preserve the success toast after the dialog closes", async ({ page }) => {
-  await page.goto("/workspaces/workspace:1");
+  await page.goto("/_old/workspaces/workspace:1");
   await page.getByRole("button", { name: "Create project", exact: true }).click();
   await page.getByLabel("Project name", { exact: true }).fill("Notification project");
   await page.getByLabel("Goal",{exact:true}).fill("Improve project behavior");

@@ -67,7 +67,7 @@
   <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-lg font-semibold">Runtimes</h2><PollStatus /></div>
   {#each profiles as profile (profile.id)}
     {@const revision=revisions[profile.id]}
-    <InformationCard title={words(profile.kind)} navigationHref={`/profiles/${encodeURIComponent(profile.id)}`} status={profile.state} actions={[{ label: "Edit", onSelect: () => edit(profile), disabled: busy }]}>
+    <InformationCard title={words(profile.kind)} navigationHref={`/_old/profiles/${encodeURIComponent(profile.id)}`} status={profile.state} actions={[{ label: "Edit", onSelect: () => edit(profile), disabled: busy }]}>
       {#if profile.state === "updating"}<p class="text-sm text-muted-foreground" role="status">The environment needs an update. New tasks wait until preparation and verification complete.</p>{/if}
       {#each profile.findings as finding (finding.code)}<div class="text-sm" role="status"><p class="text-destructive">{finding.message}</p><p class="text-muted-foreground">{finding.remediation}</p></div>{/each}
       <InformationTable rows={[
@@ -79,7 +79,7 @@
         ...profile.reconciliation.filter(entry => entry.key === "discovery-reference").map(entry => ({ label: "Discovery tag", value: entry.value, monospace: true })),
         { label: "Image destination", value: profile.desiredImageRepository || revision?.managed?.repository || "Not configured" },
       ]} />
-      {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
+      {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/_old/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
       {#if profile.failure && !profile.findings.length}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
     </InformationCard>
@@ -98,20 +98,20 @@
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={`${keys[selected.id]}-certificate-${editVersion}`}/><input type="hidden" name="resourceVersion" value={editVersion}/>
         <div class="space-y-2"><Label for="runtime-certificate">Signing certificate</Label><ThemedSelect id="runtime-certificate" name="certificateId" bind:value={certificateId} options={[{value:"",label:certificates.find(c=>c.isDefault) ? `Global default (${certificates.find(c=>c.isDefault)!.displayName})` : "Global default (not configured)"},...certificates.map(c=>({value:c.id,label:c.displayName}))]} /></div>
         {#if selected.effectiveCertificate}<p class="text-xs text-muted-foreground">Effective key: {selected.effectiveCertificate.keyId} · revision {selected.effectiveCertificate.revision}</p>{/if}
-        {#if !certificates.length}<p class="text-sm text-muted-foreground"><a href="/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
+        {#if !certificates.length}<p class="text-sm text-muted-foreground"><a href="/_old/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
         <Button type="submit" disabled={busy || !certificates.length}>Save certificate</Button>
       </form>
       <form method="POST" action="?/registry" use:enhance={submit} class="space-y-4">
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><input type="hidden" name="resourceVersion" value={editVersion}/>
         <div class="space-y-2"><Label for="runtime-registry">GHCR connection</Label><ThemedSelect id="runtime-registry" name="registryConnectionId" bind:value={registryId} options={connections.map(connection=>({value:connection.id,label:connection.displayName}))} required /></div>
         {#if imageDestination}<p class="break-all text-xs text-muted-foreground">Image destination: {imageDestination}</p>{/if}
-        {#if !connections.length}<p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> to configure this runtime.</p>{/if}
+        {#if !connections.length}<p class="text-sm text-muted-foreground">Add a ready <a href="/_old/container-registries/github" class="underline">GHCR connection</a> to configure this runtime.</p>{/if}
         <Button type="submit" disabled={busy || !registryId}>Save image destination</Button>
       </form>
       {/if}
       <div class="flex flex-wrap gap-2 border-t pt-4">
         {#each ["sync","rebuild"] as action (action)}<form method="POST" action={`?/${action}`} use:enhance={submit}><input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><Button type="submit" variant="outline" disabled={busy || (action==="rebuild" && !selected.rebuildAvailable)}>{action==="sync" ? selected.failure ? "Retry" : "Build / Retry" : "Rebuild runtime"}</Button></form>{/each}
-        <Button href={`/profiles/${encodeURIComponent(selected.id)}`} variant="outline">View details</Button>
+        <Button href={`/_old/profiles/${encodeURIComponent(selected.id)}`} variant="outline">View details</Button>
       </div>
     {/if}
   </Dialog.Content>

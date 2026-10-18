@@ -6,7 +6,7 @@ const project={workspaceId:"workspace:1",goal:"Complete work",id:"project:1",dis
 const bff=vi.hoisted(()=>({createProjectConversation:vi.fn(),getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),updateProjectConversationSettings:vi.fn(),cancelProjectAgentRun:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
 vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[]}));
-import {load,actions} from "../routes/projects/[projectId]/+page.server.js";
+import {load,actions} from "../routes/_old/projects/[projectId]/+page.server.js";
 import {connectionActions} from "$lib/server/connections.js";
 function event(fields:Record<string,string>={},url="http://localhost/projects/project:1?conversation=conversation:1"){
   const form=new FormData();for(const [key,value] of Object.entries({idempotencyKey:"00000000-0000-4000-8000-000000000001",...fields}))form.set(key,value);
@@ -22,7 +22,7 @@ describe("project agent operator routes",()=>{
   });
   it("derives a 30-character title and sends the full first message before redirecting",async()=>{
     const content="Research  the next API improvement\r\nwith backwards compatibility";
-    await expect(actions.createConversation!(event({content}))).rejects.toMatchObject({status:303,location:"/projects/project%3A1?conversation=conversation%3A1"});
+    await expect(actions.createConversation!(event({content}))).rejects.toMatchObject({status:303,location:"/_old/projects/project%3A1?conversation=conversation%3A1"});
     expect(bff.createProjectConversation).toHaveBeenCalledWith(expect.objectContaining({title:"Research the next API improvem",repositoryConnectionIds:["repository:1"]}),expect.anything());
     expect(bff.sendProjectMessage).toHaveBeenCalledWith(expect.objectContaining({conversationId:metadata.id,content,idempotencyKey:"00000000-0000-4000-8000-000000000001-message"}),expect.anything());
   });

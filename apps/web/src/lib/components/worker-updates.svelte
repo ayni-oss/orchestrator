@@ -32,7 +32,7 @@
         {#if update.result?.changedPaths.length}<details class="text-sm"><summary class="cursor-pointer">Changed paths · {update.result.changedPaths.length}</summary><ul class="mt-2 space-y-1 break-all font-mono text-xs">{#each update.result.changedPaths as path,index (index)}<li>{path}</li>{/each}</ul></details>{/if}
         {#if quality?.evidence}<details class="text-sm"><summary class="cursor-pointer">Quality evidence</summary><InformationTable rows={[{label:"Checked commit",value:quality.evidence.commit},{label:"Signals digest",value:quality.evidence.signalsDigest},{label:"Source fingerprint",value:quality.evidence.sourceFingerprint}]} /></details>{:else if update.result}<p class="text-sm text-muted-foreground">Quality evidence unavailable. A delivery receipt cannot replace missing evidence.</p>{/if}
         <div class="flex flex-wrap gap-2">
-          <Button variant="outline" href={`/tasks/${encodeURIComponent(update.taskId)}#${encodeURIComponent(`attempt-${update.attemptId}`)}`}>Open execution attempt</Button>
+          <Button variant="outline" href={`/_old/tasks/${encodeURIComponent(update.taskId)}#${encodeURIComponent(`attempt-${update.attemptId}`)}`}>Open execution attempt</Button>
           <Button variant="outline" href={projectHref(update.origin.projectId,"plans",update.origin.conversationId,undefined,update.origin.planVersion)}>Approved plan · version {update.origin.planVersion}</Button>
           {#if receipt?.url}<Button variant="outline" href={receipt.url} target="_blank" rel="noopener noreferrer">{receipt.draft?"Open draft PR":"Open pull request"} #{receipt.number}</Button>{/if}
         </div>

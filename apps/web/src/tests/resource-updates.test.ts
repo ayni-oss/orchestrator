@@ -3,7 +3,7 @@ import { BffError } from "@ayni-orchestrator/bff/server";
 
 const bff = vi.hoisted(() => ({ watchResources: vi.fn() }));
 vi.mock("$lib/server/bff.js", () => ({ getBff: () => bff }));
-import { GET } from "../routes/updates/[scope]/+server.js";
+import { GET } from "../routes/_old/updates/[scope]/+server.js";
 
 function request(scope = "all", cursor?: string) {
   return GET({

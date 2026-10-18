@@ -21,3 +21,21 @@ the CLI mark for the Ayni configuration entry and repository runtime badges;
 `variant="orchestrator"` selects the application mark. Inline icons follow the
 current text color, and favicons adapt to the browser's light or dark preference.
 The `Ayni` configuration section refers specifically to CLI runtime certificates.
+
+## UI transition
+
+The workspace Projects view starts at `/`; `?workspace=<id>` selects its scope.
+It uses real workspace/project data and the existing validated creation flow.
+Project details and workspace configuration temporarily link into `/_old`.
+
+The previous application is preserved in `src/routes/_old/`, including its layout,
+server loads/actions, update streams, and GitHub manifest setup callbacks. Its
+internal URLs use the `/_old` prefix. `/healthz`, static assets, and the global
+security hooks remain at their existing locations. Old root-level page URLs are
+not aliases; those paths are reserved for the new interface.
+
+During migration, shared components and server helpers still live in `src/lib`.
+Remove legacy routes only after their behavior has been replaced; trace their
+imports before deleting shared modules. The new creation form currently shares
+`create-project.svelte` with the previous workspace page. Repository data is not
+copied or reset by this UI migration.

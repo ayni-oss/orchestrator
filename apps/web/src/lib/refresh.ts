@@ -81,7 +81,7 @@ export function createRefreshCoordinator(refresh: (scope: RefreshScope) => Promi
 
 // Instantiated on the server too, but only mounted browser consumers subscribe.
 // Avoid replacing resource versions or form defaults while an editor is active.
-const resourceWatch = createResourceWatch(() => new EventSource("/updates/all"));
+const resourceWatch = createResourceWatch(() => new EventSource("/_old/updates/all"));
 export function watchRefreshScope(scope: RefreshScope, changed: () => void, status: (ok: boolean) => void): () => void {
   if (scope === "app:tasks" || scope === "app:workspaces" || scope === "app:conversations") return () => {};
   return resourceWatch(scope, changed, status);
