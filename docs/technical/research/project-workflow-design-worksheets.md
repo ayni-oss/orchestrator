@@ -2,7 +2,7 @@
 
 Date: 2026-10-19. Status: research templates, not approved contracts.
 
-Use these worksheets with the [refactor runbook](project-workflow-refactor-runbook.md). Fill them with evidence during research; do not treat illustrative names as an agreed schema. Delivery status belongs in issues.
+Use these worksheets with the [refactor runbook](project-workflow-refactor-runbook.md). Fill them with evidence during research; do not treat illustrative names as an agreed schema. Use [the roadmap](../../../ROADMAP.md) for direction and milestone scope; delivery status and acceptance evidence belong in PRs targeting `alpha`.
 
 ## Product and domain model
 
@@ -129,4 +129,4 @@ Use deterministic fixtures for policy and real local infrastructure for transpor
 
 For each decision, record alternatives, chosen contract, evidence, costs, unresolved risks, and reversal conditions. Keep current implementation, target proposal, and approved decision visibly distinct.
 
-Only then map current components to keep, replace, adapt, or retire. Each delivery issue needs prerequisites, an observable outcome, contracts changed, failure tests, required local checks, and removal work. Estimate effort after the high-risk experiments, with assumptions and confidence rather than a percentage-complete claim.
+Only then map current components to keep, replace, adapt, or retire. Each delivery PR needs prerequisites, an observable outcome, contracts changed, failure tests, required local checks, and removal work. Estimate effort after the high-risk experiments, with assumptions and confidence rather than a percentage-complete claim.

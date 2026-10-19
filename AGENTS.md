@@ -5,8 +5,9 @@
 - This repository is public. The maintainer has authorized publication of
   orchestrator architecture, implementation, documentation, issues and pull requests.
 - Keep durable orchestrator architecture, operations, terminology, and examples
-  in this repository. Track requirements and delivery in the Orchestrator GitHub
-  Project and linked issues. Never publish credentials or private operational data.
+  in this repository. Use ROADMAP.md for agreed direction and delivery milestones;
+  each pull request is its own work item with requirements and delivery evidence.
+  Never publish credentials or private operational data.
 - Ayni must remain independently useful as a local environment and quality tool.
   Orchestrator-driven discoveries may motivate Ayni fixes and improvements only when
   they have an independently justified Ayni use case and respect its boundaries.
@@ -16,9 +17,9 @@
 - Keep Kubernetes controllers, provider integrations, project/task lifecycle,
   agent orchestration, and orchestrator access policy here. Do not add a dependency
   from Ayni to this repository or require private fixtures for Ayni CI.
-- Changes to Ayni belong in a separate issue, branch, and PR in its repository,
-  following its own AGENTS.md. An Orchestrator issue may link the separate
-  Ayni issue. Do not silently edit Ayni as part of an Orchestrator change.
+- Changes to Ayni belong in a separate branch and PR in its repository,
+  following its own AGENTS.md. Link related PRs across the repositories.
+  Do not silently edit Ayni as part of an Orchestrator change.
 - Repository publication does not authorize new package/image releases, sites,
   announcements or publishing workflows; those require a separate maintainer decision.
 
@@ -45,18 +46,18 @@
   controller runtime; pin tested dependencies when implementation begins.
 - Rust does not require reimplementing infrastructure, language tools, or external
   agents. Keep those integrations behind explicit boundaries.
-- Read README.md, the linked issue, and relevant durable documents in docs/technical/
-  before implementation. The issue owns the outcome and acceptance criteria;
-  repository documents describe current behavior and accepted decisions.
-- Start each change from updated main on a focused branch and link its pull
-  request to the issue with a closing keyword. Do not merge automatically.
+- Read README.md, ROADMAP.md, and relevant durable documents in docs/technical/
+  before implementation. Each PR records its outcome, acceptance criteria,
+  prerequisites, failure/recovery cases, and validation evidence, with a link to
+  the relevant roadmap section. Do not require a separate GitHub issue or closing
+  keyword. Do not merge automatically.
 - Exercise deployable behavior on Docker Desktop Kubernetes when the change
   affects runtime behavior. Use the `dev/charts/ayni-orchestrator-local` Helm chart and the
   explicit `docker-desktop` context as defined in
   docs/technical/decisions/0006-local-helm-chart.md. Never fall back
   to another current cluster when the local context is absent. Local deployment
   is authorized; destructive cluster resets and retained-data deletion are separate.
-- Keep each issue small and end-to-end. Define its observable outcome and
+- Keep each PR small and end-to-end. Define its observable outcome and
   failure/recovery cases before expanding resources or integrations.
 - Consume Ayni's supported CLI and artifact contracts first. Do not duplicate its
   policy evaluation, adapter behavior, or lock interpretation in the orchestrator.
@@ -71,8 +72,17 @@
 
 - Use descriptive, unbranded branches; never use codex/ or cortex/ prefixes.
 - Use Conventional Commits for commits and PR titles.
-- Start each issue from updated main on a fresh branch. Do not reuse a merged
-  branch or implement directly on main.
+- Fetch origin/alpha and start each change from its latest commit on a fresh
+  branch. Target PRs explicitly at alpha (for example, gh pr create --base alpha),
+  regardless of the repository default branch. Do not reuse a merged branch or
+  implement directly on alpha or main. Repeat this after every merged PR.
+- ROADMAP.md owns planned direction and milestone scope; PRs own individual
+  delivery status and acceptance evidence. Update the roadmap in the same PR
+  when direction or milestone status changes. Do not create duplicate GitHub
+  issues for planned work.
+- GitHub milestones are optional groupings: reuse a matching milestone, or create
+  one when useful for an agreed roadmap milestone, and assign related PRs to it.
+  A milestone does not replace the roadmap or require separate issues.
 - After repository changes, commit and push unless explicitly instructed otherwise,
   and open a PR with an accurate scope and validation results.
 - Sign every commit with the Developer Certificate of Origin using `git commit -s`.
@@ -81,8 +91,8 @@
   Exercise affected Kubernetes behavior on a disposable cluster before claiming
   it is validated. Report blocked checks; do not treat mocks as cluster evidence.
 - Documentation-only changes require review, whitespace checks, and validation
-  of local document links. Requirements and delivery status belong in linked
-  issues and the organization Project, not duplicated planning documents.
+  of local document links. Keep workflow guidance consistent with ROADMAP.md
+  and CONTRIBUTING.md.
 
 ## Rust guidance
 

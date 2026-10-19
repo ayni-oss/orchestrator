@@ -10,7 +10,7 @@ Date: 2026-10-19. Status: research procedure; target stack selected, detailed bo
 - Derive module, library, service, storage, and API boundaries from the resulting contracts.
 - Use the [design worksheets](project-workflow-design-worksheets.md) to produce reviewable evidence at each gate.
 
-This runbook defines a method, not implementation approval or a delivery-status tracker. Record delivery work in linked GitHub issues and the organization Project. Record architectural decisions in focused decision documents after review.
+This runbook defines a method, not implementation approval or a delivery-status tracker. Use [the roadmap](../../../ROADMAP.md) for direction and milestone scope; record delivery work and acceptance evidence in PRs targeting `alpha` without requiring separate GitHub issues. Record architectural decisions in focused decision documents after review.
 
 ## Confirmed product constraints
 
@@ -101,7 +101,7 @@ A clean replacement is available because compatibility is not required. Still in
 - Specify how dispatch stops and writers are fenced before switching authority.
 - Define whether old executions drain or terminate, and what happens to their late results.
 - Establish backups or explicit reset approval, plus the last safe rollback point before new external effects.
-- Remove superseded transports, schemas, flags, controllers, and documentation after cutover; assign removal to delivery issues.
+- Remove superseded transports, schemas, flags, controllers, and documentation after cutover; assign removal to delivery PRs.
 - Regenerate contracts and managed locks through repository tooling. Preserve Ayni's independent product boundary.
 
 Completion requires passing scenario and failure tests, accurate architecture documents, dependency enforcement, and removal of obsolete paths. Report blocked validation honestly. Runtime changes require the explicit local Kubernetes topology; documentation alone does not validate runtime behavior.
