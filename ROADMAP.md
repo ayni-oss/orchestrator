@@ -24,8 +24,9 @@ and streaming contracts. Service topology follows ownership and failure contract
 
 The [refactor runbook](docs/technical/research/project-workflow-refactor-runbook.md)
 defines research gates; its [worksheets](docs/technical/research/project-workflow-design-worksheets.md)
-define required design evidence. Research gates A–H are distinct from delivery
-milestones M1–M8 below. Apply the relevant gates before each implementation;
+define required design evidence. The [M1 durable foundation contract](docs/technical/research/project-workflow-m1-durable-foundation.md)
+applies them to the first executable slice. Research gates A–H are distinct from
+delivery milestones M1–M8 below. Apply the relevant gates before each implementation;
 feasibility experiments may revise the decomposition.
 
 ### Product constraints
@@ -48,7 +49,7 @@ feasibility experiments may revise the decomposition.
 
 | Milestone | Deliverable | Demonstration required to finish |
 | --- | --- | --- |
-| M1: Durable foundation | PostgreSQL persistence and migrations, JetStream publication/consumption, gRPC commands and watches, minimal project/conversation records. | A durable message is processed by a scripted executor and streamed back despite restarts, duplicate delivery, and reconnects. |
+| M1: Durable foundation | PostgreSQL persistence and migrations, JetStream publication/consumption, gRPC commands and watches, minimal workspace/project/conversation records. | A durable message is processed by a scripted executor and streamed back despite restarts, duplicate delivery, and reconnects. |
 | M2: Conversation execution | Shared agent configuration, isolated sessions, workspace instructions, one real provider adapter, and structured activity. | Two conversations stay isolated; preparation/model activity is visible; reconnect restores accepted state. |
 | M3: Plans and approval | Conversation-owned plans, immutable versions, approval receipts, and task admission. | Approval admits exactly the reviewed task set once; stale or conflicting approval is explained. |
 | M4: Isolated task execution | Ayni runtimes, worker supervision, single-repository tasks, retained evidence, and draft publication. | A real task creates a draft PR with separate execution, quality, and publication outcomes. |
@@ -65,16 +66,26 @@ refer to this replacement sequence, not historical GitHub milestone numbers.
 ### M1 executable slice
 
 Specify the contracts, logical module map, local stack, and executable acceptance
-cases before implementation. Reproduce and classify current sandbox failures as
-baseline evidence. The replacement slice must run without depending on the old
-backend's execution paths.
+cases before implementation. Reproduce and classify current sandbox failures and
+complete the contract's bounded PostgreSQL, JetStream, executor-handoff, watch, and
+protobuf feasibility experiments before a runtime PR. The replacement slice must
+run without depending on the old backend's execution paths. M1 deliberately resets
+the private v1 workflow API and updates all known clients with the server; it exposes
+that API only on the trusted loopback operator listener. M1 establishes Workspace
+as the required parent identity for Projects and Conversations; shared workspace
+instructions and agent configuration remain M2 scope.
 
-1. Submit a conversation message through gRPC.
-2. Save the message and outbox record in one PostgreSQL transaction.
-3. Publish the retained event to JetStream.
-4. Let a scripted conversation executor consume it and report a response.
-5. Validate and persist the response through its application owner.
-6. Deliver the accepted update through a resumable gRPC watch.
+1. Submit one or more conversation messages through gRPC; active-work messages wait
+   in a bounded FIFO without steering the current Turn.
+2. Save each message, Turn, dispatch intent, receipt, and eligible command in one
+   PostgreSQL transaction.
+3. Publish retained exact command bytes to authenticated JetStream without treating
+   broker storage as executor ownership.
+4. Let a scripted executor retain the command, win an application-decided ownership
+   claim, and only then produce a retained response.
+5. Validate and persist each report and its immutable decision receipt through the
+   application owner; keep both sides' retry evidence until the next owner confirms it.
+6. Deliver accepted updates through a resumable gRPC watch.
 7. Disconnect and reconnect using the accepted cursor.
 
 A minimal diagnostic client is sufficient for this first proof. Scripted execution
@@ -85,16 +96,23 @@ protocol, and activity projection; they need not be separate services.
 M1 acceptance must establish:
 
 - Repeating a command returns its original receipt; duplicate delivery produces one accepted response.
-- Acknowledged messages survive application restart.
-- A crash between database commit and publication loses no accepted work.
+- A broker-stored command survives application restart, and PostgreSQL republishes
+  one that expires before an executor durably claims it.
+- A crash between database commit, publication, ownership claim, report acceptance,
+  and either decision receipt loses no accepted work or exact retry bytes.
+- Concurrent FIFO admission, queue limits, failed predecessors, context freezing,
+  promotion after restart, and one-at-a-time eligibility behave deterministically.
 - A watcher reconnects without gaps; expired cursors have an explicit snapshot recovery path.
-- Broker unavailability leaves work visibly pending and recoverable.
+- Broker unavailability or stream/ledger capacity leaves work visibly pending and recoverable.
 - Cancelling a watch does not cancel its underlying operation.
-- Accepted, queued, processing, and completed states are distinguishable.
+- Accepted, queued, processing, completed, and failed states are distinguishable.
+- Anonymous/cross-role broker access, unsupported-version loss, and split-brain
+  executor progress are denied by executable tests.
 
-Agree numeric targets for durable acknowledgement, visible activity, and completion
-before running the acceptance suite. Queue fairness and recovery targets are added
-when their owners enter the implementation. Transport heartbeats do not prove execution progress.
+The M1 contract proposes numeric targets for durable acknowledgement, visible
+activity, and completion. A maintainer must approve or revise them before the
+acceptance suite becomes a delivery gate. Transport heartbeats do not prove
+execution progress.
 
 ### Validation at every milestone
 

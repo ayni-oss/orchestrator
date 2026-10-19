@@ -34,7 +34,7 @@ This runbook defines a method, not implementation approval or a delivery-status 
 | Delivery | The current delivery responsibility ends at draft PR creation. Retained work has an explicit retention policy. |
 | Capability order | Workspace instructions first, MCP integrations second, multiple providers third. |
 | Proving ground | Pass basic sandbox scenarios before using Orchestrator to develop Orchestrator. Current sandbox failures must be reproduced and classified. |
-| Responsiveness | Acknowledge requests promptly and expose actual preparation/model/tool activity. Avoid unexplained waits; numeric targets remain open. |
+| Responsiveness | Acknowledge requests promptly and expose actual preparation/model/tool activity. Avoid unexplained waits; the M1 contract contains proposed numeric targets that require maintainer approval before they become delivery gates. |
 | Development strategy | Use a separate branch in this repository for now. Keeping the existing app usable throughout is not required; repository separation remains deferred. |
 | Target stack | PostgreSQL owns transactional state; JetStream carries durable messages; gRPC provides commands and watches. Detailed component boundaries remain open. |
 | Capacity | Active-project, conversation, and task counts have not yet been specified. |
@@ -88,11 +88,11 @@ Use these scenarios throughout modeling, experiments, and acceptance. Include a 
 
 ## First implementation slice
 
-The [roadmap](../../../ROADMAP.md#project-workflow-replacement) defines eight delivery milestones, separate from this runbook's research gates. M1 is a runnable PostgreSQL, JetStream, and gRPC slice with a scripted executor, durable admission, and resumable updates. Specify its contracts, module map, local stack, and acceptance cases before implementation.
+The [roadmap](../../../ROADMAP.md#project-workflow-replacement) defines eight delivery milestones, separate from this runbook's research gates. M1 is a runnable PostgreSQL, JetStream, and gRPC slice with a scripted executor, durable admission, and resumable updates. Its [durable foundation contract](project-workflow-m1-durable-foundation.md) specifies the reviewable scope, authority, module map, local stack, and acceptance cases that runtime implementation must satisfy.
 
-Reproduce current sandbox failures and establish the replacement's executable baseline. Extend its cumulative acceptance harness through planning, real execution, dependencies, and confirmed recovery. M6 proves the core feedback/recovery loop; M8 establishes operational acceptance for the initial scope.
+Reproduce current sandbox failures and establish the replacement's executable baseline. Before a runtime PR, complete the M1 contract's bounded PostgreSQL, authenticated JetStream/capacity, executor-handoff, watch/replay, and private-v1 cutover experiments; a blocked baseline is not a passed gate without an explicit maintainer exception. Extend the cumulative acceptance harness through planning, real execution, dependencies, and confirmed recovery. M6 proves the core feedback/recovery loop; M8 establishes operational acceptance for the initial scope.
 
-Use Orchestrator development as the first real workload only after sandbox scenarios pass. Self-development must not be the only mechanism available to repair the system. Numeric responsiveness and capacity targets remain to be agreed.
+Use Orchestrator development as the first real workload only after sandbox scenarios pass. Self-development must not be the only mechanism available to repair the system. The M1 contract's proposed responsiveness targets and measured capacity results remain to be approved before implementation acceptance.
 
 ## Cutover and completion
 
