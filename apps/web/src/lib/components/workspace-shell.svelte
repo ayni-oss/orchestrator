@@ -6,9 +6,11 @@
   import { LayoutDashboard, Layers, Activity, ChevronDown, Settings2, Plus, Check, PanelLeftClose, Menu, EllipsisVertical, X, GitBranch, Container, BrainCircuit } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import AyniIcon from "$lib/components/ayni-icon.svelte";
+  import CreateWorkspaceDialog from "$lib/components/create-workspace-dialog.svelte";
   import * as Dropdown from "$lib/components/ui/dropdown-menu/index.js";
   let { data, title = "Projects", children }: { data: { workspace?: WorkspaceDto | undefined; workspaces: WorkspaceDto[]; projects: ProjectDto[] }; title?: string; children: Snippet } = $props();
   let sidebarOpen = $state(false);
+  let createWorkspaceOpen = $state(false);
   let configurationOpen = $state(page.url.pathname.startsWith("/settings") || (page.url.pathname.startsWith("/workspaces/") && page.url.pathname.endsWith("/settings")));
   const workspaceUrl = $derived(data.workspace ? `/workspaces/${encodeURIComponent(data.workspace.id)}/settings` : "/_old/workspaces");
   async function selectWorkspace(id: string) {
@@ -32,7 +34,7 @@
           <Dropdown.Item onclick={() => selectWorkspace(workspace.id)}>{workspace.displayName}{#if workspace.id === data.workspace?.id}<Check class="ml-auto size-4" />{/if}</Dropdown.Item>
         {/each}
         <Dropdown.Separator />
-        <Dropdown.Item onclick={() => goto("/_old/workspaces")}><Plus size={15} /> Create workspace</Dropdown.Item>
+        <Dropdown.Item onclick={() => { sidebarOpen = false; createWorkspaceOpen = true; }}><Plus size={15} /> Create workspace</Dropdown.Item>
       </Dropdown.Content>
     </Dropdown.Root>
     <p class="section-label">Workspace</p>
@@ -57,6 +59,7 @@
     <header class="topbar"><button class="mobile-toggle" onclick={() => sidebarOpen = !sidebarOpen} aria-label="Toggle workspace navigation" aria-expanded={sidebarOpen}>{#if sidebarOpen}<PanelLeftClose size={20} />{:else}<Menu size={20} />{/if}</button><div class="breadcrumb"><span>{page.url.pathname.startsWith('/settings') ? 'Configuration' : data.workspace?.displayName ?? 'Workspace'}</span><span class="separator">/</span><strong>{title}</strong></div><ThemeToggle /><Dropdown.Root><Dropdown.Trigger class="inline-flex size-9 items-center justify-center hover:bg-accent" aria-label="Workspace actions" disabled={!data.workspace}><EllipsisVertical size={19} /></Dropdown.Trigger><Dropdown.Content align="end"><Dropdown.Item onclick={() => goto(workspaceUrl)}><Settings2 size={16} />Workspace settings</Dropdown.Item></Dropdown.Content></Dropdown.Root></header>
     <main id="main-content">{@render children()}</main>
   </div>
+  <CreateWorkspaceDialog bind:open={createWorkspaceOpen} />
 </div>
 
 <style>

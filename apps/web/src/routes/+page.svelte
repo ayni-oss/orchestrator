@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { PageProps } from "./$types";
-  import { Layers, Search, ArrowUpRight, FolderGit2, Plus } from "@lucide/svelte";
+  import { Layers, Search, ArrowUpRight, FolderGit2 } from "@lucide/svelte";
   import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import CreateProject from "$lib/components/create-project.svelte";
+  import CreateWorkspaceDialog from "$lib/components/create-workspace-dialog.svelte";
   import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -14,7 +15,7 @@
 <svelte:head><title>{data.workspace ? `${data.workspace.displayName} · Projects` : "Projects"} · Ayni Orchestrator</title></svelte:head>
 <ApplicationNotifications />
 <WorkspaceShell {data}>
-      <div class="page-heading"><div><p class="eyebrow">Workspace / Projects</p><h1>Projects</h1><p class="subtitle">Give your work a goal. Build the plan from there.</p></div>{#if data.workspace?.state === "active"}{#key data.workspace.id}<CreateProject {data} label="New project" />{/key}{:else if !data.error}<Button href="/_old/workspaces"><Plus size={16} />Create workspace</Button>{/if}</div>
+      <div class="page-heading"><div><p class="eyebrow">Workspace / Projects</p><h1>Projects</h1><p class="subtitle">Give your work a goal. Build the plan from there.</p></div>{#if data.workspace?.state === "active"}{#key data.workspace.id}<CreateProject {data} label="New project" />{/key}{:else if !data.error}<CreateWorkspaceDialog showTrigger />{/if}</div>
       {#if data.error}<section class="notice" role="alert"><h2>Projects couldn’t be loaded</h2><p>{data.error.message}</p><Button variant="outline" onclick={() => location.reload()}>Try again</Button></section>
       {:else if data.workspace}
         {#if data.workspace.state !== "active"}<p class="notice">This workspace is archived. Its projects remain available for reference.</p>{/if}
