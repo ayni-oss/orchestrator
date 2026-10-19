@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 test("workspace pages share navigation", async ({ page }) => {
   await page.goto("/operations");
@@ -30,4 +31,12 @@ test("runtime details are nested under their repository", async ({ page }) => {
   await page.goto("/repositories/repository:1/runtimes/profile:1");
   await expect(page.getByRole("heading", { name: /runtime/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Back to ayni-oss\/sandbox/ })).toBeVisible();
+});
+
+test("primary workspace pages have no obvious accessibility violations", async ({ page }) => {
+  for (const path of ["/", "/operations", "/activity", "/projects/project:1", "/workspaces/workspace:1/settings", "/repositories"]) {
+    await page.goto(path);
+    await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
+    expect((await new AxeBuilder({ page }).include("main").analyze()).violations).toEqual([]);
+  }
 });

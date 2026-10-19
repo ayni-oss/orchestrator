@@ -60,12 +60,12 @@ test("GitHub setup dialog clears dismissed credentials and prepares a canonical 
   await page.getByRole("tab",{name:"Import existing App"}).click();
   await expect(page.getByLabel("Private key (PEM)")).toHaveValue("");
 });
-test("canonical and legacy manifest callbacks enforce session state and reject replay",async ({page})=>{
+test("manifest callbacks enforce session state and reject replay",async ({page})=>{
   await page.goto("/settings/source-control/github");
   const origin=new URL(page.url()).origin;
   const foreign=await page.request.post("/settings/source-control/github/start",{headers:{origin:"https://foreign.example"}});
   expect(foreign.status()).toBe(403);
-  for(const prefix of ["/settings/source-control/github","/settings/source-control/github"]){
+  for(const prefix of ["/settings/source-control/github"]){
     const missing=await page.request.get(`${prefix}/complete?code=fixture-code`);
     expect(missing.status()).toBe(400);
     const start=await page.request.post(`${prefix}/start`,{headers:{origin}});
