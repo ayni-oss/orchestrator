@@ -25,7 +25,7 @@ The `Ayni` configuration section refers specifically to CLI runtime certificates
 ## UI transition
 
 The workspace Operations dashboard at `/operations` shows summary counts and a
-board/list of planning conversations and tasks. It is scoped by `?workspace=<id>`;
+board of planning conversations and tasks. It is scoped by `?workspace=<id>`;
 Refresh reloads its data. Cancelled tasks are omitted and completed tasks appear
 in Review. Task cards open the retained task details during migration.
 
