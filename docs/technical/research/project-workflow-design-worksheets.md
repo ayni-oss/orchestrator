@@ -18,9 +18,11 @@ For Workspace, Project, Conversation, Plan, Plan Version, Task, Attempt, Runtime
 | Access | Existing scope boundary; workspace sharing must not imply sharing private project data. |
 | Presentation | What the engineer sees, can act on, and can recover. |
 
-Resolve whether plans belong to projects independently of conversation origin. Distinguish a plan version from any execution of it, and a task from its physical attempt. Distinguish runtime configuration, certified image revision, and running workload.
+Investigate plans owned by their originating conversation and indexed by the project. Cross-conversation plan editing is not an initial requirement; fresh research must not silently inherit an earlier plan. Distinguish a plan version from any execution of it, and a task from its physical attempt. Distinguish runtime configuration, certified image revision, and running workload.
 
-Separate project facts, decisions, interpretations, and questions. Define how accepted task outcomes reach all relevant conversations, and how stale agent assessments are rejected. Decide whether one project coordinator serializes assessments or concurrent sessions propose version-checked changes.
+Separate project facts, decisions, interpretations, and questions. Project activity visibility does not automatically grant inclusion in another conversation's model context. Specify feedback delivery to the originating conversation, isolated context construction, and rejection of stale assessments.
+
+Workspace sharing initially exposes project objectives and status descriptions. Cross-conversation memory remains deferred. Investigate how project summaries derive from accepted outcomes without transferring one conversation's assumptions into another.
 
 ## Current-system evidence
 
@@ -47,6 +49,16 @@ A recovery proposal must identify the task, attempt, failure or question, retain
 
 Questions and failures appear in the originating conversation and project activity. Define one durable attention/resolution identity so these views cannot disagree. A human answer supplies context; only confirmed recovery authorizes execution.
 
+## Dependencies and isolated execution
+
+Model task prerequisites as a directed acyclic graph. Specify cycle rejection, ready-task selection, cancellation propagation, failed prerequisites, retries, and changes to dependencies after approval. Compare application-owned scheduling with a workflow engine before choosing one.
+
+A graph-shaped domain does not itself require a graph database. Start the comparison with tasks and dependency edges in relational storage; SQL supports recursive traversal and cycle detection. Evaluate storage against actual queries and scale, not terminology. See [PostgreSQL recursive queries](https://www.postgresql.org/docs/17/queries-with.html) for an example, not a database selection.
+
+Define what satisfies an edge: accepted task completion, a specific commit/artifact, or draft delivery. A draft in one repository does not make its changes available to another task automatically. Specify artifact handoff, input freezing, and revalidation when upstream work changes.
+
+Research task-to-task communication as scoped, durable reports and explicit subscriptions. An informational message must not silently mutate another attempt's frozen inputs or widen repository access. Keep isolated worktrees and execution permissions even when tasks exchange relevant findings.
+
 ## Events and JetStream
 
 Start with semantic families, then choose physical streams and subjects. Commands request an action; reports describe producer observations; accepted facts record authoritative decisions. Progress and diagnostics have different retention and privacy needs.
@@ -70,7 +82,7 @@ Resolve producer durability: an outbox or retained spool must cover crashes betw
 
 Specify bounded broker credentials, subject permissions, and authenticated producer-to-execution bindings. Repository code and model tools must not impersonate approvals or accepted outcomes. Avoid relying on subject names alone as authorization.
 
-Define project-agent consumption independently of pod lifetime: cursor ownership, wake policy, backlog compaction, turn serialization, coalescing, and budget. Progress may update the UI without invoking the model. Replay must rebuild context without repeating paid calls or external effects.
+Define project-agent consumption independently of pod lifetime: cursor ownership, wake policy, backlog compaction, turn serialization, coalescing, and budget. Meaningful outcomes trigger bounded assessment and may produce proactive proposals; ordinary progress updates the UI without invoking the model. Define which outcomes qualify, how they coalesce, and which originating conversation consumes them. Replay must rebuild context without repeating paid calls or external effects.
 
 ## gRPC and browser contracts
 
@@ -101,6 +113,9 @@ Compare at least a modular control plane with workers against a split coordinati
 
 Use deterministic fixtures for policy and real local infrastructure for transport and recovery. Each experiment needs a hypothesis, reproduction command, expected observation, and a decision affected by the result.
 
+- Reproduce and classify current sandbox failures; pass scripted admission, progress, completion, and recovery before self-development.
+- Verify that a fresh conversation does not receive another conversation's transcript, plan assumptions, or unsolicited assessments.
+- Run independent plans in isolated worktrees; verify dependency readiness and immutable artifact handoff.
 - Crash producers before and after publication; crash consumers before commit and before acknowledgement.
 - Duplicate and reorder progress, completion, approval, and cancellation messages.
 - Expire a planner session while events arrive; verify catch-up without duplicate reasoning or actions.
