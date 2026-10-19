@@ -2,7 +2,7 @@
   import {page} from "$app/state";
   import {untrack,onMount} from "svelte";
   import ConversationMessages from "$lib/components/conversation-messages.svelte";
-  import * as InputGroup from "$lib/components/ui/input-group/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { invalidate } from "$app/navigation";
   import type {ProjectViewData} from "$lib/project-view.js";
   import type { SubmitFunction } from "@sveltejs/kit";
@@ -58,7 +58,9 @@
       {#if active}<form method="POST" action={conversation?"?/sendMessage":"?/createConversation"} use:enhance={submit} class="composer shrink-0 space-y-3" data-refresh-paused={pending||content?"":undefined}>
         <input type="hidden" name="idempotencyKey" value={conversation?key(`message-${conversation.id}-${conversation.updateCursor}`):newConversationKey} />
         {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{/if}
-        <Label for="project-message" class="sr-only">Message</Label><InputGroup.Root class="border-0 bg-transparent shadow-none focus-within:ring-0"><InputGroup.Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} oninput={resizeComposer} onkeydown={sendOnEnter} placeholder="Message the project agent…" class="min-h-[72px] max-h-[320px]" /><InputGroup.Addon align="block-end" class="justify-between"><InputGroup.Button type="button" size="icon-sm" variant="ghost" aria-label="Open conversation plan" title="Open conversation plan" disabled={!conversation} onclick={onOpenPlan}><PanelRightOpen size={18} />{#if conversation?.plan}<span class="plan-indicator" aria-label="Plan available"></span>{/if}</InputGroup.Button><InputGroup.Button type="submit" size="icon-sm" variant="default" aria-label={pending?"Sending message":"Send message"} title="Send message" disabled={!canSend}><CornerDownLeft size={18} /></InputGroup.Button></InputGroup.Addon></InputGroup.Root>
+        <Label for="project-message" class="sr-only">Message</Label>
+        <Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} oninput={resizeComposer} onkeydown={sendOnEnter} placeholder="Message the project agent…" class="composer-input min-h-[72px] max-h-[320px]" />
+        <div class="composer-actions"><Button type="button" size="icon" variant="ghost" class="plan-control" aria-label="Open conversation plan" title="Open conversation plan" disabled={!conversation} onclick={onOpenPlan}><PanelRightOpen size={18} />{#if conversation?.plan}<span class="plan-indicator" aria-label="Plan available"></span>{/if}</Button><Button type="submit" size="icon" aria-label={pending?"Sending message":"Send message"} title="Send message" disabled={!canSend}><CornerDownLeft size={18} /></Button></div>
         {#if !data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Settings or workspace defaults before sending a message.</p>{/if}
       </form>{/if}
     </Card.Content></Card.Root>
@@ -70,5 +72,9 @@
 <style>
   .composer{margin-top:12px;padding:10px;border:1px solid var(--border);background:var(--card);box-shadow:3px 3px 0 var(--border)}
   .composer:focus-within{border-color:var(--primary);box-shadow:3px 3px 0 var(--primary)}
+  .composer :global(.composer-input){display:block;width:100%;padding:8px 10px;border:0;border-radius:0;background:transparent;box-shadow:none;resize:none}
+  .composer :global(.composer-input:focus-visible){border:0;outline:0;box-shadow:none}
+  .composer-actions{display:flex;align-items:center;justify-content:space-between;padding:0 2px}
+  .composer :global(.plan-control){position:relative}
   .plan-indicator{position:absolute;right:2px;top:2px;width:6px;height:6px;border-radius:50%;background:var(--primary)}
 </style>
