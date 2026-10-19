@@ -22,30 +22,17 @@ the CLI mark for the Ayni configuration entry and repository runtime badges;
 current text color, and favicons adapt to the browser's light or dark preference.
 The `Ayni` configuration section refers specifically to CLI runtime certificates.
 
-## UI transition
+## Workspace UI
 
-The workspace Operations dashboard at `/operations` shows summary counts and a
-board of planning conversations and tasks. It is scoped by `?workspace=<id>`;
-Refresh reloads its data. Cancelled tasks are omitted and completed tasks appear
-in Review. Task cards open the retained task details during migration.
+`/operations`, `/`, and `/activity` show work for the selected workspace. The
+workspace can be changed in the shared sidebar. `/projects/<id>` contains Chat,
+Plans, and Tasks tabs; `/projects/<id>/settings` contains project settings and
+repository membership. Workspace settings and repository membership are at
+`/workspaces/<id>/settings`.
 
-The workspace Projects view starts at `/`; `?workspace=<id>` selects its scope.
-It uses real workspace/project data and the existing validated creation flow.
-Project details at `/projects/<id>` center the conversation, with a right-side
-Plan sheet for review and approvals. Project settings live at `/projects/<id>/settings`; task details still use
-`/_old` during migration. Workspace settings live at
-`/workspaces/<id>/settings` inside the shared workspace shell; the header menu,
-and sidebar link there. Legacy settings bookmarks redirect
-to this canonical route.
-
-The previous application is preserved in `src/routes/_old/`, including its layout,
-server loads/actions, update streams, and GitHub manifest setup callbacks. Its
-internal URLs use the `/_old` prefix. `/healthz`, static assets, and the global
-security hooks remain at their existing locations. Old root-level page URLs are
-not aliases; those paths are reserved for the new interface.
-
-During migration, shared components and server helpers still live in `src/lib`.
-Remove legacy routes only after their behavior has been replaced; trace their
-imports before deleting shared modules. The new creation form currently shares
-`create-project.svelte` with the previous workspace page. Repository data is not
-copied or reset by this UI migration.
+`/repositories` connects repositories. Repository details and their shared
+runtime profiles live at `/repositories/<id>` and
+`/repositories/<id>/runtimes/<profile-id>`. Individual task history and actions
+live at `/tasks/<id>`. General connections and Ayni certificates are under
+`/settings`. Conversation history and live update streams use the same current
+route tree. The UI migration does not copy or reset repository data.

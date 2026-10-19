@@ -9,8 +9,8 @@
 </script>
 
 <svelte:head><title>Container registries · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8">
-  <PageHeader title="Container registries" description="Choose a registry destination for your testing environment images." />
+<div class="mx-auto max-w-5xl space-y-8">
+  <PageHeader flush title="Container registries" description="Choose a registry destination for your testing environment images." />
 
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {#each providers as provider (provider.name)}

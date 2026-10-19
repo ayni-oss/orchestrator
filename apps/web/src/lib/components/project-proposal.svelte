@@ -34,7 +34,7 @@
             {label:"Environment changes",value:request.changeConstraints.environmentChange?`Regenerate .ayni.lock for: ${request.changeConstraints.environmentChange.dependencyPaths.join(", ")}`:"Protected"},
           ]} />
           <div class="space-y-2"><h4 class="text-sm font-semibold">Implementation request</h4><p class="whitespace-pre-wrap break-words text-sm">{request.request}</p><h4 class="text-sm font-semibold">Acceptance criteria</h4><ul class="list-disc space-y-1 pl-5 text-sm">{#each request.acceptanceCriteria as criterion}<li>{criterion}</li>{/each}</ul></div>
-        {:else}<p class="text-sm">{proposal.action==="cancel_task"?"Cancel the running task and retain its history.":proposal.action==="retry_publication"?"Retry publishing the retained result; coding will not run again.":"Start a new coding attempt using this task’s frozen inputs."} <a class="underline" href={`/_old/tasks/${encodeURIComponent(proposal.targetTaskId)}`}>Open target task</a></p>{/if}
+        {:else}<p class="text-sm">{proposal.action==="cancel_task"?"Cancel the running task and retain its history.":proposal.action==="retry_publication"?"Retry publishing the retained result; coding will not run again.":"Start a new coding attempt using this task’s frozen inputs."} <a class="underline" href={`/tasks/${encodeURIComponent(proposal.targetTaskId)}`}>Open target task</a></p>{/if}
         {#if proposal.failure}<Feedback kind="warning" title="Action needs attention" message={proposal.failure} />{/if}
         {#if proposal.state==="pending" && active && allowDecision}
           <form method="POST" action="?/decideProposal" use:enhance={submit} class="flex flex-wrap gap-2"><input type="hidden" name="idempotencyKey" value={key(`decision-${proposal.id}-${conversation.updateCursor}`)} /><input type="hidden" name="conversationId" value={conversation.id} /><input type="hidden" name="proposalId" value={proposal.id} /><Button type="submit" name="decision" value="approve" disabled={pending}>{proposal.action==="create_task"?"Approve and submit task":"Confirm action"}</Button><Button type="submit" name="decision" value="revise" variant="outline" disabled={pending}>Request revision</Button><Button type="submit" name="decision" value="reject" variant="outline" disabled={pending}>Reject</Button></form>
@@ -44,7 +44,7 @@
           {@const task=data.tasks.find(t=>t.id===proposal.taskId)}
           {@const attempt=data.taskProgress[proposal.taskId]?.attempts.at(-1)}
           {@const receipt=attempt?.pullRequest??attempt?.result?.pullRequest}
-          <div class="space-y-2 border-t pt-3"><a class="font-medium underline" href={`/_old/tasks/${encodeURIComponent(proposal.taskId)}`}>View task {task?`· ${words(task.state)}`:""}</a>
+          <div class="space-y-2 border-t pt-3"><a class="font-medium underline" href={`/tasks/${encodeURIComponent(proposal.taskId)}`}>View task {task?`· ${words(task.state)}`:""}</a>
             {#if attempt}<InformationTable rows={[{label:"Execution",value:attempt.result?.execution??attempt.progress?.phase??words(attempt.state)},{label:"Quality",value:attempt.result?.quality?.outcome??"Pending"},{label:"Publication",value:attempt.result?.publication??attempt.progress?.publication??"Pending"}]} />{#if attempt.requestedInput}<p class="whitespace-pre-wrap text-sm">Input requested: {attempt.requestedInput}</p>{/if}{#if receipt?.url}<Button href={receipt.url} variant="outline" target="_blank" rel="noopener noreferrer">Open draft PR #{receipt.number}</Button>{/if}{/if}
           </div>
         {/if}

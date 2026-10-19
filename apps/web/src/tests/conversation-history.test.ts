@@ -2,7 +2,7 @@ import {BffError} from "@ayni-orchestrator/bff/server";
 import {beforeEach,describe,expect,it,vi} from "vitest";
 const bff=vi.hoisted(()=>({listProjectConversationHistory:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-import {GET as history} from "../routes/_old/projects/[projectId]/conversations/[conversationId]/history/+server.js";
+import {GET as history} from "../routes/projects/[projectId]/conversations/[conversationId]/history/+server.js";
 function event(query="",projectId="project:1"){return {params:{projectId,conversationId:"conversation:1"},url:new URL(`http://localhost/history${query}`),locals:{requestId:"history-test",requestSignal:new AbortController().signal}} as never;}
 describe("conversation history routes",()=>{
   beforeEach(()=>{vi.clearAllMocks();bff.listProjectConversationHistory.mockResolvedValue({records:[],snapshotSequence:"75",hasMore:false});});

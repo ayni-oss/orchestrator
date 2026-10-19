@@ -1,5 +1,6 @@
 <script lang="ts">
   import WorkspaceShell from "$lib/components/workspace-shell.svelte";
+  import PageHeader from "$lib/components/page-header.svelte";
   import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import {enhance} from "$lib/forms.js";
   import {page} from "$app/state";
@@ -31,10 +32,8 @@
 <ApplicationNotifications />
 <WorkspaceShell {data} title="Settings">
 {#if data.workspace}
-  <section class="space-y-4" aria-label="Workspace settings">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <h1 class="text-3xl font-semibold tracking-tight">Workspace settings</h1>
-    </div><p class="text-sm text-muted-foreground">Projects inherit agent settings and planner defaults from this workspace.</p>
+  <section class="mx-auto max-w-5xl space-y-4" aria-label="Workspace settings">
+    <PageHeader flush eyebrow="Workspace / Configuration" title="Workspace settings" description="Projects inherit agent settings and planner defaults from this workspace." />
   <Tabs.Root value={tab} onValueChange={showTab} class="gap-6">
     <Tabs.List aria-label="Workspace configuration"><Tabs.Trigger value="settings">Settings</Tabs.Trigger><Tabs.Trigger value="repositories">Repositories</Tabs.Trigger></Tabs.List>
     <Tabs.Content value="settings" class="space-y-4">
@@ -67,10 +66,10 @@
     </Tabs.Content>
     <Tabs.Content value="repositories" class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-4"><h2 class="text-lg font-semibold">Repositories</h2>{#if data.workspace.state==="active"}{#key data.workspace.id}<ManageWorkspaceRepositories {data} />{/key}{/if}</div>
-      <p class="text-sm text-muted-foreground">Projects can use these repositories. Runtime configuration is shared wherever a repository is used. Connect new repositories in the <a href="/_old/repositories" class="text-foreground underline underline-offset-4 hover:text-primary">repository catalog</a>.</p>
+      <p class="text-sm text-muted-foreground">Projects can use these repositories. Runtime configuration is shared wherever a repository is used. Connect new repositories in the <a href="/repositories" class="text-foreground underline underline-offset-4 hover:text-primary">repository catalog</a>.</p>
       <div class="grid gap-4 lg:grid-cols-2">
         {#each data.repositorySummaries as summary (summary.repository.id)}<RepositoryCard {summary} />{/each}
-        {#each data.workspace.repositoryConnectionIds.filter(id=>!data.repositorySummaries.some(summary=>summary.repository.id===id)) as id (id)}<Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/_old/repositories/${encodeURIComponent(id)}`}>{id}</a></Card.Title><Card.Description>Repository details are unavailable.</Card.Description></Card.Header></Card.Root>{/each}
+        {#each data.workspace.repositoryConnectionIds.filter(id=>!data.repositorySummaries.some(summary=>summary.repository.id===id)) as id (id)}<Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/repositories/${encodeURIComponent(id)}`}>{id}</a></Card.Title><Card.Description>Repository details are unavailable.</Card.Description></Card.Header></Card.Root>{/each}
       </div>
     </Tabs.Content>
   </Tabs.Root>

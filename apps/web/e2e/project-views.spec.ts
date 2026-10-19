@@ -6,7 +6,7 @@ async function choose(page:Page,label:string,option:string){
   await page.getByRole("option",{name:option,exact:true}).click();
 }
 async function startPlan(page:Page,message="Make the outcome easy to follow"){
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");
   await choose(page,"Project agent model","gpt-5.6-sol");
@@ -82,20 +82,20 @@ test("conversation failures recover and invalid version links do not show a diff
   await request.post("http://127.0.0.1:50062/conversation-unavailable?value=false");
   await page.getByRole("button",{name:"Retry conversations",exact:true}).click();
   await expect(page.getByRole("region",{name:"Conversation timeline",exact:true})).toBeVisible();
-  await page.goto("/_old/projects/project:1?view=plans&conversation=conversation:1&version=999");
+  await page.goto("/projects/project:1?view=plans&conversation=conversation:1&version=999");
   await expect(page.getByText("Plan version unavailable",{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:/Approve version/u})).toHaveCount(0);
   await page.getByRole("button",{name:"Show current plan",exact:true}).click();
   await expect(page.getByLabel("Plan version",{exact:true})).toContainText("Version 1");
-  await page.goto("/_old/projects/project:1?conversation=conversation:missing");
+  await page.goto("/projects/project:1?conversation=conversation:missing");
   await expect(page.getByText("Conversations unavailable",{exact:true})).toBeVisible();
   await expect(page.getByLabel("Message",{exact:true})).toHaveCount(0);
 });
 
 test("settings expose ownership, saving, failure, and focus recovery",async({page})=>{
-  await page.goto("/_old/workspaces/workspace:1?view=settings");
+  await page.goto("/workspaces/workspace:1/settings");
   await expect(page.getByRole("region",{name:"Workspace settings",exact:true})).toContainText("Projects inherit agent settings");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   const actions=page.getByRole("button",{name:"Sandbox project actions"});
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   const settings=page.getByRole("region",{name:"Project settings",exact:true});
@@ -104,7 +104,7 @@ test("settings expose ownership, saving, failure, and focus recovery",async({pag
   await settings.getByLabel("Goal and planning instructions",{exact:true}).fill("Retain my unsaved planning instructions");
   let release:(()=>void)|undefined;
   const held=new Promise<void>(resolve=>{release=resolve;});
-  await page.route("**/_old/projects/*?*/update",async route=>{
+  await page.route("**/projects/*?*/update",async route=>{
     if(route.request().method()!=="POST")return route.continue();
     await held;
     await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({type:"failure",status:409,data:'[{"error":1},{"message":2},"Reload before saving these settings."]'})});

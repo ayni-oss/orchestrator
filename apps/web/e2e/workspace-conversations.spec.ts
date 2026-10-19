@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 test.beforeEach(async ({ request }) => { await request.post("http://127.0.0.1:50062/reset-project"); });
 test("workspace conversation history stays in the sidebar and opens the selected project", async ({ page, request }) => {
- await page.goto("/_old/workspaces");
+ await page.goto("/");
  await expect(page.getByRole("button", {name:"New conversation",exact:true})).toBeDisabled();
  await expect(page.getByText("Select a workspace to view conversations.", {exact:true})).toBeVisible();
  await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
- await page.goto("/_old/workspaces/workspace:1?view=settings");
+ await page.goto("/workspaces/workspace:1/settings");
  for(const [label,option] of [["Project agent connection","Admin App"],["Project agent model","gpt-5.6-sol"],["Coding agent connection","Admin App"],["Coding agent model","gpt-5.6-sol"]]){
   await page.getByLabel(label!,{exact:true}).click();await page.getByRole("option",{name:option!,exact:true}).click();
  }

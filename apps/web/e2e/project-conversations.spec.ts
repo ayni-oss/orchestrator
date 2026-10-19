@@ -3,7 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 async function choose(page:Page,label:string,option:string){await page.getByLabel(label,{exact:true}).click();await page.getByRole("option",{name:option,exact:true}).click();}
 test.beforeEach(async({request})=>{await request.post("http://127.0.0.1:50062/reset-connections");await request.post("http://127.0.0.1:50062/reset-project");});
 test("OpenAI credentials stay write-only and unavailable providers have no configuration",async({page,request})=>{
-  await page.goto("/_old/llm-providers");
+  await page.goto("/settings/llm-providers");
   await expect(page.getByText("Anthropic Claude",{exact:true})).toBeVisible();
   await expect(page.getByText("AWS Bedrock",{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Not available",exact:true})).toHaveCount(2);
@@ -27,7 +27,7 @@ test("OpenAI credentials stay write-only and unavailable providers have no confi
 });
 test("project chat persists requirements, requires approval, links results, and preserves manual tasks",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
@@ -72,7 +72,7 @@ test("project chat persists requirements, requires approval, links results, and 
 
 test("coding model revisions retire the previous proposal and require fresh approval",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
@@ -106,7 +106,7 @@ test("coding model revisions retire the previous proposal and require fresh appr
 
 test("outdated inputs block approval with a recovery message",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
@@ -130,12 +130,12 @@ test("outdated inputs block approval with a recovery message",async({page,reques
 
 test("earlier conversation messages remain readable after reload",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/_old/workspaces/workspace:1?view=settings");
+  await page.goto("/workspaces/workspace:1/settings");
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
   await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
   await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
   await expect(page.getByRole("region",{name:"Workspace agent defaults",exact:true})).toContainText("Workspace settings updated.");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   await page.getByLabel("Message",{exact:true}).fill("Durable history");await page.getByLabel("Message",{exact:true}).press("Enter");
   await expect(page).toHaveURL(/conversation=conversation%3A1/u);
   await request.post("http://127.0.0.1:50062/long-history");await request.post("http://127.0.0.1:50062/restart-conversations");await page.reload();
@@ -146,17 +146,17 @@ test("earlier conversation messages remain readable after reload",async({page,re
   await page.getByRole("button",{name:"Load earlier messages",exact:true}).click();
   await expect(messages.getByRole("article")).toHaveCount(75);
   await expect(messages).toContainText("Original compatibility constraint: preserve legacy API behavior.");
-  const denied=await page.request.get("/_old/projects/project:other/conversations/conversation:1/history");expect(denied.status()).toBe(404);
+  const denied=await page.request.get("/projects/project:other/conversations/conversation:1/history");expect(denied.status()).toBe(404);
   expect((await new AxeBuilder({page}).include("main").analyze()).violations).toEqual([]);
 });
 
 test("conversation timeout settings and cancellation preserve saved messages",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/_old/workspaces/workspace:1?view=settings");
+  await page.goto("/workspaces/workspace:1/settings");
   await choose(page,"Planner idle timeout","24 hours");await page.getByRole("button",{name:"Save workspace settings",exact:true}).click();
   await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
   await expect(page.getByRole("region",{name:"Workspace agent defaults",exact:true})).toContainText("Workspace settings updated.");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   await page.getByLabel("Message",{exact:true}).fill("Reusable planner");await page.getByLabel("Message",{exact:true}).press("Enter");
   await expect(page).toHaveURL(/conversation=conversation%3A1/u);
   await page.getByRole("tab",{name:"Settings",exact:true}).click();
@@ -178,7 +178,7 @@ test("conversation timeout settings and cancellation preserve saved messages",as
 
 test("first Enter creates a titled conversation and New conversation opens a fresh composer",async({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");
-  await page.goto("/_old/projects/project:1");
+  await page.goto("/projects/project:1");
   const message=page.getByLabel("Message",{exact:true});
   await expect(message).toBeVisible();
   await expect(page.getByRole("button",{name:"Repositories",exact:true})).toHaveCount(0);

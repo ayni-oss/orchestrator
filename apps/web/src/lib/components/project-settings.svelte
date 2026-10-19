@@ -1,6 +1,6 @@
 <script lang="ts">
   import {untrack} from "svelte";
-  import type {PageData} from "../../routes/_old/projects/[projectId]/$types";
+  import type { PageData } from "../../routes/projects/[projectId]/settings/$types";
   import {enhance} from "$lib/forms.js";
   import InformationCard from "$lib/components/information-card.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
@@ -44,7 +44,7 @@
     </InformationCard>
           {#if section!=="settings"}
           <section class="space-y-3" aria-label="Project repositories"><h2 class="font-semibold">Selected repositories</h2><p class="text-sm text-muted-foreground">Open a repository to inspect its shared runtimes.</p>
-            {#each data.repositories as repository (repository.id)}<a class="flex items-center gap-2 break-all text-sm underline" href={`/_old/repositories/${encodeURIComponent(repository.id)}`}>{repository.displayName}{#if repository.useAyni !== false}<AyniIcon class="size-4 shrink-0" role="img" aria-label="Ayni enabled" />{/if}</a>{/each}
+            {#each data.repositories as repository (repository.id)}<a class="flex items-center gap-2 break-all text-sm underline" href={`/repositories/${encodeURIComponent(repository.id)}`}>{repository.displayName}{#if repository.useAyni !== false}<AyniIcon class="size-4 shrink-0" role="img" aria-label="Ayni enabled" />{/if}</a>{/each}
           </section>
           {/if}
           {#if section!=="repositories"}

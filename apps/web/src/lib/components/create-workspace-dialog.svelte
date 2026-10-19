@@ -62,7 +62,7 @@
     <form onsubmit={create} class="space-y-5">
       <div class="space-y-2"><Label for="new-workspace-name">Workspace name</Label><Input id="new-workspace-name" bind:value={name} required maxlength={256} autocomplete="off" /></div>
       <div class="space-y-2"><Label for="new-workspace-repositories">Repositories</Label><RepositoryPicker id="new-workspace-repositories" {repositories} value={members} onchange={value => members = value} /></div>
-      {#if loading}<p class="text-sm text-muted-foreground">Loading repositories…</p>{:else if !repositories.length && !error}<p class="text-sm text-muted-foreground">Connect a repository before creating a workspace. The repository catalog is still in the previous application.</p><Button href="/_old/repositories" variant="outline">Connect repositories</Button>{/if}
+      {#if loading}<p class="text-sm text-muted-foreground">Loading repositories…</p>{:else if !repositories.length && !error}<p class="text-sm text-muted-foreground">Connect a repository before creating a workspace.</p><Button href="/repositories" variant="outline">Connect repositories</Button>{/if}
       {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{#if !repositories.length}<Button type="button" variant="outline" onclick={loadRepositories}>Retry loading</Button>{/if}{/if}
       <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={saving || loading || !members.length}>{saving ? 'Creating…' : 'Create workspace'}</Button></Dialog.Footer>
     </form>

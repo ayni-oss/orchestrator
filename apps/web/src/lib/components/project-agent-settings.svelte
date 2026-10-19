@@ -20,7 +20,7 @@
 </script>
 <InformationCard title={workspaceId?"Project agent models":"Workspace agent defaults"}>
   <p class="text-sm text-muted-foreground">{workspaceId?"Model overrides affect this project. Use workspace defaults to share model choices.":"These research and coding models are inherited by projects unless overridden."}</p>
-  {#if workspaceId}<p class="mb-4 text-sm text-muted-foreground">{inherited?"Inherited from":"Overrides for"} the <a class="underline" href={`/_old/workspaces/${encodeURIComponent(workspaceId)}?view=settings`}>workspace defaults</a>.</p>{/if}
+  {#if workspaceId}<p class="mb-4 text-sm text-muted-foreground">{inherited?"Inherited from":"Overrides for"} the <a class="underline" href={`/workspaces/${encodeURIComponent(workspaceId)}/settings`}>workspace defaults</a>.</p>{/if}
   <form method="POST" action="?/agentDefaults" use:enhance={submit} class="space-y-4">
     <input type="hidden" name="idempotencyKey" value={idempotencyKey} /><input type="hidden" name="resourceVersion" value={project.resourceVersion} />
     <div class="grid gap-4 sm:grid-cols-2">

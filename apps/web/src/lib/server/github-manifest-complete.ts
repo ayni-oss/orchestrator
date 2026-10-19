@@ -8,7 +8,6 @@ export const load: ServerLoad = async ({ cookies, locals, setHeaders, url }) => 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const expected = cookies.get("github_app_manifest_state");
-  cookies.delete("github_app_manifest_state", { path: "/_old/setup/github" });
   cookies.delete("github_app_manifest_state", { path: "/" });
   if (!code || !state || !expected || state !== expected || !consumeManifest(state)) throw error(400, "GitHub App setup expired or could not be verified. Start again.");
   try { await getBff().completeGithubManifest(code, actionKey(), requestContext(locals)); }

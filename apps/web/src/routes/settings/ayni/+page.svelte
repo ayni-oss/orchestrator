@@ -10,8 +10,8 @@
 </script>
 
 <svelte:head><title>Ayni · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8">
-  <PageHeader title="Ayni" description="Configure signing certificates for Ayni runtime images." />
+<div class="mx-auto max-w-5xl space-y-8">
+  <PageHeader flush title="Ayni" description="Configure signing certificates for Ayni runtime images." />
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     <Card.Root>
       <Card.Header>

@@ -97,5 +97,5 @@ export async function submitDirectTask({locals,request,params}:RequestEvent) {
       const mapped = safeError(error, locals.requestId);
       return fail(mapped.status, { action: "createTask", error: mapped });
     }
-    redirect(303, `/_old/tasks/${encodeURIComponent(task.id)}`);
+    redirect(303, `/tasks/${encodeURIComponent(task.id)}`);
 }

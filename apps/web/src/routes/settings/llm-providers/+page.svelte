@@ -9,8 +9,8 @@
   ];
 </script>
 <svelte:head><title>LLM providers · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8">
-  <PageHeader title="LLM providers" description="Manage the models used to plan and implement project work." />
+<div class="mx-auto max-w-5xl space-y-8">
+  <PageHeader flush title="LLM providers" description="Manage the models used to plan and implement project work." />
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {#each providers as provider (provider.name)}
       <Card.Root><Card.Header><Card.Title>{provider.name}</Card.Title></Card.Header>

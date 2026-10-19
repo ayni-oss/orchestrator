@@ -1,7 +1,7 @@
 <script lang="ts">
   import { notify, redirectNotification } from "$lib/notifications.js";
   import { tick } from "svelte";
-  import type { PageData } from "../../routes/_old/workspaces/[workspaceId]/$types";
+  import type { PageData } from "../../routes/$types";
   import { Plus } from "@lucide/svelte";
   import { superForm } from "sveltekit-superforms";
   import { zodClient } from "sveltekit-superforms/adapters";
@@ -38,7 +38,7 @@
       <Form.Field form={projectForm} name="displayName"><Form.Control>{#snippet children({props})}<Form.Label>Project name</Form.Label><Input {...props} bind:value={$values.displayName} placeholder="A short title for your project" autocomplete="off" />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="goal"><Form.Control>{#snippet children({props})}<Form.Label>Goal</Form.Label><Textarea {...props} bind:value={$values.goal} rows={4} class="min-h-28 resize-y" placeholder="Describe what this project should achieve and why." />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
       <Form.Field form={projectForm} name="repositoryConnectionIds"><Form.Control>{#snippet children({props})}<Form.Label>Repositories</Form.Label><RepositoryPicker repositories={repositories} bind:value={$values.repositoryConnectionIds} id={props.id} invalid={props["aria-invalid"] === "true"} describedBy={props["aria-describedby"]} />{/snippet}</Form.Control><Form.FieldErrors /></Form.Field>
-      {#if !repositories.length}<p class="text-sm text-muted-foreground">Choose a workspace with connected repositories before creating a project.</p><Button href="/_old/workspaces" variant="outline">Manage workspaces</Button>{/if}
+      {#if !repositories.length}<p class="text-sm text-muted-foreground">Choose a workspace with connected repositories before creating a project.</p><Button href="/" variant="outline">Manage workspaces</Button>{/if}
 
       <Dialog.Footer><Button type="button" variant="outline" onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={$submitting || !repositories.length}>{$submitting ? "Creating…" : "Create project"}</Button></Dialog.Footer>
     </form>

@@ -7,7 +7,7 @@
   let { summary }: { summary: RepositorySummary } = $props();
   const item = $derived(summary.repository);
   const readiness = $derived(!summary.runtime.complete ? "Unavailable" : summary.runtime.ready ? "Ready" : item.useAyni === false ? "Ayni not enabled" : "Setup required");
-  const repositoryHref = $derived(`/_old/repositories/${encodeURIComponent(item.id)}`);
+  const repositoryHref = $derived(`/repositories/${encodeURIComponent(item.id)}`);
 </script>
 
 <a href={repositoryHref} aria-label={`Open repository ${item.displayName}`} class="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>div]:h-full [&>div]:transition-colors hover:[&>div]:bg-accent/30">

@@ -2,29 +2,20 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import type { PageProps } from "./$types";
-  import { MessageSquarePlus, MessageSquare, Settings2, FileText } from "@lucide/svelte";
+  import { MessageSquarePlus, MessageSquare, Settings2 } from "@lucide/svelte";
   import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import ProjectChat from "$lib/components/project-chat.svelte";
   import ProjectUpdates from "$lib/components/project-updates.svelte";
-  import ProjectPlanReview from "$lib/components/project-plan-review.svelte";
   import ProjectPlans from "$lib/components/project-plans.svelte";
   import Feedback from "$lib/components/feedback.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
   import * as Tabs from "$lib/components/ui/tabs/index.js";
   import { projectHref } from "$lib/project-navigation.js";
   import { formatDate, statusTone } from "$lib/presentation.js";
   let { data }: PageProps = $props();
-  const href: typeof projectHref = (...args) => projectHref(...args).replace("/_old/projects/", "/projects/");
-  const planOpen = $derived(page.url.searchParams.get("sheet") === "plan");
-  async function showPlan(open: boolean) {
-    const url = new URL(page.url);
-    if (open) url.searchParams.set("sheet", "plan");
-    else url.searchParams.delete("sheet");
-    await goto(url, { keepFocus: true, noScroll: true, replaceState: true });
-  }
+  const href = projectHref;
 </script>
 
 {#snippet conversationRail(view: "overview" | "plans")}
@@ -55,28 +46,18 @@
       <Tabs.Root value={data.view} onValueChange={view => { if (view === "overview" || view === "plans" || view === "tasks") void goto(href(data.project!.id, view, data.conversation?.id), { keepFocus: true, noScroll: true }); }} class="min-h-0 flex-1 gap-5">
         <Tabs.List aria-label="Project views"><Tabs.Trigger value="overview">Chat</Tabs.Trigger><Tabs.Trigger value="plans">Plans</Tabs.Trigger><Tabs.Trigger value="tasks">Tasks</Tabs.Trigger></Tabs.List>
         <Tabs.Content value="overview" class="min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
-          {#if data.view === "overview"}<div class="project-content">{@render conversationRail("overview")}<div class="chat-column">{#key `${data.project.id}-${data.conversation?.id ?? page.url.searchParams.get("new") ?? ""}`}<ProjectChat {data} onOpenPlan={() => showPlan(true)} />{/key}</div></div>{/if}
+          {#if data.view === "overview"}<div class="project-content">{@render conversationRail("overview")}<div class="chat-column">{#key `${data.project.id}-${data.conversation?.id ?? page.url.searchParams.get("new") ?? ""}`}<ProjectChat {data} />{/key}</div></div>{/if}
         </Tabs.Content>
         <Tabs.Content value="plans" class="min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
           {#if data.view === "plans"}<div class="project-content">{@render conversationRail("plans")}<div class="plans-column"><ProjectPlans {data} {href} /></div></div>{/if}
         </Tabs.Content>
         <Tabs.Content value="tasks">
           {#if data.view === "tasks"}<section class="space-y-4" aria-label="Project tasks"><div><h2 class="text-lg font-semibold">Tasks</h2><p class="text-sm text-muted-foreground">Work across this project’s repositories. Open a task for execution and quality details.</p></div><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {#each data.tasks as task (task.id)}<a class="block border bg-card p-5 transition-colors hover:border-primary" href={`/_old/tasks/${encodeURIComponent(task.id)}`}><div class="mb-4 flex items-start justify-between gap-3"><h3 class="font-medium leading-snug">{task.snapshot.request}</h3><StatusBadge status={task.state} tone={statusTone(task.state)} /></div><p class="text-xs text-muted-foreground">{data.repositories.find(repository => repository.id === task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</p><p class="mt-4 text-xs text-muted-foreground">{task.attemptCount} {task.attemptCount === 1 ? "attempt" : "attempts"} · Created {formatDate(task.createdAt)}</p></a>{:else}<p class="text-sm text-muted-foreground">No tasks yet. Approve a plan from a conversation to start work.</p>{/each}
+            {#each data.tasks as task (task.id)}<a class="block border bg-card p-5 transition-colors hover:border-primary" href={`/tasks/${encodeURIComponent(task.id)}`}><div class="mb-4 flex items-start justify-between gap-3"><h3 class="font-medium leading-snug">{task.snapshot.request}</h3><StatusBadge status={task.state} tone={statusTone(task.state)} /></div><p class="text-xs text-muted-foreground">{data.repositories.find(repository => repository.id === task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</p><p class="mt-4 text-xs text-muted-foreground">{task.attemptCount} {task.attemptCount === 1 ? "attempt" : "attempts"} · Created {formatDate(task.createdAt)}</p></a>{:else}<p class="text-sm text-muted-foreground">No tasks yet. Approve a plan from a conversation to start work.</p>{/each}
           </div>{#if data.nextPageToken}<Button variant="outline" href={href(data.project.id, "tasks", data.conversation?.id, data.nextPageToken)}>More tasks</Button>{/if}</section>{/if}
         </Tabs.Content>
       </Tabs.Root>
     </div>
-    <Sheet.Root open={planOpen} onOpenChange={showPlan}>
-      <Sheet.Content side="right" class="data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
-        <Sheet.Header class="border-b p-6"><Sheet.Title>Project plan</Sheet.Title><Sheet.Description>Review scope and proposed work before approving execution.</Sheet.Description></Sheet.Header>
-        <div class="min-h-0 flex-1 overflow-y-auto p-6">
-          {#if data.conversationError}<Feedback kind="warning" title="Plan unavailable" message={data.conversationError.message} />
-          {:else if data.conversation?.plan}{#key `${data.conversation.plan.id}-${data.planVersion}`}<ProjectPlanReview {data} {href} />{/key}
-          {:else}<div class="flex min-h-72 flex-col items-center justify-center gap-4 text-center"><FileText class="size-9 text-primary" /><h2 class="text-lg font-medium">Your plan will take shape here</h2><p class="max-w-xs text-sm leading-relaxed text-muted-foreground">Start with the conversation. When the agent prepares a plan, you can review its scope, tasks, and acceptance criteria here.</p><Button variant="outline" onclick={() => showPlan(false)}>Back to chat</Button></div>{/if}
-        </div>
-      </Sheet.Content>
-    </Sheet.Root>
   {:else}<Feedback kind="error" title="Project unavailable" message={data.error?.message ?? "This project could not be loaded."} />{/if}
 </WorkspaceShell>
 

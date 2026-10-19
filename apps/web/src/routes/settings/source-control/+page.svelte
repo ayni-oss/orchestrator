@@ -6,8 +6,8 @@
 </script>
 
 <svelte:head><title>Source control · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8">
-  <PageHeader title="Source control" description="Choose a source provider for your repositories." />
+<div class="mx-auto max-w-5xl space-y-8">
+  <PageHeader flush title="Source control" description="Choose a source provider for your repositories." />
   <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
     {#each providers as provider (provider.name)}
       <Card.Root>

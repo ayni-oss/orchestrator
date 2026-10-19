@@ -3,7 +3,7 @@ export function watchConversation(selection:{projectId:string;conversationId:str
   let source:EventSource|undefined,retry:ReturnType<typeof setTimeout>|undefined,stopped=false,cursor:string|undefined=selection.cursor;
   function connect(){
     if(stopped)return;
-    const url=`/_old/projects/${encodeURIComponent(selection.projectId)}/conversations/${encodeURIComponent(selection.conversationId)}/updates${cursor===undefined?"":`?after=${encodeURIComponent(cursor)}`}`;
+    const url=`/projects/${encodeURIComponent(selection.projectId)}/conversations/${encodeURIComponent(selection.conversationId)}/updates${cursor===undefined?"":`?after=${encodeURIComponent(cursor)}`}`;
     const stream=source=open(url);
     stream.onopen=()=>{changed();};
     stream.addEventListener("changed",event=>{const id=(event as MessageEvent).lastEventId;if(id)cursor=id;changed();});

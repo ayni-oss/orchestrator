@@ -20,13 +20,13 @@ test("overview and task workflows meet automated accessibility checks", async ({
 
   await page.setViewportSize({ width: 375, height: 720 });
   await page.getByRole("button", { name: "Toggle color theme" }).click();
-  await page.goto("/_old/tasks/00000000-0000-4000-8000-000000000039");
+  await page.goto("/tasks/00000000-0000-4000-8000-000000000039");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await expectAccessible(page);
 });
 
 test("repository and runtime onboarding meet accessibility checks",async({page})=>{
- for(const path of ["/_old/projects","/_old/projects/project:1","/_old/repositories","/_old/repositories/repository:1","/_old/profiles/profile:1","/_old/source-control","/_old/container-registries","/_old/certificates"]){
+ for(const path of ["/projects","/projects/project:1","/repositories","/repositories/repository:1","/repositories/repository:1/runtimes/profile:1","/settings/source-control","/settings/container-registries","/settings/ayni/certificates"]){
   await page.goto(path);
   await expect(page.locator("html")).toHaveAttribute("data-hydrated","true");
   await expectAccessible(page);
@@ -35,7 +35,7 @@ test("repository and runtime onboarding meet accessibility checks",async({page})
 });
 
 test("project creation supports keyboard selection and accessible validation", async ({page})=>{
- await page.goto("/_old/workspaces/workspace:1");
+ await page.goto("/workspaces/workspace:1/settings");
  await page.getByRole("button",{name:"Create project",exact:true}).click();
  await expectAccessible(page);
  await page.getByLabel("Project name",{exact:true}).fill("Keyboard project");
@@ -57,7 +57,7 @@ test("project creation supports keyboard selection and accessible validation", a
 
 test("GHCR connection onboarding dialog has accessible labels and keyboard dismissal", async ({page,request}) => {
   await request.post("http://127.0.0.1:50062/reset-connections");
-  await page.goto("/_old/container-registries/github");
+  await page.goto("/settings/container-registries/github");
   await page.getByRole("button", {name:"Add connection",exact:true}).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expectAccessible(page);
@@ -67,6 +67,6 @@ test("GHCR connection onboarding dialog has accessible labels and keyboard dismi
 
 
 test("certificate import dialog supports accessible labels and keyboard dismissal",async({page,request})=>{
-  await request.post("http://127.0.0.1:50062/reset-certificates");await page.goto("/_old/certificates");await page.getByRole("button",{name:"Add certificate",exact:true}).click();
+  await request.post("http://127.0.0.1:50062/reset-certificates");await page.goto("/settings/ayni/certificates");await page.getByRole("button",{name:"Add certificate",exact:true}).click();
   await page.getByLabel("Import",{exact:true}).check();await expectAccessible(page);await page.getByLabel("Signing seed",{exact:true}).fill("a".repeat(64));await page.keyboard.press("Escape");await expect(page.getByRole("dialog")).toBeHidden();
 });

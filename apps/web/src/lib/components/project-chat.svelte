@@ -13,8 +13,8 @@
   import Feedback from "$lib/components/feedback.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-  import { CornerDownLeft, PanelRightOpen } from "@lucide/svelte";
-  let {data,onOpenPlan}:{data:ProjectViewData;onOpenPlan:()=>void}=$props();
+  import { CornerDownLeft } from "@lucide/svelte";
+  let {data}:{data:ProjectViewData}=$props();
   let content=$state(untrack(()=>{
     const update=data.conversation?.workerUpdates.find(update=>update.attemptId===page.url.searchParams.get("question"));
     return update?`For task ${update.taskId}, attempt ${update.attemptId}, approved plan version ${update.origin.planVersion}:\nWorker question: ${update.requestedInput??update.result?.requestedInput??""}\nMy answer: `:"";
@@ -60,7 +60,7 @@
         {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{/if}
         <Label for="project-message" class="sr-only">Message</Label>
         <Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} oninput={resizeComposer} onkeydown={sendOnEnter} placeholder="Message the project agent…" class="composer-input min-h-[72px] max-h-[320px]" />
-        <div class="composer-actions"><Button type="button" size="icon" variant="ghost" class="plan-control" aria-label="Open conversation plan" title="Open conversation plan" disabled={!conversation} onclick={onOpenPlan}><PanelRightOpen size={18} />{#if conversation?.plan}<span class="plan-indicator" aria-label="Plan available"></span>{/if}</Button><Button type="submit" size="icon" aria-label={pending?"Sending message":"Send message"} title="Send message" disabled={!canSend}><CornerDownLeft size={18} /></Button></div>
+        <div class="composer-actions"><Button type="submit" size="icon" aria-label={pending?"Sending message":"Send message"} title="Send message" disabled={!canSend}><CornerDownLeft size={18} /></Button></div>
         {#if !data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Settings or workspace defaults before sending a message.</p>{/if}
       </form>{/if}
     </Card.Content></Card.Root>
@@ -74,7 +74,5 @@
   .composer:focus-within{border-color:var(--primary);box-shadow:3px 3px 0 var(--primary)}
   .composer :global(.composer-input){display:block;width:100%;padding:8px 10px;border:0;border-radius:0;background:transparent;box-shadow:none;resize:none}
   .composer :global(.composer-input:focus-visible){border:0;outline:0;box-shadow:none}
-  .composer-actions{display:flex;align-items:center;justify-content:space-between;padding:0 2px}
-  .composer :global(.plan-control){position:relative}
-  .plan-indicator{position:absolute;right:2px;top:2px;width:6px;height:6px;border-radius:50%;background:var(--primary)}
+  .composer-actions{display:flex;align-items:center;justify-content:flex-end;padding:0 2px}
 </style>

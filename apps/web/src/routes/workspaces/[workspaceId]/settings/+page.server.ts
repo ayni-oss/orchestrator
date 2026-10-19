@@ -36,7 +36,7 @@ export const actions:Actions={
       const mapped = safeError(error, locals.requestId);
       return message(form, mapped.message, {status:mapped.status as 400});
     }
-    redirect(303, `/_old/projects/${encodeURIComponent(id)}`);
+    redirect(303, `/projects/${encodeURIComponent(id)}`);
   },
   agentProfile:async event=>saveAgentProfile(event,"workspace"),
   update:async event=>mutate(event,"update"),archive:async event=>mutate(event,"archive"),agentDefaults:async event=>mutate(event,"defaults"),

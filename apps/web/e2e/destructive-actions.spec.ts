@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("cancellation updates the task with retained worker delivery", async ({ page }) => {
-  await page.goto("/_old/tasks/00000000-0000-4000-8000-000000000043");
+  await page.goto("/tasks/00000000-0000-4000-8000-000000000043");
   await expect(page.locator("html")).toHaveAttribute("data-hydrated", "true");
   await page.getByRole("button", { name: "Task actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Cancel task", exact: true }).click();

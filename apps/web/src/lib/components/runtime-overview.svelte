@@ -67,7 +67,7 @@
   <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="text-lg font-semibold">Runtimes</h2><PollStatus /></div>
   {#each profiles as profile (profile.id)}
     {@const revision=revisions[profile.id]}
-    <InformationCard title={words(profile.kind)} navigationHref={`/_old/profiles/${encodeURIComponent(profile.id)}`} status={profile.state} actions={[{ label: "Edit", onSelect: () => edit(profile), disabled: busy }]}>
+    <InformationCard title={words(profile.kind)} navigationHref={`/repositories/${encodeURIComponent(repository.id)}/runtimes/${encodeURIComponent(profile.id)}`} status={profile.state} actions={[{ label: "Edit", onSelect: () => edit(profile), disabled: busy }]}>
       {#if profile.state === "updating"}<p class="text-sm text-muted-foreground" role="status">The environment needs an update. New tasks wait until preparation and verification complete.</p>{/if}
       {#each profile.findings as finding (finding.code)}<div class="text-sm" role="status"><p class="text-destructive">{finding.message}</p><p class="text-muted-foreground">{finding.remediation}</p></div>{/each}
       <InformationTable rows={[
@@ -111,7 +111,7 @@
       {/if}
       <div class="flex flex-wrap gap-2 border-t pt-4">
         {#each ["sync","rebuild"] as action (action)}<form method="POST" action={`?/${action}`} use:enhance={submit}><input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><Button type="submit" variant="outline" disabled={busy || (action==="rebuild" && !selected.rebuildAvailable)}>{action==="sync" ? selected.failure ? "Retry" : "Build / Retry" : "Rebuild runtime"}</Button></form>{/each}
-        <Button href={`/_old/profiles/${encodeURIComponent(selected.id)}`} variant="outline">View details</Button>
+        <Button href={`/repositories/${encodeURIComponent(repository.id)}/runtimes/${encodeURIComponent(selected.id)}`} variant="outline">View details</Button>
       </div>
     {/if}
   </Dialog.Content>

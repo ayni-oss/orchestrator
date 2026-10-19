@@ -13,7 +13,7 @@
     const params=new URLSearchParams({limit:"50"});
     if(history){params.set("before",history.nextBeforeSequence);params.set("snapshot",history.snapshotSequence);}
     try {
-      const response=await fetch(`/_old/projects/${encodeURIComponent(conversation.projectId)}/conversations/${encodeURIComponent(conversation.id)}/history?${params}`),result=await response.json();
+      const response=await fetch(`/projects/${encodeURIComponent(conversation.projectId)}/conversations/${encodeURIComponent(conversation.id)}/history?${params}`),result=await response.json();
       if(!response.ok)throw new Error(result.error?.message??"Earlier messages could not be loaded. Try again.");
       history=result;
       older=[...older,...result.records.filter((record:ConversationRecordDto)=>record.kind==="message"&&(record.role==="user"||record.role==="assistant"))].sort((a,b)=>BigInt(a.sequence)<BigInt(b.sequence)?-1:1);

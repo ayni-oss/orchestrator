@@ -62,7 +62,7 @@ export function redirectNotification(result: ActionResult, action: URL) {
   if (result.type !== "redirect" || result.status !== 303) return;
   const operation = [...action.searchParams.keys()].find(key => key.startsWith("/"))?.slice(1);
   const messages: Record<string, string> = {
-    create: action.pathname === "/_old/workspaces" ? "Workspace created." : /^\/workspaces\/[^/]+$/u.test(action.pathname) ? "Project created." : "Task submitted.",
+    create: action.pathname === "/" || /^\/workspaces\/[^/]+\/settings$/u.test(action.pathname) ? "Project created." : "Task submitted.",
     createTask: "Task submitted.",
     remove: "Repository removed.",
     cancel: "Task cancellation requested.",

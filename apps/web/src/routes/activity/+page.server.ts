@@ -41,12 +41,12 @@ export const load: PageServerLoad = async ({ locals, url, depends, setHeaders })
 
     const entries: ActivityEntry[] = [];
     for (const repository of repositories) {
-      entries.push({ id: `repository:${repository.id}`, at: repository.updatedAt, kind: 'repository', title: 'Repository last updated', detail: `${repository.displayName} · current status: ${repository.status.replaceAll('_', ' ')}`, context: workspace.displayName, href: `/_old/repositories/${encodeURIComponent(repository.id)}` });
+      entries.push({ id: `repository:${repository.id}`, at: repository.updatedAt, kind: 'repository', title: 'Repository last updated', detail: `${repository.displayName} · current status: ${repository.status.replaceAll('_', ' ')}`, context: workspace.displayName, href: `/repositories/${encodeURIComponent(repository.id)}` });
     }
     for (const { project, tasks, conversations } of projectResults) {
       for (const task of tasks) {
-        entries.push({ id: `task:${task.id}:created`, at: task.createdAt, kind: 'task', title: 'Task created', detail: task.snapshot.request, context: project.displayName, href: `/_old/tasks/${encodeURIComponent(task.id)}` });
-        if (task.updatedAt !== task.createdAt) entries.push({ id: `task:${task.id}:updated`, at: task.updatedAt, kind: 'task', title: 'Task last updated', detail: `${task.snapshot.request} · current state: ${task.state.replaceAll('_', ' ')}`, context: project.displayName, href: `/_old/tasks/${encodeURIComponent(task.id)}` });
+        entries.push({ id: `task:${task.id}:created`, at: task.createdAt, kind: 'task', title: 'Task created', detail: task.snapshot.request, context: project.displayName, href: `/tasks/${encodeURIComponent(task.id)}` });
+        if (task.updatedAt !== task.createdAt) entries.push({ id: `task:${task.id}:updated`, at: task.updatedAt, kind: 'task', title: 'Task last updated', detail: `${task.snapshot.request} · current state: ${task.state.replaceAll('_', ' ')}`, context: project.displayName, href: `/tasks/${encodeURIComponent(task.id)}` });
       }
       for (const conversation of conversations) {
         const href = `/projects/${encodeURIComponent(project.id)}?conversation=${encodeURIComponent(conversation.id)}`;

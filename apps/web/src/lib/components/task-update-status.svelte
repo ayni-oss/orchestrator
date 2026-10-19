@@ -16,7 +16,7 @@
     let stopped = false;
     function connect() {
     if (stopped) return;
-    source = new EventSource(`/_old/tasks/${taskId}/updates`);
+    source = new EventSource(`/tasks/${taskId}/updates`);
     const stream = source;
     stream.onopen = () => { connection = "live"; lastUpdate = Date.now(); };
     stream.addEventListener("heartbeat", () => {
