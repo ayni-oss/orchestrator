@@ -32,7 +32,7 @@
 </script>
 <svelte:head><title>Operations · Ayni Orchestrator</title></svelte:head>
 <WorkspaceShell {data} title="Operations">
-  <header class="heading"><div><p class="eyebrow">Workspace overview</p><h1>Operations</h1><p class="subtitle">Follow the work. See what needs you next.</p></div><Button href={projectsUrl}>Projects <ArrowUpRight size={16}/></Button></header>
+  <header class="heading"><div><p class="eyebrow">Workspace overview</p><h1>Operations</h1><p class="subtitle">Follow the work. See what needs you next.</p></div></header>
   {#if data.error}<Feedback kind="error" title="Operations unavailable" message={data.error.message}/><Button variant="outline" onclick={refresh} disabled={refreshing}>Retry</Button>
   {:else}
     <div class="metrics">

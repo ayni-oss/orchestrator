@@ -32,7 +32,7 @@ in Review. Task cards open the retained task details during migration.
 The workspace Projects view starts at `/`; `?workspace=<id>` selects its scope.
 It uses real workspace/project data and the existing validated creation flow.
 Project details at `/projects/<id>` center the conversation, with a right-side
-Plan sheet for review and approvals. Project settings and task details still use
+Plan sheet for review and approvals. Project settings live at `/projects/<id>/settings`; task details still use
 `/_old` during migration. Workspace settings live at
 `/workspaces/<id>/settings` inside the shared workspace shell; the header menu,
 and sidebar link there. Legacy settings bookmarks redirect

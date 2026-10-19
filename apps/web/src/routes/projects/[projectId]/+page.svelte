@@ -34,7 +34,7 @@
         <div><p class="eyebrow">Project</p><h1>{data.project.displayName}</h1><p class="goal">{data.project.goal}</p></div>
         <div class="project-tools">
           <Dropdown.Root><Dropdown.Trigger class="inline-flex size-9 items-center justify-center hover:bg-accent" aria-label="Conversation history"><MessagesSquare size={18} /></Dropdown.Trigger><Dropdown.Content align="end"><Dropdown.Label>Conversations</Dropdown.Label>{#each data.conversations as conversation (conversation.id)}<Dropdown.Item onclick={() => goto(href(data.project!.id, "overview", conversation.id))}>{conversation.title}</Dropdown.Item>{:else}<Dropdown.Item disabled>No conversations yet</Dropdown.Item>{/each}<Dropdown.Separator /><Dropdown.Item onclick={() => goto(`/projects/${encodeURIComponent(data.project!.id)}?new=${crypto.randomUUID()}`)}><MessageSquarePlus size={16} />New conversation</Dropdown.Item></Dropdown.Content></Dropdown.Root>
-          <Button variant="ghost" size="icon" href={`/_old/projects/${encodeURIComponent(data.project.id)}?view=settings`} aria-label="Project settings"><Settings2 size={18} /></Button>
+          <Button variant="ghost" size="icon" href={`/projects/${encodeURIComponent(data.project.id)}/settings`} aria-label="Project settings"><Settings2 size={18} /></Button>
           <Button variant="outline" onclick={() => showPlan(true)}><PanelRightOpen size={16} />Plan{#if data.conversation?.plan}<span class="size-1.5 rounded-full bg-primary" aria-label="Plan available"></span>{/if}</Button>
         </div>
       </header>

@@ -12,6 +12,7 @@ import { projectSchema } from "$lib/project-schema.js";
 import type { ProjectConversationDto, ProviderModelPageDto, RequestContext } from "@ayni-orchestrator/bff/server";
 
 export const load: PageServerLoad = async ({ locals, depends, params, setHeaders, url }) => {
+  if (url.searchParams.get("view") === "settings") redirect(307, `/projects/${encodeURIComponent(params.projectId)}/settings`);
   depends("app:workspaces", "app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
   depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });

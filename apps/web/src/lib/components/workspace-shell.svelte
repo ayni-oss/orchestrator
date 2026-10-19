@@ -5,7 +5,7 @@
   import { LayoutDashboard, Layers, ChevronDown, Settings2, ArrowUpRight, Plus, Check, PanelLeftClose, Menu, EllipsisVertical } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import * as Dropdown from "$lib/components/ui/dropdown-menu/index.js";
-  let { data, title = "Projects", children }: { data: { workspace?: WorkspaceDto; workspaces: WorkspaceDto[]; projects: ProjectDto[] }; title?: string; children: Snippet } = $props();
+  let { data, title = "Projects", children }: { data: { workspace?: WorkspaceDto | undefined; workspaces: WorkspaceDto[]; projects: ProjectDto[] }; title?: string; children: Snippet } = $props();
   let sidebarOpen = $state(false);
   const workspaceUrl = $derived(data.workspace ? `/workspaces/${encodeURIComponent(data.workspace.id)}/settings` : "/_old/workspaces");
   async function selectWorkspace(id: string) {

@@ -2,6 +2,7 @@
   import {page} from "$app/state";
   import {untrack,onMount} from "svelte";
   import ConversationMessages from "$lib/components/conversation-messages.svelte";
+  import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import { invalidate } from "$app/navigation";
   import type {ProjectViewData} from "$lib/project-view.js";
   import type { SubmitFunction } from "@sveltejs/kit";
@@ -12,7 +13,6 @@
   import Feedback from "$lib/components/feedback.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-  import { Textarea } from "$lib/components/ui/textarea/index.js";
   let {data}:{data:ProjectViewData}=$props();
   let content=$state(untrack(()=>{
     const update=data.conversation?.workerUpdates.find(update=>update.attemptId===page.url.searchParams.get("question"));
@@ -40,10 +40,10 @@
   {/if}
   {#if !data.conversationError}
     <Card.Root role="region" aria-label="Conversation" class="min-h-0 flex-1 border-0 bg-transparent shadow-none py-0"><Card.Content class="flex min-h-0 flex-1 flex-col gap-4 px-0">
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region must support keyboard scrolling.) -->
-      <div class="min-h-32 flex-1 overflow-y-auto overscroll-contain space-y-4 rounded-md focus-visible:outline-2 focus-visible:outline-ring" role="region" aria-label="Conversation timeline" tabindex="0">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex (The timeline supports keyboard scrolling.) -->
+      <div class="min-h-32 flex-1 overflow-y-auto overscroll-contain space-y-4 p-1" role="region" aria-label="Conversation timeline" tabindex="0">
       {#if conversation}
-      {#key conversation.id}<ConversationMessages {conversation} />{/key}
+      {#key conversation.id}<ConversationMessages {conversation} chatLayout />{/key}
       {#each conversation.runs.filter(r=>r.state==="failed"||r.state==="interrupted") as run (run.id)}<Feedback kind="warning" title={`Agent run ${run.state}`} message={run.failure||"Send a message to explicitly retry. Open Tasks to inspect previously approved work."} />{/each}
       {#if running}<p role="status" class="text-sm text-muted-foreground">The agent is researching your request. You can return later; this conversation is saved.</p>{/if}
       {:else}<div class="flex min-h-64 h-full flex-col items-center justify-center gap-3 text-center"><h2 class="text-2xl font-medium tracking-tight">What would you like to work on?</h2><p class="max-w-md text-sm leading-relaxed text-muted-foreground">Describe a change or ask a question. We’ll shape a plan together before any work starts.</p></div>{/if}
@@ -51,8 +51,7 @@
       {#if active}<form method="POST" action={conversation?"?/sendMessage":"?/createConversation"} use:enhance={submit} class="shrink-0 space-y-3" data-refresh-paused={pending||content?"":undefined}>
         <input type="hidden" name="idempotencyKey" value={conversation?key(`message-${conversation.id}-${conversation.updateCursor}`):newConversationKey} />
         {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{/if}
-        <Label for="project-message" class="sr-only">Message</Label><Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} onkeydown={sendOnEnter} placeholder="Describe the work, ask a question, or request a revision…" />
-        <div class="flex flex-wrap justify-between gap-3"><p class="text-xs text-muted-foreground">Enter to send · Shift+Enter for a new line</p><Button type="submit" disabled={!canSend}>{pending?"Sending…":"Send message"}</Button></div>
+        <Label for="project-message" class="sr-only">Message</Label><InputGroup.Root><InputGroup.Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} onkeydown={sendOnEnter} placeholder="Describe the work, ask a question, or request a revision…" /><InputGroup.Addon align="block-end" class="justify-between"><span class="text-xs">Enter to send · Shift+Enter for a new line</span><InputGroup.Button type="submit" variant="default" disabled={!canSend}>{pending?"Sending…":"Send"}</InputGroup.Button></InputGroup.Addon></InputGroup.Root>
         {#if conversation}<p class="text-xs text-muted-foreground">To cancel or retry work, explicitly request the action here and approve its confirmation card.</p>{/if}
         {#if !data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Settings or workspace defaults before sending a message.</p>{/if}
       </form>{/if}
