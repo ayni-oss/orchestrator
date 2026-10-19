@@ -79,7 +79,7 @@
         ...profile.reconciliation.filter(entry => entry.key === "discovery-reference").map(entry => ({ label: "Discovery tag", value: entry.value, monospace: true })),
         { label: "Image destination", value: profile.desiredImageRepository || revision?.managed?.repository || "Not configured" },
       ]} />
-      {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/_old/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
+      {#if profile.kind==="ayni_managed" && !profile.effectiveCertificate}<p class="text-sm text-muted-foreground"><a href="/settings/ayni/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
       {#if profile.failure && !profile.findings.length}<p class="text-sm text-destructive" role="status">{failureMessage(profile.failure.message)}</p>{/if}
       {#if profile.support!=="operational"}<p class="text-sm text-muted-foreground">{words(profile.support)} runtime</p>{/if}
     </InformationCard>
@@ -98,14 +98,14 @@
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={`${keys[selected.id]}-certificate-${editVersion}`}/><input type="hidden" name="resourceVersion" value={editVersion}/>
         <div class="space-y-2"><Label for="runtime-certificate">Signing certificate</Label><ThemedSelect id="runtime-certificate" name="certificateId" bind:value={certificateId} options={[{value:"",label:certificates.find(c=>c.isDefault) ? `Global default (${certificates.find(c=>c.isDefault)!.displayName})` : "Global default (not configured)"},...certificates.map(c=>({value:c.id,label:c.displayName}))]} /></div>
         {#if selected.effectiveCertificate}<p class="text-xs text-muted-foreground">Effective key: {selected.effectiveCertificate.keyId} · revision {selected.effectiveCertificate.revision}</p>{/if}
-        {#if !certificates.length}<p class="text-sm text-muted-foreground"><a href="/_old/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
+        {#if !certificates.length}<p class="text-sm text-muted-foreground"><a href="/settings/ayni/certificates" class="underline">Add a signing certificate</a> to build this environment.</p>{/if}
         <Button type="submit" disabled={busy || !certificates.length}>Save certificate</Button>
       </form>
       <form method="POST" action="?/registry" use:enhance={submit} class="space-y-4">
         <input type="hidden" name="profileId" value={selected.id}/><input type="hidden" name="idempotencyKey" value={keys[selected.id]}/><input type="hidden" name="resourceVersion" value={editVersion}/>
         <div class="space-y-2"><Label for="runtime-registry">GHCR connection</Label><ThemedSelect id="runtime-registry" name="registryConnectionId" bind:value={registryId} options={connections.map(connection=>({value:connection.id,label:connection.displayName}))} required /></div>
         {#if imageDestination}<p class="break-all text-xs text-muted-foreground">Image destination: {imageDestination}</p>{/if}
-        {#if !connections.length}<p class="text-sm text-muted-foreground">Add a ready <a href="/_old/container-registries/github" class="underline">GHCR connection</a> to configure this runtime.</p>{/if}
+        {#if !connections.length}<p class="text-sm text-muted-foreground">Add a ready <a href="/settings/container-registries/github" class="underline">GHCR connection</a> to configure this runtime.</p>{/if}
         <Button type="submit" disabled={busy || !registryId}>Save image destination</Button>
       </form>
       {/if}

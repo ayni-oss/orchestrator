@@ -13,5 +13,5 @@ export const load: ServerLoad = async ({ cookies, locals, setHeaders, url }) => 
   if (!code || !state || !expected || state !== expected || !consumeManifest(state)) throw error(400, "GitHub App setup expired or could not be verified. Start again.");
   try { await getBff().completeGithubManifest(code, actionKey(), requestContext(locals)); }
   catch { throw error(502, "GitHub App setup could not be completed. Return to Source control to check the connection."); }
-  redirect(303, "/_old/source-control/github");
+  redirect(303, "/settings/source-control/github");
 };
