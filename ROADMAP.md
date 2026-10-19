@@ -5,6 +5,114 @@ This roadmap records agreed product direction. Requirements and delivery status 
 [repository issues](https://github.com/ayni-oss/orchestrator/issues).
 Use those records to track milestones and acceptance criteria.
 
+## Project workflow replacement
+
+Direction agreed 2026-10-19. This is the proposed eight-milestone delivery sequence,
+not a claim that the replacement is implemented or a calendar estimate. Detailed
+requirements and execution status belong in delivery issues and the Project;
+create those records when each milestone is specified.
+
+Build on a separate branch in this repository. Development state is disposable,
+breaking changes are acceptable, and keeping the old app operational throughout
+is not required. Repository separation remains deferred. PostgreSQL is the target
+transactional store, JetStream carries durable messages, and gRPC provides command
+and streaming contracts. Service topology follows ownership and failure contracts.
+
+The [refactor runbook](docs/technical/research/project-workflow-refactor-runbook.md)
+defines research gates; its [worksheets](docs/technical/research/project-workflow-design-worksheets.md)
+define required design evidence. Research gates A–H are distinct from delivery
+milestones M1–M8 below. Apply the relevant gates before each implementation;
+feasibility experiments may revise the decomposition.
+
+### Product constraints
+
+- Conversations share agent configuration but retain isolated working context.
+  A fresh conversation receives the objective and factual project status, excluding
+  other conversations' transcripts, plans, and reasoning. Cross-conversation memory is deferred.
+- Plans are developed in their originating conversations and visible at project level.
+  Concurrent work uses isolated worktrees. Tasks target one repository initially.
+- A dependent task can use an explicitly selected upstream commit before merge.
+  Its admitted inputs stay frozen when the upstream branch changes.
+- Questions and failures reach the originating conversation and project activity.
+  Recovery requires a proposal and confirmation; retained work has an explicit retention policy.
+- Task delivery ends at draft PR creation. The user decides project completion,
+  supported by an agent summary. Automatic assessments may propose further work without authorizing execution.
+- Capability priority is workspace instructions, then MCP integrations, then multiple providers.
+  Tenancy expansion and user management are outside this refactor.
+
+### Delivery milestones
+
+| Milestone | Deliverable | Demonstration required to finish |
+| --- | --- | --- |
+| M1: Durable foundation | PostgreSQL persistence and migrations, JetStream publication/consumption, gRPC commands and watches, minimal project/conversation records. | A durable message is processed by a scripted executor and streamed back despite restarts, duplicate delivery, and reconnects. |
+| M2: Conversation execution | Shared agent configuration, isolated sessions, workspace instructions, one real provider adapter, and structured activity. | Two conversations stay isolated; preparation/model activity is visible; reconnect restores accepted state. |
+| M3: Plans and approval | Conversation-owned plans, immutable versions, approval receipts, and task admission. | Approval admits exactly the reviewed task set once; stale or conflicting approval is explained. |
+| M4: Isolated task execution | Ayni runtimes, worker supervision, single-repository tasks, retained evidence, and draft publication. | A real task creates a draft PR with separate execution, quality, and publication outcomes. |
+| M5: Dependencies and concurrency | Concurrent worktrees, dependency scheduling, and explicit upstream commit selection. | Task B uses A's selected commit before merge; later changes to A cannot silently change B's inputs. |
+| M6: Feedback and recovery | Attention items, waiting state, retained work, recovery proposals, and confirmation. | A task asks for help and continues safely after confirmation, including across pod loss. |
+| M7: Project continuity and integrations | Factual summaries, automatic outcome assessment, proactive proposals, MCPs, and additional providers. | Fresh conversations receive only objective and factual status; feedback reaches its origin and project activity; integrations obey configured scope. |
+| M8: Operational acceptance | Retention, diagnostics, capacity checks, self-development scenario, cutover, and obsolete-path removal. | Failure scenarios pass and Orchestrator can develop Orchestrator without relying on it as the only repair mechanism. |
+
+Each milestone builds on the preceding executable slice and retains its regression
+suite. M1–M6 establish the core planning, execution, and confirmed-recovery loop.
+M7–M8 complete the agreed initial scope and operational acceptance. These labels
+refer to this replacement sequence, not historical GitHub milestone numbers.
+
+### M1 executable slice
+
+Specify the contracts, logical module map, local stack, and executable acceptance
+cases before implementation. Reproduce and classify current sandbox failures as
+baseline evidence. The replacement slice must run without depending on the old
+backend's execution paths.
+
+1. Submit a conversation message through gRPC.
+2. Save the message and outbox record in one PostgreSQL transaction.
+3. Publish the retained event to JetStream.
+4. Let a scripted conversation executor consume it and report a response.
+5. Validate and persist the response through its application owner.
+6. Deliver the accepted update through a resumable gRPC watch.
+7. Disconnect and reconnect using the accepted cursor.
+
+A minimal diagnostic client is sufficient for this first proof. Scripted execution
+makes failure cases reproducible; M2 adds the real provider and working conversation
+interface. Logical owners include admission, persistence, event delivery, executor
+protocol, and activity projection; they need not be separate services.
+
+M1 acceptance must establish:
+
+- Repeating a command returns its original receipt; duplicate delivery produces one accepted response.
+- Acknowledged messages survive application restart.
+- A crash between database commit and publication loses no accepted work.
+- A watcher reconnects without gaps; expired cursors have an explicit snapshot recovery path.
+- Broker unavailability leaves work visibly pending and recoverable.
+- Cancelling a watch does not cancel its underlying operation.
+- Accepted, queued, processing, and completed states are distinguishable.
+
+Agree numeric targets for durable acknowledgement, visible activity, and completion
+before running the acceptance suite. Queue fairness and recovery targets are added
+when their owners enter the implementation. Transport heartbeats do not prove execution progress.
+
+### Validation at every milestone
+
+| Level | Purpose | Evidence |
+| --- | --- | --- |
+| Contract | Verify policy independently of infrastructure. | Valid transitions, scope, frozen inputs, approval binding. |
+| Integration | Exercise actual storage and transport. | PostgreSQL transactions/migrations, JetStream redelivery, gRPC replay. |
+| Failure | Interrupt specific durability boundaries. | Crashes before publication, after processing, and before acknowledgement. |
+| User scenario | Verify what the engineer observes and can do. | Send, watch progress, reconnect, answer, confirm, and continue. |
+
+Keep one cumulative acceptance harness. Add real Docker Desktop Kubernetes tests
+when workloads enter the system and provider-backed tests when model behavior matters.
+Passing scripted tests does not prove worker isolation, checkpoint safety, quality,
+or publication behavior. Every delivery issue must name prerequisites, observable
+outcomes, failure cases, acceptance commands, and obsolete paths to remove.
+
+## Existing implementation and earlier delivery direction
+
+The sections below describe the existing SQLite-based implementation and its earlier
+delivery sequence. They provide reuse and migration context; the replacement direction
+above governs the new backend. Historical issue links retain their original meaning.
+
 ## Workspaces, projects and agent execution
 
 Orchestrator provides reusable workspaces where users pursue specific projects.

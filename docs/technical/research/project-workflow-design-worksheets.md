@@ -20,7 +20,7 @@ For Workspace, Project, Conversation, Plan, Plan Version, Task, Attempt, Runtime
 
 Investigate plans owned by their originating conversation and indexed by the project. Cross-conversation plan editing is not an initial requirement; fresh research must not silently inherit an earlier plan. Distinguish a plan version from any execution of it, and a task from its physical attempt. Distinguish runtime configuration, certified image revision, and running workload.
 
-Separate project facts, decisions, interpretations, and questions. Project activity visibility does not automatically grant inclusion in another conversation's model context. Specify feedback delivery to the originating conversation, isolated context construction, and rejection of stale assessments.
+Separate project facts, decisions, interpretations, and questions. Fresh conversations receive the objective and factual project status, excluding other conversations' transcripts, plans, and reasoning. Project activity visibility does not grant broader model-context inclusion. Specify feedback delivery to the originating conversation, isolated context construction, and rejection of stale assessments.
 
 Workspace sharing initially exposes project objectives and status descriptions. Cross-conversation memory remains deferred. Investigate how project summaries derive from accepted outcomes without transferring one conversation's assumptions into another.
 
@@ -55,7 +55,7 @@ Model task prerequisites as a directed acyclic graph. Specify cycle rejection, r
 
 A graph-shaped domain does not itself require a graph database. Start the comparison with tasks and dependency edges in relational storage; SQL supports recursive traversal and cycle detection. Evaluate storage against actual queries and scale, not terminology. See [PostgreSQL recursive queries](https://www.postgresql.org/docs/17/queries-with.html) for an example, not a database selection.
 
-Define what satisfies an edge: accepted task completion, a specific commit/artifact, or draft delivery. A draft in one repository does not make its changes available to another task automatically. Specify artifact handoff, input freezing, and revalidation when upstream work changes.
+A downstream task may use an explicitly selected upstream commit before merge. Define what makes that commit eligible to satisfy an edge, including any required evidence. A draft in one repository does not make its changes available to another task automatically. Specify artifact handoff, input freezing, and revalidation when upstream work changes.
 
 Research task-to-task communication as scoped, durable reports and explicit subscriptions. An informational message must not silently mutate another attempt's frozen inputs or widen repository access. Keep isolated worktrees and execution permissions even when tasks exchange relevant findings.
 
@@ -107,7 +107,7 @@ Evaluate logical owners before assigning crates, packages, or deployments. Candi
 
 For each proposed component, list owned state, inbound/outbound contracts, permitted dependencies, external actions, and failure behavior. Name the authority for every transaction. If components share tables, document that coupling rather than claiming independent service ownership.
 
-Compare at least a modular control plane with workers against a split coordination/projection deployment. Evaluate storage choices against write concurrency, transaction boundaries, recovery, and operational scope. Keep deployment tenancy expansion outside this exercise.
+Compare at least a modular control plane with workers against a split coordination/projection deployment. Use PostgreSQL as the target transactional store. Evaluate schema ownership, write concurrency, transaction boundaries, migrations, and recovery within that choice. Keep deployment tenancy expansion outside this exercise.
 
 ## Feasibility and acceptance evidence
 

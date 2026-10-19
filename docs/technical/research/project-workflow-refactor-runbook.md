@@ -1,6 +1,6 @@
 # Project workflow refactor runbook
 
-Date: 2026-10-19. Status: research procedure; target architecture is not yet selected.
+Date: 2026-10-19. Status: research procedure; target stack selected, detailed boundaries remain under investigation.
 
 ## What this establishes
 
@@ -18,7 +18,7 @@ This runbook defines a method, not implementation approval or a delivery-status 
 | --- | --- |
 | Workspace | Defines reachable repositories, agent configuration, instructions, tools, and MCP integrations. Cross-project visibility includes objective and status with a description. |
 | Project | Groups a chunk of work, conversations, plans, and task activity. The user decides completion with agent summarization. |
-| Conversation isolation | Sessions share agent configuration but keep working context isolated. Cross-conversation memory is deferred. |
+| Conversation isolation | Sessions share agent configuration but keep working context isolated. Fresh conversations receive objective and factual project status only, excluding other conversations' transcripts, plans, and reasoning. Cross-conversation memory is deferred. |
 | Plan ownership | Cross-conversation editing has no demonstrated value. Investigate conversation-owned plans; do not silently import earlier plans into fresh research. |
 | Concurrent work | Multiple plans and same-repository tasks may run concurrently in isolated worktrees with separate branches and draft PRs. |
 | Plan and task | Plans organize changes; tasks execute through runtimes built with Ayni. Results feed subsequent planning. |
@@ -28,7 +28,7 @@ This runbook defines a method, not implementation approval or a delivery-status 
 | Authorization | The agent prepares a recovery proposal; the engineer must confirm it before recovery executes. |
 | Continuation | Reuse retained work where safe. The distinction between resuming an attempt and creating a new attempt requires design. |
 | Task boundaries | Read-only research/planning execution is separate from task execution. One repository per task is the preferred security boundary, subject to research. |
-| Dependencies | Task dependencies are required. DAG scheduling and communication of relevant changes between tasks require research. |
+| Dependencies | Task dependencies are required. B can use an explicitly selected commit from A before merge; later upstream changes cannot silently alter B. DAG scheduling and task communication require research. |
 | Completion feedback | Update project facts and assess meaningful outcomes automatically; the agent may proactively propose work. Proposals do not authorize execution. |
 | Waiting and steering | Waiting for input retains durable work even if compute expires. Steering active execution is desirable, not an initial requirement. |
 | Delivery | The current delivery responsibility ends at draft PR creation. Retained work has an explicit retention policy. |
@@ -36,6 +36,7 @@ This runbook defines a method, not implementation approval or a delivery-status 
 | Proving ground | Pass basic sandbox scenarios before using Orchestrator to develop Orchestrator. Current sandbox failures must be reproduced and classified. |
 | Responsiveness | Acknowledge requests promptly and expose actual preparation/model/tool activity. Avoid unexplained waits; numeric targets remain open. |
 | Development strategy | Use a separate branch in this repository for now. Keeping the existing app usable throughout is not required; repository separation remains deferred. |
+| Target stack | PostgreSQL owns transactional state; JetStream carries durable messages; gRPC provides commands and watches. Detailed component boundaries remain open. |
 | Capacity | Active-project, conversation, and task counts have not yet been specified. |
 
 Disposable state permits a clean replacement design. It does not authorize deleting a running deployment or retained external work during research. Preserve existing access boundaries and scope identities without introducing a new tenancy or identity platform.
@@ -87,13 +88,11 @@ Use these scenarios throughout modeling, experiments, and acceptance. Include a 
 
 ## First implementation slice
 
-Begin with a reproducible sandbox baseline: record current failures, build a minimal scripted interaction, and verify admission, visible progress, and terminal outcomes. Select the architectural slice after the contract and feasibility gates. The preferred proving scenario is one task failure, one conversation exchange, one confirmed recovery, and one resulting project update.
+The [roadmap](../../../ROADMAP.md#project-workflow-replacement) defines eight delivery milestones, separate from this runbook's research gates. M1 is a runnable PostgreSQL, JetStream, and gRPC slice with a scripted executor, durable admission, and resumable updates. Specify its contracts, module map, local stack, and acceptance cases before implementation.
 
-Use Orchestrator development as the first real workload only after sandbox scenarios pass. Self-development must not be the only mechanism available to repair the system.
+Reproduce current sandbox failures and establish the replacement's executable baseline. Extend its cumulative acceptance harness through planning, real execution, dependencies, and confirmed recovery. M6 proves the core feedback/recovery loop; M8 establishes operational acceptance for the initial scope.
 
-Include durable attention state, retained-work identity, recovery proposal, approval receipt, scheduling, streamed feedback, and evidence acceptance. A simulated success-only chat cannot establish the contract.
-
-Before implementation, agree numeric targets for acknowledgement latency, visible progress latency, reconnect recovery, queue fairness, and event-to-agent reaction. Measure user-visible updates separately from transport heartbeats. Do not invent targets from existing polling intervals.
+Use Orchestrator development as the first real workload only after sandbox scenarios pass. Self-development must not be the only mechanism available to repair the system. Numeric responsiveness and capacity targets remain to be agreed.
 
 ## Cutover and completion
 
@@ -119,7 +118,7 @@ The target model is written before the keep/replace mapping. Existing code suppl
 
 ### Does an event backbone make the system event-sourced?
 
-That is a separate storage decision. Compare authoritative database state with durable event delivery against event-sourced aggregates. Document retention and reconstruction requirements before deciding.
+The selected baseline uses PostgreSQL for authoritative transactional state and JetStream for durable delivery. Define retention and reconstruction explicitly; an event backbone does not require event-sourcing every aggregate.
 
 ## Where the detail lives
 
