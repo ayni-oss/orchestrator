@@ -25,8 +25,9 @@ for (const path of await files(sourceRoot)) {
   if (name.startsWith("tests/") || /\.(?:test|spec)\.ts$/u.test(name)) continue;
   const serverOnly = name.includes("/server/") || name.endsWith(".server.ts") || name.endsWith("/+server.ts");
   const contents = await readFile(path, "utf8");
+  const runtimeImports = contents.replace(/import\s+type\s+(?:[^;]+);?/gu, "");
   if (!serverOnly && ["@ayni-orchestrator/bff", "@ayni-orchestrator/grpc-bindings"]
-    .some((marker) => contents.includes(marker))) {
+    .some((marker) => runtimeImports.includes(marker))) {
     throw new Error(`server-only transport imported by browser source: ${name}`);
   }
 }

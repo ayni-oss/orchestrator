@@ -3,16 +3,14 @@ import { BffError } from "@ayni-orchestrator/bff/server";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError } from "$lib/server/page.js";
 export function connectionLoad(kind:string) {
-  return async ({locals,setHeaders,depends}:ServerLoadEvent) => {
+  return async ({locals,depends}:ServerLoadEvent) => {
     depends("app:connections");
-    setHeaders({"cache-control":"no-store"});
     try { return {connections:(await getBff().listConnections(requestContext(locals))).filter(c=>c.kind===kind),idempotencyKey:actionKey(),available:true}; }
     catch(error) {return {connections:[],idempotencyKey:actionKey(),available:false,error:safeError(error,locals.requestId)};}
   };
 }
 export function connectionActions(kind:string):Actions {
-  const run = (operation:string):Actions[string] => async ({request,locals,setHeaders}) => {
-    setHeaders({"cache-control":"no-store"});
+  const run = (operation:string):Actions[string] => async ({request,locals}) => {
     const f=await request.formData();
     const value=(key:string,max=256):string=>{
       const raw=f.get(key) ?? "";

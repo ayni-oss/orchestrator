@@ -3,15 +3,13 @@ import type { Actions, PageServerLoad } from "./$types";
 import { BffError } from "@ayni-orchestrator/bff/server";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError } from "$lib/server/page.js";
-export const load: PageServerLoad = async ({locals,depends,setHeaders}) => {
+export const load: PageServerLoad = async ({locals,depends}) => {
   depends("app:certificates");
-  setHeaders({"cache-control":"no-store"});
   try { return {certificates:await getBff().listCertificates(requestContext(locals)),idempotencyKey:actionKey(),available:true}; }
   catch(error) { return {certificates:[],idempotencyKey:actionKey(),available:false,error:safeError(error,locals.requestId)}; }
 };
 function mutation(operation:string):Actions[string] {
-  return async ({request,locals,setHeaders}) => {
-    setHeaders({"cache-control":"no-store"});
+  return async ({request,locals}) => {
     const form=await request.formData();
     try {
       const value=(key:string,max=128)=>{

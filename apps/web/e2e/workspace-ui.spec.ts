@@ -29,7 +29,7 @@ test("runtime details are nested under their repository", async ({ page }) => {
   await page.goto("/repositories/repository:1");
   await expect(page.getByRole("heading", { name: "ayni-oss/sandbox", exact: true })).toBeVisible();
   await page.goto("/repositories/repository:1/runtimes/profile:1");
-  await expect(page.getByRole("heading", { name: /runtime/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /runtime/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Back to ayni-oss\/sandbox/ })).toBeVisible();
 });
 

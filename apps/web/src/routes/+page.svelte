@@ -5,7 +5,6 @@
   import PageHeader from "$lib/components/page-header.svelte";
   import CreateProject from "$lib/components/create-project.svelte";
   import CreateWorkspaceDialog from "$lib/components/create-workspace-dialog.svelte";
-  import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   let { data }: PageProps = $props();
@@ -14,7 +13,6 @@
   const projectUrl = (id: string) => `/projects/${encodeURIComponent(id)}`;
 </script>
 <svelte:head><title>{data.workspace ? `${data.workspace.displayName} · Projects` : "Projects"} · Ayni Orchestrator</title></svelte:head>
-<ApplicationNotifications />
 <WorkspaceShell {data}>
       <PageHeader eyebrow="Workspace / Projects" title="Projects" description="Give your work a goal. Build the plan from there.">
         {#snippet actions()}{#if data.workspace?.state === "active"}{#key data.workspace.id}<CreateProject {data} label="New project" />{/key}{:else if !data.error}<CreateWorkspaceDialog showTrigger />{/if}{/snippet}

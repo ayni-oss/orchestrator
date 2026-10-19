@@ -11,7 +11,7 @@
 </script>
 
 <a href={repositoryHref} aria-label={`Open repository ${item.displayName}`} class="block min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>div]:h-full [&>div]:transition-colors hover:[&>div]:bg-accent/30">
-  <InformationCard title={item.displayName} status={readiness} tone={summary.runtime.ready ? "success" : "warning"}>
+  <InformationCard title={item.displayName} headingLevel={2} status={readiness} tone={summary.runtime.ready ? "success" : "warning"}>
     {#snippet titleAccessory()}
       {#if item.useAyni !== false}<AyniIcon class="size-5 shrink-0 text-muted-foreground" role="img" aria-label="Ayni enabled" />{/if}
     {/snippet}

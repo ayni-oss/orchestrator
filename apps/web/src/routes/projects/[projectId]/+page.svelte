@@ -4,9 +4,9 @@
   import type { PageProps } from "./$types";
   import { MessageSquarePlus, MessageSquare, Settings2 } from "@lucide/svelte";
   import WorkspaceShell from "$lib/components/workspace-shell.svelte";
-  import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import ProjectChat from "$lib/components/project-chat.svelte";
   import ProjectUpdates from "$lib/components/project-updates.svelte";
+  import WorkerUpdates from "$lib/components/worker-updates.svelte";
   import ProjectPlans from "$lib/components/project-plans.svelte";
   import Feedback from "$lib/components/feedback.svelte";
   import StatusBadge from "$lib/components/status-badge.svelte";
@@ -31,7 +31,6 @@
 {/snippet}
 
 <svelte:head><title>{data.project?.displayName ?? "Project unavailable"} · Ayni Orchestrator</title></svelte:head>
-<ApplicationNotifications />
 <WorkspaceShell {data} title={data.project?.displayName ?? "Project"}>
   {#if data.project}
     <ProjectUpdates {data} />
@@ -54,7 +53,7 @@
         <Tabs.Content value="tasks">
           {#if data.view === "tasks"}<section class="space-y-4" aria-label="Project tasks"><div><h2 class="text-lg font-semibold">Tasks</h2><p class="text-sm text-muted-foreground">Work across this project’s repositories. Open a task for execution and quality details.</p></div><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {#each data.tasks as task (task.id)}<a class="block border bg-card p-5 transition-colors hover:border-primary" href={`/tasks/${encodeURIComponent(task.id)}`}><div class="mb-4 flex items-start justify-between gap-3"><h3 class="font-medium leading-snug">{task.snapshot.request}</h3><StatusBadge status={task.state} tone={statusTone(task.state)} /></div><p class="text-xs text-muted-foreground">{data.repositories.find(repository => repository.id === task.snapshot.repository.repositoryConnectionId)?.displayName ?? "Removed repository · history retained"}</p><p class="mt-4 text-xs text-muted-foreground">{task.attemptCount} {task.attemptCount === 1 ? "attempt" : "attempts"} · Created {formatDate(task.createdAt)}</p></a>{:else}<p class="text-sm text-muted-foreground">No tasks yet. Approve a plan from a conversation to start work.</p>{/each}
-          </div>{#if data.nextPageToken}<Button variant="outline" href={href(data.project.id, "tasks", data.conversation?.id, data.nextPageToken)}>More tasks</Button>{/if}</section>{/if}
+          </div>{#if data.nextPageToken}<Button variant="outline" href={href(data.project.id, "tasks", data.conversation?.id, data.nextPageToken)}>More tasks</Button>{/if}{#if data.conversation}<WorkerUpdates updates={data.conversation.workerUpdates} />{/if}</section>{/if}
         </Tabs.Content>
       </Tabs.Root>
     </div>

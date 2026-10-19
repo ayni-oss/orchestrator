@@ -18,7 +18,7 @@
   const submit:SubmitFunction=({formData})=>{const inherit=formData.get("inherit")==="true";pending=true;error="";success="";return async({result,update})=>{try{if(result.type==="failure")error=String(result.data?.error?.message??"Settings could not be saved. Try again.");if(result.type==="success")success=String(result.data?.success??"Agent defaults saved.");await update({reset:false});if(inherit&&result.type==="success"){await tick();projectConnection=configuration?.effective.projectConnectionId??"";codingConnection=configuration?.effective.codingConnectionId??"";projectModel=configuration?.effective.projectModel??"";codingModel=configuration?.effective.codingModel??"";}}finally{pending=false;}};};
   const options=$derived(connections.map(c=>({value:c.id,label:c.displayName})));
 </script>
-<InformationCard title={workspaceId?"Project agent models":"Workspace agent defaults"}>
+<InformationCard title={workspaceId?"Project agent models":"Workspace agent defaults"} headingLevel={2}>
   <p class="text-sm text-muted-foreground">{workspaceId?"Model overrides affect this project. Use workspace defaults to share model choices.":"These research and coding models are inherited by projects unless overridden."}</p>
   {#if workspaceId}<p class="mb-4 text-sm text-muted-foreground">{inherited?"Inherited from":"Overrides for"} the <a class="underline" href={`/workspaces/${encodeURIComponent(workspaceId)}/settings`}>workspace defaults</a>.</p>{/if}
   <form method="POST" action="?/agentDefaults" use:enhance={submit} class="space-y-4">

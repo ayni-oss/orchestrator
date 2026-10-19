@@ -15,7 +15,7 @@ test("GitHub import and rotation use dialogs and the canonical route",async ({pa
   await expect(page.getByRole("heading",{name:"My App"})).toBeVisible();
   await expect(page.locator("body")).not.toContainText("test-private-value");
   await expect(page.getByRole("button",{name:"Add GitHub App",exact:true})).toHaveCount(0);
-  await page.getByRole("button",{name:/ actions$/u}).first().click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
+  await page.getByRole("button",{name:"My App actions",exact:true}).click();await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   await page.getByLabel("New private key").fill("replacement-private-value");
   await request.post("http://127.0.0.1:50062/reject-connection-mutation");
   await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && response.url().includes("?/replace")), page.getByRole("button",{name:"Replace credentials"}).click()]);await expect(page.getByRole("button",{name:"Replace credentials"})).toBeEnabled();
@@ -39,7 +39,7 @@ test("GitHub import and rotation use dialogs and the canonical route",async ({pa
 test("admin GitHub App has a compact read-only details dialog",async ({page,request})=>{
   await request.post("http://127.0.0.1:50062/admin-connection");await page.goto("/settings/source-control/github");
   await expect(page.getByText("Your administrator",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:/ actions$/u}).first().click();await page.getByRole("menuitem",{name:"Details",exact:true}).click();
+  await page.getByRole("button",{name:"Admin App actions",exact:true}).click();await page.getByRole("menuitem",{name:"Details",exact:true}).click();
   await expect(page.getByRole("dialog").getByText("Managed by your administrator.",{exact:false})).toBeVisible();
   await expect(page.getByRole("button",{name:"Replace credentials"})).toHaveCount(0);
   await expect(page.getByLabel("Private key (PEM)")).toHaveCount(0);
@@ -232,8 +232,6 @@ test("registry Secret outages distinguish retained test results and recover inde
   await expect(row.getByText("Failed",{exact:true})).toBeVisible();
   await expect(row.getByText("Unavailable",{exact:true})).toBeVisible();
   await expect(row.getByText("Cleanup required",{exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Config",exact:true}).click();
-  await expect(page.getByRole("link",{name:/Container registries Container registry credential Secrets are unavailable/})).toBeVisible();
   await row.getByRole("button",{name:"Team images actions",exact:true}).click();
   await page.getByRole("menuitem",{name:"Edit",exact:true}).click();
   const dialog=page.getByRole("dialog");

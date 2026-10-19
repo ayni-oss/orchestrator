@@ -6,7 +6,6 @@
   import WorkspaceShell from '$lib/components/workspace-shell.svelte';
   import PageHeader from '$lib/components/page-header.svelte';
   import ProjectSettings from '$lib/components/project-settings.svelte';
-  import ApplicationNotifications from '$lib/components/application-notifications.svelte';
   import Feedback from '$lib/components/feedback.svelte';
   import * as Tabs from '$lib/components/ui/tabs/index.js';
   let { data }: PageProps = $props();
@@ -19,7 +18,6 @@
   }
 </script>
 <svelte:head><title>{data.project?.displayName ?? 'Project'} settings · Ayni Orchestrator</title></svelte:head>
-<ApplicationNotifications />
 <WorkspaceShell {data} title="Project settings">
   {#if data.project}
     <div class="settings-page">

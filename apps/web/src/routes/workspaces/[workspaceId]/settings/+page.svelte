@@ -1,7 +1,6 @@
 <script lang="ts">
   import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import PageHeader from "$lib/components/page-header.svelte";
-  import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import {enhance} from "$lib/forms.js";
   import {page} from "$app/state";
   import {goto} from "$app/navigation";
@@ -29,7 +28,6 @@
   async function closeArchive(){await new Promise<void>(resolve=>{finishArchiving=resolve;archiving=false;});}
 </script>
 <svelte:head><title>Workspace settings · Ayni Orchestrator</title></svelte:head>
-<ApplicationNotifications />
 <WorkspaceShell {data} title="Settings">
 {#if data.workspace}
   <section class="mx-auto max-w-5xl space-y-4" aria-label="Workspace settings">

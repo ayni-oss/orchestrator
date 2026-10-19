@@ -12,7 +12,6 @@ async function approved(page:Page){
  await page.getByRole("tab",{name:"Plans",exact:true}).click();
  await page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true}).click();
  await page.getByRole("tab",{name:"Tasks",exact:true}).click();
- await expect(page.getByRole("region",{name:"Worker updates",exact:true})).toBeVisible();
 }
 test.beforeEach(async({request})=>{await request.post("http://127.0.0.1:50062/reset-project");await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");});
 for(const [scenario,execution,quality,publication] of [

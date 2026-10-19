@@ -4,7 +4,7 @@ import { consumeManifest } from "$lib/server/github-manifest.js";
 import { getBff } from "$lib/server/bff.js";
 import { requestContext, actionKey } from "$lib/server/page.js";
 export const load: ServerLoad = async ({ cookies, locals, setHeaders, url }) => {
-  setHeaders({ "cache-control": "no-store, max-age=0", "referrer-policy": "no-referrer" });
+  setHeaders({ "referrer-policy": "no-referrer" });
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const expected = cookies.get("github_app_manifest_state");
