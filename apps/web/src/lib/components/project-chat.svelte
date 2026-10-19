@@ -13,7 +13,8 @@
   import Feedback from "$lib/components/feedback.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-  let {data}:{data:ProjectViewData}=$props();
+  import { CornerDownLeft, PanelRightOpen } from "@lucide/svelte";
+  let {data,onOpenPlan}:{data:ProjectViewData;onOpenPlan:()=>void}=$props();
   let content=$state(untrack(()=>{
     const update=data.conversation?.workerUpdates.find(update=>update.attemptId===page.url.searchParams.get("question"));
     return update?`For task ${update.taskId}, attempt ${update.attemptId}, approved plan version ${update.origin.planVersion}:\nWorker question: ${update.requestedInput??update.result?.requestedInput??""}\nMy answer: `:"";
@@ -30,7 +31,13 @@
     event.preventDefault();
     if(canSend)composer?.form?.requestSubmit();
   }
-  const submit:SubmitFunction=({cancel})=>{if(!canSend){cancel();return;}pending=true;return async({result,update})=>{try{if(result.type==="success")content="";await update({reset:false});}finally{pending=false;}};};
+  function resizeComposer(event:Event){
+    const field=event.currentTarget as HTMLTextAreaElement;
+    field.style.height="auto";
+    field.style.height=`${Math.min(Math.max(field.scrollHeight,72),320)}px`;
+    field.style.overflowY=field.scrollHeight>320?"auto":"hidden";
+  }
+  const submit:SubmitFunction=({cancel})=>{if(!canSend){cancel();return;}pending=true;return async({result,update})=>{try{if(result.type==="success"){content="";if(composer)composer.style.height="72px";}await update({reset:false});}finally{pending=false;}};};
   function key(suffix:string){return `${data.idempotencyKey}-${suffix}`;}
 </script>
 <section class="project-chat flex min-h-0 flex-1 flex-col gap-4" aria-label="Project conversation">
@@ -51,7 +58,7 @@
       {#if active}<form method="POST" action={conversation?"?/sendMessage":"?/createConversation"} use:enhance={submit} class="composer shrink-0 space-y-3" data-refresh-paused={pending||content?"":undefined}>
         <input type="hidden" name="idempotencyKey" value={conversation?key(`message-${conversation.id}-${conversation.updateCursor}`):newConversationKey} />
         {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{/if}
-        <Label for="project-message" class="sr-only">Message</Label><InputGroup.Root class="border-0 bg-transparent shadow-none focus-within:ring-0"><InputGroup.Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} onkeydown={sendOnEnter} placeholder="Message the project agent…" /><InputGroup.Addon align="block-end" class="justify-end"><InputGroup.Button type="submit" variant="default" disabled={!canSend}>{pending?"Sending…":"Send"}</InputGroup.Button></InputGroup.Addon></InputGroup.Root>
+        <Label for="project-message" class="sr-only">Message</Label><InputGroup.Root class="border-0 bg-transparent shadow-none focus-within:ring-0"><InputGroup.Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} oninput={resizeComposer} onkeydown={sendOnEnter} placeholder="Message the project agent…" class="min-h-[72px] max-h-[320px]" /><InputGroup.Addon align="block-end" class="justify-between"><InputGroup.Button type="button" size="icon-sm" variant="ghost" aria-label="Open conversation plan" title="Open conversation plan" disabled={!conversation} onclick={onOpenPlan}><PanelRightOpen size={18} />{#if conversation?.plan}<span class="plan-indicator" aria-label="Plan available"></span>{/if}</InputGroup.Button><InputGroup.Button type="submit" size="icon-sm" variant="default" aria-label={pending?"Sending message":"Send message"} title="Send message" disabled={!canSend}><CornerDownLeft size={18} /></InputGroup.Button></InputGroup.Addon></InputGroup.Root>
         {#if !data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Settings or workspace defaults before sending a message.</p>{/if}
       </form>{/if}
     </Card.Content></Card.Root>
@@ -63,4 +70,5 @@
 <style>
   .composer{margin-top:12px;padding:10px;border:1px solid var(--border);background:var(--card);box-shadow:3px 3px 0 var(--border)}
   .composer:focus-within{border-color:var(--primary);box-shadow:3px 3px 0 var(--primary)}
+  .plan-indicator{position:absolute;right:2px;top:2px;width:6px;height:6px;border-radius:50%;background:var(--primary)}
 </style>
