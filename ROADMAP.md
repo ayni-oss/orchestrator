@@ -1,18 +1,22 @@
 # Roadmap
 
-This roadmap records agreed product direction. Requirements and delivery status live in the
-[Orchestrator Project](https://github.com/orgs/ayni-oss/projects/2) and
-[repository issues](https://github.com/ayni-oss/orchestrator/issues).
-Use those records to track milestones and acceptance criteria.
+This roadmap is the source of truth for agreed product direction and milestone scope.
+Each pull request is its own work item and records requirements, acceptance criteria,
+validation evidence, and delivery status, linking back to the relevant section here.
+Do not create separate GitHub issues for roadmap work. Optional GitHub milestones
+can group related PRs; reuse a matching milestone or create one when useful.
+Update this roadmap in the same PR when direction or milestone status changes.
+Development branches start from the latest `origin/alpha`; PRs target `alpha` explicitly.
 
 ## Project workflow replacement
 
 Direction agreed 2026-10-19. This is the proposed eight-milestone delivery sequence,
 not a claim that the replacement is implemented or a calendar estimate. Detailed
-requirements and execution status belong in delivery issues and the Project;
-create those records when each milestone is specified.
+requirements and execution evidence belong in the PRs delivering each milestone.
+Define each PR's acceptance criteria before implementation.
 
-Build on a separate branch in this repository. Development state is disposable,
+Build on fresh branches from `alpha` in this repository and merge PRs into `alpha`.
+Development state is disposable,
 breaking changes are acceptable, and keeping the old app operational throughout
 is not required. Repository separation remains deferred. PostgreSQL is the target
 transactional store, JetStream carries durable messages, and gRPC provides command
@@ -104,7 +108,7 @@ when their owners enter the implementation. Transport heartbeats do not prove ex
 Keep one cumulative acceptance harness. Add real Docker Desktop Kubernetes tests
 when workloads enter the system and provider-backed tests when model behavior matters.
 Passing scripted tests does not prove worker isolation, checkpoint safety, quality,
-or publication behavior. Every delivery issue must name prerequisites, observable
+or publication behavior. Every delivery PR must name prerequisites, observable
 outcomes, failure cases, acceptance commands, and obsolete paths to remove.
 
 ## Existing implementation and earlier delivery direction
@@ -194,8 +198,8 @@ Compaction keeps the original archive and cannot overwrite a newer index.
 
 ### Implementation sequence
 
-These slices describe the agreed direction. Use their linked delivery issues and
-the Orchestrator Project for current status and acceptance criteria.
+These slices record earlier delivery direction. Their linked issues preserve
+historical context; new work follows the roadmap and PR workflow above.
 
 | Slice | Observable outcome | Issue |
 | --- | --- | --- |

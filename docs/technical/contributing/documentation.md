@@ -47,8 +47,9 @@ Review labels inside both rectangles and decision diamonds after changing a flow
 Document current contracts precisely and keep canonical code, schema and command
 references. Use diagrams to explain authority, state changes and recovery; retain
 necessary bounds and compatibility rules in tables or focused reference sections.
-Label dated research and unimplemented direction explicitly. Requirements and
-milestone status remain in GitHub issues and the Project.
+Label dated research and unimplemented direction explicitly. Planned direction and
+milestone scope belong in [the roadmap](../../../ROADMAP.md); individual delivery
+status and acceptance evidence belong in pull requests.
 
 ## Validate and publish
 

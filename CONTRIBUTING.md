@@ -5,6 +5,18 @@ appropriate tests, and ensure the required checks pass.
 
 ## Pull requests
 
+Start each change on a fresh descriptive branch from the latest `origin/alpha`
+and target the PR at `alpha` explicitly, even while the default branch is `main`.
+Do not work directly on either integration branch or reuse a merged branch.
+
+[ROADMAP.md](ROADMAP.md) owns planned direction and milestone scope. Each PR is
+its own work item: link the relevant roadmap section and describe prerequisites,
+observable outcomes, acceptance criteria, failure/recovery cases, and validation
+results. A separate GitHub issue or issue-closing keyword is not required; do not
+create duplicate issues for roadmap work. Update the roadmap when direction or
+milestone status changes. Optional GitHub milestones can group related PRs;
+reuse a matching milestone or create one for an agreed roadmap milestone when useful.
+
 Use a Conventional Commit pull-request title:
 `<type>(<optional-scope>)<optional-!>: <description>`. The title becomes the
 squash-merge commit. CI rejects titles outside the supported `build`, `chore`,
@@ -67,5 +79,5 @@ integration checks remain specific to this repository.
 
 Use [the documentation index](docs/index.md) to find current guides.
 [Documentation authoring](docs/technical/contributing/documentation.md) describes the
-source layout, link checks and publication workflow. Requirements and delivery
-status belong in issues and the organization Project.
+source layout, link checks and publication workflow. Planned direction belongs in
+the roadmap; individual delivery status and evidence belong in pull requests.
