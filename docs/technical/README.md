@@ -17,6 +17,7 @@ For product usage, start with the [user guide](../site/index.md).
 
 - [Refactor runbook](research/project-workflow-refactor-runbook.md): gated investigation from product behavior to contracts, component boundaries, and cutover.
 - [Design worksheets](research/project-workflow-design-worksheets.md): evidence and decision templates for that investigation.
+- [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): reviewable scope, authority, transport, replay, failure, and M2 handoff contract for the first replacement slice.
 
 ## Maintain a deployment
 
