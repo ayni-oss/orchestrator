@@ -2,18 +2,25 @@
   import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import ApplicationNotifications from "$lib/components/application-notifications.svelte";
   import {enhance} from "$lib/forms.js";
+  import {page} from "$app/state";
+  import {goto} from "$app/navigation";
   import type {PageProps} from "./$types";
   import Feedback from "$lib/components/feedback.svelte";
   import InformationCard from "$lib/components/information-card.svelte";
   import InformationTable from "$lib/components/information-table.svelte";
   import ProjectAgentSettings from "$lib/components/project-agent-settings.svelte";
+  import ManageWorkspaceRepositories from "$lib/components/manage-workspace-repositories.svelte";
+  import RepositoryCard from "$lib/components/repository-card.svelte";
   import {Button} from "$lib/components/ui/button/index.js";
   import {Input} from "$lib/components/ui/input/index.js";
   import ThemedSelect from "$lib/components/ui/select/select-field.svelte";
   import {Label} from "$lib/components/ui/label/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   let {data}:PageProps=$props();
+  const tab=$derived(page.url.searchParams.get("tab")==="repositories"?"repositories":"settings");
+  function showTab(value:string){const url=new URL(page.url);if(value==="repositories")url.searchParams.set("tab","repositories");else url.searchParams.delete("tab");void goto(url,{keepFocus:true,noScroll:true});}
 
   let settingsError=$state(""),settingsSuccess=$state("");
   let saving=$state(false),archiving=$state(false);
@@ -28,6 +35,9 @@
     <div class="flex flex-wrap items-center justify-between gap-4">
       <h1 class="text-3xl font-semibold tracking-tight">Workspace settings</h1>
     </div><p class="text-sm text-muted-foreground">Projects inherit agent settings and planner defaults from this workspace.</p>
+  <Tabs.Root value={tab} onValueChange={showTab} class="gap-6">
+    <Tabs.List aria-label="Workspace configuration"><Tabs.Trigger value="settings">Settings</Tabs.Trigger><Tabs.Trigger value="repositories">Repositories</Tabs.Trigger></Tabs.List>
+    <Tabs.Content value="settings" class="space-y-4">
   {#if data.workspace.state==="active"}
     <Card.Root><Card.Header><Card.Title>Workspace settings</Card.Title><Card.Description>Name this workspace and choose how long idle planner sessions remain ready.</Card.Description></Card.Header><Card.Content>
       <form method="POST" action="?/update" use:enhance={()=>{saving=true;settingsError="";settingsSuccess="";return async({result,update})=>{try{if(result.type==="failure")settingsError=String(result.data?.error?.message??"Workspace settings could not be saved. Try again.");if(result.type==="success")settingsSuccess=String(result.data?.success??"Workspace settings saved.");await update({reset:false});}finally{saving=false;}};}} class="space-y-4">
@@ -54,6 +64,16 @@
     </section>
     <Dialog.Root bind:open={archiving} onOpenChangeComplete={open=>{if(!open){finishArchiving?.();finishArchiving=undefined;}}}><Dialog.Content><Dialog.Header><Dialog.Title>Archive workspace</Dialog.Title><Dialog.Description>Archiving {data.workspace.displayName} prevents new work across its projects. Existing work and history are retained.</Dialog.Description></Dialog.Header><form method="POST" action="?/archive" use:enhance={()=>async({result,update})=>{if(result.type==="success")await closeArchive();await update();}}><input type="hidden" name="idempotencyKey" value={data.idempotencyKey} /><input type="hidden" name="resourceVersion" value={data.workspace.resourceVersion} /><Dialog.Footer><Button type="button" variant="outline" onclick={()=>archiving=false}>Cancel</Button><Button type="submit" variant="destructive">Archive workspace</Button></Dialog.Footer></form></Dialog.Content></Dialog.Root>
   {/if}
+    </Tabs.Content>
+    <Tabs.Content value="repositories" class="space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-4"><h2 class="text-lg font-semibold">Repositories</h2>{#if data.workspace.state==="active"}{#key data.workspace.id}<ManageWorkspaceRepositories {data} />{/key}{/if}</div>
+      <p class="text-sm text-muted-foreground">Projects can use these repositories. Runtime configuration is shared wherever a repository is used. Connect new repositories in the <a href="/_old/repositories" class="text-foreground underline underline-offset-4 hover:text-primary">repository catalog</a>.</p>
+      <div class="grid gap-4 lg:grid-cols-2">
+        {#each data.repositorySummaries as summary (summary.repository.id)}<RepositoryCard {summary} />{/each}
+        {#each data.workspace.repositoryConnectionIds.filter(id=>!data.repositorySummaries.some(summary=>summary.repository.id===id)) as id (id)}<Card.Root><Card.Header><Card.Title><a class="hover:underline" href={`/_old/repositories/${encodeURIComponent(id)}`}>{id}</a></Card.Title><Card.Description>Repository details are unavailable.</Card.Description></Card.Header></Card.Root>{/each}
+      </div>
+    </Tabs.Content>
+  </Tabs.Root>
   </section>
 
 {:else}<p role="alert">{data.error?.message ?? "Workspace unavailable."}</p>{/if}
