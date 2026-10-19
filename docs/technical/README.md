@@ -13,6 +13,11 @@ For product usage, start with the [user guide](../site/index.md).
 - [Assurance](architecture/assurance.md): current trust boundaries and research limits.
 - [UI design system](architecture/design-system.md): reusable components and presentation rules.
 
+## Research the project workflow
+
+- [Refactor runbook](research/project-workflow-refactor-runbook.md): gated investigation from product behavior to contracts, component boundaries, and cutover.
+- [Design worksheets](research/project-workflow-design-worksheets.md): evidence and decision templates for that investigation.
+
 ## Maintain a deployment
 
 - [Local development](operations/local-development.md): Helm, Tilt and Docker Desktop validation.
