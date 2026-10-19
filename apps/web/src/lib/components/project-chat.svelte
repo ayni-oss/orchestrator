@@ -48,11 +48,10 @@
       {#if running}<p role="status" class="text-sm text-muted-foreground">The agent is researching your request. You can return later; this conversation is saved.</p>{/if}
       {:else}<div class="flex min-h-64 h-full flex-col items-center justify-center gap-3 text-center"><h2 class="text-2xl font-medium tracking-tight">What would you like to work on?</h2><p class="max-w-md text-sm leading-relaxed text-muted-foreground">Describe a change or ask a question. We’ll shape a plan together before any work starts.</p></div>{/if}
       </div>
-      {#if active}<form method="POST" action={conversation?"?/sendMessage":"?/createConversation"} use:enhance={submit} class="shrink-0 space-y-3" data-refresh-paused={pending||content?"":undefined}>
+      {#if active}<form method="POST" action={conversation?"?/sendMessage":"?/createConversation"} use:enhance={submit} class="composer shrink-0 space-y-3" data-refresh-paused={pending||content?"":undefined}>
         <input type="hidden" name="idempotencyKey" value={conversation?key(`message-${conversation.id}-${conversation.updateCursor}`):newConversationKey} />
         {#if conversation}<input type="hidden" name="conversationId" value={conversation.id} />{/if}
-        <Label for="project-message" class="sr-only">Message</Label><InputGroup.Root><InputGroup.Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} onkeydown={sendOnEnter} placeholder="Describe the work, ask a question, or request a revision…" /><InputGroup.Addon align="block-end" class="justify-between"><span class="text-xs">Enter to send · Shift+Enter for a new line</span><InputGroup.Button type="submit" variant="default" disabled={!canSend}>{pending?"Sending…":"Send"}</InputGroup.Button></InputGroup.Addon></InputGroup.Root>
-        {#if conversation}<p class="text-xs text-muted-foreground">To cancel or retry work, explicitly request the action here and approve its confirmation card.</p>{/if}
+        <Label for="project-message" class="sr-only">Message</Label><InputGroup.Root class="border-0 bg-transparent shadow-none focus-within:ring-0"><InputGroup.Textarea bind:ref={composer} id="project-message" name="content" rows={3} required maxlength={16384} bind:value={content} onkeydown={sendOnEnter} placeholder="Message the project agent…" /><InputGroup.Addon align="block-end" class="justify-end"><InputGroup.Button type="submit" variant="default" disabled={!canSend}>{pending?"Sending…":"Send"}</InputGroup.Button></InputGroup.Addon></InputGroup.Root>
         {#if !data.agentConfiguration?.effective.projectModel||!data.agentConfiguration?.effective.codingModel}<p role="status" class="text-sm text-muted-foreground">Choose project and coding agent models in Settings or workspace defaults before sending a message.</p>{/if}
       </form>{/if}
     </Card.Content></Card.Root>
@@ -61,3 +60,7 @@
     {/each}{/if}
   {/if}
 </section>
+<style>
+  .composer{margin-top:12px;padding:10px;border:1px solid var(--border);background:var(--card);box-shadow:3px 3px 0 var(--border)}
+  .composer:focus-within{border-color:var(--primary);box-shadow:3px 3px 0 var(--primary)}
+</style>
