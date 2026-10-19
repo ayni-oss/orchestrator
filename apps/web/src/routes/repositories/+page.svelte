@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import { registryImageRepository } from "$lib/connection.js";
   import { notify } from "$lib/notifications.js";
   import type { RepositoryOptions } from "$lib/server/repository-options.js";
@@ -55,8 +56,9 @@
 </script>
 
 <svelte:head><title>Repository connections · Ayni Orchestrator</title></svelte:head>
-<div class="space-y-8" data-bff-status={data.backend}>
-  <PageHeader eyebrow="Connectivity" title="Repository connections" description="Connect repositories to make them available to Orchestrator. It builds runtimes from their Ayni configuration; for repositories without Ayni, provide your own container image.">
+<WorkspaceShell {data} title="Repositories">
+<div class="mx-auto max-w-5xl space-y-8" data-bff-status={data.backend}>
+  <PageHeader flush eyebrow="Connectivity" title="Repository connections" description="Connect repositories to make them available to Orchestrator. It builds runtimes from their Ayni configuration; for repositories without Ayni, provide your own container image.">
     {#snippet actions()}<Button onclick={openConnect}><Plus aria-hidden="true" /> Connect repository</Button>{/snippet}
   </PageHeader>
 
@@ -117,7 +119,7 @@
 
                 <p class="text-sm text-muted-foreground">You can connect now and configure the runtime's image destination later.</p>
               {:else if useAyni && !data.registryConnections.length}
-                <p class="text-sm text-muted-foreground">Add a ready <a href="/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>
+                <p class="text-sm text-muted-foreground">Add a ready <a href="/settings/container-registries/github" class="underline">GHCR connection</a> or configure the runtime's image destination later.</p>
               {/if}
             </div>
           </div>
@@ -129,8 +131,10 @@
         </form>
       {:else if !loadingOptions && !options.error}
         <p class="text-sm text-muted-foreground">No GitHub App installations are available. Set up GitHub in Source control first.</p>
-        <Button href="/source-control/github" variant="outline">Set up GitHub</Button>
+        <Button href="/settings/source-control/github" variant="outline">Set up GitHub</Button>
       {/if}
     </Dialog.Content>
   </Dialog.Root>
 </div>
+
+</WorkspaceShell>

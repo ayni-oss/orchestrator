@@ -5,7 +5,6 @@ const stateCookie = "github_app_manifest_state";
 
 export const POST: RequestHandler = ({ cookies, request, url }) => {
   if (request.headers.get("origin") !== url.origin) return json({ error: "Invalid request origin." }, { status: 403, headers: { "cache-control": "no-store" } });
-  cookies.delete(stateCookie, { path: "/setup/github" });
   const state = beginManifest();
   cookies.set(stateCookie, state, {
     httpOnly: true,

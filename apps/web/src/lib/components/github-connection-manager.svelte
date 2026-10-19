@@ -52,7 +52,7 @@
     name: appName,
     description: "Customer-owned GitHub App for a trusted local Ayni Orchestrator deployment.",
     url: "https://github.com/ayni-oss/orchestrator",
-    redirect_url: callbackOrigin ? `${callbackOrigin}/source-control/github/complete` : undefined,
+    redirect_url: callbackOrigin ? `${callbackOrigin}/settings/source-control/github/complete` : undefined,
     public: false,
     default_permissions: {
       contents: "write",
@@ -65,7 +65,7 @@
     appSuffix = Array.from(crypto.getRandomValues(new Uint8Array(4)), byte => byte.toString(16).padStart(2, "0")).join("");
     flowState = "";
     try {
-      const response = await fetch("/source-control/github/start", { method: "POST" });
+      const response = await fetch("/settings/source-control/github/start", { method: "POST" });
       if (response.ok) flowState = (await response.json() as { state: string }).state;
       else notify("error", "Setup unavailable", "GitHub setup could not be prepared. Close this dialog and try again.");
     } catch { notify("error", "Setup unavailable", "GitHub setup could not be prepared. Close this dialog and try again."); }

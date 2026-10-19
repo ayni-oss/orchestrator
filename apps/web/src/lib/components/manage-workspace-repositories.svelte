@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PageData } from "../../routes/workspaces/[workspaceId]/$types";
+  import type { RepositoryConnectionDto, WorkspaceDto } from "@ayni-orchestrator/bff/server";
   import { enhance } from "$lib/forms.js";
   import Feedback from "$lib/components/feedback.svelte";
   import RepositoryPicker from "$lib/components/repository-picker.svelte";
@@ -7,7 +7,7 @@
   import { Label } from "$lib/components/ui/label/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
 
-  let { data }: { data: PageData } = $props();
+  let { data }: { data: { workspace?: WorkspaceDto | undefined; repositories: RepositoryConnectionDto[]; idempotencyKey: string } } = $props();
   let open = $state(false), saving = $state(false), error = $state("");
   let members = $state<string[]>([]);
   function manage() {

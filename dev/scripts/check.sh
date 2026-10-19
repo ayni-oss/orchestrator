@@ -172,15 +172,15 @@ check_once() {
   grep -q 'orchestrator_grpc_admissions_total' <<<"$metrics" || return 1
   grep -q 'orchestrator_grpc_completions_total' <<<"$metrics" || return 1
 
-  check_stage="web health and task page"
+  check_stage="web health and repository page"
   curl_local "http://127.0.0.1:$web_port/healthz" | grep -q '"component":"web"' || return 1
   web_html="$(curl_local --dump-header "$response_headers" \
-    -H 'x-request-id: local-web-check' "http://127.0.0.1:$web_port/tasks")" || return 1
+    -H 'x-request-id: local-web-check' "http://127.0.0.1:$web_port/repositories")" || return 1
   grep -qi '^x-request-id: local-web-check' "$response_headers" || return 1
   grep -Eqi '^content-security-policy: .*script-src[^;]*nonce-' "$response_headers" || return 1
   grep -Eq '<script[^>]+nonce=' <<<"$web_html" || return 1
   grep -q 'data-bff-status="connected"' <<<"$web_html" || return 1
-  grep -q 'Development tasks' <<<"$web_html" || return 1
+  grep -q 'Repositories' <<<"$web_html" || return 1
   check_stage="operations endpoint isolation"
   unsupported_root_status="$(curl --connect-timeout 2 --max-time 10 --silent --show-error \
     --output /dev/null --write-out '%{http_code}' \

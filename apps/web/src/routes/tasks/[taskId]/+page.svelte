@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import WorkerActivity from "$lib/components/worker-activity.svelte";
   import AgentProfileSummary from "$lib/components/agent-profile-summary.svelte";
   import {projectHref} from "$lib/project-navigation.js";
@@ -37,13 +38,14 @@
 </script>
 
 <svelte:head><title>{data.task?.snapshot.request.slice(0, 60) ?? "Task unavailable"} · Ayni Orchestrator</title></svelte:head>
-<div class="max-w-4xl space-y-6">
-  <Button href="/tasks" variant="ghost">Development tasks</Button>
+<WorkspaceShell {data} title="Task">
+<div class="mx-auto max-w-5xl space-y-6">
+  
   {#if data.task}
     {@const task = data.task}
     {@const terminal = terminalStates.includes(task.state)}
     <Button href={projectHref(task.projectId,"tasks",task.snapshot.origin?.conversationId)} variant="outline">Project tasks</Button>
-    <PageHeader eyebrow="Task" title={task.snapshot.request} />
+    <PageHeader flush eyebrow="Task" title={task.snapshot.request} />
     <AgentProfileSummary profile={task.snapshot.agentProfile} />
     {#if task.snapshot.origin}
       {@const origin=task.snapshot.origin}
@@ -159,5 +161,7 @@
         </InformationCard>
       {:else}<EmptyState title="Quality result unavailable" description="Repository check results will appear when the worker completes a full check." />{/each}
     </section>
-  {/if}
+  {:else}<Feedback kind="error" title="Task unavailable" message={data.error?.message ?? "This task could not be loaded."} />{/if}
 </div>
+
+</WorkspaceShell>

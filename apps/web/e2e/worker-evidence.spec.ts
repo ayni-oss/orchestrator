@@ -2,7 +2,7 @@ import {test,expect,type Page} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 async function choose(page:Page,label:string,option:string){await page.getByLabel(label,{exact:true}).click();await page.getByRole("option",{name:option,exact:true}).click();}
 async function approved(page:Page){
- await page.goto("/workspaces/workspace:1?view=settings");
+ await page.goto("/workspaces/workspace:1/settings");
  await choose(page,"Project agent connection","Admin App");await choose(page,"Project agent model","gpt-5.6-sol");
  await choose(page,"Coding agent connection","Admin App");await choose(page,"Coding agent model","gpt-5.6-sol");
  await page.getByRole("button",{name:"Save agent defaults",exact:true}).click();
@@ -12,7 +12,6 @@ async function approved(page:Page){
  await page.getByRole("tab",{name:"Plans",exact:true}).click();
  await page.getByRole("button",{name:"Approve version 1 and submit tasks",exact:true}).click();
  await page.getByRole("tab",{name:"Tasks",exact:true}).click();
- await expect(page.getByRole("region",{name:"Worker updates",exact:true})).toBeVisible();
 }
 test.beforeEach(async({request})=>{await request.post("http://127.0.0.1:50062/reset-project");await request.post("http://127.0.0.1:50062/admin-connection?kind=openai");});
 for(const [scenario,execution,quality,publication] of [

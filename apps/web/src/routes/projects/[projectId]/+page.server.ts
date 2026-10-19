@@ -7,19 +7,22 @@ import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, requestContext, safeError, text } from "$lib/server/page.js";
 import { isResourceVersion, isCanonicalIdentifier } from "$lib/server/validation.js";
-import { projectRepositoryChoices } from "$lib/server/project-choices.js";
+import { projectRepositoryChoices, workspaceChoices, workspaceProjects } from "$lib/server/project-choices.js";
 import { projectSchema } from "$lib/project-schema.js";
 import type { ProjectConversationDto, ProviderModelPageDto, RequestContext } from "@ayni-orchestrator/bff/server";
 
 export const load: PageServerLoad = async ({ locals, depends, params, setHeaders, url }) => {
+  if(url.searchParams.get("view") === "settings") redirect(307, `/projects/${encodeURIComponent(params.projectId)}/settings`);
   depends("app:workspaces", "app:projects", "app:runtimes", "app:tasks", "app:conversations", "app:connections");
   depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });
-  const base = { view: projectView(url.searchParams.get("view")), planVersion: url.searchParams.get("version") ?? "", idempotencyKey: actionKey(), taskKey: actionKey(), requestId: locals.requestId };
+  const workspaces = await workspaceChoices(requestContext(locals)).catch(() => []);
+  const base = { workspaces, view: projectView(url.searchParams.get("view")), planVersion: url.searchParams.get("version") ?? "", idempotencyKey: actionKey(), taskKey: actionKey(), requestId: locals.requestId };
   try {
     const context = requestContext(locals), bff = getBff();
     const storedProject = await bff.getProject(params.projectId, context);
     const workspace = await bff.getWorkspace(storedProject.workspaceId,context);
+    const projects = await workspaceProjects(workspace.id, context);
     const project = storedProject;
     const configuration=await loadAgentConfiguration("project",project.id,context);
     const [repositories, profiles, tasks, choices, agentModels, conversationResult] = await Promise.all([
@@ -32,7 +35,7 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     ]);
     const llmConnections=agentModels.connections,connectionModels=agentModels.catalogues;
     const codingCatalogue=connectionModels[configuration.agentConfiguration?.effective.codingConnectionId??""];
-    const conversationId=url.searchParams.get("conversation");
+    const conversationId=url.searchParams.get("conversation") ?? (url.searchParams.has("new") ? undefined : conversationResult.conversations[0]?.id);
     const selectedConversation=conversationId ? conversationResult.conversations.find(c=>c.id===conversationId) : undefined;
     let conversation:ProjectConversationDto|undefined,conversationError=conversationResult.error;
     if(conversationId && !selectedConversation && !conversationError)conversationError={status:404,reason:"resource_not_found",message:"This conversation is no longer available in this project. Choose another conversation or start a new one.",requestId:locals.requestId,retryable:false};
@@ -43,9 +46,9 @@ export const load: PageServerLoad = async ({ locals, depends, params, setHeaders
     const taskProgress:Record<string,Awaited<ReturnType<typeof bff.taskProgress>>>={};
     const taskIds=new Set([...tasks.developmentTasks.map(task=>task.id),...(conversation?.proposals.flatMap(proposal=>proposal.taskId?[proposal.taskId]:[])??[])]);
     await Promise.allSettled([...taskIds].map(async id=>{taskProgress[id]=await bff.taskProgress(id,context);}));
-    return { ...base, ...configuration, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, workspace, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:codingCatalogue?.models ?? [], provider:codingCatalogue?.provider ?? "" };
+    return { ...base, projects, ...configuration, llmConnections, connectionModels, conversations:conversationResult.conversations, conversation, conversationError, taskProgress, project, workspace, repositories, profiles: profiles.flatMap(page => page.runtimeProfiles), tasks: tasks.developmentTasks, nextPageToken: tasks.page.nextPageToken, choices, models:codingCatalogue?.models ?? [], provider:codingCatalogue?.provider ?? "" };
   } catch (error) {
-    return { ...base, agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, workspace:undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };
+    return { ...base, projects: [], agentConfiguration:undefined,capabilities:undefined,configurationError:undefined,llmConnections:[],connectionModels:{} as Record<string,ProviderModelPageDto>,conversations:[],conversation:undefined,conversationError:undefined,taskProgress:{} as Record<string,Awaited<ReturnType<ReturnType<typeof getBff>["taskProgress"]>>>,project: undefined, workspace:undefined, repositories: [], profiles: [], tasks: [], nextPageToken: "", choices:[], models:[], provider:"", error: safeError(error, locals.requestId) };
   }
 };
 export const actions: Actions = {

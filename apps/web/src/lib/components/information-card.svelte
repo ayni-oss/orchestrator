@@ -16,7 +16,7 @@
   import StatusBadge from "$lib/components/status-badge.svelte";
   import { statusTone, type StatusTone } from "$lib/presentation.js";
 
-  let { title, titleAccessory, href, navigationHref, status, tone, actions = [], danger = false, children }: {
+  let { title, titleAccessory, href, navigationHref, status, tone, actions = [], danger = false, headingLevel = 3, children }: {
     title: string;
     titleAccessory?: Snippet;
     href?: string;
@@ -25,6 +25,7 @@
     tone?: StatusTone;
     actions?: InformationCardAction[];
     danger?: boolean;
+    headingLevel?: 2 | 3;
     children: Snippet;
   } = $props();
 </script>
@@ -35,7 +36,11 @@
   {/if}
   <Card.Header class="flex items-center justify-between gap-3">
     <Card.Title class="min-w-0 flex-1">
-      <h3 class="flex items-center gap-2"><span class="min-w-0 break-words">{#if href}<a {href} class="hover:underline">{title}</a>{:else}{title}{/if}</span>{#if titleAccessory}{@render titleAccessory()}{/if}</h3>
+      {#if headingLevel === 2}
+        <h2 class="flex items-center gap-2"><span class="min-w-0 break-words">{#if href}<a {href} class="hover:underline">{title}</a>{:else}{title}{/if}</span>{#if titleAccessory}{@render titleAccessory()}{/if}</h2>
+      {:else}
+        <h3 class="flex items-center gap-2"><span class="min-w-0 break-words">{#if href}<a {href} class="hover:underline">{title}</a>{:else}{title}{/if}</span>{#if titleAccessory}{@render titleAccessory()}{/if}</h3>
+      {/if}
     </Card.Title>
     <div class="ml-auto flex shrink-0 items-center gap-3">
       {#if status}<StatusBadge {status} tone={tone ?? statusTone(status)} />{/if}

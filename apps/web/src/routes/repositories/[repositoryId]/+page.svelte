@@ -1,9 +1,11 @@
 <script lang="ts">
+  import WorkspaceShell from "$lib/components/workspace-shell.svelte";
   import { enhance } from "$lib/forms.js";
   import type { SubmitFunction } from "@sveltejs/kit";
   import { ExternalLink, Trash2 } from "@lucide/svelte";
   import type { PageProps } from "./$types";
   import Feedback from "$lib/components/feedback.svelte";
+  import PageHeader from "$lib/components/page-header.svelte";
   import RuntimeOverview from "$lib/components/runtime-overview.svelte";
   import InformationCard from "$lib/components/information-card.svelte";
   import InformationTable from "$lib/components/information-table.svelte";
@@ -60,17 +62,14 @@
 </script>
 
 <svelte:head><title>{data.repositoryConnection?.displayName ?? "Repository unavailable"} · Ayni Orchestrator</title></svelte:head>
-<div class="max-w-4xl space-y-6">
+<WorkspaceShell {data} title="Repository">
+<div class="mx-auto max-w-5xl space-y-6">
   <Button href="/repositories" variant="ghost">Repositories</Button>
 
   {#if data.repositoryConnection}
     {@const repository = data.repositoryConnection}
     {@const showOnboarding = repository.useAyni !== false && (!data.runtimeProfiles.length || data.runtimeProfiles.some(profile => profile.kind === "ayni_managed"))}
-    <header class="space-y-3">
-      <div class="flex flex-wrap items-center gap-3">
-        <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{repository.displayName}</h1>
-      </div>
-    </header>
+    <PageHeader flush eyebrow="Repository" title={repository.displayName} description="Connection, onboarding, and runtimes for this repository." />
     {#if repository.failure}<Feedback kind="warning" title="Repository needs attention" message={repository.failure.message} />{/if}
     <section class="space-y-4" aria-labelledby="repository-information-title">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -141,5 +140,7 @@
         </form>
       </InformationCard>
     </section>
-  {/if}
+  {:else}<Feedback kind="error" title="Repository unavailable" message={data.error?.message ?? "This repository could not be loaded."} />{/if}
 </div>
+
+</WorkspaceShell>

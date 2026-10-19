@@ -25,7 +25,7 @@ describe("notification events", () => {
     events.load("/repositories", {});
     events.load("/repositories", { error: { message: "Unavailable" } });
     expect(toast.error).toHaveBeenCalledTimes(2);
-    events.load("/certificates", { error: { message: "Unavailable" } });
+    events.load("/settings/ayni/certificates", { error: { message: "Unavailable" } });
     expect(toast.error).toHaveBeenCalledTimes(3);
   });
   it("handles auxiliary loader failures without toasting resource readiness or validation", () => {

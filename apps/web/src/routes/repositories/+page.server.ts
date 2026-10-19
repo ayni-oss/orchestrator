@@ -2,11 +2,13 @@ import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
 import { actionKey, isOwnerOrRepository, requestContext, safeError, text } from "$lib/server/page.js";
+import { shellSelection } from "$lib/server/shell-selection.js";
 import { isCanonicalIdentifier } from "$lib/server/validation.js";
 
 export const load: PageServerLoad = async ({ depends, locals, setHeaders, url }) => {
   depends("app:repositories", "app:runtimes");
   setHeaders({ "cache-control": "no-store" });
+  const shell = await shellSelection(requestContext(locals), url.searchParams.get("workspace") ?? undefined);
   const requestedPageToken = url.searchParams.get("pageToken");
   const pageToken = requestedPageToken !== null && requestedPageToken.length <= 512 ? requestedPageToken : undefined;
   try {
@@ -21,10 +23,10 @@ export const load: PageServerLoad = async ({ depends, locals, setHeaders, url })
       ...(connections.status === "rejected" ? { registryError: safeError(connections.reason, locals.requestId) } : {}),
     };
     if (repositories.status === "rejected") {
-      return { ...registry, summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(repositories.reason, locals.requestId) };
+      return { ...shell, ...registry, summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(repositories.reason, locals.requestId) };
     }
     return {
-      ...registry,
+      ...shell, ...registry,
       summaries: repositories.value.summaries,
       nextPageToken: repositories.value.page.nextPageToken || undefined,
       requestId: locals.requestId,
@@ -32,7 +34,7 @@ export const load: PageServerLoad = async ({ depends, locals, setHeaders, url })
       idempotencyKey: actionKey(),
     };
   } catch (error) {
-    return { registryConnections: [], summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
+    return { ...shell, registryConnections: [], summaries: [], requestId: locals.requestId, backend: "disconnected" as const, idempotencyKey: actionKey(), error: safeError(error, locals.requestId) };
   }
 };
 

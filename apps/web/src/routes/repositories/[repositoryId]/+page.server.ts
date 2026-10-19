@@ -1,6 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { getBff } from "$lib/server/bff.js";
+import { shellSelection } from "$lib/server/shell-selection.js";
 import { actionKey, requestContext, safeError, text } from "$lib/server/page.js";
 
 const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
@@ -9,8 +10,9 @@ export const load: PageServerLoad = async ({ locals, params, depends,setHeaders 
   depends("app:runtimes");
   depends("app:repositories");
   setHeaders({ "cache-control": "no-store" });
+  const shell = await shellSelection(requestContext(locals), undefined, params.repositoryId);
   if (!RESOURCE_ID.test(params.repositoryId)) {
-    return {certificates:[],registryConnections:[],runtimeRevisions:{}, repositoryConnection: undefined, runtimeProfiles: [], runtimeKeys: {}, requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };
+    return {...shell, certificates:[],registryConnections:[],runtimeRevisions:{}, repositoryConnection: undefined, runtimeProfiles: [], runtimeKeys: {}, requestId: locals.requestId, error: { status: 400, reason: "invalid_identifier", message: "The repository connection identifier is invalid.", requestId: locals.requestId, retryable: false } };
   }
   const context = requestContext(locals);
   const [repository, profiles, connections, certificates] = await Promise.allSettled([
@@ -21,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, params, depends,setHeaders 
   ]);
   const failure = repository.status === "rejected" ? repository.reason : profiles.status === "rejected" ? profiles.reason : undefined;
   return {
-    runtimeRevisions: profiles.status === "fulfilled" ? Object.fromEntries(await Promise.all(profiles.value.runtimeProfiles.map(async profile => {
+    ...shell, runtimeRevisions: profiles.status === "fulfilled" ? Object.fromEntries(await Promise.all(profiles.value.runtimeProfiles.map(async profile => {
       try { return [profile.id, profile.activeRevisionId ? await getBff().getRuntimeRevision(profile.activeRevisionId,context) : undefined]; }
       catch { return [profile.id,undefined]; }
     }))) : {},

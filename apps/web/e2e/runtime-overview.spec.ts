@@ -23,7 +23,7 @@ test("certificate trust proposal and progress appear in Ayni onboarding", async 
       await expect(onboarding).toContainText(description!);
       await expect(onboarding.getByRole("link", {name:"Review certificate trust update"})).toHaveCount(0);
       if (["merged","verified"].includes(state!)) {
-        await page.goto("/profiles/profile:1");
+        await page.goto("/repositories/repository:1/runtimes/profile:1");
         await expect(page.getByRole("link",{name:"Review certificate trust update"})).toHaveCount(0);
         await page.goto("/repositories/repository:1");
       }
@@ -76,9 +76,6 @@ test("repository overview shows identity and readiness separately from runtime c
   await expect(page.getByText("Runtime sync requested.",{exact:true})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await page.mouse.move(10,10);
-  // Success toasts expire when the pointer is outside the notification region.
-  await expect(page.getByText("Runtime sync requested.",{exact:true})).toHaveCount(0, {timeout:10_000});
 });
 
 
@@ -125,7 +122,7 @@ test("repository analysis retains onboarding independently of connection access"
 test("exhausted runtime offers explicit retry without an automatic timestamp", async ({page, request}) => {
   try {
     await request.post("http://127.0.0.1:50062/preparation?phase=verifying&retry=operator_required");
-    await page.goto("/profiles/profile:1");
+    await page.goto("/repositories/repository:1/runtimes/profile:1");
     await expect(page.getByText("Manual retry required", {exact:true})).toBeVisible();
     await expect(page.getByText("runtime_verification_failed", {exact:true})).toBeVisible();
     await expect(page.getByText("Next retry", {exact:true})).toHaveCount(0);

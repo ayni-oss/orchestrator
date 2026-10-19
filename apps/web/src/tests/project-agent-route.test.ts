@@ -5,7 +5,7 @@ const workspace={id:"workspace:1",displayName:"Workspace",state:"active",reposit
 const project={workspaceId:"workspace:1",goal:"Complete work",id:"project:1",displayName:"Project",state:"active",repositoryConnectionIds:["repository:1"],resourceVersion:"1"};
 const bff=vi.hoisted(()=>({createProjectConversation:vi.fn(),getProject:vi.fn(),getWorkspace:vi.fn(),getRepositoryConnection:vi.fn(),listRuntimeProfiles:vi.fn(),listDevelopmentTasks:vi.fn(),listProviderModels:vi.fn(),listConnections:vi.fn(),listProjectConversations:vi.fn(),getProjectConversation:vi.fn(),updateProjectConversationSettings:vi.fn(),cancelProjectAgentRun:vi.fn(),taskProgress:vi.fn(),updateProject:vi.fn(),sendProjectMessage:vi.fn(),decideProjectProposal:vi.fn(),decideProjectPlan:vi.fn(),createConnection:vi.fn(),testConnection:vi.fn(),replaceConnectionCredentials:vi.fn()}));
 vi.mock("$lib/server/bff.js",()=>({getBff:()=>bff}));
-vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[]}));
+vi.mock("$lib/server/project-choices.js",()=>({projectRepositoryChoices:async()=>[],workspaceChoices:async()=>[workspace],workspaceProjects:async()=>[project]}));
 import {load,actions} from "../routes/projects/[projectId]/+page.server.js";
 import {connectionActions} from "$lib/server/connections.js";
 function event(fields:Record<string,string>={},url="http://localhost/projects/project:1?conversation=conversation:1"){
