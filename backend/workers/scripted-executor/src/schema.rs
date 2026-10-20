@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS commands (
     execution_binding_revision text NOT NULL,
     context_revision integer NOT NULL CHECK (context_revision > 0),
     signing_public_key blob CHECK (signing_public_key IS NULL OR length(signing_public_key) = 32),
+    terminal_reserved_bytes integer NOT NULL CHECK (terminal_reserved_bytes >= 0),
     state text NOT NULL CHECK (state IN ('claim_pending', 'accepted', 'terminal_pending', 'rejected', 'completed')),
     PRIMARY KEY (source, event_id),
     UNIQUE (turn_id, assignment_id, generation)
@@ -39,7 +40,9 @@ CREATE TABLE IF NOT EXISTS reports (
     decision text CHECK (decision IN ('accepted', 'rejected')),
     decision_digest text,
     decision_bytes blob,
+    decision_consumer_sequence integer CHECK (decision_consumer_sequence > 0),
     decision_acked integer NOT NULL DEFAULT 0 CHECK (decision_acked IN (0, 1)),
+    resolved_at_seconds integer CHECK (resolved_at_seconds IS NULL OR resolved_at_seconds >= 0),
     PRIMARY KEY (source, event_id),
     UNIQUE (command_source, command_event_id, sequence),
     FOREIGN KEY (command_source, command_event_id) REFERENCES commands(source, event_id)

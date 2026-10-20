@@ -16,11 +16,15 @@ requirements and execution evidence belong in the PRs delivering each milestone.
 Define each PR's acceptance criteria before implementation.
 
 Build on fresh branches from `alpha` in this repository and merge PRs into `alpha`.
-Development state is disposable,
-breaking changes are acceptable, and keeping the old app operational throughout
-is not required. Repository separation remains deferred. PostgreSQL is the target
-transactional store, JetStream carries durable messages, and gRPC provides command
-and streaming contracts. Service topology follows ownership and failure contracts.
+Development state is disposable and breaking changes are required where the old
+design conflicts. Prior SQLite schemas, retained data, APIs, tests, and broker topology
+are research input only: do not migrate, dual-write, preserve, or adapt them. M1
+runtime slice 1 deletes the superseded workflow implementation and tests while
+installing the replacement boundary; every later milestone builds only on the
+replacement contracts and cumulative acceptance harness. Repository separation
+remains deferred. PostgreSQL is the target transactional store, JetStream carries
+durable messages, and gRPC provides command and streaming contracts. Service topology
+follows ownership and failure contracts.
 
 The [refactor runbook](docs/technical/research/project-workflow-refactor-runbook.md)
 defines research gates; its [worksheets](docs/technical/research/project-workflow-design-worksheets.md)
@@ -66,11 +70,12 @@ refer to this replacement sequence, not historical GitHub milestone numbers.
 ### M1 executable slice
 
 Specify the contracts, logical module map, local stack, and executable acceptance
-cases before implementation. Reproduce and classify current sandbox failures and
-complete the contract's bounded PostgreSQL, JetStream, executor-handoff, watch, and
-protobuf feasibility experiments before a runtime PR. The replacement slice must
-run without depending on the old backend's execution paths. M1 deliberately resets
-the private v1 workflow API and updates all known clients with the server; it exposes
+cases before implementation. Complete the contract's bounded PostgreSQL, JetStream,
+executor-handoff, watch, and protobuf feasibility experiments before a runtime PR.
+The replacement acceptance harness is the only delivery baseline; historical sandbox
+outcomes do not constrain its states or architecture. Runtime slice 1 deletes the old
+workflow implementation and tests instead of depending on or preserving them. M1
+deliberately resets the private v1 workflow API and updates all known clients with the server; it exposes
 that API only on the trusted loopback operator listener. M1 establishes Workspace
 as the required parent identity for Projects and Conversations; shared workspace
 instructions and agent configuration remain M2 scope.
@@ -132,8 +137,10 @@ outcomes, failure cases, acceptance commands, and obsolete paths to remove.
 ## Existing implementation and earlier delivery direction
 
 The sections below describe the existing SQLite-based implementation and its earlier
-delivery sequence. They provide reuse and migration context; the replacement direction
-above governs the new backend. Historical issue links retain their original meaning.
+delivery sequence as learning context only. They confer no compatibility, migration,
+data-preservation, testing, API, or topology requirement on the replacement. The
+replacement direction above governs the new backend; historical issue links retain
+their original meaning.
 
 ## Workspaces, projects and agent execution
 

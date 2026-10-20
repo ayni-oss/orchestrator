@@ -14,7 +14,7 @@ readonly WORK
 
 readonly ADMIN_URL="nats://workflow-admin:admin-feasibility-only@${SERVER}:4222"
 readonly APPLICATION_URL="nats://workflow-application:application-feasibility-only@${SERVER}:4222"
-readonly EXECUTOR_URL="nats://workflow-executor-018f0f7b:executor-feasibility-only@${SERVER}:4222"
+readonly EXECUTOR_URL="nats://workflow-executor-018f0f7b-6a4d-7a11-8d77-010203040506:executor-feasibility-only@${SERVER}:4222"
 readonly ACCEPTANCE_URL="nats://workflow-acceptance:acceptance-feasibility-only@${SERVER}:4222"
 
 cleanup() {
@@ -106,7 +106,7 @@ for config in command report decision; do
   admin stream add --config "/config/${config}.json" --defaults >/dev/null
 done
 
-# Exact rendered production bounds and isolated/coexistence headroom.
+# Exact rendered production bounds and isolated broker headroom.
 python3 - "$FIXTURES" <<'PY'
 import json
 import pathlib
@@ -132,8 +132,7 @@ for filename, (name, messages, size) in expected.items():
     total += size
 assert total == 512 * 1024 * 1024
 assert 1024 * 1024 * 1024 - total == 512 * 1024 * 1024
-assert 1536 * 1024 * 1024 - total - 512 * 1024 * 1024 == 512 * 1024 * 1024
-print(f"workflow-stream-bytes={total} isolated-headroom={512 * 1024 * 1024} coexistence-headroom={512 * 1024 * 1024}")
+print(f"workflow-stream-bytes={total} isolated-headroom={512 * 1024 * 1024}")
 PY
 for stream in ORCHESTRATOR_WORKFLOW_COMMAND_V1 ORCHESTRATOR_WORKFLOW_REPORT_V1 ORCHESTRATOR_WORKFLOW_DECISION_V1; do
   admin stream info "$stream" --json >/dev/null
@@ -143,7 +142,7 @@ done
 # deletion and purge must all fail.
 expect_failure anonymous box_nats --server "nats://${SERVER}:4222" --timeout 1s server check connection
 expect_failure application-publishes-report box_nats --server "$APPLICATION_URL" --timeout 1s pub --jetstream orchestrator.workflow.report.conversation.v1 denied
-expect_failure executor-publishes-decision box_nats --server "$EXECUTOR_URL" --timeout 1s pub --jetstream orchestrator.workflow.accepted.conversation.v1.018f0f7b denied
+expect_failure executor-publishes-decision box_nats --server "$EXECUTOR_URL" --timeout 1s pub --jetstream orchestrator.workflow.accepted.conversation.v1.018f0f7b-6a4d-7a11-8d77-010203040506 denied
 expect_failure harness-publishes-command box_nats --server "$ACCEPTANCE_URL" --timeout 1s pub --jetstream orchestrator.workflow.command.conversation.v1 denied
 expect_failure application-administers-streams box_nats --server "$APPLICATION_URL" --timeout 1s stream ls
 expect_permission_failure executor-direct-subscribe box_nats --server "$EXECUTOR_URL" --timeout 1s sub --count 1 --wait 500ms orchestrator.workflow.command.conversation.v1
@@ -154,15 +153,15 @@ expect_failure admin-deletes-command-message admin stream rmm ORCHESTRATOR_WORKF
 # inbox subjects.
 admin consumer add ORCHESTRATOR_WORKFLOW_COMMAND_V1 scripted-executor --pull --ack explicit --deliver all --filter orchestrator.workflow.command.conversation.v1 --max-deliver 10 --max-pending 1024 --defaults >/dev/null
 admin consumer add ORCHESTRATOR_WORKFLOW_REPORT_V1 workflow-application --pull --ack explicit --deliver all --filter orchestrator.workflow.report.conversation.v1 --max-deliver 10 --max-pending 1024 --defaults >/dev/null
-admin consumer add ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-018f0f7b --pull --ack explicit --deliver all --filter orchestrator.workflow.accepted.conversation.v1.018f0f7b --max-deliver 10 --max-pending 1024 --defaults >/dev/null
+admin consumer add ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-018f0f7b-6a4d-7a11-8d77-010203040506 --pull --ack explicit --deliver all --filter orchestrator.workflow.accepted.conversation.v1.018f0f7b-6a4d-7a11-8d77-010203040506 --max-deliver 10 --max-pending 1024 --defaults >/dev/null
 admin consumer add ORCHESTRATOR_WORKFLOW_DECISION_V1 acceptance-harness --pull --ack explicit --deliver all --filter 'orchestrator.workflow.accepted.conversation.v1.>' --max-deliver 10 --max-pending 1024 --defaults >/dev/null
 
 box_nats --server "$APPLICATION_URL" pub --jetstream orchestrator.workflow.command.conversation.v1 command-smoke >/dev/null
 box_nats --server "$EXECUTOR_URL" consumer next ORCHESTRATOR_WORKFLOW_COMMAND_V1 scripted-executor --count 1 --ack >/dev/null
 box_nats --server "$EXECUTOR_URL" pub --jetstream orchestrator.workflow.report.conversation.v1 report-smoke >/dev/null
 box_nats --server "$APPLICATION_URL" consumer next ORCHESTRATOR_WORKFLOW_REPORT_V1 workflow-application --count 1 --ack >/dev/null
-box_nats --server "$APPLICATION_URL" pub --jetstream orchestrator.workflow.accepted.conversation.v1.018f0f7b decision-smoke >/dev/null
-box_nats --server "$EXECUTOR_URL" consumer next ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-018f0f7b --count 1 --ack >/dev/null
+box_nats --server "$APPLICATION_URL" pub --jetstream orchestrator.workflow.accepted.conversation.v1.018f0f7b-6a4d-7a11-8d77-010203040506 decision-smoke >/dev/null
+box_nats --server "$EXECUTOR_URL" consumer next ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-018f0f7b-6a4d-7a11-8d77-010203040506 --count 1 --ack >/dev/null
 box_nats --server "$ACCEPTANCE_URL" consumer next ORCHESTRATOR_WORKFLOW_DECISION_V1 acceptance-harness --count 1 --ack >/dev/null
 
 # Publish the exact maximum command body with a near-4-KiB application header,

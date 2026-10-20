@@ -411,12 +411,15 @@ dependencies = [
 name = "ayni-orchestrator-scripted-executor"
 version = "0.1.0"
 dependencies = [
+ "async-nats",
  "ayni-orchestrator-events",
  "ed25519-dalek",
  "rusqlite",
  "sha2 0.10.9",
  "tempfile",
  "thiserror",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

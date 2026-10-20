@@ -12,13 +12,25 @@ use ayni_orchestrator_events::v1::{
 use ayni_orchestrator_events::workflow::{
     decode_command, decode_decision, decode_report, verify_report_signature,
 };
+use ed25519_dalek::SigningKey;
 use rusqlite::{Connection, OptionalExtension as _, Transaction, TransactionBehavior, params};
-use sha2::{Digest as _, Sha256};
-use std::path::Path;
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
+mod decision;
 mod schema;
+mod storage;
 
 use schema::SCHEMA;
+use storage::{
+    exact_digest, existing_command_outcome, existing_report_outcome, insert_report,
+    redelivered_command_outcome, reserve,
+};
+
+const TERMINAL_REPORT_RESERVATION_BYTES: usize = 40 * 1024;
+const RESOLVED_METADATA_RETENTION_SECONDS: u64 = 8 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug)]
 pub struct LedgerLimits {
@@ -75,10 +87,14 @@ pub enum LedgerError {
     EventConflict,
     #[error("executor generation is stale")]
     StaleGeneration,
+    #[error("an accepted executor owner cannot be replaced in M1")]
+    AcceptedOwnerCannotRotate,
     #[error("executor ledger capacity is exhausted")]
     Capacity,
     #[error("the report or command does not exist")]
     NotFound,
+    #[error("the decision consumer has not durably acknowledged this delivery")]
+    DecisionAckPending,
     #[error("the application has not accepted this executor claim")]
     ClaimNotAccepted,
     #[error("invalid ledger input")]
@@ -187,7 +203,8 @@ impl Ledger {
         validate_command(command)?;
         validate_report(claim, 1)?;
         let instance_id = retained_instance_id(&self.connection)?;
-        let validated = validate_command_claim(command, claim, &instance_id)?;
+        let signing_public_key = retained_signing_public_key(&self.connection)?;
+        let validated = validate_command_claim(command, claim, &instance_id, &signing_public_key)?;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -195,39 +212,54 @@ impl Ledger {
             transaction.commit()?;
             return Ok(outcome);
         }
-        let latest_generation: Option<i64> = transaction
+        let latest: Option<(i64, String)> = transaction
             .query_row(
-                "SELECT max(generation) FROM commands WHERE turn_id = ?1 AND assignment_id = ?2",
+                "SELECT generation, state FROM commands \
+                 WHERE turn_id = ?1 AND assignment_id = ?2 \
+                 ORDER BY generation DESC LIMIT 1",
                 params![validated.turn_id, validated.assignment_id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .optional()?
-            .flatten();
+            .optional()?;
         let generation = i64::try_from(validated.generation).map_err(|_| LedgerError::Invalid)?;
-        if latest_generation.is_some_and(|latest| generation < latest) {
+        if latest
+            .as_ref()
+            .is_some_and(|(latest, _)| generation < *latest)
+        {
             return Err(LedgerError::StaleGeneration);
         }
-        if latest_generation == Some(generation) {
+        if latest
+            .as_ref()
+            .is_some_and(|(latest, _)| generation == *latest)
+        {
             return Err(LedgerError::EventConflict);
         }
+        if latest.as_ref().is_some_and(|(_, state)| {
+            matches!(
+                state.as_str(),
+                "accepted" | "terminal_pending" | "completed"
+            )
+        }) {
+            return Err(LedgerError::AcceptedOwnerCannotRotate);
+        }
         transaction.execute(
-            "UPDATE commands SET state = 'rejected' \
-             WHERE turn_id = ?1 AND assignment_id = ?2 AND generation < ?3 \
-             AND state != 'completed'",
+            "UPDATE commands SET state = 'rejected', terminal_reserved_bytes = 0 \
+             WHERE turn_id = ?1 AND assignment_id = ?2 AND generation < ?3",
             params![validated.turn_id, validated.assignment_id, generation],
         )?;
         reserve(
             &transaction,
             self.limits,
             2,
-            command.exact_bytes.len() + claim.exact_bytes.len(),
+            command.exact_bytes.len() + claim.exact_bytes.len() + TERMINAL_REPORT_RESERVATION_BYTES,
             0,
         )?;
         transaction.execute(
             "INSERT INTO commands \
              (source, event_id, digest, event_bytes, workspace_id, project_id, conversation_id, \
-              turn_id, assignment_id, generation, execution_binding_revision, context_revision, state) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 'claim_pending')",
+              turn_id, assignment_id, generation, execution_binding_revision, context_revision, \
+              terminal_reserved_bytes, state) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'claim_pending')",
             params![
                 command.source,
                 command.id,
@@ -241,11 +273,32 @@ impl Ledger {
                 generation,
                 validated.execution_binding_revision,
                 i64::try_from(validated.context_revision).map_err(|_| LedgerError::Invalid)?,
+                i64::try_from(TERMINAL_REPORT_RESERVATION_BYTES)
+                    .map_err(|_| LedgerError::Invalid)?,
             ],
         )?;
         insert_report(&transaction, command, claim)?;
         transaction.commit()?;
         Ok(StoreOutcome::Stored)
+    }
+
+    /// Validate a redelivered command after its claim bytes may already have
+    /// been handed off and cleaned. No new claim is created and execution state
+    /// is unchanged.
+    ///
+    /// # Errors
+    /// Returns missing commands, changed-byte conflicts, validation, or SQL errors.
+    pub fn retain_redelivered_command(
+        &mut self,
+        command: &Command<'_>,
+    ) -> Result<StoreOutcome, LedgerError> {
+        validate_redelivered_command(command)?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let outcome = redelivered_command_outcome(&transaction, command)?;
+        transaction.commit()?;
+        Ok(outcome)
     }
 
     /// Retain one sequence-2 terminal report. Execution is forbidden until the
@@ -275,7 +328,13 @@ impl Ledger {
             report,
             &instance_id,
         )?;
-        reserve(&transaction, self.limits, 1, report.exact_bytes.len(), 0)?;
+        reserve(
+            &transaction,
+            self.limits,
+            1,
+            report.exact_bytes.len(),
+            TERMINAL_REPORT_RESERVATION_BYTES,
+        )?;
         let command = Command {
             source: command_source,
             id: command_event_id,
@@ -286,98 +345,59 @@ impl Ledger {
         };
         insert_report(&transaction, &command, report)?;
         transaction.execute(
-            "UPDATE commands SET state = 'terminal_pending' WHERE source = ?1 AND event_id = ?2",
+            "UPDATE commands SET state = 'terminal_pending', terminal_reserved_bytes = 0 \
+             WHERE source = ?1 AND event_id = ?2",
             params![command_source, command_event_id],
         )?;
         transaction.commit()?;
         Ok(StoreOutcome::Stored)
     }
 
-    /// Record an application decision before acknowledging its consumer delivery.
-    /// Exact report bytes are removed only after this transaction commits.
+    /// Remove resolved identity metadata only after the fixed eight-day replay
+    /// horizon. Unresolved commands, reports, and exact bytes are never pruned.
     ///
     /// # Errors
-    /// Returns missing reports, immutable conflicts, capacity, or SQL errors.
-    pub fn record_decision(
-        &mut self,
-        decision: &Decision<'_>,
-    ) -> Result<StoreOutcome, LedgerError> {
-        let instance_id = retained_instance_id(&self.connection)?;
-        let (payload, accepted) = decode_targeted_decision(decision.exact_bytes, &instance_id)?;
-        let decision_digest = exact_digest(decision.exact_bytes);
+    /// Returns SQL or invalid-clock failures.
+    pub fn prune_resolved_metadata(&mut self, now_seconds: u64) -> Result<u64, LedgerError> {
+        let cutoff = now_seconds.saturating_sub(RESOLVED_METADATA_RETENTION_SECONDS);
+        let cutoff = i64::try_from(cutoff).map_err(|_| LedgerError::Invalid)?;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let retained = retained_decision_report(&transaction, &payload)?;
-        let result = if accepted { "accepted" } else { "rejected" };
-        if prior_decision_is_duplicate(&retained, result, &decision_digest, decision.exact_bytes)? {
-            transaction.commit()?;
-            return Ok(StoreOutcome::Duplicate);
-        }
-        let signing_public_key = validate_decision_binding(
-            &transaction,
-            &payload,
-            &retained.report_digest,
-            retained.report_bytes.as_deref(),
-            &retained.command_source,
-            &retained.command_event_id,
-            retained.sequence,
-            &instance_id,
+        let reports = transaction.execute(
+            "DELETE FROM reports WHERE decision_acked = 1 \
+             AND resolved_at_seconds <= ?1 \
+             AND EXISTS (SELECT 1 FROM commands \
+               WHERE commands.source = reports.command_source \
+               AND commands.event_id = reports.command_event_id \
+               AND commands.state IN ('rejected', 'completed'))",
+            params![cutoff],
         )?;
-        reserve(
-            &transaction,
-            self.limits,
-            0,
-            decision.exact_bytes.len(),
-            retained.report_bytes.as_deref().map_or(0, <[u8]>::len),
-        )?;
-        transaction.execute(
-            "UPDATE reports SET decision = ?3, decision_digest = ?4, decision_bytes = ?5, event_bytes = NULL \
-             WHERE source = ?1 AND event_id = ?2",
-            params![
-                payload.report_source,
-                payload.report_id,
-                result,
-                decision_digest,
-                decision.exact_bytes,
-            ],
-        )?;
-        let (command_state, cleanup_command) = command_transition(retained.sequence, accepted)?;
-        transaction.execute(
-            "UPDATE commands SET state = ?3, signing_public_key = COALESCE(?5, signing_public_key), \
-             event_bytes = CASE WHEN ?4 THEN NULL ELSE event_bytes END \
-             WHERE source = ?1 AND event_id = ?2",
-            params![
-                retained.command_source,
-                retained.command_event_id,
-                command_state,
-                cleanup_command,
-                signing_public_key,
-            ],
+        let commands = transaction.execute(
+            "DELETE FROM commands WHERE state IN ('rejected', 'completed') \
+             AND NOT EXISTS (SELECT 1 FROM reports \
+               WHERE reports.command_source = commands.source \
+               AND reports.command_event_id = commands.event_id)",
+            [],
         )?;
         transaction.commit()?;
-        Ok(StoreOutcome::Stored)
+        u64::try_from(reports.saturating_add(commands)).map_err(|_| LedgerError::Invalid)
     }
 
-    /// Mark a decision-consumer ACK only after its durable ledger transaction.
-    /// The exact decision bytes may then be removed while identity/digest remain.
+    /// Retirement is safe only when no execution is unresolved and every
+    /// targeted application decision has been durably `ACKed`.
     ///
     /// # Errors
-    /// Returns missing decisions or SQL failures.
-    pub fn acknowledge_decision(
-        &mut self,
-        report_source: &str,
-        report_event_id: &str,
-    ) -> Result<(), LedgerError> {
-        let changed = self.connection.execute(
-            "UPDATE reports SET decision_acked = 1, decision_bytes = NULL \
-             WHERE source = ?1 AND event_id = ?2 AND decision IS NOT NULL",
-            params![report_source, report_event_id],
-        )?;
-        if changed == 0 {
-            return Err(LedgerError::NotFound);
-        }
-        Ok(())
+    /// Returns SQL failures.
+    pub fn can_retire(&self) -> Result<bool, LedgerError> {
+        Ok(self.connection.query_row(
+            "SELECT NOT EXISTS(SELECT 1 FROM commands \
+               WHERE state IN ('claim_pending', 'accepted', 'terminal_pending')) \
+             AND NOT EXISTS(SELECT 1 FROM reports \
+               WHERE decision IS NULL OR decision_acked = 0)",
+            [],
+            |row| row.get(0),
+        )?)
     }
 
     /// True only after an accepted sequence-1 decision is durable and while the
@@ -419,6 +439,29 @@ impl Ledger {
     }
 }
 
+fn unix_seconds() -> Result<u64, LedgerError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| LedgerError::Invalid)
+}
+
+fn validate_redelivered_command(command: &Command<'_>) -> Result<(), LedgerError> {
+    validate_command(command)?;
+    let (identity, _, payload) =
+        decode_command(command.exact_bytes).map_err(|_| LedgerError::Invalid)?;
+    let binding = payload.binding.ok_or(LedgerError::Invalid)?;
+    if identity.source != command.source
+        || identity.id != command.id
+        || binding.turn_id != command.turn_id
+        || binding.assignment_id != command.assignment_id
+        || binding.executor_generation != command.executor_generation
+    {
+        return Err(LedgerError::Invalid);
+    }
+    Ok(())
+}
+
 const fn validate_command(command: &Command<'_>) -> Result<(), LedgerError> {
     if command.source.is_empty()
         || command.id.is_empty()
@@ -451,6 +494,16 @@ fn retained_instance_id(connection: &Connection) -> Result<String, LedgerError> 
     )?)
 }
 
+fn retained_signing_public_key(connection: &Connection) -> Result<[u8; 32], LedgerError> {
+    let seed: Vec<u8> = connection.query_row(
+        "SELECT signing_seed FROM executor_identity WHERE singleton = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    let seed: [u8; 32] = seed.try_into().map_err(|_| LedgerError::Invalid)?;
+    Ok(SigningKey::from_bytes(&seed).verifying_key().to_bytes())
+}
+
 fn decode_targeted_decision(
     exact_bytes: &[u8],
     instance_id: &str,
@@ -470,6 +523,26 @@ fn decode_targeted_decision(
         ConversationReportDecisionKind::Unspecified => return Err(LedgerError::Invalid),
     };
     Ok((payload, accepted))
+}
+
+fn retain_decision_consumer_sequence(
+    transaction: &Transaction<'_>,
+    report_source: &str,
+    report_event_id: &str,
+    consumer_sequence: Option<u64>,
+) -> Result<(), LedgerError> {
+    let Some(consumer_sequence) = consumer_sequence else {
+        return Ok(());
+    };
+    let consumer_sequence = i64::try_from(consumer_sequence).map_err(|_| LedgerError::Invalid)?;
+    transaction.execute(
+        "UPDATE reports SET decision_consumer_sequence = \
+         CASE WHEN COALESCE(decision_consumer_sequence, 0) < ?3 THEN ?3 \
+              ELSE decision_consumer_sequence END \
+         WHERE source = ?1 AND event_id = ?2",
+        params![report_source, report_event_id, consumer_sequence],
+    )?;
+    Ok(())
 }
 
 fn retained_decision_report(
@@ -537,6 +610,7 @@ fn validate_command_claim(
     command: &Command<'_>,
     claim: &Report<'_>,
     instance_id: &str,
+    signing_public_key: &[u8; 32],
 ) -> Result<ValidatedCommand, LedgerError> {
     let (command_identity, _, command_payload) =
         decode_command(command.exact_bytes).map_err(|_| LedgerError::Invalid)?;
@@ -563,6 +637,7 @@ fn validate_command_claim(
             .map_err(|_| LedgerError::Invalid)?
             != ConversationTurnReportKind::Started
         || claim_payload.executor_instance_id != instance_id
+        || claim_payload.signing_public_key.as_slice() != signing_public_key
         || claim_binding != &expected_claim_binding
     {
         return Err(LedgerError::Invalid);
@@ -835,125 +910,6 @@ fn decision_report_binding_matches(
         && binding.executor_generation == decision.executor_generation
         && binding.command_event_id == command_event_id
         && report_sequence == sequence)
-}
-
-fn existing_command_outcome(
-    transaction: &Transaction<'_>,
-    command: &Command<'_>,
-    claim: &Report<'_>,
-) -> Result<Option<StoreOutcome>, LedgerError> {
-    let existing: Option<(String, Option<Vec<u8>>)> = transaction
-        .query_row(
-            "SELECT digest, event_bytes FROM commands WHERE source = ?1 AND event_id = ?2",
-            params![command.source, command.id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    let Some((digest, bytes)) = existing else {
-        return Ok(None);
-    };
-    if digest != exact_digest(command.exact_bytes)
-        || bytes
-            .as_deref()
-            .is_some_and(|retained| retained != command.exact_bytes)
-    {
-        return Err(LedgerError::EventConflict);
-    }
-    match existing_report_outcome(transaction, claim)? {
-        Some(StoreOutcome::Duplicate) => Ok(Some(StoreOutcome::Duplicate)),
-        Some(StoreOutcome::Stored) | None => Err(LedgerError::EventConflict),
-    }
-}
-
-fn existing_report_outcome(
-    transaction: &Transaction<'_>,
-    report: &Report<'_>,
-) -> Result<Option<StoreOutcome>, LedgerError> {
-    let existing: Option<(String, Option<Vec<u8>>)> = transaction
-        .query_row(
-            "SELECT digest, event_bytes FROM reports WHERE source = ?1 AND event_id = ?2",
-            params![report.source, report.id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    let Some((digest, bytes)) = existing else {
-        return Ok(None);
-    };
-    if digest == exact_digest(report.exact_bytes)
-        && bytes
-            .as_deref()
-            .is_none_or(|retained| retained == report.exact_bytes)
-    {
-        Ok(Some(StoreOutcome::Duplicate))
-    } else {
-        Err(LedgerError::EventConflict)
-    }
-}
-
-fn insert_report(
-    transaction: &Transaction<'_>,
-    command: &Command<'_>,
-    report: &Report<'_>,
-) -> Result<(), LedgerError> {
-    transaction.execute(
-        "INSERT INTO reports \
-         (source, event_id, digest, event_bytes, command_source, command_event_id, sequence) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            report.source,
-            report.id,
-            exact_digest(report.exact_bytes),
-            report.exact_bytes,
-            command.source,
-            command.id,
-            i64::from(report.sequence),
-        ],
-    )?;
-    Ok(())
-}
-
-fn reserve(
-    transaction: &Transaction<'_>,
-    limits: LedgerLimits,
-    added_records: u64,
-    added_bytes: usize,
-    removed_bytes: usize,
-) -> Result<(), LedgerError> {
-    let (records, bytes): (i64, i64) = transaction.query_row(
-        "SELECT \
-           (SELECT count(*) FROM commands) + (SELECT count(*) FROM reports), \
-           COALESCE((SELECT sum(length(event_bytes)) FROM commands), 0) + \
-           COALESCE((SELECT sum(COALESCE(length(event_bytes), 0) + COALESCE(length(decision_bytes), 0)) FROM reports), 0)",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
-    let added_bytes = u64::try_from(added_bytes).map_err(|_| LedgerError::Capacity)?;
-    let removed_bytes = u64::try_from(removed_bytes).map_err(|_| LedgerError::Capacity)?;
-    if u64::try_from(records)
-        .map_err(|_| LedgerError::Capacity)?
-        .saturating_add(added_records)
-        > limits.max_records
-        || u64::try_from(bytes)
-            .map_err(|_| LedgerError::Capacity)?
-            .saturating_sub(removed_bytes)
-            .saturating_add(added_bytes)
-            > limits.max_exact_bytes
-    {
-        return Err(LedgerError::Capacity);
-    }
-    Ok(())
-}
-
-fn exact_digest(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let digest = Sha256::digest(bytes);
-    let mut result = String::with_capacity(7 + digest.len() * 2);
-    result.push_str("sha256:");
-    for byte in digest {
-        result.push(char::from(HEX[usize::from(byte >> 4)]));
-        result.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    result
 }
 
 #[cfg(test)]

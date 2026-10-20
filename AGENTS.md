@@ -41,6 +41,13 @@
 
 ## Implementation direction
 
+- The project-workflow replacement is clean-slate. Prior SQLite workflow schemas,
+  retained data, APIs, tests, deployment topology, and compatibility behavior are
+  research input only and must not constrain the replacement. Do not add migration,
+  dual-write, compatibility, or shared-broker work for them. The first M1 runtime
+  slice deletes the superseded workflow implementation and tests as it installs the
+  replacement boundary; subsequent work builds only on the replacement contracts
+  and cumulative acceptance harness.
 - Prefer Rust for orchestrator-owned application code, including controllers and
   workers. Kubernetes controllers and Operators do not require Go. Evaluate kube-rs for the
   controller runtime; pin tested dependencies when implementation begins.
