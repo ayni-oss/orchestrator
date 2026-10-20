@@ -11,7 +11,7 @@ This document retains reproducible evidence for the gates in
 
 - Repository: `ayni-oss/orchestrator`.
 - Executable proof and contract revision:
-  `60aef6cbbfc92755820d0d342f36ad0ee4bc5a08`.
+  `54469ec99b3534cd53883128aae304e5f65b48e5`.
 - Rust: `rustc 1.94.0`; Cargo 1.94.0.
 - PostgreSQL image:
   `postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3`.
@@ -279,7 +279,11 @@ checks ignored the command binding, and the private-v1 inventory used a partial
 symbol list. Revision `60aef6cbbfc92755820d0d342f36ad0ee4bc5a08` closes those gaps with
 fixed-size record/byte reservations, terminal rejection cleanup, bound duplicate
 checks, a legacy-proto-derived 154-file inventory, and a refreshed Ayni environment
-lock. The focused and full validation commands below passed after those corrections.
+lock. Revision `54469ec99b3534cd53883128aae304e5f65b48e5` then preserves the authenticated
+transport scenario while splitting it into bounded phase helpers; the pinned Rust
+analyzer reports a maximum cyclomatic complexity of 19 in that file rather than the
+previous failing value of 66. The focused and full validation commands below passed
+after those corrections.
 
 ## Validation and gate ledger
 
