@@ -99,8 +99,8 @@ application-to-executor command, signed executor report, and targeted applicatio
 decision payloads for the replacement conversation runtime. Every encoded workflow
 CloudEvent requires an RFC 3339 produced time and canonical W3C `traceparent` in
 addition to its immutable source, event ID, scope, assignment, generation, causation,
-and correlation bindings. Failed reports and rejected decisions carry stable
-lowercase reason codes, never raw exceptions or secret-bearing diagnostics.
+and correlation bindings. Failed reports and rejected decisions carry closed,
+stable reason codes, never raw exceptions or secret-bearing diagnostics.
 
 The payload schema and cross-language signing fixture are compatibility commitments.
 The current executor ledger, PostgreSQL watch service, and JetStream configuration

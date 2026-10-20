@@ -44,7 +44,7 @@ message ConversationTurnReport {
   bytes signing_public_key = 5;
   string signing_key_digest = 6;
   string response_content = 7;
-  // Stable lowercase classification code; never raw executor diagnostics.
+  // Closed classification code; currently only "script_failed". Never raw executor diagnostics.
   string failure_reason = 8;
   bytes signature = 9;
 }
@@ -64,7 +64,8 @@ message ConversationReportDecision {
   string assignment_id = 6;
   uint64 executor_generation = 7;
   ConversationReportDecisionKind decision = 8;
-  // Empty for acceptance; otherwise a stable lowercase classification code.
+  // Empty for acceptance. Rejection is one of: claim_lost, stale_generation,
+  // wrong_scope, wrong_binding, invalid_signature, event_conflict, terminal_conflict.
   string safe_reason = 9;
   string turn_state = 10;
   string workspace_id = 11;

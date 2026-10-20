@@ -510,7 +510,11 @@ outcome, and an Ed25519 signature over the canonical envelope/payload bytes. The
 ownership claim additionally carries the public key; later reports must use its
 bound digest. Decision facts carry report identity/digest, target executor instance,
 accepted claimant when one exists, immutable accepted or rejected result, and
-authoritative Turn state; they do not copy transcript content.
+authoritative Turn state; they do not copy transcript content. The initial closed
+report failure vocabulary is `script_failed`. Rejection uses only `claim_lost`,
+`stale_generation`, `wrong_scope`, `wrong_binding`, `invalid_signature`,
+`event_conflict`, or `terminal_conflict`; adding a code requires a reviewed contract
+change.
 
 A report event ID is stable across retries. The executor persists the event ID and
 exact bytes before publication. The signature input is a domain-separated digest of
@@ -557,7 +561,8 @@ ledger. The ID is one validated NATS subject token; the private key never leaves
 that workload or enters an event. On command delivery it atomically stores the exact
 command and a signed sequence-1
 `turn.started` ownership claim before sending the command-consumer ACK. The application
-verifies the signature, then atomically accepts the first valid claim for the current
+uses strict Ed25519 verification that rejects small-order public keys, then atomically
+accepts the first valid claim for the current
 assignment/generation, binds that public-key digest, records its immutable report
 receipt, marks dispatch `transferred` and execution `processing`, and creates the
 claim-decision fact. Every later report must verify under the bound key. Competing

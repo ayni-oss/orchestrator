@@ -126,7 +126,7 @@ export interface ConversationTurnReport {
   signingPublicKey: Buffer;
   signingKeyDigest: string;
   responseContent: string;
-  /** Stable lowercase classification code; never raw executor diagnostics. */
+  /** Closed classification code; currently only "script_failed". Never raw executor diagnostics. */
   failureReason: string;
   signature: Buffer;
 }
@@ -140,7 +140,10 @@ export interface ConversationReportDecision {
   assignmentId: string;
   executorGeneration: string;
   decision: ConversationReportDecisionKind;
-  /** Empty for acceptance; otherwise a stable lowercase classification code. */
+  /**
+   * Empty for acceptance. Rejection is one of: claim_lost, stale_generation,
+   * wrong_scope, wrong_binding, invalid_signature, event_conflict, terminal_conflict.
+   */
   safeReason: string;
   turnState: string;
   workspaceId: string;

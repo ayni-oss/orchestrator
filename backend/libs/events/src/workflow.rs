@@ -5,7 +5,7 @@ use super::v1::{
 use super::{ContractError, EventIdentity, digest, resource_identifier, validate_identity};
 use cloudevents::event::{ExtensionValue, SpecVersion};
 use cloudevents::{AttributesReader, Data, Event, EventBuilder, EventBuilderV10};
-use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _, VerifyingKey};
+use ed25519_dalek::{Signature, Signer as _, SigningKey, VerifyingKey};
 use prost::Message as _;
 use sha2::{Digest as _, Sha256};
 
@@ -220,11 +220,19 @@ pub fn verify_report_signature(
     }
     let signature = Signature::from_slice(&payload.signature)
         .map_err(|_| ContractError::Invalid("report signature"))?;
-    let verifying_key = VerifyingKey::from_bytes(&report_public_key)
-        .map_err(|_| ContractError::Invalid("report public key"))?;
+    let verifying_key = strict_verifying_key(&report_public_key)?;
     verifying_key
-        .verify(&report_signing_digest(identity, payload)?, &signature)
+        .verify_strict(&report_signing_digest(identity, payload)?, &signature)
         .map_err(|_| ContractError::Invalid("report signature"))
+}
+
+fn strict_verifying_key(public_key: &[u8; 32]) -> Result<VerifyingKey, ContractError> {
+    let verifying_key = VerifyingKey::from_bytes(public_key)
+        .map_err(|_| ContractError::Invalid("report public key"))?;
+    if verifying_key.is_weak() {
+        return Err(ContractError::Invalid("weak report public key"));
+    }
+    Ok(verifying_key)
 }
 
 /// Encode a signed started/completed/failed executor report.
@@ -626,7 +634,7 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
         }
         ConversationTurnReportKind::Failed => {
             payload.response_content.is_empty()
-                && safe_reason_code(&payload.failure_reason)
+                && report_failure_reason(&payload.failure_reason)
                 && payload.signing_public_key.is_empty()
         }
         ConversationTurnReportKind::Unspecified => false,
@@ -700,17 +708,26 @@ fn lowercase_hexadecimal(bytes: &[u8]) -> String {
 fn decision_reason_valid(decision: ConversationReportDecisionKind, reason: &str) -> bool {
     match decision {
         ConversationReportDecisionKind::Accepted => reason.is_empty(),
-        ConversationReportDecisionKind::Rejected => safe_reason_code(reason),
+        ConversationReportDecisionKind::Rejected => decision_rejection_reason(reason),
         ConversationReportDecisionKind::Unspecified => false,
     }
 }
 
-fn safe_reason_code(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+fn report_failure_reason(value: &str) -> bool {
+    matches!(value, "script_failed")
+}
+
+fn decision_rejection_reason(value: &str) -> bool {
+    matches!(
+        value,
+        "claim_lost"
+            | "stale_generation"
+            | "wrong_scope"
+            | "wrong_binding"
+            | "invalid_signature"
+            | "event_conflict"
+            | "terminal_conflict"
+    )
 }
 
 fn simple_identifier(value: &str) -> bool {
@@ -847,6 +864,17 @@ mod tests {
     }
 
     #[test]
+    fn weak_report_public_key_is_rejected() -> Result<(), ContractError> {
+        let mut weak_public_key = [0; 32];
+        weak_public_key[0] = 1;
+        let parsed = VerifyingKey::from_bytes(&weak_public_key)
+            .map_err(|_| ContractError::Invalid("weak-key test fixture"))?;
+        assert!(parsed.is_weak());
+        assert!(strict_verifying_key(&weak_public_key).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn shared_signing_fixture_matches_canonical_bytes() -> Result<(), Box<dyn std::error::Error>> {
         #[derive(serde::Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -891,10 +919,29 @@ mod tests {
     }
 
     #[test]
-    fn safe_reason_codes_reject_free_form_diagnostics() {
-        assert!(safe_reason_code("script_failed"));
-        assert!(!safe_reason_code("token=secret"));
-        assert!(!safe_reason_code("raw exception text"));
+    fn safe_reason_allowlists_reject_free_form_diagnostics() {
+        assert!(report_failure_reason("script_failed"));
+        assert!(!report_failure_reason("token=secret"));
+        assert!(!report_failure_reason("raw_exception_text"));
+        assert!(!report_failure_reason(&"a".repeat(64)));
+        for reason in [
+            "claim_lost",
+            "stale_generation",
+            "wrong_scope",
+            "wrong_binding",
+            "invalid_signature",
+            "event_conflict",
+            "terminal_conflict",
+        ] {
+            assert!(decision_reason_valid(
+                ConversationReportDecisionKind::Rejected,
+                reason
+            ));
+        }
+        assert!(!decision_reason_valid(
+            ConversationReportDecisionKind::Rejected,
+            "credential_leaked_in_raw_diagnostic"
+        ));
         assert!(decision_reason_valid(
             ConversationReportDecisionKind::Accepted,
             ""
