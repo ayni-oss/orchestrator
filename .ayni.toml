@@ -7,7 +7,7 @@ deps = true
 mutation = false
 
 [languages]
-enabled = ["rust", "node"]
+enabled = ["rust"]
 
 [concurrency]
 amount = 1
@@ -28,48 +28,20 @@ nofile = 8192
 roots = ["."]
 
 [rust.size]
-# Current repository baseline is 986 lines; keep it visible as a warning and
-# reject growth beyond the next explicit ceiling.
+# Keep the largest production modules visible without permitting another
+# monolithic workflow owner.
 "*.rs" = { warn = 400, fail = 1000, exclude = ["target/**", ".ayni/**", ".worktrees/**"] }
 
 [rust.complexity]
-# Current repository baseline is 30; warnings preserve the refactoring signal.
 fn_cyclomatic = { warn = 10, fail = 31 }
 fn_cognitive = { warn = 20, fail = 29 }
 
 [rust.deps.forbidden]
-"backend/libs/events" = ["backend/servers/*", "backend/workers/*", "backend/libs/runtime/*", "backend/libs/domain", "backend/libs/registry", "backend/libs/oci", "backend/libs/observability"]
-"backend/libs/oci" = ["backend/servers/*", "backend/workers/*", "backend/libs/domain", "backend/libs/registry", "backend/libs/runtime/*", "backend/libs/observability"]
-"backend/libs/registry" = ["backend/servers/*", "backend/workers/*", "backend/libs/runtime/*", "backend/libs/observability"]
-"backend/servers/control-plane/crates/application" = ["backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/*", "backend/libs/runtime/profiles/ayni", "backend/libs/observability"]
-"backend/servers/control-plane/crates/grpc-contract" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/runtime/contracts", "backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
-"backend/libs/domain" = ["backend/servers/control-plane/crates/application", "backend/servers/control-plane/crates/grpc-contract", "backend/libs/observability", "backend/libs/runtime/contracts", "backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
-"backend/libs/runtime/contracts" = ["backend/servers/control-plane/crates/application", "backend/servers/control-plane/crates/grpc-contract", "backend/libs/observability", "backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
-"backend/libs/runtime/profiles/ayni" = ["backend/servers/control-plane/crates/application", "backend/servers/control-plane/crates/grpc-contract", "backend/libs/observability", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane", "backend/workers/runtime-worker"]
-"backend/servers/control-plane/crates/kubernetes" = ["backend/libs/runtime/profiles/ayni", "backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane", "backend/workers/runtime-worker"]
-"backend/servers/control-plane" = ["backend/workers/runtime-worker"]
-"backend/workers/runtime-worker" = ["backend/servers/control-plane/crates/application", "backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/kubernetes", "backend/servers/control-plane"]
-
-
-# Package roots keep generated protobuf bindings out of source-quality budgets.
-# Their TypeScript compilation remains part of the frontend compatibility check.
-[node]
-roots = ["apps/web", "packages/bff"]
-
-[node.tooling.test]
-command = "pnpm"
-args = ["--reporter=silent", "run", "test", "--reporter=json"]
-
-[node.size]
-"**/*.ts" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**", "**/coverage/**", "**/.vitest/**", "**/test-results/**", "**/.ayni/**"] }
-"**/*.js" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**"] }
-"**/*.mjs" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**"] }
-"**/*.svelte" = { warn = 350, fail = 600, exclude = ["**/node_modules/**", "**/.svelte-kit/**", "**/build/**"] }
-
-[node.complexity]
-# Existing task-form action measures 26; warn without hiding that baseline.
-fn_cyclomatic = { warn = 10, fail = 30 }
-
-[node.deps.forbidden]
-"packages/bff" = ["apps/*"]
-"clients/typescript" = ["apps/*", "packages/*"]
+"backend/libs/events" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/oci", "backend/libs/providers", "backend/libs/registry", "backend/servers/*", "backend/workers/*"]
+"backend/libs/oci" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/providers", "backend/libs/registry", "backend/servers/*", "backend/workers/*"]
+"backend/libs/providers" = ["backend/servers/*", "backend/workers/*"]
+"backend/libs/registry" = ["backend/servers/*", "backend/workers/*"]
+"backend/servers/control-plane/crates/grpc-contract" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/providers", "backend/libs/registry", "backend/servers/control-plane", "backend/servers/control-plane/crates/workflow-postgres", "backend/workers/*"]
+"backend/servers/control-plane/crates/workflow-postgres" = ["backend/libs/domain", "backend/libs/observability", "backend/libs/oci", "backend/libs/providers", "backend/libs/registry", "backend/servers/control-plane", "backend/servers/control-plane/crates/grpc-contract", "backend/workers/*"]
+"backend/servers/control-plane" = ["backend/workers/*"]
+"backend/workers/scripted-executor" = ["backend/servers/control-plane", "backend/servers/control-plane/crates/grpc-contract", "backend/servers/control-plane/crates/workflow-postgres"]

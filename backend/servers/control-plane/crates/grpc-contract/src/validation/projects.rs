@@ -1,93 +1,113 @@
-use super::{ValidationError, idempotency_key, resource_id, v1};
-/// Validates a project display name.
+use super::{ValidationError, idempotency_key, resource_id};
+use crate::v1;
+
+/// Validates a workflow display name.
 ///
 /// # Errors
-/// Returns an invalid input error for blank, oversized or control-bearing names.
-pub fn project_name(value: &str) -> Result<(), ValidationError> {
-    if value.trim().is_empty() || value.len() > 256 || value.chars().any(char::is_control) {
-        return Err(ValidationError::new(
-            v1::ErrorReason::InvalidInput,
-            "display_name",
-        ));
+/// Returns invalid input for blank, oversized, whitespace-padded, or control-bearing names.
+pub fn display_name(value: &str, field: &'static str) -> Result<(), ValidationError> {
+    if value.is_empty()
+        || value.len() > 256
+        || value.trim() != value
+        || value.chars().any(char::is_control)
+    {
+        return Err(ValidationError::new(v1::ErrorReason::InvalidInput, field));
     }
     Ok(())
 }
 
-/// Validates project creation.
+/// Validates workspace creation.
 ///
 /// # Errors
-/// Returns the violated public field bound.
+/// Returns the first violated public field bound.
+pub fn create_workspace(value: &v1::CreateWorkspaceRequest) -> Result<(), ValidationError> {
+    idempotency_key(&value.idempotency_key)?;
+    display_name(&value.display_name, "display_name")
+}
+
+/// Validates project creation and its authoritative parent scope.
+///
+/// # Errors
+/// Returns the first violated public field bound.
 pub fn create_project(value: &v1::CreateProjectRequest) -> Result<(), ValidationError> {
     idempotency_key(&value.idempotency_key)?;
-    project_name(&value.display_name)?;
-    project_goal(&value.goal)?;
-    if !value.workspace_id.is_empty() {
-        resource_id(&value.workspace_id, "workspace_id")?;
-    }
-    if value.repository_connection_ids.is_empty() {
-        resource_id(&value.repository_connection_id, "repository_connection_id")
-    } else {
-        if !value.repository_connection_id.is_empty() {
-            return Err(ValidationError::new(
-                v1::ErrorReason::InvalidInput,
-                "repository_connection_ids",
-            ));
-        }
-        project_members(&value.repository_connection_ids)
-    }
+    display_name(&value.display_name, "display_name")?;
+    resource_id(&value.workspace_id, "workspace_id")?;
+    bounded_text(&value.goal, 16_384, true, "goal")
 }
 
-/// Validates project mutation identity and optimistic concurrency.
+/// Validates conversation creation and complete parent scope.
 ///
 /// # Errors
-/// Returns the violated public field bound.
-pub fn project_mutation(key: &str, id: &str, version: u64) -> Result<(), ValidationError> {
-    idempotency_key(key)?;
-    resource_id(id, "project_id")?;
-    if version == 0 || version > i64::MAX as u64 {
+/// Returns the first violated public field bound.
+pub fn create_conversation(value: &v1::CreateConversationRequest) -> Result<(), ValidationError> {
+    idempotency_key(&value.idempotency_key)?;
+    resource_id(&value.workspace_id, "workspace_id")?;
+    resource_id(&value.project_id, "project_id")?;
+    display_name(&value.title, "title")
+}
+
+/// Validates durable user-message admission.
+///
+/// # Errors
+/// Returns the first violated public field bound.
+pub fn send_message(value: &v1::SendMessageRequest) -> Result<(), ValidationError> {
+    idempotency_key(&value.idempotency_key)?;
+    conversation_scope(
+        &value.workspace_id,
+        &value.project_id,
+        &value.conversation_id,
+    )?;
+    bounded_text(&value.content, 16_384, false, "content")
+}
+
+/// Validates a complete conversation scope before any child lookup.
+///
+/// # Errors
+/// Returns the malformed scope field.
+pub fn conversation_scope(
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+) -> Result<(), ValidationError> {
+    resource_id(workspace_id, "workspace_id")?;
+    resource_id(project_id, "project_id")?;
+    resource_id(conversation_id, "conversation_id")
+}
+
+/// Validates bounded history pagination.
+///
+/// # Errors
+/// Returns invalid input for a missing snapshot or an excessive page.
+pub fn history(value: &v1::ListConversationHistoryRequest) -> Result<(), ValidationError> {
+    conversation_scope(
+        &value.workspace_id,
+        &value.project_id,
+        &value.conversation_id,
+    )?;
+    resource_id(&value.snapshot_id, "snapshot_id")?;
+    if value.limit > 100 {
         return Err(ValidationError::new(
-            v1::ErrorReason::InvalidInput,
-            "expected_resource_version",
+            v1::ErrorReason::BoundExceeded,
+            "limit",
         ));
     }
     Ok(())
 }
 
-/// Validates a nonempty set of shared repository members.
-///
-/// # Errors
-/// Returns invalid input for duplicates, invalid identities or an excessive list.
-pub fn project_members(values: &[String]) -> Result<(), ValidationError> {
-    if values.is_empty()
-        || values.len() > 100
-        || values
-            .iter()
-            .collect::<std::collections::BTreeSet<_>>()
-            .len()
-            != values.len()
-    {
-        return Err(ValidationError::new(
-            v1::ErrorReason::InvalidInput,
-            "repository_connection_ids",
-        ));
-    }
-    for value in values {
-        resource_id(value, "repository_connection_ids")?;
-    }
-    Ok(())
-}
-
-/// Validates bounded project intent text.
-///
-/// # Errors
-/// Returns invalid input for excessive length or unsupported control characters.
-pub fn project_goal(value: &str) -> Result<(), ValidationError> {
-    if value.len() > 16_384
+fn bounded_text(
+    value: &str,
+    maximum: usize,
+    allow_empty: bool,
+    field: &'static str,
+) -> Result<(), ValidationError> {
+    if (!allow_empty && value.is_empty())
+        || value.len() > maximum
         || value
             .chars()
-            .any(|c| c.is_control() && c != '\n' && c != '\t')
+            .any(|character| character.is_control() && character != '\n' && character != '\t')
     {
-        return Err(ValidationError::new(v1::ErrorReason::InvalidInput, "goal"));
+        return Err(ValidationError::new(v1::ErrorReason::InvalidInput, field));
     }
     Ok(())
 }

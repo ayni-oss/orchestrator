@@ -9,50 +9,23 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-ayni-orchestrator-providers = { path = "../../libs/providers" }
-async-nats.workspace = true
-url.workspace = true
-ayni-orchestrator-events = { path = "../../libs/events" }
-kube.workspace = true
-k8s-openapi.workspace = true
-ayni-orchestrator-registry = { path = "../../libs/registry" }
-ayni-orchestrator-application = { path = "crates/application" }
-ayni-orchestrator-domain = { path = "../../libs/domain" }
-async-stream.workspace = true
 axum.workspace = true
-base64.workspace = true
 ayni-orchestrator-api = { path = "crates/grpc-contract" }
 ayni-orchestrator-observability = { path = "../../libs/observability" }
-ayni-orchestrator-runtime = { path = "../../libs/runtime/contracts" }
-ayni-orchestrator-profile-ayni = { path = "../../libs/runtime/profiles/ayni" }
-ayni-orchestrator-kubernetes = { path = "crates/kubernetes" }
-reqwest.workspace = true
-jsonwebtoken.workspace = true
+ayni-orchestrator-workflow-postgres = { path = "crates/workflow-postgres" }
 prost.workspace = true
 prost-types.workspace = true
-rig-core.workspace = true
-sha2.workspace = true
-ed25519-dalek.workspace = true
-getrandom = "=0.3.4"
-subtle.workspace = true
-rusqlite.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-toml_edit = "=0.22.27"
 thiserror.workspace = true
 tokio.workspace = true
-tempfile.workspace = true
 tokio-stream.workspace = true
 tonic.workspace = true
 tonic-health.workspace = true
 tonic-reflection.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 http-body-util.workspace = true
-rcgen = "=0.14.5"
 tower.workspace = true
 
 [lints]

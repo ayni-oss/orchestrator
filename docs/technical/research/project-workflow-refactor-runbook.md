@@ -139,6 +139,6 @@ The selected baseline uses PostgreSQL for authoritative transactional state and 
 
 - [Design worksheets](project-workflow-design-worksheets.md): required event, API, component, recovery, and experiment outputs.
 - [Architecture](../architecture/architecture.md) and [code ownership](../architecture/code-organization.md): current implementation references to verify.
-- [Event platform](../architecture/event-platform.md): existing reporting and accepted-fact contracts.
-- [Workflow evaluations](../reference/workflow-evaluations.md): current fixtures and the limits of their evidence.
+- [Event-platform archive](../history/event-platform/index.md): dated reporting and accepted-fact research.
+- [M1 feasibility evidence](project-workflow-m1-feasibility-evidence.md): closed experiments and the limits of their evidence.
 - [Documentation rules](../contributing/documentation.md): source placement and validation.

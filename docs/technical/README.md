@@ -1,40 +1,21 @@
 # Technical documentation
 
-These documents support contributors, deployment maintainers and coding agents.
-They are repository sources, excluded from the human-facing documentation site.
-For product usage, start with the [user guide](../site/index.md).
+The current implementation is M1 runtime Slice 1: a clean PostgreSQL-authoritative workflow foundation with a trusted-loopback private-v1 API.
 
-## Understand the implementation
+## Current implementation
 
-- [Architecture](architecture/architecture.md): control plane, worker and persistence.
-- [Code ownership](architecture/code-organization.md): shared libraries and dependency direction.
-- [Event platform](architecture/event-platform.md): reporting, acceptance, delivery and cleanup.
-- [Worker](architecture/runtime-runner.md): budgets, sandbox, checks and publication.
-- [Assurance](architecture/assurance.md): current trust boundaries and research limits.
-- [UI design system](architecture/design-system.md): reusable components and presentation rules.
+- [Architecture](architecture/architecture.md): authority, transactions, API surface, projections, and failure boundaries.
+- [Code organization](architecture/code-organization.md): production ownership and dependency direction.
+- [Local development](operations/local-development.md): Docker Desktop deployment, diagnostics, validation, restart, and cleanup.
+- [Operations](operations/operations.md): startup, probes, schema changes, credentials, backup, and failure handling.
+- [Protocol tooling](../../proto/README.md): canonical protobuf generation and compatibility policy.
 
-## Research the project workflow
+## Binding research
 
-- [Refactor runbook](research/project-workflow-refactor-runbook.md): gated investigation from product behavior to contracts, component boundaries, and cutover.
-- [Design worksheets](research/project-workflow-design-worksheets.md): evidence and decision templates for that investigation.
-- [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): reviewable scope, authority, transport, replay, failure, and M2 handoff contract for the first replacement slice.
+- [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): full milestone contract and later-slice handoffs.
+- [Feasibility evidence](research/project-workflow-m1-feasibility-evidence.md): closed pre-implementation evidence.
+- [Refactor runbook](research/project-workflow-refactor-runbook.md) and [design worksheets](research/project-workflow-design-worksheets.md): investigation provenance.
 
-## Maintain a deployment
+The [event-platform history](history/event-platform/index.md) is retained as dated evidence, not as current runtime documentation. Superseded browser, SQLite workflow, runtime-worker, provider, compatibility-drain, and custom-client instructions were removed during the clean cutover.
 
-- [Local development](operations/local-development.md): Helm, Tilt and Docker Desktop validation.
-- [Operations](operations/operations.md): schema upgrades, credentials and recovery.
-- [Event compatibility](operations/event-compatibility.md): reader drain and rollback gates.
-- [GitHub security](operations/github-security.md): provider and repository permissions.
-- [Managed execution](guides/managed-runtime-execution.md): build and activation internals.
-
-## Integrate with contracts
-
-- [Ayni](reference/ayni-integration.md) and [official builders](reference/repository-builders.md).
-- [Custom clients](reference/custom-client-access.md) and [protocol tooling](../../proto/README.md).
-- [Verification](reference/verification-events.md), [runtime operations](reference/runtime-operation-events.md), and [coding](reference/coding-events.md).
-- [Workflow traces and evaluations](reference/workflow-evaluations.md): repeatable scenarios and retained comparisons.
-- [Operator projections](reference/operator-projections.md), [CloudEvents](reference/cloudevents-contract.md), and [observability](reference/observability-and-events.md).
-
-[Documentation authoring](contributing/documentation.md) defines the audience boundary.
-[Decisions](decisions/README.md) and [dated research](history/event-platform/index.md)
-preserve provenance. The [roadmap](../../ROADMAP.md) links remaining work.
+[Documentation authoring](contributing/documentation.md) defines the audience boundary. The [roadmap](../../ROADMAP.md) tracks later slices.

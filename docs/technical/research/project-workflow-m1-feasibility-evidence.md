@@ -50,20 +50,24 @@ measures the distributions it owns; runtime slices must add the remaining warmed
 
 ## Reproduction
 
-With a healthy Docker daemon and Docker Desktop Kubernetes:
+The JetStream and executor results below are historical gate evidence owned by the
+pinned proof revision `54469ec99b3534cd53883128aae304e5f65b48e5`. Reproduce
+those results from a clean checkout of that revision, where the isolated fixtures
+and gate scripts remain intact. Runtime Slice 1 deliberately removes those local
+broker/executor fixtures rather than carrying an unused or shared-broker profile.
+They return with the isolated topology in runtime Slice 2.
+
+The active Slice 1 checkout retains and runs only its current authority and cutover
+gates:
 
 ```sh
 scripts/ci/check-workflow-postgres-feasibility.sh
-scripts/ci/check-workflow-jetstream-feasibility.sh
-scripts/ci/check-workflow-jetstream-capacity.sh
-scripts/ci/check-workflow-jetstream-credentials.sh
-scripts/ci/check-workflow-executor-feasibility.sh
 scripts/ci/check-workflow-private-v1-feasibility.sh
 ```
 
-The scripts use pinned images, fixture-only credentials, random disposable Docker
-resources or Kubernetes namespaces, bounded waits, and cleanup traps. They do not
-read `dev/.env`, production Secrets, or external-provider credentials.
+Both scripts use pinned dependencies, disposable resources, bounded waits, and
+cleanup traps. They do not read production Secrets or external-provider
+credentials.
 
 ## PostgreSQL authority and migration gate
 
@@ -239,25 +243,24 @@ and kill injection at additional process boundaries remain slice acceptance work
 
 ## Private-v1 reset and listener gate
 
-The isolated overlay under `dev/feasibility/private-v1/` remains outside canonical
-production registration. The retained result was:
+Before implementation, an isolated overlay under `dev/feasibility/private-v1/`
+proved the one-time reset, deterministic generation, complete handwritten-consumer
+inventory, trusted PostgreSQL owner, and custom-listener omission. That overlay and
+inventory were deleted after the coordinated canonical cutover; preserving a second
+schema source would now be drift.
+
+The post-cutover gate reports:
 
 ```text
-private-v1-feasibility: schema=pass old-baseline-break=pass refreshed-baseline=pass post-reset-file-policy=pass generation=deterministic inventory=pass trusted-postgres-owner=pass custom-listener-omission=pass
+private-v1-cutover: canonical-surface=pass stale-consumers=absent trusted-loopback=pass custom-listener=absent
 ```
 
-The proof freezes two service names and seven M1 RPCs, reserves removed field names
-and numbers, and validates compact terminal projections, typed vocabularies, and
-cursorless heartbeats. Overlaying the reset fails the old baseline as expected; the
-refreshed baseline passes, and deleting an RPC afterward fails normal `FILE`
-compatibility. Two TypeScript generations are byte-identical.
-
-The retained inventory covers 154 handwritten Rust, TypeScript client, BFF, web,
-shell, and supporting references.
-Type-level compile-fail checks reject a SQLite workflow owner and reject workflow
-registration on the custom-client listener. Runtime slice 1 must regenerate canonical
-clients, update/delete every inventoried consumer, remove the old owner and tests,
-and exercise the real trusted/custom listener graph in the coordinated reset.
+The canonical sources now freeze two service names and seven M1 RPCs, reserve removed
+field names and numbers, and define compact terminal projections, typed vocabularies,
+and cursorless heartbeats. TypeScript generation is checked against committed output.
+Normal `FILE` compatibility resumes after the `workflow-m1-private-v1` baseline.
+The old workflow owner, tests, BFF/web callers, and inventoried handwritten consumers
+were removed with the cutover.
 
 ## Review closure
 

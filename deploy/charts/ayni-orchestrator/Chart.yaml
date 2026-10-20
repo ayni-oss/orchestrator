@@ -1,6 +1,7 @@
 apiVersion: v2
 name: ayni-orchestrator
-description: Ayni Orchestrator control plane and operator web application
+description: PostgreSQL-authoritative Ayni Orchestrator control plane
+home: https://github.com/ayni-oss/orchestrator
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

@@ -8,18 +8,19 @@ COPY proto ./proto
 RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=ayni-orchestrator-control-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-control-target,target=/workspace/target \
-    cargo build --locked --release --package ayni-orchestrator-control-plane --bins \
+    cargo build --locked --release --package ayni-orchestrator-control-plane \
+      --bin ayni-orchestrator-control-plane --bin workflow-migrate \
     && install --mode=0755 target/release/ayni-orchestrator-control-plane /tmp/ayni-orchestrator-control-plane \
-    && install --mode=0755 target/release/registry-connection-test /tmp/registry-connection-test
+    && install --mode=0755 target/release/workflow-migrate /tmp/workflow-migrate
 
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes ca-certificates git \
-    && rm -rf /var/lib/apt/lists/*
-RUN useradd --system --uid 10001 --create-home orchestrator
+    && apt-get install --no-install-recommends --yes ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --no-create-home orchestrator
 USER 10001
 COPY --from=builder /tmp/ayni-orchestrator-control-plane /usr/local/bin/ayni-orchestrator-control-plane
-COPY --from=builder /tmp/registry-connection-test /usr/local/bin/registry-connection-test
-EXPOSE 8080 50051 50052
+COPY --from=builder /tmp/workflow-migrate /usr/local/bin/workflow-migrate
+EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]

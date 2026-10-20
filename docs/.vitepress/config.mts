@@ -3,7 +3,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 
 export default withMermaid(defineConfig({
   title: 'Ayni Orchestrator',
-  description: 'Turn a development request into a reviewable pull request.',
+  description: 'PostgreSQL-authoritative workflow foundations.',
   srcDir: 'site',
   mermaid: {
     startOnLoad: false,
@@ -21,25 +21,13 @@ export default withMermaid(defineConfig({
   themeConfig: {
     siteTitle: false,
     nav: [
-      { text: 'Get started', link: '/getting-started' },
-      { text: 'Run a task', link: '/projects-and-tasks' },
-      { text: 'Troubleshooting', link: '/troubleshooting' },
+      { text: 'M1 Slice 1', link: '/' },
+      { text: 'Source', link: 'https://github.com/ayni-oss/orchestrator' },
       { text: 'Ayni CLI', link: 'https://cli.ayni.build' },
     ],
-    sidebar: [
-      { text: 'Ayni Orchestrator', items: [
-        { text: 'Home', link: '/' },
-        { text: 'How it works', link: '/how-it-works' },
-        { text: 'Get started', link: '/getting-started' },
-        { text: 'Repositories and runtimes', link: '/repositories-and-runtimes' },
-        { text: 'Projects and tasks', link: '/projects-and-tasks' },
-        { text: 'Results and recovery', link: '/results-and-recovery' },
-        { text: 'Trust and quality', link: '/trust-and-quality' },
-        { text: 'Troubleshooting', link: '/troubleshooting' },
-      ] },
-    ],
+    sidebar: [{ text: 'Ayni Orchestrator', items: [{ text: 'M1 Slice 1', link: '/' }] }],
     socialLinks: [{ icon: 'github', link: 'https://github.com/ayni-oss/orchestrator' }],
-    editLink: { pattern: 'https://github.com/ayni-oss/orchestrator/edit/main/docs/site/:path' },
+    editLink: { pattern: 'https://github.com/ayni-oss/orchestrator/edit/alpha/docs/site/:path' },
     search: { provider: 'local' },
   },
 }))

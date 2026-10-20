@@ -8,12 +8,16 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+ayni-orchestrator-events = { path = "../../../../libs/events" }
 prost.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
 tokio-stream = { workspace = true, features = ["net"] }
 tonic.workspace = true
 tonic-prost.workspace = true
+uuid.workspace = true
 
 [build-dependencies]
 prost-build.workspace = true

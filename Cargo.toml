@@ -2,18 +2,13 @@
 members = [
     "backend/libs/events",
     "backend/libs/providers",
-    "backend/servers/control-plane/crates/application",
     "backend/servers/control-plane/crates/grpc-contract",
     "backend/libs/domain",
     "backend/libs/registry",
     "backend/libs/oci",
     "backend/libs/observability",
     "backend/servers/control-plane",
-    "backend/workers/runtime-worker",
     "backend/workers/scripted-executor",
-    "backend/libs/runtime/contracts",
-    "backend/libs/runtime/profiles/ayni",
-    "backend/servers/control-plane/crates/kubernetes",
     "backend/servers/control-plane/crates/workflow-postgres",
 ]
 resolver = "3"

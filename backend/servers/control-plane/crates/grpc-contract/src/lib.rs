@@ -1,82 +1,64 @@
-//! Generated Rust bindings for the canonical Ayni Orchestrator v1 API.
+//! Canonical private-v1 workflow transport contract.
 //!
-//! Product semantics remain in domain and application layers. This crate
-//! contains transport types, generated service contracts, and shared public
-//! request-bound validation only.
+//! Product semantics remain in the `PostgreSQL` authority and control-plane adapter.
+//! This crate contains only generated transport types and request-bound validation.
 
-/// The worker-owned `ayni.orchestrator.v1` Protocol Buffers package.
+/// The canonical `ayni.orchestrator.v1` private workflow package.
 #[allow(clippy::all, clippy::pedantic, clippy::nursery)]
 pub mod v1 {
     tonic::include_proto!("ayni.orchestrator.v1");
 }
 
-/// Public transport-level validation used by server adapters.
+/// Transport-level validation shared by the trusted workflow adapter.
 pub mod validation;
 
-/// The compiled v1 descriptor set used by reflection and contract tests.
+/// The canonical descriptor set used by trusted-loopback reflection and contract tests.
 pub const FILE_DESCRIPTOR_SET: &[u8] =
     tonic::include_file_descriptor_set!("ayni_orchestrator_v1_descriptor");
 
 #[cfg(test)]
 mod tests {
-    use super::v1;
-    use prost::Message;
+    use prost::Message as _;
     use prost_types::FileDescriptorSet;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     #[test]
-    fn descriptor_exposes_worker_delivery_and_only_active_services()
-    -> Result<(), prost::DecodeError> {
+    fn descriptor_exposes_only_the_canonical_workflow_services() -> Result<(), prost::DecodeError> {
         let descriptor = FileDescriptorSet::decode(super::FILE_DESCRIPTOR_SET)?;
         let services = descriptor
             .file
             .iter()
-            .flat_map(|f| &f.service)
-            .filter_map(|s| s.name.as_deref())
-            .collect::<BTreeSet<_>>();
+            .flat_map(|file| &file.service)
+            .filter_map(|service| {
+                Some((
+                    service.name.as_deref()?,
+                    service
+                        .method
+                        .iter()
+                        .filter_map(|method| method.name.as_deref())
+                        .collect::<BTreeSet<_>>(),
+                ))
+            })
+            .collect::<BTreeMap<_, _>>();
         assert_eq!(
             services,
-            BTreeSet::from([
-                "AgentProfileService",
-                "CertificateService",
-                "ConnectionService",
-                "DevelopmentTaskService",
-                "ProjectConversationService",
-                "ProjectService",
-                "ProviderService",
-                "RepositoryService",
-                "RuntimeProfileService",
+            BTreeMap::from([
+                (
+                    "ProjectConversationService",
+                    BTreeSet::from([
+                        "CreateConversation",
+                        "GetConversationSnapshot",
+                        "ListConversationHistory",
+                        "SendMessage",
+                        "WatchConversation",
+                    ]),
+                ),
+                (
+                    "ProjectService",
+                    BTreeSet::from(["CreateProject", "CreateWorkspace"]),
+                ),
             ])
         );
-        let tasks = descriptor
-            .file
-            .iter()
-            .flat_map(|f| &f.service)
-            .find(|s| s.name.as_deref() == Some("DevelopmentTaskService"));
-        let Some(tasks) = tasks else {
-            panic!("task service is required")
-        };
-        let methods = tasks
-            .method
-            .iter()
-            .filter_map(|m| m.name.as_deref())
-            .collect::<BTreeSet<_>>();
-        assert!(methods.contains("RetryTaskPublication"));
-        assert!(methods.contains("WatchDevelopmentTask"));
-        Ok(())
-    }
-
-    #[test]
-    fn unknown_quality_measurements_survive_round_trip() -> Result<(), prost::DecodeError> {
-        let quality = v1::QualityResult {
-            outcome: v1::QualityOutcome::Unavailable as i32,
-            findings: vec!["Full check could not execute".into()],
-            ..Default::default()
-        };
-        let decoded = v1::QualityResult::decode(quality.encode_to_vec().as_slice())?;
-        assert_eq!(decoded.completed_targets, None);
-        assert_eq!(decoded.evidence, None);
-        assert_eq!(decoded, quality);
         Ok(())
     }
 }

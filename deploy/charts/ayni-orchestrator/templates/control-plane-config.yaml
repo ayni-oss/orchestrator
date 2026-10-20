@@ -1,6 +1,9 @@
 {{- if .Values.enabled }}
-{{- if and .Values.outbox.consumerEnabled (not .Values.outbox.natsUrl) }}
-{{- fail "outbox.consumerEnabled requires trusted local outbox transport" }}
+{{- if eq .Values.workflowPostgres.migratorSecretName .Values.workflowPostgres.runtimeSecretName }}
+{{- fail "workflowPostgres migrator and runtime Secret names must differ" }}
+{{- end }}
+{{- if eq (int .Values.controlPlane.httpPort) (int .Values.controlPlane.trustedGrpcPort) }}
+{{- fail "controlPlane HTTP and trusted gRPC ports must differ" }}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap
@@ -8,25 +11,13 @@ metadata:
   name: control-plane-config
   labels:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: ayni-orchestrator-control-plane
 data:
-  ORCHESTRATOR_VERIFICATION_CONSUMER_ENABLED: {{ .Values.outbox.consumerEnabled | quote }}
-  {{- if .Values.outbox.natsUrl }}
-  ORCHESTRATOR_OUTBOX_NATS_URL: {{ .Values.outbox.natsUrl | quote }}
-  ORCHESTRATOR_OUTBOX_LOCAL_DEVELOPMENT: {{ .Values.outbox.localDevelopment | quote }}
-  {{- end }}
-  ORCHESTRATOR_BIND_ADDRESS: 0.0.0.0:8080
-  ORCHESTRATOR_GRPC_BIND_ADDRESS: 127.0.0.1:50051
-  ORCHESTRATOR_DATABASE_PATH: /data/orchestrator.sqlite
-  ORCHESTRATOR_ADMIN_CERTIFICATES: {{ .Values.connections.adminCertificates | toJson | quote }}
-  ORCHESTRATOR_ADMIN_REGISTRY_CONNECTIONS: {{ .Values.connections.adminRegistries | toJson | quote }}
-  ORCHESTRATOR_CONNECTION_NAMESPACE: {{ .Release.Namespace | quote }}
-  ORCHESTRATOR_GITHUB_APP_SECRET_NAME: {{ .Values.connections.githubAppSecretName | quote }}
-  ORCHESTRATOR_CONNECTION_TEST_IMAGE: {{ .Values.connections.testImage | quote }}
-  ORCHESTRATOR_MAX_ATTEMPTS: {{ .Values.controlPlane.maxAttempts | quote }}
-  {{- if .Values.customClients.enabled }}
-  ORCHESTRATOR_CUSTOM_GRPC_BIND_ADDRESS: 0.0.0.0:50052
-  ORCHESTRATOR_CUSTOM_GRPC_TLS_CERTIFICATE_PATH: /run/secrets/custom-grpc/tls.crt
-  ORCHESTRATOR_CUSTOM_GRPC_TLS_PRIVATE_KEY_PATH: /run/secrets/custom-grpc/tls.key
-  ORCHESTRATOR_CUSTOM_GRPC_CLIENTS_PATH: /run/secrets/custom-grpc/clients.json
-  {{- end }}
+  ORCHESTRATOR_HTTP_BIND_ADDRESS: "0.0.0.0:{{ .Values.controlPlane.httpPort }}"
+  # The canonical private-v1 workflow API is pod-local by design. Operators
+  # reach it only through an explicit pod port-forward for diagnostics.
+  ORCHESTRATOR_GRPC_BIND_ADDRESS: "127.0.0.1:{{ .Values.controlPlane.trustedGrpcPort }}"
+  ORCHESTRATOR_WORKFLOW_MIGRATION_DATABASE_URL_PATH: /var/run/secrets/ayni/workflow-postgres-migrator/url
+  ORCHESTRATOR_WORKFLOW_DATABASE_URL_PATH: /var/run/secrets/ayni/workflow-postgres-runtime/url
+  ORCHESTRATOR_WORKFLOW_DATABASE_ROLE: {{ .Values.workflowPostgres.runtimeRoleName | quote }}
 {{- end }}

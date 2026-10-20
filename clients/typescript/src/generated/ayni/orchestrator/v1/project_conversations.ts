@@ -20,1453 +20,101 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
-import { Timestamp } from "../../../google/protobuf/timestamp";
-import { FrozenAgentProfile } from "./agent_profiles";
 import {
-  DevelopmentAttemptState,
-  developmentAttemptStateFromJSON,
-  developmentAttemptStateToJSON,
-  DevelopmentTaskRequest,
-  FrozenProviderCredentials,
-  FrozenRuntime,
-  ProviderTokenUsage,
-  PullRequestReceipt,
-  TaskOrigin,
-  WorkerProgress,
-  WorkerResult,
-} from "./development_tasks";
+  CommandReceipt,
+  Conversation,
+  ConversationHistoryRecord,
+  ConversationSnapshot,
+  ConversationUpdate,
+  ConversationWatchHeartbeat,
+} from "./workflow";
 
-export interface ProjectConversation {
-  id: string;
+export interface CreateConversationRequest {
+  idempotencyKey: string;
+  workspaceId: string;
   projectId: string;
   title: string;
-  repositoryConnectionIds: string[];
-  messages: ProjectMessage[];
-  runs: ProjectAgentRun[];
-  proposals: ProjectTaskProposal[];
-  updateCursor: string;
-  createdAt?: Date | undefined;
-  plan?: ProjectPlan | undefined;
-  plannerIdleTimeoutSeconds?: number | undefined;
-  effectivePlannerIdleTimeoutSeconds: number;
-  plannerSession?:
-    | ProjectPlannerSession
-    | undefined;
-  /** Latest accepted state per execution attempt; older evidence stays in history. */
-  workerUpdates: ProjectWorkerUpdate[];
 }
 
-export interface ProjectMessage {
-  id: string;
-  role: string;
-  content: string;
-  createdAt?: Date | undefined;
-  runId: string;
+export interface CreateConversationResponse {
+  conversation?: Conversation | undefined;
+  receipt?: CommandReceipt | undefined;
 }
 
-export interface ProjectAgentRun {
-  id: string;
-  state: string;
-  model: string;
-  connectionId: string;
-  credentialRevision: string;
-  modelCalls: number;
-  failure: string;
-  createdAt?: Date | undefined;
-  providerCredentials?: FrozenProviderCredentials | undefined;
-  purpose: string;
-  tokenUsage?: ProviderTokenUsage | undefined;
-  sessionId: string;
-  sessionGeneration: string;
-  sessionTurnSequence: string;
-  sessionDeadlineAt?: Date | undefined;
-  sessionManaged: boolean;
-  plannerProfile?: FrozenAgentProfile | undefined;
-  workerProfile?: FrozenAgentProfile | undefined;
-}
-
-export interface ProjectTaskProposal {
-  id: string;
-  runId: string;
-  state: string;
-  request?: DevelopmentTaskRequest | undefined;
-  taskId: string;
-  attemptId: string;
-  failure: string;
-  /** create_task, cancel_task, retry_task, retry_publication. */
-  action: string;
-  targetTaskId: string;
-  researchedRuntime?: FrozenRuntime | undefined;
-}
-
-export interface CreateProjectConversationRequest {
+export interface SendMessageRequest {
   idempotencyKey: string;
+  workspaceId: string;
   projectId: string;
-  title: string;
-  repositoryConnectionIds: string[];
-  plannerIdleTimeoutSeconds?: number | undefined;
-}
-
-export interface WatchProjectConversationResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-export interface CreateProjectConversationResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-export interface GetProjectConversationResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-export interface SendProjectMessageResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-export interface DecideProjectProposalResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-export interface ListProjectConversationsRequest {
-  projectId: string;
-}
-
-export interface ListProjectConversationsResponse {
-  conversations: ProjectConversation[];
-}
-
-export interface GetProjectConversationRequest {
-  conversationId: string;
-}
-
-export interface SendProjectMessageRequest {
-  idempotencyKey: string;
   conversationId: string;
   content: string;
 }
 
-export interface DecideProjectProposalRequest {
-  idempotencyKey: string;
-  conversationId: string;
-  proposalId: string;
-  /** approve, reject, revise. Revisions are supplied as a new user message. */
-  decision: string;
+export interface SendMessageResponse {
+  receipt?: CommandReceipt | undefined;
 }
 
-export interface WatchProjectConversationRequest {
-  conversationId: string;
-  afterCursor: string;
-}
-
-/**
- * Stable identity with append-only research snapshots. Approval admits the entire
- * reviewed version; lifecycle actions remain separate proposal confirmations.
- */
-export interface ProjectPlan {
-  id: string;
-  versions: ProjectPlanVersion[];
-}
-
-export interface ProjectPlanVersion {
-  version: string;
-  runId: string;
-  state: string;
-  findings: string;
-  scope: string;
-  acceptanceCriteria: string[];
-  proposalIds: string[];
-  /** Descriptive research only; this grants no environment change authority. */
-  dependencyEnvironmentImpact: string;
-  createdAt?: Date | undefined;
-  failure: string;
-}
-
-export interface DecideProjectPlanRequest {
-  idempotencyKey: string;
-  conversationId: string;
-  planId: string;
-  version: string;
-  /** approve, reject, revise. Revisions are supplied as a new user message. */
-  decision: string;
-}
-
-export interface DecideProjectPlanResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-/** Archive records are immutable safe projections, scoped to one conversation. */
-export interface ProjectContextRecord {
-  sequence: string;
-  id: string;
-  kind: string;
-  sourceId: string;
-  repositoryId: string;
-  role: string;
-  content: string;
-}
-
-export interface ProjectConversationSummary {
-  version: string;
-  sourceWatermark: string;
-  content: string;
-  sourceRecordIds: string[];
-}
-
-export interface GetProjectConversationContextRequest {
+export interface GetConversationSnapshotRequest {
+  workspaceId: string;
   projectId: string;
   conversationId: string;
 }
 
-export interface GetProjectConversationContextResponse {
-  summary?: ProjectConversationSummary | undefined;
-  sourceWatermark: string;
-  archiveRecordCount: string;
-  capacityRecordLimit: string;
-  recentMessageLimit: number;
+export interface GetConversationSnapshotResponse {
+  snapshot?: ConversationSnapshot | undefined;
 }
 
-export interface ListProjectConversationHistoryRequest {
+export interface ListConversationHistoryRequest {
+  workspaceId: string;
   projectId: string;
   conversationId: string;
+  snapshotId: string;
   beforeSequence: string;
-  snapshotSequence: string;
-  query: string;
   limit: number;
 }
 
-export interface ListProjectConversationHistoryResponse {
-  records: ProjectContextRecord[];
-  snapshotSequence: string;
+export interface ListConversationHistoryResponse {
+  records: ConversationHistoryRecord[];
+  snapshotId: string;
   nextBeforeSequence: string;
   hasMore: boolean;
-  archiveRecordCount: string;
 }
 
-/** Logical lifecycle only: credential and Kubernetes identities remain private. */
-export interface ProjectPlannerSession {
-  sessionId: string;
-  generation: string;
-  state: string;
-  lastActivityAt?: Date | undefined;
-  idleExpiresAt?: Date | undefined;
-  activeRunId: string;
-}
-
-export interface UpdateProjectConversationSettingsRequest {
-  idempotencyKey: string;
+export interface WatchConversationRequest {
+  workspaceId: string;
   projectId: string;
   conversationId: string;
-  expectedUpdateCursor: string;
-  plannerIdleTimeoutSeconds?: number | undefined;
-  inheritWorkspaceTimeout: boolean;
+  afterCursor?: string | undefined;
 }
 
-export interface UpdateProjectConversationSettingsResponse {
-  conversation?: ProjectConversation | undefined;
+export interface WatchConversationResponse {
+  frame?: { $case: "snapshot"; snapshot: ConversationSnapshot } | { $case: "update"; update: ConversationUpdate } | {
+    $case: "heartbeat";
+    heartbeat: ConversationWatchHeartbeat;
+  } | undefined;
 }
 
-export interface CancelProjectAgentRunRequest {
-  idempotencyKey: string;
-  projectId: string;
-  conversationId: string;
-  runId: string;
+function createBaseCreateConversationRequest(): CreateConversationRequest {
+  return { idempotencyKey: "", workspaceId: "", projectId: "", title: "" };
 }
 
-export interface CancelProjectAgentRunResponse {
-  conversation?: ProjectConversation | undefined;
-}
-
-/** Derived from retained, accepted attempts. Model prose is never an outcome source. */
-export interface ProjectWorkerUpdate {
-  origin?: TaskOrigin | undefined;
-  taskId: string;
-  attemptId: string;
-  attemptNumber: number;
-  resourceVersion: string;
-  state: DevelopmentAttemptState;
-  requestedInput?: string | undefined;
-  progress?: WorkerProgress | undefined;
-  result?: WorkerResult | undefined;
-  pullRequest?: PullRequestReceipt | undefined;
-  publicationOnly: boolean;
-  failure: string;
-  updatedAt?: Date | undefined;
-}
-
-function createBaseProjectConversation(): ProjectConversation {
-  return {
-    id: "",
-    projectId: "",
-    title: "",
-    repositoryConnectionIds: [],
-    messages: [],
-    runs: [],
-    proposals: [],
-    updateCursor: "0",
-    createdAt: undefined,
-    plan: undefined,
-    plannerIdleTimeoutSeconds: undefined,
-    effectivePlannerIdleTimeoutSeconds: 0,
-    plannerSession: undefined,
-    workerUpdates: [],
-  };
-}
-
-export const ProjectConversation: MessageFns<ProjectConversation> = {
-  encode(message: ProjectConversation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.projectId !== "") {
-      writer.uint32(18).string(message.projectId);
-    }
-    if (message.title !== "") {
-      writer.uint32(26).string(message.title);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(34).string(v!);
-    }
-    for (const v of message.messages) {
-      ProjectMessage.encode(v!, writer.uint32(42).fork()).join();
-    }
-    for (const v of message.runs) {
-      ProjectAgentRun.encode(v!, writer.uint32(50).fork()).join();
-    }
-    for (const v of message.proposals) {
-      ProjectTaskProposal.encode(v!, writer.uint32(58).fork()).join();
-    }
-    if (message.updateCursor !== "0") {
-      writer.uint32(64).uint64(message.updateCursor);
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
-    }
-    if (message.plan !== undefined) {
-      ProjectPlan.encode(message.plan, writer.uint32(82).fork()).join();
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      writer.uint32(88).uint32(message.plannerIdleTimeoutSeconds);
-    }
-    if (message.effectivePlannerIdleTimeoutSeconds !== 0) {
-      writer.uint32(96).uint32(message.effectivePlannerIdleTimeoutSeconds);
-    }
-    if (message.plannerSession !== undefined) {
-      ProjectPlannerSession.encode(message.plannerSession, writer.uint32(106).fork()).join();
-    }
-    for (const v of message.workerUpdates) {
-      ProjectWorkerUpdate.encode(v!, writer.uint32(114).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectConversation {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectConversation();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.projectId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.title = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.messages.push(ProjectMessage.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.runs.push(ProjectAgentRun.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.proposals.push(ProjectTaskProposal.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 8: {
-            if (tag !== 64) {
-              break;
-            }
-
-            message.updateCursor = reader.uint64().toString();
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 10: {
-            if (tag !== 82) {
-              break;
-            }
-
-            message.plan = ProjectPlan.decode(reader, reader.uint32());
-            continue;
-          }
-          case 11: {
-            if (tag !== 88) {
-              break;
-            }
-
-            message.plannerIdleTimeoutSeconds = reader.uint32();
-            continue;
-          }
-          case 12: {
-            if (tag !== 96) {
-              break;
-            }
-
-            message.effectivePlannerIdleTimeoutSeconds = reader.uint32();
-            continue;
-          }
-          case 13: {
-            if (tag !== 106) {
-              break;
-            }
-
-            message.plannerSession = ProjectPlannerSession.decode(reader, reader.uint32());
-            continue;
-          }
-          case 14: {
-            if (tag !== 114) {
-              break;
-            }
-
-            message.workerUpdates.push(ProjectWorkerUpdate.decode(reader, reader.uint32()));
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectConversation {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      projectId: isSet(object.projectId)
-        ? globalThis.String(object.projectId)
-        : isSet(object.project_id)
-        ? globalThis.String(object.project_id)
-        : "",
-      title: isSet(object.title) ? globalThis.String(object.title) : "",
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
-      messages: globalThis.Array.isArray(object?.messages)
-        ? object.messages.map((e: any) => ProjectMessage.fromJSON(e))
-        : [],
-      runs: globalThis.Array.isArray(object?.runs)
-        ? object.runs.map((e: any) => ProjectAgentRun.fromJSON(e))
-        : [],
-      proposals: globalThis.Array.isArray(object?.proposals)
-        ? object.proposals.map((e: any) => ProjectTaskProposal.fromJSON(e))
-        : [],
-      updateCursor: isSet(object.updateCursor)
-        ? globalThis.String(object.updateCursor)
-        : isSet(object.update_cursor)
-        ? globalThis.String(object.update_cursor)
-        : "0",
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      plan: isSet(object.plan) ? ProjectPlan.fromJSON(object.plan) : undefined,
-      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
-        : isSet(object.planner_idle_timeout_seconds)
-        ? globalThis.Number(object.planner_idle_timeout_seconds)
-        : undefined,
-      effectivePlannerIdleTimeoutSeconds: isSet(object.effectivePlannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.effectivePlannerIdleTimeoutSeconds)
-        : isSet(object.effective_planner_idle_timeout_seconds)
-        ? globalThis.Number(object.effective_planner_idle_timeout_seconds)
-        : 0,
-      plannerSession: isSet(object.plannerSession)
-        ? ProjectPlannerSession.fromJSON(object.plannerSession)
-        : isSet(object.planner_session)
-        ? ProjectPlannerSession.fromJSON(object.planner_session)
-        : undefined,
-      workerUpdates: globalThis.Array.isArray(object?.workerUpdates)
-        ? object.workerUpdates.map((e: any) => ProjectWorkerUpdate.fromJSON(e))
-        : globalThis.Array.isArray(object?.worker_updates)
-        ? object.worker_updates.map((e: any) => ProjectWorkerUpdate.fromJSON(e))
-        : [],
-    };
-  },
-
-  toJSON(message: ProjectConversation): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.projectId !== "") {
-      obj.projectId = message.projectId;
-    }
-    if (message.title !== "") {
-      obj.title = message.title;
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
-    if (message.messages?.length) {
-      obj.messages = message.messages.map((e) => ProjectMessage.toJSON(e));
-    }
-    if (message.runs?.length) {
-      obj.runs = message.runs.map((e) => ProjectAgentRun.toJSON(e));
-    }
-    if (message.proposals?.length) {
-      obj.proposals = message.proposals.map((e) => ProjectTaskProposal.toJSON(e));
-    }
-    if (message.updateCursor !== "0") {
-      obj.updateCursor = message.updateCursor;
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.plan !== undefined) {
-      obj.plan = ProjectPlan.toJSON(message.plan);
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
-    }
-    if (message.effectivePlannerIdleTimeoutSeconds !== 0) {
-      obj.effectivePlannerIdleTimeoutSeconds = Math.round(message.effectivePlannerIdleTimeoutSeconds);
-    }
-    if (message.plannerSession !== undefined) {
-      obj.plannerSession = ProjectPlannerSession.toJSON(message.plannerSession);
-    }
-    if (message.workerUpdates?.length) {
-      obj.workerUpdates = message.workerUpdates.map((e) => ProjectWorkerUpdate.toJSON(e));
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectConversation>): ProjectConversation {
-    return ProjectConversation.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectConversation>): ProjectConversation {
-    const message = createBaseProjectConversation();
-    message.id = object.id ?? "";
-    message.projectId = object.projectId ?? "";
-    message.title = object.title ?? "";
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
-    message.messages = object.messages?.map((e) => ProjectMessage.fromPartial(e)) || [];
-    message.runs = object.runs?.map((e) => ProjectAgentRun.fromPartial(e)) || [];
-    message.proposals = object.proposals?.map((e) => ProjectTaskProposal.fromPartial(e)) || [];
-    message.updateCursor = object.updateCursor ?? "0";
-    message.createdAt = object.createdAt ?? undefined;
-    message.plan = (object.plan !== undefined && object.plan !== null)
-      ? ProjectPlan.fromPartial(object.plan)
-      : undefined;
-    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
-    message.effectivePlannerIdleTimeoutSeconds = object.effectivePlannerIdleTimeoutSeconds ?? 0;
-    message.plannerSession = (object.plannerSession !== undefined && object.plannerSession !== null)
-      ? ProjectPlannerSession.fromPartial(object.plannerSession)
-      : undefined;
-    message.workerUpdates = object.workerUpdates?.map((e) => ProjectWorkerUpdate.fromPartial(e)) || [];
-    return message;
-  },
-};
-
-function createBaseProjectMessage(): ProjectMessage {
-  return { id: "", role: "", content: "", createdAt: undefined, runId: "" };
-}
-
-export const ProjectMessage: MessageFns<ProjectMessage> = {
-  encode(message: ProjectMessage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.role !== "") {
-      writer.uint32(18).string(message.role);
-    }
-    if (message.content !== "") {
-      writer.uint32(26).string(message.content);
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(34).fork()).join();
-    }
-    if (message.runId !== "") {
-      writer.uint32(42).string(message.runId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectMessage {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectMessage();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.role = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.content = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.runId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectMessage {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      role: isSet(object.role) ? globalThis.String(object.role) : "",
-      content: isSet(object.content) ? globalThis.String(object.content) : "",
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      runId: isSet(object.runId)
-        ? globalThis.String(object.runId)
-        : isSet(object.run_id)
-        ? globalThis.String(object.run_id)
-        : "",
-    };
-  },
-
-  toJSON(message: ProjectMessage): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.role !== "") {
-      obj.role = message.role;
-    }
-    if (message.content !== "") {
-      obj.content = message.content;
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.runId !== "") {
-      obj.runId = message.runId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectMessage>): ProjectMessage {
-    return ProjectMessage.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectMessage>): ProjectMessage {
-    const message = createBaseProjectMessage();
-    message.id = object.id ?? "";
-    message.role = object.role ?? "";
-    message.content = object.content ?? "";
-    message.createdAt = object.createdAt ?? undefined;
-    message.runId = object.runId ?? "";
-    return message;
-  },
-};
-
-function createBaseProjectAgentRun(): ProjectAgentRun {
-  return {
-    id: "",
-    state: "",
-    model: "",
-    connectionId: "",
-    credentialRevision: "",
-    modelCalls: 0,
-    failure: "",
-    createdAt: undefined,
-    providerCredentials: undefined,
-    purpose: "",
-    tokenUsage: undefined,
-    sessionId: "",
-    sessionGeneration: "0",
-    sessionTurnSequence: "0",
-    sessionDeadlineAt: undefined,
-    sessionManaged: false,
-    plannerProfile: undefined,
-    workerProfile: undefined,
-  };
-}
-
-export const ProjectAgentRun: MessageFns<ProjectAgentRun> = {
-  encode(message: ProjectAgentRun, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.state !== "") {
-      writer.uint32(18).string(message.state);
-    }
-    if (message.model !== "") {
-      writer.uint32(26).string(message.model);
-    }
-    if (message.connectionId !== "") {
-      writer.uint32(34).string(message.connectionId);
-    }
-    if (message.credentialRevision !== "") {
-      writer.uint32(42).string(message.credentialRevision);
-    }
-    if (message.modelCalls !== 0) {
-      writer.uint32(48).uint32(message.modelCalls);
-    }
-    if (message.failure !== "") {
-      writer.uint32(58).string(message.failure);
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(66).fork()).join();
-    }
-    if (message.providerCredentials !== undefined) {
-      FrozenProviderCredentials.encode(message.providerCredentials, writer.uint32(74).fork()).join();
-    }
-    if (message.purpose !== "") {
-      writer.uint32(82).string(message.purpose);
-    }
-    if (message.tokenUsage !== undefined) {
-      ProviderTokenUsage.encode(message.tokenUsage, writer.uint32(90).fork()).join();
-    }
-    if (message.sessionId !== "") {
-      writer.uint32(98).string(message.sessionId);
-    }
-    if (message.sessionGeneration !== "0") {
-      writer.uint32(104).uint64(message.sessionGeneration);
-    }
-    if (message.sessionTurnSequence !== "0") {
-      writer.uint32(112).uint64(message.sessionTurnSequence);
-    }
-    if (message.sessionDeadlineAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.sessionDeadlineAt), writer.uint32(122).fork()).join();
-    }
-    if (message.sessionManaged !== false) {
-      writer.uint32(128).bool(message.sessionManaged);
-    }
-    if (message.plannerProfile !== undefined) {
-      FrozenAgentProfile.encode(message.plannerProfile, writer.uint32(138).fork()).join();
-    }
-    if (message.workerProfile !== undefined) {
-      FrozenAgentProfile.encode(message.workerProfile, writer.uint32(146).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectAgentRun {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectAgentRun();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.state = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.model = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.connectionId = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.credentialRevision = reader.string();
-            continue;
-          }
-          case 6: {
-            if (tag !== 48) {
-              break;
-            }
-
-            message.modelCalls = reader.uint32();
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.failure = reader.string();
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.providerCredentials = FrozenProviderCredentials.decode(reader, reader.uint32());
-            continue;
-          }
-          case 10: {
-            if (tag !== 82) {
-              break;
-            }
-
-            message.purpose = reader.string();
-            continue;
-          }
-          case 11: {
-            if (tag !== 90) {
-              break;
-            }
-
-            message.tokenUsage = ProviderTokenUsage.decode(reader, reader.uint32());
-            continue;
-          }
-          case 12: {
-            if (tag !== 98) {
-              break;
-            }
-
-            message.sessionId = reader.string();
-            continue;
-          }
-          case 13: {
-            if (tag !== 104) {
-              break;
-            }
-
-            message.sessionGeneration = reader.uint64().toString();
-            continue;
-          }
-          case 14: {
-            if (tag !== 112) {
-              break;
-            }
-
-            message.sessionTurnSequence = reader.uint64().toString();
-            continue;
-          }
-          case 15: {
-            if (tag !== 122) {
-              break;
-            }
-
-            message.sessionDeadlineAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 16: {
-            if (tag !== 128) {
-              break;
-            }
-
-            message.sessionManaged = reader.bool();
-            continue;
-          }
-          case 17: {
-            if (tag !== 138) {
-              break;
-            }
-
-            message.plannerProfile = FrozenAgentProfile.decode(reader, reader.uint32());
-            continue;
-          }
-          case 18: {
-            if (tag !== 146) {
-              break;
-            }
-
-            message.workerProfile = FrozenAgentProfile.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectAgentRun {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      state: isSet(object.state) ? globalThis.String(object.state) : "",
-      model: isSet(object.model) ? globalThis.String(object.model) : "",
-      connectionId: isSet(object.connectionId)
-        ? globalThis.String(object.connectionId)
-        : isSet(object.connection_id)
-        ? globalThis.String(object.connection_id)
-        : "",
-      credentialRevision: isSet(object.credentialRevision)
-        ? globalThis.String(object.credentialRevision)
-        : isSet(object.credential_revision)
-        ? globalThis.String(object.credential_revision)
-        : "",
-      modelCalls: isSet(object.modelCalls)
-        ? globalThis.Number(object.modelCalls)
-        : isSet(object.model_calls)
-        ? globalThis.Number(object.model_calls)
-        : 0,
-      failure: isSet(object.failure) ? globalThis.String(object.failure) : "",
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      providerCredentials: isSet(object.providerCredentials)
-        ? FrozenProviderCredentials.fromJSON(object.providerCredentials)
-        : isSet(object.provider_credentials)
-        ? FrozenProviderCredentials.fromJSON(object.provider_credentials)
-        : undefined,
-      purpose: isSet(object.purpose) ? globalThis.String(object.purpose) : "",
-      tokenUsage: isSet(object.tokenUsage)
-        ? ProviderTokenUsage.fromJSON(object.tokenUsage)
-        : isSet(object.token_usage)
-        ? ProviderTokenUsage.fromJSON(object.token_usage)
-        : undefined,
-      sessionId: isSet(object.sessionId)
-        ? globalThis.String(object.sessionId)
-        : isSet(object.session_id)
-        ? globalThis.String(object.session_id)
-        : "",
-      sessionGeneration: isSet(object.sessionGeneration)
-        ? globalThis.String(object.sessionGeneration)
-        : isSet(object.session_generation)
-        ? globalThis.String(object.session_generation)
-        : "0",
-      sessionTurnSequence: isSet(object.sessionTurnSequence)
-        ? globalThis.String(object.sessionTurnSequence)
-        : isSet(object.session_turn_sequence)
-        ? globalThis.String(object.session_turn_sequence)
-        : "0",
-      sessionDeadlineAt: isSet(object.sessionDeadlineAt)
-        ? fromJsonTimestamp(object.sessionDeadlineAt)
-        : isSet(object.session_deadline_at)
-        ? fromJsonTimestamp(object.session_deadline_at)
-        : undefined,
-      sessionManaged: isSet(object.sessionManaged)
-        ? globalThis.Boolean(object.sessionManaged)
-        : isSet(object.session_managed)
-        ? globalThis.Boolean(object.session_managed)
-        : false,
-      plannerProfile: isSet(object.plannerProfile)
-        ? FrozenAgentProfile.fromJSON(object.plannerProfile)
-        : isSet(object.planner_profile)
-        ? FrozenAgentProfile.fromJSON(object.planner_profile)
-        : undefined,
-      workerProfile: isSet(object.workerProfile)
-        ? FrozenAgentProfile.fromJSON(object.workerProfile)
-        : isSet(object.worker_profile)
-        ? FrozenAgentProfile.fromJSON(object.worker_profile)
-        : undefined,
-    };
-  },
-
-  toJSON(message: ProjectAgentRun): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.state !== "") {
-      obj.state = message.state;
-    }
-    if (message.model !== "") {
-      obj.model = message.model;
-    }
-    if (message.connectionId !== "") {
-      obj.connectionId = message.connectionId;
-    }
-    if (message.credentialRevision !== "") {
-      obj.credentialRevision = message.credentialRevision;
-    }
-    if (message.modelCalls !== 0) {
-      obj.modelCalls = Math.round(message.modelCalls);
-    }
-    if (message.failure !== "") {
-      obj.failure = message.failure;
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.providerCredentials !== undefined) {
-      obj.providerCredentials = FrozenProviderCredentials.toJSON(message.providerCredentials);
-    }
-    if (message.purpose !== "") {
-      obj.purpose = message.purpose;
-    }
-    if (message.tokenUsage !== undefined) {
-      obj.tokenUsage = ProviderTokenUsage.toJSON(message.tokenUsage);
-    }
-    if (message.sessionId !== "") {
-      obj.sessionId = message.sessionId;
-    }
-    if (message.sessionGeneration !== "0") {
-      obj.sessionGeneration = message.sessionGeneration;
-    }
-    if (message.sessionTurnSequence !== "0") {
-      obj.sessionTurnSequence = message.sessionTurnSequence;
-    }
-    if (message.sessionDeadlineAt !== undefined) {
-      obj.sessionDeadlineAt = message.sessionDeadlineAt.toISOString();
-    }
-    if (message.sessionManaged !== false) {
-      obj.sessionManaged = message.sessionManaged;
-    }
-    if (message.plannerProfile !== undefined) {
-      obj.plannerProfile = FrozenAgentProfile.toJSON(message.plannerProfile);
-    }
-    if (message.workerProfile !== undefined) {
-      obj.workerProfile = FrozenAgentProfile.toJSON(message.workerProfile);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectAgentRun>): ProjectAgentRun {
-    return ProjectAgentRun.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectAgentRun>): ProjectAgentRun {
-    const message = createBaseProjectAgentRun();
-    message.id = object.id ?? "";
-    message.state = object.state ?? "";
-    message.model = object.model ?? "";
-    message.connectionId = object.connectionId ?? "";
-    message.credentialRevision = object.credentialRevision ?? "";
-    message.modelCalls = object.modelCalls ?? 0;
-    message.failure = object.failure ?? "";
-    message.createdAt = object.createdAt ?? undefined;
-    message.providerCredentials = (object.providerCredentials !== undefined && object.providerCredentials !== null)
-      ? FrozenProviderCredentials.fromPartial(object.providerCredentials)
-      : undefined;
-    message.purpose = object.purpose ?? "";
-    message.tokenUsage = (object.tokenUsage !== undefined && object.tokenUsage !== null)
-      ? ProviderTokenUsage.fromPartial(object.tokenUsage)
-      : undefined;
-    message.sessionId = object.sessionId ?? "";
-    message.sessionGeneration = object.sessionGeneration ?? "0";
-    message.sessionTurnSequence = object.sessionTurnSequence ?? "0";
-    message.sessionDeadlineAt = object.sessionDeadlineAt ?? undefined;
-    message.sessionManaged = object.sessionManaged ?? false;
-    message.plannerProfile = (object.plannerProfile !== undefined && object.plannerProfile !== null)
-      ? FrozenAgentProfile.fromPartial(object.plannerProfile)
-      : undefined;
-    message.workerProfile = (object.workerProfile !== undefined && object.workerProfile !== null)
-      ? FrozenAgentProfile.fromPartial(object.workerProfile)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseProjectTaskProposal(): ProjectTaskProposal {
-  return {
-    id: "",
-    runId: "",
-    state: "",
-    request: undefined,
-    taskId: "",
-    attemptId: "",
-    failure: "",
-    action: "",
-    targetTaskId: "",
-    researchedRuntime: undefined,
-  };
-}
-
-export const ProjectTaskProposal: MessageFns<ProjectTaskProposal> = {
-  encode(message: ProjectTaskProposal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.runId !== "") {
-      writer.uint32(18).string(message.runId);
-    }
-    if (message.state !== "") {
-      writer.uint32(26).string(message.state);
-    }
-    if (message.request !== undefined) {
-      DevelopmentTaskRequest.encode(message.request, writer.uint32(34).fork()).join();
-    }
-    if (message.taskId !== "") {
-      writer.uint32(42).string(message.taskId);
-    }
-    if (message.attemptId !== "") {
-      writer.uint32(50).string(message.attemptId);
-    }
-    if (message.failure !== "") {
-      writer.uint32(58).string(message.failure);
-    }
-    if (message.action !== "") {
-      writer.uint32(66).string(message.action);
-    }
-    if (message.targetTaskId !== "") {
-      writer.uint32(74).string(message.targetTaskId);
-    }
-    if (message.researchedRuntime !== undefined) {
-      FrozenRuntime.encode(message.researchedRuntime, writer.uint32(82).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectTaskProposal {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectTaskProposal();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.runId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.state = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.request = DevelopmentTaskRequest.decode(reader, reader.uint32());
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.taskId = reader.string();
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.attemptId = reader.string();
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.failure = reader.string();
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.action = reader.string();
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.targetTaskId = reader.string();
-            continue;
-          }
-          case 10: {
-            if (tag !== 82) {
-              break;
-            }
-
-            message.researchedRuntime = FrozenRuntime.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectTaskProposal {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      runId: isSet(object.runId)
-        ? globalThis.String(object.runId)
-        : isSet(object.run_id)
-        ? globalThis.String(object.run_id)
-        : "",
-      state: isSet(object.state) ? globalThis.String(object.state) : "",
-      request: isSet(object.request) ? DevelopmentTaskRequest.fromJSON(object.request) : undefined,
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
-        : "",
-      attemptId: isSet(object.attemptId)
-        ? globalThis.String(object.attemptId)
-        : isSet(object.attempt_id)
-        ? globalThis.String(object.attempt_id)
-        : "",
-      failure: isSet(object.failure) ? globalThis.String(object.failure) : "",
-      action: isSet(object.action) ? globalThis.String(object.action) : "",
-      targetTaskId: isSet(object.targetTaskId)
-        ? globalThis.String(object.targetTaskId)
-        : isSet(object.target_task_id)
-        ? globalThis.String(object.target_task_id)
-        : "",
-      researchedRuntime: isSet(object.researchedRuntime)
-        ? FrozenRuntime.fromJSON(object.researchedRuntime)
-        : isSet(object.researched_runtime)
-        ? FrozenRuntime.fromJSON(object.researched_runtime)
-        : undefined,
-    };
-  },
-
-  toJSON(message: ProjectTaskProposal): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.runId !== "") {
-      obj.runId = message.runId;
-    }
-    if (message.state !== "") {
-      obj.state = message.state;
-    }
-    if (message.request !== undefined) {
-      obj.request = DevelopmentTaskRequest.toJSON(message.request);
-    }
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
-    }
-    if (message.attemptId !== "") {
-      obj.attemptId = message.attemptId;
-    }
-    if (message.failure !== "") {
-      obj.failure = message.failure;
-    }
-    if (message.action !== "") {
-      obj.action = message.action;
-    }
-    if (message.targetTaskId !== "") {
-      obj.targetTaskId = message.targetTaskId;
-    }
-    if (message.researchedRuntime !== undefined) {
-      obj.researchedRuntime = FrozenRuntime.toJSON(message.researchedRuntime);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectTaskProposal>): ProjectTaskProposal {
-    return ProjectTaskProposal.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectTaskProposal>): ProjectTaskProposal {
-    const message = createBaseProjectTaskProposal();
-    message.id = object.id ?? "";
-    message.runId = object.runId ?? "";
-    message.state = object.state ?? "";
-    message.request = (object.request !== undefined && object.request !== null)
-      ? DevelopmentTaskRequest.fromPartial(object.request)
-      : undefined;
-    message.taskId = object.taskId ?? "";
-    message.attemptId = object.attemptId ?? "";
-    message.failure = object.failure ?? "";
-    message.action = object.action ?? "";
-    message.targetTaskId = object.targetTaskId ?? "";
-    message.researchedRuntime = (object.researchedRuntime !== undefined && object.researchedRuntime !== null)
-      ? FrozenRuntime.fromPartial(object.researchedRuntime)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseCreateProjectConversationRequest(): CreateProjectConversationRequest {
-  return {
-    idempotencyKey: "",
-    projectId: "",
-    title: "",
-    repositoryConnectionIds: [],
-    plannerIdleTimeoutSeconds: undefined,
-  };
-}
-
-export const CreateProjectConversationRequest: MessageFns<CreateProjectConversationRequest> = {
-  encode(message: CreateProjectConversationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const CreateConversationRequest: MessageFns<CreateConversationRequest> = {
+  encode(message: CreateConversationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.idempotencyKey !== "") {
       writer.uint32(10).string(message.idempotencyKey);
     }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
     if (message.projectId !== "") {
-      writer.uint32(18).string(message.projectId);
+      writer.uint32(26).string(message.projectId);
     }
     if (message.title !== "") {
-      writer.uint32(26).string(message.title);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(34).string(v!);
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      writer.uint32(40).uint32(message.plannerIdleTimeoutSeconds);
+      writer.uint32(34).string(message.title);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): CreateProjectConversationRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateConversationRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -1475,7 +123,7 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCreateProjectConversationRequest();
+      const message = createBaseCreateConversationRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -1492,7 +140,7 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
               break;
             }
 
-            message.projectId = reader.string();
+            message.workspaceId = reader.string();
             continue;
           }
           case 3: {
@@ -1500,7 +148,7 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
               break;
             }
 
-            message.title = reader.string();
+            message.projectId = reader.string();
             continue;
           }
           case 4: {
@@ -1508,15 +156,7 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
               break;
             }
 
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.plannerIdleTimeoutSeconds = reader.uint32();
+            message.title = reader.string();
             continue;
           }
         }
@@ -1531,12 +171,17 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
     }
   },
 
-  fromJSON(object: any): CreateProjectConversationRequest {
+  fromJSON(object: any): CreateConversationRequest {
     return {
       idempotencyKey: isSet(object.idempotencyKey)
         ? globalThis.String(object.idempotencyKey)
         : isSet(object.idempotency_key)
         ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
         : "",
       projectId: isSet(object.projectId)
         ? globalThis.String(object.projectId)
@@ -1544,23 +189,16 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
         ? globalThis.String(object.project_id)
         : "",
       title: isSet(object.title) ? globalThis.String(object.title) : "",
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
-      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
-        : isSet(object.planner_idle_timeout_seconds)
-        ? globalThis.Number(object.planner_idle_timeout_seconds)
-        : undefined,
     };
   },
 
-  toJSON(message: CreateProjectConversationRequest): unknown {
+  toJSON(message: CreateConversationRequest): unknown {
     const obj: any = {};
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
     }
     if (message.projectId !== "") {
       obj.projectId = message.projectId;
@@ -1568,42 +206,38 @@ export const CreateProjectConversationRequest: MessageFns<CreateProjectConversat
     if (message.title !== "") {
       obj.title = message.title;
     }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
-    }
     return obj;
   },
 
-  create(base?: DeepPartial<CreateProjectConversationRequest>): CreateProjectConversationRequest {
-    return CreateProjectConversationRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<CreateConversationRequest>): CreateConversationRequest {
+    return CreateConversationRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<CreateProjectConversationRequest>): CreateProjectConversationRequest {
-    const message = createBaseCreateProjectConversationRequest();
+  fromPartial(object: DeepPartial<CreateConversationRequest>): CreateConversationRequest {
+    const message = createBaseCreateConversationRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
     message.projectId = object.projectId ?? "";
     message.title = object.title ?? "";
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
-    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
     return message;
   },
 };
 
-function createBaseWatchProjectConversationResponse(): WatchProjectConversationResponse {
-  return { conversation: undefined };
+function createBaseCreateConversationResponse(): CreateConversationResponse {
+  return { conversation: undefined, receipt: undefined };
 }
 
-export const WatchProjectConversationResponse: MessageFns<WatchProjectConversationResponse> = {
-  encode(message: WatchProjectConversationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const CreateConversationResponse: MessageFns<CreateConversationResponse> = {
+  encode(message: CreateConversationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
+      Conversation.encode(message.conversation, writer.uint32(10).fork()).join();
+    }
+    if (message.receipt !== undefined) {
+      CommandReceipt.encode(message.receipt, writer.uint32(18).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): WatchProjectConversationResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateConversationResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -1612,7 +246,7 @@ export const WatchProjectConversationResponse: MessageFns<WatchProjectConversati
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseWatchProjectConversationResponse();
+      const message = createBaseCreateConversationResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -1621,7 +255,15 @@ export const WatchProjectConversationResponse: MessageFns<WatchProjectConversati
               break;
             }
 
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
+            message.conversation = Conversation.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.receipt = CommandReceipt.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -1636,319 +278,64 @@ export const WatchProjectConversationResponse: MessageFns<WatchProjectConversati
     }
   },
 
-  fromJSON(object: any): WatchProjectConversationResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
+  fromJSON(object: any): CreateConversationResponse {
+    return {
+      conversation: isSet(object.conversation) ? Conversation.fromJSON(object.conversation) : undefined,
+      receipt: isSet(object.receipt) ? CommandReceipt.fromJSON(object.receipt) : undefined,
+    };
   },
 
-  toJSON(message: WatchProjectConversationResponse): unknown {
+  toJSON(message: CreateConversationResponse): unknown {
     const obj: any = {};
     if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
+      obj.conversation = Conversation.toJSON(message.conversation);
+    }
+    if (message.receipt !== undefined) {
+      obj.receipt = CommandReceipt.toJSON(message.receipt);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<WatchProjectConversationResponse>): WatchProjectConversationResponse {
-    return WatchProjectConversationResponse.fromPartial(base ?? {});
+  create(base?: DeepPartial<CreateConversationResponse>): CreateConversationResponse {
+    return CreateConversationResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<WatchProjectConversationResponse>): WatchProjectConversationResponse {
-    const message = createBaseWatchProjectConversationResponse();
+  fromPartial(object: DeepPartial<CreateConversationResponse>): CreateConversationResponse {
+    const message = createBaseCreateConversationResponse();
     message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
+      ? Conversation.fromPartial(object.conversation)
+      : undefined;
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? CommandReceipt.fromPartial(object.receipt)
       : undefined;
     return message;
   },
 };
 
-function createBaseCreateProjectConversationResponse(): CreateProjectConversationResponse {
-  return { conversation: undefined };
+function createBaseSendMessageRequest(): SendMessageRequest {
+  return { idempotencyKey: "", workspaceId: "", projectId: "", conversationId: "", content: "" };
 }
 
-export const CreateProjectConversationResponse: MessageFns<CreateProjectConversationResponse> = {
-  encode(message: CreateProjectConversationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
+export const SendMessageRequest: MessageFns<SendMessageRequest> = {
+  encode(message: SendMessageRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
     }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): CreateProjectConversationResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
     }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCreateProjectConversationResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): CreateProjectConversationResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: CreateProjectConversationResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<CreateProjectConversationResponse>): CreateProjectConversationResponse {
-    return CreateProjectConversationResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<CreateProjectConversationResponse>): CreateProjectConversationResponse {
-    const message = createBaseCreateProjectConversationResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseGetProjectConversationResponse(): GetProjectConversationResponse {
-  return { conversation: undefined };
-}
-
-export const GetProjectConversationResponse: MessageFns<GetProjectConversationResponse> = {
-  encode(message: GetProjectConversationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetProjectConversationResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetProjectConversationResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetProjectConversationResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: GetProjectConversationResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetProjectConversationResponse>): GetProjectConversationResponse {
-    return GetProjectConversationResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetProjectConversationResponse>): GetProjectConversationResponse {
-    const message = createBaseGetProjectConversationResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseSendProjectMessageResponse(): SendProjectMessageResponse {
-  return { conversation: undefined };
-}
-
-export const SendProjectMessageResponse: MessageFns<SendProjectMessageResponse> = {
-  encode(message: SendProjectMessageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SendProjectMessageResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseSendProjectMessageResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): SendProjectMessageResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: SendProjectMessageResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<SendProjectMessageResponse>): SendProjectMessageResponse {
-    return SendProjectMessageResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<SendProjectMessageResponse>): SendProjectMessageResponse {
-    const message = createBaseSendProjectMessageResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseDecideProjectProposalResponse(): DecideProjectProposalResponse {
-  return { conversation: undefined };
-}
-
-export const DecideProjectProposalResponse: MessageFns<DecideProjectProposalResponse> = {
-  encode(message: DecideProjectProposalResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): DecideProjectProposalResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDecideProjectProposalResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): DecideProjectProposalResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: DecideProjectProposalResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<DecideProjectProposalResponse>): DecideProjectProposalResponse {
-    return DecideProjectProposalResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<DecideProjectProposalResponse>): DecideProjectProposalResponse {
-    const message = createBaseDecideProjectProposalResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseListProjectConversationsRequest(): ListProjectConversationsRequest {
-  return { projectId: "" };
-}
-
-export const ListProjectConversationsRequest: MessageFns<ListProjectConversationsRequest> = {
-  encode(message: ListProjectConversationsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.projectId !== "") {
-      writer.uint32(10).string(message.projectId);
+      writer.uint32(26).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(34).string(message.conversationId);
+    }
+    if (message.content !== "") {
+      writer.uint32(42).string(message.content);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectConversationsRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SendMessageRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -1957,18 +344,50 @@ export const ListProjectConversationsRequest: MessageFns<ListProjectConversation
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectConversationsRequest();
+      const message = createBaseSendMessageRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
           case 1: {
             if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
               break;
             }
 
             message.projectId = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.content = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1981,252 +400,23 @@ export const ListProjectConversationsRequest: MessageFns<ListProjectConversation
     }
   },
 
-  fromJSON(object: any): ListProjectConversationsRequest {
+  fromJSON(object: any): SendMessageRequest {
     return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
       projectId: isSet(object.projectId)
         ? globalThis.String(object.projectId)
         : isSet(object.project_id)
         ? globalThis.String(object.project_id)
         : "",
-    };
-  },
-
-  toJSON(message: ListProjectConversationsRequest): unknown {
-    const obj: any = {};
-    if (message.projectId !== "") {
-      obj.projectId = message.projectId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListProjectConversationsRequest>): ListProjectConversationsRequest {
-    return ListProjectConversationsRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListProjectConversationsRequest>): ListProjectConversationsRequest {
-    const message = createBaseListProjectConversationsRequest();
-    message.projectId = object.projectId ?? "";
-    return message;
-  },
-};
-
-function createBaseListProjectConversationsResponse(): ListProjectConversationsResponse {
-  return { conversations: [] };
-}
-
-export const ListProjectConversationsResponse: MessageFns<ListProjectConversationsResponse> = {
-  encode(message: ListProjectConversationsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.conversations) {
-      ProjectConversation.encode(v!, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectConversationsResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectConversationsResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversations.push(ProjectConversation.decode(reader, reader.uint32()));
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListProjectConversationsResponse {
-    return {
-      conversations: globalThis.Array.isArray(object?.conversations)
-        ? object.conversations.map((e: any) => ProjectConversation.fromJSON(e))
-        : [],
-    };
-  },
-
-  toJSON(message: ListProjectConversationsResponse): unknown {
-    const obj: any = {};
-    if (message.conversations?.length) {
-      obj.conversations = message.conversations.map((e) => ProjectConversation.toJSON(e));
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListProjectConversationsResponse>): ListProjectConversationsResponse {
-    return ListProjectConversationsResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListProjectConversationsResponse>): ListProjectConversationsResponse {
-    const message = createBaseListProjectConversationsResponse();
-    message.conversations = object.conversations?.map((e) => ProjectConversation.fromPartial(e)) || [];
-    return message;
-  },
-};
-
-function createBaseGetProjectConversationRequest(): GetProjectConversationRequest {
-  return { conversationId: "" };
-}
-
-export const GetProjectConversationRequest: MessageFns<GetProjectConversationRequest> = {
-  encode(message: GetProjectConversationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversationId !== "") {
-      writer.uint32(10).string(message.conversationId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetProjectConversationRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetProjectConversationRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversationId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetProjectConversationRequest {
-    return {
-      conversationId: isSet(object.conversationId)
-        ? globalThis.String(object.conversationId)
-        : isSet(object.conversation_id)
-        ? globalThis.String(object.conversation_id)
-        : "",
-    };
-  },
-
-  toJSON(message: GetProjectConversationRequest): unknown {
-    const obj: any = {};
-    if (message.conversationId !== "") {
-      obj.conversationId = message.conversationId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetProjectConversationRequest>): GetProjectConversationRequest {
-    return GetProjectConversationRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetProjectConversationRequest>): GetProjectConversationRequest {
-    const message = createBaseGetProjectConversationRequest();
-    message.conversationId = object.conversationId ?? "";
-    return message;
-  },
-};
-
-function createBaseSendProjectMessageRequest(): SendProjectMessageRequest {
-  return { idempotencyKey: "", conversationId: "", content: "" };
-}
-
-export const SendProjectMessageRequest: MessageFns<SendProjectMessageRequest> = {
-  encode(message: SendProjectMessageRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.conversationId !== "") {
-      writer.uint32(18).string(message.conversationId);
-    }
-    if (message.content !== "") {
-      writer.uint32(26).string(message.content);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): SendProjectMessageRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseSendProjectMessageRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.conversationId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.content = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): SendProjectMessageRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
       conversationId: isSet(object.conversationId)
         ? globalThis.String(object.conversationId)
         : isSet(object.conversation_id)
@@ -2236,10 +426,16 @@ export const SendProjectMessageRequest: MessageFns<SendProjectMessageRequest> = 
     };
   },
 
-  toJSON(message: SendProjectMessageRequest): unknown {
+  toJSON(message: SendMessageRequest): unknown {
     const obj: any = {};
     if (message.idempotencyKey !== "") {
       obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
     }
     if (message.conversationId !== "") {
       obj.conversationId = message.conversationId;
@@ -2250,40 +446,33 @@ export const SendProjectMessageRequest: MessageFns<SendProjectMessageRequest> = 
     return obj;
   },
 
-  create(base?: DeepPartial<SendProjectMessageRequest>): SendProjectMessageRequest {
-    return SendProjectMessageRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<SendMessageRequest>): SendMessageRequest {
+    return SendMessageRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<SendProjectMessageRequest>): SendProjectMessageRequest {
-    const message = createBaseSendProjectMessageRequest();
+  fromPartial(object: DeepPartial<SendMessageRequest>): SendMessageRequest {
+    const message = createBaseSendMessageRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
     message.conversationId = object.conversationId ?? "";
     message.content = object.content ?? "";
     return message;
   },
 };
 
-function createBaseDecideProjectProposalRequest(): DecideProjectProposalRequest {
-  return { idempotencyKey: "", conversationId: "", proposalId: "", decision: "" };
+function createBaseSendMessageResponse(): SendMessageResponse {
+  return { receipt: undefined };
 }
 
-export const DecideProjectProposalRequest: MessageFns<DecideProjectProposalRequest> = {
-  encode(message: DecideProjectProposalRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.conversationId !== "") {
-      writer.uint32(18).string(message.conversationId);
-    }
-    if (message.proposalId !== "") {
-      writer.uint32(26).string(message.proposalId);
-    }
-    if (message.decision !== "") {
-      writer.uint32(34).string(message.decision);
+export const SendMessageResponse: MessageFns<SendMessageResponse> = {
+  encode(message: SendMessageResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      CommandReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): DecideProjectProposalRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): SendMessageResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -2292,7 +481,7 @@ export const DecideProjectProposalRequest: MessageFns<DecideProjectProposalReque
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDecideProjectProposalRequest();
+      const message = createBaseSendMessageResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -2301,31 +490,7 @@ export const DecideProjectProposalRequest: MessageFns<DecideProjectProposalReque
               break;
             }
 
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.conversationId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.proposalId = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.decision = reader.string();
+            message.receipt = CommandReceipt.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -2340,1009 +505,49 @@ export const DecideProjectProposalRequest: MessageFns<DecideProjectProposalReque
     }
   },
 
-  fromJSON(object: any): DecideProjectProposalRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      conversationId: isSet(object.conversationId)
-        ? globalThis.String(object.conversationId)
-        : isSet(object.conversation_id)
-        ? globalThis.String(object.conversation_id)
-        : "",
-      proposalId: isSet(object.proposalId)
-        ? globalThis.String(object.proposalId)
-        : isSet(object.proposal_id)
-        ? globalThis.String(object.proposal_id)
-        : "",
-      decision: isSet(object.decision) ? globalThis.String(object.decision) : "",
-    };
+  fromJSON(object: any): SendMessageResponse {
+    return { receipt: isSet(object.receipt) ? CommandReceipt.fromJSON(object.receipt) : undefined };
   },
 
-  toJSON(message: DecideProjectProposalRequest): unknown {
+  toJSON(message: SendMessageResponse): unknown {
     const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.conversationId !== "") {
-      obj.conversationId = message.conversationId;
-    }
-    if (message.proposalId !== "") {
-      obj.proposalId = message.proposalId;
-    }
-    if (message.decision !== "") {
-      obj.decision = message.decision;
+    if (message.receipt !== undefined) {
+      obj.receipt = CommandReceipt.toJSON(message.receipt);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<DecideProjectProposalRequest>): DecideProjectProposalRequest {
-    return DecideProjectProposalRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<SendMessageResponse>): SendMessageResponse {
+    return SendMessageResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<DecideProjectProposalRequest>): DecideProjectProposalRequest {
-    const message = createBaseDecideProjectProposalRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.conversationId = object.conversationId ?? "";
-    message.proposalId = object.proposalId ?? "";
-    message.decision = object.decision ?? "";
-    return message;
-  },
-};
-
-function createBaseWatchProjectConversationRequest(): WatchProjectConversationRequest {
-  return { conversationId: "", afterCursor: "0" };
-}
-
-export const WatchProjectConversationRequest: MessageFns<WatchProjectConversationRequest> = {
-  encode(message: WatchProjectConversationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversationId !== "") {
-      writer.uint32(10).string(message.conversationId);
-    }
-    if (message.afterCursor !== "0") {
-      writer.uint32(16).uint64(message.afterCursor);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): WatchProjectConversationRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseWatchProjectConversationRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversationId = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.afterCursor = reader.uint64().toString();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): WatchProjectConversationRequest {
-    return {
-      conversationId: isSet(object.conversationId)
-        ? globalThis.String(object.conversationId)
-        : isSet(object.conversation_id)
-        ? globalThis.String(object.conversation_id)
-        : "",
-      afterCursor: isSet(object.afterCursor)
-        ? globalThis.String(object.afterCursor)
-        : isSet(object.after_cursor)
-        ? globalThis.String(object.after_cursor)
-        : "0",
-    };
-  },
-
-  toJSON(message: WatchProjectConversationRequest): unknown {
-    const obj: any = {};
-    if (message.conversationId !== "") {
-      obj.conversationId = message.conversationId;
-    }
-    if (message.afterCursor !== "0") {
-      obj.afterCursor = message.afterCursor;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<WatchProjectConversationRequest>): WatchProjectConversationRequest {
-    return WatchProjectConversationRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<WatchProjectConversationRequest>): WatchProjectConversationRequest {
-    const message = createBaseWatchProjectConversationRequest();
-    message.conversationId = object.conversationId ?? "";
-    message.afterCursor = object.afterCursor ?? "0";
-    return message;
-  },
-};
-
-function createBaseProjectPlan(): ProjectPlan {
-  return { id: "", versions: [] };
-}
-
-export const ProjectPlan: MessageFns<ProjectPlan> = {
-  encode(message: ProjectPlan, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    for (const v of message.versions) {
-      ProjectPlanVersion.encode(v!, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectPlan {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectPlan();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.versions.push(ProjectPlanVersion.decode(reader, reader.uint32()));
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectPlan {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      versions: globalThis.Array.isArray(object?.versions)
-        ? object.versions.map((e: any) => ProjectPlanVersion.fromJSON(e))
-        : [],
-    };
-  },
-
-  toJSON(message: ProjectPlan): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.versions?.length) {
-      obj.versions = message.versions.map((e) => ProjectPlanVersion.toJSON(e));
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectPlan>): ProjectPlan {
-    return ProjectPlan.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectPlan>): ProjectPlan {
-    const message = createBaseProjectPlan();
-    message.id = object.id ?? "";
-    message.versions = object.versions?.map((e) => ProjectPlanVersion.fromPartial(e)) || [];
-    return message;
-  },
-};
-
-function createBaseProjectPlanVersion(): ProjectPlanVersion {
-  return {
-    version: "0",
-    runId: "",
-    state: "",
-    findings: "",
-    scope: "",
-    acceptanceCriteria: [],
-    proposalIds: [],
-    dependencyEnvironmentImpact: "",
-    createdAt: undefined,
-    failure: "",
-  };
-}
-
-export const ProjectPlanVersion: MessageFns<ProjectPlanVersion> = {
-  encode(message: ProjectPlanVersion, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.version !== "0") {
-      writer.uint32(8).uint64(message.version);
-    }
-    if (message.runId !== "") {
-      writer.uint32(18).string(message.runId);
-    }
-    if (message.state !== "") {
-      writer.uint32(26).string(message.state);
-    }
-    if (message.findings !== "") {
-      writer.uint32(34).string(message.findings);
-    }
-    if (message.scope !== "") {
-      writer.uint32(42).string(message.scope);
-    }
-    for (const v of message.acceptanceCriteria) {
-      writer.uint32(50).string(v!);
-    }
-    for (const v of message.proposalIds) {
-      writer.uint32(58).string(v!);
-    }
-    if (message.dependencyEnvironmentImpact !== "") {
-      writer.uint32(66).string(message.dependencyEnvironmentImpact);
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(74).fork()).join();
-    }
-    if (message.failure !== "") {
-      writer.uint32(82).string(message.failure);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectPlanVersion {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectPlanVersion();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.version = reader.uint64().toString();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.runId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.state = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.findings = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.scope = reader.string();
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.acceptanceCriteria.push(reader.string());
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.proposalIds.push(reader.string());
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.dependencyEnvironmentImpact = reader.string();
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 10: {
-            if (tag !== 82) {
-              break;
-            }
-
-            message.failure = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectPlanVersion {
-    return {
-      version: isSet(object.version) ? globalThis.String(object.version) : "0",
-      runId: isSet(object.runId)
-        ? globalThis.String(object.runId)
-        : isSet(object.run_id)
-        ? globalThis.String(object.run_id)
-        : "",
-      state: isSet(object.state) ? globalThis.String(object.state) : "",
-      findings: isSet(object.findings) ? globalThis.String(object.findings) : "",
-      scope: isSet(object.scope) ? globalThis.String(object.scope) : "",
-      acceptanceCriteria: globalThis.Array.isArray(object?.acceptanceCriteria)
-        ? object.acceptanceCriteria.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.acceptance_criteria)
-        ? object.acceptance_criteria.map((e: any) => globalThis.String(e))
-        : [],
-      proposalIds: globalThis.Array.isArray(object?.proposalIds)
-        ? object.proposalIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.proposal_ids)
-        ? object.proposal_ids.map((e: any) => globalThis.String(e))
-        : [],
-      dependencyEnvironmentImpact: isSet(object.dependencyEnvironmentImpact)
-        ? globalThis.String(object.dependencyEnvironmentImpact)
-        : isSet(object.dependency_environment_impact)
-        ? globalThis.String(object.dependency_environment_impact)
-        : "",
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      failure: isSet(object.failure) ? globalThis.String(object.failure) : "",
-    };
-  },
-
-  toJSON(message: ProjectPlanVersion): unknown {
-    const obj: any = {};
-    if (message.version !== "0") {
-      obj.version = message.version;
-    }
-    if (message.runId !== "") {
-      obj.runId = message.runId;
-    }
-    if (message.state !== "") {
-      obj.state = message.state;
-    }
-    if (message.findings !== "") {
-      obj.findings = message.findings;
-    }
-    if (message.scope !== "") {
-      obj.scope = message.scope;
-    }
-    if (message.acceptanceCriteria?.length) {
-      obj.acceptanceCriteria = message.acceptanceCriteria;
-    }
-    if (message.proposalIds?.length) {
-      obj.proposalIds = message.proposalIds;
-    }
-    if (message.dependencyEnvironmentImpact !== "") {
-      obj.dependencyEnvironmentImpact = message.dependencyEnvironmentImpact;
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.failure !== "") {
-      obj.failure = message.failure;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectPlanVersion>): ProjectPlanVersion {
-    return ProjectPlanVersion.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectPlanVersion>): ProjectPlanVersion {
-    const message = createBaseProjectPlanVersion();
-    message.version = object.version ?? "0";
-    message.runId = object.runId ?? "";
-    message.state = object.state ?? "";
-    message.findings = object.findings ?? "";
-    message.scope = object.scope ?? "";
-    message.acceptanceCriteria = object.acceptanceCriteria?.map((e) => e) || [];
-    message.proposalIds = object.proposalIds?.map((e) => e) || [];
-    message.dependencyEnvironmentImpact = object.dependencyEnvironmentImpact ?? "";
-    message.createdAt = object.createdAt ?? undefined;
-    message.failure = object.failure ?? "";
-    return message;
-  },
-};
-
-function createBaseDecideProjectPlanRequest(): DecideProjectPlanRequest {
-  return { idempotencyKey: "", conversationId: "", planId: "", version: "0", decision: "" };
-}
-
-export const DecideProjectPlanRequest: MessageFns<DecideProjectPlanRequest> = {
-  encode(message: DecideProjectPlanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.conversationId !== "") {
-      writer.uint32(18).string(message.conversationId);
-    }
-    if (message.planId !== "") {
-      writer.uint32(26).string(message.planId);
-    }
-    if (message.version !== "0") {
-      writer.uint32(32).uint64(message.version);
-    }
-    if (message.decision !== "") {
-      writer.uint32(42).string(message.decision);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): DecideProjectPlanRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDecideProjectPlanRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.conversationId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.planId = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.version = reader.uint64().toString();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.decision = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): DecideProjectPlanRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      conversationId: isSet(object.conversationId)
-        ? globalThis.String(object.conversationId)
-        : isSet(object.conversation_id)
-        ? globalThis.String(object.conversation_id)
-        : "",
-      planId: isSet(object.planId)
-        ? globalThis.String(object.planId)
-        : isSet(object.plan_id)
-        ? globalThis.String(object.plan_id)
-        : "",
-      version: isSet(object.version) ? globalThis.String(object.version) : "0",
-      decision: isSet(object.decision) ? globalThis.String(object.decision) : "",
-    };
-  },
-
-  toJSON(message: DecideProjectPlanRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.conversationId !== "") {
-      obj.conversationId = message.conversationId;
-    }
-    if (message.planId !== "") {
-      obj.planId = message.planId;
-    }
-    if (message.version !== "0") {
-      obj.version = message.version;
-    }
-    if (message.decision !== "") {
-      obj.decision = message.decision;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<DecideProjectPlanRequest>): DecideProjectPlanRequest {
-    return DecideProjectPlanRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<DecideProjectPlanRequest>): DecideProjectPlanRequest {
-    const message = createBaseDecideProjectPlanRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.conversationId = object.conversationId ?? "";
-    message.planId = object.planId ?? "";
-    message.version = object.version ?? "0";
-    message.decision = object.decision ?? "";
-    return message;
-  },
-};
-
-function createBaseDecideProjectPlanResponse(): DecideProjectPlanResponse {
-  return { conversation: undefined };
-}
-
-export const DecideProjectPlanResponse: MessageFns<DecideProjectPlanResponse> = {
-  encode(message: DecideProjectPlanResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): DecideProjectPlanResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseDecideProjectPlanResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): DecideProjectPlanResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: DecideProjectPlanResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<DecideProjectPlanResponse>): DecideProjectPlanResponse {
-    return DecideProjectPlanResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<DecideProjectPlanResponse>): DecideProjectPlanResponse {
-    const message = createBaseDecideProjectPlanResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
+  fromPartial(object: DeepPartial<SendMessageResponse>): SendMessageResponse {
+    const message = createBaseSendMessageResponse();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? CommandReceipt.fromPartial(object.receipt)
       : undefined;
     return message;
   },
 };
 
-function createBaseProjectContextRecord(): ProjectContextRecord {
-  return { sequence: "0", id: "", kind: "", sourceId: "", repositoryId: "", role: "", content: "" };
+function createBaseGetConversationSnapshotRequest(): GetConversationSnapshotRequest {
+  return { workspaceId: "", projectId: "", conversationId: "" };
 }
 
-export const ProjectContextRecord: MessageFns<ProjectContextRecord> = {
-  encode(message: ProjectContextRecord, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.sequence !== "0") {
-      writer.uint32(8).uint64(message.sequence);
+export const GetConversationSnapshotRequest: MessageFns<GetConversationSnapshotRequest> = {
+  encode(message: GetConversationSnapshotRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
     }
-    if (message.id !== "") {
-      writer.uint32(18).string(message.id);
-    }
-    if (message.kind !== "") {
-      writer.uint32(26).string(message.kind);
-    }
-    if (message.sourceId !== "") {
-      writer.uint32(34).string(message.sourceId);
-    }
-    if (message.repositoryId !== "") {
-      writer.uint32(42).string(message.repositoryId);
-    }
-    if (message.role !== "") {
-      writer.uint32(50).string(message.role);
-    }
-    if (message.content !== "") {
-      writer.uint32(58).string(message.content);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectContextRecord {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectContextRecord();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.sequence = reader.uint64().toString();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.kind = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.sourceId = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.repositoryId = reader.string();
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.role = reader.string();
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.content = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectContextRecord {
-    return {
-      sequence: isSet(object.sequence) ? globalThis.String(object.sequence) : "0",
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      kind: isSet(object.kind) ? globalThis.String(object.kind) : "",
-      sourceId: isSet(object.sourceId)
-        ? globalThis.String(object.sourceId)
-        : isSet(object.source_id)
-        ? globalThis.String(object.source_id)
-        : "",
-      repositoryId: isSet(object.repositoryId)
-        ? globalThis.String(object.repositoryId)
-        : isSet(object.repository_id)
-        ? globalThis.String(object.repository_id)
-        : "",
-      role: isSet(object.role) ? globalThis.String(object.role) : "",
-      content: isSet(object.content) ? globalThis.String(object.content) : "",
-    };
-  },
-
-  toJSON(message: ProjectContextRecord): unknown {
-    const obj: any = {};
-    if (message.sequence !== "0") {
-      obj.sequence = message.sequence;
-    }
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.kind !== "") {
-      obj.kind = message.kind;
-    }
-    if (message.sourceId !== "") {
-      obj.sourceId = message.sourceId;
-    }
-    if (message.repositoryId !== "") {
-      obj.repositoryId = message.repositoryId;
-    }
-    if (message.role !== "") {
-      obj.role = message.role;
-    }
-    if (message.content !== "") {
-      obj.content = message.content;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectContextRecord>): ProjectContextRecord {
-    return ProjectContextRecord.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectContextRecord>): ProjectContextRecord {
-    const message = createBaseProjectContextRecord();
-    message.sequence = object.sequence ?? "0";
-    message.id = object.id ?? "";
-    message.kind = object.kind ?? "";
-    message.sourceId = object.sourceId ?? "";
-    message.repositoryId = object.repositoryId ?? "";
-    message.role = object.role ?? "";
-    message.content = object.content ?? "";
-    return message;
-  },
-};
-
-function createBaseProjectConversationSummary(): ProjectConversationSummary {
-  return { version: "0", sourceWatermark: "0", content: "", sourceRecordIds: [] };
-}
-
-export const ProjectConversationSummary: MessageFns<ProjectConversationSummary> = {
-  encode(message: ProjectConversationSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.version !== "0") {
-      writer.uint32(8).uint64(message.version);
-    }
-    if (message.sourceWatermark !== "0") {
-      writer.uint32(16).uint64(message.sourceWatermark);
-    }
-    if (message.content !== "") {
-      writer.uint32(26).string(message.content);
-    }
-    for (const v of message.sourceRecordIds) {
-      writer.uint32(34).string(v!);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectConversationSummary {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectConversationSummary();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.version = reader.uint64().toString();
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.sourceWatermark = reader.uint64().toString();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.content = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.sourceRecordIds.push(reader.string());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectConversationSummary {
-    return {
-      version: isSet(object.version) ? globalThis.String(object.version) : "0",
-      sourceWatermark: isSet(object.sourceWatermark)
-        ? globalThis.String(object.sourceWatermark)
-        : isSet(object.source_watermark)
-        ? globalThis.String(object.source_watermark)
-        : "0",
-      content: isSet(object.content) ? globalThis.String(object.content) : "",
-      sourceRecordIds: globalThis.Array.isArray(object?.sourceRecordIds)
-        ? object.sourceRecordIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.source_record_ids)
-        ? object.source_record_ids.map((e: any) => globalThis.String(e))
-        : [],
-    };
-  },
-
-  toJSON(message: ProjectConversationSummary): unknown {
-    const obj: any = {};
-    if (message.version !== "0") {
-      obj.version = message.version;
-    }
-    if (message.sourceWatermark !== "0") {
-      obj.sourceWatermark = message.sourceWatermark;
-    }
-    if (message.content !== "") {
-      obj.content = message.content;
-    }
-    if (message.sourceRecordIds?.length) {
-      obj.sourceRecordIds = message.sourceRecordIds;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectConversationSummary>): ProjectConversationSummary {
-    return ProjectConversationSummary.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectConversationSummary>): ProjectConversationSummary {
-    const message = createBaseProjectConversationSummary();
-    message.version = object.version ?? "0";
-    message.sourceWatermark = object.sourceWatermark ?? "0";
-    message.content = object.content ?? "";
-    message.sourceRecordIds = object.sourceRecordIds?.map((e) => e) || [];
-    return message;
-  },
-};
-
-function createBaseGetProjectConversationContextRequest(): GetProjectConversationContextRequest {
-  return { projectId: "", conversationId: "" };
-}
-
-export const GetProjectConversationContextRequest: MessageFns<GetProjectConversationContextRequest> = {
-  encode(message: GetProjectConversationContextRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.projectId !== "") {
-      writer.uint32(10).string(message.projectId);
+      writer.uint32(18).string(message.projectId);
     }
     if (message.conversationId !== "") {
-      writer.uint32(18).string(message.conversationId);
+      writer.uint32(26).string(message.conversationId);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GetProjectConversationContextRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): GetConversationSnapshotRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3351,20 +556,28 @@ export const GetProjectConversationContextRequest: MessageFns<GetProjectConversa
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetProjectConversationContextRequest();
+      const message = createBaseGetConversationSnapshotRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
           case 1: {
             if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
               break;
             }
 
             message.projectId = reader.string();
             continue;
           }
-          case 2: {
-            if (tag !== 18) {
+          case 3: {
+            if (tag !== 26) {
               break;
             }
 
@@ -3383,8 +596,13 @@ export const GetProjectConversationContextRequest: MessageFns<GetProjectConversa
     }
   },
 
-  fromJSON(object: any): GetProjectConversationContextRequest {
+  fromJSON(object: any): GetConversationSnapshotRequest {
     return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
       projectId: isSet(object.projectId)
         ? globalThis.String(object.projectId)
         : isSet(object.project_id)
@@ -3398,8 +616,11 @@ export const GetProjectConversationContextRequest: MessageFns<GetProjectConversa
     };
   },
 
-  toJSON(message: GetProjectConversationContextRequest): unknown {
+  toJSON(message: GetConversationSnapshotRequest): unknown {
     const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
     if (message.projectId !== "") {
       obj.projectId = message.projectId;
     }
@@ -3409,48 +630,31 @@ export const GetProjectConversationContextRequest: MessageFns<GetProjectConversa
     return obj;
   },
 
-  create(base?: DeepPartial<GetProjectConversationContextRequest>): GetProjectConversationContextRequest {
-    return GetProjectConversationContextRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<GetConversationSnapshotRequest>): GetConversationSnapshotRequest {
+    return GetConversationSnapshotRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<GetProjectConversationContextRequest>): GetProjectConversationContextRequest {
-    const message = createBaseGetProjectConversationContextRequest();
+  fromPartial(object: DeepPartial<GetConversationSnapshotRequest>): GetConversationSnapshotRequest {
+    const message = createBaseGetConversationSnapshotRequest();
+    message.workspaceId = object.workspaceId ?? "";
     message.projectId = object.projectId ?? "";
     message.conversationId = object.conversationId ?? "";
     return message;
   },
 };
 
-function createBaseGetProjectConversationContextResponse(): GetProjectConversationContextResponse {
-  return {
-    summary: undefined,
-    sourceWatermark: "0",
-    archiveRecordCount: "0",
-    capacityRecordLimit: "0",
-    recentMessageLimit: 0,
-  };
+function createBaseGetConversationSnapshotResponse(): GetConversationSnapshotResponse {
+  return { snapshot: undefined };
 }
 
-export const GetProjectConversationContextResponse: MessageFns<GetProjectConversationContextResponse> = {
-  encode(message: GetProjectConversationContextResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.summary !== undefined) {
-      ProjectConversationSummary.encode(message.summary, writer.uint32(10).fork()).join();
-    }
-    if (message.sourceWatermark !== "0") {
-      writer.uint32(16).uint64(message.sourceWatermark);
-    }
-    if (message.archiveRecordCount !== "0") {
-      writer.uint32(24).uint64(message.archiveRecordCount);
-    }
-    if (message.capacityRecordLimit !== "0") {
-      writer.uint32(32).uint64(message.capacityRecordLimit);
-    }
-    if (message.recentMessageLimit !== 0) {
-      writer.uint32(40).uint32(message.recentMessageLimit);
+export const GetConversationSnapshotResponse: MessageFns<GetConversationSnapshotResponse> = {
+  encode(message: GetConversationSnapshotResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.snapshot !== undefined) {
+      ConversationSnapshot.encode(message.snapshot, writer.uint32(10).fork()).join();
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): GetProjectConversationContextResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): GetConversationSnapshotResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3459,7 +663,7 @@ export const GetProjectConversationContextResponse: MessageFns<GetProjectConvers
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetProjectConversationContextResponse();
+      const message = createBaseGetConversationSnapshotResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -3468,39 +672,7 @@ export const GetProjectConversationContextResponse: MessageFns<GetProjectConvers
               break;
             }
 
-            message.summary = ProjectConversationSummary.decode(reader, reader.uint32());
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.sourceWatermark = reader.uint64().toString();
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.archiveRecordCount = reader.uint64().toString();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.capacityRecordLimit = reader.uint64().toString();
-            continue;
-          }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.recentMessageLimit = reader.uint32();
+            message.snapshot = ConversationSnapshot.decode(reader, reader.uint32());
             continue;
           }
         }
@@ -3515,88 +687,50 @@ export const GetProjectConversationContextResponse: MessageFns<GetProjectConvers
     }
   },
 
-  fromJSON(object: any): GetProjectConversationContextResponse {
-    return {
-      summary: isSet(object.summary) ? ProjectConversationSummary.fromJSON(object.summary) : undefined,
-      sourceWatermark: isSet(object.sourceWatermark)
-        ? globalThis.String(object.sourceWatermark)
-        : isSet(object.source_watermark)
-        ? globalThis.String(object.source_watermark)
-        : "0",
-      archiveRecordCount: isSet(object.archiveRecordCount)
-        ? globalThis.String(object.archiveRecordCount)
-        : isSet(object.archive_record_count)
-        ? globalThis.String(object.archive_record_count)
-        : "0",
-      capacityRecordLimit: isSet(object.capacityRecordLimit)
-        ? globalThis.String(object.capacityRecordLimit)
-        : isSet(object.capacity_record_limit)
-        ? globalThis.String(object.capacity_record_limit)
-        : "0",
-      recentMessageLimit: isSet(object.recentMessageLimit)
-        ? globalThis.Number(object.recentMessageLimit)
-        : isSet(object.recent_message_limit)
-        ? globalThis.Number(object.recent_message_limit)
-        : 0,
-    };
+  fromJSON(object: any): GetConversationSnapshotResponse {
+    return { snapshot: isSet(object.snapshot) ? ConversationSnapshot.fromJSON(object.snapshot) : undefined };
   },
 
-  toJSON(message: GetProjectConversationContextResponse): unknown {
+  toJSON(message: GetConversationSnapshotResponse): unknown {
     const obj: any = {};
-    if (message.summary !== undefined) {
-      obj.summary = ProjectConversationSummary.toJSON(message.summary);
-    }
-    if (message.sourceWatermark !== "0") {
-      obj.sourceWatermark = message.sourceWatermark;
-    }
-    if (message.archiveRecordCount !== "0") {
-      obj.archiveRecordCount = message.archiveRecordCount;
-    }
-    if (message.capacityRecordLimit !== "0") {
-      obj.capacityRecordLimit = message.capacityRecordLimit;
-    }
-    if (message.recentMessageLimit !== 0) {
-      obj.recentMessageLimit = Math.round(message.recentMessageLimit);
+    if (message.snapshot !== undefined) {
+      obj.snapshot = ConversationSnapshot.toJSON(message.snapshot);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<GetProjectConversationContextResponse>): GetProjectConversationContextResponse {
-    return GetProjectConversationContextResponse.fromPartial(base ?? {});
+  create(base?: DeepPartial<GetConversationSnapshotResponse>): GetConversationSnapshotResponse {
+    return GetConversationSnapshotResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<GetProjectConversationContextResponse>): GetProjectConversationContextResponse {
-    const message = createBaseGetProjectConversationContextResponse();
-    message.summary = (object.summary !== undefined && object.summary !== null)
-      ? ProjectConversationSummary.fromPartial(object.summary)
+  fromPartial(object: DeepPartial<GetConversationSnapshotResponse>): GetConversationSnapshotResponse {
+    const message = createBaseGetConversationSnapshotResponse();
+    message.snapshot = (object.snapshot !== undefined && object.snapshot !== null)
+      ? ConversationSnapshot.fromPartial(object.snapshot)
       : undefined;
-    message.sourceWatermark = object.sourceWatermark ?? "0";
-    message.archiveRecordCount = object.archiveRecordCount ?? "0";
-    message.capacityRecordLimit = object.capacityRecordLimit ?? "0";
-    message.recentMessageLimit = object.recentMessageLimit ?? 0;
     return message;
   },
 };
 
-function createBaseListProjectConversationHistoryRequest(): ListProjectConversationHistoryRequest {
-  return { projectId: "", conversationId: "", beforeSequence: "0", snapshotSequence: "0", query: "", limit: 0 };
+function createBaseListConversationHistoryRequest(): ListConversationHistoryRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", snapshotId: "", beforeSequence: "0", limit: 0 };
 }
 
-export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConversationHistoryRequest> = {
-  encode(message: ListProjectConversationHistoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const ListConversationHistoryRequest: MessageFns<ListConversationHistoryRequest> = {
+  encode(message: ListConversationHistoryRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
     if (message.projectId !== "") {
-      writer.uint32(10).string(message.projectId);
+      writer.uint32(18).string(message.projectId);
     }
     if (message.conversationId !== "") {
-      writer.uint32(18).string(message.conversationId);
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.snapshotId !== "") {
+      writer.uint32(34).string(message.snapshotId);
     }
     if (message.beforeSequence !== "0") {
-      writer.uint32(24).uint64(message.beforeSequence);
-    }
-    if (message.snapshotSequence !== "0") {
-      writer.uint32(32).uint64(message.snapshotSequence);
-    }
-    if (message.query !== "") {
-      writer.uint32(42).string(message.query);
+      writer.uint32(40).uint64(message.beforeSequence);
     }
     if (message.limit !== 0) {
       writer.uint32(48).uint32(message.limit);
@@ -3604,7 +738,7 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectConversationHistoryRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): ListConversationHistoryRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3613,7 +747,7 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectConversationHistoryRequest();
+      const message = createBaseListConversationHistoryRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -3622,7 +756,7 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
               break;
             }
 
-            message.projectId = reader.string();
+            message.workspaceId = reader.string();
             continue;
           }
           case 2: {
@@ -3630,31 +764,31 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
               break;
             }
 
-            message.conversationId = reader.string();
+            message.projectId = reader.string();
             continue;
           }
           case 3: {
-            if (tag !== 24) {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.snapshotId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
               break;
             }
 
             message.beforeSequence = reader.uint64().toString();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.snapshotSequence = reader.uint64().toString();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.query = reader.string();
             continue;
           }
           case 6: {
@@ -3677,8 +811,13 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
     }
   },
 
-  fromJSON(object: any): ListProjectConversationHistoryRequest {
+  fromJSON(object: any): ListConversationHistoryRequest {
     return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
       projectId: isSet(object.projectId)
         ? globalThis.String(object.projectId)
         : isSet(object.project_id)
@@ -3689,37 +828,36 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
         : isSet(object.conversation_id)
         ? globalThis.String(object.conversation_id)
         : "",
+      snapshotId: isSet(object.snapshotId)
+        ? globalThis.String(object.snapshotId)
+        : isSet(object.snapshot_id)
+        ? globalThis.String(object.snapshot_id)
+        : "",
       beforeSequence: isSet(object.beforeSequence)
         ? globalThis.String(object.beforeSequence)
         : isSet(object.before_sequence)
         ? globalThis.String(object.before_sequence)
         : "0",
-      snapshotSequence: isSet(object.snapshotSequence)
-        ? globalThis.String(object.snapshotSequence)
-        : isSet(object.snapshot_sequence)
-        ? globalThis.String(object.snapshot_sequence)
-        : "0",
-      query: isSet(object.query) ? globalThis.String(object.query) : "",
       limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
     };
   },
 
-  toJSON(message: ListProjectConversationHistoryRequest): unknown {
+  toJSON(message: ListConversationHistoryRequest): unknown {
     const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
     if (message.projectId !== "") {
       obj.projectId = message.projectId;
     }
     if (message.conversationId !== "") {
       obj.conversationId = message.conversationId;
     }
+    if (message.snapshotId !== "") {
+      obj.snapshotId = message.snapshotId;
+    }
     if (message.beforeSequence !== "0") {
       obj.beforeSequence = message.beforeSequence;
-    }
-    if (message.snapshotSequence !== "0") {
-      obj.snapshotSequence = message.snapshotSequence;
-    }
-    if (message.query !== "") {
-      obj.query = message.query;
     }
     if (message.limit !== 0) {
       obj.limit = Math.round(message.limit);
@@ -3727,32 +865,32 @@ export const ListProjectConversationHistoryRequest: MessageFns<ListProjectConver
     return obj;
   },
 
-  create(base?: DeepPartial<ListProjectConversationHistoryRequest>): ListProjectConversationHistoryRequest {
-    return ListProjectConversationHistoryRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<ListConversationHistoryRequest>): ListConversationHistoryRequest {
+    return ListConversationHistoryRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<ListProjectConversationHistoryRequest>): ListProjectConversationHistoryRequest {
-    const message = createBaseListProjectConversationHistoryRequest();
+  fromPartial(object: DeepPartial<ListConversationHistoryRequest>): ListConversationHistoryRequest {
+    const message = createBaseListConversationHistoryRequest();
+    message.workspaceId = object.workspaceId ?? "";
     message.projectId = object.projectId ?? "";
     message.conversationId = object.conversationId ?? "";
+    message.snapshotId = object.snapshotId ?? "";
     message.beforeSequence = object.beforeSequence ?? "0";
-    message.snapshotSequence = object.snapshotSequence ?? "0";
-    message.query = object.query ?? "";
     message.limit = object.limit ?? 0;
     return message;
   },
 };
 
-function createBaseListProjectConversationHistoryResponse(): ListProjectConversationHistoryResponse {
-  return { records: [], snapshotSequence: "0", nextBeforeSequence: "0", hasMore: false, archiveRecordCount: "0" };
+function createBaseListConversationHistoryResponse(): ListConversationHistoryResponse {
+  return { records: [], snapshotId: "", nextBeforeSequence: "0", hasMore: false };
 }
 
-export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConversationHistoryResponse> = {
-  encode(message: ListProjectConversationHistoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+export const ListConversationHistoryResponse: MessageFns<ListConversationHistoryResponse> = {
+  encode(message: ListConversationHistoryResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     for (const v of message.records) {
-      ProjectContextRecord.encode(v!, writer.uint32(10).fork()).join();
+      ConversationHistoryRecord.encode(v!, writer.uint32(10).fork()).join();
     }
-    if (message.snapshotSequence !== "0") {
-      writer.uint32(16).uint64(message.snapshotSequence);
+    if (message.snapshotId !== "") {
+      writer.uint32(18).string(message.snapshotId);
     }
     if (message.nextBeforeSequence !== "0") {
       writer.uint32(24).uint64(message.nextBeforeSequence);
@@ -3760,13 +898,10 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
     if (message.hasMore !== false) {
       writer.uint32(32).bool(message.hasMore);
     }
-    if (message.archiveRecordCount !== "0") {
-      writer.uint32(40).uint64(message.archiveRecordCount);
-    }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectConversationHistoryResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): ListConversationHistoryResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -3775,7 +910,7 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectConversationHistoryResponse();
+      const message = createBaseListConversationHistoryResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -3784,15 +919,15 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
               break;
             }
 
-            message.records.push(ProjectContextRecord.decode(reader, reader.uint32()));
+            message.records.push(ConversationHistoryRecord.decode(reader, reader.uint32()));
             continue;
           }
           case 2: {
-            if (tag !== 16) {
+            if (tag !== 18) {
               break;
             }
 
-            message.snapshotSequence = reader.uint64().toString();
+            message.snapshotId = reader.string();
             continue;
           }
           case 3: {
@@ -3811,14 +946,6 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
             message.hasMore = reader.bool();
             continue;
           }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.archiveRecordCount = reader.uint64().toString();
-            continue;
-          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -3831,16 +958,16 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
     }
   },
 
-  fromJSON(object: any): ListProjectConversationHistoryResponse {
+  fromJSON(object: any): ListConversationHistoryResponse {
     return {
       records: globalThis.Array.isArray(object?.records)
-        ? object.records.map((e: any) => ProjectContextRecord.fromJSON(e))
+        ? object.records.map((e: any) => ConversationHistoryRecord.fromJSON(e))
         : [],
-      snapshotSequence: isSet(object.snapshotSequence)
-        ? globalThis.String(object.snapshotSequence)
-        : isSet(object.snapshot_sequence)
-        ? globalThis.String(object.snapshot_sequence)
-        : "0",
+      snapshotId: isSet(object.snapshotId)
+        ? globalThis.String(object.snapshotId)
+        : isSet(object.snapshot_id)
+        ? globalThis.String(object.snapshot_id)
+        : "",
       nextBeforeSequence: isSet(object.nextBeforeSequence)
         ? globalThis.String(object.nextBeforeSequence)
         : isSet(object.next_before_sequence)
@@ -3851,21 +978,16 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
         : isSet(object.has_more)
         ? globalThis.Boolean(object.has_more)
         : false,
-      archiveRecordCount: isSet(object.archiveRecordCount)
-        ? globalThis.String(object.archiveRecordCount)
-        : isSet(object.archive_record_count)
-        ? globalThis.String(object.archive_record_count)
-        : "0",
     };
   },
 
-  toJSON(message: ListProjectConversationHistoryResponse): unknown {
+  toJSON(message: ListConversationHistoryResponse): unknown {
     const obj: any = {};
     if (message.records?.length) {
-      obj.records = message.records.map((e) => ProjectContextRecord.toJSON(e));
+      obj.records = message.records.map((e) => ConversationHistoryRecord.toJSON(e));
     }
-    if (message.snapshotSequence !== "0") {
-      obj.snapshotSequence = message.snapshotSequence;
+    if (message.snapshotId !== "") {
+      obj.snapshotId = message.snapshotId;
     }
     if (message.nextBeforeSequence !== "0") {
       obj.nextBeforeSequence = message.nextBeforeSequence;
@@ -3873,213 +995,30 @@ export const ListProjectConversationHistoryResponse: MessageFns<ListProjectConve
     if (message.hasMore !== false) {
       obj.hasMore = message.hasMore;
     }
-    if (message.archiveRecordCount !== "0") {
-      obj.archiveRecordCount = message.archiveRecordCount;
-    }
     return obj;
   },
 
-  create(base?: DeepPartial<ListProjectConversationHistoryResponse>): ListProjectConversationHistoryResponse {
-    return ListProjectConversationHistoryResponse.fromPartial(base ?? {});
+  create(base?: DeepPartial<ListConversationHistoryResponse>): ListConversationHistoryResponse {
+    return ListConversationHistoryResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<ListProjectConversationHistoryResponse>): ListProjectConversationHistoryResponse {
-    const message = createBaseListProjectConversationHistoryResponse();
-    message.records = object.records?.map((e) => ProjectContextRecord.fromPartial(e)) || [];
-    message.snapshotSequence = object.snapshotSequence ?? "0";
+  fromPartial(object: DeepPartial<ListConversationHistoryResponse>): ListConversationHistoryResponse {
+    const message = createBaseListConversationHistoryResponse();
+    message.records = object.records?.map((e) => ConversationHistoryRecord.fromPartial(e)) || [];
+    message.snapshotId = object.snapshotId ?? "";
     message.nextBeforeSequence = object.nextBeforeSequence ?? "0";
     message.hasMore = object.hasMore ?? false;
-    message.archiveRecordCount = object.archiveRecordCount ?? "0";
     return message;
   },
 };
 
-function createBaseProjectPlannerSession(): ProjectPlannerSession {
-  return {
-    sessionId: "",
-    generation: "0",
-    state: "",
-    lastActivityAt: undefined,
-    idleExpiresAt: undefined,
-    activeRunId: "",
-  };
+function createBaseWatchConversationRequest(): WatchConversationRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", afterCursor: undefined };
 }
 
-export const ProjectPlannerSession: MessageFns<ProjectPlannerSession> = {
-  encode(message: ProjectPlannerSession, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.sessionId !== "") {
-      writer.uint32(10).string(message.sessionId);
-    }
-    if (message.generation !== "0") {
-      writer.uint32(16).uint64(message.generation);
-    }
-    if (message.state !== "") {
-      writer.uint32(26).string(message.state);
-    }
-    if (message.lastActivityAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.lastActivityAt), writer.uint32(34).fork()).join();
-    }
-    if (message.idleExpiresAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.idleExpiresAt), writer.uint32(42).fork()).join();
-    }
-    if (message.activeRunId !== "") {
-      writer.uint32(50).string(message.activeRunId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectPlannerSession {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectPlannerSession();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.sessionId = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.generation = reader.uint64().toString();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.state = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.lastActivityAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.idleExpiresAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.activeRunId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectPlannerSession {
-    return {
-      sessionId: isSet(object.sessionId)
-        ? globalThis.String(object.sessionId)
-        : isSet(object.session_id)
-        ? globalThis.String(object.session_id)
-        : "",
-      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
-      state: isSet(object.state) ? globalThis.String(object.state) : "",
-      lastActivityAt: isSet(object.lastActivityAt)
-        ? fromJsonTimestamp(object.lastActivityAt)
-        : isSet(object.last_activity_at)
-        ? fromJsonTimestamp(object.last_activity_at)
-        : undefined,
-      idleExpiresAt: isSet(object.idleExpiresAt)
-        ? fromJsonTimestamp(object.idleExpiresAt)
-        : isSet(object.idle_expires_at)
-        ? fromJsonTimestamp(object.idle_expires_at)
-        : undefined,
-      activeRunId: isSet(object.activeRunId)
-        ? globalThis.String(object.activeRunId)
-        : isSet(object.active_run_id)
-        ? globalThis.String(object.active_run_id)
-        : "",
-    };
-  },
-
-  toJSON(message: ProjectPlannerSession): unknown {
-    const obj: any = {};
-    if (message.sessionId !== "") {
-      obj.sessionId = message.sessionId;
-    }
-    if (message.generation !== "0") {
-      obj.generation = message.generation;
-    }
-    if (message.state !== "") {
-      obj.state = message.state;
-    }
-    if (message.lastActivityAt !== undefined) {
-      obj.lastActivityAt = message.lastActivityAt.toISOString();
-    }
-    if (message.idleExpiresAt !== undefined) {
-      obj.idleExpiresAt = message.idleExpiresAt.toISOString();
-    }
-    if (message.activeRunId !== "") {
-      obj.activeRunId = message.activeRunId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectPlannerSession>): ProjectPlannerSession {
-    return ProjectPlannerSession.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectPlannerSession>): ProjectPlannerSession {
-    const message = createBaseProjectPlannerSession();
-    message.sessionId = object.sessionId ?? "";
-    message.generation = object.generation ?? "0";
-    message.state = object.state ?? "";
-    message.lastActivityAt = object.lastActivityAt ?? undefined;
-    message.idleExpiresAt = object.idleExpiresAt ?? undefined;
-    message.activeRunId = object.activeRunId ?? "";
-    return message;
-  },
-};
-
-function createBaseUpdateProjectConversationSettingsRequest(): UpdateProjectConversationSettingsRequest {
-  return {
-    idempotencyKey: "",
-    projectId: "",
-    conversationId: "",
-    expectedUpdateCursor: "0",
-    plannerIdleTimeoutSeconds: undefined,
-    inheritWorkspaceTimeout: false,
-  };
-}
-
-export const UpdateProjectConversationSettingsRequest: MessageFns<UpdateProjectConversationSettingsRequest> = {
-  encode(message: UpdateProjectConversationSettingsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
+export const WatchConversationRequest: MessageFns<WatchConversationRequest> = {
+  encode(message: WatchConversationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
     }
     if (message.projectId !== "") {
       writer.uint32(18).string(message.projectId);
@@ -4087,19 +1026,13 @@ export const UpdateProjectConversationSettingsRequest: MessageFns<UpdateProjectC
     if (message.conversationId !== "") {
       writer.uint32(26).string(message.conversationId);
     }
-    if (message.expectedUpdateCursor !== "0") {
-      writer.uint32(32).uint64(message.expectedUpdateCursor);
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      writer.uint32(40).uint32(message.plannerIdleTimeoutSeconds);
-    }
-    if (message.inheritWorkspaceTimeout !== false) {
-      writer.uint32(48).bool(message.inheritWorkspaceTimeout);
+    if (message.afterCursor !== undefined) {
+      writer.uint32(34).string(message.afterCursor);
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): UpdateProjectConversationSettingsRequest {
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchConversationRequest {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4108,7 +1041,7 @@ export const UpdateProjectConversationSettingsRequest: MessageFns<UpdateProjectC
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseUpdateProjectConversationSettingsRequest();
+      const message = createBaseWatchConversationRequest();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4117,245 +1050,7 @@ export const UpdateProjectConversationSettingsRequest: MessageFns<UpdateProjectC
               break;
             }
 
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.projectId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.conversationId = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.expectedUpdateCursor = reader.uint64().toString();
-            continue;
-          }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.plannerIdleTimeoutSeconds = reader.uint32();
-            continue;
-          }
-          case 6: {
-            if (tag !== 48) {
-              break;
-            }
-
-            message.inheritWorkspaceTimeout = reader.bool();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): UpdateProjectConversationSettingsRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      projectId: isSet(object.projectId)
-        ? globalThis.String(object.projectId)
-        : isSet(object.project_id)
-        ? globalThis.String(object.project_id)
-        : "",
-      conversationId: isSet(object.conversationId)
-        ? globalThis.String(object.conversationId)
-        : isSet(object.conversation_id)
-        ? globalThis.String(object.conversation_id)
-        : "",
-      expectedUpdateCursor: isSet(object.expectedUpdateCursor)
-        ? globalThis.String(object.expectedUpdateCursor)
-        : isSet(object.expected_update_cursor)
-        ? globalThis.String(object.expected_update_cursor)
-        : "0",
-      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
-        : isSet(object.planner_idle_timeout_seconds)
-        ? globalThis.Number(object.planner_idle_timeout_seconds)
-        : undefined,
-      inheritWorkspaceTimeout: isSet(object.inheritWorkspaceTimeout)
-        ? globalThis.Boolean(object.inheritWorkspaceTimeout)
-        : isSet(object.inherit_workspace_timeout)
-        ? globalThis.Boolean(object.inherit_workspace_timeout)
-        : false,
-    };
-  },
-
-  toJSON(message: UpdateProjectConversationSettingsRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.projectId !== "") {
-      obj.projectId = message.projectId;
-    }
-    if (message.conversationId !== "") {
-      obj.conversationId = message.conversationId;
-    }
-    if (message.expectedUpdateCursor !== "0") {
-      obj.expectedUpdateCursor = message.expectedUpdateCursor;
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
-    }
-    if (message.inheritWorkspaceTimeout !== false) {
-      obj.inheritWorkspaceTimeout = message.inheritWorkspaceTimeout;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<UpdateProjectConversationSettingsRequest>): UpdateProjectConversationSettingsRequest {
-    return UpdateProjectConversationSettingsRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<UpdateProjectConversationSettingsRequest>): UpdateProjectConversationSettingsRequest {
-    const message = createBaseUpdateProjectConversationSettingsRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.projectId = object.projectId ?? "";
-    message.conversationId = object.conversationId ?? "";
-    message.expectedUpdateCursor = object.expectedUpdateCursor ?? "0";
-    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
-    message.inheritWorkspaceTimeout = object.inheritWorkspaceTimeout ?? false;
-    return message;
-  },
-};
-
-function createBaseUpdateProjectConversationSettingsResponse(): UpdateProjectConversationSettingsResponse {
-  return { conversation: undefined };
-}
-
-export const UpdateProjectConversationSettingsResponse: MessageFns<UpdateProjectConversationSettingsResponse> = {
-  encode(message: UpdateProjectConversationSettingsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): UpdateProjectConversationSettingsResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseUpdateProjectConversationSettingsResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): UpdateProjectConversationSettingsResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: UpdateProjectConversationSettingsResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<UpdateProjectConversationSettingsResponse>): UpdateProjectConversationSettingsResponse {
-    return UpdateProjectConversationSettingsResponse.fromPartial(base ?? {});
-  },
-  fromPartial(
-    object: DeepPartial<UpdateProjectConversationSettingsResponse>,
-  ): UpdateProjectConversationSettingsResponse {
-    const message = createBaseUpdateProjectConversationSettingsResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseCancelProjectAgentRunRequest(): CancelProjectAgentRunRequest {
-  return { idempotencyKey: "", projectId: "", conversationId: "", runId: "" };
-}
-
-export const CancelProjectAgentRunRequest: MessageFns<CancelProjectAgentRunRequest> = {
-  encode(message: CancelProjectAgentRunRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.projectId !== "") {
-      writer.uint32(18).string(message.projectId);
-    }
-    if (message.conversationId !== "") {
-      writer.uint32(26).string(message.conversationId);
-    }
-    if (message.runId !== "") {
-      writer.uint32(34).string(message.runId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): CancelProjectAgentRunRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCancelProjectAgentRunRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
+            message.workspaceId = reader.string();
             continue;
           }
           case 2: {
@@ -4379,7 +1074,7 @@ export const CancelProjectAgentRunRequest: MessageFns<CancelProjectAgentRunReque
               break;
             }
 
-            message.runId = reader.string();
+            message.afterCursor = reader.string();
             continue;
           }
         }
@@ -4394,12 +1089,12 @@ export const CancelProjectAgentRunRequest: MessageFns<CancelProjectAgentRunReque
     }
   },
 
-  fromJSON(object: any): CancelProjectAgentRunRequest {
+  fromJSON(object: any): WatchConversationRequest {
     return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
         : "",
       projectId: isSet(object.projectId)
         ? globalThis.String(object.projectId)
@@ -4411,18 +1106,18 @@ export const CancelProjectAgentRunRequest: MessageFns<CancelProjectAgentRunReque
         : isSet(object.conversation_id)
         ? globalThis.String(object.conversation_id)
         : "",
-      runId: isSet(object.runId)
-        ? globalThis.String(object.runId)
-        : isSet(object.run_id)
-        ? globalThis.String(object.run_id)
-        : "",
+      afterCursor: isSet(object.afterCursor)
+        ? globalThis.String(object.afterCursor)
+        : isSet(object.after_cursor)
+        ? globalThis.String(object.after_cursor)
+        : undefined,
     };
   },
 
-  toJSON(message: CancelProjectAgentRunRequest): unknown {
+  toJSON(message: WatchConversationRequest): unknown {
     const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
     }
     if (message.projectId !== "") {
       obj.projectId = message.projectId;
@@ -4430,38 +1125,46 @@ export const CancelProjectAgentRunRequest: MessageFns<CancelProjectAgentRunReque
     if (message.conversationId !== "") {
       obj.conversationId = message.conversationId;
     }
-    if (message.runId !== "") {
-      obj.runId = message.runId;
+    if (message.afterCursor !== undefined) {
+      obj.afterCursor = message.afterCursor;
     }
     return obj;
   },
 
-  create(base?: DeepPartial<CancelProjectAgentRunRequest>): CancelProjectAgentRunRequest {
-    return CancelProjectAgentRunRequest.fromPartial(base ?? {});
+  create(base?: DeepPartial<WatchConversationRequest>): WatchConversationRequest {
+    return WatchConversationRequest.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<CancelProjectAgentRunRequest>): CancelProjectAgentRunRequest {
-    const message = createBaseCancelProjectAgentRunRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
+  fromPartial(object: DeepPartial<WatchConversationRequest>): WatchConversationRequest {
+    const message = createBaseWatchConversationRequest();
+    message.workspaceId = object.workspaceId ?? "";
     message.projectId = object.projectId ?? "";
     message.conversationId = object.conversationId ?? "";
-    message.runId = object.runId ?? "";
+    message.afterCursor = object.afterCursor ?? undefined;
     return message;
   },
 };
 
-function createBaseCancelProjectAgentRunResponse(): CancelProjectAgentRunResponse {
-  return { conversation: undefined };
+function createBaseWatchConversationResponse(): WatchConversationResponse {
+  return { frame: undefined };
 }
 
-export const CancelProjectAgentRunResponse: MessageFns<CancelProjectAgentRunResponse> = {
-  encode(message: CancelProjectAgentRunResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.conversation !== undefined) {
-      ProjectConversation.encode(message.conversation, writer.uint32(10).fork()).join();
+export const WatchConversationResponse: MessageFns<WatchConversationResponse> = {
+  encode(message: WatchConversationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    switch (message.frame?.$case) {
+      case "snapshot":
+        ConversationSnapshot.encode(message.frame.snapshot, writer.uint32(10).fork()).join();
+        break;
+      case "update":
+        ConversationUpdate.encode(message.frame.update, writer.uint32(18).fork()).join();
+        break;
+      case "heartbeat":
+        ConversationWatchHeartbeat.encode(message.frame.heartbeat, writer.uint32(26).fork()).join();
+        break;
     }
     return writer;
   },
 
-  decode(input: BinaryReader | Uint8Array, length?: number): CancelProjectAgentRunResponse {
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchConversationResponse {
     const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
     const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
     if (previousRecursionDepth >= 100) {
@@ -4470,7 +1173,7 @@ export const CancelProjectAgentRunResponse: MessageFns<CancelProjectAgentRunResp
     (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
     try {
       const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCancelProjectAgentRunResponse();
+      const message = createBaseWatchConversationResponse();
       while (reader.pos < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
@@ -4479,126 +1182,7 @@ export const CancelProjectAgentRunResponse: MessageFns<CancelProjectAgentRunResp
               break;
             }
 
-            message.conversation = ProjectConversation.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): CancelProjectAgentRunResponse {
-    return { conversation: isSet(object.conversation) ? ProjectConversation.fromJSON(object.conversation) : undefined };
-  },
-
-  toJSON(message: CancelProjectAgentRunResponse): unknown {
-    const obj: any = {};
-    if (message.conversation !== undefined) {
-      obj.conversation = ProjectConversation.toJSON(message.conversation);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<CancelProjectAgentRunResponse>): CancelProjectAgentRunResponse {
-    return CancelProjectAgentRunResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<CancelProjectAgentRunResponse>): CancelProjectAgentRunResponse {
-    const message = createBaseCancelProjectAgentRunResponse();
-    message.conversation = (object.conversation !== undefined && object.conversation !== null)
-      ? ProjectConversation.fromPartial(object.conversation)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseProjectWorkerUpdate(): ProjectWorkerUpdate {
-  return {
-    origin: undefined,
-    taskId: "",
-    attemptId: "",
-    attemptNumber: 0,
-    resourceVersion: "0",
-    state: 0,
-    requestedInput: undefined,
-    progress: undefined,
-    result: undefined,
-    pullRequest: undefined,
-    publicationOnly: false,
-    failure: "",
-    updatedAt: undefined,
-  };
-}
-
-export const ProjectWorkerUpdate: MessageFns<ProjectWorkerUpdate> = {
-  encode(message: ProjectWorkerUpdate, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.origin !== undefined) {
-      TaskOrigin.encode(message.origin, writer.uint32(10).fork()).join();
-    }
-    if (message.taskId !== "") {
-      writer.uint32(18).string(message.taskId);
-    }
-    if (message.attemptId !== "") {
-      writer.uint32(26).string(message.attemptId);
-    }
-    if (message.attemptNumber !== 0) {
-      writer.uint32(32).uint32(message.attemptNumber);
-    }
-    if (message.resourceVersion !== "0") {
-      writer.uint32(40).uint64(message.resourceVersion);
-    }
-    if (message.state !== 0) {
-      writer.uint32(48).int32(message.state);
-    }
-    if (message.requestedInput !== undefined) {
-      writer.uint32(58).string(message.requestedInput);
-    }
-    if (message.progress !== undefined) {
-      WorkerProgress.encode(message.progress, writer.uint32(66).fork()).join();
-    }
-    if (message.result !== undefined) {
-      WorkerResult.encode(message.result, writer.uint32(74).fork()).join();
-    }
-    if (message.pullRequest !== undefined) {
-      PullRequestReceipt.encode(message.pullRequest, writer.uint32(82).fork()).join();
-    }
-    if (message.publicationOnly !== false) {
-      writer.uint32(88).bool(message.publicationOnly);
-    }
-    if (message.failure !== "") {
-      writer.uint32(98).string(message.failure);
-    }
-    if (message.updatedAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(106).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectWorkerUpdate {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectWorkerUpdate();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.origin = TaskOrigin.decode(reader, reader.uint32());
+            message.frame = { $case: "snapshot", snapshot: ConversationSnapshot.decode(reader, reader.uint32()) };
             continue;
           }
           case 2: {
@@ -4606,7 +1190,7 @@ export const ProjectWorkerUpdate: MessageFns<ProjectWorkerUpdate> = {
               break;
             }
 
-            message.taskId = reader.string();
+            message.frame = { $case: "update", update: ConversationUpdate.decode(reader, reader.uint32()) };
             continue;
           }
           case 3: {
@@ -4614,87 +1198,10 @@ export const ProjectWorkerUpdate: MessageFns<ProjectWorkerUpdate> = {
               break;
             }
 
-            message.attemptId = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.attemptNumber = reader.uint32();
-            continue;
-          }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.resourceVersion = reader.uint64().toString();
-            continue;
-          }
-          case 6: {
-            if (tag !== 48) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.requestedInput = reader.string();
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.progress = WorkerProgress.decode(reader, reader.uint32());
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.result = WorkerResult.decode(reader, reader.uint32());
-            continue;
-          }
-          case 10: {
-            if (tag !== 82) {
-              break;
-            }
-
-            message.pullRequest = PullRequestReceipt.decode(reader, reader.uint32());
-            continue;
-          }
-          case 11: {
-            if (tag !== 88) {
-              break;
-            }
-
-            message.publicationOnly = reader.bool();
-            continue;
-          }
-          case 12: {
-            if (tag !== 98) {
-              break;
-            }
-
-            message.failure = reader.string();
-            continue;
-          }
-          case 13: {
-            if (tag !== 106) {
-              break;
-            }
-
-            message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            message.frame = {
+              $case: "heartbeat",
+              heartbeat: ConversationWatchHeartbeat.decode(reader, reader.uint32()),
+            };
             continue;
           }
         }
@@ -4709,455 +1216,200 @@ export const ProjectWorkerUpdate: MessageFns<ProjectWorkerUpdate> = {
     }
   },
 
-  fromJSON(object: any): ProjectWorkerUpdate {
+  fromJSON(object: any): WatchConversationResponse {
     return {
-      origin: isSet(object.origin) ? TaskOrigin.fromJSON(object.origin) : undefined,
-      taskId: isSet(object.taskId)
-        ? globalThis.String(object.taskId)
-        : isSet(object.task_id)
-        ? globalThis.String(object.task_id)
-        : "",
-      attemptId: isSet(object.attemptId)
-        ? globalThis.String(object.attemptId)
-        : isSet(object.attempt_id)
-        ? globalThis.String(object.attempt_id)
-        : "",
-      attemptNumber: isSet(object.attemptNumber)
-        ? globalThis.Number(object.attemptNumber)
-        : isSet(object.attempt_number)
-        ? globalThis.Number(object.attempt_number)
-        : 0,
-      resourceVersion: isSet(object.resourceVersion)
-        ? globalThis.String(object.resourceVersion)
-        : isSet(object.resource_version)
-        ? globalThis.String(object.resource_version)
-        : "0",
-      state: isSet(object.state) ? developmentAttemptStateFromJSON(object.state) : 0,
-      requestedInput: isSet(object.requestedInput)
-        ? globalThis.String(object.requestedInput)
-        : isSet(object.requested_input)
-        ? globalThis.String(object.requested_input)
-        : undefined,
-      progress: isSet(object.progress) ? WorkerProgress.fromJSON(object.progress) : undefined,
-      result: isSet(object.result) ? WorkerResult.fromJSON(object.result) : undefined,
-      pullRequest: isSet(object.pullRequest)
-        ? PullRequestReceipt.fromJSON(object.pullRequest)
-        : isSet(object.pull_request)
-        ? PullRequestReceipt.fromJSON(object.pull_request)
-        : undefined,
-      publicationOnly: isSet(object.publicationOnly)
-        ? globalThis.Boolean(object.publicationOnly)
-        : isSet(object.publication_only)
-        ? globalThis.Boolean(object.publication_only)
-        : false,
-      failure: isSet(object.failure) ? globalThis.String(object.failure) : "",
-      updatedAt: isSet(object.updatedAt)
-        ? fromJsonTimestamp(object.updatedAt)
-        : isSet(object.updated_at)
-        ? fromJsonTimestamp(object.updated_at)
+      frame: isSet(object.snapshot)
+        ? { $case: "snapshot", snapshot: ConversationSnapshot.fromJSON(object.snapshot) }
+        : isSet(object.update)
+        ? { $case: "update", update: ConversationUpdate.fromJSON(object.update) }
+        : isSet(object.heartbeat)
+        ? { $case: "heartbeat", heartbeat: ConversationWatchHeartbeat.fromJSON(object.heartbeat) }
         : undefined,
     };
   },
 
-  toJSON(message: ProjectWorkerUpdate): unknown {
+  toJSON(message: WatchConversationResponse): unknown {
     const obj: any = {};
-    if (message.origin !== undefined) {
-      obj.origin = TaskOrigin.toJSON(message.origin);
-    }
-    if (message.taskId !== "") {
-      obj.taskId = message.taskId;
-    }
-    if (message.attemptId !== "") {
-      obj.attemptId = message.attemptId;
-    }
-    if (message.attemptNumber !== 0) {
-      obj.attemptNumber = Math.round(message.attemptNumber);
-    }
-    if (message.resourceVersion !== "0") {
-      obj.resourceVersion = message.resourceVersion;
-    }
-    if (message.state !== 0) {
-      obj.state = developmentAttemptStateToJSON(message.state);
-    }
-    if (message.requestedInput !== undefined) {
-      obj.requestedInput = message.requestedInput;
-    }
-    if (message.progress !== undefined) {
-      obj.progress = WorkerProgress.toJSON(message.progress);
-    }
-    if (message.result !== undefined) {
-      obj.result = WorkerResult.toJSON(message.result);
-    }
-    if (message.pullRequest !== undefined) {
-      obj.pullRequest = PullRequestReceipt.toJSON(message.pullRequest);
-    }
-    if (message.publicationOnly !== false) {
-      obj.publicationOnly = message.publicationOnly;
-    }
-    if (message.failure !== "") {
-      obj.failure = message.failure;
-    }
-    if (message.updatedAt !== undefined) {
-      obj.updatedAt = message.updatedAt.toISOString();
+    if (message.frame?.$case === "snapshot") {
+      obj.snapshot = ConversationSnapshot.toJSON(message.frame.snapshot);
+    } else if (message.frame?.$case === "update") {
+      obj.update = ConversationUpdate.toJSON(message.frame.update);
+    } else if (message.frame?.$case === "heartbeat") {
+      obj.heartbeat = ConversationWatchHeartbeat.toJSON(message.frame.heartbeat);
     }
     return obj;
   },
 
-  create(base?: DeepPartial<ProjectWorkerUpdate>): ProjectWorkerUpdate {
-    return ProjectWorkerUpdate.fromPartial(base ?? {});
+  create(base?: DeepPartial<WatchConversationResponse>): WatchConversationResponse {
+    return WatchConversationResponse.fromPartial(base ?? {});
   },
-  fromPartial(object: DeepPartial<ProjectWorkerUpdate>): ProjectWorkerUpdate {
-    const message = createBaseProjectWorkerUpdate();
-    message.origin = (object.origin !== undefined && object.origin !== null)
-      ? TaskOrigin.fromPartial(object.origin)
-      : undefined;
-    message.taskId = object.taskId ?? "";
-    message.attemptId = object.attemptId ?? "";
-    message.attemptNumber = object.attemptNumber ?? 0;
-    message.resourceVersion = object.resourceVersion ?? "0";
-    message.state = object.state ?? 0;
-    message.requestedInput = object.requestedInput ?? undefined;
-    message.progress = (object.progress !== undefined && object.progress !== null)
-      ? WorkerProgress.fromPartial(object.progress)
-      : undefined;
-    message.result = (object.result !== undefined && object.result !== null)
-      ? WorkerResult.fromPartial(object.result)
-      : undefined;
-    message.pullRequest = (object.pullRequest !== undefined && object.pullRequest !== null)
-      ? PullRequestReceipt.fromPartial(object.pullRequest)
-      : undefined;
-    message.publicationOnly = object.publicationOnly ?? false;
-    message.failure = object.failure ?? "";
-    message.updatedAt = object.updatedAt ?? undefined;
+  fromPartial(object: DeepPartial<WatchConversationResponse>): WatchConversationResponse {
+    const message = createBaseWatchConversationResponse();
+    switch (object.frame?.$case) {
+      case "snapshot": {
+        if (object.frame?.snapshot !== undefined && object.frame?.snapshot !== null) {
+          message.frame = { $case: "snapshot", snapshot: ConversationSnapshot.fromPartial(object.frame.snapshot) };
+        }
+        break;
+      }
+      case "update": {
+        if (object.frame?.update !== undefined && object.frame?.update !== null) {
+          message.frame = { $case: "update", update: ConversationUpdate.fromPartial(object.frame.update) };
+        }
+        break;
+      }
+      case "heartbeat": {
+        if (object.frame?.heartbeat !== undefined && object.frame?.heartbeat !== null) {
+          message.frame = {
+            $case: "heartbeat",
+            heartbeat: ConversationWatchHeartbeat.fromPartial(object.frame.heartbeat),
+          };
+        }
+        break;
+      }
+    }
     return message;
   },
 };
 
-/** Trusted operator conversation API; not available on the custom-client listener. */
+/** M1 exposes only the durable conversation path on the trusted operator listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
-  updateProjectConversationSettings: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/UpdateProjectConversationSettings" as const,
+  createConversation: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/CreateConversation" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: UpdateProjectConversationSettingsRequest): Buffer =>
-      Buffer.from(UpdateProjectConversationSettingsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): UpdateProjectConversationSettingsRequest =>
-      UpdateProjectConversationSettingsRequest.decode(value),
-    responseSerialize: (value: UpdateProjectConversationSettingsResponse): Buffer =>
-      Buffer.from(UpdateProjectConversationSettingsResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): UpdateProjectConversationSettingsResponse =>
-      UpdateProjectConversationSettingsResponse.decode(value),
+    requestSerialize: (value: CreateConversationRequest): Buffer =>
+      Buffer.from(CreateConversationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateConversationRequest => CreateConversationRequest.decode(value),
+    responseSerialize: (value: CreateConversationResponse): Buffer =>
+      Buffer.from(CreateConversationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CreateConversationResponse => CreateConversationResponse.decode(value),
   },
-  cancelProjectAgentRun: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/CancelProjectAgentRun" as const,
+  sendMessage: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/SendMessage" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: CancelProjectAgentRunRequest): Buffer =>
-      Buffer.from(CancelProjectAgentRunRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): CancelProjectAgentRunRequest => CancelProjectAgentRunRequest.decode(value),
-    responseSerialize: (value: CancelProjectAgentRunResponse): Buffer =>
-      Buffer.from(CancelProjectAgentRunResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CancelProjectAgentRunResponse => CancelProjectAgentRunResponse.decode(value),
+    requestSerialize: (value: SendMessageRequest): Buffer => Buffer.from(SendMessageRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SendMessageRequest => SendMessageRequest.decode(value),
+    responseSerialize: (value: SendMessageResponse): Buffer => Buffer.from(SendMessageResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SendMessageResponse => SendMessageResponse.decode(value),
   },
-  getProjectConversationContext: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/GetProjectConversationContext" as const,
+  getConversationSnapshot: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/GetConversationSnapshot" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: GetProjectConversationContextRequest): Buffer =>
-      Buffer.from(GetProjectConversationContextRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetProjectConversationContextRequest =>
-      GetProjectConversationContextRequest.decode(value),
-    responseSerialize: (value: GetProjectConversationContextResponse): Buffer =>
-      Buffer.from(GetProjectConversationContextResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetProjectConversationContextResponse =>
-      GetProjectConversationContextResponse.decode(value),
+    requestSerialize: (value: GetConversationSnapshotRequest): Buffer =>
+      Buffer.from(GetConversationSnapshotRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetConversationSnapshotRequest => GetConversationSnapshotRequest.decode(value),
+    responseSerialize: (value: GetConversationSnapshotResponse): Buffer =>
+      Buffer.from(GetConversationSnapshotResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetConversationSnapshotResponse =>
+      GetConversationSnapshotResponse.decode(value),
   },
-  listProjectConversationHistory: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/ListProjectConversationHistory" as const,
+  listConversationHistory: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListConversationHistory" as const,
     requestStream: false as const,
     responseStream: false as const,
-    requestSerialize: (value: ListProjectConversationHistoryRequest): Buffer =>
-      Buffer.from(ListProjectConversationHistoryRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListProjectConversationHistoryRequest =>
-      ListProjectConversationHistoryRequest.decode(value),
-    responseSerialize: (value: ListProjectConversationHistoryResponse): Buffer =>
-      Buffer.from(ListProjectConversationHistoryResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListProjectConversationHistoryResponse =>
-      ListProjectConversationHistoryResponse.decode(value),
+    requestSerialize: (value: ListConversationHistoryRequest): Buffer =>
+      Buffer.from(ListConversationHistoryRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListConversationHistoryRequest => ListConversationHistoryRequest.decode(value),
+    responseSerialize: (value: ListConversationHistoryResponse): Buffer =>
+      Buffer.from(ListConversationHistoryResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListConversationHistoryResponse =>
+      ListConversationHistoryResponse.decode(value),
   },
-  watchProjectConversation: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/WatchProjectConversation" as const,
+  watchConversation: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/WatchConversation" as const,
     requestStream: false as const,
     responseStream: true as const,
-    requestSerialize: (value: WatchProjectConversationRequest): Buffer =>
-      Buffer.from(WatchProjectConversationRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): WatchProjectConversationRequest =>
-      WatchProjectConversationRequest.decode(value),
-    responseSerialize: (value: WatchProjectConversationResponse): Buffer =>
-      Buffer.from(WatchProjectConversationResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): WatchProjectConversationResponse =>
-      WatchProjectConversationResponse.decode(value),
-  },
-  createProjectConversation: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/CreateProjectConversation" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: CreateProjectConversationRequest): Buffer =>
-      Buffer.from(CreateProjectConversationRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): CreateProjectConversationRequest =>
-      CreateProjectConversationRequest.decode(value),
-    responseSerialize: (value: CreateProjectConversationResponse): Buffer =>
-      Buffer.from(CreateProjectConversationResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): CreateProjectConversationResponse =>
-      CreateProjectConversationResponse.decode(value),
-  },
-  listProjectConversations: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/ListProjectConversations" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ListProjectConversationsRequest): Buffer =>
-      Buffer.from(ListProjectConversationsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListProjectConversationsRequest =>
-      ListProjectConversationsRequest.decode(value),
-    responseSerialize: (value: ListProjectConversationsResponse): Buffer =>
-      Buffer.from(ListProjectConversationsResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListProjectConversationsResponse =>
-      ListProjectConversationsResponse.decode(value),
-  },
-  getProjectConversation: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/GetProjectConversation" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: GetProjectConversationRequest): Buffer =>
-      Buffer.from(GetProjectConversationRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetProjectConversationRequest => GetProjectConversationRequest.decode(value),
-    responseSerialize: (value: GetProjectConversationResponse): Buffer =>
-      Buffer.from(GetProjectConversationResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetProjectConversationResponse =>
-      GetProjectConversationResponse.decode(value),
-  },
-  sendProjectMessage: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/SendProjectMessage" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: SendProjectMessageRequest): Buffer =>
-      Buffer.from(SendProjectMessageRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): SendProjectMessageRequest => SendProjectMessageRequest.decode(value),
-    responseSerialize: (value: SendProjectMessageResponse): Buffer =>
-      Buffer.from(SendProjectMessageResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): SendProjectMessageResponse => SendProjectMessageResponse.decode(value),
-  },
-  decideProjectPlan: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/DecideProjectPlan" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: DecideProjectPlanRequest): Buffer =>
-      Buffer.from(DecideProjectPlanRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): DecideProjectPlanRequest => DecideProjectPlanRequest.decode(value),
-    responseSerialize: (value: DecideProjectPlanResponse): Buffer =>
-      Buffer.from(DecideProjectPlanResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): DecideProjectPlanResponse => DecideProjectPlanResponse.decode(value),
-  },
-  decideProjectProposal: {
-    path: "/ayni.orchestrator.v1.ProjectConversationService/DecideProjectProposal" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: DecideProjectProposalRequest): Buffer =>
-      Buffer.from(DecideProjectProposalRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): DecideProjectProposalRequest => DecideProjectProposalRequest.decode(value),
-    responseSerialize: (value: DecideProjectProposalResponse): Buffer =>
-      Buffer.from(DecideProjectProposalResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): DecideProjectProposalResponse => DecideProjectProposalResponse.decode(value),
+    requestSerialize: (value: WatchConversationRequest): Buffer =>
+      Buffer.from(WatchConversationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): WatchConversationRequest => WatchConversationRequest.decode(value),
+    responseSerialize: (value: WatchConversationResponse): Buffer =>
+      Buffer.from(WatchConversationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): WatchConversationResponse => WatchConversationResponse.decode(value),
   },
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
-  updateProjectConversationSettings: handleUnaryCall<
-    UpdateProjectConversationSettingsRequest,
-    UpdateProjectConversationSettingsResponse
-  >;
-  cancelProjectAgentRun: handleUnaryCall<CancelProjectAgentRunRequest, CancelProjectAgentRunResponse>;
-  getProjectConversationContext: handleUnaryCall<
-    GetProjectConversationContextRequest,
-    GetProjectConversationContextResponse
-  >;
-  listProjectConversationHistory: handleUnaryCall<
-    ListProjectConversationHistoryRequest,
-    ListProjectConversationHistoryResponse
-  >;
-  watchProjectConversation: handleServerStreamingCall<
-    WatchProjectConversationRequest,
-    WatchProjectConversationResponse
-  >;
-  createProjectConversation: handleUnaryCall<CreateProjectConversationRequest, CreateProjectConversationResponse>;
-  listProjectConversations: handleUnaryCall<ListProjectConversationsRequest, ListProjectConversationsResponse>;
-  getProjectConversation: handleUnaryCall<GetProjectConversationRequest, GetProjectConversationResponse>;
-  sendProjectMessage: handleUnaryCall<SendProjectMessageRequest, SendProjectMessageResponse>;
-  decideProjectPlan: handleUnaryCall<DecideProjectPlanRequest, DecideProjectPlanResponse>;
-  decideProjectProposal: handleUnaryCall<DecideProjectProposalRequest, DecideProjectProposalResponse>;
+  createConversation: handleUnaryCall<CreateConversationRequest, CreateConversationResponse>;
+  sendMessage: handleUnaryCall<SendMessageRequest, SendMessageResponse>;
+  getConversationSnapshot: handleUnaryCall<GetConversationSnapshotRequest, GetConversationSnapshotResponse>;
+  listConversationHistory: handleUnaryCall<ListConversationHistoryRequest, ListConversationHistoryResponse>;
+  watchConversation: handleServerStreamingCall<WatchConversationRequest, WatchConversationResponse>;
 }
 
 export interface ProjectConversationServiceClient extends Client {
-  updateProjectConversationSettings(
-    request: UpdateProjectConversationSettingsRequest,
-    callback: (error: ServiceError | null, response: UpdateProjectConversationSettingsResponse) => void,
+  createConversation(
+    request: CreateConversationRequest,
+    callback: (error: ServiceError | null, response: CreateConversationResponse) => void,
   ): ClientUnaryCall;
-  updateProjectConversationSettings(
-    request: UpdateProjectConversationSettingsRequest,
+  createConversation(
+    request: CreateConversationRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: UpdateProjectConversationSettingsResponse) => void,
+    callback: (error: ServiceError | null, response: CreateConversationResponse) => void,
   ): ClientUnaryCall;
-  updateProjectConversationSettings(
-    request: UpdateProjectConversationSettingsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: UpdateProjectConversationSettingsResponse) => void,
-  ): ClientUnaryCall;
-  cancelProjectAgentRun(
-    request: CancelProjectAgentRunRequest,
-    callback: (error: ServiceError | null, response: CancelProjectAgentRunResponse) => void,
-  ): ClientUnaryCall;
-  cancelProjectAgentRun(
-    request: CancelProjectAgentRunRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CancelProjectAgentRunResponse) => void,
-  ): ClientUnaryCall;
-  cancelProjectAgentRun(
-    request: CancelProjectAgentRunRequest,
+  createConversation(
+    request: CreateConversationRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CancelProjectAgentRunResponse) => void,
+    callback: (error: ServiceError | null, response: CreateConversationResponse) => void,
   ): ClientUnaryCall;
-  getProjectConversationContext(
-    request: GetProjectConversationContextRequest,
-    callback: (error: ServiceError | null, response: GetProjectConversationContextResponse) => void,
+  sendMessage(
+    request: SendMessageRequest,
+    callback: (error: ServiceError | null, response: SendMessageResponse) => void,
   ): ClientUnaryCall;
-  getProjectConversationContext(
-    request: GetProjectConversationContextRequest,
+  sendMessage(
+    request: SendMessageRequest,
     metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetProjectConversationContextResponse) => void,
+    callback: (error: ServiceError | null, response: SendMessageResponse) => void,
   ): ClientUnaryCall;
-  getProjectConversationContext(
-    request: GetProjectConversationContextRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetProjectConversationContextResponse) => void,
-  ): ClientUnaryCall;
-  listProjectConversationHistory(
-    request: ListProjectConversationHistoryRequest,
-    callback: (error: ServiceError | null, response: ListProjectConversationHistoryResponse) => void,
-  ): ClientUnaryCall;
-  listProjectConversationHistory(
-    request: ListProjectConversationHistoryRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListProjectConversationHistoryResponse) => void,
-  ): ClientUnaryCall;
-  listProjectConversationHistory(
-    request: ListProjectConversationHistoryRequest,
+  sendMessage(
+    request: SendMessageRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListProjectConversationHistoryResponse) => void,
+    callback: (error: ServiceError | null, response: SendMessageResponse) => void,
   ): ClientUnaryCall;
-  watchProjectConversation(
-    request: WatchProjectConversationRequest,
+  getConversationSnapshot(
+    request: GetConversationSnapshotRequest,
+    callback: (error: ServiceError | null, response: GetConversationSnapshotResponse) => void,
+  ): ClientUnaryCall;
+  getConversationSnapshot(
+    request: GetConversationSnapshotRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetConversationSnapshotResponse) => void,
+  ): ClientUnaryCall;
+  getConversationSnapshot(
+    request: GetConversationSnapshotRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetConversationSnapshotResponse) => void,
+  ): ClientUnaryCall;
+  listConversationHistory(
+    request: ListConversationHistoryRequest,
+    callback: (error: ServiceError | null, response: ListConversationHistoryResponse) => void,
+  ): ClientUnaryCall;
+  listConversationHistory(
+    request: ListConversationHistoryRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListConversationHistoryResponse) => void,
+  ): ClientUnaryCall;
+  listConversationHistory(
+    request: ListConversationHistoryRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListConversationHistoryResponse) => void,
+  ): ClientUnaryCall;
+  watchConversation(
+    request: WatchConversationRequest,
     options?: Partial<CallOptions>,
-  ): ClientReadableStream<WatchProjectConversationResponse>;
-  watchProjectConversation(
-    request: WatchProjectConversationRequest,
+  ): ClientReadableStream<WatchConversationResponse>;
+  watchConversation(
+    request: WatchConversationRequest,
     metadata?: Metadata,
     options?: Partial<CallOptions>,
-  ): ClientReadableStream<WatchProjectConversationResponse>;
-  createProjectConversation(
-    request: CreateProjectConversationRequest,
-    callback: (error: ServiceError | null, response: CreateProjectConversationResponse) => void,
-  ): ClientUnaryCall;
-  createProjectConversation(
-    request: CreateProjectConversationRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: CreateProjectConversationResponse) => void,
-  ): ClientUnaryCall;
-  createProjectConversation(
-    request: CreateProjectConversationRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: CreateProjectConversationResponse) => void,
-  ): ClientUnaryCall;
-  listProjectConversations(
-    request: ListProjectConversationsRequest,
-    callback: (error: ServiceError | null, response: ListProjectConversationsResponse) => void,
-  ): ClientUnaryCall;
-  listProjectConversations(
-    request: ListProjectConversationsRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListProjectConversationsResponse) => void,
-  ): ClientUnaryCall;
-  listProjectConversations(
-    request: ListProjectConversationsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListProjectConversationsResponse) => void,
-  ): ClientUnaryCall;
-  getProjectConversation(
-    request: GetProjectConversationRequest,
-    callback: (error: ServiceError | null, response: GetProjectConversationResponse) => void,
-  ): ClientUnaryCall;
-  getProjectConversation(
-    request: GetProjectConversationRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetProjectConversationResponse) => void,
-  ): ClientUnaryCall;
-  getProjectConversation(
-    request: GetProjectConversationRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetProjectConversationResponse) => void,
-  ): ClientUnaryCall;
-  sendProjectMessage(
-    request: SendProjectMessageRequest,
-    callback: (error: ServiceError | null, response: SendProjectMessageResponse) => void,
-  ): ClientUnaryCall;
-  sendProjectMessage(
-    request: SendProjectMessageRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: SendProjectMessageResponse) => void,
-  ): ClientUnaryCall;
-  sendProjectMessage(
-    request: SendProjectMessageRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: SendProjectMessageResponse) => void,
-  ): ClientUnaryCall;
-  decideProjectPlan(
-    request: DecideProjectPlanRequest,
-    callback: (error: ServiceError | null, response: DecideProjectPlanResponse) => void,
-  ): ClientUnaryCall;
-  decideProjectPlan(
-    request: DecideProjectPlanRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: DecideProjectPlanResponse) => void,
-  ): ClientUnaryCall;
-  decideProjectPlan(
-    request: DecideProjectPlanRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: DecideProjectPlanResponse) => void,
-  ): ClientUnaryCall;
-  decideProjectProposal(
-    request: DecideProjectProposalRequest,
-    callback: (error: ServiceError | null, response: DecideProjectProposalResponse) => void,
-  ): ClientUnaryCall;
-  decideProjectProposal(
-    request: DecideProjectProposalRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: DecideProjectProposalResponse) => void,
-  ): ClientUnaryCall;
-  decideProjectProposal(
-    request: DecideProjectProposalRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: DecideProjectProposalResponse) => void,
-  ): ClientUnaryCall;
+  ): ClientReadableStream<WatchConversationResponse>;
 }
 
 export const ProjectConversationServiceClient = makeGenericClientConstructor(
@@ -5181,28 +1433,6 @@ type DeepPartial<T> = T extends Builtin ? T
   : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
   : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
   : Partial<T>;
-
-function toTimestamp(date: Date): Timestamp {
-  const seconds = Math.trunc(date.getTime() / 1_000).toString();
-  const nanos = (date.getTime() % 1_000) * 1_000_000;
-  return { seconds, nanos };
-}
-
-function fromTimestamp(t: Timestamp): Date {
-  let millis = (globalThis.Number(t.seconds) || 0) * 1_000;
-  millis += (t.nanos || 0) / 1_000_000;
-  return new globalThis.Date(millis);
-}
-
-function fromJsonTimestamp(o: any): Date {
-  if (o instanceof globalThis.Date) {
-    return o;
-  } else if (typeof o === "string") {
-    return new globalThis.Date(o);
-  } else {
-    return fromTimestamp(Timestamp.fromJSON(o));
-  }
-}
 
 function isSet(value: any): boolean {
   return value !== null && value !== undefined;

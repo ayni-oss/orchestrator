@@ -1,21 +1,16 @@
-Ayni Orchestrator local development release {{ .Release.Name }} is installed in
-namespace {{ .Release.Namespace }}.
-{{- $application := index .Values "ayni-orchestrator" }}
-{{- if $application.enabled }}
+The local PostgreSQL-authoritative Slice 1 stack is installed.
 
-Forward the local web application with:
-  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/web 18080:8080
-{{- end }}
-{{- if .Values.jetstream.enabled }}
+Wait for readiness:
+  kubectl --namespace {{ .Release.Namespace }} rollout status statefulset/workflow-postgres
+  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/control-plane
 
-JetStream uses the retained jetstream-data PVC and internal service jetstream:4222.
-The lifecycle stream is bounded; full streams reject publication and messages
-expire after the configured replay window. Application publication is separate.
-Do not delete the claim to resolve saturation. This is a trusted local profile;
-NetworkPolicy isolation requires a CNI that enforces it.
-{{- end }}
-{{- if .Values.observability.enabled }}
+Health:
+  kubectl --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
 
-Forward the local Grafana dashboard with:
-  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward --address 127.0.0.1 service/grafana 13000:3000
-{{- end }}
+Trusted private-v1 diagnostics:
+  POD=$(kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
+  kubectl --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:50051
+
+The PostgreSQL PVC is retained when the Helm release is removed. Use the
+explicit `dev/ctl purge` confirmation flow to delete the development namespace
+and its data.

@@ -4,9 +4,7 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.31.0",
   "workspaces": [
-    "apps/*",
-    "clients/*",
-    "packages/*"
+    "clients/*"
   ],
   "engines": {
     "node": "24.14.0"
@@ -15,12 +13,8 @@
     "chart:check": "scripts/ci/check-helm.sh",
     "proto:check": "scripts/ci/check-proto.sh",
     "proto:generate": "buf generate",
-    "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check && pnpm --filter @ayni-orchestrator/bff check && pnpm --filter @ayni-orchestrator/web check",
-    "test:frontend": "pnpm --filter @ayni-orchestrator/bff test && pnpm --filter @ayni-orchestrator/web test",
-    "test:e2e": "pnpm --filter @ayni-orchestrator/web test:e2e",
-    "build:web": "pnpm --filter @ayni-orchestrator/web build",
-    "check:browser-bundle": "pnpm --filter @ayni-orchestrator/web check:browser-bundle",
-    "frontend:check": "pnpm typecheck && pnpm build:web && pnpm check:browser-bundle",
+    "typecheck": "pnpm --filter @ayni-orchestrator/grpc-bindings check",
+    "test": "pnpm --filter @ayni-orchestrator/grpc-bindings test",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
@@ -37,8 +31,7 @@
     "overrides": {
       "vitepress>vite": "6.4.3",
       "source-map-js": "1.2.2",
-      "mermaid>katex": "0.18.2",
-      "@sveltejs/kit>cookie": "0.7.2"
+      "mermaid>katex": "0.18.2"
     }
   }
 }

@@ -40,8 +40,6 @@ dev_build_chart_dependencies() (
   export HELM_REPOSITORY_CACHE="$scratch/cache"
   export HELM_PLUGINS="$scratch/plugins"
   mkdir -p "$scratch/cache" "$scratch/plugins"
-  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
-  helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
   helm dependency build "$DEV_CHART" >/dev/null
 )
 

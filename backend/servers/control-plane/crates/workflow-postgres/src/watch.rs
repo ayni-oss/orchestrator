@@ -479,6 +479,30 @@ pub async fn reset_conversation(
     title: &str,
 ) -> Result<(), tokio_postgres::Error> {
     let (mut client, driver) = connect(database_url).await?;
+    client
+        .batch_execute(
+            "CREATE TABLE IF NOT EXISTS public.workflow_watch_conversations (\
+                 id text PRIMARY KEY,\
+                 title text NOT NULL,\
+                 revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0)\
+             );\
+             CREATE TABLE IF NOT EXISTS public.workflow_watch_updates (\
+                 cursor bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\
+                 conversation_id text NOT NULL REFERENCES public.workflow_watch_conversations(id) ON DELETE CASCADE,\
+                 revision bigint NOT NULL CHECK (revision > 0),\
+                 kind text NOT NULL,\
+                 safe_payload text NOT NULL,\
+                 created_at timestamptz NOT NULL DEFAULT clock_timestamp(),\
+                 UNIQUE (conversation_id, revision)\
+             );\
+             CREATE INDEX IF NOT EXISTS workflow_watch_updates_replay \
+                 ON public.workflow_watch_updates (conversation_id, cursor);\
+             CREATE TABLE IF NOT EXISTS public.workflow_watch_watermarks (\
+                 conversation_id text PRIMARY KEY REFERENCES public.workflow_watch_conversations(id) ON DELETE CASCADE,\
+                 pruned_through_cursor bigint NOT NULL DEFAULT 0 CHECK (pruned_through_cursor >= 0)\
+             );",
+        )
+        .await?;
     let transaction = client.transaction().await?;
     transaction
         .execute(

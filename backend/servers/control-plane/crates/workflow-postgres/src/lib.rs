@@ -1,80 +1,32 @@
-//! `PostgreSQL` workflow feasibility adapter.
+//! `PostgreSQL` authority for the replacement project-conversation workflow.
 //!
-//! This crate intentionally starts with a narrow migration primitive. Runtime
-//! authority is added only after the repository's `PostgreSQL` feasibility gate is
-//! retained and reviewed.
+//! This crate owns forward schema migrations and transaction boundaries for M1.
+//! `JetStream` delivery is outside Slice 1; gRPC policy remains in the control-plane adapter.
 
 use tokio::task::JoinHandle;
-use tokio_postgres::{Client, Config, Error, NoTls};
+use tokio_postgres::{Client, Config, NoTls};
 
-const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-const MIGRATION_VERSION: i64 = 1;
+pub mod migrations;
+pub mod model;
+pub mod store;
 
-const MIGRATION: &str = r"
-CREATE TABLE IF NOT EXISTS workflow_schema_migrations (
-    version bigint PRIMARY KEY,
-    description text NOT NULL,
-    applied_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
+pub use migrations::{
+    CURRENT_SCHEMA_VERSION, MigrationError, migrate as migrate_client,
+    migrate_for_runtime as migrate_client_for_runtime, migration_lock_id,
+    validate as validate_client, validate_for_runtime as validate_client_for_runtime,
+};
+pub use store::{StoreError, WorkflowStore};
 
-CREATE TABLE IF NOT EXISTS workflow_gate_conversations (
-    id text PRIMARY KEY,
-    next_sequence bigint NOT NULL DEFAULT 1 CHECK (next_sequence > 0)
-);
-
-CREATE TABLE IF NOT EXISTS workflow_gate_turns (
-    id text PRIMARY KEY,
-    conversation_id text NOT NULL REFERENCES workflow_gate_conversations(id) ON DELETE CASCADE,
-    sequence bigint NOT NULL CHECK (sequence > 0),
-    UNIQUE (conversation_id, sequence)
-);
-
-CREATE TABLE IF NOT EXISTS workflow_gate_events (
-    cursor bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    conversation_id text NOT NULL,
-    kind text NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-
-CREATE TABLE IF NOT EXISTS workflow_gate_outbox (
-    id text PRIMARY KEY,
-    subject text NOT NULL,
-    event_bytes bytea NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-
-CREATE TABLE IF NOT EXISTS workflow_watch_conversations (
-    id text PRIMARY KEY,
-    title text NOT NULL,
-    revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0)
-);
-
-CREATE TABLE IF NOT EXISTS workflow_watch_updates (
-    cursor bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    conversation_id text NOT NULL REFERENCES workflow_watch_conversations(id) ON DELETE CASCADE,
-    revision bigint NOT NULL CHECK (revision > 0),
-    kind text NOT NULL,
-    safe_payload text NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    UNIQUE (conversation_id, revision)
-);
-
-CREATE INDEX IF NOT EXISTS workflow_watch_updates_replay
-    ON workflow_watch_updates (conversation_id, cursor);
-
-CREATE TABLE IF NOT EXISTS workflow_watch_watermarks (
-    conversation_id text PRIMARY KEY REFERENCES workflow_watch_conversations(id) ON DELETE CASCADE,
-    pruned_through_cursor bigint NOT NULL DEFAULT 0 CHECK (pruned_through_cursor >= 0)
-);
-";
-
-/// Open one plaintext `PostgreSQL` connection for local feasibility and return the
-/// connection driver task. Production TLS and pooling are deliberately not implied.
+/// Open one plaintext `PostgreSQL` connection for the isolated local profile.
+/// Production callers must select and configure an appropriate TLS connector.
 ///
 /// # Errors
 /// Returns the `PostgreSQL` configuration or connection error.
-pub async fn connect(database_url: &str) -> Result<(Client, JoinHandle<()>), Error> {
-    let config: Config = database_url.parse()?;
+pub async fn connect(
+    database_url: &str,
+) -> Result<(Client, JoinHandle<()>), tokio_postgres::Error> {
+    let mut config: Config = database_url.parse()?;
+    config.options("-c search_path=pg_catalog,public,pg_temp");
     let (client, connection) = config.connect(NoTls).await?;
     let driver = tokio::spawn(async move {
         let _ = connection.await;
@@ -82,37 +34,58 @@ pub async fn connect(database_url: &str) -> Result<(Client, JoinHandle<()>), Err
     Ok((client, driver))
 }
 
-/// Apply the feasibility schema under a transaction-scoped advisory lock.
-/// Concurrent callers serialize before inspecting and recording the version.
+/// Apply all repository-owned workflow migrations using a local plaintext connection.
 ///
 /// # Errors
-/// Returns any `PostgreSQL` connection, DDL, or transaction error.
-pub async fn migrate(database_url: &str) -> Result<(), Error> {
+/// Returns a migration error when `PostgreSQL` is unavailable or retained schema state
+/// is unsupported.
+pub async fn migrate(database_url: &str) -> Result<(), MigrationError> {
     let (mut client, driver) = connect(database_url).await?;
-    let transaction = client.transaction().await?;
-    transaction
-        .query_one("SELECT pg_advisory_xact_lock($1)", &[&MIGRATION_LOCK_ID])
-        .await?;
-    transaction.batch_execute(MIGRATION).await?;
-    transaction
-        .execute(
-            "INSERT INTO workflow_schema_migrations (version, description) \
-             VALUES ($1, 'workflow feasibility schema') ON CONFLICT (version) DO NOTHING",
-            &[&MIGRATION_VERSION],
-        )
-        .await?;
-    transaction.commit().await?;
+    let result = migrations::migrate(&mut client).await;
     driver.abort();
-    Ok(())
+    result
 }
 
-/// Stable advisory lock ID used by the reproducible feasibility test.
-#[must_use]
-pub const fn migration_lock_id() -> i64 {
-    MIGRATION_LOCK_ID
+/// Apply migrations and grant one distinct least-privilege runtime role.
+///
+/// # Errors
+/// Returns a migration or runtime-role error when the schema cannot be prepared safely.
+pub async fn migrate_for_runtime(
+    database_url: &str,
+    runtime_role: &str,
+) -> Result<(), MigrationError> {
+    let (mut client, driver) = connect(database_url).await?;
+    let result = migrations::migrate_for_runtime(&mut client, runtime_role).await;
+    driver.abort();
+    result
 }
 
-/// Feasibility-only generated snapshot/watch protocol.
+/// Validate that the configured database has exactly the supported workflow schema.
+///
+/// # Errors
+/// Returns a migration error for unavailable, incomplete, modified, or future state.
+pub async fn validate(database_url: &str) -> Result<(), MigrationError> {
+    let (client, driver) = connect(database_url).await?;
+    let result = migrations::validate(&client).await;
+    driver.abort();
+    result
+}
+
+/// Validate schema, privileges, and the exact connected runtime role.
+///
+/// # Errors
+/// Returns a validation error for unavailable, modified, privileged, or misbound state.
+pub async fn validate_for_runtime(
+    database_url: &str,
+    runtime_role: &str,
+) -> Result<(), MigrationError> {
+    let (client, driver) = connect(database_url).await?;
+    let result = migrations::validate_for_runtime(&client, runtime_role).await;
+    driver.abort();
+    result
+}
+
+/// Feasibility-only generated snapshot/watch protocol retained until Slice 3.
 #[allow(clippy::all, clippy::pedantic, clippy::nursery)]
 pub mod watch_v1 {
     tonic::include_proto!("ayni.orchestrator.feasibility.v1");

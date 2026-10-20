@@ -30,4 +30,4 @@ cp -R clients/typescript/src/generated "$temporary/generated"
 buf generate
 diff -ru "$temporary/generated" clients/typescript/src/generated
 pnpm --filter @ayni-orchestrator/grpc-bindings check
-pnpm --filter @ayni-orchestrator/web exec node --import tsx ../../clients/typescript/tests/verification.test.ts
+pnpm --filter @ayni-orchestrator/grpc-bindings test

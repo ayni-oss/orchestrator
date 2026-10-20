@@ -5,6 +5,8 @@ readonly IMAGE="postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea45
 readonly CONTAINER="ayni-m1-postgres-feasibility-$$"
 readonly PASSWORD="feasibility-only"
 readonly DATABASE="workflow_gate"
+readonly RUNTIME_ROLE="ayni_gate_runtime"
+readonly RUNTIME_PASSWORD="runtime-feasibility-only"
 
 cleanup() {
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
@@ -44,8 +46,19 @@ if [[ ! "$port" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
+docker exec "$CONTAINER" psql --username postgres --dbname "$DATABASE" \
+  --command="CREATE ROLE $RUNTIME_ROLE LOGIN PASSWORD '$RUNTIME_PASSWORD'; \
+    REVOKE ALL ON DATABASE $DATABASE FROM PUBLIC; \
+    GRANT CONNECT ON DATABASE $DATABASE TO $RUNTIME_ROLE" >/dev/null
+
 export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${port}/${DATABASE}"
+export AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL="postgresql://${RUNTIME_ROLE}:${RUNTIME_PASSWORD}@127.0.0.1:${port}/${DATABASE}"
+export AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE="$RUNTIME_ROLE"
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test feasibility -- --ignored --nocapture
+export AYNI_POSTGRES_FEASIBILITY_URL="$AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL"
+cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --nocapture
+cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --ignored --nocapture
+export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${port}/${DATABASE}"
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test watch_feasibility -- --ignored --nocapture
 
 echo "postgres-image=$IMAGE"

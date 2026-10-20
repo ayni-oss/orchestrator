@@ -1,7 +1,5 @@
 packages:
-  - apps/*
   - clients/*
-  - packages/*
 
 ignoredBuiltDependencies:
   - protobufjs

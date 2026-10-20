@@ -10,7 +10,8 @@
     }
   },
   "scripts": {
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx tests/verification.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.15.0",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "24.10.1",
     "ts-proto": "2.12.4",
+    "tsx": "4.23.15",
     "typescript": "7.0.2"
   }
 }

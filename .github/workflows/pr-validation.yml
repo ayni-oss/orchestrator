@@ -149,11 +149,11 @@ jobs:
 
       - name: Validate contract and generated bindings
         run: |
-          if ! grep -qx 'repository-builders-v4' proto/BASELINE; then
-            echo 'The current protobuf baseline marker must be exactly repository-builders-v4.' >&2
+          if ! grep -qx 'workflow-m1-private-v1' proto/BASELINE; then
+            echo 'The current protobuf baseline marker must be exactly workflow-m1-private-v1.' >&2
             exit 1
-          elif test -f .contract-base/proto/BASELINE && grep -qx 'managed-images-v3' .contract-base/proto/BASELINE; then
-            echo 'Buf breaking comparison reset for the intentional repository-builders-v4 contract cutover.'
+          elif test -f .contract-base/proto/BASELINE && grep -qx 'repository-builders-v4' .contract-base/proto/BASELINE; then
+            echo 'Buf breaking comparison reset for the intentional M1 private-v1 authority cutover.'
             scripts/ci/check-proto.sh
           elif cmp -s proto/BASELINE .contract-base/proto/BASELINE; then
             scripts/ci/check-proto.sh .contract-base/proto
@@ -162,12 +162,16 @@ jobs:
             exit 1
           fi
 
+      - name: Validate canonical private-v1 cutover
+        run: scripts/ci/check-workflow-private-v1-feasibility.sh
+
       - name: Compile and test Rust bindings
         run: cargo test -p ayni-orchestrator-api -p ayni-orchestrator-events
 
   integration:
-    name: Tests and tooling
+    name: Rust and PostgreSQL
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -176,17 +180,14 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - name: Set up locked Node dependencies
-        uses: ayni-oss/ayni/.github/actions/node-project@82966446499f11f5668dd314a432c8ab74788c3d # shared CI
-        with:
-          package-manager: pnpm
-          node-version: 24.14.0
-      - name: Test local protocol fixtures
-        run: node --test dev/tests/nats-fault-proxy.test.mjs dev/tests/planner-stub.test.mjs
-      - name: Test workflow evaluation reporting
-        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s evals -p 'test_*.py'
-      - name: Test compatibility drain inventory
-        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/operations -p 'test_*.py'
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Test workspace
+        run: cargo test --workspace --all-targets
+      - name: Lint workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test PostgreSQL authority
+        run: scripts/ci/check-workflow-postgres-feasibility.sh
 
   ayni:
     name: Ayni quality
