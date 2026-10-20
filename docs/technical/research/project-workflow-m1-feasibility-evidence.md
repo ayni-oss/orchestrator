@@ -11,7 +11,7 @@ This document retains reproducible evidence for the gates in
 
 - Repository: `ayni-oss/orchestrator`.
 - Executable proof and contract revision:
-  `13afc851f69c77e0696da70b7f17ca5114693509`.
+  `60aef6cbbfc92755820d0d342f36ad0ee4bc5a08`.
 - Rust: `rustc 1.94.0`; Cargo 1.94.0.
 - PostgreSQL image:
   `postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3`.
@@ -252,7 +252,8 @@ cursorless heartbeats. Overlaying the reset fails the old baseline as expected; 
 refreshed baseline passes, and deleting an RPC afterward fails normal `FILE`
 compatibility. Two TypeScript generations are byte-identical.
 
-The retained inventory covers 63 handwritten Rust, BFF, web, and shell consumers.
+The retained inventory covers 154 handwritten Rust, TypeScript client, BFF, web,
+shell, and supporting references.
 Type-level compile-fail checks reject a SQLite workflow owner and reject workflow
 registration on the custom-client listener. Runtime slice 1 must regenerate canonical
 clients, update/delete every inventoried consumer, remove the old owner and tests,
@@ -271,7 +272,14 @@ Independent read-only audit initially found four blocking proof defects:
 Revision `13afc851f69c77e0696da70b7f17ca5114693509` closes all four with retained
 consumer sequence/ACK-floor reconciliation, kind-specific claim bounds,
 capacity-error/near-limit/512-MiB assertions, and bcrypt-only broker configuration.
-The focused and full validation commands below passed after those corrections.
+
+A final audit found that the executor byte reservation omitted claim margin and a
+future terminal record, terminal rejection had no completion path, report duplicate
+checks ignored the command binding, and the private-v1 inventory used a partial
+symbol list. Revision `60aef6cbbfc92755820d0d342f36ad0ee4bc5a08` closes those gaps with
+fixed-size record/byte reservations, terminal rejection cleanup, bound duplicate
+checks, a legacy-proto-derived 154-file inventory, and a refreshed Ayni environment
+lock. The focused and full validation commands below passed after those corrections.
 
 ## Validation and gate ledger
 
@@ -306,7 +314,7 @@ Bash used by CI.
 | JetStream topology/capacity | Auth/ACLs, bounds, max payload, restart, exact republish, full production-size `discard=new`, oldest retention, and both 512-MiB headrooms pass. |
 | Credential isolation/retirement | Immutable per-identity Secrets, bcrypt-only broker config, pod/RBAC isolation, per-executor decisions, and ACK-before-retirement pass. |
 | Executor ownership/handoff | Strict signing and claim size, atomic ledger, capacity reservation, split brain, crash/redelivery, ACK-floor reconciliation, long-outage republish, and retirement pass. |
-| Private-v1 reset/listeners | Reset procedure, regenerated baseline enforcement, deterministic generation, 63-file inventory, trusted PostgreSQL owner, and custom-listener omission pass. |
+| Private-v1 reset/listeners | Reset procedure, regenerated baseline enforcement, deterministic generation, 154-file inventory, trusted PostgreSQL owner, and custom-listener omission pass. |
 
 All pre-implementation gates are therefore closed. The remaining items in this
 document are explicit runtime-slice acceptance obligations, not unresolved choices
