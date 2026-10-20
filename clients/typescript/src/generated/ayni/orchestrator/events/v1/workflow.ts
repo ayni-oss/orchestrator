@@ -126,6 +126,7 @@ export interface ConversationTurnReport {
   signingPublicKey: Buffer;
   signingKeyDigest: string;
   responseContent: string;
+  /** Stable lowercase classification code; never raw executor diagnostics. */
   failureReason: string;
   signature: Buffer;
 }
@@ -139,6 +140,7 @@ export interface ConversationReportDecision {
   assignmentId: string;
   executorGeneration: string;
   decision: ConversationReportDecisionKind;
+  /** Empty for acceptance; otherwise a stable lowercase classification code. */
   safeReason: string;
   turnState: string;
   workspaceId: string;

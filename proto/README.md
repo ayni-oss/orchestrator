@@ -92,6 +92,22 @@ causation, aggregate revision and whether the observation changed task state.
 See [coding lifecycle reporting](../docs/technical/reference/coding-events.md) for authenticated
 ingestion, independent outcomes, writer fencing and retained-envelope recovery.
 
+## Conversation workflow payloads
+
+The canonical `ayni.orchestrator.events.v1` workflow messages define the versioned
+application-to-executor command, signed executor report, and targeted application
+decision payloads for the replacement conversation runtime. Every encoded workflow
+CloudEvent requires an RFC 3339 produced time and canonical W3C `traceparent` in
+addition to its immutable source, event ID, scope, assignment, generation, causation,
+and correlation bindings. Failed reports and rejected decisions carry stable
+lowercase reason codes, never raw exceptions or secret-bearing diagnostics.
+
+The payload schema and cross-language signing fixture are compatibility commitments.
+The current executor ledger, PostgreSQL watch service, and JetStream configuration
+remain feasibility artifacts and are not registered as production workflow owners.
+See the [M1 feasibility evidence](../docs/technical/research/project-workflow-m1-feasibility-evidence.md)
+for reproduction commands and open gates.
+
 ## Operator lifecycle and watch contracts
 
 `LifecycleDecisionRecorded` records a committed connection, certificate, project

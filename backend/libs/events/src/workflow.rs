@@ -28,6 +28,20 @@ pub const MAX_REPORT_BYTES: usize = 32 * 1024;
 pub const MAX_DECISION_BYTES: usize = 16 * 1024;
 pub const MAX_CONTENT_BYTES: usize = 16 * 1024;
 
+/// Required transport metadata retained unchanged across delivery retries.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowEventMetadata {
+    pub produced_at: String,
+    pub traceparent: String,
+}
+
+#[derive(Clone, Copy)]
+struct EventContract<'a> {
+    event_type: &'a str,
+    schema: &'static str,
+    maximum: usize,
+}
+
 /// Build the one-token decision subject for a retained executor instance.
 /// # Errors
 /// Rejects an empty, oversized, or non-token executor instance ID.
@@ -43,18 +57,22 @@ pub fn decision_subject(executor_instance_id: &str) -> Result<String, ContractEr
 /// Rejects invalid scope, context, identity, or an oversized `CloudEvent`.
 pub fn encode_command(
     identity: &EventIdentity,
+    metadata: &WorkflowEventMetadata,
     payload: &ConversationTurnRequested,
 ) -> Result<Vec<u8>, ContractError> {
     validate_application_identity(identity)?;
     let binding = validate_command(payload, identity)?;
     encode_event(
         identity,
-        TURN_REQUESTED_TYPE,
-        COMMAND_SCHEMA,
+        metadata,
+        EventContract {
+            event_type: TURN_REQUESTED_TYPE,
+            schema: COMMAND_SCHEMA,
+            maximum: MAX_COMMAND_BYTES,
+        },
         workflow_subject(binding),
         &binding_extensions(binding),
         payload,
-        MAX_COMMAND_BYTES,
     )
 }
 
@@ -63,8 +81,15 @@ pub fn encode_command(
 /// Rejects malformed, unsupported, mismatched, or oversized input.
 pub fn decode_command(
     bytes: &[u8],
-) -> Result<(EventIdentity, ConversationTurnRequested), ContractError> {
-    let (identity, payload, event) = decode_event(
+) -> Result<
+    (
+        EventIdentity,
+        WorkflowEventMetadata,
+        ConversationTurnRequested,
+    ),
+    ContractError,
+> {
+    let (identity, metadata, payload, event) = decode_event(
         bytes,
         TURN_REQUESTED_TYPE,
         COMMAND_SCHEMA,
@@ -76,7 +101,7 @@ pub fn decode_command(
         return Err(ContractError::Invalid("command subject"));
     }
     validate_binding_extensions(&event, binding)?;
-    Ok((identity, payload))
+    Ok((identity, metadata, payload))
 }
 
 /// Canonical bytes covered by one executor signature. The signature field is
@@ -207,6 +232,7 @@ pub fn verify_report_signature(
 /// Rejects invalid binding, signing metadata, outcome, identity, or size.
 pub fn encode_report(
     identity: &EventIdentity,
+    metadata: &WorkflowEventMetadata,
     payload: &ConversationTurnReport,
 ) -> Result<Vec<u8>, ContractError> {
     validate_identity(identity)?;
@@ -215,12 +241,15 @@ pub fn encode_report(
     validate_report_identity(identity, payload)?;
     encode_event(
         identity,
-        kind,
-        REPORT_SCHEMA,
+        metadata,
+        EventContract {
+            event_type: kind,
+            schema: REPORT_SCHEMA,
+            maximum: MAX_REPORT_BYTES,
+        },
         workflow_subject(binding(payload)?),
         &binding_extensions(binding(payload)?),
         payload,
-        MAX_REPORT_BYTES,
     )
 }
 
@@ -229,7 +258,7 @@ pub fn encode_report(
 /// Rejects malformed, unsupported, mismatched, or oversized input.
 pub fn decode_report(
     bytes: &[u8],
-) -> Result<(EventIdentity, ConversationTurnReport), ContractError> {
+) -> Result<(EventIdentity, WorkflowEventMetadata, ConversationTurnReport), ContractError> {
     if bytes.len() > MAX_REPORT_BYTES {
         return Err(ContractError::Oversized);
     }
@@ -251,6 +280,7 @@ pub fn decode_report(
         id: event.id().to_owned(),
     };
     validate_identity(&identity)?;
+    let metadata = decode_workflow_metadata(&event)?;
     let Some(Data::Json(data)) = event.data() else {
         return Err(ContractError::Invalid("report data"));
     };
@@ -263,7 +293,7 @@ pub fn decode_report(
         return Err(ContractError::Invalid("report binding"));
     }
     validate_binding_extensions(&event, report_binding)?;
-    Ok((identity, payload))
+    Ok((identity, metadata, payload))
 }
 
 /// Encode an application acceptance/rejection decision targeted to one executor.
@@ -271,18 +301,22 @@ pub fn decode_report(
 /// Rejects invalid report identity, assignment, target, or size.
 pub fn encode_decision(
     identity: &EventIdentity,
+    metadata: &WorkflowEventMetadata,
     payload: &ConversationReportDecision,
 ) -> Result<Vec<u8>, ContractError> {
     validate_application_identity(identity)?;
     validate_decision(payload)?;
     encode_event(
         identity,
-        REPORT_DECIDED_TYPE,
-        DECISION_SCHEMA,
+        metadata,
+        EventContract {
+            event_type: REPORT_DECIDED_TYPE,
+            schema: DECISION_SCHEMA,
+            maximum: MAX_DECISION_BYTES,
+        },
         format!("reports/{}", payload.report_id),
         &decision_extensions(payload),
         payload,
-        MAX_DECISION_BYTES,
     )
 }
 
@@ -291,8 +325,15 @@ pub fn encode_decision(
 /// Rejects malformed, unsupported, mismatched, or oversized input.
 pub fn decode_decision(
     bytes: &[u8],
-) -> Result<(EventIdentity, ConversationReportDecision), ContractError> {
-    let (identity, payload, event) = decode_event(
+) -> Result<
+    (
+        EventIdentity,
+        WorkflowEventMetadata,
+        ConversationReportDecision,
+    ),
+    ContractError,
+> {
+    let (identity, metadata, payload, event) = decode_event(
         bytes,
         REPORT_DECIDED_TYPE,
         DECISION_SCHEMA,
@@ -304,32 +345,40 @@ pub fn decode_decision(
         return Err(ContractError::Invalid("decision subject"));
     }
     validate_decision_extensions(&event, &payload)?;
-    Ok((identity, payload))
+    Ok((identity, metadata, payload))
 }
 
 fn encode_event<T: serde::Serialize>(
     identity: &EventIdentity,
-    event_type: &str,
-    schema: &str,
+    metadata: &WorkflowEventMetadata,
+    contract: EventContract<'_>,
     subject: String,
     extensions: &[(&str, String)],
     payload: &T,
-    maximum: usize,
 ) -> Result<Vec<u8>, ContractError> {
+    if !traceparent(&metadata.traceparent) {
+        return Err(ContractError::Invalid("workflow trace reference"));
+    }
     let mut builder = EventBuilderV10::new()
         .id(identity.id.clone())
         .source(identity.source.clone())
-        .ty(event_type)
-        .subject(subject);
+        .ty(contract.event_type)
+        .subject(subject)
+        .time(metadata.produced_at.as_str())
+        .extension("traceparent", metadata.traceparent.clone());
     for (name, value) in extensions {
         builder = builder.extension(name, value.clone());
     }
     let event = builder
-        .data_with_schema("application/json", schema, serde_json::to_value(payload)?)
+        .data_with_schema(
+            "application/json",
+            contract.schema,
+            serde_json::to_value(payload)?,
+        )
         .build()
         .map_err(|_| ContractError::Invalid("workflow CloudEvent"))?;
     let bytes = serde_json::to_vec(&event)?;
-    if bytes.len() > maximum {
+    if bytes.len() > contract.maximum {
         return Err(ContractError::Oversized);
     }
     Ok(bytes)
@@ -340,7 +389,7 @@ fn decode_event<T: serde::de::DeserializeOwned>(
     event_type: &str,
     schema: &str,
     maximum: usize,
-) -> Result<(EventIdentity, T, Event), ContractError> {
+) -> Result<(EventIdentity, WorkflowEventMetadata, T, Event), ContractError> {
     if bytes.len() > maximum {
         return Err(ContractError::Oversized);
     }
@@ -359,11 +408,51 @@ fn decode_event<T: serde::de::DeserializeOwned>(
         id: event.id().to_owned(),
     };
     validate_identity(&identity)?;
+    let metadata = decode_workflow_metadata(&event)?;
     let Some(Data::Json(data)) = event.data() else {
         return Err(ContractError::Invalid("workflow data"));
     };
     let payload = serde_json::from_value(data.clone())?;
-    Ok((identity, payload, event))
+    Ok((identity, metadata, payload, event))
+}
+
+fn decode_workflow_metadata(event: &Event) -> Result<WorkflowEventMetadata, ContractError> {
+    let produced_at = event
+        .time()
+        .copied()
+        .ok_or(ContractError::Invalid("workflow produced time"))?;
+    let Some(ExtensionValue::String(trace_reference)) = event.extension("traceparent") else {
+        return Err(ContractError::Invalid("workflow trace reference"));
+    };
+    if !traceparent(trace_reference) {
+        return Err(ContractError::Invalid("workflow trace reference"));
+    }
+    Ok(WorkflowEventMetadata {
+        produced_at: produced_at.to_rfc3339(),
+        traceparent: trace_reference.clone(),
+    })
+}
+
+fn traceparent(value: &str) -> bool {
+    let mut parts = value.split('-');
+    let version = parts.next();
+    let trace_id = parts.next();
+    let parent_id = parts.next();
+    let flags = parts.next();
+    version == Some("00")
+        && trace_id
+            .is_some_and(|part| canonical_hex(part, 32) && part.bytes().any(|byte| byte != b'0'))
+        && parent_id
+            .is_some_and(|part| canonical_hex(part, 16) && part.bytes().any(|byte| byte != b'0'))
+        && flags.is_some_and(|part| canonical_hex(part, 2))
+        && parts.next().is_none()
+}
+
+fn canonical_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 fn validate_application_identity(identity: &EventIdentity) -> Result<(), ContractError> {
@@ -537,8 +626,7 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
         }
         ConversationTurnReportKind::Failed => {
             payload.response_content.is_empty()
-                && !payload.failure_reason.trim().is_empty()
-                && payload.failure_reason.len() <= 1024
+                && safe_reason_code(&payload.failure_reason)
                 && payload.signing_public_key.is_empty()
         }
         ConversationTurnReportKind::Unspecified => false,
@@ -581,7 +669,7 @@ fn validate_decision(payload: &ConversationReportDecision) -> Result<(), Contrac
         || !simple_identifier(&payload.assignment_id)
         || payload.executor_generation == 0
         || decision == ConversationReportDecisionKind::Unspecified
-        || payload.safe_reason.len() > 256
+        || !decision_reason_valid(decision, &payload.safe_reason)
         || !matches!(
             payload.turn_state.as_str(),
             "processing" | "completed" | "failed"
@@ -609,6 +697,22 @@ fn lowercase_hexadecimal(bytes: &[u8]) -> String {
     result
 }
 
+fn decision_reason_valid(decision: ConversationReportDecisionKind, reason: &str) -> bool {
+    match decision {
+        ConversationReportDecisionKind::Accepted => reason.is_empty(),
+        ConversationReportDecisionKind::Rejected => safe_reason_code(reason),
+        ConversationReportDecisionKind::Unspecified => false,
+    }
+}
+
+fn safe_reason_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
 fn simple_identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -625,6 +729,13 @@ mod tests {
         EventIdentity {
             source: "ayni://orchestrator/supervisors/workflow-application".into(),
             id: uuid::Uuid::now_v7().to_string(),
+        }
+    }
+
+    fn metadata() -> WorkflowEventMetadata {
+        WorkflowEventMetadata {
+            produced_at: "2026-10-20T08:00:00+00:00".into(),
+            traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".into(),
         }
     }
 
@@ -659,12 +770,22 @@ mod tests {
             input_content: "hello".into(),
             context: vec![],
         };
-        let bytes = encode_command(&identity, &payload)?;
-        assert_eq!(decode_command(&bytes)?, (identity, payload));
+        let metadata = metadata();
+        let bytes = encode_command(&identity, &metadata, &payload)?;
+        assert_eq!(decode_command(&bytes)?, (identity, metadata, payload));
         let mut changed_extension: serde_json::Value = serde_json::from_slice(&bytes)?;
         changed_extension["workspaceid"] =
             serde_json::json!(format!("workspace:{}", uuid::Uuid::now_v7()));
         assert!(decode_command(&serde_json::to_vec(&changed_extension)?).is_err());
+        let mut missing_time: serde_json::Value = serde_json::from_slice(&bytes)?;
+        missing_time
+            .as_object_mut()
+            .ok_or(ContractError::Invalid("command JSON object"))?
+            .remove("time");
+        assert!(decode_command(&serde_json::to_vec(&missing_time)?).is_err());
+        let mut invalid_trace: serde_json::Value = serde_json::from_slice(&bytes)?;
+        invalid_trace["traceparent"] = serde_json::json!("unscoped-trace");
+        assert!(decode_command(&serde_json::to_vec(&invalid_trace)?).is_err());
         Ok(())
     }
 
@@ -691,9 +812,11 @@ mod tests {
         let expected = report_signing_bytes(&identity, &payload)?;
         sign_report(&identity, &mut payload, &signing_seed)?;
         verify_report_signature(&identity, &payload, None)?;
-        let bytes = encode_report(&identity, &payload)?;
-        let (actual_identity, decoded) = decode_report(&bytes)?;
+        let metadata = metadata();
+        let bytes = encode_report(&identity, &metadata, &payload)?;
+        let (actual_identity, actual_metadata, decoded) = decode_report(&bytes)?;
         assert_eq!(actual_identity, identity);
+        assert_eq!(actual_metadata, metadata);
         assert_eq!(report_signing_bytes(&identity, &decoded)?, expected);
         Ok(())
     }
@@ -768,6 +891,21 @@ mod tests {
     }
 
     #[test]
+    fn safe_reason_codes_reject_free_form_diagnostics() {
+        assert!(safe_reason_code("script_failed"));
+        assert!(!safe_reason_code("token=secret"));
+        assert!(!safe_reason_code("raw exception text"));
+        assert!(decision_reason_valid(
+            ConversationReportDecisionKind::Accepted,
+            ""
+        ));
+        assert!(!decision_reason_valid(
+            ConversationReportDecisionKind::Accepted,
+            "accepted"
+        ));
+    }
+
+    #[test]
     fn decisions_are_targeted_and_bounded() -> Result<(), ContractError> {
         let identity = identity();
         let target_executor_instance_id = uuid::Uuid::now_v7().to_string();
@@ -787,8 +925,9 @@ mod tests {
             conversation_id: format!("conversation:{}", uuid::Uuid::now_v7()),
             turn_id: format!("turn:{}", uuid::Uuid::now_v7()),
         };
-        let bytes = encode_decision(&identity, &payload)?;
-        assert_eq!(decode_decision(&bytes)?, (identity, payload));
+        let metadata = metadata();
+        let bytes = encode_decision(&identity, &metadata, &payload)?;
+        assert_eq!(decode_decision(&bytes)?, (identity, metadata, payload));
         Ok(())
     }
 }

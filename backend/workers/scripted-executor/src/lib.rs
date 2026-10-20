@@ -4,8 +4,10 @@
 //! application decision is durable. It is deliberately synchronous; a future
 //! worker process must call it from a blocking boundary.
 
+use ayni_orchestrator_events::EventIdentity;
 use ayni_orchestrator_events::v1::{
-    ConversationReportDecision, ConversationReportDecisionKind, ConversationTurnReportKind,
+    ConversationReportDecision, ConversationReportDecisionKind, ConversationTurnBinding,
+    ConversationTurnReport, ConversationTurnReportKind,
 };
 use ayni_orchestrator_events::workflow::{
     decode_command, decode_decision, decode_report, verify_report_signature,
@@ -14,53 +16,9 @@ use rusqlite::{Connection, OptionalExtension as _, Transaction, TransactionBehav
 use sha2::{Digest as _, Sha256};
 use std::path::Path;
 
-const SCHEMA: &str = r"
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = FULL;
-PRAGMA foreign_keys = ON;
+mod schema;
 
-CREATE TABLE IF NOT EXISTS executor_identity (
-    singleton integer PRIMARY KEY CHECK (singleton = 1),
-    instance_id text NOT NULL,
-    signing_seed blob NOT NULL CHECK (length(signing_seed) = 32)
-);
-
-CREATE TABLE IF NOT EXISTS commands (
-    source text NOT NULL,
-    event_id text NOT NULL,
-    digest text NOT NULL,
-    event_bytes blob,
-    workspace_id text NOT NULL,
-    project_id text NOT NULL,
-    conversation_id text NOT NULL,
-    turn_id text NOT NULL,
-    assignment_id text NOT NULL,
-    generation integer NOT NULL CHECK (generation > 0),
-    execution_binding_revision text NOT NULL,
-    context_revision integer NOT NULL CHECK (context_revision > 0),
-    signing_public_key blob CHECK (signing_public_key IS NULL OR length(signing_public_key) = 32),
-    state text NOT NULL CHECK (state IN ('claim_pending', 'accepted', 'terminal_pending', 'rejected', 'completed')),
-    PRIMARY KEY (source, event_id),
-    UNIQUE (turn_id, assignment_id, generation)
-);
-
-CREATE TABLE IF NOT EXISTS reports (
-    source text NOT NULL,
-    event_id text NOT NULL,
-    digest text NOT NULL,
-    event_bytes blob,
-    command_source text NOT NULL,
-    command_event_id text NOT NULL,
-    sequence integer NOT NULL CHECK (sequence IN (1, 2)),
-    decision text CHECK (decision IN ('accepted', 'rejected')),
-    decision_digest text,
-    decision_bytes blob,
-    decision_acked integer NOT NULL DEFAULT 0 CHECK (decision_acked IN (0, 1)),
-    PRIMARY KEY (source, event_id),
-    UNIQUE (command_source, command_event_id, sequence),
-    FOREIGN KEY (command_source, command_event_id) REFERENCES commands(source, event_id)
-);
-";
+use schema::SCHEMA;
 
 #[derive(Clone, Copy, Debug)]
 pub struct LedgerLimits {
@@ -143,16 +101,40 @@ struct ValidatedCommand {
     context_revision: u64,
 }
 
-type DecisionRow = (
-    Option<String>,
-    Option<String>,
-    Option<Vec<u8>>,
-    Option<Vec<u8>>,
-    String,
-    i64,
-    String,
-    String,
-);
+struct RetainedDecisionReport {
+    prior_result: Option<String>,
+    prior_digest: Option<String>,
+    prior_bytes: Option<Vec<u8>>,
+    report_bytes: Option<Vec<u8>>,
+    report_digest: String,
+    sequence: i64,
+    command_source: String,
+    command_event_id: String,
+}
+
+struct RetainedCommandBinding {
+    command_digest: String,
+    workspace_id: String,
+    project_id: String,
+    conversation_id: String,
+    turn_id: String,
+    assignment_id: String,
+    generation: i64,
+    execution_binding_revision: String,
+    context_revision: i64,
+    signing_public_key: Vec<u8>,
+    state: String,
+}
+
+struct RetainedDecisionCommand {
+    workspace_id: String,
+    project_id: String,
+    conversation_id: String,
+    turn_id: String,
+    assignment_id: String,
+    generation: i64,
+    superseded: bool,
+}
 
 impl Ledger {
     /// Open or create a ledger and verify that its retained executor identity is
@@ -316,84 +298,30 @@ impl Ledger {
     ///
     /// # Errors
     /// Returns missing reports, immutable conflicts, capacity, or SQL errors.
-    #[allow(clippy::too_many_lines)]
     pub fn record_decision(
         &mut self,
         decision: &Decision<'_>,
     ) -> Result<StoreOutcome, LedgerError> {
-        if decision.exact_bytes.is_empty() {
-            return Err(LedgerError::Invalid);
-        }
-        let (_, payload) =
-            decode_decision(decision.exact_bytes).map_err(|_| LedgerError::Invalid)?;
-        let accepted = match ConversationReportDecisionKind::try_from(payload.decision)
-            .map_err(|_| LedgerError::Invalid)?
-        {
-            ConversationReportDecisionKind::Accepted => true,
-            ConversationReportDecisionKind::Rejected => false,
-            ConversationReportDecisionKind::Unspecified => return Err(LedgerError::Invalid),
-        };
         let instance_id = retained_instance_id(&self.connection)?;
-        if payload.target_executor_instance_id != instance_id {
-            return Err(LedgerError::Invalid);
-        }
+        let (payload, accepted) = decode_targeted_decision(decision.exact_bytes, &instance_id)?;
         let decision_digest = exact_digest(decision.exact_bytes);
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let existing: Option<DecisionRow> = transaction
-            .query_row(
-                "SELECT decision, decision_digest, decision_bytes, event_bytes, digest, sequence, command_source, command_event_id \
-                 FROM reports WHERE source = ?1 AND event_id = ?2",
-                params![payload.report_source, payload.report_id],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                        row.get(6)?,
-                        row.get(7)?,
-                    ))
-                },
-            )
-            .optional()?;
-        let Some((
-            prior_result,
-            prior_digest,
-            prior_bytes,
-            report_bytes,
-            report_digest,
-            sequence,
-            command_source,
-            command_id,
-        )) = existing
-        else {
-            return Err(LedgerError::NotFound);
-        };
+        let retained = retained_decision_report(&transaction, &payload)?;
         let result = if accepted { "accepted" } else { "rejected" };
-        if let Some(prior_result) = prior_result {
-            if prior_result == result
-                && prior_digest.as_deref() == Some(decision_digest.as_str())
-                && prior_bytes
-                    .as_deref()
-                    .is_none_or(|bytes| bytes == decision.exact_bytes)
-            {
-                transaction.commit()?;
-                return Ok(StoreOutcome::Duplicate);
-            }
-            return Err(LedgerError::EventConflict);
+        if prior_decision_is_duplicate(&retained, result, &decision_digest, decision.exact_bytes)? {
+            transaction.commit()?;
+            return Ok(StoreOutcome::Duplicate);
         }
         let signing_public_key = validate_decision_binding(
             &transaction,
             &payload,
-            &report_digest,
-            report_bytes.as_deref(),
-            &command_source,
-            &command_id,
-            sequence,
+            &retained.report_digest,
+            retained.report_bytes.as_deref(),
+            &retained.command_source,
+            &retained.command_event_id,
+            retained.sequence,
             &instance_id,
         )?;
         reserve(
@@ -401,7 +329,7 @@ impl Ledger {
             self.limits,
             0,
             decision.exact_bytes.len(),
-            report_bytes.as_deref().map_or(0, <[u8]>::len),
+            retained.report_bytes.as_deref().map_or(0, <[u8]>::len),
         )?;
         transaction.execute(
             "UPDATE reports SET decision = ?3, decision_digest = ?4, decision_bytes = ?5, event_bytes = NULL \
@@ -414,21 +342,14 @@ impl Ledger {
                 decision.exact_bytes,
             ],
         )?;
-        let command_state = match (sequence, accepted) {
-            (1, true) => "accepted",
-            (1, false) => "rejected",
-            (2, false) => "terminal_pending",
-            (2, true) => "completed",
-            _ => return Err(LedgerError::Invalid),
-        };
-        let cleanup_command = (sequence == 1 && !accepted) || (sequence == 2 && accepted);
+        let (command_state, cleanup_command) = command_transition(retained.sequence, accepted)?;
         transaction.execute(
             "UPDATE commands SET state = ?3, signing_public_key = COALESCE(?5, signing_public_key), \
              event_bytes = CASE WHEN ?4 THEN NULL ELSE event_bytes END \
              WHERE source = ?1 AND event_id = ?2",
             params![
-                command_source,
-                command_id,
+                retained.command_source,
+                retained.command_event_id,
                 command_state,
                 cleanup_command,
                 signing_public_key,
@@ -530,12 +451,94 @@ fn retained_instance_id(connection: &Connection) -> Result<String, LedgerError> 
     )?)
 }
 
+fn decode_targeted_decision(
+    exact_bytes: &[u8],
+    instance_id: &str,
+) -> Result<(ConversationReportDecision, bool), LedgerError> {
+    if exact_bytes.is_empty() {
+        return Err(LedgerError::Invalid);
+    }
+    let (_, _, payload) = decode_decision(exact_bytes).map_err(|_| LedgerError::Invalid)?;
+    if payload.target_executor_instance_id != instance_id {
+        return Err(LedgerError::Invalid);
+    }
+    let accepted = match ConversationReportDecisionKind::try_from(payload.decision)
+        .map_err(|_| LedgerError::Invalid)?
+    {
+        ConversationReportDecisionKind::Accepted => true,
+        ConversationReportDecisionKind::Rejected => false,
+        ConversationReportDecisionKind::Unspecified => return Err(LedgerError::Invalid),
+    };
+    Ok((payload, accepted))
+}
+
+fn retained_decision_report(
+    transaction: &Transaction<'_>,
+    decision: &ConversationReportDecision,
+) -> Result<RetainedDecisionReport, LedgerError> {
+    transaction
+        .query_row(
+            "SELECT decision, decision_digest, decision_bytes, event_bytes, digest, sequence, command_source, command_event_id \
+             FROM reports WHERE source = ?1 AND event_id = ?2",
+            params![decision.report_source, decision.report_id],
+            |row| {
+                Ok(RetainedDecisionReport {
+                    prior_result: row.get(0)?,
+                    prior_digest: row.get(1)?,
+                    prior_bytes: row.get(2)?,
+                    report_bytes: row.get(3)?,
+                    report_digest: row.get(4)?,
+                    sequence: row.get(5)?,
+                    command_source: row.get(6)?,
+                    command_event_id: row.get(7)?,
+                })
+            },
+        )
+        .optional()?
+        .ok_or(LedgerError::NotFound)
+}
+
+fn prior_decision_is_duplicate(
+    retained: &RetainedDecisionReport,
+    result: &str,
+    decision_digest: &str,
+    decision_bytes: &[u8],
+) -> Result<bool, LedgerError> {
+    let Some(prior_result) = retained.prior_result.as_deref() else {
+        return Ok(false);
+    };
+    if prior_result == result
+        && retained.prior_digest.as_deref() == Some(decision_digest)
+        && retained
+            .prior_bytes
+            .as_deref()
+            .is_none_or(|bytes| bytes == decision_bytes)
+    {
+        Ok(true)
+    } else {
+        Err(LedgerError::EventConflict)
+    }
+}
+
+const fn command_transition(
+    sequence: i64,
+    accepted: bool,
+) -> Result<(&'static str, bool), LedgerError> {
+    match (sequence, accepted) {
+        (1, true) => Ok(("accepted", false)),
+        (1, false) => Ok(("rejected", true)),
+        (2, false) => Ok(("terminal_pending", false)),
+        (2, true) => Ok(("completed", true)),
+        _ => Err(LedgerError::Invalid),
+    }
+}
+
 fn validate_command_claim(
     command: &Command<'_>,
     claim: &Report<'_>,
     instance_id: &str,
 ) -> Result<ValidatedCommand, LedgerError> {
-    let (command_identity, command_payload) =
+    let (command_identity, _, command_payload) =
         decode_command(command.exact_bytes).map_err(|_| LedgerError::Invalid)?;
     let command_binding = command_payload.binding.ok_or(LedgerError::Invalid)?;
     let command_identity_matches =
@@ -547,7 +550,7 @@ fn validate_command_claim(
     {
         return Err(LedgerError::Invalid);
     }
-    let (claim_identity, claim_payload) =
+    let (claim_identity, _, claim_payload) =
         decode_report(claim.exact_bytes).map_err(|_| LedgerError::Invalid)?;
     let claim_binding = claim_payload.binding.as_ref().ok_or(LedgerError::Invalid)?;
     let mut expected_claim_binding = command_binding.clone();
@@ -585,92 +588,95 @@ fn validate_terminal_report(
     report: &Report<'_>,
     instance_id: &str,
 ) -> Result<(), LedgerError> {
-    type CommandBindingRow = (
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        i64,
-        String,
-        i64,
-        Vec<u8>,
-        String,
-    );
-    let retained: Option<CommandBindingRow> = transaction
+    let retained = retained_command_binding(transaction, command_source, command_event_id)?;
+    if retained.state != "accepted" {
+        return Err(LedgerError::ClaimNotAccepted);
+    }
+    let (identity, _, payload) =
+        decode_report(report.exact_bytes).map_err(|_| LedgerError::Invalid)?;
+    let binding = payload.binding.as_ref().ok_or(LedgerError::Invalid)?;
+    let kind =
+        ConversationTurnReportKind::try_from(payload.kind).map_err(|_| LedgerError::Invalid)?;
+    let public_key: [u8; 32] = retained
+        .signing_public_key
+        .as_slice()
+        .try_into()
+        .map_err(|_| LedgerError::Invalid)?;
+    if !terminal_report_header_matches(report, &identity, &payload, kind, instance_id)
+        || !terminal_binding_matches(binding, &retained, command_event_id)?
+    {
+        return Err(LedgerError::Invalid);
+    }
+    verify_report_signature(&identity, &payload, Some(&public_key))
+        .map_err(|_| LedgerError::Invalid)
+}
+
+fn retained_command_binding(
+    transaction: &Transaction<'_>,
+    command_source: &str,
+    command_event_id: &str,
+) -> Result<RetainedCommandBinding, LedgerError> {
+    transaction
         .query_row(
             "SELECT digest, workspace_id, project_id, conversation_id, turn_id, assignment_id, \
              generation, execution_binding_revision, context_revision, signing_public_key, state \
              FROM commands WHERE source = ?1 AND event_id = ?2",
             params![command_source, command_event_id],
             |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                    row.get(6)?,
-                    row.get(7)?,
-                    row.get(8)?,
-                    row.get(9)?,
-                    row.get(10)?,
-                ))
+                Ok(RetainedCommandBinding {
+                    command_digest: row.get(0)?,
+                    workspace_id: row.get(1)?,
+                    project_id: row.get(2)?,
+                    conversation_id: row.get(3)?,
+                    turn_id: row.get(4)?,
+                    assignment_id: row.get(5)?,
+                    generation: row.get(6)?,
+                    execution_binding_revision: row.get(7)?,
+                    context_revision: row.get(8)?,
+                    signing_public_key: row.get(9)?,
+                    state: row.get(10)?,
+                })
             },
         )
-        .optional()?;
-    let Some((
-        command_digest,
-        workspace_id,
-        project_id,
-        conversation_id,
-        turn_id,
-        assignment_id,
-        generation,
-        execution_binding_revision,
-        context_revision,
-        public_key,
-        state,
-    )) = retained
-    else {
-        return Err(LedgerError::NotFound);
-    };
-    if state != "accepted" {
-        return Err(LedgerError::ClaimNotAccepted);
-    }
-    let (identity, payload) =
-        decode_report(report.exact_bytes).map_err(|_| LedgerError::Invalid)?;
-    let binding = payload.binding.as_ref().ok_or(LedgerError::Invalid)?;
-    let kind =
-        ConversationTurnReportKind::try_from(payload.kind).map_err(|_| LedgerError::Invalid)?;
-    let public_key: [u8; 32] = public_key.try_into().map_err(|_| LedgerError::Invalid)?;
-    let report_identity_matches = identity.source == report.source && identity.id == report.id;
-    if !report_identity_matches
-        || payload.executor_instance_id != instance_id
-        || payload.report_sequence != 2
-        || !matches!(
+        .optional()?
+        .ok_or(LedgerError::NotFound)
+}
+
+fn terminal_report_header_matches(
+    report: &Report<'_>,
+    identity: &EventIdentity,
+    payload: &ConversationTurnReport,
+    kind: ConversationTurnReportKind,
+    instance_id: &str,
+) -> bool {
+    identity.source == report.source
+        && identity.id == report.id
+        && payload.executor_instance_id == instance_id
+        && payload.report_sequence == 2
+        && matches!(
             kind,
             ConversationTurnReportKind::Completed | ConversationTurnReportKind::Failed
         )
-        || binding.workspace_id != workspace_id
-        || binding.project_id != project_id
-        || binding.conversation_id != conversation_id
-        || binding.turn_id != turn_id
-        || binding.assignment_id != assignment_id
-        || binding.executor_generation
-            != u64::try_from(generation).map_err(|_| LedgerError::Invalid)?
-        || binding.execution_binding_revision != execution_binding_revision
-        || binding.context_revision
-            != u64::try_from(context_revision).map_err(|_| LedgerError::Invalid)?
-        || binding.command_event_id != command_event_id
-        || binding.command_digest != command_digest
-    {
-        return Err(LedgerError::Invalid);
-    }
-    verify_report_signature(&identity, &payload, Some(&public_key))
-        .map_err(|_| LedgerError::Invalid)
+}
+
+fn terminal_binding_matches(
+    binding: &ConversationTurnBinding,
+    retained: &RetainedCommandBinding,
+    command_event_id: &str,
+) -> Result<bool, LedgerError> {
+    let generation = u64::try_from(retained.generation).map_err(|_| LedgerError::Invalid)?;
+    let context_revision =
+        u64::try_from(retained.context_revision).map_err(|_| LedgerError::Invalid)?;
+    Ok(binding.workspace_id == retained.workspace_id
+        && binding.project_id == retained.project_id
+        && binding.conversation_id == retained.conversation_id
+        && binding.turn_id == retained.turn_id
+        && binding.assignment_id == retained.assignment_id
+        && binding.executor_generation == generation
+        && binding.execution_binding_revision == retained.execution_binding_revision
+        && binding.context_revision == context_revision
+        && binding.command_event_id == command_event_id
+        && binding.command_digest == retained.command_digest)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -685,14 +691,16 @@ fn validate_decision_binding(
     instance_id: &str,
 ) -> Result<Option<Vec<u8>>, LedgerError> {
     let report_bytes = report_bytes.ok_or(LedgerError::EventConflict)?;
-    let (report_identity, report_payload) =
+    let (report_identity, _, report_payload) =
         decode_report(report_bytes).map_err(|_| LedgerError::Invalid)?;
-    if decision.report_source != report_identity.source
-        || decision.report_id != report_identity.id
-        || decision.report_digest != report_digest
-        || report_digest != exact_digest(report_bytes)
-        || report_payload.executor_instance_id != instance_id
-    {
+    if !decision_report_identity_matches(
+        decision,
+        &report_identity,
+        &report_payload,
+        report_digest,
+        report_bytes,
+        instance_id,
+    ) {
         return Err(LedgerError::Invalid);
     }
     let binding = report_payload
@@ -704,22 +712,76 @@ fn validate_decision_binding(
     let accepted = ConversationReportDecisionKind::try_from(decision.decision)
         .map_err(|_| LedgerError::Invalid)?
         == ConversationReportDecisionKind::Accepted;
-    let accepted_state_matches = !accepted
+    let retained = retained_decision_command(transaction, command_source, command_event_id)?;
+    if accepted && retained.superseded {
+        return Err(LedgerError::StaleGeneration);
+    }
+    if !decision_state_matches(accepted, report_kind, &decision.turn_state)
+        || !sequence_matches_report_kind(sequence, report_kind)
+        || !decision_scope_matches(decision, &retained)?
+        || !decision_report_binding_matches(
+            binding,
+            &retained,
+            decision,
+            command_event_id,
+            sequence,
+            report_payload.report_sequence,
+        )?
+    {
+        return Err(LedgerError::Invalid);
+    }
+    Ok((sequence == 1).then_some(report_payload.signing_public_key))
+}
+
+fn decision_report_identity_matches(
+    decision: &ConversationReportDecision,
+    identity: &EventIdentity,
+    report: &ConversationTurnReport,
+    retained_digest: &str,
+    report_bytes: &[u8],
+    instance_id: &str,
+) -> bool {
+    decision.report_source == identity.source
+        && decision.report_id == identity.id
+        && decision.report_digest == retained_digest
+        && retained_digest == exact_digest(report_bytes)
+        && report.executor_instance_id == instance_id
+}
+
+fn decision_state_matches(
+    accepted: bool,
+    report_kind: ConversationTurnReportKind,
+    turn_state: &str,
+) -> bool {
+    !accepted
         || matches!(
-            (report_kind, decision.turn_state.as_str()),
+            (report_kind, turn_state),
             (ConversationTurnReportKind::Started, "processing")
                 | (ConversationTurnReportKind::Completed, "completed")
                 | (ConversationTurnReportKind::Failed, "failed")
-        );
-    let sequence_matches_kind = matches!(
+        )
+}
+
+const fn sequence_matches_report_kind(
+    sequence: i64,
+    report_kind: ConversationTurnReportKind,
+) -> bool {
+    matches!(
         (sequence, report_kind),
         (1, ConversationTurnReportKind::Started)
             | (
                 2,
                 ConversationTurnReportKind::Completed | ConversationTurnReportKind::Failed
             )
-    );
-    let retained: Option<(String, String, String, String, String, i64, bool)> = transaction
+    )
+}
+
+fn retained_decision_command(
+    transaction: &Transaction<'_>,
+    command_source: &str,
+    command_event_id: &str,
+) -> Result<RetainedDecisionCommand, LedgerError> {
+    transaction
         .query_row(
             "SELECT c.workspace_id, c.project_id, c.conversation_id, c.turn_id, c.assignment_id, \
              c.generation, EXISTS(SELECT 1 FROM commands newer \
@@ -728,52 +790,51 @@ fn validate_decision_binding(
              FROM commands c WHERE c.source = ?1 AND c.event_id = ?2",
             params![command_source, command_event_id],
             |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                    row.get(6)?,
-                ))
+                Ok(RetainedDecisionCommand {
+                    workspace_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    conversation_id: row.get(2)?,
+                    turn_id: row.get(3)?,
+                    assignment_id: row.get(4)?,
+                    generation: row.get(5)?,
+                    superseded: row.get(6)?,
+                })
             },
         )
-        .optional()?;
-    let Some((workspace, project, conversation, turn, assignment, generation, superseded)) =
-        retained
-    else {
-        return Err(LedgerError::NotFound);
-    };
-    if accepted && superseded {
-        return Err(LedgerError::StaleGeneration);
-    }
-    if !accepted_state_matches
-        || !sequence_matches_kind
-        || decision.workspace_id != workspace
-        || decision.project_id != project
-        || decision.conversation_id != conversation
-        || decision.turn_id != turn
-        || decision.assignment_id != assignment
-        || decision.executor_generation
-            != u64::try_from(generation).map_err(|_| LedgerError::Invalid)?
-        || binding.workspace_id != workspace
-        || binding.project_id != project
-        || binding.conversation_id != conversation
-        || binding.turn_id != turn
-        || binding.assignment_id != assignment
-        || binding.executor_generation != decision.executor_generation
-        || binding.command_event_id != command_event_id
-        || i64::try_from(report_payload.report_sequence).map_err(|_| LedgerError::Invalid)?
-            != sequence
-    {
-        return Err(LedgerError::Invalid);
-    }
-    if sequence == 1 {
-        Ok(Some(report_payload.signing_public_key))
-    } else {
-        Ok(None)
-    }
+        .optional()?
+        .ok_or(LedgerError::NotFound)
+}
+
+fn decision_scope_matches(
+    decision: &ConversationReportDecision,
+    retained: &RetainedDecisionCommand,
+) -> Result<bool, LedgerError> {
+    let generation = u64::try_from(retained.generation).map_err(|_| LedgerError::Invalid)?;
+    Ok(decision.workspace_id == retained.workspace_id
+        && decision.project_id == retained.project_id
+        && decision.conversation_id == retained.conversation_id
+        && decision.turn_id == retained.turn_id
+        && decision.assignment_id == retained.assignment_id
+        && decision.executor_generation == generation)
+}
+
+fn decision_report_binding_matches(
+    binding: &ConversationTurnBinding,
+    retained: &RetainedDecisionCommand,
+    decision: &ConversationReportDecision,
+    command_event_id: &str,
+    sequence: i64,
+    report_sequence: u64,
+) -> Result<bool, LedgerError> {
+    let report_sequence = i64::try_from(report_sequence).map_err(|_| LedgerError::Invalid)?;
+    Ok(binding.workspace_id == retained.workspace_id
+        && binding.project_id == retained.project_id
+        && binding.conversation_id == retained.conversation_id
+        && binding.turn_id == retained.turn_id
+        && binding.assignment_id == retained.assignment_id
+        && binding.executor_generation == decision.executor_generation
+        && binding.command_event_id == command_event_id
+        && report_sequence == sequence)
 }
 
 fn existing_command_outcome(
@@ -896,613 +957,4 @@ fn exact_digest(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ayni_orchestrator_events::EventIdentity;
-    use ayni_orchestrator_events::v1::{
-        ConversationReportDecision, ConversationReportDecisionKind, ConversationTurnBinding,
-        ConversationTurnReport, ConversationTurnReportKind, ConversationTurnRequested,
-    };
-    use ayni_orchestrator_events::workflow::{
-        APPLICATION_SOURCE, decode_report, encode_command, encode_decision, encode_report,
-        sign_report, signing_key_digest,
-    };
-    use ed25519_dalek::SigningKey;
-    use tempfile::TempDir;
-
-    const WINNER: &str = "018f0f7b-6a4d-7a11-8d77-010203040506";
-    const LOSER: &str = "018f0f7b-6a4d-7a11-8d77-a1a2a3a4a5a6";
-    const WINNER_SEED: [u8; 32] = [7; 32];
-    const LOSER_SEED: [u8; 32] = [9; 32];
-    const COMMAND_ID: &str = "018f0f7b-6a4d-7a11-8d77-111213141516";
-    const CLAIM_ID: &str = "018f0f7b-6a4d-7a11-8d77-818283848586";
-    const TERMINAL_ID: &str = "018f0f7b-6a4d-7a11-8d77-919293949596";
-
-    struct CommandFixture {
-        identity: EventIdentity,
-        binding: ConversationTurnBinding,
-        bytes: Vec<u8>,
-    }
-
-    impl CommandFixture {
-        fn command(&self) -> Command<'_> {
-            Command {
-                source: &self.identity.source,
-                id: &self.identity.id,
-                exact_bytes: &self.bytes,
-                turn_id: &self.binding.turn_id,
-                assignment_id: &self.binding.assignment_id,
-                executor_generation: self.binding.executor_generation,
-            }
-        }
-    }
-
-    struct ReportFixture {
-        identity: EventIdentity,
-        bytes: Vec<u8>,
-    }
-
-    impl ReportFixture {
-        fn report(&self, sequence: u8) -> Report<'_> {
-            Report {
-                source: &self.identity.source,
-                id: &self.identity.id,
-                exact_bytes: &self.bytes,
-                sequence,
-            }
-        }
-    }
-
-    fn open(
-        directory: &TempDir,
-        limits: LedgerLimits,
-        instance: &str,
-        seed: &[u8; 32],
-    ) -> Result<Ledger, LedgerError> {
-        Ledger::open(
-            directory.path().join("ledger.sqlite"),
-            limits,
-            instance,
-            seed,
-        )
-    }
-
-    fn command_fixture(generation: u64, event_id: &str) -> Result<CommandFixture, LedgerError> {
-        command_fixture_with_input(generation, event_id, "fixture input")
-    }
-
-    fn command_fixture_with_input(
-        generation: u64,
-        event_id: &str,
-        input_content: &str,
-    ) -> Result<CommandFixture, LedgerError> {
-        let identity = EventIdentity {
-            source: APPLICATION_SOURCE.into(),
-            id: event_id.into(),
-        };
-        let binding = ConversationTurnBinding {
-            workspace_id: "workspace:018f0f7b-6a4d-7a11-8d77-212223242526".into(),
-            project_id: "project:018f0f7b-6a4d-7a11-8d77-313233343536".into(),
-            conversation_id: "conversation:018f0f7b-6a4d-7a11-8d77-414243444546".into(),
-            turn_id: "turn:018f0f7b-6a4d-7a11-8d77-515253545556".into(),
-            assignment_id: "018f0f7b-6a4d-7a11-8d77-616263646566".into(),
-            executor_generation: generation,
-            execution_binding_revision: "scripted-v1".into(),
-            context_revision: 1,
-            command_event_id: identity.id.clone(),
-            command_digest: String::new(),
-        };
-        let payload = ConversationTurnRequested {
-            binding: Some(binding.clone()),
-            input_message_id: "message:018f0f7b-6a4d-7a11-8d77-717273747576".into(),
-            input_content: input_content.into(),
-            context: vec![],
-        };
-        let bytes = encode_command(&identity, &payload).map_err(|_| LedgerError::Invalid)?;
-        Ok(CommandFixture {
-            identity,
-            binding,
-            bytes,
-        })
-    }
-
-    fn claim_fixture(
-        command: &CommandFixture,
-        executor: &str,
-        seed: &[u8; 32],
-        report_id: &str,
-    ) -> Result<ReportFixture, LedgerError> {
-        let identity = EventIdentity {
-            source: format!("ayni://orchestrator/supervisors/{executor}"),
-            id: report_id.into(),
-        };
-        let public_key = SigningKey::from_bytes(seed).verifying_key().to_bytes();
-        let mut binding = command.binding.clone();
-        binding.command_digest = exact_digest(&command.bytes);
-        let mut payload = ConversationTurnReport {
-            binding: Some(binding),
-            kind: ConversationTurnReportKind::Started.into(),
-            report_sequence: 1,
-            executor_instance_id: executor.into(),
-            signing_public_key: public_key.to_vec(),
-            signing_key_digest: signing_key_digest(&public_key),
-            ..Default::default()
-        };
-        sign_report(&identity, &mut payload, seed).map_err(|_| LedgerError::Invalid)?;
-        let bytes = encode_report(&identity, &payload).map_err(|_| LedgerError::Invalid)?;
-        Ok(ReportFixture { identity, bytes })
-    }
-
-    fn terminal_fixture(
-        command: &CommandFixture,
-        executor: &str,
-        seed: &[u8; 32],
-        report_id: &str,
-    ) -> Result<ReportFixture, LedgerError> {
-        terminal_fixture_with_binding(
-            command,
-            executor,
-            seed,
-            report_id,
-            &command.binding.execution_binding_revision,
-            command.binding.context_revision,
-        )
-    }
-
-    fn terminal_fixture_with_binding(
-        command: &CommandFixture,
-        executor: &str,
-        seed: &[u8; 32],
-        report_id: &str,
-        execution_binding_revision: &str,
-        context_revision: u64,
-    ) -> Result<ReportFixture, LedgerError> {
-        let identity = EventIdentity {
-            source: format!("ayni://orchestrator/supervisors/{executor}"),
-            id: report_id.into(),
-        };
-        let public_key = SigningKey::from_bytes(seed).verifying_key().to_bytes();
-        let mut binding = command.binding.clone();
-        binding.command_digest = exact_digest(&command.bytes);
-        binding.execution_binding_revision = execution_binding_revision.into();
-        binding.context_revision = context_revision;
-        let mut payload = ConversationTurnReport {
-            binding: Some(binding),
-            kind: ConversationTurnReportKind::Completed.into(),
-            report_sequence: 2,
-            executor_instance_id: executor.into(),
-            signing_key_digest: signing_key_digest(&public_key),
-            response_content: "scripted response".into(),
-            ..Default::default()
-        };
-        sign_report(&identity, &mut payload, seed).map_err(|_| LedgerError::Invalid)?;
-        let bytes = encode_report(&identity, &payload).map_err(|_| LedgerError::Invalid)?;
-        Ok(ReportFixture { identity, bytes })
-    }
-
-    fn decision_bytes(
-        command: &CommandFixture,
-        report: &ReportFixture,
-        target: &str,
-        accepted_claimant: &str,
-        accepted: bool,
-        report_digest: Option<&str>,
-        generation: Option<u64>,
-    ) -> Result<Vec<u8>, LedgerError> {
-        let (_, report_payload) = decode_report(&report.bytes).map_err(|_| LedgerError::Invalid)?;
-        let turn_state = match ConversationTurnReportKind::try_from(report_payload.kind)
-            .map_err(|_| LedgerError::Invalid)?
-        {
-            ConversationTurnReportKind::Started => "processing",
-            ConversationTurnReportKind::Completed => "completed",
-            ConversationTurnReportKind::Failed => "failed",
-            ConversationTurnReportKind::Unspecified => return Err(LedgerError::Invalid),
-        };
-        let payload = ConversationReportDecision {
-            report_source: report.identity.source.clone(),
-            report_id: report.identity.id.clone(),
-            report_digest: report_digest.map_or_else(|| exact_digest(&report.bytes), str::to_owned),
-            target_executor_instance_id: target.into(),
-            accepted_executor_instance_id: accepted_claimant.into(),
-            assignment_id: command.binding.assignment_id.clone(),
-            executor_generation: generation.unwrap_or(command.binding.executor_generation),
-            decision: if accepted {
-                ConversationReportDecisionKind::Accepted.into()
-            } else {
-                ConversationReportDecisionKind::Rejected.into()
-            },
-            safe_reason: if accepted {
-                String::new()
-            } else {
-                "claim_lost".into()
-            },
-            turn_state: turn_state.into(),
-            workspace_id: command.binding.workspace_id.clone(),
-            project_id: command.binding.project_id.clone(),
-            conversation_id: command.binding.conversation_id.clone(),
-            turn_id: command.binding.turn_id.clone(),
-        };
-        let identity = EventIdentity {
-            source: APPLICATION_SOURCE.into(),
-            id: "018f0f7b-6a4d-7a11-8d77-b1b2b3b4b5b6".into(),
-        };
-        encode_decision(&identity, &payload).map_err(|_| LedgerError::Invalid)
-    }
-
-    #[test]
-    fn crash_reopen_preserves_claim_and_blocks_execution_until_decision() -> Result<(), LedgerError>
-    {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        {
-            let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-            assert_eq!(
-                ledger.retain_command_and_claim(&command.command(), &claim.report(1))?,
-                StoreOutcome::Stored
-            );
-            assert!(!ledger.can_execute(&command.identity.source, &command.identity.id)?);
-        }
-        let ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        assert_eq!(
-            ledger.exact_report_bytes(&claim.identity.source, &claim.identity.id)?,
-            claim.bytes
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn decisions_are_bound_and_duplicates_survive_cleanup() -> Result<(), LedgerError> {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
-
-        let wrong_digest = format!("sha256:{}", "0".repeat(64));
-        let wrong = decision_bytes(
-            &command,
-            &claim,
-            WINNER,
-            WINNER,
-            true,
-            Some(&wrong_digest),
-            None,
-        )?;
-        assert!(matches!(
-            ledger.record_decision(&Decision {
-                exact_bytes: &wrong
-            }),
-            Err(LedgerError::Invalid)
-        ));
-        let stale = decision_bytes(&command, &claim, WINNER, WINNER, true, None, Some(2))?;
-        assert!(matches!(
-            ledger.record_decision(&Decision {
-                exact_bytes: &stale
-            }),
-            Err(LedgerError::Invalid)
-        ));
-
-        let accepted = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
-        assert_eq!(
-            ledger.record_decision(&Decision {
-                exact_bytes: &accepted,
-            })?,
-            StoreOutcome::Stored
-        );
-        assert_eq!(
-            ledger.retain_command_and_claim(&command.command(), &claim.report(1))?,
-            StoreOutcome::Duplicate
-        );
-        ledger.acknowledge_decision(&claim.identity.source, &claim.identity.id)?;
-        assert_eq!(
-            ledger.record_decision(&Decision {
-                exact_bytes: &accepted,
-            })?,
-            StoreOutcome::Duplicate
-        );
-        assert!(ledger.can_execute(&command.identity.source, &command.identity.id)?);
-        Ok(())
-    }
-
-    #[test]
-    fn terminal_report_and_decision_replay_after_restart() -> Result<(), LedgerError> {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        let terminal = terminal_fixture(&command, WINNER, &WINNER_SEED, TERMINAL_ID)?;
-        let accepted = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
-        {
-            let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-            ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
-            ledger.record_decision(&Decision {
-                exact_bytes: &accepted,
-            })?;
-            ledger.retain_terminal_report(
-                &command.identity.source,
-                &command.identity.id,
-                &terminal.report(2),
-            )?;
-            assert!(!ledger.can_execute(&command.identity.source, &command.identity.id)?);
-        }
-        let mut reopened = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        assert_eq!(
-            reopened.exact_report_bytes(&terminal.identity.source, &terminal.identity.id)?,
-            terminal.bytes
-        );
-        let terminal_decision =
-            decision_bytes(&command, &terminal, WINNER, WINNER, true, None, None)?;
-        reopened.record_decision(&Decision {
-            exact_bytes: &terminal_decision,
-        })?;
-        assert_eq!(
-            reopened.retain_terminal_report(
-                &command.identity.source,
-                &command.identity.id,
-                &terminal.report(2),
-            )?,
-            StoreOutcome::Duplicate
-        );
-        reopened.acknowledge_decision(&terminal.identity.source, &terminal.identity.id)?;
-        assert_eq!(
-            reopened.record_decision(&Decision {
-                exact_bytes: &terminal_decision,
-            })?,
-            StoreOutcome::Duplicate
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn split_brain_allows_only_the_accepted_ledger_to_execute() -> Result<(), LedgerError> {
-        let winner_directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let loser_directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let winner_claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        let loser_claim = claim_fixture(
-            &command,
-            LOSER,
-            &LOSER_SEED,
-            "018f0f7b-6a4d-7a11-8d77-c1c2c3c4c5c6",
-        )?;
-        let mut winner = open(
-            &winner_directory,
-            LedgerLimits::m1_default(),
-            WINNER,
-            &WINNER_SEED,
-        )?;
-        let mut loser = open(
-            &loser_directory,
-            LedgerLimits::m1_default(),
-            LOSER,
-            &LOSER_SEED,
-        )?;
-        winner.retain_command_and_claim(&command.command(), &winner_claim.report(1))?;
-        loser.retain_command_and_claim(&command.command(), &loser_claim.report(1))?;
-        let winner_decision =
-            decision_bytes(&command, &winner_claim, WINNER, WINNER, true, None, None)?;
-        let loser_decision =
-            decision_bytes(&command, &loser_claim, LOSER, WINNER, false, None, None)?;
-        winner.record_decision(&Decision {
-            exact_bytes: &winner_decision,
-        })?;
-        loser.record_decision(&Decision {
-            exact_bytes: &loser_decision,
-        })?;
-        assert!(winner.can_execute(&command.identity.source, &command.identity.id)?);
-        assert!(!loser.can_execute(&command.identity.source, &command.identity.id)?);
-        let terminal = terminal_fixture(&command, LOSER, &LOSER_SEED, TERMINAL_ID)?;
-        assert!(matches!(
-            loser.retain_terminal_report(
-                &command.identity.source,
-                &command.identity.id,
-                &terminal.report(2)
-            ),
-            Err(LedgerError::ClaimNotAccepted)
-        ));
-        Ok(())
-    }
-
-    #[test]
-    fn newer_generation_fences_prior_acceptance() -> Result<(), LedgerError> {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        let generation_one = command_fixture(1, COMMAND_ID)?;
-        let claim_one = claim_fixture(&generation_one, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        ledger.retain_command_and_claim(&generation_one.command(), &claim_one.report(1))?;
-        let decision_one = decision_bytes(
-            &generation_one,
-            &claim_one,
-            WINNER,
-            WINNER,
-            true,
-            None,
-            None,
-        )?;
-        ledger.record_decision(&Decision {
-            exact_bytes: &decision_one,
-        })?;
-        assert!(ledger.can_execute(&generation_one.identity.source, &generation_one.identity.id)?);
-
-        let generation_two = command_fixture(2, "018f0f7b-6a4d-7a11-8d77-d1d2d3d4d5d6")?;
-        let claim_two = claim_fixture(
-            &generation_two,
-            WINNER,
-            &WINNER_SEED,
-            "018f0f7b-6a4d-7a11-8d77-e1e2e3e4e5e6",
-        )?;
-        ledger.retain_command_and_claim(&generation_two.command(), &claim_two.report(1))?;
-        assert!(!ledger.can_execute(&generation_one.identity.source, &generation_one.identity.id)?);
-        assert_eq!(
-            ledger.record_decision(&Decision {
-                exact_bytes: &decision_one,
-            })?,
-            StoreOutcome::Duplicate
-        );
-        assert!(!ledger.can_execute(&generation_one.identity.source, &generation_one.identity.id)?);
-
-        let decision_two = decision_bytes(
-            &generation_two,
-            &claim_two,
-            WINNER,
-            WINNER,
-            true,
-            None,
-            None,
-        )?;
-        ledger.record_decision(&Decision {
-            exact_bytes: &decision_two,
-        })?;
-        assert!(ledger.can_execute(&generation_two.identity.source, &generation_two.identity.id)?);
-
-        let late_directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let mut late = open(
-            &late_directory,
-            LedgerLimits::m1_default(),
-            WINNER,
-            &WINNER_SEED,
-        )?;
-        late.retain_command_and_claim(&generation_one.command(), &claim_one.report(1))?;
-        late.retain_command_and_claim(&generation_two.command(), &claim_two.report(1))?;
-        assert!(matches!(
-            late.record_decision(&Decision {
-                exact_bytes: &decision_one,
-            }),
-            Err(LedgerError::StaleGeneration)
-        ));
-        Ok(())
-    }
-
-    #[test]
-    fn terminal_report_requires_the_full_frozen_binding() -> Result<(), LedgerError> {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
-        let accepted = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
-        ledger.record_decision(&Decision {
-            exact_bytes: &accepted,
-        })?;
-
-        let wrong_context = terminal_fixture_with_binding(
-            &command,
-            WINNER,
-            &WINNER_SEED,
-            TERMINAL_ID,
-            &command.binding.execution_binding_revision,
-            command.binding.context_revision + 1,
-        )?;
-        assert!(matches!(
-            ledger.retain_terminal_report(
-                &command.identity.source,
-                &command.identity.id,
-                &wrong_context.report(2),
-            ),
-            Err(LedgerError::Invalid)
-        ));
-        Ok(())
-    }
-
-    #[test]
-    fn exact_byte_conflicts_and_cleanup_are_explicit() -> Result<(), LedgerError> {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
-
-        let changed_command = command_fixture_with_input(1, COMMAND_ID, "changed input")?;
-        let changed_command_claim =
-            claim_fixture(&changed_command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        assert!(matches!(
-            ledger.retain_command_and_claim(
-                &changed_command.command(),
-                &changed_command_claim.report(1),
-            ),
-            Err(LedgerError::EventConflict)
-        ));
-        let changed_claim = claim_fixture(&command, WINNER, &[8; 32], CLAIM_ID)?;
-        assert!(matches!(
-            ledger.retain_command_and_claim(&command.command(), &changed_claim.report(1)),
-            Err(LedgerError::EventConflict)
-        ));
-
-        let accepted = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
-        ledger.record_decision(&Decision {
-            exact_bytes: &accepted,
-        })?;
-        let (report_bytes, retained_decision_bytes): (Option<Vec<u8>>, Option<Vec<u8>>) = ledger
-            .connection
-            .query_row(
-                "SELECT event_bytes, decision_bytes FROM reports WHERE source = ?1 AND event_id = ?2",
-                params![claim.identity.source, claim.identity.id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?;
-        assert!(report_bytes.is_none());
-        assert_eq!(
-            retained_decision_bytes.as_deref(),
-            Some(accepted.as_slice())
-        );
-
-        let changed_decision = decision_bytes(&command, &claim, WINNER, WINNER, false, None, None)?;
-        assert!(matches!(
-            ledger.record_decision(&Decision {
-                exact_bytes: &changed_decision,
-            }),
-            Err(LedgerError::EventConflict)
-        ));
-        ledger.acknowledge_decision(&claim.identity.source, &claim.identity.id)?;
-        let decision_bytes: Option<Vec<u8>> = ledger.connection.query_row(
-            "SELECT decision_bytes FROM reports WHERE source = ?1 AND event_id = ?2",
-            params![claim.identity.source, claim.identity.id],
-            |row| row.get(0),
-        )?;
-        assert!(decision_bytes.is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn stale_generation_and_full_ledger_reject_atomically() -> Result<(), LedgerError> {
-        let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
-        let generation_two = command_fixture(2, "018f0f7b-6a4d-7a11-8d77-d1d2d3d4d5d6")?;
-        let claim_two = claim_fixture(
-            &generation_two,
-            WINNER,
-            &WINNER_SEED,
-            "018f0f7b-6a4d-7a11-8d77-e1e2e3e4e5e6",
-        )?;
-        ledger.retain_command_and_claim(&generation_two.command(), &claim_two.report(1))?;
-        let stale = command_fixture(1, "018f0f7b-6a4d-7a11-8d77-f1f2f3f4f5f6")?;
-        let stale_claim = claim_fixture(
-            &stale,
-            WINNER,
-            &WINNER_SEED,
-            "018f0f7b-6a4d-7a11-8d77-0123456789ab",
-        )?;
-        assert!(matches!(
-            ledger.retain_command_and_claim(&stale.command(), &stale_claim.report(1)),
-            Err(LedgerError::StaleGeneration)
-        ));
-
-        let full_directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
-        let mut full = open(
-            &full_directory,
-            LedgerLimits {
-                max_records: 1,
-                max_exact_bytes: 4,
-            },
-            WINNER,
-            &WINNER_SEED,
-        )?;
-        let command = command_fixture(1, COMMAND_ID)?;
-        let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
-        assert!(matches!(
-            full.retain_command_and_claim(&command.command(), &claim.report(1)),
-            Err(LedgerError::Capacity)
-        ));
-        assert!(!full.can_execute(&command.identity.source, &command.identity.id)?);
-        Ok(())
-    }
-}
+mod tests;
