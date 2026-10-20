@@ -12,10 +12,10 @@ It does not claim that M1, or all pre-implementation gates, passed.
 ### Source and environment
 
 - Repository: `ayni-oss/orchestrator`.
-- Working-tree base revision: `3e5d3998a4ad9d328d81aaf60014151a7fec693e`.
-  The exact resulting revision must replace this provisional provenance after the
-  evidence patch is committed; until then these are reproducible working-tree results,
-  not immutable retained-revision evidence.
+- Retained implementation revision:
+  `2c32ca99623941317dce3c17ebef6a80c067faad`. The later evidence-only commit
+  changes no executable proof, protocol contract, fixture, dependency, or generated
+  binding.
 - PostgreSQL image: `postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3`.
 - Image-reported version: PostgreSQL 17.6, Debian package `17.6-2.pgdg12+1`.
 - Exercised platform: `linux/arm64` under Docker Desktop client/server 29.8.2.
@@ -54,7 +54,10 @@ postgres-platform=linux/arm64
 ### Observations
 
 1. A separately held advisory lock prevented the migration transaction from
-   reaching DDL until the lock was released.
+   reaching DDL until the lock was released. The test first observed the named
+   migration backend waiting on the exact ungranted advisory-lock key in
+   `pg_stat_activity`/`pg_locks`, so scheduler or connection-startup delay cannot
+   satisfy the assertion.
 2. Eight simultaneous migration callers completed, while the migration ledger
    retained exactly one version row.
 3. An explicitly rolled-back authority transaction left no partial conversation
@@ -109,7 +112,7 @@ scripts/ci/check-workflow-postgres-feasibility.sh
 One retained successful run reported:
 
 ```text
-tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms=36.286 snapshot-p95-ms=163.160 snapshot-max-ms=250.445 commit-ack-to-client-watch-p50-ms=34.623 commit-ack-to-client-watch-p95-ms=38.076 commit-ack-to-client-watch-max-ms=58.136 samples=100
+tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms=37.852 snapshot-p95-ms=75.141 snapshot-max-ms=116.977 commit-ack-to-client-watch-p50-ms=34.614 commit-ack-to-client-watch-p95-ms=40.896 commit-ack-to-client-watch-max-ms=54.357 samples=100
 test tonic_snapshot_watch_feasibility_gate ... ok
 ```
 
@@ -143,8 +146,8 @@ distinct commit-notification-to-server-queue proposal or promoted to an approved
    continued, and reconnect replayed every row after the slow client's last accepted
    cursor.
 6. One local run retained 100 warmed samples with snapshot p50/p95/max of
-   36.29/163.16/250.45 ms and commit-acknowledgement-to-client-watch p50/p95/max of
-   34.62/38.08/58.14 ms.
+   37.85/75.14/116.98 ms and commit-acknowledgement-to-client-watch p50/p95/max of
+   34.61/40.90/54.36 ms.
 
 ### Limitations
 
@@ -174,7 +177,7 @@ distinct commit-notification-to-server-queue proposal or promoted to an approved
 This result supports repeatable-read snapshot/boundary selection, durable rows with
 `LISTEN/NOTIFY` as a lossy wake-up, scoped cursor expiry, and per-watcher bounded
 buffers as viable candidates. It implements the experiment requested by feasibility
-step 5, but immutable resulting-revision provenance and maintainer review are still
+step 5 at the retained implementation revision, but maintainer review is still
 required before the gate is recorded as closed. It does not authorize listener
 registration or runtime PostgreSQL ownership.
 
@@ -255,7 +258,7 @@ pnpm --filter @ayni-orchestrator/grpc-bindings check
 pnpm --filter @ayni-orchestrator/web exec node --import tsx ../../clients/typescript/tests/verification.test.ts
 ```
 
-The retained successful run passed five workflow event/signing tests and eight
+The retained successful run passed six workflow event/signing tests and eight
 executor-ledger tests. Rust and TypeScript independently reconstructed the canonical
 sequence-1 report bytes and SHA-256 digest in
 `proto/testdata/workflow/report-signing.json`, then verified the same Ed25519
@@ -283,21 +286,22 @@ The SQLite/WAL ledger prototype demonstrated:
 - report-byte cleanup only after a durable decision, followed by decision-byte
   cleanup only after its consumer ACK.
 
-Tampered signed metadata failed Ed25519 verification. The prototype uses pinned
-`rusqlite 0.40.2` and the repository's existing `ed25519-dalek 2.2.0`.
+Tampering with signed binding or causation fields failed Ed25519 verification.
+The transport time and trace reference are required envelope fields but are not part
+of the explicitly frozen signing input. The prototype uses pinned `rusqlite 0.40.2`
+and the repository's existing `ed25519-dalek 2.2.0`.
 
 ### Limitations
 
 This is an in-process state-machine prototype, not a JetStream-connected executor
 process. Its fixture schema has no versioned upgrade path; runtime ledger migrations
-must explicitly reject or migrate older layouts. The candidate CloudEvents bind
-workflow scope and causal identity but do
-not yet carry the required retained producer timestamp or trace-reference extension;
-they are not the complete runtime envelopes. Their generated event messages are an
-intentional additive candidate surface in the events library so Rust/TypeScript can
-exercise one schema; they are not registered in the legacy canonical event-type
-registry or any runtime publisher/consumer. Review may require isolating that surface
-before a gate PR. Reopening the database exercises durable restart boundaries but
+must explicitly reject or migrate older layouts. The canonical workflow CloudEvents
+require an RFC 3339 produced time and canonical W3C `traceparent`, bind complete
+workflow scope and causal identity, and reject free-form failure diagnostics in
+favor of stable safe reason codes. Their generated event messages are an intentional
+additive v1 compatibility surface in the events library so Rust/TypeScript exercise
+one schema; no legacy event-type registration or runtime publisher/consumer is
+required because this is the clean replacement protocol. Reopening the database exercises durable restart boundaries but
 does not yet inject process kills at every fsync/ACK boundary. The prototype stores
 fixture signing seed bytes in SQLite; runtime file permissions, Secret injection,
 and at-rest key handling are not approved by this evidence. Quarantine capacity,
@@ -352,8 +356,8 @@ private-v1-feasibility: schema=pass old-baseline-break=pass refreshed-baseline=p
    identical. Rust generation remains build-time from the same canonical proto tree,
    so the eventual cutover must regenerate Rust descriptors and TypeScript from one
    revision.
-5. The retained search found 63 handwritten Rust, BFF, web, and shell consumers.
-   Inventory drift fails the script; generated TypeScript outputs are documented
+5. The retained search found 63 handwritten Rust, BFF, web, and shell consumer files.
+   File-set drift fails the script; generated TypeScript outputs are documented
    separately because generation uses `clean: true`.
 6. The type-level listener model admits only a sealed PostgreSQL workflow owner on
    the trusted listener. Compile-fail checks reject a SQLite owner and reject any
@@ -375,8 +379,8 @@ private-v1-feasibility: schema=pass old-baseline-break=pass refreshed-baseline=p
   ordinary baseline guard must be restored.
 - The name-based inventory can miss a consumer that avoids every searched symbol;
   cutover review must combine it with generated import and route ownership review.
-- Working-tree results still need an immutable resulting revision and maintainer
-  review before this feasibility gate is recorded as retained evidence.
+- Results are retained at the implementation revision above; maintainer review is
+  still required before this feasibility gate is recorded as closed.
 
 ### Decision effect
 
@@ -384,6 +388,18 @@ The approved candidate numbering, compact terminal projection, enum/string bound
 one-time baseline procedure, known-consumer inventory, and separated-listener type
 shape are viable inputs to the authority-switch change. This proof does not itself
 change compatibility, ownership, registration, or client behavior.
+
+## Validation retention policy
+
+Routine pull-request validation compiles and tests the workspace, checks canonical
+protobuf generation and compatibility, and validates documentation. The three
+`check-workflow-*-feasibility.sh` commands are retained review gates rather than
+automatic checks on every unrelated pull request: they pull pinned disposable images,
+exercise host Docker networking and storage, or generate an isolated replacement API.
+A review-ready evidence change reruns all three against its immutable implementation
+revision and records the exact commands, image digests, observations, and limitations
+here. Moving these gates into recurring hosted CI is a separate operational choice;
+a missing hosted run is not represented as a passed result.
 
 ## Remaining gate ledger
 
@@ -393,5 +409,5 @@ change compatibility, ownership, registration, or client behavior.
 | PostgreSQL client/migration feasibility | Evidence above; pending maintainer review. |
 | Authenticated JetStream topology and capacity | Auth/ACL/bounds/overhead/restart evidence above; full-capacity, coexistence load, and credential isolation remain open. |
 | Executor ledger, signing, and claim handshake | Local ledger/signing evidence above; integrated JetStream crash and retirement cases remain open. |
-| PostgreSQL-backed Tonic snapshot/watch | Isolated implementation and local results above; immutable resulting-revision provenance and maintainer review remain open. Production parent scoping, projection, retention scheduling, and listener integration remain out of scope. |
-| Private-v1 reset and known-client regeneration | Complete isolated overlay, reset/regeneration procedure, 63-file handwritten inventory, and listener-separation model are above; immutable revision and maintainer review remain open. Canonical baseline reset, generated-client cutover, production owner removal, and real listener tests belong to the coordinated authority switch. |
+| PostgreSQL-backed Tonic snapshot/watch | Isolated implementation and local results are retained at the implementation revision above; maintainer review remains open. Production parent scoping, projection, retention scheduling, and listener integration remain out of scope. |
+| Private-v1 reset and known-client regeneration | Complete isolated overlay, reset/regeneration procedure, 63-file handwritten inventory, and listener-separation model are retained at the implementation revision above; maintainer review remains open. Canonical baseline reset, generated-client cutover, production owner removal, and real listener tests belong to the coordinated authority switch. |
