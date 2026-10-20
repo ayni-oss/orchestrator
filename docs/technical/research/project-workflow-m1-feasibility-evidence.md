@@ -13,7 +13,7 @@ It does not claim that M1, or all pre-implementation gates, passed.
 
 - Repository: `ayni-oss/orchestrator`.
 - Retained implementation revision:
-  `2c32ca99623941317dce3c17ebef6a80c067faad`. The later evidence-only commit
+  `a0b2633bb113adc371143929ff308e195ef64f94`. The later evidence-only commit
   changes no executable proof, protocol contract, fixture, dependency, or generated
   binding.
 - PostgreSQL image: `postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3`.
@@ -112,7 +112,7 @@ scripts/ci/check-workflow-postgres-feasibility.sh
 One retained successful run reported:
 
 ```text
-tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms=37.852 snapshot-p95-ms=75.141 snapshot-max-ms=116.977 commit-ack-to-client-watch-p50-ms=34.614 commit-ack-to-client-watch-p95-ms=40.896 commit-ack-to-client-watch-max-ms=54.357 samples=100
+tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms=36.273 snapshot-p95-ms=38.637 snapshot-max-ms=76.335 commit-ack-to-client-watch-p50-ms=34.751 commit-ack-to-client-watch-p95-ms=38.020 commit-ack-to-client-watch-max-ms=57.408 samples=100
 test tonic_snapshot_watch_feasibility_gate ... ok
 ```
 
@@ -146,8 +146,8 @@ distinct commit-notification-to-server-queue proposal or promoted to an approved
    continued, and reconnect replayed every row after the slow client's last accepted
    cursor.
 6. One local run retained 100 warmed samples with snapshot p50/p95/max of
-   37.85/75.14/116.98 ms and commit-acknowledgement-to-client-watch p50/p95/max of
-   34.61/40.90/54.36 ms.
+   36.27/38.64/76.34 ms and commit-acknowledgement-to-client-watch p50/p95/max of
+   34.75/38.02/57.41 ms.
 
 ### Limitations
 
@@ -258,7 +258,7 @@ pnpm --filter @ayni-orchestrator/grpc-bindings check
 pnpm --filter @ayni-orchestrator/web exec node --import tsx ../../clients/typescript/tests/verification.test.ts
 ```
 
-The retained successful run passed six workflow event/signing tests and eight
+The retained successful run passed seven workflow event/signing tests and eight
 executor-ledger tests. Rust and TypeScript independently reconstructed the canonical
 sequence-1 report bytes and SHA-256 digest in
 `proto/testdata/workflow/report-signing.json`, then verified the same Ed25519
@@ -286,8 +286,9 @@ The SQLite/WAL ledger prototype demonstrated:
 - report-byte cleanup only after a durable decision, followed by decision-byte
   cleanup only after its consumer ACK.
 
-Tampering with signed binding or causation fields failed Ed25519 verification.
-The transport time and trace reference are required envelope fields but are not part
+Tampering with signed binding or causation fields failed strict Ed25519 verification,
+and a known small-order public key was rejected before ownership could bind. The
+transport time and trace reference are required envelope fields but are not part
 of the explicitly frozen signing input. The prototype uses pinned `rusqlite 0.40.2`
 and the repository's existing `ed25519-dalek 2.2.0`.
 
@@ -298,11 +299,12 @@ process. Its fixture schema has no versioned upgrade path; runtime ledger migrat
 must explicitly reject or migrate older layouts. The canonical workflow CloudEvents
 require an RFC 3339 produced time and canonical W3C `traceparent`, bind complete
 workflow scope and causal identity, and reject free-form failure diagnostics in
-favor of stable safe reason codes. Their generated event messages are an intentional
-additive v1 compatibility surface in the events library so Rust/TypeScript exercise
-one schema; no legacy event-type registration or runtime publisher/consumer is
-required because this is the clean replacement protocol. Reopening the database exercises durable restart boundaries but
-does not yet inject process kills at every fsync/ACK boundary. The prototype stores
+favor of closed safe-reason allowlists. Their generated event messages are an
+intentional additive v1 compatibility surface in the events library so Rust/TypeScript
+exercise one schema; no legacy event-type registration or runtime publisher/consumer
+is required because this is the clean replacement protocol. Reopening the database
+exercises durable restart boundaries but does not yet inject process kills at every
+fsync/ACK boundary. The prototype stores
 fixture signing seed bytes in SQLite; runtime file permissions, Secret injection,
 and at-rest key handling are not approved by this evidence. Quarantine capacity,
 actual NATS redelivery, per-instance credential/consumer retirement, ledger disk-full,
