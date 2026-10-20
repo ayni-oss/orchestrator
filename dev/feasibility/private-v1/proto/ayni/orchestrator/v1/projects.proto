@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package ayni.orchestrator.v1;
+
+import "ayni/orchestrator/v1/workflow.proto";
+import "google/protobuf/timestamp.proto";
+
+// M1 keeps only minimal hierarchy creation on the trusted operator listener.
+service ProjectService {
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+}
+
+message Workspace {
+  reserved 3, 4, 8, 9;
+  reserved "state", "repository_connection_ids", "agent_defaults", "planner_idle_timeout_seconds";
+
+  string id = 1;
+  string display_name = 2;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  uint64 resource_version = 7;
+}
+
+message CreateWorkspaceRequest {
+  reserved 3 to 5;
+  reserved "repository_connection_ids", "agent_defaults", "planner_idle_timeout_seconds";
+
+  string idempotency_key = 1;
+  string display_name = 2;
+}
+
+message CreateWorkspaceResponse {
+  Workspace workspace = 1;
+  CommandReceipt receipt = 2;
+}
+
+message Project {
+  reserved 3, 4, 8;
+  reserved "state", "repository_connection_ids", "agent_defaults";
+
+  string id = 1;
+  string display_name = 2;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  uint64 resource_version = 7;
+  string workspace_id = 9;
+  string goal = 10;
+}
+
+message CreateProjectRequest {
+  reserved 3, 4;
+  reserved "repository_connection_id", "repository_connection_ids";
+
+  string idempotency_key = 1;
+  string display_name = 2;
+  string workspace_id = 5;
+  string goal = 6;
+}
+
+message CreateProjectResponse {
+  Project project = 1;
+  CommandReceipt receipt = 2;
+}

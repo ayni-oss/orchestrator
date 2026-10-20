@@ -293,7 +293,7 @@ Field numbers are fixed before generated code changes:
 | `Message` | `id=1`, `conversation_id=2`, source Turn `=3`, role `=4`, content `=5`, accepted time `=6`, stable sequence `=7`. |
 | `Turn` | `id=1`, `conversation_id=2`, input Message `=3`, FIFO sequence `=4`, binding revision `=5`, context revision `=6`, assignment ID `=7`, executor generation `=8`, scheduling/dispatch/execution states `=9..11`, response Message `=12`, safe failure reason `=13`, accepted/updated times `=14..15`. |
 | `Activity` | `id=1`, `conversation_id=2`, revision `=3`, cursor `=4`, Turn `=5`, stage/state `=6..7`, `waiting_on=8`, safe reason `=9`, accepted time `=10`, bounded safe detail `=11`. |
-| `ConversationSnapshot` | Scope IDs `=1..3`, conversation revision `=4`, recent Messages `=5`, nonterminal Turns `=6`, terminal summaries `=7`, history counts `=8`, history snapshot identity `=9`, current activity `=10`, resume cursor `=11`. |
+| `ConversationSnapshot` | Scope IDs `=1..3`, conversation revision `=4`, recent Messages `=5`, nonterminal Turns `=6`, terminal summaries `=7`, history counts `=8`, history snapshot identity `=9`, current activity `=10`, resume cursor `=11`, title `=12`, created time `=13`. |
 | `ConversationHistoryRecord` | Sequence `=1`, ID `=2`, kind `=3`, role/state `=4`, bounded content/outcome `=5`, source Turn `=6`, accepted time `=7`. |
 | `ConversationUpdate` | Update ID `=1`, activity ID `=2`, cursor `=3`, conversation revision `=4`, kind `=5`, affected resource IDs `=6`, state `=7`, `waiting_on=8`, safe reason `=9`, accepted time `=10`. |
 
@@ -328,7 +328,7 @@ Required boundary projections are:
 | Projection | Required safe fields |
 | --- | --- |
 | `CommandReceipt` | Command ID and kind; Workspace, Project, and Conversation scope; created Message and Turn IDs when applicable; original accepted time, conversation revision, resume cursor, and presentation state. |
-| `ConversationSnapshot` | Scope IDs, conversation revision, recent Messages, all bounded nonterminal Turns in FIFO order, recent terminal summaries, history counts and snapshot identity, current activity, and resume cursor. |
+| `ConversationSnapshot` | Scope IDs, title and creation time, conversation revision, recent Messages, all bounded nonterminal Turns in FIFO order, recent terminal summaries, history counts and snapshot identity, current activity, and resume cursor. |
 | `ConversationHistoryRecord` | Stable sequence and ID, kind, role/state, bounded content or safe outcome, source Turn, and accepted time. |
 | `ConversationUpdate` | Stable update and activity IDs, cursor, conversation revision, kind, affected resource IDs, state, `waiting_on`, safe reason, and accepted time. |
 
@@ -510,7 +510,11 @@ outcome, and an Ed25519 signature over the canonical envelope/payload bytes. The
 ownership claim additionally carries the public key; later reports must use its
 bound digest. Decision facts carry report identity/digest, target executor instance,
 accepted claimant when one exists, immutable accepted or rejected result, and
-authoritative Turn state; they do not copy transcript content.
+authoritative Turn state; they do not copy transcript content. The initial closed
+report failure vocabulary is `script_failed`. Rejection uses only `claim_lost`,
+`stale_generation`, `wrong_scope`, `wrong_binding`, `invalid_signature`,
+`event_conflict`, or `terminal_conflict`; adding a code requires a reviewed contract
+change.
 
 A report event ID is stable across retries. The executor persists the event ID and
 exact bytes before publication. The signature input is a domain-separated digest of
@@ -557,7 +561,8 @@ ledger. The ID is one validated NATS subject token; the private key never leaves
 that workload or enters an event. On command delivery it atomically stores the exact
 command and a signed sequence-1
 `turn.started` ownership claim before sending the command-consumer ACK. The application
-verifies the signature, then atomically accepts the first valid claim for the current
+uses strict Ed25519 verification that rejects small-order public keys, then atomically
+accepts the first valid claim for the current
 assignment/generation, binds that public-key digest, records its immutable report
 receipt, marks dispatch `transferred` and execution `processing`, and creates the
 claim-decision fact. Every later report must verify under the bound key. Competing
@@ -898,6 +903,9 @@ credentials, and model calls remain isolated. M2 adds `provisioning`, `agent_wak
 or accepted response.
 
 ## Gates before runtime implementation
+
+Reproducible results and remaining limitations are tracked in the
+[M1 feasibility evidence bundle](project-workflow-m1-feasibility-evidence.md).
 
 Contract review alone does not authorize a product runtime PR. Runbook Gates B, F,
 and G remain open until the following evidence is committed or linked in a reviewable

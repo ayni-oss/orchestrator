@@ -1,0 +1,21 @@
+[package]
+name = "ayni-orchestrator-scripted-executor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ayni-orchestrator-events = { path = "../../libs/events" }
+rusqlite.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ed25519-dalek.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

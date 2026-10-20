@@ -9,10 +9,12 @@ publish.workspace = true
 
 [dependencies]
 cloudevents-sdk.workspace = true
+ed25519-dalek.workspace = true
 pbjson.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 
