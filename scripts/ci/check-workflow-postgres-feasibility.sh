@@ -47,7 +47,9 @@ if [[ ! "$port" =~ ^[0-9]+$ ]]; then
 fi
 
 docker exec "$CONTAINER" psql --username postgres --dbname "$DATABASE" \
-  --command="CREATE ROLE $RUNTIME_ROLE LOGIN PASSWORD '$RUNTIME_PASSWORD'" >/dev/null
+  --command="CREATE ROLE $RUNTIME_ROLE LOGIN PASSWORD '$RUNTIME_PASSWORD'; \
+    REVOKE ALL ON DATABASE $DATABASE FROM PUBLIC; \
+    GRANT CONNECT ON DATABASE $DATABASE TO $RUNTIME_ROLE" >/dev/null
 
 export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${port}/${DATABASE}"
 export AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL="postgresql://${RUNTIME_ROLE}:${RUNTIME_PASSWORD}@127.0.0.1:${port}/${DATABASE}"

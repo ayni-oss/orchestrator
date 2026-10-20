@@ -25,7 +25,8 @@ pub use store::{StoreError, WorkflowStore};
 pub async fn connect(
     database_url: &str,
 ) -> Result<(Client, JoinHandle<()>), tokio_postgres::Error> {
-    let config: Config = database_url.parse()?;
+    let mut config: Config = database_url.parse()?;
+    config.options("-c search_path=pg_catalog,public,pg_temp");
     let (client, connection) = config.connect(NoTls).await?;
     let driver = tokio::spawn(async move {
         let _ = connection.await;

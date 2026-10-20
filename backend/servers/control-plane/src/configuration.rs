@@ -65,7 +65,7 @@ impl Configuration {
         if !grpc_bind_address.ip().is_loopback() || grpc_bind_address.port() == 0 {
             return Err(ConfigurationError::UnsafeGrpcAddress);
         }
-        if http_bind_address == grpc_bind_address {
+        if http_bind_address.port() == grpc_bind_address.port() {
             return Err(ConfigurationError::DuplicateAddress);
         }
         validate_secret_path(&migration_database_url_path)?;
@@ -154,7 +154,7 @@ pub enum ConfigurationError {
     InvalidGrpcAddress,
     #[error("the trusted workflow gRPC listener must use loopback and a nonzero port")]
     UnsafeGrpcAddress,
-    #[error("HTTP and gRPC listener addresses must differ")]
+    #[error("HTTP and gRPC listener ports must differ")]
     DuplicateAddress,
     #[error("workflow database Secret paths must be absolute")]
     InvalidSecretPath,
@@ -179,6 +179,16 @@ mod tests {
                 "ayni_runtime",
             ),
             Err(ConfigurationError::UnsafeGrpcAddress)
+        ));
+        assert!(matches!(
+            Configuration::from_values(
+                "0.0.0.0:50051",
+                "127.0.0.1:50051",
+                PathBuf::from("/migration"),
+                PathBuf::from("/runtime"),
+                "ayni_runtime",
+            ),
+            Err(ConfigurationError::DuplicateAddress)
         ));
     }
 

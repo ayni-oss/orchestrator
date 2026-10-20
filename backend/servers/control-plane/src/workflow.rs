@@ -15,7 +15,7 @@ use tonic::{Code, Request, Response, Status, transport::Server};
 use uuid::Uuid;
 
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
-const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_RESPONSE_BYTES: usize = 3 * 1024 * 1024;
 const ERROR_DETAIL_TYPE_URL: &str = "type.googleapis.com/ayni.orchestrator.v1.ErrorDetail";
 type ConversationStream =
     Pin<Box<dyn Stream<Item = Result<v1::WatchConversationResponse, Status>> + Send + 'static>>;

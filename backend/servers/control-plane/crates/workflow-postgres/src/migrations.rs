@@ -50,11 +50,14 @@ async fn migrate_inner(
 ) -> Result<(), MigrationError> {
     let transaction = client.transaction().await?;
     transaction
+        .batch_execute("SET LOCAL search_path TO public, pg_catalog, pg_temp")
+        .await?;
+    transaction
         .query_one("SELECT pg_advisory_xact_lock($1)", &[&MIGRATION_LOCK_ID])
         .await?;
     transaction
         .batch_execute(
-            "CREATE TABLE IF NOT EXISTS workflow_schema_migrations (\
+            "CREATE TABLE IF NOT EXISTS public.workflow_schema_migrations (\
                  version bigint PRIMARY KEY CHECK (version > 0),\
                  description text NOT NULL,\
                  checksum text NOT NULL,\
@@ -65,7 +68,7 @@ async fn migrate_inner(
     validate_history(&transaction).await?;
     let current: i64 = transaction
         .query_one(
-            "SELECT COALESCE(max(version), 0) FROM workflow_schema_migrations",
+            "SELECT COALESCE(max(version), 0) FROM public.workflow_schema_migrations",
             &[],
         )
         .await?
@@ -77,7 +80,7 @@ async fn migrate_inner(
         transaction.batch_execute(MIGRATION_1).await?;
         transaction
             .execute(
-                "INSERT INTO workflow_schema_migrations (version, description, checksum) \
+                "INSERT INTO public.workflow_schema_migrations (version, description, checksum) \
                  VALUES ($1, $2, $3)",
                 &[
                     &CURRENT_SCHEMA_VERSION,
@@ -113,8 +116,12 @@ pub async fn validate_for_runtime(
     runtime_role: &str,
 ) -> Result<(), MigrationError> {
     validate_role_name(runtime_role)?;
-    let connected_role: String = client.query_one("SELECT current_user", &[]).await?.get(0);
-    if connected_role != runtime_role {
+    let identities = client
+        .query_one("SELECT current_user, session_user", &[])
+        .await?;
+    let current_role: String = identities.get(0);
+    let session_role: String = identities.get(1);
+    if current_role != runtime_role || session_role != runtime_role {
         return Err(MigrationError::InvalidRuntimeRole);
     }
     validate_inner(client).await
@@ -123,7 +130,7 @@ pub async fn validate_for_runtime(
 async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
     let row = client
         .query_opt(
-            "SELECT version, checksum FROM workflow_schema_migrations ORDER BY version DESC LIMIT 1",
+            "SELECT version, checksum FROM public.workflow_schema_migrations ORDER BY version DESC LIMIT 1",
             &[],
         )
         .await?
@@ -146,7 +153,7 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
 async fn validate_history(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let rows = transaction
         .query(
-            "SELECT version FROM workflow_schema_migrations ORDER BY version",
+            "SELECT version FROM public.workflow_schema_migrations ORDER BY version",
             &[],
         )
         .await?;
@@ -165,7 +172,7 @@ async fn validate_history(transaction: &Transaction<'_>) -> Result<(), Migration
 async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let checksum: String = transaction
         .query_one(
-            "SELECT checksum FROM workflow_schema_migrations WHERE version = $1",
+            "SELECT checksum FROM public.workflow_schema_migrations WHERE version = $1",
             &[&CURRENT_SCHEMA_VERSION],
         )
         .await?
@@ -188,9 +195,13 @@ async fn apply_runtime_privileges(
                AND NOT role.rolsuper AND NOT role.rolcreatedb \
                AND NOT role.rolcreaterole AND NOT role.rolreplication \
                AND NOT role.rolbypassrls AND role.rolname <> current_user \
+               AND has_database_privilege(role.rolname, current_database(), 'CONNECT') \
+               AND NOT has_database_privilege( \
+                   role.rolname, current_database(), 'CREATE,TEMPORARY' \
+               ) \
                AND NOT EXISTS ( \
                    SELECT 1 FROM pg_auth_members AS membership \
-                   WHERE membership.member = role.oid \
+                   WHERE membership.member = role.oid OR membership.roleid = role.oid \
                )",
             &[&runtime_role],
         )
@@ -211,19 +222,23 @@ async fn apply_runtime_privileges(
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
                workflow_outbox, workflow_history_snapshots FROM {role};\
-             GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \
+             GRANT SELECT, INSERT ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
                workflow_outbox, workflow_history_snapshots TO {role};\
+             GRANT UPDATE (revision, next_turn_sequence, next_history_sequence) \
+               ON workflow_conversations TO {role};\
+             GRANT UPDATE (resume_cursor) ON workflow_command_receipts TO {role};\
+             GRANT DELETE ON workflow_history_snapshots TO {role};\
              REVOKE ALL PRIVILEGES ON SEQUENCE workflow_updates_cursor_seq FROM {role};\
              GRANT USAGE, SELECT ON SEQUENCE workflow_updates_cursor_seq TO {role};\
              REVOKE ALL PRIVILEGES ON FUNCTION workflow_ts_seconds(timestamptz), \
                workflow_ts_nanos(timestamptz) FROM {role};\
              GRANT EXECUTE ON FUNCTION workflow_ts_seconds(timestamptz), \
                workflow_ts_nanos(timestamptz) TO {role};\
-             REVOKE ALL PRIVILEGES ON TABLE workflow_schema_migrations FROM {role};\
-             GRANT SELECT ON TABLE workflow_schema_migrations TO {role};"
+             REVOKE ALL PRIVILEGES ON TABLE public.workflow_schema_migrations FROM {role};\
+             GRANT SELECT ON TABLE public.workflow_schema_migrations TO {role};"
         ))
         .await?;
     Ok(())
@@ -250,14 +265,25 @@ async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationE
         .query_one(schema_manifest_query(), &[])
         .await?
         .get(0);
-    validate_schema_manifest(&manifest)
+    validate_schema_manifest(&manifest)?;
+    let safe: bool = transaction
+        .query_one(schema_guards_query(), &[])
+        .await?
+        .get(0);
+    validate_schema_guards(safe)
 }
 
 async fn validate_schema_client(client: &Client) -> Result<(), MigrationError> {
     let manifest: String = client.query_one(schema_manifest_query(), &[]).await?.get(0);
-    validate_schema_manifest(&manifest)
+    validate_schema_manifest(&manifest)?;
+    let safe: bool = client.query_one(schema_guards_query(), &[]).await?.get(0);
+    validate_schema_guards(safe)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the exact runtime ACL expression remains contiguous for security review"
+)]
 async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationError> {
     let valid: bool = client
         .query_one(
@@ -265,49 +291,135 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                role.rolcanlogin \
                AND NOT role.rolsuper AND NOT role.rolcreatedb AND NOT role.rolcreaterole \
                AND NOT role.rolreplication AND NOT role.rolbypassrls \
+               AND has_database_privilege(current_user, current_database(), 'CONNECT') \
+               AND NOT has_database_privilege( \
+                   current_user, current_database(), 'CREATE,TEMPORARY' \
+               ) \
                AND NOT EXISTS ( \
                    SELECT 1 FROM pg_auth_members AS membership \
-                   WHERE membership.member = role.oid \
+                   WHERE membership.member = role.oid OR membership.roleid = role.oid \
+               ) \
+               AND (SELECT database.datdba <> role.oid FROM pg_database AS database \
+                    WHERE database.datname = current_database()) \
+               AND (SELECT namespace.nspowner <> role.oid FROM pg_namespace AS namespace \
+                    WHERE namespace.nspname = 'public') \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM pg_namespace AS namespace \
+                   CROSS JOIN LATERAL aclexplode(namespace.nspacl) AS acl \
+                   WHERE namespace.nspname = 'public' \
+                     AND acl.grantee = role.oid AND acl.is_grantable \
+               ) \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM pg_class AS object \
+                   JOIN pg_namespace AS namespace ON namespace.oid = object.relnamespace \
+                   WHERE namespace.nspname = 'public' \
+                     AND object.relname LIKE 'workflow\\_%' ESCAPE '\\' \
+                     AND object.relowner = role.oid \
+               ) \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM pg_proc AS function \
+                   JOIN pg_namespace AS namespace ON namespace.oid = function.pronamespace \
+                   WHERE namespace.nspname = 'public' \
+                     AND function.proname LIKE 'workflow\\_%' ESCAPE '\\' \
+                     AND function.proowner = role.oid \
+               ) \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM information_schema.table_privileges AS privilege \
+                   WHERE privilege.grantee = current_user \
+                     AND privilege.table_schema = 'public' \
+                     AND privilege.table_name LIKE 'workflow\\_%' ESCAPE '\\' \
+                     AND privilege.is_grantable = 'YES' \
+               ) \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM information_schema.routine_privileges AS privilege \
+                   WHERE privilege.grantee = current_user \
+                     AND privilege.specific_schema = 'public' \
+                     AND privilege.routine_name LIKE 'workflow\\_%' ESCAPE '\\' \
+                     AND privilege.is_grantable = 'YES' \
+               ) \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM information_schema.usage_privileges AS privilege \
+                   WHERE privilege.grantee = current_user \
+                     AND privilege.object_schema = 'public' \
+                     AND (privilege.object_name = 'public' \
+                          OR privilege.object_name LIKE 'workflow\\_%' ESCAPE '\\') \
+                     AND privilege.is_grantable = 'YES' \
                ) \
                AND has_schema_privilege(current_user, 'public', 'USAGE') \
                AND NOT has_schema_privilege(current_user, 'public', 'CREATE') \
-               AND has_table_privilege(current_user, 'workflow_schema_migrations', 'SELECT') \
+               AND has_table_privilege( \
+                   current_user, 'public.workflow_schema_migrations', 'SELECT' \
+               ) \
                AND NOT has_table_privilege( \
-                   current_user, 'workflow_schema_migrations', \
+                   current_user, 'public.workflow_schema_migrations', \
                    'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER' \
                ) \
                AND ( \
                    SELECT bool_and( \
                        has_table_privilege(current_user, table_name, 'SELECT') \
                        AND has_table_privilege(current_user, table_name, 'INSERT') \
-                       AND has_table_privilege(current_user, table_name, 'UPDATE') \
-                       AND has_table_privilege(current_user, table_name, 'DELETE') \
                        AND NOT has_table_privilege( \
-                           current_user, table_name, 'TRUNCATE,REFERENCES,TRIGGER' \
+                           current_user, table_name, 'UPDATE,TRUNCATE,REFERENCES,TRIGGER' \
                        ) \
+                       AND has_table_privilege(current_user, table_name, 'DELETE') \
+                           = (table_name = 'public.workflow_history_snapshots') \
                    ) \
                    FROM unnest(ARRAY[ \
-                       'workflow_workspaces', 'workflow_projects', \
-                       'workflow_conversations', 'workflow_command_receipts', \
-                       'workflow_messages', 'workflow_turns', 'workflow_activities', \
-                       'workflow_updates', 'workflow_dispatch_intents', 'workflow_outbox', \
-                       'workflow_history_snapshots' \
+                       'public.workflow_workspaces', 'public.workflow_projects', \
+                       'public.workflow_conversations', 'public.workflow_command_receipts', \
+                       'public.workflow_messages', 'public.workflow_turns', \
+                       'public.workflow_activities', 'public.workflow_updates', \
+                       'public.workflow_dispatch_intents', 'public.workflow_outbox', \
+                       'public.workflow_history_snapshots' \
                    ]) AS table_name \
                ) \
-               AND has_sequence_privilege( \
-                   current_user, 'workflow_updates_cursor_seq', 'USAGE' \
+               AND has_column_privilege( \
+                   current_user, 'public.workflow_conversations', 'revision', 'UPDATE' \
+               ) \
+               AND has_column_privilege( \
+                   current_user, 'public.workflow_conversations', \
+                   'next_turn_sequence', 'UPDATE' \
+               ) \
+               AND has_column_privilege( \
+                   current_user, 'public.workflow_conversations', \
+                   'next_history_sequence', 'UPDATE' \
+               ) \
+               AND has_column_privilege( \
+                   current_user, 'public.workflow_command_receipts', \
+                   'resume_cursor', 'UPDATE' \
+               ) \
+               AND NOT EXISTS ( \
+                   SELECT 1 FROM information_schema.columns AS candidate \
+                   WHERE candidate.table_schema = 'public' \
+                     AND candidate.table_name LIKE 'workflow\\_%' ESCAPE '\\' \
+                     AND has_column_privilege( \
+                         current_user, \
+                         format('public.%I', candidate.table_name), \
+                         candidate.column_name, 'UPDATE' \
+                     ) \
+                     AND NOT ( \
+                         (candidate.table_name = 'workflow_conversations' \
+                          AND candidate.column_name IN ( \
+                              'revision', 'next_turn_sequence', 'next_history_sequence' \
+                          )) \
+                         OR (candidate.table_name = 'workflow_command_receipts' \
+                             AND candidate.column_name = 'resume_cursor') \
+                     ) \
                ) \
                AND has_sequence_privilege( \
-                   current_user, 'workflow_updates_cursor_seq', 'SELECT' \
+                   current_user, 'public.workflow_updates_cursor_seq', 'USAGE' \
+               ) \
+               AND has_sequence_privilege( \
+                   current_user, 'public.workflow_updates_cursor_seq', 'SELECT' \
                ) \
                AND NOT has_sequence_privilege( \
-                   current_user, 'workflow_updates_cursor_seq', 'UPDATE' \
+                   current_user, 'public.workflow_updates_cursor_seq', 'UPDATE' \
                ) \
                AND has_function_privilege( \
-                   current_user, 'workflow_ts_seconds(timestamptz)', 'EXECUTE' \
+                   current_user, 'public.workflow_ts_seconds(timestamptz)', 'EXECUTE' \
                ) \
                AND has_function_privilege( \
-                   current_user, 'workflow_ts_nanos(timestamptz)', 'EXECUTE' \
+                   current_user, 'public.workflow_ts_nanos(timestamptz)', 'EXECUTE' \
                ) \
              FROM pg_roles AS role WHERE role.rolname = current_user",
             &[],
@@ -319,6 +431,59 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
     } else {
         Err(MigrationError::InvalidRuntimePrivileges)
     }
+}
+
+const fn validate_schema_guards(safe: bool) -> Result<(), MigrationError> {
+    if safe {
+        Ok(())
+    } else {
+        Err(MigrationError::InvalidSchema)
+    }
+}
+
+const fn schema_guards_query() -> &'static str {
+    r"
+SELECT
+    NOT EXISTS (
+        SELECT 1
+        FROM pg_class AS relation
+        JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'public'
+          AND relation.relname LIKE 'workflow\_%' ESCAPE '\'
+          AND relation.relkind IN ('r', 'i', 'S')
+          AND (
+              relation.relpersistence <> 'p'
+              OR relation.relrowsecurity
+              OR relation.relforcerowsecurity
+          )
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger AS trigger
+        JOIN pg_class AS relation ON relation.oid = trigger.tgrelid
+        JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'public'
+          AND relation.relname LIKE 'workflow\_%' ESCAPE '\'
+          AND NOT trigger.tgisinternal
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM pg_policy AS policy
+        JOIN pg_class AS relation ON relation.oid = policy.polrelid
+        JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'public'
+          AND relation.relname LIKE 'workflow\_%' ESCAPE '\'
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM pg_rewrite AS rule
+        JOIN pg_class AS relation ON relation.oid = rule.ev_class
+        JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+        WHERE namespace.nspname = 'public'
+          AND relation.relname LIKE 'workflow\_%' ESCAPE '\'
+          AND rule.rulename <> '_RETURN'
+    )
+"
 }
 
 fn validate_schema_manifest(manifest: &str) -> Result<(), MigrationError> {

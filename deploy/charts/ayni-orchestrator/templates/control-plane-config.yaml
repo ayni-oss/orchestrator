@@ -2,6 +2,9 @@
 {{- if eq .Values.workflowPostgres.migratorSecretName .Values.workflowPostgres.runtimeSecretName }}
 {{- fail "workflowPostgres migrator and runtime Secret names must differ" }}
 {{- end }}
+{{- if eq (int .Values.controlPlane.httpPort) (int .Values.controlPlane.trustedGrpcPort) }}
+{{- fail "controlPlane HTTP and trusted gRPC ports must differ" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

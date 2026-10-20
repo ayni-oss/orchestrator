@@ -481,14 +481,14 @@ pub async fn reset_conversation(
     let (mut client, driver) = connect(database_url).await?;
     client
         .batch_execute(
-            "CREATE TABLE IF NOT EXISTS workflow_watch_conversations (\
+            "CREATE TABLE IF NOT EXISTS public.workflow_watch_conversations (\
                  id text PRIMARY KEY,\
                  title text NOT NULL,\
                  revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0)\
              );\
-             CREATE TABLE IF NOT EXISTS workflow_watch_updates (\
+             CREATE TABLE IF NOT EXISTS public.workflow_watch_updates (\
                  cursor bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\
-                 conversation_id text NOT NULL REFERENCES workflow_watch_conversations(id) ON DELETE CASCADE,\
+                 conversation_id text NOT NULL REFERENCES public.workflow_watch_conversations(id) ON DELETE CASCADE,\
                  revision bigint NOT NULL CHECK (revision > 0),\
                  kind text NOT NULL,\
                  safe_payload text NOT NULL,\
@@ -496,9 +496,9 @@ pub async fn reset_conversation(
                  UNIQUE (conversation_id, revision)\
              );\
              CREATE INDEX IF NOT EXISTS workflow_watch_updates_replay \
-                 ON workflow_watch_updates (conversation_id, cursor);\
-             CREATE TABLE IF NOT EXISTS workflow_watch_watermarks (\
-                 conversation_id text PRIMARY KEY REFERENCES workflow_watch_conversations(id) ON DELETE CASCADE,\
+                 ON public.workflow_watch_updates (conversation_id, cursor);\
+             CREATE TABLE IF NOT EXISTS public.workflow_watch_watermarks (\
+                 conversation_id text PRIMARY KEY REFERENCES public.workflow_watch_conversations(id) ON DELETE CASCADE,\
                  pruned_through_cursor bigint NOT NULL DEFAULT 0 CHECK (pruned_through_cursor >= 0)\
              );",
         )

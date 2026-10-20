@@ -523,7 +523,7 @@ impl WorkflowStore {
                 "DELETE FROM workflow_history_snapshots WHERE id IN ( \
                      SELECT id FROM workflow_history_snapshots \
                      WHERE expires_at <= clock_timestamp() \
-                     ORDER BY expires_at LIMIT 1000 FOR UPDATE SKIP LOCKED \
+                     ORDER BY expires_at LIMIT 1000 \
                  )",
                 &[],
             )
@@ -609,8 +609,13 @@ impl WorkflowStore {
         };
         let before = i64::try_from(before_sequence)
             .map_err(|_| StoreError::InvalidInput("before_sequence"))?;
-        let (client, driver) = crate::connect(&self.database_url).await?;
-        let snapshot = client
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let transaction = client
+            .build_transaction()
+            .isolation_level(IsolationLevel::RepeatableRead)
+            .start()
+            .await?;
+        let snapshot = transaction
             .query_opt(
                 "SELECT boundary_sequence, expires_at > clock_timestamp() \
                  FROM workflow_history_snapshots \
@@ -630,7 +635,7 @@ impl WorkflowStore {
             before.min(boundary.saturating_add(1))
         };
         let fetch = i64::from(limit).saturating_add(1);
-        let mut rows = client
+        let mut rows = transaction
             .query(
                 "SELECT sequence, id, role, content, COALESCE(turn_id, ''), \
                         workflow_ts_seconds(accepted_at), workflow_ts_nanos(accepted_at) \
@@ -650,6 +655,7 @@ impl WorkflowStore {
             .map(history_from_message_row)
             .collect::<Result<Vec<_>, _>>()?;
         let next_before_sequence = records.last().map_or(0, |record| record.sequence);
+        transaction.commit().await?;
         driver.abort();
         Ok(HistoryPage {
             records,

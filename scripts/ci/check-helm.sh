@@ -76,6 +76,12 @@ if helm template invalid "$reusable_chart" \
   echo "reusable chart accepted one Secret for migration and runtime roles" >&2
   exit 1
 fi
+if helm template invalid "$reusable_chart" \
+  --set controlPlane.httpPort=50051 \
+  --set controlPlane.trustedGrpcPort=50051 >/dev/null 2>&1; then
+  echo "reusable chart accepted overlapping HTTP and trusted gRPC ports" >&2
+  exit 1
+fi
 if helm template invalid "$local_chart" \
   --set-string postgres.secrets.runtime=workflow-postgres-migrator >/dev/null 2>&1; then
   echo "local chart accepted one Secret for migration and runtime roles" >&2

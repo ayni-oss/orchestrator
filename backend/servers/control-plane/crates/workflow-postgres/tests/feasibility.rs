@@ -1,7 +1,7 @@
 use ayni_orchestrator_events::workflow::decode_command;
 use ayni_orchestrator_workflow_postgres::{
     MigrationError, StoreError, WorkflowStore, connect, migrate, migrate_for_runtime,
-    migration_lock_id, validate, validate_for_runtime,
+    migration_lock_id, validate, validate_client_for_runtime, validate_for_runtime,
 };
 use std::{error::Error, sync::Arc, time::Duration};
 use tokio::{
@@ -34,6 +34,7 @@ async fn postgres_feasibility_gate() -> TestResult {
     prove_concurrent_migrations(&client, &database_url).await?;
     migrate_for_runtime(&database_url, &runtime_database_role).await?;
     validate(&runtime_database_url).await?;
+    prove_safe_search_path(&runtime_database_url).await?;
     prove_runtime_role(&runtime_database_url).await?;
     prove_schema_drift_rejected(&client, &runtime_database_url).await?;
     prove_runtime_privilege_drift_rejected(
@@ -80,7 +81,7 @@ async fn prove_advisory_lock(client: &Client, database_url: &str) -> TestResult 
 
 async fn prove_migration_failure_rollback(client: &Client, database_url: &str) -> TestResult {
     client
-        .batch_execute("CREATE TABLE workflow_projects (injected boolean)")
+        .batch_execute("CREATE TABLE public.workflow_projects (injected boolean)")
         .await?;
     assert!(matches!(
         migrate(database_url).await,
@@ -126,28 +127,60 @@ async fn prove_concurrent_migrations(client: &Client, database_url: &str) -> Tes
     Ok(())
 }
 
+async fn prove_safe_search_path(database_url: &str) -> TestResult {
+    let separator = if database_url.contains('?') { '&' } else { '?' };
+    let hostile_url = format!(
+        "{database_url}{separator}options=-c%20search_path%3Dpublic%2Cpg_temp%2Cpg_catalog"
+    );
+    let (client, driver) = connect(&hostile_url).await?;
+    let search_path: String = client.query_one("SHOW search_path", &[]).await?.get(0);
+    assert_eq!(search_path, "pg_catalog,public,pg_temp");
+    driver.abort();
+    Ok(())
+}
+
 async fn prove_runtime_role(database_url: &str) -> TestResult {
     let (client, driver) = connect(database_url).await?;
     let privileges = client
         .query_one(
             "SELECT \
-               has_table_privilege(current_user, 'workflow_workspaces', 'SELECT,INSERT,UPDATE,DELETE'), \
+               has_table_privilege(current_user, 'workflow_workspaces', 'SELECT'), \
+               has_table_privilege(current_user, 'workflow_workspaces', 'INSERT'), \
+               has_table_privilege(current_user, 'workflow_workspaces', 'UPDATE,DELETE'), \
+               has_column_privilege( \
+                   current_user, 'workflow_conversations', 'revision', 'UPDATE' \
+               ), \
+               has_table_privilege(current_user, 'workflow_history_snapshots', 'DELETE'), \
                has_table_privilege(current_user, 'workflow_schema_migrations', 'SELECT'), \
                has_table_privilege(current_user, 'workflow_schema_migrations', 'INSERT,UPDATE,DELETE'), \
-               has_schema_privilege(current_user, 'public', 'CREATE')",
+               has_schema_privilege(current_user, 'public', 'CREATE'), \
+               has_database_privilege(current_user, current_database(), 'CONNECT'), \
+               has_database_privilege(current_user, current_database(), 'CREATE,TEMPORARY')",
             &[],
         )
         .await?;
     assert!(privileges.get::<_, bool>(0));
     assert!(privileges.get::<_, bool>(1));
     assert!(!privileges.get::<_, bool>(2));
-    assert!(!privileges.get::<_, bool>(3));
+    assert!(privileges.get::<_, bool>(3));
+    assert!(privileges.get::<_, bool>(4));
+    assert!(privileges.get::<_, bool>(5));
+    assert!(!privileges.get::<_, bool>(6));
+    assert!(!privileges.get::<_, bool>(7));
+    assert!(privileges.get::<_, bool>(8));
+    assert!(!privileges.get::<_, bool>(9));
     assert!(
         client
             .execute(
                 "DELETE FROM workflow_schema_migrations WHERE version = 1",
                 &[],
             )
+            .await
+            .is_err()
+    );
+    assert!(
+        client
+            .execute("UPDATE workflow_messages SET content = 'tampered'", &[])
             .await
             .is_err()
     );
@@ -165,10 +198,51 @@ async fn prove_schema_drift_rejected(client: &Client, runtime_url: &str) -> Test
     ));
     client
         .batch_execute(
-            "CREATE FUNCTION workflow_ts_nanos(value timestamptz) \
+            "CREATE FUNCTION public.workflow_ts_nanos(value timestamptz) \
              RETURNS bigint LANGUAGE sql IMMUTABLE PARALLEL SAFE \
              RETURN (extract(microseconds FROM value)::bigint % 1000000) * 1000",
         )
+        .await?;
+    validate(runtime_url).await?;
+
+    client
+        .batch_execute(
+            "CREATE FUNCTION public.ayni_schema_drift() RETURNS trigger LANGUAGE plpgsql \
+             AS $drift$ BEGIN RETURN NEW; END; $drift$; \
+             CREATE TRIGGER ayni_schema_drift BEFORE INSERT ON workflow_workspaces \
+             FOR EACH ROW EXECUTE FUNCTION ayni_schema_drift()",
+        )
+        .await?;
+    assert!(matches!(
+        validate(runtime_url).await,
+        Err(MigrationError::InvalidSchema)
+    ));
+    client
+        .batch_execute(
+            "DROP TRIGGER ayni_schema_drift ON workflow_workspaces; \
+             DROP FUNCTION ayni_schema_drift()",
+        )
+        .await?;
+
+    client
+        .batch_execute("ALTER TABLE workflow_schema_migrations SET UNLOGGED")
+        .await?;
+    assert!(matches!(
+        validate(runtime_url).await,
+        Err(MigrationError::InvalidSchema)
+    ));
+    client
+        .batch_execute("ALTER TABLE workflow_schema_migrations SET LOGGED")
+        .await?;
+    client
+        .batch_execute("ALTER TABLE workflow_workspaces ENABLE ROW LEVEL SECURITY")
+        .await?;
+    assert!(matches!(
+        validate(runtime_url).await,
+        Err(MigrationError::InvalidSchema)
+    ));
+    client
+        .batch_execute("ALTER TABLE workflow_workspaces DISABLE ROW LEVEL SECURITY")
         .await?;
     validate(runtime_url).await?;
     Ok(())
@@ -186,7 +260,7 @@ async fn prove_runtime_privilege_drift_rejected(
         .get(0);
     client
         .batch_execute(&format!(
-            "REVOKE DELETE ON workflow_workspaces FROM {quoted_role}"
+            "REVOKE INSERT ON workflow_workspaces FROM {quoted_role}"
         ))
         .await?;
     assert!(matches!(
@@ -206,6 +280,54 @@ async fn prove_runtime_privilege_drift_rejected(
         Err(MigrationError::InvalidRuntimePrivileges)
     ));
     migrate_for_runtime(migration_url, runtime_role).await?;
+    validate_for_runtime(runtime_url, runtime_role).await?;
+
+    client
+        .batch_execute(&format!(
+            "GRANT UPDATE ON workflow_messages TO {quoted_role}"
+        ))
+        .await?;
+    assert!(matches!(
+        validate_for_runtime(runtime_url, runtime_role).await,
+        Err(MigrationError::InvalidRuntimePrivileges)
+    ));
+    migrate_for_runtime(migration_url, runtime_role).await?;
+    validate_for_runtime(runtime_url, runtime_role).await?;
+
+    client
+        .batch_execute(&format!(
+            "GRANT SELECT ON workflow_workspaces TO {quoted_role} WITH GRANT OPTION"
+        ))
+        .await?;
+    assert!(matches!(
+        validate_for_runtime(runtime_url, runtime_role).await,
+        Err(MigrationError::InvalidRuntimePrivileges)
+    ));
+    migrate_for_runtime(migration_url, runtime_role).await?;
+    validate_for_runtime(runtime_url, runtime_role).await?;
+
+    client
+        .batch_execute(&format!(
+            "CREATE ROLE ayni_runtime_inheritor; \
+             GRANT {quoted_role} TO ayni_runtime_inheritor"
+        ))
+        .await?;
+    assert!(matches!(
+        validate_for_runtime(runtime_url, runtime_role).await,
+        Err(MigrationError::InvalidRuntimePrivileges)
+    ));
+    client
+        .batch_execute(&format!(
+            "REVOKE {quoted_role} FROM ayni_runtime_inheritor; \
+             DROP ROLE ayni_runtime_inheritor; \
+             SET ROLE {quoted_role}"
+        ))
+        .await?;
+    assert!(matches!(
+        validate_client_for_runtime(client, runtime_role).await,
+        Err(MigrationError::InvalidRuntimeRole)
+    ));
+    client.batch_execute("RESET ROLE").await?;
     validate_for_runtime(runtime_url, runtime_role).await?;
     assert!(matches!(
         validate_for_runtime(runtime_url, "different_runtime").await,
@@ -257,7 +379,7 @@ async fn prove_admission_insert_rollbacks(client: &Client, database_url: &str) -
         .await?;
     client
         .batch_execute(
-            "CREATE FUNCTION ayni_abort_admission() RETURNS trigger \
+            "CREATE FUNCTION public.ayni_abort_admission() RETURNS trigger \
              LANGUAGE plpgsql AS $abort$ BEGIN RAISE EXCEPTION 'injected admission failure'; END; $abort$",
         )
         .await?;

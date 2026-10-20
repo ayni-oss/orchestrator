@@ -24,7 +24,7 @@ The first deploy creates the namespace and three immutable Secrets without print
 - `workflow-postgres-migrator`, whose `url` file is mounted only into the startup migration init container;
 - `workflow-postgres-runtime`, whose `url` file is mounted only into the serving container.
 
-The PostgreSQL image is pinned to the reviewed 17.6 manifest digest. An init container gives UID 999 ownership of a new retained volume and skips recursive traversal once UID 999 already owns it, so restarts preserve the hardened `0700` data directory. First initialization creates distinct migration and runtime roles. The migration runner then grants explicit application-table DML and sequence use while keeping migration history read-only to the runtime role; blanket default grants are not used.
+The PostgreSQL image is pinned to the reviewed 17.6 manifest digest. An init container gives UID 999 ownership of a new retained volume and skips recursive traversal once UID 999 already owns it, so restarts preserve the hardened `0700` data directory. First initialization creates distinct migration and runtime roles. The migration runner grants only required reads/inserts, bounded conversation/receipt column updates, expired-snapshot deletion, and sequence/function use while keeping migration history read-only; blanket defaults, grant delegation, role inheritance, schema creation, and temporary-object creation are rejected.
 
 `dev/ctl check` waits for both workloads, checks migration version 1, and optionally verifies that no workspace has been admitted. It never reads or prints credential values.
 

@@ -42,7 +42,7 @@ Never edit an applied migration. A checksum mismatch, gap, unknown future versio
 The reusable chart never creates credentials. Administrators provide two differently named immutable Secrets containing a `url` key and configure `workflowPostgres.runtimeRoleName` to match the runtime URL:
 
 - the migration owner, which can create schema objects;
-- the runtime role, which can read and mutate application rows, read but not mutate migration history, and cannot create schema objects.
+- the runtime role, which has only the required table/column mutations, reads but cannot mutate migration history, and cannot create schemas or temporary objects, own workflow objects, inherit roles, or delegate grants.
 
 The database administrator Secret belongs only to the local PostgreSQL chart and is not mounted into the control plane. URLs are files, not ConfigMap values, environment variables, logs, command-line arguments, API fields, or diagnostic output.
 
