@@ -1,0 +1,227 @@
+syntax = "proto3";
+
+package ayni.orchestrator.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Durable workflow state is authoritative in PostgreSQL. Transport state remains
+// separate so broker storage never implies executor ownership.
+enum SchedulingState {
+  SCHEDULING_STATE_UNSPECIFIED = 0;
+  SCHEDULING_STATE_WAITING_FOR_PREDECESSOR = 1;
+  SCHEDULING_STATE_ELIGIBLE = 2;
+}
+
+enum DispatchState {
+  DISPATCH_STATE_UNSPECIFIED = 0;
+  DISPATCH_STATE_NOT_ELIGIBLE = 1;
+  DISPATCH_STATE_PENDING = 2;
+  DISPATCH_STATE_STORED = 3;
+  DISPATCH_STATE_TRANSFERRED = 4;
+  DISPATCH_STATE_DEGRADED = 5;
+}
+
+enum ExecutionState {
+  EXECUTION_STATE_UNSPECIFIED = 0;
+  EXECUTION_STATE_NOT_STARTED = 1;
+  EXECUTION_STATE_PROCESSING = 2;
+  EXECUTION_STATE_COMPLETED = 3;
+  EXECUTION_STATE_FAILED = 4;
+}
+
+enum PresentationState {
+  PRESENTATION_STATE_UNSPECIFIED = 0;
+  PRESENTATION_STATE_ACCEPTED = 1;
+  PRESENTATION_STATE_QUEUED = 2;
+  PRESENTATION_STATE_PROCESSING = 3;
+  PRESENTATION_STATE_COMPLETED = 4;
+  PRESENTATION_STATE_FAILED = 5;
+}
+
+enum ActivityStage {
+  ACTIVITY_STAGE_UNSPECIFIED = 0;
+  ACTIVITY_STAGE_ADMISSION = 1;
+  ACTIVITY_STAGE_SCHEDULING = 2;
+  ACTIVITY_STAGE_DISPATCH = 3;
+  ACTIVITY_STAGE_EXECUTION = 4;
+  ACTIVITY_STAGE_TERMINAL = 5;
+}
+
+enum CommandReceiptKind {
+  COMMAND_RECEIPT_KIND_UNSPECIFIED = 0;
+  COMMAND_RECEIPT_KIND_CREATE_WORKSPACE = 1;
+  COMMAND_RECEIPT_KIND_CREATE_PROJECT = 2;
+  COMMAND_RECEIPT_KIND_CREATE_CONVERSATION = 3;
+  COMMAND_RECEIPT_KIND_SEND_MESSAGE = 4;
+}
+
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_ASSISTANT = 2;
+}
+
+enum WaitingOn {
+  WAITING_ON_UNSPECIFIED = 0;
+  WAITING_ON_PREDECESSOR = 1;
+  WAITING_ON_DELIVERY = 2;
+  WAITING_ON_EXECUTOR = 3;
+}
+
+enum ConversationHistoryRecordKind {
+  CONVERSATION_HISTORY_RECORD_KIND_UNSPECIFIED = 0;
+  CONVERSATION_HISTORY_RECORD_KIND_MESSAGE = 1;
+  CONVERSATION_HISTORY_RECORD_KIND_TERMINAL_TURN = 2;
+}
+
+enum ConversationHistoryRoleOrState {
+  CONVERSATION_HISTORY_ROLE_OR_STATE_UNSPECIFIED = 0;
+  CONVERSATION_HISTORY_ROLE_OR_STATE_USER_MESSAGE = 1;
+  CONVERSATION_HISTORY_ROLE_OR_STATE_ASSISTANT_MESSAGE = 2;
+  CONVERSATION_HISTORY_ROLE_OR_STATE_COMPLETED_TURN = 3;
+  CONVERSATION_HISTORY_ROLE_OR_STATE_FAILED_TURN = 4;
+}
+
+enum ConversationUpdateKind {
+  CONVERSATION_UPDATE_KIND_UNSPECIFIED = 0;
+  CONVERSATION_UPDATE_KIND_MESSAGE_ADMITTED = 1;
+  CONVERSATION_UPDATE_KIND_TURN_SCHEDULING_CHANGED = 2;
+  CONVERSATION_UPDATE_KIND_TURN_DISPATCH_CHANGED = 3;
+  CONVERSATION_UPDATE_KIND_TURN_EXECUTION_CHANGED = 4;
+  CONVERSATION_UPDATE_KIND_TERMINAL_OUTCOME_ACCEPTED = 5;
+}
+
+// The original result of one idempotent command. Replays return these fields
+// unchanged rather than projecting newer aggregate state.
+message CommandReceipt {
+  string command_id = 1;
+  CommandReceiptKind kind = 2;
+  string workspace_id = 3;
+  string project_id = 4;
+  string conversation_id = 5;
+  string message_id = 6;
+  string turn_id = 7;
+  google.protobuf.Timestamp accepted_at = 8;
+  uint64 conversation_revision = 9;
+  string resume_cursor = 10;
+  PresentationState presentation_state = 11;
+}
+
+message Conversation {
+  string id = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string title = 4;
+  google.protobuf.Timestamp created_at = 5;
+  uint64 revision = 6;
+}
+
+message Message {
+  string id = 1;
+  string conversation_id = 2;
+  string turn_id = 3;
+  MessageRole role = 4;
+  string content = 5;
+  google.protobuf.Timestamp accepted_at = 6;
+  uint64 sequence = 7;
+}
+
+message Turn {
+  string id = 1;
+  string conversation_id = 2;
+  string input_message_id = 3;
+  uint64 sequence = 4;
+  string execution_binding_revision = 5;
+  uint64 context_revision = 6;
+  string assignment_id = 7;
+  uint64 executor_generation = 8;
+  SchedulingState scheduling_state = 9;
+  DispatchState dispatch_state = 10;
+  ExecutionState execution_state = 11;
+  string response_message_id = 12;
+  string failure_reason = 13;
+  google.protobuf.Timestamp accepted_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message Activity {
+  string id = 1;
+  string conversation_id = 2;
+  uint64 conversation_revision = 3;
+  string cursor = 4;
+  string turn_id = 5;
+  ActivityStage stage = 6;
+  PresentationState presentation_state = 7;
+  WaitingOn waiting_on = 8;
+  string safe_reason = 9;
+  google.protobuf.Timestamp accepted_at = 10;
+  string safe_detail = 11;
+}
+
+// A bounded terminal projection deliberately omits executor and dispatch mechanics.
+message TerminalTurnSummary {
+  string id = 1;
+  uint64 sequence = 2;
+  string input_message_id = 3;
+
+  // Only COMPLETED or FAILED is valid.
+  PresentationState presentation_state = 4;
+
+  oneof outcome {
+    // Required for COMPLETED.
+    string response_message_id = 5;
+    // Required for FAILED; never raw executor output.
+    string safe_failure_reason = 6;
+  }
+
+  google.protobuf.Timestamp accepted_at = 7;
+  google.protobuf.Timestamp terminal_at = 8;
+}
+
+message ConversationHistoryCounts {
+  uint64 messages = 1;
+  uint64 turns = 2;
+  bool has_older_history = 3;
+}
+
+message ConversationSnapshot {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  uint64 conversation_revision = 4;
+  repeated Message recent_messages = 5;
+  repeated Turn nonterminal_turns = 6;
+  repeated TerminalTurnSummary recent_terminal_turns = 7;
+  ConversationHistoryCounts history_counts = 8;
+  string history_snapshot_id = 9;
+  Activity current_activity = 10;
+  string resume_cursor = 11;
+  string title = 12;
+  google.protobuf.Timestamp created_at = 13;
+}
+
+message ConversationHistoryRecord {
+  uint64 sequence = 1;
+  string id = 2;
+  ConversationHistoryRecordKind kind = 3;
+  ConversationHistoryRoleOrState role_or_state = 4;
+  string content_or_outcome = 5;
+  string source_turn_id = 6;
+  google.protobuf.Timestamp accepted_at = 7;
+}
+
+message ConversationUpdate {
+  string update_id = 1;
+  string activity_id = 2;
+  string cursor = 3;
+  uint64 conversation_revision = 4;
+  ConversationUpdateKind kind = 5;
+  repeated string affected_resource_ids = 6;
+  PresentationState presentation_state = 7;
+  WaitingOn waiting_on = 8;
+  string safe_reason = 9;
+  google.protobuf.Timestamp accepted_at = 10;
+}
+
+// A heartbeat carries no cursor and never represents workflow progress.
+message ConversationWatchHeartbeat {}

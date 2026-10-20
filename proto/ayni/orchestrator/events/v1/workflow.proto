@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package ayni.orchestrator.events.v1;
+
+message ConversationTurnBinding {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string turn_id = 4;
+  string assignment_id = 5;
+  uint64 executor_generation = 6;
+  string execution_binding_revision = 7;
+  uint64 context_revision = 8;
+  string command_event_id = 9;
+  string command_digest = 10;
+}
+
+message ConversationContextRecord {
+  string message_id = 1;
+  uint64 sequence = 2;
+  string role = 3;
+  string content = 4;
+}
+
+message ConversationTurnRequested {
+  ConversationTurnBinding binding = 1;
+  string input_message_id = 2;
+  string input_content = 3;
+  repeated ConversationContextRecord context = 4;
+}
+
+enum ConversationTurnReportKind {
+  CONVERSATION_TURN_REPORT_KIND_UNSPECIFIED = 0;
+  CONVERSATION_TURN_REPORT_KIND_STARTED = 1;
+  CONVERSATION_TURN_REPORT_KIND_COMPLETED = 2;
+  CONVERSATION_TURN_REPORT_KIND_FAILED = 3;
+}
+
+message ConversationTurnReport {
+  ConversationTurnBinding binding = 1;
+  ConversationTurnReportKind kind = 2;
+  uint64 report_sequence = 3;
+  string executor_instance_id = 4;
+  bytes signing_public_key = 5;
+  string signing_key_digest = 6;
+  string response_content = 7;
+  string failure_reason = 8;
+  bytes signature = 9;
+}
+
+enum ConversationReportDecisionKind {
+  CONVERSATION_REPORT_DECISION_KIND_UNSPECIFIED = 0;
+  CONVERSATION_REPORT_DECISION_KIND_ACCEPTED = 1;
+  CONVERSATION_REPORT_DECISION_KIND_REJECTED = 2;
+}
+
+message ConversationReportDecision {
+  string report_source = 1;
+  string report_id = 2;
+  string report_digest = 3;
+  string target_executor_instance_id = 4;
+  string accepted_executor_instance_id = 5;
+  string assignment_id = 6;
+  uint64 executor_generation = 7;
+  ConversationReportDecisionKind decision = 8;
+  string safe_reason = 9;
+  string turn_state = 10;
+  string workspace_id = 11;
+  string project_id = 12;
+  string conversation_id = 13;
+  string turn_id = 14;
+}

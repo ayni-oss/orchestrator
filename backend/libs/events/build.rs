@@ -10,11 +10,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed={}", coding.display());
     let lifecycle = root.join("ayni/orchestrator/events/v1/lifecycle.proto");
     println!("cargo:rerun-if-changed={}", lifecycle.display());
+    let workflow = root.join("ayni/orchestrator/events/v1/workflow.proto");
+    println!("cargo:rerun-if-changed={}", workflow.display());
     let descriptor = PathBuf::from(env::var("OUT_DIR")?).join("events.bin");
     prost_build::Config::new()
         .protoc_executable(protoc_bin_vendored::protoc_bin_path()?)
         .file_descriptor_set_path(&descriptor)
-        .compile_protos(&[proto, operation, coding, lifecycle], &[root])?;
+        .compile_protos(&[proto, operation, coding, lifecycle, workflow], &[root])?;
     pbjson_build::Builder::new()
         .register_descriptors(&fs::read(descriptor)?)?
         .build(&[".ayni.orchestrator.events.v1"])?;

@@ -32,7 +32,7 @@ prost.workspace = true
 prost-types.workspace = true
 rig-core.workspace = true
 sha2.workspace = true
-ed25519-dalek = "=2.2.0"
+ed25519-dalek.workspace = true
 getrandom = "=0.3.4"
 subtle.workspace = true
 rusqlite.workspace = true

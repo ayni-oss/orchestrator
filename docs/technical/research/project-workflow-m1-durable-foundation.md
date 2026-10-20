@@ -899,6 +899,9 @@ or accepted response.
 
 ## Gates before runtime implementation
 
+Reproducible results and remaining limitations are tracked in the
+[M1 feasibility evidence bundle](project-workflow-m1-feasibility-evidence.md).
+
 Contract review alone does not authorize a product runtime PR. Runbook Gates B, F,
 and G remain open until the following evidence is committed or linked in a reviewable
 bundle with repository/full revision, reproducible command, output, observation,
