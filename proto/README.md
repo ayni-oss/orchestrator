@@ -106,7 +106,8 @@ The payload schema and cross-language signing fixture are compatibility commitme
 The current executor ledger, PostgreSQL watch service, and JetStream configuration
 remain feasibility artifacts and are not registered as production workflow owners.
 See the [M1 feasibility evidence](../docs/technical/research/project-workflow-m1-feasibility-evidence.md)
-for reproduction commands and open gates.
+for the closed pre-implementation gates, reproduction commands, and remaining
+runtime obligations.
 
 ## Operator lifecycle and watch contracts
 

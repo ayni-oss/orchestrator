@@ -1,415 +1,325 @@
 # Project workflow M1 feasibility evidence
 
-Date: 2026-10-20. Status: partial evidence bundle; maintainer review and the
-remaining gates are required before runtime authority implementation.
+Date: 2026-10-20. Status: all M1 pre-implementation gates are closed for
+runtime slice 1. This bundle approves the bounded architecture and acceptance
+criteria; it does not claim that the production M1 runtime has been implemented.
 
 This document retains reproducible evidence for the gates in
 [the M1 durable-foundation contract](project-workflow-m1-durable-foundation.md).
-It does not claim that M1, or all pre-implementation gates, passed.
 
-## PostgreSQL client and migration stack
-
-### Source and environment
+## Retained revision and scope
 
 - Repository: `ayni-oss/orchestrator`.
-- Retained implementation revision:
-  `a0b2633bb113adc371143929ff308e195ef64f94`. The later evidence-only commit
-  changes no executable proof, protocol contract, fixture, dependency, or generated
-  binding.
-- PostgreSQL image: `postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3`.
-- Image-reported version: PostgreSQL 17.6, Debian package `17.6-2.pgdg12+1`.
-- Exercised platform: `linux/arm64` under Docker Desktop client/server 29.8.2.
+- Executable proof and contract revision:
+  `54469ec99b3534cd53883128aae304e5f65b48e5`.
 - Rust: `rustc 1.94.0`; Cargo 1.94.0.
-- Candidate client: `tokio-postgres 0.7.18`, plaintext `NoTls` against a
-  loopback-only disposable database.
-- Candidate migration mechanism: repository-owned forward SQL inside a
-  transaction guarded by `pg_advisory_xact_lock`.
+- PostgreSQL image:
+  `postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3`.
+- NATS image:
+  `nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4`.
+- NATS tool image:
+  `natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295`.
+- Exercised host: Docker Desktop on `linux/arm64`; the credential proof used the
+  disposable `docker-desktop` Kubernetes context.
 
-The test creates an ephemeral container with a random loopback port, uses only a
-fixture password, and removes the container on every exit path. It does not read
-`dev/.env`, Kubernetes Secrets, or external-service credentials.
+The maintained clean-slate decision explicitly waives reproduction, migration, or
+compatibility with the prior SQLite workflow runtime. Prior schemas, retained data,
+APIs, tests, behavior, and broker topology are learning inputs only. Runtime slice 1
+must delete that workflow implementation and its tests while installing the
+replacement boundary. No dual write, compatibility shim, old baseline deployment,
+or shared-broker adaptation is part of M1.
 
-### Reproduction
+## Approved decisions
 
-From the repository root with a healthy Docker daemon:
+The maintainer approved these choices on 2026-10-20:
+
+| Area | Approved M1 decision |
+| --- | --- |
+| PostgreSQL | PostgreSQL 17.6, `tokio-postgres 0.7.18`, repository-owned forward SQL, and transaction-scoped advisory locking. |
+| Snapshot/watch | Repeatable-read snapshot and boundary selection; durable-table replay; `LISTEN/NOTIFY` only as a lossy wake-up. |
+| Private v1 | One intentional clean reset followed immediately by normal `FILE` compatibility enforcement; workflow services exist only on the trusted listener. |
+| Broker | A new isolated authenticated JetStream profile; no legacy publisher or shared-broker coexistence work. |
+| Credentials | Distinct least-privilege per-instance passwords in immutable Kubernetes Secrets. Broker configuration retains only one-way hashes. Plaintext transport is a Docker Desktop development exception; TLS is required before production secrets or traffic. |
+| Executor identity | SQLite WAL retained ledger, Ed25519 report signatures, one retained ledger/PVC per accepted owner, and no executor-generation rotation after ownership acceptance. |
+| Performance | Internal p95 limits: 50/100/100/250/100 ms for authority commit, outbox-to-broker storage ACK, report validation/decision commit, claim-decision round trip, and server snapshot. Client-visible p95 limits: 250/500/2,000 ms for send, watch propagation, and answer resumption. |
+
+The approved performance values are runtime acceptance limits, not claims that every
+production distribution exists in these prototypes. The watch prototype below
+measures the distributions it owns; runtime slices must add the remaining warmed
+100-sample checks before taking their respective authority.
+
+## Reproduction
+
+With a healthy Docker daemon and Docker Desktop Kubernetes:
 
 ```sh
 scripts/ci/check-workflow-postgres-feasibility.sh
+scripts/ci/check-workflow-jetstream-feasibility.sh
+scripts/ci/check-workflow-jetstream-capacity.sh
+scripts/ci/check-workflow-jetstream-credentials.sh
+scripts/ci/check-workflow-executor-feasibility.sh
+scripts/ci/check-workflow-private-v1-feasibility.sh
 ```
 
-The command pulls the image by digest and runs the ignored integration test in
-`backend/servers/control-plane/crates/workflow-postgres/tests/feasibility.rs`.
-The migration portion of the retained successful result was:
+The scripts use pinned images, fixture-only credentials, random disposable Docker
+resources or Kubernetes namespaces, bounded waits, and cleanup traps. They do not
+read `dev/.env`, production Secrets, or external-provider credentials.
+
+## PostgreSQL authority and migration gate
+
+The PostgreSQL script starts one disposable PostgreSQL 17.6 container and runs the
+ignored integration tests in the feasibility crate. The retained result was:
 
 ```text
-running 1 test
 postgres-feasibility: advisory-lock=pass rollback=pass concurrent-migration=pass notification-replay=pass fifo-row-lock=pass exact-outbox=pass
 test postgres_feasibility_gate ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-postgres-image=postgres@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3
-postgres-platform=linux/arm64
 ```
 
-### Observations
+The proof established:
 
-1. A separately held advisory lock prevented the migration transaction from
-   reaching DDL until the lock was released. The test first observed the named
-   migration backend waiting on the exact ungranted advisory-lock key in
-   `pg_stat_activity`/`pg_locks`, so scheduler or connection-startup delay cannot
-   satisfy the assertion.
-2. Eight simultaneous migration callers completed, while the migration ledger
-   retained exactly one version row.
-3. An explicitly rolled-back authority transaction left no partial conversation
-   row.
-4. Sixteen competing admissions used `SELECT ... FOR UPDATE` on one conversation
-   row and allocated exactly the contiguous FIFO range 1 through 16.
-5. Event bytes containing NUL and non-UTF-8 octets survived insertion and replay
-   through a fresh connection without transformation.
-6. A notification emitted while the listener was disconnected was recovered by
-   replaying the durable event table after the prior cursor. A subsequent
-   `LISTEN` notification woke the live connection and matched its committed row.
+1. A separately held transaction-scoped advisory lock visibly blocked the migration
+   backend on the exact lock key before DDL.
+2. Eight concurrent migration callers completed while exactly one version row was
+   retained.
+3. Explicit rollback left no partial authority state.
+4. Sixteen competing admissions allocated the contiguous FIFO range 1 through 16
+   through row locking.
+5. Exact outbox bytes, including NUL and non-UTF-8 octets, survived a fresh
+   connection without transformation.
+6. A notification lost while disconnected was recovered from the durable table;
+   a later notification acted only as a live wake-up.
 
-### Limitations
+This closes selection of PostgreSQL 17.6, `tokio-postgres 0.7.18`, forward migration
+SQL, advisory locking, row-lock admission, exact `bytea` outbox storage, and durable
+replay. Production schema checksums, least-privilege runtime/migration roles, TLS,
+pooling, failover, and calendar-time retention remain runtime implementation work.
 
-- This is a feasibility schema, not the runtime authority schema or a migration
-  from deployed data. Its single version marker does not yet checksum SQL or reject
-  edited/applied migration drift.
-- The run used one local PostgreSQL node, one architecture, plaintext loopback
-  transport, and no pooler, failover, disk-full, or network-partition injection.
-- The test proves transaction rollback, not recovery from a process kill at every
-  statement boundary.
-- The base migration test uses an unbounded fixture table. Synthetic retention,
-  cursor expiry, slow readers, and Tonic behavior are exercised separately in the
-  snapshot/watch prototype below; calendar-time seven-day pruning remains runtime work.
-- FIFO allocation proves row-lock serialization but not the full production
-  eligibility state machine.
-- The image index digest and crate remain candidates until this bundle is
-  reviewed; this evidence does not authorize runtime implementation by itself.
+## Snapshot/watch gate
 
-### Decision effect
-
-This result supports `tokio-postgres 0.7.18`, transaction-scoped advisory-lock
-migrations, durable table replay after `LISTEN` loss, row-lock FIFO admission, and
-bytea storage of exact outbox events as viable candidates. A reviewed decision may
-use those choices in the first runtime slice. Failed reproduction or review
-feedback must revise the candidates before that slice.
-
-## PostgreSQL-backed Tonic snapshot/watch prototype
-
-### Source and reproduction
-
-The feasibility-only service is generated from
-`backend/servers/control-plane/crates/workflow-postgres/proto/watch.proto` inside the
-PostgreSQL feasibility crate. It is not added to the production descriptor set or
-registered by a production listener. The same disposable PostgreSQL command runs
-both integration tests:
-
-```sh
-scripts/ci/check-workflow-postgres-feasibility.sh
-```
-
-One retained successful run reported:
+The same script runs an isolated Tonic service against PostgreSQL. The latest retained
+100-sample run, after ten warm-up samples, reported:
 
 ```text
-tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms=36.273 snapshot-p95-ms=38.637 snapshot-max-ms=76.335 commit-ack-to-client-watch-p50-ms=34.751 commit-ack-to-client-watch-p95-ms=38.020 commit-ack-to-client-watch-max-ms=57.408 samples=100
-test tonic_snapshot_watch_feasibility_gate ... ok
+tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms=36.780 snapshot-p95-ms=44.922 snapshot-max-ms=68.237 commit-ack-to-client-watch-p50-ms=34.802 commit-ack-to-client-watch-p95-ms=37.251 commit-ack-to-client-watch-max-ms=62.473 samples=100
 ```
 
-Snapshot samples measure loopback client request to receipt. The update helper
-captures a monotonic timestamp immediately after PostgreSQL acknowledges `COMMIT`;
-watch samples end when the loopback Tonic client receives that durable update. The
-first ten of 110 deterministic samples are discarded as warm-up. These client-visible
-measurements are reported diagnostically and are not compared with the contract's
-distinct commit-notification-to-server-queue proposal or promoted to an approved SLO.
+Both measured p95 values are below the approved 100-ms server snapshot limit and the
+500-ms client-visible watch limit. The proof also established:
 
-### Observations
+- one repeatable-read transaction selects projection state and its resume boundary;
+- a concurrent committed update is excluded from both or included in both, then is
+  delivered exactly once after the boundary;
+- cursorless watch emits one snapshot before later durable updates;
+- cursors are scoped to one conversation and old/pruned cursors fail with
+  `FAILED_PRECONDITION`;
+- suppressed notifications are recovered by durable replay;
+- one slow reader is evicted with `RESOURCE_EXHAUSTED` without blocking mutation or
+  another watcher; and
+- reconnect resumes from the last accepted cursor without loss.
 
-1. Snapshot state and its resume boundary were selected in one repeatable-read
-   transaction. A transactionally held update was excluded from both the initial
-   projection and boundary, then delivered exactly once after commit even though its
-   pre-listener `NOTIFY` could be missed. During a separate 100-update race, every
-   returned revision equalled durable rows at that snapshot's boundary.
-2. A cursorless stream emitted exactly one snapshot first and then a strictly later
-   durable update. Versioned cursors were conversation-scoped; cross-conversation
-   use returned `INVALID_ARGUMENT` without resolving the other conversation.
-3. An update committed with `NOTIFY` suppressed was recovered by periodic durable
-   table replay. Notifications are wake-ups only and never carry authoritative
-   state.
-4. Atomically advancing the synthetic retained watermark past an already-open
-   watch caused that active stream, as well as a new older-cursor request, to return
-   `FAILED_PRECONDITION: WATCH_CURSOR_EXPIRED`. Cursorless recovery returned current
-   state and a usable boundary after all rows through that boundary were pruned.
-5. A real Tonic client with a 1-KiB HTTP/2 receive window stopped polling while 32
-   large updates filled a one-item application buffer. Only that watcher closed with
-   `RESOURCE_EXHAUSTED`; a concurrent drained watcher received every update, mutation
-   continued, and reconnect replayed every row after the slow client's last accepted
-   cursor.
-6. One local run retained 100 warmed samples with snapshot p50/p95/max of
-   36.27/38.64/76.34 ms and commit-acknowledgement-to-client-watch p50/p95/max of
-   34.75/38.02/57.41 ms.
+The prototype uses synthetic bounded state and explicit retention advancement.
+Production parent-scope validation, complete projections, seven-day pruning,
+transport sizing, TLS, outage injection, and listener registration remain runtime
+acceptance work rather than open architecture decisions.
 
-### Limitations
+## Authenticated isolated JetStream gate
 
-- The service and schema are isolated feasibility artifacts, not the production
-  private-v1 API or authority schema. The snapshot carries only a synthetic title
-  and revision rather than the complete bounded M1 projection.
-- Retention is advanced explicitly by the test; no seven-day pruning scheduler or
-  wall-clock boundary is proven.
-- The prototype opens simple plaintext connections rather than exercising the
-  runtime pool, TLS, failover, cancellation storm, or multi-node behavior.
-- Slow-reader eviction uses a deliberately constrained loopback HTTP/2 window. It
-  does not size production transport buffers or prove behavior across every
-  intermediary.
-- The candidate requests carry only `conversation_id`; they do not prove the full
-  Workspace/Project/Conversation parent-scope validation required by private v1.
-- Replay maps a PostgreSQL failure to `UNAVAILABLE`, but this run does not inject an
-  outage after an active watch has started.
-- The latency values come from one local `linux/arm64` Docker fixture. They are
-  diagnostic measurements, not an approved SLO, production benchmark, or evidence
-  for the other client-visible M1 distributions.
-- Cursor encoding, heartbeat cadence, replay batch size, and error telemetry remain
-  candidate implementation details. The migration version still lacks SQL checksum
-  drift detection.
-
-### Decision effect
-
-This result supports repeatable-read snapshot/boundary selection, durable rows with
-`LISTEN/NOTIFY` as a lossy wake-up, scoped cursor expiry, and per-watcher bounded
-buffers as viable candidates. It implements the experiment requested by feasibility
-step 5 at the retained implementation revision, but maintainer review is still
-required before the gate is recorded as closed. It does not authorize listener
-registration or runtime PostgreSQL ownership.
-
-## Authenticated JetStream topology prototype
-
-### Source and reproduction
-
-- NATS image: `nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4`.
-- Tool image: `natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295`.
-- Disposable config and stream fixtures: `dev/feasibility/jetstream`.
-
-```sh
-scripts/ci/check-workflow-jetstream-feasibility.sh
-```
-
-The successful run reported:
+The topology proof retained this result:
 
 ```text
-workflow-stream-bytes=536870912 isolated-headroom=536870912 coexistence-headroom=536870912
+workflow-stream-bytes=536870912 isolated-headroom=536870912
 max-command-body=262144 broker-stored-delta=266287 margin=4143
 exact-republish-sha256=31a1f9dea0169551092d05e8bf4a446228c8c3eb4c9b713c66adcb7fd53c89be
 jetstream-feasibility: auth=pass acls=pass consumers=pass bounds=pass payload=pass overhead=pass restart-republish=pass discard-new=pass expiry=pass
 ```
 
-### Observations
+Anonymous access; cross-role publication; direct executor subscription; application
+administration; and stream deletion/purge were denied. Administrator-created pull
+consumers limited each role to its command, report, per-executor decision, or
+read-only acceptance path. The three streams use file storage, one replica,
+`discard=new`, seven-day age, two-minute duplicate window, 260-KiB message maximum,
+and denied delete/purge.
 
-1. Anonymous connections were rejected. Static fixture identities represented the
-   application, one retained executor instance, the read-only acceptance harness,
-   and an administrator.
-2. Cross-role report/decision/command publication, direct executor subscription,
-   and application stream administration were denied. Stream message deletion and
-   purge were denied by the stream configuration.
-3. Administrator-provisioned durable pull consumers let only the intended workload
-   fetch and ACK command, report, per-executor decision, and wildcard acceptance
-   deliveries through their narrow JetStream API/inbox permissions.
-4. All three file-backed streams rendered and ran with `discard=new`, one replica,
-   seven-day age, two-minute duplicate window, 260-KiB broker message maximum, and
-   the contracted count/byte limits. Their 512-MiB sum leaves 512 MiB under the
-   isolated 1-GiB budget. Adding the 512-MiB lifecycle stream under a 1.5-GiB
-   coexistence budget also leaves 512 MiB.
-5. A 256-KiB command body plus a near-4-KiB header was accepted. NATS reported a
-   266,287-byte stored delta: 4,143 bytes over the body and below the contract's
-   additional 8-KiB header/storage allowance.
-6. After a broker stop/restart with retained file storage, republising the same
-   exact bytes and `Nats-Msg-Id` produced a duplicate ACK at the original sequence.
-   The fetched payload SHA-256 still matched the publisher file.
-7. Scaled streams demonstrated rejection of a new record while retaining the old
-   record under `discard=new`, and age expiry after a shortened fixture horizon.
+A maximum 256-KiB command plus near-4-KiB headers was accepted. The 266,287-byte
+stored delta leaves 4,143 bytes of measured overhead, below the reserved 8 KiB.
+Broker restart retained exact bytes and the original duplicate ACK sequence. Scaled
+fixtures independently proved age expiry and rejection of a new record without
+removing the oldest record.
 
-### Limitations
+### Production-size capacity
 
-The ACL identities use static plaintext fixture passwords inside a disposable
-Docker network. Runtime credentials must use retained per-instance secret material;
-the executor fixture does not prove Kubernetes Secret isolation or retirement.
-The test validates the exact production limits but scales down stream-full and age
-expiry execution, rather than writing the full 512-MiB reservation or waiting seven
-days on every run. The coexistence result validates capacity arithmetic but does not
-run the legacy lifecycle workload concurrently. Disk-full, long-outage expiry,
-exact-byte publisher recovery after the duplicate window, and measured full-profile
-filesystem headroom remain open before this gate can be approved.
-
-### Decision effect
-
-The image digests, three-stream separation, 327,680-byte server payload, narrow
-workload ACL shape, 8-KiB combined header/storage reservation, and isolated/coexistence
-budgets are viable candidates. The measured 4,143-byte overhead does not require an
-increase to the contract's per-record margin. Approval still depends on the full
-capacity/coexistence and credential-isolation evidence named above.
-
-## Executor ledger and signing prototype
-
-### Reproduction
-
-```sh
-cargo test --locked -p ayni-orchestrator-events workflow
-cargo test --locked -p ayni-orchestrator-scripted-executor
-pnpm --filter @ayni-orchestrator/grpc-bindings check
-pnpm --filter @ayni-orchestrator/web exec node --import tsx ../../clients/typescript/tests/verification.test.ts
-```
-
-The retained successful run passed seven workflow event/signing tests and eight
-executor-ledger tests. Rust and TypeScript independently reconstructed the canonical
-sequence-1 report bytes and SHA-256 digest in
-`proto/testdata/workflow/report-signing.json`, then verified the same Ed25519
-signature. The signed input explicitly binds the event type, source, event ID,
-assignment, executor generation, report sequence, command causation ID, and exact
-deterministic protobuf bytes with the signature omitted.
-
-The SQLite/WAL ledger prototype demonstrated:
-
-- atomic retention of exact command and signed claim bytes before command ACK;
-- restart with the same instance ID and signing seed, with execution still blocked
-  before an accepted application decision;
-- decoded application decisions bound to the retained report digest, workflow scope,
-  assignment, generation, target instance, and accepted claimant before execution;
-- equal command/report/decision replay after exact-byte cleanup, plus changed-byte
-  conflict behavior;
-- two retained executor instances receiving immutable winning and losing decisions,
-  with only the winner able to create a terminal report;
-- stale-generation rejection, fencing of a previously accepted older generation,
-  and rejection of a late stale acceptance decision;
-- terminal report validation against the retained execution binding and context
-  revision;
-- terminal report survival across reopen while its decision is lost;
-- atomic ledger-full rejection; and
-- report-byte cleanup only after a durable decision, followed by decision-byte
-  cleanup only after its consumer ACK.
-
-Tampering with signed binding or causation fields failed strict Ed25519 verification,
-and a known small-order public key was rejected before ownership could bind. The
-transport time and trace reference are required envelope fields but are not part
-of the explicitly frozen signing input. The prototype uses pinned `rusqlite 0.40.2`
-and the repository's existing `ed25519-dalek 2.2.0`.
-
-### Limitations
-
-This is an in-process state-machine prototype, not a JetStream-connected executor
-process. Its fixture schema has no versioned upgrade path; runtime ledger migrations
-must explicitly reject or migrate older layouts. The canonical workflow CloudEvents
-require an RFC 3339 produced time and canonical W3C `traceparent`, bind complete
-workflow scope and causal identity, and reject free-form failure diagnostics in
-favor of closed safe-reason allowlists. Their generated event messages are an
-intentional additive v1 compatibility surface in the events library so Rust/TypeScript
-exercise one schema; no legacy event-type registration or runtime publisher/consumer
-is required because this is the clean replacement protocol. Reopening the database
-exercises durable restart boundaries but does not yet inject process kills at every
-fsync/ACK boundary. The prototype stores
-fixture signing seed bytes in SQLite; runtime file permissions, Secret injection,
-and at-rest key handling are not approved by this evidence. Quarantine capacity,
-actual NATS redelivery, per-instance credential/consumer retirement, ledger disk-full,
-and old/new process overlap remain to be exercised in the integrated gate. The
-fixture proves Rust/TypeScript canonicalization; another implementation language is
-not yet a runtime dependency.
-
-### Decision effect
-
-The evidence supports SQLite WAL as the candidate bounded retained executor ledger,
-Ed25519 over a domain-separated SHA-256 digest, and the checked-in protobuf fixture
-as the candidate signing contract. These choices remain pending maintainer review
-and integrated crash/transport evidence.
-
-## Private-v1 reset and listener-separation prototype
-
-### Source and reproduction
-
-The complete candidate overlay, listener model, and retained consumer inventory live
-under `dev/feasibility/private-v1/`. They are deliberately excluded from canonical
-`proto/`, Rust descriptors, checked-in TypeScript bindings, and production listeners.
-
-```sh
-scripts/ci/check-workflow-private-v1-feasibility.sh
-```
-
-The successful result was:
+The separate capacity script writes the isolated profile to each configured byte
+limit. It accepts a full result only when the failed publish reports a broker
+capacity error, retained usage is within one conservative record of the limit, the
+successful publish count equals retained messages, and record 1 still has the
+expected digest. The retained result was:
 
 ```text
-running 2 tests
-test tests::custom_listener_has_no_workflow_service_registration ... ok
-test tests::trusted_listener_has_only_the_postgres_owned_m1_services ... ok
+capacity-stream=ORCHESTRATOR_WORKFLOW_COMMAND_V1 messages=1023 stored-bytes=268250081 configured-max-bytes=268435456 discard-new=pass oldest-retained=pass
+capacity-stream=ORCHESTRATOR_WORKFLOW_REPORT_V1 messages=6130 stored-bytes=201321503 configured-max-bytes=201326592 discard-new=pass oldest-retained=pass
+capacity-stream=ORCHESTRATOR_WORKFLOW_DECISION_V1 messages=4067 stored-bytes=67093344 configured-max-bytes=67108864 discard-new=pass oldest-retained=pass
+capacity-profile=isolated stream-bytes=536664928 filesystem-bytes=549261312 server-headroom=537076896 pvc-headroom=1598222336
+jetstream-capacity: isolated-full=pass discard-new=pass filesystem-headroom=pass
+```
 
+The measured profile leaves at least 512 MiB under both the 1-GiB logical server
+budget and 2-GiB PVC budget. Disk-full behavior below that reserved headroom,
+multi-node replication, production TLS, and long calendar-time age expiry remain
+runtime/deployment concerns.
+
+## Kubernetes credential-isolation gate
+
+The credential script creates a disposable namespace and separate service accounts,
+immutable Secrets, and hardened client Pods for administrator, application, two
+executor instances, and acceptance identities. The broker ConfigMap is rejected if
+it contains any fixture plaintext password; checked-in broker configuration contains
+only bcrypt hashes. No client Pod mounts another identity's Secret, service-account
+tokens are disabled, and namespace RBAC grants no Secret read authority.
+
+The retained result was:
+
+```text
+denied=diagnostic-anonymous
+denied=winner-reads-loser-decision
+denied=loser-reads-winner-decision
+denied=acceptance-publishes
+retirement-blocked=targeted-decision-unacked
+denied=retired-consumer
+jetstream-credentials: immutable-secrets=pass broker-hashes=pass pod-isolation=pass rbac-denial=pass executor-isolation=pass retirement-order=pass
+```
+
+Each executor could consume only its targeted decision. Retirement remained blocked
+while one decision was ACK-pending, then consumer deletion made further access fail.
+This closes the local password lifecycle and isolation gate. Plaintext client
+transport is confined to this disposable local environment; a production deployment
+must add TLS before admitting any credential or traffic.
+
+## Executor ledger, signing, and handoff gate
+
+The event library now enforces separate 16-KiB ownership-claim and 32-KiB terminal
+report limits on encode and decode. A valid signed claim padded to max-plus-one is
+rejected. Strict Ed25519 verification rejects changed binding/causation fields and
+known weak public keys.
+
+The bounded SQLite/WAL ledger tests establish:
+
+- command and signed claim bytes commit atomically before command ACK;
+- the claim public key must equal the retained seed's derived public key;
+- restart retains instance ID, signing seed, exact bytes, and the execution fence;
+- terminal-report capacity is reserved when accepting a command/claim;
+- real SQLite-full and logical-capacity failures roll back command and claim together;
+- stale generations fail, an unaccepted generation may be replaced, and an accepted
+  owner cannot rotate in M1;
+- only the accepted split-brain claimant can execute;
+- exact-byte duplicates remain valid after byte cleanup while changed bytes conflict;
+- unresolved entries never prune; completed/rejected metadata prunes only after the
+  fixed eight-day horizon; and
+- retirement requires no unresolved execution and every targeted decision ACK.
+
+The authenticated transport wrapper retained this result:
+
+```text
+executor-transport-feasibility: command-redelivery=pass split-brain=pass decision-redelivery=pass ack-reconciliation=pass long-outage-republish=pass retirement=pass
+executor-feasibility: authenticated-transport=pass crash-redelivery=pass split-brain=pass ack-reconciliation=pass long-outage=pass retirement=pass
+```
+
+The integration drops a command delivery before ACK, reopens the winning ledger,
+accepts competing claims, targets immutable winner/loser decisions, and proves only
+the winner can execute. Before a decision ACK, the ledger stores the named consumer's
+delivery sequence. After the broker confirms the ACK, the test closes the ledger and
+reconciles that sequence against the consumer's contiguous ACK floor. A wrong
+consumer and a lower floor fail closed. This removes the otherwise ambiguous crash
+window between broker ACK and local retirement state.
+
+The integration also shortens report age and duplicate windows, then republishes the
+same terminal report identity and exact bytes after both horizons. Retirement succeeds
+only after both claim and terminal decisions are confirmed and reconciled. Runtime
+file permissions, fsync/storage-class qualification, production Secret projection,
+and kill injection at additional process boundaries remain slice acceptance work.
+
+## Private-v1 reset and listener gate
+
+The isolated overlay under `dev/feasibility/private-v1/` remains outside canonical
+production registration. The retained result was:
+
+```text
 private-v1-feasibility: schema=pass old-baseline-break=pass refreshed-baseline=pass post-reset-file-policy=pass generation=deterministic inventory=pass trusted-postgres-owner=pass custom-listener-omission=pass
 ```
 
-### Observations
+The proof freezes two service names and seven M1 RPCs, reserves removed field names
+and numbers, and validates compact terminal projections, typed vocabularies, and
+cursorless heartbeats. Overlaying the reset fails the old baseline as expected; the
+refreshed baseline passes, and deleting an RPC afterward fails normal `FILE`
+compatibility. Two TypeScript generations are byte-identical.
 
-1. The isolated overlay freezes the two contracted service names and only the seven
-   M1 RPCs: two hierarchy commands and five conversation operations. Workspace and
-   Project keep approved field identities and reserve removed numbers and names.
-2. The approved candidate makes snapshots self-contained with title and creation
-   time, replaces full terminal Turns with a compact safe summary, uses one derived
-   presentation-state enum for activity/update views, uses typed product vocabularies,
-   and keeps safe diagnostic reason/detail values as bounded strings. Heartbeats are
-   cursorless and separate from workflow progress.
-3. Overlaying the candidate on the current module fails the old `FILE` baseline as
-   expected. The exact refreshed overlay passes; deleting `SendMessage` afterward is
-   rejected, demonstrating that normal `FILE` enforcement resumes after the reset.
-4. Two complete TypeScript generations of the overlaid module were byte-for-byte
-   identical. Rust generation remains build-time from the same canonical proto tree,
-   so the eventual cutover must regenerate Rust descriptors and TypeScript from one
-   revision.
-5. The retained search found 63 handwritten Rust, BFF, web, and shell consumer files.
-   File-set drift fails the script; generated TypeScript outputs are documented
-   separately because generation uses `clean: true`.
-6. The type-level listener model admits only a sealed PostgreSQL workflow owner on
-   the trusted listener. Compile-fail checks reject a SQLite owner and reject any
-   workflow-registration call on the custom-client listener.
+The retained inventory covers 154 handwritten Rust, TypeScript client, BFF, web,
+shell, and supporting references.
+Type-level compile-fail checks reject a SQLite workflow owner and reject workflow
+registration on the custom-client listener. Runtime slice 1 must regenerate canonical
+clients, update/delete every inventoried consumer, remove the old owner and tests,
+and exercise the real trusted/custom listener graph in the coordinated reset.
 
-### Limitations
+## Review closure
 
-- This is an isolated overlay and construction proof. Production still serves the
-  old SQLite-backed conversation API, and the current custom listener still registers
-  the old `ProjectService`; no authority switch is claimed.
-- Temporary TypeScript generation is proven deterministic but is not checked in or
-  compiled with the BFF/web consumers. The actual cutover must regenerate both client
-  families, remove/adapt all inventoried consumers, and run their complete suites.
-- The listener model proves a structural pattern, not the deployed server graph. The
-  replacement must use equivalent separated constructors and transport tests that
-  require both workflow service names to be unimplemented on the custom listener.
-- `proto/BASELINE`, release documentation, and CI's one-time transition allowance are
-  intentionally unchanged. They move only in the coordinated reset, after which the
-  ordinary baseline guard must be restored.
-- The name-based inventory can miss a consumer that avoids every searched symbol;
-  cutover review must combine it with generated import and route ownership review.
-- Results are retained at the implementation revision above; maintainer review is
-  still required before this feasibility gate is recorded as closed.
+Independent read-only audit initially found four blocking proof defects:
 
-### Decision effect
+1. no recoverable executor state for a crash after broker decision ACK;
+2. ownership claims accepted up to the terminal report limit;
+3. capacity rejection accepted arbitrary publish failures and checked only positive
+   headroom; and
+4. plaintext client passwords present in the broker ConfigMap.
 
-The approved candidate numbering, compact terminal projection, enum/string boundary,
-one-time baseline procedure, known-consumer inventory, and separated-listener type
-shape are viable inputs to the authority-switch change. This proof does not itself
-change compatibility, ownership, registration, or client behavior.
+Revision `13afc851f69c77e0696da70b7f17ca5114693509` closes all four with retained
+consumer sequence/ACK-floor reconciliation, kind-specific claim bounds,
+capacity-error/near-limit/512-MiB assertions, and bcrypt-only broker configuration.
 
-## Validation retention policy
+A final audit found that the executor byte reservation omitted claim margin and a
+future terminal record, terminal rejection had no completion path, report duplicate
+checks ignored the command binding, and the private-v1 inventory used a partial
+symbol list. Revision `60aef6cbbfc92755820d0d342f36ad0ee4bc5a08` closes those gaps with
+fixed-size record/byte reservations, terminal rejection cleanup, bound duplicate
+checks, a legacy-proto-derived 154-file inventory, and a refreshed Ayni environment
+lock. Revision `54469ec99b3534cd53883128aae304e5f65b48e5` then preserves the authenticated
+transport scenario while splitting it into bounded phase helpers; the pinned Rust
+analyzer reports a maximum cyclomatic complexity of 19 in that file rather than the
+previous failing value of 66. The focused and full validation commands below passed
+after those corrections.
 
-Routine pull-request validation compiles and tests the workspace, checks canonical
-protobuf generation and compatibility, and validates documentation. The three
-`check-workflow-*-feasibility.sh` commands are retained review gates rather than
-automatic checks on every unrelated pull request: they pull pinned disposable images,
-exercise host Docker networking and storage, or generate an isolated replacement API.
-A review-ready evidence change reruns all three against its immutable implementation
-revision and records the exact commands, image digests, observations, and limitations
-here. Moving these gates into recurring hosted CI is a separate operational choice;
-a missing hosted run is not represented as a passed result.
+## Validation and gate ledger
 
-## Remaining gate ledger
+In addition to the six gate scripts, the retained revision passed:
 
-| Gate | Evidence status |
+```sh
+cargo fmt --all -- --check
+cargo check --locked --workspace --all-targets
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo test --locked --workspace --all-targets
+pnpm docs:check
+pnpm frontend:check
+pnpm test:frontend
+scripts/ci/check-proto.sh
+PATH=/opt/homebrew/bin:$PATH scripts/ci/check-helm.sh
+scripts/ci/check-github-security.sh
+node --test dev/tests/nats-fault-proxy.test.mjs dev/tests/planner-stub.test.mjs
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s evals -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/operations -p 'test_*.py'
+```
+
+The Homebrew Bash prefix avoids the known empty-array behavior of macOS Bash 3.2 in
+an existing development-secret test; the same Helm command succeeds under modern
+Bash used by CI.
+
+| Gate | Closed evidence |
 | --- | --- |
-| Current SQLite Orchestrator sandbox baseline | Open; must be reproduced safely or explicitly waived. |
-| PostgreSQL client/migration feasibility | Evidence above; pending maintainer review. |
-| Authenticated JetStream topology and capacity | Auth/ACL/bounds/overhead/restart evidence above; full-capacity, coexistence load, and credential isolation remain open. |
-| Executor ledger, signing, and claim handshake | Local ledger/signing evidence above; integrated JetStream crash and retirement cases remain open. |
-| PostgreSQL-backed Tonic snapshot/watch | Isolated implementation and local results are retained at the implementation revision above; maintainer review remains open. Production parent scoping, projection, retention scheduling, and listener integration remain out of scope. |
-| Private-v1 reset and known-client regeneration | Complete isolated overlay, reset/regeneration procedure, 63-file handwritten inventory, and listener-separation model are retained at the implementation revision above; maintainer review remains open. Canonical baseline reset, generated-client cutover, production owner removal, and real listener tests belong to the coordinated authority switch. |
+| Historical SQLite sandbox baseline | Explicitly waived by the clean-slate decision; no compatibility, data migration, old tests, or shared topology is allowed. |
+| Architecture and performance choices | Approved choices and p95 limits are recorded above and in the durable contract. |
+| PostgreSQL client/migration | Advisory lock, rollback, concurrency, FIFO row lock, exact bytes, and replay pass. |
+| Snapshot/watch | Atomic boundary, lossy-notification replay, expiry, slow-reader isolation, and warmed latency pass. |
+| JetStream topology/capacity | Auth/ACLs, bounds, max payload, restart, exact republish, full production-size `discard=new`, oldest retention, and both 512-MiB headrooms pass. |
+| Credential isolation/retirement | Immutable per-identity Secrets, bcrypt-only broker config, pod/RBAC isolation, per-executor decisions, and ACK-before-retirement pass. |
+| Executor ownership/handoff | Strict signing and claim size, atomic ledger, capacity reservation, split brain, crash/redelivery, ACK-floor reconciliation, long-outage republish, and retirement pass. |
+| Private-v1 reset/listeners | Reset procedure, regenerated baseline enforcement, deterministic generation, 154-file inventory, trusted PostgreSQL owner, and custom-listener omission pass. |
+
+All pre-implementation gates are therefore closed. The remaining items in this
+document are explicit runtime-slice acceptance obligations, not unresolved choices
+or permission to restore the superseded architecture.

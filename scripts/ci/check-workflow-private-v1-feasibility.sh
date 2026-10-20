@@ -101,11 +101,31 @@ mkdir "$temporary/first" "$temporary/second"
 (cd "$temporary/second" && buf generate "$overlay" --template "$temporary/buf.gen.yaml")
 diff -ru "$temporary/first/generated" "$temporary/second/generated"
 
+# Derive the inventory search from every legacy service, RPC, message, enum, and
+# enum value. This includes types that survive the reset with materially changed
+# fields, rather than relying on a hand-picked subset of familiar method names.
+legacy_patterns="$temporary/legacy-private-v1-symbols.regex"
+{
+  sed -nE \
+    -e 's/^[[:space:]]*(service|message|enum|rpc)[[:space:]]+([A-Za-z][A-Za-z0-9_]*).*/\2/p' \
+    -e 's/^[[:space:]]*([A-Z][A-Z0-9_]+)[[:space:]]*=.*/\1/p' \
+    "$root/proto/ayni/orchestrator/v1/projects.proto" \
+    "$root/proto/ayni/orchestrator/v1/project_conversations.proto"
+} | LC_ALL=C sort -u | while IFS= read -r symbol; do
+  # Substring matching deliberately includes handwritten wrappers such as
+  # ProjectWorkerUpdateDto and generated-service adapter type names.
+  printf '%s\n' "$symbol"
+done >"$legacy_patterns"
+test -s "$legacy_patterns"
+
 # The checked inventory detects handwritten consumer drift without counting generated output.
-rg -l --glob '!clients/typescript/src/generated/**' \
+rg -l --glob '!**/src/generated/**' \
   --glob '!dev/feasibility/private-v1/**' \
-  'ProjectConversationService|ProjectService|CreateWorkspaceRequest|CreateProjectRequest|ProjectConversation|SendProjectMessage|WatchProjectConversation' \
-  "$root/backend" "$root/packages" "$root/apps" "$root/dev" \
+  -f "$legacy_patterns" \
+  -e '(CreateConversation|SendMessage|GetConversationSnapshot|ListConversationHistory|WatchConversation)' \
+  -e '(create|list|get|update|archive|watch|send|decide|cancel)(_?[Pp]roject|_?[Ww]orkspace|_?[Cc]onversation)' \
+  -e 'send_message|sendMessage' \
+  "$root/backend" "$root/clients" "$root/packages" "$root/apps" "$root/dev" \
   | sed "s|^$root/||" | LC_ALL=C sort >"$temporary/consumer-inventory.txt"
 diff -u "$candidate/consumer-inventory.txt" "$temporary/consumer-inventory.txt"
 

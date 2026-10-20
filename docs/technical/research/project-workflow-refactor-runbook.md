@@ -61,7 +61,7 @@ Work through the gates in order. Complete independent inventories together, but 
 | Gate | Work and required output | Depends on | Exit criterion |
 | --- | --- | --- | --- |
 | A: Scope and scenarios | Confirm constraints; write working-day scenarios and measurable experience targets. | Maintainer answers | Every scenario states what the engineer sees and can do, including failure. |
-| B: System evidence | Trace representative commands, events, reads, state writes, and external effects through current code. Capture dependency and authority maps. | A | Each factual claim has a source or reproducible observation; unknowns remain explicit. |
+| B: Risk evidence | Extract reusable mechanisms and failure lessons from representative prior flows without inheriting their schemas, states, compatibility, data, tests, or topology. Capture the target dependency and authority maps. | A | Every retained lesson has a source or reproducible observation, target implications are explicit, and no legacy behavior becomes an unstated requirement. |
 | C: Domain and recovery | Define ownership, vocabulary, state machines, invariants, and recovery approval semantics. | A, B | Walk the failure-and-continuation scenario without ambiguous authority or state. |
 | D: Contracts | Design event families, consumer behavior, gRPC commands and watches, and persistence boundaries. | C | Duplicate, late, missing, and replayed delivery have specified outcomes. |
 | E: Components | Assign logical owners; compare modules, shared libraries, deployable services, and worker processes. | C, D | Every contract and side effect has one accountable owner; deployment splits have evidence. |
@@ -90,19 +90,34 @@ Use these scenarios throughout modeling, experiments, and acceptance. Include a 
 
 The [roadmap](../../../ROADMAP.md#project-workflow-replacement) defines eight delivery milestones, separate from this runbook's research gates. M1 is a runnable PostgreSQL, JetStream, and gRPC slice with a scripted executor, durable admission, and resumable updates. Its [durable foundation contract](project-workflow-m1-durable-foundation.md) specifies the reviewable scope, authority, module map, local stack, and acceptance cases that runtime implementation must satisfy.
 
-Reproduce current sandbox failures and establish the replacement's executable baseline. Before a runtime PR, complete the M1 contract's bounded PostgreSQL, authenticated JetStream/capacity, executor-handoff, watch/replay, and private-v1 cutover experiments; a blocked baseline is not a passed gate without an explicit maintainer exception. Extend the cumulative acceptance harness through planning, real execution, dependencies, and confirmed recovery. M6 proves the core feedback/recovery loop; M8 establishes operational acceptance for the initial scope.
+The replacement's cumulative acceptance harness is its only executable baseline.
+Historical sandbox behavior supplies lessons, not compatibility requirements. Before
+a runtime PR, complete the M1 contract's bounded PostgreSQL, authenticated isolated
+JetStream/capacity, executor-handoff, watch/replay, and private-v1 reset experiments.
+Runtime slice 1 deletes the superseded workflow code and tests as it installs the
+replacement boundary. Extend the harness through planning, real execution,
+dependencies, and confirmed recovery. M6 proves the core feedback/recovery loop; M8
+establishes operational acceptance for the initial scope.
 
-Use Orchestrator development as the first real workload only after sandbox scenarios pass. Self-development must not be the only mechanism available to repair the system. The M1 contract's proposed responsiveness targets and measured capacity results remain to be approved before implementation acceptance.
+Use Orchestrator development as the first real workload only after replacement
+sandbox scenarios pass. Self-development must not be the only mechanism available
+to repair the system. Approved responsiveness and capacity targets remain regression
+requirements for subsequent slices.
 
 ## Cutover and completion
 
-A clean replacement is available because compatibility is not required. Still inventory active work, published branches, pull requests, and retained artifacts before selecting an actual cutover procedure.
+The replacement is a deliberate reset in disposable development state. No deployed
+user, retained workflow data, or old execution must be migrated or drained.
 
-- Specify how dispatch stops and writers are fenced before switching authority.
-- Define whether old executions drain or terminate, and what happens to their late results.
-- Establish backups or explicit reset approval, plus the last safe rollback point before new external effects.
-- Remove superseded transports, schemas, flags, controllers, and documentation after cutover; assign removal to delivery PRs.
-- Regenerate contracts and managed locks through repository tooling. Preserve Ayni's independent product boundary.
+- Runtime slice 1 deletes superseded workflow transports, schemas, tests, flags,
+  controllers, and documentation before registering the replacement boundary.
+- The rollback point is before the first replacement PostgreSQL admission. Before
+  that point, revert the slice; after it, reset the disposable replacement namespace
+  rather than restoring a legacy authority or translating data.
+- Late legacy results have no replacement authority and are rejected by the removed
+  listener/consumer boundary.
+- Regenerate contracts and managed locks through repository tooling, preserve Ayni's
+  independent product boundary, and carry no compatibility shims into later milestones.
 
 Completion requires passing scenario and failure tests, accurate architecture documents, dependency enforcement, and removal of obsolete paths. Report blocked validation honestly. Runtime changes require the explicit local Kubernetes topology; documentation alone does not validate runtime behavior.
 

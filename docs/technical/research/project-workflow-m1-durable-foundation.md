@@ -1,7 +1,7 @@
 # M1 durable foundation contract
 
-Date: 2026-10-19. Status: reviewable contract; baseline and feasibility gates remain open, and runtime implementation is not approved.
-Current-system source audit: Orchestrator `e128a51088d5879108119783a0d3adf7774dd43c` on `alpha`.
+Date: 2026-10-19. Status: reviewed clean-slate contract; runtime implementation has not started.
+Current-system source audit: Orchestrator `e128a51088d5879108119783a0d3adf7774dd43c` on `alpha`, retained only as historical risk evidence.
 
 This document applies the [project workflow runbook](project-workflow-refactor-runbook.md)
 and its [design worksheets](project-workflow-design-worksheets.md) to
@@ -9,6 +9,21 @@ and its [design worksheets](project-workflow-design-worksheets.md) to
 replacement slice, not current deployed behavior. If a feasibility experiment
 invalidates a contract, update this document and the roadmap before widening the
 implementation.
+
+## Clean-slate authority decision
+
+The replacement has no adopted users or production data, so prior SQLite workflow
+schemas, retained state, RPC behavior, tests, and broker topology are not compatibility
+requirements. They supply failure lessons and reusable mechanisms only. Do not add a
+migration, dual write, legacy baseline, shared-broker adaptation, or compatibility
+shim. Runtime slice 1 deletes the superseded workflow implementation and tests while
+installing the PostgreSQL-owned private-v1 boundary. Every later slice and milestone
+uses only the replacement contracts and cumulative acceptance harness.
+
+The rollback boundary is before the first replacement PostgreSQL admission. Before
+that point the slice can be reverted. After replacement data is admitted, rollback
+means resetting the disposable replacement namespace; it never restores SQLite
+authority or translates replacement data into an old schema.
 
 ## Outcome
 
@@ -212,12 +227,12 @@ than becoming successful generic progress.
 
 ### Responsiveness owned by Orchestrator
 
-The following numbers are a concrete proposal, not an approved SLO. The maintainer
-must approve or revise them before the M1 acceptance suite becomes a delivery gate.
-Infrastructure and future provider duration is observed separately; controlled M1
+The maintainer approved the following M1 acceptance thresholds on 2026-10-20.
+They are local deterministic delivery gates, not production SLOs. Infrastructure
+and future provider duration is observed separately; controlled M1
 acceptance measures both internal boundaries and what the diagnostic client sees.
 
-| Boundary | Proposed M1 target under a healthy, non-backpressured fixture |
+| Boundary | M1 target under a healthy, non-backpressured fixture |
 | --- | --- |
 | PostgreSQL commit to the gRPC receipt being handed to Tonic | p95 at or below 50 ms; no deliberate batching or polling. |
 | Accepted commit notification to a connected watch update being queued | p95 at or below 100 ms. |
@@ -235,7 +250,7 @@ cannot produce a durable gRPC admission receipt; it returns an unavailable comma
 error rather than a false success. Dependency timeout and error cases remain pass/fail
 correctness checks even when excluded from healthy-fixture latency percentiles.
 
-Every proposed p95 check uses at least 100 warmed deterministic samples. Internal
+Every p95 check uses at least 100 warmed deterministic samples. Internal
 checks replace dependency calls with bounded fakes; end-to-end checks run the pinned
 local stack from the diagnostic client. Any failed correctness sample fails the run
 independently of the percentile. Reports retain all three client-visible
@@ -271,10 +286,9 @@ The same authority-switch PR regenerates Rust descriptors and
 `clients/typescript`; updates or removes calls in the control-plane gRPC adapters,
 project-agent coordinator and tests, `packages/bff`, and `apps/web/e2e`; refreshes
 `proto/BASELINE` and the intentional breaking fixture; and updates `proto/README.md`.
-It stops registering the SQLite-backed workflow
-service before registering the PostgreSQL replacement; old and new owners never
-serve the same RPC path. A separately named/isolated old deployment may exist only
-for baseline evidence and receives no replacement traffic.
+It deletes the SQLite-backed workflow service, its workflow tests, and old RPC
+registration before registering the PostgreSQL replacement; old and new owners never
+serve the same RPC path, and no legacy deployment is retained.
 
 Field numbers are fixed before generated code changes:
 
@@ -443,28 +457,36 @@ from and filtered to its retained instance ID. The application maps each publish
 stream sequence to that consumer's ACK state. The executor retains exact claim and
 terminal-report bytes until it writes the matching application acceptance or
 rejection decision to its ledger, and republishes the same report identity/bytes
-after outage or age expiry. It then ACKs its decision-consumer delivery. The
-application retains each immutable report receipt and decision-publication intent
-until that durable consumer ACK; if the fact ages out first, it republishes the same
-decision. Report bytes may then be removed from the executor
+after outage or age expiry. Before ACKing, it retains the decision consumer-delivery
+sequence with the decision. After the server confirms the ACK, it records that ACK
+locally; a restart in between reconciles the retained sequence against the consumer's
+contiguous ACK floor before retirement. The application retains each immutable report
+receipt and decision-publication intent until that durable consumer ACK; if the fact
+ages out first, it republishes the same decision. Report bytes may then be removed from the executor
 ledger, while bounded report identity, digest, and decision metadata remain for
 reconciliation.
 
-The current chart cannot host this contract unchanged: it has a 16 KiB server
-payload, anonymous access, a 1 GiB server file budget, and a legacy lifecycle stream
-that reserves 512 MiB. The M1 chart change is therefore a prerequisite, not reuse
-by assertion:
+M1 provisions a new isolated broker profile rather than adapting the legacy chart
+or publisher:
 
 - set and test server `max_payload` at or above 327,680 bytes so a 262,144-byte
   event plus NATS headers fits without weakening the event bound;
-- disable anonymous NATS access and provision distinct application, per-executor,
-  acceptance-harness, and administrative identities with least-subject ACLs;
-- in the isolated M1 profile, omit the legacy lifecycle stream and reserve 512 MiB
-  for workflow streams under a 1-GiB server budget and 2-GiB PVC; if the 512-MiB
-  legacy stream coexists, use at least a 1.5-GiB server budget and 2-GiB PVC, then
-  validate actual file-system overhead and free-space headroom; and
+- disable anonymous access and provision distinct application, per-executor,
+  acceptance-harness, and administrative password identities with least-subject ACLs;
+- inject each password through its own immutable Kubernetes Secret, mount only that
+  Secret into the owning Pod, and refuse executor retirement until every targeted
+  decision is durably ACKed;
+- reserve 512 MiB for the three workflow streams under a 1-GiB server budget and
+  2-GiB PVC, leaving at least 512 MiB of logical server headroom and 512 MiB of
+  measured filesystem headroom at the full configured profile; and
 - render-fail any stream total above its server/PVC budget and test exact maximum
-  payloads, unauthorized publish/subscribe, and the selected coexistence profile.
+  payloads, unauthorized publish/subscribe, full `discard=new` behavior, and oldest
+  record survival.
+
+Plaintext password transport is an explicit local-development corner cut confined
+to the isolated Docker Desktop namespace. TLS is mandatory before any production
+secret or traffic is admitted. NKeys/JWT may replace passwords later only with an
+explicit credential-lifecycle contract; they are not implied by M1.
 
 Each admitted Turn reserves application backlog capacity for one 264-KiB command
 and two 24-KiB report decisions until the corresponding handoffs complete. Each
@@ -550,8 +572,10 @@ consumer reports support, and test old/new rolling order in both directions.
 When a Turn becomes eligible, the application issues an opaque assignment ID and
 executor generation 1 in the same transaction as its frozen context and command.
 The assignment ID remains stable for the Turn. Only the application can increment
-the generation, and only an explicit retained recovery decision abandons the prior
-generation; timeout or redelivery alone changes neither value.
+the generation, and only before any ownership claim has been accepted. An explicit
+retained recovery decision may abandon an unaccepted generation; timeout or redelivery
+alone changes neither value. Once a claim is accepted, M1 cannot rotate that Turn to
+a different executor generation.
 
 Before an executor starts, the administrative provisioner assigns one canonical
 UUIDv7 instance ID, a NATS identity restricted to the shared command/report lanes
@@ -572,9 +596,11 @@ replays receive immutable rejection decisions.
 An executor must durably record the matching accepted claim decision before running
 the script or any future external effect. A restarted executor with the same ledger
 reuses its instance, key, assignment, generation, and report bytes. A replacement
-without that ledger has a new key and can win only when no claim was accepted or
-after the application records an explicit generation rotation. An old instance
-returning after rotation is stale. The provisioner cannot retire an instance key,
+without that ledger has a new key and can win only when no claim was accepted. If an
+accepted executor loses its ledger/PVC, the Turn remains visibly blocked until that
+same retained owner returns; automatic or operator-driven reassignment is outside M1.
+This avoids pretending that credential revocation can fence an offline process that
+already received execution authorization. The provisioner cannot retire an instance key,
 decision consumer, credential, or ledger while any decision targeted to that
 instance lacks its decision-consumer ACK. The per-instance NATS identity
 authenticates the supervised workload and limits its subjects; the bound signing key
@@ -705,17 +731,18 @@ assumptions.
 | Decision | M1 choice and evidence | Cost, unresolved risk, and reversal condition |
 | --- | --- | --- |
 | Application topology | One modular replacement control-plane process owns admission, acceptance, projection, and PostgreSQL transactions. Splitting those owners adds distributed transactions without an M1 scaling or security requirement. | A process failure affects all control-plane roles. Split a role only when measured availability, scaling, or security needs justify an independent data/failure contract. |
-| Legacy integration | Build an independent replacement slice rather than retrofit PostgreSQL into `CleanStore`. At the deliberate private-v1 reset, the replacement listener stops registering SQLite workflow RPCs before PostgreSQL takes authority. | Generic mechanisms must be extracted deliberately. The old deployment may coexist only in an isolated baseline namespace, never as a second owner of the same endpoint. |
+| Clean-slate replacement | Runtime slice 1 deletes the SQLite workflow owner, its workflow tests, and old RPC registrations before PostgreSQL takes authority. No data migration, dual write, compatibility shim, baseline namespace, or shared-broker adaptation is permitted. | Generic mechanisms may be reimplemented only when they satisfy the replacement contract. Roll back before first PostgreSQL admission; afterward reset the disposable replacement namespace. |
 | Executor boundary | Run the scripted executor separately because command ownership, restart, and report replay are real failure and future credential boundaries. | Adds one workload and retained ledger. M2 may replace it with isolated session workloads while preserving the protocol. |
 | JetStream topology | Use three limits-policy streams with separate command, report, and decision capacities, all with `discard=new` and a seven-day horizon. | More stream administration, but one lane cannot evict another. Recombine only if measured capacity and privacy evidence proves isolation unnecessary. |
 | Conversation history | PostgreSQL remains authoritative; JetStream retains only bounded command/report copies for seven days. | Frozen command context and executor response still exist in broker storage during that horizon. Revisit inline payloads if production privacy analysis requires encrypted or reference-based dispatch. |
 | Browser transport | Keep M1 native gRPC and a diagnostic client. | M2 must compare SSE with browser-compatible gRPC without weakening snapshot/cursor semantics. |
 | Provider framework | Keep the executor protocol provider-neutral and use no provider framework in M1. | M2 selects one real adapter from evidence; it cannot change admission, fencing, or the named ACK/decision boundaries. |
 
-PostgreSQL client and migration-library selection remain bounded pre-implementation
-feasibility experiments. The selected crates must support advisory locking, transactional
-migrations, async cancellation, TLS-capable connections, pinned dependencies, and
-tests without a network database at compile time. Active-project and conversation
+The maintainer approved PostgreSQL 17.6, `tokio-postgres 0.7.18`, repository-owned
+forward migrations, and transaction-scoped advisory locking from the retained
+feasibility evidence. Runtime code must preserve async cancellation, TLS-capable
+connections, pinned dependencies, and tests without a network database at compile
+time. Active-project and conversation
 capacity beyond the M1 stream/database bounds remains open and is measured before
 an operational scale claim.
 
@@ -809,44 +836,14 @@ parameters, fault counters, state timeline, cursor timeline, exact command/repor
 IDs, timings split by owned and dependency duration, and cleanup outcome. It never
 retains credentials or unrestricted message bodies.
 
-## Sandbox baseline
+## Replacement baseline
 
-| Baseline | Status on 2026-10-19 | Evidence or required next action |
-| --- | --- | --- |
-| Sandbox repository without Orchestrator | Observed passed; external evidence is not retained here | `git@github.com:ayni-oss/sandbox.git` at `7ce2d44568d3e6ba499258deed4a645fdf041ded`; direct command below. |
-| Current SQLite Orchestrator sandbox path | Blocked | No committed retained failure export; reproduce safely in an isolated deployment before runtime implementation. |
-| M1 replacement path | Not implemented | The cumulative harness defined here becomes its baseline. |
-
-The external repository `git@github.com:ayni-oss/sandbox.git` at full revision
-`7ce2d44568d3e6ba499258deed4a645fdf041ded` was observed running
-`scripts/check-math-validation.sh` successfully on 2026-10-19: 13 Rust tests and
-the CLI retry/invalid-command checks passed. This repository does not retain that
-command output, so the result is an observation to reproduce in the M1 evidence
-bundle, not a self-verifying proof. It says nothing about an orchestration path.
-
-Current Orchestrator sandbox failures are not reproducible from repository source
-alone. No retained task/attempt export that identifies those failures is committed.
-Before the first runtime implementation PR claims its baseline gate, use the current
-system in an isolated Docker Desktop namespace to record at least one bounded
-sandbox task from admission through terminal outcome, without creating an
-unreviewed external publication.
-
-Classify each observation as one of:
-
-- command admission or duplicate handling;
-- runtime or source preparation;
-- executor/session provisioning;
-- model execution;
-- report acceptance or stale fencing;
-- quality/evidence;
-- publication/external reconciliation; or
-- observation, reconnect, or UI projection.
-
-Record source revision, task and attempt IDs, frozen inputs, accepted timestamps,
-all distinct states, safe failure reason, retained evidence identity, and whether
-retry would repeat an external effect. If the current system cannot run without a
-publication side effect, stop at the last safe boundary and record the baseline as
-blocked rather than authorizing publication.
+The cumulative M1 acceptance harness is the only executable baseline. Historical
+sandbox runs and SQLite behavior are not reproduced, waived, migrated, or preserved;
+they informed the risk inventory but have no authority over replacement states,
+contracts, tests, or completion. Runtime slice 1 removes the old workflow code and
+tests. A replacement regression is evaluated only against the reviewed M1 contract
+and its own retained evidence.
 
 ## M2 handoff
 
@@ -907,54 +904,55 @@ or accepted response.
 Reproducible results and remaining limitations are tracked in the
 [M1 feasibility evidence bundle](project-workflow-m1-feasibility-evidence.md).
 
-Contract review alone does not authorize a product runtime PR. Runbook Gates B, F,
-and G remain open until the following evidence is committed or linked in a reviewable
-bundle with repository/full revision, reproducible command, output, observation,
-limitation, and decision effect:
+Runbook Gates B, F, and G are closed for runtime decomposition when the evidence
+bundle pins the complete gate revision and its reproducible commands. The required
+proofs are:
 
-1. Reproduce and classify the current SQLite Orchestrator sandbox path in an isolated
-   deployment as specified above. If the safe boundary makes it impossible, obtain
-   a maintainer decision that explicitly accepts the missing baseline; `Blocked` is
-   not equivalent to passed.
-2. Exercise the candidate PostgreSQL client/migration stack for advisory-lock startup,
-   transaction rollback, concurrent migration, `LISTEN`/notification loss with table
+1. Exercise PostgreSQL 17.6 and `tokio-postgres 0.7.18` for advisory-lock startup,
+   transaction rollback, concurrent migration, `LISTEN` loss with durable-table
    replay, FIFO row-lock races, and persisted exact outbox bytes.
-3. Render and run NATS with anonymous access disabled, all four identities and ACLs,
-   three `discard=new` streams, exact body/header/message bounds, measured per-record
-   storage overhead and capacity headroom, stream-full behavior, seven-day expiry,
-   and exact-byte republish after simulated long
-   outage. Exercise both isolated-M1 and explicitly sized coexistence profiles.
-4. Prototype the executor ledger, cross-language canonical signing fixtures, and
-   first-claim/decision handshake through crashes, duplicate commands/reports,
-   tampered signatures, split brain, stale generation, report-decision loss,
-   ledger-full backpressure, and eventual content cleanup.
-5. Prototype a PostgreSQL-backed Tonic snapshot/watch with atomic boundary selection,
-   notification loss, replay, expiry, slow-reader eviction, and the proposed
-   client-visible latency measurements.
-6. Freeze the private-v1 protobuf numbering above, enumerate generated and handwritten
-   consumers, prove the Buf baseline reset/regeneration procedure, and show that the
-   replacement listener cannot register a SQLite workflow owner or expose the service
-   on the custom-client listener.
+2. Run the isolated authenticated NATS profile with application, per-executor,
+   acceptance-harness, and administrative identities; three full production-sized
+   `discard=new` streams; exact payload bounds; measured storage overhead and
+   filesystem headroom; max-plus-one rejection; Kubernetes Secret isolation; and
+   exact-byte republish after shortened age/deduplication horizons.
+3. Exercise the executor ledger and canonical signing contract over real JetStream
+   redelivery through commit/ACK crashes, duplicate commands/reports, strict key
+   binding, same-generation split brain, pre-acceptance stale generation, decision
+   loss, logical and SQLite-full backpressure, retirement ordering, and resolved
+   metadata cleanup. An accepted owner cannot rotate in M1.
+4. Exercise the PostgreSQL-backed Tonic snapshot/watch with atomic boundary selection,
+   notification loss, replay, expiry, slow-reader eviction, and the approved
+   client-visible latency thresholds.
+5. Freeze the approved private-v1 protobuf numbering, deterministic regeneration,
+   complete consumer inventory, and trusted-listener separation.
 
-Failed experiments revise this contract before decomposition. Exact image digests,
-crate choices, command lines, and measured capacity come from this evidence; they
-are not selected by documentation alone.
+The retained evidence meets those proofs. Historical SQLite/sandbox reproduction and
+legacy-broker coexistence are intentionally absent because the clean-slate decision
+makes them non-requirements. Failed reproduction of any retained command reopens the
+relevant gate before runtime work continues.
 
 ## Implementation slices after the gates
 
-Once those gates and the proposed numeric targets are reviewed, keep runtime PRs
-end-to-end:
+Keep runtime PRs end-to-end and build only on the replacement baseline:
 
-1. Add the pinned PostgreSQL local stack, migration runner, private-v1 authority
-   reset, minimal hierarchy, idempotent FIFO gRPC admission, snapshot/history reads,
-   and component contract tests.
-2. Add authenticated three-stream JetStream delivery, the command/decision intents,
-   bounded scripted-executor ledger and claim handshake, report receipts, accepted
-   response, and the happy-path diagnostic scenario.
-3. Add notification-backed watches, cursor retention/snapshot recovery, quarantine,
-   fault injection, restart/capacity/version-skew cases, metrics, retention cleanup,
-   and the complete M1 acceptance report.
+1. Delete the superseded SQLite workflow implementation/tests and old workflow RPC
+   registrations; add the pinned PostgreSQL local stack, migration runner, approved
+   private-v1 reset, minimal hierarchy, idempotent FIFO admission, snapshot/history
+   reads, and component contract tests. **Rollback:** before the first PostgreSQL
+   admission, revert the slice; afterward reset only the disposable replacement
+   namespace and never restore legacy authority.
+2. Depending on slice 1, add the isolated authenticated three-stream broker,
+   command/decision intents, bounded scripted-executor ledger and claim handshake,
+   report receipts, accepted response, and happy-path diagnostic scenario.
+   **Rollback:** return to the slice-1 replacement revision only when no handoff is
+   unresolved; otherwise repair forward or reset the disposable namespace.
+3. Depending on slice 2, add notification-backed watches, cursor retention/snapshot
+   recovery, quarantine, fault injection, restart/capacity/version-skew cases,
+   metrics, retention cleanup, and the complete M1 acceptance report. **Rollback:**
+   preserve PostgreSQL and ledger authority and roll back only stateless readers;
+   incompatible retained-state changes require forward repair or namespace reset.
 
-Each PR names its obsolete path or follow-up removal. M1 is not complete merely
-because PostgreSQL, JetStream, and gRPC are individually reachable; the full
-message-to-response failure matrix and approved client-visible targets must pass.
+M1 is not complete merely because PostgreSQL, JetStream, and gRPC are individually
+reachable; the full message-to-response failure matrix and approved client-visible
+targets must pass.

@@ -24,6 +24,7 @@ pub const COMMAND_SCHEMA: &str = "ayni://orchestrator/schemas/conversation-turn-
 pub const REPORT_SCHEMA: &str = "ayni://orchestrator/schemas/conversation-turn-report/v1";
 pub const DECISION_SCHEMA: &str = "ayni://orchestrator/schemas/conversation-report-decision/v1";
 pub const MAX_COMMAND_BYTES: usize = 256 * 1024;
+pub const MAX_CLAIM_BYTES: usize = 16 * 1024;
 pub const MAX_REPORT_BYTES: usize = 32 * 1024;
 pub const MAX_DECISION_BYTES: usize = 16 * 1024;
 pub const MAX_CONTENT_BYTES: usize = 16 * 1024;
@@ -253,7 +254,11 @@ pub fn encode_report(
         EventContract {
             event_type: kind,
             schema: REPORT_SCHEMA,
-            maximum: MAX_REPORT_BYTES,
+            maximum: if kind == TURN_STARTED_TYPE {
+                MAX_CLAIM_BYTES
+            } else {
+                MAX_REPORT_BYTES
+            },
         },
         workflow_subject(binding(payload)?),
         &binding_extensions(binding(payload)?),
@@ -294,6 +299,9 @@ pub fn decode_report(
     };
     let payload: ConversationTurnReport = serde_json::from_value(data.clone())?;
     let kind = report_kind(&payload)?;
+    if kind == TURN_STARTED_TYPE && bytes.len() > MAX_CLAIM_BYTES {
+        return Err(ContractError::Oversized);
+    }
     validate_report(&payload, true)?;
     validate_report_identity(&identity, &payload)?;
     let report_binding = binding(&payload)?;
@@ -835,6 +843,13 @@ mod tests {
         assert_eq!(actual_identity, identity);
         assert_eq!(actual_metadata, metadata);
         assert_eq!(report_signing_bytes(&identity, &decoded)?, expected);
+        let mut oversized_claim = bytes;
+        assert!(oversized_claim.len() < MAX_CLAIM_BYTES);
+        oversized_claim.resize(MAX_CLAIM_BYTES + 1, b' ');
+        assert!(matches!(
+            decode_report(&oversized_claim),
+            Err(ContractError::Oversized)
+        ));
         Ok(())
     }
 
