@@ -9,7 +9,6 @@ not an active backlog or a statement of current behavior.
 - [Implementation proposal](event-platform-implementation.md)
 - [Snapshot contract catalog](control-plane-event-contracts.csv)
 
-Start with the [current event platform](../../architecture/event-platform.md),
-its linked contracts and [compatibility operations](../../operations/event-compatibility.md).
-Source links in the archived documents refer to the audited commit; later
-amendments link current guides explicitly.
+Start with the [current Slice 1 architecture](../../architecture/architecture.md).
+Source links in the archived documents refer to the audited commit and do not
+describe the clean-slate replacement runtime.

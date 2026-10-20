@@ -11,9 +11,7 @@ import {
   type ChannelCredentials,
   Client,
   type ClientOptions,
-  type ClientReadableStream,
   type ClientUnaryCall,
-  type handleServerStreamingCall,
   type handleUnaryCall,
   makeGenericClientConstructor,
   type Metadata,
@@ -21,307 +19,386 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { Timestamp } from "../../../google/protobuf/timestamp";
-import { AgentProfileSettings } from "./agent_profiles";
-import { PageRequest, PageResponse } from "./common";
-import { DevelopmentTaskState, developmentTaskStateFromJSON, developmentTaskStateToJSON } from "./development_tasks";
-import { RuntimeReadinessSummary } from "./repositories";
+import { CommandReceipt } from "./workflow";
 
-/** Lifecycle is separate from the readiness of the project's execution profile. */
-export enum ProjectState {
-  PROJECT_STATE_UNSPECIFIED = 0,
-  PROJECT_STATE_ACTIVE = 1,
-  PROJECT_STATE_ARCHIVED = 2,
-  UNRECOGNIZED = -1,
+export interface Workspace {
+  id: string;
+  displayName: string;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  resourceVersion: string;
 }
 
-export function projectStateFromJSON(object: any): ProjectState {
-  switch (object) {
-    case 0:
-    case "PROJECT_STATE_UNSPECIFIED":
-      return ProjectState.PROJECT_STATE_UNSPECIFIED;
-    case 1:
-    case "PROJECT_STATE_ACTIVE":
-      return ProjectState.PROJECT_STATE_ACTIVE;
-    case 2:
-    case "PROJECT_STATE_ARCHIVED":
-      return ProjectState.PROJECT_STATE_ARCHIVED;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return ProjectState.UNRECOGNIZED;
-  }
+export interface CreateWorkspaceRequest {
+  idempotencyKey: string;
+  displayName: string;
 }
 
-export function projectStateToJSON(object: ProjectState): string {
-  switch (object) {
-    case ProjectState.PROJECT_STATE_UNSPECIFIED:
-      return "PROJECT_STATE_UNSPECIFIED";
-    case ProjectState.PROJECT_STATE_ACTIVE:
-      return "PROJECT_STATE_ACTIVE";
-    case ProjectState.PROJECT_STATE_ARCHIVED:
-      return "PROJECT_STATE_ARCHIVED";
-    case ProjectState.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
-}
-
-/**
- * Workspaces own shared repository access and agent defaults. Repository runtimes
- * remain attached to repository connections and are never copied by membership.
- */
-export enum WorkspaceState {
-  WORKSPACE_STATE_UNSPECIFIED = 0,
-  WORKSPACE_STATE_ACTIVE = 1,
-  WORKSPACE_STATE_ARCHIVED = 2,
-  UNRECOGNIZED = -1,
-}
-
-export function workspaceStateFromJSON(object: any): WorkspaceState {
-  switch (object) {
-    case 0:
-    case "WORKSPACE_STATE_UNSPECIFIED":
-      return WorkspaceState.WORKSPACE_STATE_UNSPECIFIED;
-    case 1:
-    case "WORKSPACE_STATE_ACTIVE":
-      return WorkspaceState.WORKSPACE_STATE_ACTIVE;
-    case 2:
-    case "WORKSPACE_STATE_ARCHIVED":
-      return WorkspaceState.WORKSPACE_STATE_ARCHIVED;
-    case -1:
-    case "UNRECOGNIZED":
-    default:
-      return WorkspaceState.UNRECOGNIZED;
-  }
-}
-
-export function workspaceStateToJSON(object: WorkspaceState): string {
-  switch (object) {
-    case WorkspaceState.WORKSPACE_STATE_UNSPECIFIED:
-      return "WORKSPACE_STATE_UNSPECIFIED";
-    case WorkspaceState.WORKSPACE_STATE_ACTIVE:
-      return "WORKSPACE_STATE_ACTIVE";
-    case WorkspaceState.WORKSPACE_STATE_ARCHIVED:
-      return "WORKSPACE_STATE_ARCHIVED";
-    case WorkspaceState.UNRECOGNIZED:
-    default:
-      return "UNRECOGNIZED";
-  }
+export interface CreateWorkspaceResponse {
+  workspace?: Workspace | undefined;
+  receipt?: CommandReceipt | undefined;
 }
 
 export interface Project {
   id: string;
   displayName: string;
-  state: ProjectState;
-  /** Current members; repositories may be shared by multiple projects. */
-  repositoryConnectionIds: string[];
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   resourceVersion: string;
-  agentDefaults?: ProjectAgentDefaults | undefined;
   workspaceId: string;
   goal: string;
 }
 
 export interface CreateProjectRequest {
   idempotencyKey: string;
-  /** A nonblank display name of at most 256 UTF-8 bytes, without control characters. */
   displayName: string;
-  /** Legacy single-member creation; cannot be combined with the repeated field. */
-  repositoryConnectionId: string;
-  /** Between 1 and 100 unique repository connections. */
-  repositoryConnectionIds: string[];
   workspaceId: string;
   goal: string;
 }
 
 export interface CreateProjectResponse {
   project?: Project | undefined;
+  receipt?: CommandReceipt | undefined;
 }
 
-export interface ListProjectsRequest {
-  page?: PageRequest | undefined;
-  state?: ProjectState | undefined;
+function createBaseWorkspace(): Workspace {
+  return { id: "", displayName: "", createdAt: undefined, updatedAt: undefined, resourceVersion: "0" };
 }
 
-export interface ListProjectsResponse {
-  projects: Project[];
-  page?: PageResponse | undefined;
+export const Workspace: MessageFns<Workspace> = {
+  encode(message: Workspace, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(42).fork()).join();
+    }
+    if (message.updatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(50).fork()).join();
+    }
+    if (message.resourceVersion !== "0") {
+      writer.uint32(56).uint64(message.resourceVersion);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Workspace {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWorkspace();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.resourceVersion = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Workspace {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+      updatedAt: isSet(object.updatedAt)
+        ? fromJsonTimestamp(object.updatedAt)
+        : isSet(object.updated_at)
+        ? fromJsonTimestamp(object.updated_at)
+        : undefined,
+      resourceVersion: isSet(object.resourceVersion)
+        ? globalThis.String(object.resourceVersion)
+        : isSet(object.resource_version)
+        ? globalThis.String(object.resource_version)
+        : "0",
+    };
+  },
+
+  toJSON(message: Workspace): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    if (message.updatedAt !== undefined) {
+      obj.updatedAt = message.updatedAt.toISOString();
+    }
+    if (message.resourceVersion !== "0") {
+      obj.resourceVersion = message.resourceVersion;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<Workspace>): Workspace {
+    return Workspace.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<Workspace>): Workspace {
+    const message = createBaseWorkspace();
+    message.id = object.id ?? "";
+    message.displayName = object.displayName ?? "";
+    message.createdAt = object.createdAt ?? undefined;
+    message.updatedAt = object.updatedAt ?? undefined;
+    message.resourceVersion = object.resourceVersion ?? "0";
+    return message;
+  },
+};
+
+function createBaseCreateWorkspaceRequest(): CreateWorkspaceRequest {
+  return { idempotencyKey: "", displayName: "" };
 }
 
-export interface GetProjectRequest {
-  projectId: string;
+export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
+  encode(message: CreateWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.displayName !== "") {
+      writer.uint32(18).string(message.displayName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWorkspaceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateWorkspaceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.displayName = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CreateWorkspaceRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : "",
+    };
+  },
+
+  toJSON(message: CreateWorkspaceRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.displayName !== "") {
+      obj.displayName = message.displayName;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CreateWorkspaceRequest>): CreateWorkspaceRequest {
+    return CreateWorkspaceRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CreateWorkspaceRequest>): CreateWorkspaceRequest {
+    const message = createBaseCreateWorkspaceRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.displayName = object.displayName ?? "";
+    return message;
+  },
+};
+
+function createBaseCreateWorkspaceResponse(): CreateWorkspaceResponse {
+  return { workspace: undefined, receipt: undefined };
 }
 
-export interface GetProjectResponse {
-  project?:
-    | Project
-    | undefined;
-  /** Read projection only; raw overrides remain on the resource. */
-  effectiveAgentDefaults?: ProjectAgentDefaults | undefined;
-}
+export const CreateWorkspaceResponse: MessageFns<CreateWorkspaceResponse> = {
+  encode(message: CreateWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspace !== undefined) {
+      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
+    }
+    if (message.receipt !== undefined) {
+      CommandReceipt.encode(message.receipt, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
 
-export interface UpdateProjectRequest {
-  idempotencyKey: string;
-  projectId: string;
-  expectedResourceVersion: string;
-  displayName: string;
-  /** A nonempty list replaces current membership; empty preserves membership. */
-  repositoryConnectionIds: string[];
-  /** Omitted preserves defaults; an empty message clears them. */
-  agentDefaults?: ProjectAgentDefaults | undefined;
-  goal?: string | undefined;
-}
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWorkspaceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateWorkspaceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
 
-export interface UpdateProjectResponse {
-  project?: Project | undefined;
-}
+            message.workspace = Workspace.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
 
-export interface ArchiveProjectRequest {
-  idempotencyKey: string;
-  projectId: string;
-  expectedResourceVersion: string;
-}
+            message.receipt = CommandReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
 
-export interface ArchiveProjectResponse {
-  project?: Project | undefined;
-}
+  fromJSON(object: any): CreateWorkspaceResponse {
+    return {
+      workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined,
+      receipt: isSet(object.receipt) ? CommandReceipt.fromJSON(object.receipt) : undefined,
+    };
+  },
 
-/**
- * A bounded, complete read projection retained with its pagination snapshot.
- * Unavailable storage fails the RPC rather than returning empty successful data.
- */
-export interface ProjectSummary {
-  project?: Project | undefined;
-  repositoryNames: string[];
-  runtime?: RuntimeReadinessSummary | undefined;
-  latestTask?: ProjectTaskSummary | undefined;
-  tasksComplete: boolean;
-}
+  toJSON(message: CreateWorkspaceResponse): unknown {
+    const obj: any = {};
+    if (message.workspace !== undefined) {
+      obj.workspace = Workspace.toJSON(message.workspace);
+    }
+    if (message.receipt !== undefined) {
+      obj.receipt = CommandReceipt.toJSON(message.receipt);
+    }
+    return obj;
+  },
 
-export interface ProjectTaskSummary {
-  id: string;
-  state: DevelopmentTaskState;
-  request: string;
-  createdAt?: Date | undefined;
-}
-
-export interface ListProjectSummariesRequest {
-  page?: PageRequest | undefined;
-}
-
-export interface ListProjectSummariesResponse {
-  summaries: ProjectSummary[];
-  page?: PageResponse | undefined;
-}
-
-/**
- * Omit after_cursor for a current snapshot followed by durable replay. Expired
- * cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
- */
-export interface WatchProjectsRequest {
-  afterCursor?: string | undefined;
-}
-
-export interface WatchProjectsResponse {
-  cursor: string;
-  project?: Project | undefined;
-  deleted: boolean;
-  /** Marks the snapshot boundary, including an empty snapshot. */
-  snapshotComplete: boolean;
-}
-
-/** Separate connection and model selections for research and implementation. */
-export interface ProjectAgentDefaults {
-  projectConnectionId: string;
-  projectModel: string;
-  codingConnectionId: string;
-  codingModel: string;
-  plannerProfile?: AgentProfileSettings | undefined;
-  workerProfile?: AgentProfileSettings | undefined;
-}
-
-export interface Workspace {
-  id: string;
-  displayName: string;
-  state: WorkspaceState;
-  repositoryConnectionIds: string[];
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-  resourceVersion: string;
-  agentDefaults?: ProjectAgentDefaults | undefined;
-  plannerIdleTimeoutSeconds: number;
-}
-
-export interface CreateWorkspaceRequest {
-  idempotencyKey: string;
-  displayName: string;
-  repositoryConnectionIds: string[];
-  agentDefaults?: ProjectAgentDefaults | undefined;
-  plannerIdleTimeoutSeconds?: number | undefined;
-}
-
-export interface CreateWorkspaceResponse {
-  workspace?: Workspace | undefined;
-}
-
-export interface ListWorkspacesRequest {
-  page?: PageRequest | undefined;
-  state?: WorkspaceState | undefined;
-}
-
-export interface ListWorkspacesResponse {
-  workspaces: Workspace[];
-  page?: PageResponse | undefined;
-}
-
-export interface GetWorkspaceRequest {
-  workspaceId: string;
-}
-
-export interface GetWorkspaceResponse {
-  workspace?:
-    | Workspace
-    | undefined;
-  /** Read projection only; raw overrides remain on the resource. */
-  effectiveAgentDefaults?: ProjectAgentDefaults | undefined;
-}
-
-export interface UpdateWorkspaceRequest {
-  idempotencyKey: string;
-  workspaceId: string;
-  expectedResourceVersion: string;
-  displayName: string;
-  /** Empty preserves membership, matching the compatibility Project API. */
-  repositoryConnectionIds: string[];
-  agentDefaults?: ProjectAgentDefaults | undefined;
-  plannerIdleTimeoutSeconds?: number | undefined;
-}
-
-export interface UpdateWorkspaceResponse {
-  workspace?: Workspace | undefined;
-}
-
-export interface ArchiveWorkspaceRequest {
-  idempotencyKey: string;
-  workspaceId: string;
-  expectedResourceVersion: string;
-}
-
-export interface ArchiveWorkspaceResponse {
-  workspace?: Workspace | undefined;
-}
+  create(base?: DeepPartial<CreateWorkspaceResponse>): CreateWorkspaceResponse {
+    return CreateWorkspaceResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CreateWorkspaceResponse>): CreateWorkspaceResponse {
+    const message = createBaseCreateWorkspaceResponse();
+    message.workspace = (object.workspace !== undefined && object.workspace !== null)
+      ? Workspace.fromPartial(object.workspace)
+      : undefined;
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? CommandReceipt.fromPartial(object.receipt)
+      : undefined;
+    return message;
+  },
+};
 
 function createBaseProject(): Project {
   return {
     id: "",
     displayName: "",
-    state: 0,
-    repositoryConnectionIds: [],
     createdAt: undefined,
     updatedAt: undefined,
     resourceVersion: "0",
-    agentDefaults: undefined,
     workspaceId: "",
     goal: "",
   };
@@ -335,12 +412,6 @@ export const Project: MessageFns<Project> = {
     if (message.displayName !== "") {
       writer.uint32(18).string(message.displayName);
     }
-    if (message.state !== 0) {
-      writer.uint32(24).int32(message.state);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(34).string(v!);
-    }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(42).fork()).join();
     }
@@ -349,9 +420,6 @@ export const Project: MessageFns<Project> = {
     }
     if (message.resourceVersion !== "0") {
       writer.uint32(56).uint64(message.resourceVersion);
-    }
-    if (message.agentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(66).fork()).join();
     }
     if (message.workspaceId !== "") {
       writer.uint32(74).string(message.workspaceId);
@@ -391,22 +459,6 @@ export const Project: MessageFns<Project> = {
             message.displayName = reader.string();
             continue;
           }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
           case 5: {
             if (tag !== 42) {
               break;
@@ -429,14 +481,6 @@ export const Project: MessageFns<Project> = {
             }
 
             message.resourceVersion = reader.uint64().toString();
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
             continue;
           }
           case 9: {
@@ -475,12 +519,6 @@ export const Project: MessageFns<Project> = {
         : isSet(object.display_name)
         ? globalThis.String(object.display_name)
         : "",
-      state: isSet(object.state) ? projectStateFromJSON(object.state) : 0,
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
       createdAt: isSet(object.createdAt)
         ? fromJsonTimestamp(object.createdAt)
         : isSet(object.created_at)
@@ -496,11 +534,6 @@ export const Project: MessageFns<Project> = {
         : isSet(object.resource_version)
         ? globalThis.String(object.resource_version)
         : "0",
-      agentDefaults: isSet(object.agentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
-        : isSet(object.agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
-        : undefined,
       workspaceId: isSet(object.workspaceId)
         ? globalThis.String(object.workspaceId)
         : isSet(object.workspace_id)
@@ -518,12 +551,6 @@ export const Project: MessageFns<Project> = {
     if (message.displayName !== "") {
       obj.displayName = message.displayName;
     }
-    if (message.state !== 0) {
-      obj.state = projectStateToJSON(message.state);
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
     }
@@ -532,9 +559,6 @@ export const Project: MessageFns<Project> = {
     }
     if (message.resourceVersion !== "0") {
       obj.resourceVersion = message.resourceVersion;
-    }
-    if (message.agentDefaults !== undefined) {
-      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
     }
     if (message.workspaceId !== "") {
       obj.workspaceId = message.workspaceId;
@@ -552,14 +576,9 @@ export const Project: MessageFns<Project> = {
     const message = createBaseProject();
     message.id = object.id ?? "";
     message.displayName = object.displayName ?? "";
-    message.state = object.state ?? 0;
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
     message.resourceVersion = object.resourceVersion ?? "0";
-    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
-      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
-      : undefined;
     message.workspaceId = object.workspaceId ?? "";
     message.goal = object.goal ?? "";
     return message;
@@ -567,14 +586,7 @@ export const Project: MessageFns<Project> = {
 };
 
 function createBaseCreateProjectRequest(): CreateProjectRequest {
-  return {
-    idempotencyKey: "",
-    displayName: "",
-    repositoryConnectionId: "",
-    repositoryConnectionIds: [],
-    workspaceId: "",
-    goal: "",
-  };
+  return { idempotencyKey: "", displayName: "", workspaceId: "", goal: "" };
 }
 
 export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
@@ -584,12 +596,6 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     }
     if (message.displayName !== "") {
       writer.uint32(18).string(message.displayName);
-    }
-    if (message.repositoryConnectionId !== "") {
-      writer.uint32(26).string(message.repositoryConnectionId);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(34).string(v!);
     }
     if (message.workspaceId !== "") {
       writer.uint32(42).string(message.workspaceId);
@@ -627,22 +633,6 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
             }
 
             message.displayName = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.repositoryConnectionId = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
             continue;
           }
           case 5: {
@@ -685,16 +675,6 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
         : isSet(object.display_name)
         ? globalThis.String(object.display_name)
         : "",
-      repositoryConnectionId: isSet(object.repositoryConnectionId)
-        ? globalThis.String(object.repositoryConnectionId)
-        : isSet(object.repository_connection_id)
-        ? globalThis.String(object.repository_connection_id)
-        : "",
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
       workspaceId: isSet(object.workspaceId)
         ? globalThis.String(object.workspaceId)
         : isSet(object.workspace_id)
@@ -712,12 +692,6 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     if (message.displayName !== "") {
       obj.displayName = message.displayName;
     }
-    if (message.repositoryConnectionId !== "") {
-      obj.repositoryConnectionId = message.repositoryConnectionId;
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
     if (message.workspaceId !== "") {
       obj.workspaceId = message.workspaceId;
     }
@@ -734,8 +708,6 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
     const message = createBaseCreateProjectRequest();
     message.idempotencyKey = object.idempotencyKey ?? "";
     message.displayName = object.displayName ?? "";
-    message.repositoryConnectionId = object.repositoryConnectionId ?? "";
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
     message.workspaceId = object.workspaceId ?? "";
     message.goal = object.goal ?? "";
     return message;
@@ -743,13 +715,16 @@ export const CreateProjectRequest: MessageFns<CreateProjectRequest> = {
 };
 
 function createBaseCreateProjectResponse(): CreateProjectResponse {
-  return { project: undefined };
+  return { project: undefined, receipt: undefined };
 }
 
 export const CreateProjectResponse: MessageFns<CreateProjectResponse> = {
   encode(message: CreateProjectResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.project !== undefined) {
       Project.encode(message.project, writer.uint32(10).fork()).join();
+    }
+    if (message.receipt !== undefined) {
+      CommandReceipt.encode(message.receipt, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -775,6 +750,14 @@ export const CreateProjectResponse: MessageFns<CreateProjectResponse> = {
             message.project = Project.decode(reader, reader.uint32());
             continue;
           }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.receipt = CommandReceipt.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -788,13 +771,19 @@ export const CreateProjectResponse: MessageFns<CreateProjectResponse> = {
   },
 
   fromJSON(object: any): CreateProjectResponse {
-    return { project: isSet(object.project) ? Project.fromJSON(object.project) : undefined };
+    return {
+      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
+      receipt: isSet(object.receipt) ? CommandReceipt.fromJSON(object.receipt) : undefined,
+    };
   },
 
   toJSON(message: CreateProjectResponse): unknown {
     const obj: any = {};
     if (message.project !== undefined) {
       obj.project = Project.toJSON(message.project);
+    }
+    if (message.receipt !== undefined) {
+      obj.receipt = CommandReceipt.toJSON(message.receipt);
     }
     return obj;
   },
@@ -807,2876 +796,14 @@ export const CreateProjectResponse: MessageFns<CreateProjectResponse> = {
     message.project = (object.project !== undefined && object.project !== null)
       ? Project.fromPartial(object.project)
       : undefined;
-    return message;
-  },
-};
-
-function createBaseListProjectsRequest(): ListProjectsRequest {
-  return { page: undefined, state: undefined };
-}
-
-export const ListProjectsRequest: MessageFns<ListProjectsRequest> = {
-  encode(message: ListProjectsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.page !== undefined) {
-      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
-    }
-    if (message.state !== undefined) {
-      writer.uint32(16).int32(message.state);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectsRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectsRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.page = PageRequest.decode(reader, reader.uint32());
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListProjectsRequest {
-    return {
-      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
-      state: isSet(object.state) ? projectStateFromJSON(object.state) : undefined,
-    };
-  },
-
-  toJSON(message: ListProjectsRequest): unknown {
-    const obj: any = {};
-    if (message.page !== undefined) {
-      obj.page = PageRequest.toJSON(message.page);
-    }
-    if (message.state !== undefined) {
-      obj.state = projectStateToJSON(message.state);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListProjectsRequest>): ListProjectsRequest {
-    return ListProjectsRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListProjectsRequest>): ListProjectsRequest {
-    const message = createBaseListProjectsRequest();
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageRequest.fromPartial(object.page)
-      : undefined;
-    message.state = object.state ?? undefined;
-    return message;
-  },
-};
-
-function createBaseListProjectsResponse(): ListProjectsResponse {
-  return { projects: [], page: undefined };
-}
-
-export const ListProjectsResponse: MessageFns<ListProjectsResponse> = {
-  encode(message: ListProjectsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.projects) {
-      Project.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.page !== undefined) {
-      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectsResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectsResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.projects.push(Project.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.page = PageResponse.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListProjectsResponse {
-    return {
-      projects: globalThis.Array.isArray(object?.projects) ? object.projects.map((e: any) => Project.fromJSON(e)) : [],
-      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListProjectsResponse): unknown {
-    const obj: any = {};
-    if (message.projects?.length) {
-      obj.projects = message.projects.map((e) => Project.toJSON(e));
-    }
-    if (message.page !== undefined) {
-      obj.page = PageResponse.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListProjectsResponse>): ListProjectsResponse {
-    return ListProjectsResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListProjectsResponse>): ListProjectsResponse {
-    const message = createBaseListProjectsResponse();
-    message.projects = object.projects?.map((e) => Project.fromPartial(e)) || [];
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageResponse.fromPartial(object.page)
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? CommandReceipt.fromPartial(object.receipt)
       : undefined;
     return message;
   },
 };
 
-function createBaseGetProjectRequest(): GetProjectRequest {
-  return { projectId: "" };
-}
-
-export const GetProjectRequest: MessageFns<GetProjectRequest> = {
-  encode(message: GetProjectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.projectId !== "") {
-      writer.uint32(10).string(message.projectId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetProjectRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetProjectRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.projectId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetProjectRequest {
-    return {
-      projectId: isSet(object.projectId)
-        ? globalThis.String(object.projectId)
-        : isSet(object.project_id)
-        ? globalThis.String(object.project_id)
-        : "",
-    };
-  },
-
-  toJSON(message: GetProjectRequest): unknown {
-    const obj: any = {};
-    if (message.projectId !== "") {
-      obj.projectId = message.projectId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetProjectRequest>): GetProjectRequest {
-    return GetProjectRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetProjectRequest>): GetProjectRequest {
-    const message = createBaseGetProjectRequest();
-    message.projectId = object.projectId ?? "";
-    return message;
-  },
-};
-
-function createBaseGetProjectResponse(): GetProjectResponse {
-  return { project: undefined, effectiveAgentDefaults: undefined };
-}
-
-export const GetProjectResponse: MessageFns<GetProjectResponse> = {
-  encode(message: GetProjectResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.project !== undefined) {
-      Project.encode(message.project, writer.uint32(10).fork()).join();
-    }
-    if (message.effectiveAgentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.effectiveAgentDefaults, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetProjectResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetProjectResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.project = Project.decode(reader, reader.uint32());
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.effectiveAgentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetProjectResponse {
-    return {
-      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
-      effectiveAgentDefaults: isSet(object.effectiveAgentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.effectiveAgentDefaults)
-        : isSet(object.effective_agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.effective_agent_defaults)
-        : undefined,
-    };
-  },
-
-  toJSON(message: GetProjectResponse): unknown {
-    const obj: any = {};
-    if (message.project !== undefined) {
-      obj.project = Project.toJSON(message.project);
-    }
-    if (message.effectiveAgentDefaults !== undefined) {
-      obj.effectiveAgentDefaults = ProjectAgentDefaults.toJSON(message.effectiveAgentDefaults);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetProjectResponse>): GetProjectResponse {
-    return GetProjectResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetProjectResponse>): GetProjectResponse {
-    const message = createBaseGetProjectResponse();
-    message.project = (object.project !== undefined && object.project !== null)
-      ? Project.fromPartial(object.project)
-      : undefined;
-    message.effectiveAgentDefaults =
-      (object.effectiveAgentDefaults !== undefined && object.effectiveAgentDefaults !== null)
-        ? ProjectAgentDefaults.fromPartial(object.effectiveAgentDefaults)
-        : undefined;
-    return message;
-  },
-};
-
-function createBaseUpdateProjectRequest(): UpdateProjectRequest {
-  return {
-    idempotencyKey: "",
-    projectId: "",
-    expectedResourceVersion: "0",
-    displayName: "",
-    repositoryConnectionIds: [],
-    agentDefaults: undefined,
-    goal: undefined,
-  };
-}
-
-export const UpdateProjectRequest: MessageFns<UpdateProjectRequest> = {
-  encode(message: UpdateProjectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.projectId !== "") {
-      writer.uint32(18).string(message.projectId);
-    }
-    if (message.expectedResourceVersion !== "0") {
-      writer.uint32(24).uint64(message.expectedResourceVersion);
-    }
-    if (message.displayName !== "") {
-      writer.uint32(34).string(message.displayName);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(42).string(v!);
-    }
-    if (message.agentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(50).fork()).join();
-    }
-    if (message.goal !== undefined) {
-      writer.uint32(58).string(message.goal);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): UpdateProjectRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseUpdateProjectRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.projectId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.expectedResourceVersion = reader.uint64().toString();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.displayName = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
-            continue;
-          }
-          case 7: {
-            if (tag !== 58) {
-              break;
-            }
-
-            message.goal = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): UpdateProjectRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      projectId: isSet(object.projectId)
-        ? globalThis.String(object.projectId)
-        : isSet(object.project_id)
-        ? globalThis.String(object.project_id)
-        : "",
-      expectedResourceVersion: isSet(object.expectedResourceVersion)
-        ? globalThis.String(object.expectedResourceVersion)
-        : isSet(object.expected_resource_version)
-        ? globalThis.String(object.expected_resource_version)
-        : "0",
-      displayName: isSet(object.displayName)
-        ? globalThis.String(object.displayName)
-        : isSet(object.display_name)
-        ? globalThis.String(object.display_name)
-        : "",
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
-      agentDefaults: isSet(object.agentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
-        : isSet(object.agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
-        : undefined,
-      goal: isSet(object.goal) ? globalThis.String(object.goal) : undefined,
-    };
-  },
-
-  toJSON(message: UpdateProjectRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.projectId !== "") {
-      obj.projectId = message.projectId;
-    }
-    if (message.expectedResourceVersion !== "0") {
-      obj.expectedResourceVersion = message.expectedResourceVersion;
-    }
-    if (message.displayName !== "") {
-      obj.displayName = message.displayName;
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
-    if (message.agentDefaults !== undefined) {
-      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
-    }
-    if (message.goal !== undefined) {
-      obj.goal = message.goal;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<UpdateProjectRequest>): UpdateProjectRequest {
-    return UpdateProjectRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<UpdateProjectRequest>): UpdateProjectRequest {
-    const message = createBaseUpdateProjectRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.projectId = object.projectId ?? "";
-    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
-    message.displayName = object.displayName ?? "";
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
-    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
-      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
-      : undefined;
-    message.goal = object.goal ?? undefined;
-    return message;
-  },
-};
-
-function createBaseUpdateProjectResponse(): UpdateProjectResponse {
-  return { project: undefined };
-}
-
-export const UpdateProjectResponse: MessageFns<UpdateProjectResponse> = {
-  encode(message: UpdateProjectResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.project !== undefined) {
-      Project.encode(message.project, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): UpdateProjectResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseUpdateProjectResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.project = Project.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): UpdateProjectResponse {
-    return { project: isSet(object.project) ? Project.fromJSON(object.project) : undefined };
-  },
-
-  toJSON(message: UpdateProjectResponse): unknown {
-    const obj: any = {};
-    if (message.project !== undefined) {
-      obj.project = Project.toJSON(message.project);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<UpdateProjectResponse>): UpdateProjectResponse {
-    return UpdateProjectResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<UpdateProjectResponse>): UpdateProjectResponse {
-    const message = createBaseUpdateProjectResponse();
-    message.project = (object.project !== undefined && object.project !== null)
-      ? Project.fromPartial(object.project)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseArchiveProjectRequest(): ArchiveProjectRequest {
-  return { idempotencyKey: "", projectId: "", expectedResourceVersion: "0" };
-}
-
-export const ArchiveProjectRequest: MessageFns<ArchiveProjectRequest> = {
-  encode(message: ArchiveProjectRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.projectId !== "") {
-      writer.uint32(18).string(message.projectId);
-    }
-    if (message.expectedResourceVersion !== "0") {
-      writer.uint32(24).uint64(message.expectedResourceVersion);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ArchiveProjectRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseArchiveProjectRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.projectId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.expectedResourceVersion = reader.uint64().toString();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ArchiveProjectRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      projectId: isSet(object.projectId)
-        ? globalThis.String(object.projectId)
-        : isSet(object.project_id)
-        ? globalThis.String(object.project_id)
-        : "",
-      expectedResourceVersion: isSet(object.expectedResourceVersion)
-        ? globalThis.String(object.expectedResourceVersion)
-        : isSet(object.expected_resource_version)
-        ? globalThis.String(object.expected_resource_version)
-        : "0",
-    };
-  },
-
-  toJSON(message: ArchiveProjectRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.projectId !== "") {
-      obj.projectId = message.projectId;
-    }
-    if (message.expectedResourceVersion !== "0") {
-      obj.expectedResourceVersion = message.expectedResourceVersion;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ArchiveProjectRequest>): ArchiveProjectRequest {
-    return ArchiveProjectRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ArchiveProjectRequest>): ArchiveProjectRequest {
-    const message = createBaseArchiveProjectRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.projectId = object.projectId ?? "";
-    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
-    return message;
-  },
-};
-
-function createBaseArchiveProjectResponse(): ArchiveProjectResponse {
-  return { project: undefined };
-}
-
-export const ArchiveProjectResponse: MessageFns<ArchiveProjectResponse> = {
-  encode(message: ArchiveProjectResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.project !== undefined) {
-      Project.encode(message.project, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ArchiveProjectResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseArchiveProjectResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.project = Project.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ArchiveProjectResponse {
-    return { project: isSet(object.project) ? Project.fromJSON(object.project) : undefined };
-  },
-
-  toJSON(message: ArchiveProjectResponse): unknown {
-    const obj: any = {};
-    if (message.project !== undefined) {
-      obj.project = Project.toJSON(message.project);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ArchiveProjectResponse>): ArchiveProjectResponse {
-    return ArchiveProjectResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ArchiveProjectResponse>): ArchiveProjectResponse {
-    const message = createBaseArchiveProjectResponse();
-    message.project = (object.project !== undefined && object.project !== null)
-      ? Project.fromPartial(object.project)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseProjectSummary(): ProjectSummary {
-  return { project: undefined, repositoryNames: [], runtime: undefined, latestTask: undefined, tasksComplete: false };
-}
-
-export const ProjectSummary: MessageFns<ProjectSummary> = {
-  encode(message: ProjectSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.project !== undefined) {
-      Project.encode(message.project, writer.uint32(10).fork()).join();
-    }
-    for (const v of message.repositoryNames) {
-      writer.uint32(18).string(v!);
-    }
-    if (message.runtime !== undefined) {
-      RuntimeReadinessSummary.encode(message.runtime, writer.uint32(26).fork()).join();
-    }
-    if (message.latestTask !== undefined) {
-      ProjectTaskSummary.encode(message.latestTask, writer.uint32(34).fork()).join();
-    }
-    if (message.tasksComplete !== false) {
-      writer.uint32(40).bool(message.tasksComplete);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectSummary {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectSummary();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.project = Project.decode(reader, reader.uint32());
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.repositoryNames.push(reader.string());
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.runtime = RuntimeReadinessSummary.decode(reader, reader.uint32());
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.latestTask = ProjectTaskSummary.decode(reader, reader.uint32());
-            continue;
-          }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.tasksComplete = reader.bool();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectSummary {
-    return {
-      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
-      repositoryNames: globalThis.Array.isArray(object?.repositoryNames)
-        ? object.repositoryNames.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_names)
-        ? object.repository_names.map((e: any) => globalThis.String(e))
-        : [],
-      runtime: isSet(object.runtime) ? RuntimeReadinessSummary.fromJSON(object.runtime) : undefined,
-      latestTask: isSet(object.latestTask)
-        ? ProjectTaskSummary.fromJSON(object.latestTask)
-        : isSet(object.latest_task)
-        ? ProjectTaskSummary.fromJSON(object.latest_task)
-        : undefined,
-      tasksComplete: isSet(object.tasksComplete)
-        ? globalThis.Boolean(object.tasksComplete)
-        : isSet(object.tasks_complete)
-        ? globalThis.Boolean(object.tasks_complete)
-        : false,
-    };
-  },
-
-  toJSON(message: ProjectSummary): unknown {
-    const obj: any = {};
-    if (message.project !== undefined) {
-      obj.project = Project.toJSON(message.project);
-    }
-    if (message.repositoryNames?.length) {
-      obj.repositoryNames = message.repositoryNames;
-    }
-    if (message.runtime !== undefined) {
-      obj.runtime = RuntimeReadinessSummary.toJSON(message.runtime);
-    }
-    if (message.latestTask !== undefined) {
-      obj.latestTask = ProjectTaskSummary.toJSON(message.latestTask);
-    }
-    if (message.tasksComplete !== false) {
-      obj.tasksComplete = message.tasksComplete;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectSummary>): ProjectSummary {
-    return ProjectSummary.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectSummary>): ProjectSummary {
-    const message = createBaseProjectSummary();
-    message.project = (object.project !== undefined && object.project !== null)
-      ? Project.fromPartial(object.project)
-      : undefined;
-    message.repositoryNames = object.repositoryNames?.map((e) => e) || [];
-    message.runtime = (object.runtime !== undefined && object.runtime !== null)
-      ? RuntimeReadinessSummary.fromPartial(object.runtime)
-      : undefined;
-    message.latestTask = (object.latestTask !== undefined && object.latestTask !== null)
-      ? ProjectTaskSummary.fromPartial(object.latestTask)
-      : undefined;
-    message.tasksComplete = object.tasksComplete ?? false;
-    return message;
-  },
-};
-
-function createBaseProjectTaskSummary(): ProjectTaskSummary {
-  return { id: "", state: 0, request: "", createdAt: undefined };
-}
-
-export const ProjectTaskSummary: MessageFns<ProjectTaskSummary> = {
-  encode(message: ProjectTaskSummary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.state !== 0) {
-      writer.uint32(16).int32(message.state);
-    }
-    if (message.request !== "") {
-      writer.uint32(26).string(message.request);
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(34).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectTaskSummary {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectTaskSummary();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.request = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectTaskSummary {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      state: isSet(object.state) ? developmentTaskStateFromJSON(object.state) : 0,
-      request: isSet(object.request) ? globalThis.String(object.request) : "",
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-    };
-  },
-
-  toJSON(message: ProjectTaskSummary): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.state !== 0) {
-      obj.state = developmentTaskStateToJSON(message.state);
-    }
-    if (message.request !== "") {
-      obj.request = message.request;
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectTaskSummary>): ProjectTaskSummary {
-    return ProjectTaskSummary.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectTaskSummary>): ProjectTaskSummary {
-    const message = createBaseProjectTaskSummary();
-    message.id = object.id ?? "";
-    message.state = object.state ?? 0;
-    message.request = object.request ?? "";
-    message.createdAt = object.createdAt ?? undefined;
-    return message;
-  },
-};
-
-function createBaseListProjectSummariesRequest(): ListProjectSummariesRequest {
-  return { page: undefined };
-}
-
-export const ListProjectSummariesRequest: MessageFns<ListProjectSummariesRequest> = {
-  encode(message: ListProjectSummariesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.page !== undefined) {
-      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectSummariesRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectSummariesRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.page = PageRequest.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListProjectSummariesRequest {
-    return { page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined };
-  },
-
-  toJSON(message: ListProjectSummariesRequest): unknown {
-    const obj: any = {};
-    if (message.page !== undefined) {
-      obj.page = PageRequest.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListProjectSummariesRequest>): ListProjectSummariesRequest {
-    return ListProjectSummariesRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListProjectSummariesRequest>): ListProjectSummariesRequest {
-    const message = createBaseListProjectSummariesRequest();
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageRequest.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseListProjectSummariesResponse(): ListProjectSummariesResponse {
-  return { summaries: [], page: undefined };
-}
-
-export const ListProjectSummariesResponse: MessageFns<ListProjectSummariesResponse> = {
-  encode(message: ListProjectSummariesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.summaries) {
-      ProjectSummary.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.page !== undefined) {
-      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListProjectSummariesResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListProjectSummariesResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.summaries.push(ProjectSummary.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.page = PageResponse.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListProjectSummariesResponse {
-    return {
-      summaries: globalThis.Array.isArray(object?.summaries)
-        ? object.summaries.map((e: any) => ProjectSummary.fromJSON(e))
-        : [],
-      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListProjectSummariesResponse): unknown {
-    const obj: any = {};
-    if (message.summaries?.length) {
-      obj.summaries = message.summaries.map((e) => ProjectSummary.toJSON(e));
-    }
-    if (message.page !== undefined) {
-      obj.page = PageResponse.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListProjectSummariesResponse>): ListProjectSummariesResponse {
-    return ListProjectSummariesResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListProjectSummariesResponse>): ListProjectSummariesResponse {
-    const message = createBaseListProjectSummariesResponse();
-    message.summaries = object.summaries?.map((e) => ProjectSummary.fromPartial(e)) || [];
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageResponse.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseWatchProjectsRequest(): WatchProjectsRequest {
-  return { afterCursor: undefined };
-}
-
-export const WatchProjectsRequest: MessageFns<WatchProjectsRequest> = {
-  encode(message: WatchProjectsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.afterCursor !== undefined) {
-      writer.uint32(8).uint64(message.afterCursor);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): WatchProjectsRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseWatchProjectsRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.afterCursor = reader.uint64().toString();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): WatchProjectsRequest {
-    return {
-      afterCursor: isSet(object.afterCursor)
-        ? globalThis.String(object.afterCursor)
-        : isSet(object.after_cursor)
-        ? globalThis.String(object.after_cursor)
-        : undefined,
-    };
-  },
-
-  toJSON(message: WatchProjectsRequest): unknown {
-    const obj: any = {};
-    if (message.afterCursor !== undefined) {
-      obj.afterCursor = message.afterCursor;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<WatchProjectsRequest>): WatchProjectsRequest {
-    return WatchProjectsRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<WatchProjectsRequest>): WatchProjectsRequest {
-    const message = createBaseWatchProjectsRequest();
-    message.afterCursor = object.afterCursor ?? undefined;
-    return message;
-  },
-};
-
-function createBaseWatchProjectsResponse(): WatchProjectsResponse {
-  return { cursor: "0", project: undefined, deleted: false, snapshotComplete: false };
-}
-
-export const WatchProjectsResponse: MessageFns<WatchProjectsResponse> = {
-  encode(message: WatchProjectsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.cursor !== "0") {
-      writer.uint32(8).uint64(message.cursor);
-    }
-    if (message.project !== undefined) {
-      Project.encode(message.project, writer.uint32(18).fork()).join();
-    }
-    if (message.deleted !== false) {
-      writer.uint32(24).bool(message.deleted);
-    }
-    if (message.snapshotComplete !== false) {
-      writer.uint32(32).bool(message.snapshotComplete);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): WatchProjectsResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseWatchProjectsResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 8) {
-              break;
-            }
-
-            message.cursor = reader.uint64().toString();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.project = Project.decode(reader, reader.uint32());
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.deleted = reader.bool();
-            continue;
-          }
-          case 4: {
-            if (tag !== 32) {
-              break;
-            }
-
-            message.snapshotComplete = reader.bool();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): WatchProjectsResponse {
-    return {
-      cursor: isSet(object.cursor) ? globalThis.String(object.cursor) : "0",
-      project: isSet(object.project) ? Project.fromJSON(object.project) : undefined,
-      deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
-      snapshotComplete: isSet(object.snapshotComplete)
-        ? globalThis.Boolean(object.snapshotComplete)
-        : isSet(object.snapshot_complete)
-        ? globalThis.Boolean(object.snapshot_complete)
-        : false,
-    };
-  },
-
-  toJSON(message: WatchProjectsResponse): unknown {
-    const obj: any = {};
-    if (message.cursor !== "0") {
-      obj.cursor = message.cursor;
-    }
-    if (message.project !== undefined) {
-      obj.project = Project.toJSON(message.project);
-    }
-    if (message.deleted !== false) {
-      obj.deleted = message.deleted;
-    }
-    if (message.snapshotComplete !== false) {
-      obj.snapshotComplete = message.snapshotComplete;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<WatchProjectsResponse>): WatchProjectsResponse {
-    return WatchProjectsResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<WatchProjectsResponse>): WatchProjectsResponse {
-    const message = createBaseWatchProjectsResponse();
-    message.cursor = object.cursor ?? "0";
-    message.project = (object.project !== undefined && object.project !== null)
-      ? Project.fromPartial(object.project)
-      : undefined;
-    message.deleted = object.deleted ?? false;
-    message.snapshotComplete = object.snapshotComplete ?? false;
-    return message;
-  },
-};
-
-function createBaseProjectAgentDefaults(): ProjectAgentDefaults {
-  return {
-    projectConnectionId: "",
-    projectModel: "",
-    codingConnectionId: "",
-    codingModel: "",
-    plannerProfile: undefined,
-    workerProfile: undefined,
-  };
-}
-
-export const ProjectAgentDefaults: MessageFns<ProjectAgentDefaults> = {
-  encode(message: ProjectAgentDefaults, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.projectConnectionId !== "") {
-      writer.uint32(10).string(message.projectConnectionId);
-    }
-    if (message.projectModel !== "") {
-      writer.uint32(18).string(message.projectModel);
-    }
-    if (message.codingConnectionId !== "") {
-      writer.uint32(26).string(message.codingConnectionId);
-    }
-    if (message.codingModel !== "") {
-      writer.uint32(34).string(message.codingModel);
-    }
-    if (message.plannerProfile !== undefined) {
-      AgentProfileSettings.encode(message.plannerProfile, writer.uint32(42).fork()).join();
-    }
-    if (message.workerProfile !== undefined) {
-      AgentProfileSettings.encode(message.workerProfile, writer.uint32(50).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ProjectAgentDefaults {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseProjectAgentDefaults();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.projectConnectionId = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.projectModel = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.codingConnectionId = reader.string();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.codingModel = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.plannerProfile = AgentProfileSettings.decode(reader, reader.uint32());
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.workerProfile = AgentProfileSettings.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ProjectAgentDefaults {
-    return {
-      projectConnectionId: isSet(object.projectConnectionId)
-        ? globalThis.String(object.projectConnectionId)
-        : isSet(object.project_connection_id)
-        ? globalThis.String(object.project_connection_id)
-        : "",
-      projectModel: isSet(object.projectModel)
-        ? globalThis.String(object.projectModel)
-        : isSet(object.project_model)
-        ? globalThis.String(object.project_model)
-        : "",
-      codingConnectionId: isSet(object.codingConnectionId)
-        ? globalThis.String(object.codingConnectionId)
-        : isSet(object.coding_connection_id)
-        ? globalThis.String(object.coding_connection_id)
-        : "",
-      codingModel: isSet(object.codingModel)
-        ? globalThis.String(object.codingModel)
-        : isSet(object.coding_model)
-        ? globalThis.String(object.coding_model)
-        : "",
-      plannerProfile: isSet(object.plannerProfile)
-        ? AgentProfileSettings.fromJSON(object.plannerProfile)
-        : isSet(object.planner_profile)
-        ? AgentProfileSettings.fromJSON(object.planner_profile)
-        : undefined,
-      workerProfile: isSet(object.workerProfile)
-        ? AgentProfileSettings.fromJSON(object.workerProfile)
-        : isSet(object.worker_profile)
-        ? AgentProfileSettings.fromJSON(object.worker_profile)
-        : undefined,
-    };
-  },
-
-  toJSON(message: ProjectAgentDefaults): unknown {
-    const obj: any = {};
-    if (message.projectConnectionId !== "") {
-      obj.projectConnectionId = message.projectConnectionId;
-    }
-    if (message.projectModel !== "") {
-      obj.projectModel = message.projectModel;
-    }
-    if (message.codingConnectionId !== "") {
-      obj.codingConnectionId = message.codingConnectionId;
-    }
-    if (message.codingModel !== "") {
-      obj.codingModel = message.codingModel;
-    }
-    if (message.plannerProfile !== undefined) {
-      obj.plannerProfile = AgentProfileSettings.toJSON(message.plannerProfile);
-    }
-    if (message.workerProfile !== undefined) {
-      obj.workerProfile = AgentProfileSettings.toJSON(message.workerProfile);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ProjectAgentDefaults>): ProjectAgentDefaults {
-    return ProjectAgentDefaults.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ProjectAgentDefaults>): ProjectAgentDefaults {
-    const message = createBaseProjectAgentDefaults();
-    message.projectConnectionId = object.projectConnectionId ?? "";
-    message.projectModel = object.projectModel ?? "";
-    message.codingConnectionId = object.codingConnectionId ?? "";
-    message.codingModel = object.codingModel ?? "";
-    message.plannerProfile = (object.plannerProfile !== undefined && object.plannerProfile !== null)
-      ? AgentProfileSettings.fromPartial(object.plannerProfile)
-      : undefined;
-    message.workerProfile = (object.workerProfile !== undefined && object.workerProfile !== null)
-      ? AgentProfileSettings.fromPartial(object.workerProfile)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseWorkspace(): Workspace {
-  return {
-    id: "",
-    displayName: "",
-    state: 0,
-    repositoryConnectionIds: [],
-    createdAt: undefined,
-    updatedAt: undefined,
-    resourceVersion: "0",
-    agentDefaults: undefined,
-    plannerIdleTimeoutSeconds: 0,
-  };
-}
-
-export const Workspace: MessageFns<Workspace> = {
-  encode(message: Workspace, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.id !== "") {
-      writer.uint32(10).string(message.id);
-    }
-    if (message.displayName !== "") {
-      writer.uint32(18).string(message.displayName);
-    }
-    if (message.state !== 0) {
-      writer.uint32(24).int32(message.state);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(34).string(v!);
-    }
-    if (message.createdAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(42).fork()).join();
-    }
-    if (message.updatedAt !== undefined) {
-      Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(50).fork()).join();
-    }
-    if (message.resourceVersion !== "0") {
-      writer.uint32(56).uint64(message.resourceVersion);
-    }
-    if (message.agentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(66).fork()).join();
-    }
-    if (message.plannerIdleTimeoutSeconds !== 0) {
-      writer.uint32(72).uint32(message.plannerIdleTimeoutSeconds);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): Workspace {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseWorkspace();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.id = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.displayName = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 7: {
-            if (tag !== 56) {
-              break;
-            }
-
-            message.resourceVersion = reader.uint64().toString();
-            continue;
-          }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
-            continue;
-          }
-          case 9: {
-            if (tag !== 72) {
-              break;
-            }
-
-            message.plannerIdleTimeoutSeconds = reader.uint32();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): Workspace {
-    return {
-      id: isSet(object.id) ? globalThis.String(object.id) : "",
-      displayName: isSet(object.displayName)
-        ? globalThis.String(object.displayName)
-        : isSet(object.display_name)
-        ? globalThis.String(object.display_name)
-        : "",
-      state: isSet(object.state) ? workspaceStateFromJSON(object.state) : 0,
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
-      createdAt: isSet(object.createdAt)
-        ? fromJsonTimestamp(object.createdAt)
-        : isSet(object.created_at)
-        ? fromJsonTimestamp(object.created_at)
-        : undefined,
-      updatedAt: isSet(object.updatedAt)
-        ? fromJsonTimestamp(object.updatedAt)
-        : isSet(object.updated_at)
-        ? fromJsonTimestamp(object.updated_at)
-        : undefined,
-      resourceVersion: isSet(object.resourceVersion)
-        ? globalThis.String(object.resourceVersion)
-        : isSet(object.resource_version)
-        ? globalThis.String(object.resource_version)
-        : "0",
-      agentDefaults: isSet(object.agentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
-        : isSet(object.agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
-        : undefined,
-      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
-        : isSet(object.planner_idle_timeout_seconds)
-        ? globalThis.Number(object.planner_idle_timeout_seconds)
-        : 0,
-    };
-  },
-
-  toJSON(message: Workspace): unknown {
-    const obj: any = {};
-    if (message.id !== "") {
-      obj.id = message.id;
-    }
-    if (message.displayName !== "") {
-      obj.displayName = message.displayName;
-    }
-    if (message.state !== 0) {
-      obj.state = workspaceStateToJSON(message.state);
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
-    if (message.createdAt !== undefined) {
-      obj.createdAt = message.createdAt.toISOString();
-    }
-    if (message.updatedAt !== undefined) {
-      obj.updatedAt = message.updatedAt.toISOString();
-    }
-    if (message.resourceVersion !== "0") {
-      obj.resourceVersion = message.resourceVersion;
-    }
-    if (message.agentDefaults !== undefined) {
-      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
-    }
-    if (message.plannerIdleTimeoutSeconds !== 0) {
-      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<Workspace>): Workspace {
-    return Workspace.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<Workspace>): Workspace {
-    const message = createBaseWorkspace();
-    message.id = object.id ?? "";
-    message.displayName = object.displayName ?? "";
-    message.state = object.state ?? 0;
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
-    message.createdAt = object.createdAt ?? undefined;
-    message.updatedAt = object.updatedAt ?? undefined;
-    message.resourceVersion = object.resourceVersion ?? "0";
-    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
-      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
-      : undefined;
-    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? 0;
-    return message;
-  },
-};
-
-function createBaseCreateWorkspaceRequest(): CreateWorkspaceRequest {
-  return {
-    idempotencyKey: "",
-    displayName: "",
-    repositoryConnectionIds: [],
-    agentDefaults: undefined,
-    plannerIdleTimeoutSeconds: undefined,
-  };
-}
-
-export const CreateWorkspaceRequest: MessageFns<CreateWorkspaceRequest> = {
-  encode(message: CreateWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.displayName !== "") {
-      writer.uint32(18).string(message.displayName);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(26).string(v!);
-    }
-    if (message.agentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(34).fork()).join();
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      writer.uint32(40).uint32(message.plannerIdleTimeoutSeconds);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): CreateWorkspaceRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCreateWorkspaceRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.displayName = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 26) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
-            continue;
-          }
-          case 5: {
-            if (tag !== 40) {
-              break;
-            }
-
-            message.plannerIdleTimeoutSeconds = reader.uint32();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): CreateWorkspaceRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      displayName: isSet(object.displayName)
-        ? globalThis.String(object.displayName)
-        : isSet(object.display_name)
-        ? globalThis.String(object.display_name)
-        : "",
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
-      agentDefaults: isSet(object.agentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
-        : isSet(object.agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
-        : undefined,
-      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
-        : isSet(object.planner_idle_timeout_seconds)
-        ? globalThis.Number(object.planner_idle_timeout_seconds)
-        : undefined,
-    };
-  },
-
-  toJSON(message: CreateWorkspaceRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.displayName !== "") {
-      obj.displayName = message.displayName;
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
-    if (message.agentDefaults !== undefined) {
-      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<CreateWorkspaceRequest>): CreateWorkspaceRequest {
-    return CreateWorkspaceRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<CreateWorkspaceRequest>): CreateWorkspaceRequest {
-    const message = createBaseCreateWorkspaceRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.displayName = object.displayName ?? "";
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
-    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
-      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
-      : undefined;
-    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
-    return message;
-  },
-};
-
-function createBaseCreateWorkspaceResponse(): CreateWorkspaceResponse {
-  return { workspace: undefined };
-}
-
-export const CreateWorkspaceResponse: MessageFns<CreateWorkspaceResponse> = {
-  encode(message: CreateWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.workspace !== undefined) {
-      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): CreateWorkspaceResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseCreateWorkspaceResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.workspace = Workspace.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): CreateWorkspaceResponse {
-    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
-  },
-
-  toJSON(message: CreateWorkspaceResponse): unknown {
-    const obj: any = {};
-    if (message.workspace !== undefined) {
-      obj.workspace = Workspace.toJSON(message.workspace);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<CreateWorkspaceResponse>): CreateWorkspaceResponse {
-    return CreateWorkspaceResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<CreateWorkspaceResponse>): CreateWorkspaceResponse {
-    const message = createBaseCreateWorkspaceResponse();
-    message.workspace = (object.workspace !== undefined && object.workspace !== null)
-      ? Workspace.fromPartial(object.workspace)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseListWorkspacesRequest(): ListWorkspacesRequest {
-  return { page: undefined, state: undefined };
-}
-
-export const ListWorkspacesRequest: MessageFns<ListWorkspacesRequest> = {
-  encode(message: ListWorkspacesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.page !== undefined) {
-      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
-    }
-    if (message.state !== undefined) {
-      writer.uint32(16).int32(message.state);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListWorkspacesRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListWorkspacesRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.page = PageRequest.decode(reader, reader.uint32());
-            continue;
-          }
-          case 2: {
-            if (tag !== 16) {
-              break;
-            }
-
-            message.state = reader.int32() as any;
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListWorkspacesRequest {
-    return {
-      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
-      state: isSet(object.state) ? workspaceStateFromJSON(object.state) : undefined,
-    };
-  },
-
-  toJSON(message: ListWorkspacesRequest): unknown {
-    const obj: any = {};
-    if (message.page !== undefined) {
-      obj.page = PageRequest.toJSON(message.page);
-    }
-    if (message.state !== undefined) {
-      obj.state = workspaceStateToJSON(message.state);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListWorkspacesRequest>): ListWorkspacesRequest {
-    return ListWorkspacesRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListWorkspacesRequest>): ListWorkspacesRequest {
-    const message = createBaseListWorkspacesRequest();
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageRequest.fromPartial(object.page)
-      : undefined;
-    message.state = object.state ?? undefined;
-    return message;
-  },
-};
-
-function createBaseListWorkspacesResponse(): ListWorkspacesResponse {
-  return { workspaces: [], page: undefined };
-}
-
-export const ListWorkspacesResponse: MessageFns<ListWorkspacesResponse> = {
-  encode(message: ListWorkspacesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    for (const v of message.workspaces) {
-      Workspace.encode(v!, writer.uint32(10).fork()).join();
-    }
-    if (message.page !== undefined) {
-      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ListWorkspacesResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseListWorkspacesResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.workspaces.push(Workspace.decode(reader, reader.uint32()));
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.page = PageResponse.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ListWorkspacesResponse {
-    return {
-      workspaces: globalThis.Array.isArray(object?.workspaces)
-        ? object.workspaces.map((e: any) => Workspace.fromJSON(e))
-        : [],
-      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
-    };
-  },
-
-  toJSON(message: ListWorkspacesResponse): unknown {
-    const obj: any = {};
-    if (message.workspaces?.length) {
-      obj.workspaces = message.workspaces.map((e) => Workspace.toJSON(e));
-    }
-    if (message.page !== undefined) {
-      obj.page = PageResponse.toJSON(message.page);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ListWorkspacesResponse>): ListWorkspacesResponse {
-    return ListWorkspacesResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ListWorkspacesResponse>): ListWorkspacesResponse {
-    const message = createBaseListWorkspacesResponse();
-    message.workspaces = object.workspaces?.map((e) => Workspace.fromPartial(e)) || [];
-    message.page = (object.page !== undefined && object.page !== null)
-      ? PageResponse.fromPartial(object.page)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseGetWorkspaceRequest(): GetWorkspaceRequest {
-  return { workspaceId: "" };
-}
-
-export const GetWorkspaceRequest: MessageFns<GetWorkspaceRequest> = {
-  encode(message: GetWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.workspaceId !== "") {
-      writer.uint32(10).string(message.workspaceId);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetWorkspaceRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetWorkspaceRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.workspaceId = reader.string();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetWorkspaceRequest {
-    return {
-      workspaceId: isSet(object.workspaceId)
-        ? globalThis.String(object.workspaceId)
-        : isSet(object.workspace_id)
-        ? globalThis.String(object.workspace_id)
-        : "",
-    };
-  },
-
-  toJSON(message: GetWorkspaceRequest): unknown {
-    const obj: any = {};
-    if (message.workspaceId !== "") {
-      obj.workspaceId = message.workspaceId;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetWorkspaceRequest>): GetWorkspaceRequest {
-    return GetWorkspaceRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetWorkspaceRequest>): GetWorkspaceRequest {
-    const message = createBaseGetWorkspaceRequest();
-    message.workspaceId = object.workspaceId ?? "";
-    return message;
-  },
-};
-
-function createBaseGetWorkspaceResponse(): GetWorkspaceResponse {
-  return { workspace: undefined, effectiveAgentDefaults: undefined };
-}
-
-export const GetWorkspaceResponse: MessageFns<GetWorkspaceResponse> = {
-  encode(message: GetWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.workspace !== undefined) {
-      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
-    }
-    if (message.effectiveAgentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.effectiveAgentDefaults, writer.uint32(18).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): GetWorkspaceResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseGetWorkspaceResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.workspace = Workspace.decode(reader, reader.uint32());
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.effectiveAgentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): GetWorkspaceResponse {
-    return {
-      workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined,
-      effectiveAgentDefaults: isSet(object.effectiveAgentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.effectiveAgentDefaults)
-        : isSet(object.effective_agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.effective_agent_defaults)
-        : undefined,
-    };
-  },
-
-  toJSON(message: GetWorkspaceResponse): unknown {
-    const obj: any = {};
-    if (message.workspace !== undefined) {
-      obj.workspace = Workspace.toJSON(message.workspace);
-    }
-    if (message.effectiveAgentDefaults !== undefined) {
-      obj.effectiveAgentDefaults = ProjectAgentDefaults.toJSON(message.effectiveAgentDefaults);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<GetWorkspaceResponse>): GetWorkspaceResponse {
-    return GetWorkspaceResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<GetWorkspaceResponse>): GetWorkspaceResponse {
-    const message = createBaseGetWorkspaceResponse();
-    message.workspace = (object.workspace !== undefined && object.workspace !== null)
-      ? Workspace.fromPartial(object.workspace)
-      : undefined;
-    message.effectiveAgentDefaults =
-      (object.effectiveAgentDefaults !== undefined && object.effectiveAgentDefaults !== null)
-        ? ProjectAgentDefaults.fromPartial(object.effectiveAgentDefaults)
-        : undefined;
-    return message;
-  },
-};
-
-function createBaseUpdateWorkspaceRequest(): UpdateWorkspaceRequest {
-  return {
-    idempotencyKey: "",
-    workspaceId: "",
-    expectedResourceVersion: "0",
-    displayName: "",
-    repositoryConnectionIds: [],
-    agentDefaults: undefined,
-    plannerIdleTimeoutSeconds: undefined,
-  };
-}
-
-export const UpdateWorkspaceRequest: MessageFns<UpdateWorkspaceRequest> = {
-  encode(message: UpdateWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.workspaceId !== "") {
-      writer.uint32(18).string(message.workspaceId);
-    }
-    if (message.expectedResourceVersion !== "0") {
-      writer.uint32(24).uint64(message.expectedResourceVersion);
-    }
-    if (message.displayName !== "") {
-      writer.uint32(34).string(message.displayName);
-    }
-    for (const v of message.repositoryConnectionIds) {
-      writer.uint32(42).string(v!);
-    }
-    if (message.agentDefaults !== undefined) {
-      ProjectAgentDefaults.encode(message.agentDefaults, writer.uint32(50).fork()).join();
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      writer.uint32(56).uint32(message.plannerIdleTimeoutSeconds);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWorkspaceRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseUpdateWorkspaceRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.workspaceId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.expectedResourceVersion = reader.uint64().toString();
-            continue;
-          }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.displayName = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.repositoryConnectionIds.push(reader.string());
-            continue;
-          }
-          case 6: {
-            if (tag !== 50) {
-              break;
-            }
-
-            message.agentDefaults = ProjectAgentDefaults.decode(reader, reader.uint32());
-            continue;
-          }
-          case 7: {
-            if (tag !== 56) {
-              break;
-            }
-
-            message.plannerIdleTimeoutSeconds = reader.uint32();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): UpdateWorkspaceRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      workspaceId: isSet(object.workspaceId)
-        ? globalThis.String(object.workspaceId)
-        : isSet(object.workspace_id)
-        ? globalThis.String(object.workspace_id)
-        : "",
-      expectedResourceVersion: isSet(object.expectedResourceVersion)
-        ? globalThis.String(object.expectedResourceVersion)
-        : isSet(object.expected_resource_version)
-        ? globalThis.String(object.expected_resource_version)
-        : "0",
-      displayName: isSet(object.displayName)
-        ? globalThis.String(object.displayName)
-        : isSet(object.display_name)
-        ? globalThis.String(object.display_name)
-        : "",
-      repositoryConnectionIds: globalThis.Array.isArray(object?.repositoryConnectionIds)
-        ? object.repositoryConnectionIds.map((e: any) => globalThis.String(e))
-        : globalThis.Array.isArray(object?.repository_connection_ids)
-        ? object.repository_connection_ids.map((e: any) => globalThis.String(e))
-        : [],
-      agentDefaults: isSet(object.agentDefaults)
-        ? ProjectAgentDefaults.fromJSON(object.agentDefaults)
-        : isSet(object.agent_defaults)
-        ? ProjectAgentDefaults.fromJSON(object.agent_defaults)
-        : undefined,
-      plannerIdleTimeoutSeconds: isSet(object.plannerIdleTimeoutSeconds)
-        ? globalThis.Number(object.plannerIdleTimeoutSeconds)
-        : isSet(object.planner_idle_timeout_seconds)
-        ? globalThis.Number(object.planner_idle_timeout_seconds)
-        : undefined,
-    };
-  },
-
-  toJSON(message: UpdateWorkspaceRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.workspaceId !== "") {
-      obj.workspaceId = message.workspaceId;
-    }
-    if (message.expectedResourceVersion !== "0") {
-      obj.expectedResourceVersion = message.expectedResourceVersion;
-    }
-    if (message.displayName !== "") {
-      obj.displayName = message.displayName;
-    }
-    if (message.repositoryConnectionIds?.length) {
-      obj.repositoryConnectionIds = message.repositoryConnectionIds;
-    }
-    if (message.agentDefaults !== undefined) {
-      obj.agentDefaults = ProjectAgentDefaults.toJSON(message.agentDefaults);
-    }
-    if (message.plannerIdleTimeoutSeconds !== undefined) {
-      obj.plannerIdleTimeoutSeconds = Math.round(message.plannerIdleTimeoutSeconds);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<UpdateWorkspaceRequest>): UpdateWorkspaceRequest {
-    return UpdateWorkspaceRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<UpdateWorkspaceRequest>): UpdateWorkspaceRequest {
-    const message = createBaseUpdateWorkspaceRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.workspaceId = object.workspaceId ?? "";
-    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
-    message.displayName = object.displayName ?? "";
-    message.repositoryConnectionIds = object.repositoryConnectionIds?.map((e) => e) || [];
-    message.agentDefaults = (object.agentDefaults !== undefined && object.agentDefaults !== null)
-      ? ProjectAgentDefaults.fromPartial(object.agentDefaults)
-      : undefined;
-    message.plannerIdleTimeoutSeconds = object.plannerIdleTimeoutSeconds ?? undefined;
-    return message;
-  },
-};
-
-function createBaseUpdateWorkspaceResponse(): UpdateWorkspaceResponse {
-  return { workspace: undefined };
-}
-
-export const UpdateWorkspaceResponse: MessageFns<UpdateWorkspaceResponse> = {
-  encode(message: UpdateWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.workspace !== undefined) {
-      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWorkspaceResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseUpdateWorkspaceResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.workspace = Workspace.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): UpdateWorkspaceResponse {
-    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
-  },
-
-  toJSON(message: UpdateWorkspaceResponse): unknown {
-    const obj: any = {};
-    if (message.workspace !== undefined) {
-      obj.workspace = Workspace.toJSON(message.workspace);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<UpdateWorkspaceResponse>): UpdateWorkspaceResponse {
-    return UpdateWorkspaceResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<UpdateWorkspaceResponse>): UpdateWorkspaceResponse {
-    const message = createBaseUpdateWorkspaceResponse();
-    message.workspace = (object.workspace !== undefined && object.workspace !== null)
-      ? Workspace.fromPartial(object.workspace)
-      : undefined;
-    return message;
-  },
-};
-
-function createBaseArchiveWorkspaceRequest(): ArchiveWorkspaceRequest {
-  return { idempotencyKey: "", workspaceId: "", expectedResourceVersion: "0" };
-}
-
-export const ArchiveWorkspaceRequest: MessageFns<ArchiveWorkspaceRequest> = {
-  encode(message: ArchiveWorkspaceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.idempotencyKey !== "") {
-      writer.uint32(10).string(message.idempotencyKey);
-    }
-    if (message.workspaceId !== "") {
-      writer.uint32(18).string(message.workspaceId);
-    }
-    if (message.expectedResourceVersion !== "0") {
-      writer.uint32(24).uint64(message.expectedResourceVersion);
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ArchiveWorkspaceRequest {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseArchiveWorkspaceRequest();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.idempotencyKey = reader.string();
-            continue;
-          }
-          case 2: {
-            if (tag !== 18) {
-              break;
-            }
-
-            message.workspaceId = reader.string();
-            continue;
-          }
-          case 3: {
-            if (tag !== 24) {
-              break;
-            }
-
-            message.expectedResourceVersion = reader.uint64().toString();
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ArchiveWorkspaceRequest {
-    return {
-      idempotencyKey: isSet(object.idempotencyKey)
-        ? globalThis.String(object.idempotencyKey)
-        : isSet(object.idempotency_key)
-        ? globalThis.String(object.idempotency_key)
-        : "",
-      workspaceId: isSet(object.workspaceId)
-        ? globalThis.String(object.workspaceId)
-        : isSet(object.workspace_id)
-        ? globalThis.String(object.workspace_id)
-        : "",
-      expectedResourceVersion: isSet(object.expectedResourceVersion)
-        ? globalThis.String(object.expectedResourceVersion)
-        : isSet(object.expected_resource_version)
-        ? globalThis.String(object.expected_resource_version)
-        : "0",
-    };
-  },
-
-  toJSON(message: ArchiveWorkspaceRequest): unknown {
-    const obj: any = {};
-    if (message.idempotencyKey !== "") {
-      obj.idempotencyKey = message.idempotencyKey;
-    }
-    if (message.workspaceId !== "") {
-      obj.workspaceId = message.workspaceId;
-    }
-    if (message.expectedResourceVersion !== "0") {
-      obj.expectedResourceVersion = message.expectedResourceVersion;
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ArchiveWorkspaceRequest>): ArchiveWorkspaceRequest {
-    return ArchiveWorkspaceRequest.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ArchiveWorkspaceRequest>): ArchiveWorkspaceRequest {
-    const message = createBaseArchiveWorkspaceRequest();
-    message.idempotencyKey = object.idempotencyKey ?? "";
-    message.workspaceId = object.workspaceId ?? "";
-    message.expectedResourceVersion = object.expectedResourceVersion ?? "0";
-    return message;
-  },
-};
-
-function createBaseArchiveWorkspaceResponse(): ArchiveWorkspaceResponse {
-  return { workspace: undefined };
-}
-
-export const ArchiveWorkspaceResponse: MessageFns<ArchiveWorkspaceResponse> = {
-  encode(message: ArchiveWorkspaceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.workspace !== undefined) {
-      Workspace.encode(message.workspace, writer.uint32(10).fork()).join();
-    }
-    return writer;
-  },
-
-  decode(input: BinaryReader | Uint8Array, length?: number): ArchiveWorkspaceResponse {
-    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
-    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
-    if (previousRecursionDepth >= 100) {
-      throw new globalThis.Error("protobuf decode recursion limit exceeded");
-    }
-    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
-    try {
-      const end = length === undefined ? reader.len : reader.pos + length;
-      const message = createBaseArchiveWorkspaceResponse();
-      while (reader.pos < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1: {
-            if (tag !== 10) {
-              break;
-            }
-
-            message.workspace = Workspace.decode(reader, reader.uint32());
-            continue;
-          }
-        }
-        if ((tag & 7) === 4 || tag === 0) {
-          break;
-        }
-        reader.skip(tag & 7);
-      }
-      return message;
-    } finally {
-      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
-    }
-  },
-
-  fromJSON(object: any): ArchiveWorkspaceResponse {
-    return { workspace: isSet(object.workspace) ? Workspace.fromJSON(object.workspace) : undefined };
-  },
-
-  toJSON(message: ArchiveWorkspaceResponse): unknown {
-    const obj: any = {};
-    if (message.workspace !== undefined) {
-      obj.workspace = Workspace.toJSON(message.workspace);
-    }
-    return obj;
-  },
-
-  create(base?: DeepPartial<ArchiveWorkspaceResponse>): ArchiveWorkspaceResponse {
-    return ArchiveWorkspaceResponse.fromPartial(base ?? {});
-  },
-  fromPartial(object: DeepPartial<ArchiveWorkspaceResponse>): ArchiveWorkspaceResponse {
-    const message = createBaseArchiveWorkspaceResponse();
-    message.workspace = (object.workspace !== undefined && object.workspace !== null)
-      ? Workspace.fromPartial(object.workspace)
-      : undefined;
-    return message;
-  },
-};
-
-/** Goal-oriented projects select resources owned by a workspace. */
+/** M1 keeps only minimal hierarchy creation on the trusted operator listener. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
   createWorkspace: {
@@ -3690,70 +817,6 @@ export const ProjectServiceService = {
       Buffer.from(CreateWorkspaceResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CreateWorkspaceResponse => CreateWorkspaceResponse.decode(value),
   },
-  listWorkspaces: {
-    path: "/ayni.orchestrator.v1.ProjectService/ListWorkspaces" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ListWorkspacesRequest): Buffer =>
-      Buffer.from(ListWorkspacesRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListWorkspacesRequest => ListWorkspacesRequest.decode(value),
-    responseSerialize: (value: ListWorkspacesResponse): Buffer =>
-      Buffer.from(ListWorkspacesResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListWorkspacesResponse => ListWorkspacesResponse.decode(value),
-  },
-  getWorkspace: {
-    path: "/ayni.orchestrator.v1.ProjectService/GetWorkspace" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: GetWorkspaceRequest): Buffer => Buffer.from(GetWorkspaceRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetWorkspaceRequest => GetWorkspaceRequest.decode(value),
-    responseSerialize: (value: GetWorkspaceResponse): Buffer =>
-      Buffer.from(GetWorkspaceResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetWorkspaceResponse => GetWorkspaceResponse.decode(value),
-  },
-  updateWorkspace: {
-    path: "/ayni.orchestrator.v1.ProjectService/UpdateWorkspace" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: UpdateWorkspaceRequest): Buffer =>
-      Buffer.from(UpdateWorkspaceRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): UpdateWorkspaceRequest => UpdateWorkspaceRequest.decode(value),
-    responseSerialize: (value: UpdateWorkspaceResponse): Buffer =>
-      Buffer.from(UpdateWorkspaceResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): UpdateWorkspaceResponse => UpdateWorkspaceResponse.decode(value),
-  },
-  archiveWorkspace: {
-    path: "/ayni.orchestrator.v1.ProjectService/ArchiveWorkspace" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ArchiveWorkspaceRequest): Buffer =>
-      Buffer.from(ArchiveWorkspaceRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ArchiveWorkspaceRequest => ArchiveWorkspaceRequest.decode(value),
-    responseSerialize: (value: ArchiveWorkspaceResponse): Buffer =>
-      Buffer.from(ArchiveWorkspaceResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ArchiveWorkspaceResponse => ArchiveWorkspaceResponse.decode(value),
-  },
-  watchProjects: {
-    path: "/ayni.orchestrator.v1.ProjectService/WatchProjects" as const,
-    requestStream: false as const,
-    responseStream: true as const,
-    requestSerialize: (value: WatchProjectsRequest): Buffer => Buffer.from(WatchProjectsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): WatchProjectsRequest => WatchProjectsRequest.decode(value),
-    responseSerialize: (value: WatchProjectsResponse): Buffer =>
-      Buffer.from(WatchProjectsResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): WatchProjectsResponse => WatchProjectsResponse.decode(value),
-  },
-  listProjectSummaries: {
-    path: "/ayni.orchestrator.v1.ProjectService/ListProjectSummaries" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ListProjectSummariesRequest): Buffer =>
-      Buffer.from(ListProjectSummariesRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListProjectSummariesRequest => ListProjectSummariesRequest.decode(value),
-    responseSerialize: (value: ListProjectSummariesResponse): Buffer =>
-      Buffer.from(ListProjectSummariesResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListProjectSummariesResponse => ListProjectSummariesResponse.decode(value),
-  },
   createProject: {
     path: "/ayni.orchestrator.v1.ProjectService/CreateProject" as const,
     requestStream: false as const,
@@ -3764,61 +827,11 @@ export const ProjectServiceService = {
       Buffer.from(CreateProjectResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CreateProjectResponse => CreateProjectResponse.decode(value),
   },
-  listProjects: {
-    path: "/ayni.orchestrator.v1.ProjectService/ListProjects" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ListProjectsRequest): Buffer => Buffer.from(ListProjectsRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ListProjectsRequest => ListProjectsRequest.decode(value),
-    responseSerialize: (value: ListProjectsResponse): Buffer =>
-      Buffer.from(ListProjectsResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ListProjectsResponse => ListProjectsResponse.decode(value),
-  },
-  getProject: {
-    path: "/ayni.orchestrator.v1.ProjectService/GetProject" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: GetProjectRequest): Buffer => Buffer.from(GetProjectRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): GetProjectRequest => GetProjectRequest.decode(value),
-    responseSerialize: (value: GetProjectResponse): Buffer => Buffer.from(GetProjectResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): GetProjectResponse => GetProjectResponse.decode(value),
-  },
-  updateProject: {
-    path: "/ayni.orchestrator.v1.ProjectService/UpdateProject" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: UpdateProjectRequest): Buffer => Buffer.from(UpdateProjectRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): UpdateProjectRequest => UpdateProjectRequest.decode(value),
-    responseSerialize: (value: UpdateProjectResponse): Buffer =>
-      Buffer.from(UpdateProjectResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): UpdateProjectResponse => UpdateProjectResponse.decode(value),
-  },
-  archiveProject: {
-    path: "/ayni.orchestrator.v1.ProjectService/ArchiveProject" as const,
-    requestStream: false as const,
-    responseStream: false as const,
-    requestSerialize: (value: ArchiveProjectRequest): Buffer =>
-      Buffer.from(ArchiveProjectRequest.encode(value).finish()),
-    requestDeserialize: (value: Buffer): ArchiveProjectRequest => ArchiveProjectRequest.decode(value),
-    responseSerialize: (value: ArchiveProjectResponse): Buffer =>
-      Buffer.from(ArchiveProjectResponse.encode(value).finish()),
-    responseDeserialize: (value: Buffer): ArchiveProjectResponse => ArchiveProjectResponse.decode(value),
-  },
 } as const;
 
 export interface ProjectServiceServer extends UntypedServiceImplementation {
   createWorkspace: handleUnaryCall<CreateWorkspaceRequest, CreateWorkspaceResponse>;
-  listWorkspaces: handleUnaryCall<ListWorkspacesRequest, ListWorkspacesResponse>;
-  getWorkspace: handleUnaryCall<GetWorkspaceRequest, GetWorkspaceResponse>;
-  updateWorkspace: handleUnaryCall<UpdateWorkspaceRequest, UpdateWorkspaceResponse>;
-  archiveWorkspace: handleUnaryCall<ArchiveWorkspaceRequest, ArchiveWorkspaceResponse>;
-  watchProjects: handleServerStreamingCall<WatchProjectsRequest, WatchProjectsResponse>;
-  listProjectSummaries: handleUnaryCall<ListProjectSummariesRequest, ListProjectSummariesResponse>;
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
-  listProjects: handleUnaryCall<ListProjectsRequest, ListProjectsResponse>;
-  getProject: handleUnaryCall<GetProjectRequest, GetProjectResponse>;
-  updateProject: handleUnaryCall<UpdateProjectRequest, UpdateProjectResponse>;
-  archiveProject: handleUnaryCall<ArchiveProjectRequest, ArchiveProjectResponse>;
 }
 
 export interface ProjectServiceClient extends Client {
@@ -3837,90 +850,6 @@ export interface ProjectServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CreateWorkspaceResponse) => void,
   ): ClientUnaryCall;
-  listWorkspaces(
-    request: ListWorkspacesRequest,
-    callback: (error: ServiceError | null, response: ListWorkspacesResponse) => void,
-  ): ClientUnaryCall;
-  listWorkspaces(
-    request: ListWorkspacesRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListWorkspacesResponse) => void,
-  ): ClientUnaryCall;
-  listWorkspaces(
-    request: ListWorkspacesRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListWorkspacesResponse) => void,
-  ): ClientUnaryCall;
-  getWorkspace(
-    request: GetWorkspaceRequest,
-    callback: (error: ServiceError | null, response: GetWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  getWorkspace(
-    request: GetWorkspaceRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  getWorkspace(
-    request: GetWorkspaceRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  updateWorkspace(
-    request: UpdateWorkspaceRequest,
-    callback: (error: ServiceError | null, response: UpdateWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  updateWorkspace(
-    request: UpdateWorkspaceRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: UpdateWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  updateWorkspace(
-    request: UpdateWorkspaceRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: UpdateWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  archiveWorkspace(
-    request: ArchiveWorkspaceRequest,
-    callback: (error: ServiceError | null, response: ArchiveWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  archiveWorkspace(
-    request: ArchiveWorkspaceRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ArchiveWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  archiveWorkspace(
-    request: ArchiveWorkspaceRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ArchiveWorkspaceResponse) => void,
-  ): ClientUnaryCall;
-  watchProjects(
-    request: WatchProjectsRequest,
-    options?: Partial<CallOptions>,
-  ): ClientReadableStream<WatchProjectsResponse>;
-  watchProjects(
-    request: WatchProjectsRequest,
-    metadata?: Metadata,
-    options?: Partial<CallOptions>,
-  ): ClientReadableStream<WatchProjectsResponse>;
-  listProjectSummaries(
-    request: ListProjectSummariesRequest,
-    callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,
-  ): ClientUnaryCall;
-  listProjectSummaries(
-    request: ListProjectSummariesRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,
-  ): ClientUnaryCall;
-  listProjectSummaries(
-    request: ListProjectSummariesRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListProjectSummariesResponse) => void,
-  ): ClientUnaryCall;
   createProject(
     request: CreateProjectRequest,
     callback: (error: ServiceError | null, response: CreateProjectResponse) => void,
@@ -3935,66 +864,6 @@ export interface ProjectServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CreateProjectResponse) => void,
-  ): ClientUnaryCall;
-  listProjects(
-    request: ListProjectsRequest,
-    callback: (error: ServiceError | null, response: ListProjectsResponse) => void,
-  ): ClientUnaryCall;
-  listProjects(
-    request: ListProjectsRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ListProjectsResponse) => void,
-  ): ClientUnaryCall;
-  listProjects(
-    request: ListProjectsRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ListProjectsResponse) => void,
-  ): ClientUnaryCall;
-  getProject(
-    request: GetProjectRequest,
-    callback: (error: ServiceError | null, response: GetProjectResponse) => void,
-  ): ClientUnaryCall;
-  getProject(
-    request: GetProjectRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: GetProjectResponse) => void,
-  ): ClientUnaryCall;
-  getProject(
-    request: GetProjectRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: GetProjectResponse) => void,
-  ): ClientUnaryCall;
-  updateProject(
-    request: UpdateProjectRequest,
-    callback: (error: ServiceError | null, response: UpdateProjectResponse) => void,
-  ): ClientUnaryCall;
-  updateProject(
-    request: UpdateProjectRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: UpdateProjectResponse) => void,
-  ): ClientUnaryCall;
-  updateProject(
-    request: UpdateProjectRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: UpdateProjectResponse) => void,
-  ): ClientUnaryCall;
-  archiveProject(
-    request: ArchiveProjectRequest,
-    callback: (error: ServiceError | null, response: ArchiveProjectResponse) => void,
-  ): ClientUnaryCall;
-  archiveProject(
-    request: ArchiveProjectRequest,
-    metadata: Metadata,
-    callback: (error: ServiceError | null, response: ArchiveProjectResponse) => void,
-  ): ClientUnaryCall;
-  archiveProject(
-    request: ArchiveProjectRequest,
-    metadata: Metadata,
-    options: Partial<CallOptions>,
-    callback: (error: ServiceError | null, response: ArchiveProjectResponse) => void,
   ): ClientUnaryCall;
 }
 

@@ -1,6 +1,6 @@
 # Control-plane event and flow inventory
 
-> Historical research from 11 October 2026. Start with the [current event platform](../../architecture/event-platform.md) for implemented behavior. The proposal and source inventory below preserve provenance.
+> Historical research from 11 October 2026. Start with the [current event platform](index.md) for implemented behavior. The proposal and source inventory below preserve provenance.
 
 Source snapshot: 11 October 2026, orchestrator commit `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`.
 
@@ -8,7 +8,7 @@ The [architecture assessment](control-plane-events.md) develops the proposed eve
 
 This inventory retains its audited source snapshot. Current operator lifecycle
 facts, watches and projection recovery are documented in
-[operator lifecycle facts and resource streams](../../reference/operator-projections.md).
+[operator lifecycle facts and resource streams](index.md).
 
 The current control plane combines persisted commands, Kubernetes observations, worker files, provider responses and resource-change streams. These signals have different authority. Application outcomes require validated evidence; infrastructure observations establish execution status and inform recovery.
 
@@ -157,7 +157,7 @@ Sources: [Runtime preparation, failure counting, publication and cleanup](https:
 
 The worker returns normally after writing many failed application outcomes. A Kubernetes-successful worker can therefore report `Failed`, `NoChanges`, `InputRequired` or failed publication. Conversely, a failed Job can still have a valid retained result.
 
-New event-mode coding generations accept authenticated retained terminal reports while the Job is running. Legacy generations retain completion-triggered file collection. Execution stop remains a separate replacement gate; see [coding lifecycle reporting](../../reference/coding-events.md).
+New event-mode coding generations accept authenticated retained terminal reports while the Job is running. Legacy generations retain completion-triggered file collection. Execution stop remains a separate replacement gate; see [coding lifecycle reporting](index.md).
 
 Sources: [Task admission and frozen identities](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/crates/application/src/tasks.rs#L150); [Coding result collection, recovery and cleanup](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/coordinators/reconciliation/coding.rs#L25); [Decisions from task state and Kubernetes execution state](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/crates/application/src/reconciliation.rs#L18); [Worker validation, state transitions and publication retry](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/servers/control-plane/src/adapters/sqlite/coding_reconciliation.rs#L165); [Worker execution and independent result outcomes](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/workers/runtime-worker/src/coding/mod.rs#L27); [Worker progress and result contracts](https://github.com/ayni-oss/orchestrator/blob/1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac/backend/libs/runtime/contracts/src/coding.rs#L41).
 

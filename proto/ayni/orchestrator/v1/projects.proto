@@ -2,210 +2,63 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
-import "ayni/orchestrator/v1/agent_profiles.proto";
-import "ayni/orchestrator/v1/common.proto";
-import "ayni/orchestrator/v1/development_tasks.proto";
-import "ayni/orchestrator/v1/repositories.proto";
+import "ayni/orchestrator/v1/workflow.proto";
 import "google/protobuf/timestamp.proto";
 
-// Goal-oriented projects select resources owned by a workspace.
+// M1 keeps only minimal hierarchy creation on the trusted operator listener.
 service ProjectService {
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
-  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
-  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse);
-  rpc UpdateWorkspace(UpdateWorkspaceRequest) returns (UpdateWorkspaceResponse);
-  rpc ArchiveWorkspace(ArchiveWorkspaceRequest) returns (ArchiveWorkspaceResponse);
-  rpc WatchProjects(WatchProjectsRequest) returns (stream WatchProjectsResponse);
-  rpc ListProjectSummaries(ListProjectSummariesRequest) returns (ListProjectSummariesResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
-  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
-  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
-  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse);
-  rpc ArchiveProject(ArchiveProjectRequest) returns (ArchiveProjectResponse);
 }
 
-// Lifecycle is separate from the readiness of the project's execution profile.
-enum ProjectState {
-  PROJECT_STATE_UNSPECIFIED = 0;
-  PROJECT_STATE_ACTIVE = 1;
-  PROJECT_STATE_ARCHIVED = 2;
-}
+message Workspace {
+  reserved 3, 4, 8, 9;
+  reserved "state", "repository_connection_ids", "agent_defaults", "planner_idle_timeout_seconds";
 
-message Project {
   string id = 1;
   string display_name = 2;
-  ProjectState state = 3;
-  // Current members; repositories may be shared by multiple projects.
-  repeated string repository_connection_ids = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
   uint64 resource_version = 7;
-  ProjectAgentDefaults agent_defaults = 8;
+}
+
+message CreateWorkspaceRequest {
+  reserved 3 to 5;
+  reserved "repository_connection_ids", "agent_defaults", "planner_idle_timeout_seconds";
+
+  string idempotency_key = 1;
+  string display_name = 2;
+}
+
+message CreateWorkspaceResponse {
+  Workspace workspace = 1;
+  CommandReceipt receipt = 2;
+}
+
+message Project {
+  reserved 3, 4, 8;
+  reserved "state", "repository_connection_ids", "agent_defaults";
+
+  string id = 1;
+  string display_name = 2;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  uint64 resource_version = 7;
   string workspace_id = 9;
   string goal = 10;
 }
 
 message CreateProjectRequest {
+  reserved 3, 4;
+  reserved "repository_connection_id", "repository_connection_ids";
+
   string idempotency_key = 1;
-  // A nonblank display name of at most 256 UTF-8 bytes, without control characters.
   string display_name = 2;
-  // Legacy single-member creation; cannot be combined with the repeated field.
-  string repository_connection_id = 3;
-  // Between 1 and 100 unique repository connections.
-  repeated string repository_connection_ids = 4;
   string workspace_id = 5;
   string goal = 6;
 }
+
 message CreateProjectResponse {
   Project project = 1;
-}
-message ListProjectsRequest {
-  PageRequest page = 1;
-  optional ProjectState state = 2;
-}
-message ListProjectsResponse {
-  repeated Project projects = 1;
-  PageResponse page = 2;
-}
-message GetProjectRequest {
-  string project_id = 1;
-}
-message GetProjectResponse {
-  Project project = 1;
-  // Read projection only; raw overrides remain on the resource.
-  ProjectAgentDefaults effective_agent_defaults = 2;
-}
-message UpdateProjectRequest {
-  string idempotency_key = 1;
-  string project_id = 2;
-  uint64 expected_resource_version = 3;
-  string display_name = 4;
-  // A nonempty list replaces current membership; empty preserves membership.
-  repeated string repository_connection_ids = 5;
-  // Omitted preserves defaults; an empty message clears them.
-  ProjectAgentDefaults agent_defaults = 6;
-  optional string goal = 7;
-}
-message UpdateProjectResponse {
-  Project project = 1;
-}
-message ArchiveProjectRequest {
-  string idempotency_key = 1;
-  string project_id = 2;
-  uint64 expected_resource_version = 3;
-}
-message ArchiveProjectResponse {
-  Project project = 1;
-}
-
-// A bounded, complete read projection retained with its pagination snapshot.
-// Unavailable storage fails the RPC rather than returning empty successful data.
-message ProjectSummary {
-  Project project = 1;
-  repeated string repository_names = 2;
-  RuntimeReadinessSummary runtime = 3;
-  optional ProjectTaskSummary latest_task = 4;
-  bool tasks_complete = 5;
-}
-message ProjectTaskSummary {
-  string id = 1;
-  DevelopmentTaskState state = 2;
-  string request = 3;
-  google.protobuf.Timestamp created_at = 4;
-}
-message ListProjectSummariesRequest {
-  PageRequest page = 1;
-}
-message ListProjectSummariesResponse {
-  repeated ProjectSummary summaries = 1;
-  PageResponse page = 2;
-}
-
-// Omit after_cursor for a current snapshot followed by durable replay. Expired
-// cursors return WATCH_CURSOR_EXPIRED; discard the cursor and obtain a snapshot.
-message WatchProjectsRequest {
-  optional uint64 after_cursor = 1;
-}
-message WatchProjectsResponse {
-  uint64 cursor = 1;
-  Project project = 2;
-  bool deleted = 3;
-  // Marks the snapshot boundary, including an empty snapshot.
-  bool snapshot_complete = 4;
-}
-
-// Separate connection and model selections for research and implementation.
-message ProjectAgentDefaults {
-  string project_connection_id = 1;
-  string project_model = 2;
-  string coding_connection_id = 3;
-  string coding_model = 4;
-  AgentProfileSettings planner_profile = 5;
-  AgentProfileSettings worker_profile = 6;
-}
-
-// Workspaces own shared repository access and agent defaults. Repository runtimes
-// remain attached to repository connections and are never copied by membership.
-enum WorkspaceState {
-  WORKSPACE_STATE_UNSPECIFIED = 0;
-  WORKSPACE_STATE_ACTIVE = 1;
-  WORKSPACE_STATE_ARCHIVED = 2;
-}
-message Workspace {
-  string id = 1;
-  string display_name = 2;
-  WorkspaceState state = 3;
-  repeated string repository_connection_ids = 4;
-  google.protobuf.Timestamp created_at = 5;
-  google.protobuf.Timestamp updated_at = 6;
-  uint64 resource_version = 7;
-  ProjectAgentDefaults agent_defaults = 8;
-  uint32 planner_idle_timeout_seconds = 9;
-}
-message CreateWorkspaceRequest {
-  string idempotency_key = 1;
-  string display_name = 2;
-  repeated string repository_connection_ids = 3;
-  ProjectAgentDefaults agent_defaults = 4;
-  optional uint32 planner_idle_timeout_seconds = 5;
-}
-message CreateWorkspaceResponse {
-  Workspace workspace = 1;
-}
-message ListWorkspacesRequest {
-  PageRequest page = 1;
-  optional WorkspaceState state = 2;
-}
-message ListWorkspacesResponse {
-  repeated Workspace workspaces = 1;
-  PageResponse page = 2;
-}
-message GetWorkspaceRequest {
-  string workspace_id = 1;
-}
-message GetWorkspaceResponse {
-  Workspace workspace = 1;
-  // Read projection only; raw overrides remain on the resource.
-  ProjectAgentDefaults effective_agent_defaults = 2;
-}
-message UpdateWorkspaceRequest {
-  string idempotency_key = 1;
-  string workspace_id = 2;
-  uint64 expected_resource_version = 3;
-  string display_name = 4;
-  // Empty preserves membership, matching the compatibility Project API.
-  repeated string repository_connection_ids = 5;
-  ProjectAgentDefaults agent_defaults = 6;
-  optional uint32 planner_idle_timeout_seconds = 7;
-}
-message UpdateWorkspaceResponse {
-  Workspace workspace = 1;
-}
-message ArchiveWorkspaceRequest {
-  string idempotency_key = 1;
-  string workspace_id = 2;
-  uint64 expected_resource_version = 3;
-}
-message ArchiveWorkspaceResponse {
-  Workspace workspace = 1;
+  CommandReceipt receipt = 2;
 }

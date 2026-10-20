@@ -2,11 +2,5 @@ dependencies:
 - name: ayni-orchestrator
   repository: file://../../../deploy/charts/ayni-orchestrator
   version: 0.1.0
-- name: prometheus
-  repository: https://prometheus-community.github.io/helm-charts
-  version: 27.38.0
-- name: grafana
-  repository: https://grafana.github.io/helm-charts
-  version: 10.0.0
-digest: sha256:22e0ce855cf5576845c2933d4dda59d7b1655870a4ce31d0e543609a5977e9d7
-generated: "2026-10-12T11:44:02.227311+02:00"
+digest: sha256:e12baff28ebd724b5092c3fdddf05a627befe02fd08cf794a050065d886349af
+generated: "2026-10-20T15:56:34.374762+02:00"

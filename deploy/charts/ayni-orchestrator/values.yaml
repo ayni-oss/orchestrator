@@ -1,71 +1,20 @@
 enabled: true
 
-# Opt-in, credential-free runtime source policy. Secret values never belong here.
-runtime:
-  enabled: false
-  workerImage: ""
-  outputClaim: runtime-outputs
-  outputSize: 4Gi
-  modelSecret: openai-api
-  # Re-verify ready runtimes hourly, with per-profile scheduling jitter.
-  intervalSeconds: 3600
-  requestTimeoutSeconds: 30
-  codingTurns: 24
-  qualityRepairLimit: 3
-  concurrency: 4
-  projectAgentModelCalls: 24
-  projectAgentDeadlineSeconds: 600
-  # Docker Desktop-only architecture emulation is enabled by the local chart.
-  # Production releases retain strict runtime platform scheduling.
-  allowEmulation: false
-  engineMode: external-isolated
-  profiles: {}
-  # Deployment-wide policy for connected managed repositories; no repository map.
-  # The local chart supplies this policy automatically.
-  managedRuntime: null
-  # Authority applies only to new preparation generations. Keep reporting during drain.
-  verificationMode: shadow
-  # Authenticated reporting transport; null retains the legacy reader.
-  reporting: null
-  serviceAccounts:
-    create: true
-    imagePullSecrets: []
-
-# Opt-in trusted local JetStream publisher. Production authentication is separate.
-outbox:
-  natsUrl: ""
-  localDevelopment: false
-  consumerEnabled: false
-
-# Optional verification traces. Empty endpoint keeps JSON logs only.
-telemetry:
-  tracesEndpoint: ""
-  # The local umbrella chart supplies an optional endpoint ConfigMap.
-  endpointConfigMap: ""
-
 images:
   controlPlane: local/ayni-orchestrator-control-plane:replace-me
-  web: local/ayni-orchestrator-web:replace-me
   pullPolicy: IfNotPresent
 
-# Local development only. The Docker Desktop umbrella chart enables this through
-# its ignored hot-reload overlay; reusable installations retain immutable images.
-development:
-  hotReload:
-    enabled: false
-
-connections:
-  githubAppSecretName: ""
-  # Null inherits runtime.modelSecret for compatibility; empty leaves setup to the UI.
-  openaiSecretName: null
-  testImage: ""
-  # Explicit safe metadata only; referenced Secrets remain administrator-owned.
-  adminRegistries: []
-  # Explicit signing Secret references, imported as read-only certificates.
-  adminCertificates: []
+workflowPostgres:
+  # These immutable Secrets are administrator-owned. Each must contain a `url`
+  # key with a PostgreSQL connection string for its distinct database role.
+  migratorSecretName: workflow-postgres-migrator
+  runtimeSecretName: workflow-postgres-runtime
+  runtimeRoleName: ayni_runtime
 
 controlPlane:
-  maxAttempts: 3
+  replicaCount: 1
+  httpPort: 8080
+  trustedGrpcPort: 50051
   resources:
     requests:
       cpu: 100m
@@ -73,20 +22,3 @@ controlPlane:
     limits:
       cpu: 500m
       memory: 256Mi
-
-web:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
-
-persistence:
-  controlPlaneState:
-    size: 1Gi
-
-customClients:
-  enabled: false
-  secretName: custom-client-grpc-access

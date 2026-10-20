@@ -1,223 +1,26 @@
 ayni-orchestrator:
   enabled: true
-  outbox:
-    natsUrl: nats://jetstream:4222
-    localDevelopment: true
-    consumerEnabled: true
-  telemetry:
-    endpointConfigMap: telemetry-config
-  runtime:
-    # Native Apple Silicon validation; override explicitly on Intel hosts.
-    allowEmulation: false
-    # Explicit development-only exception; production defaults stay non-privileged.
-    engineMode: local-development
-    managedRuntime:
-      build:
-        engine:
-          image: docker.io/library/docker@sha256:a56b3bdde89315ed2cc0e4906e582b5033d93bf20d9cb9510c2cdd4e7f7690b1
-          security_mode: local-development
-        service_account: runtime-builder
-      platform: linux/arm64
-      service_account: runtime-coding
-      pull_secret: runtime-pull
   images:
     controlPlane: local/ayni-orchestrator-control-plane:replace-me
-    web: local/ayni-orchestrator-web:replace-me
-    pullPolicy: Never
-observability:
-  enabled: true
-  collectorImage: otel/opentelemetry-collector:0.162.0@sha256:310a800ad69ee430e7c541796852a242c9c7db97aaad4daa5ccf843c525fbdb2
-  # Retains the HTTP search API required by pinned Grafana 12.1.1.
-  jaegerImage: cr.jaegertracing.io/jaegertracing/jaeger:2.20.0@sha256:46a886260e04002d8f45e213fc39063fa11a50446048fdaa64786fc0840cb9f8
-
-prometheus:
-  rbac:
-    create: false
-  serviceAccounts:
-    server:
-      create: false
-      name: prometheus
-  commonMetaLabels:
-    orchestrator.ayni.dev/stack: observability
-  configmapReload:
-    prometheus:
-      enabled: true
-      image:
-        repository: quay.io/prometheus-operator/prometheus-config-reloader
-        tag: v0.85.0
-        digest: sha256:ebb560bcb6bd3ab728a7ab61d77d22a001cc0c7a67f0531e7f92e20ce004de38
-        pullPolicy: IfNotPresent
-      resources:
-        requests:
-          cpu: 10m
-          memory: 16Mi
-        limits:
-          cpu: 50m
-          memory: 32Mi
-      containerSecurityContext:
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: [ALL]
-        readOnlyRootFilesystem: true
-  alertmanager:
-    enabled: false
-  kube-state-metrics:
-    enabled: false
-  prometheus-node-exporter:
-    enabled: false
-  prometheus-pushgateway:
-    enabled: false
-  server:
-    fullnameOverride: prometheus
-    configMapOverrideName: prometheus-config
-    podAnnotations:
-      kubectl.kubernetes.io/default-container: prometheus-server
-    image:
-      repository: prom/prometheus
-      tag: v3.5.0
-      digest: sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
-      pullPolicy: IfNotPresent
-    persistentVolume:
-      enabled: false
-    emptyDir:
-      sizeLimit: 1Gi
-    service:
-      type: ClusterIP
-      servicePort: 9090
-    retention: 48h
-    retentionSize: 900MB
-    resources:
-      requests:
-        cpu: 50m
-        memory: 96Mi
-      limits:
-        cpu: 300m
-        memory: 384Mi
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 65534
-      runAsGroup: 65534
-      fsGroup: 65534
-      seccompProfile:
-        type: RuntimeDefault
-    containerSecurityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop: [ALL]
-      readOnlyRootFilesystem: true
-
-grafana:
-  fullnameOverride: grafana
-  rbac:
-    create: false
-  serviceAccount:
-    create: false
-    automountServiceAccountToken: false
-  automountServiceAccountToken: false
-  testFramework:
-    enabled: false
-  image:
-    registry: docker.io
-    repository: grafana/grafana
-    tag: 12.1.1
-    sha: a1701c2180249361737a99a01bc770db39381640e4d631825d38ff4535efa47d
     pullPolicy: IfNotPresent
-  service:
-    type: ClusterIP
-    port: 3000
-    targetPort: 3000
-  persistence:
-    enabled: false
-    inMemory:
-      enabled: true
-      sizeLimit: 64Mi
-  initChownData:
-    enabled: false
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 472
-    runAsGroup: 472
-    fsGroup: 472
-    seccompProfile:
-      type: RuntimeDefault
-  containerSecurityContext:
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: [ALL]
-    readOnlyRootFilesystem: true
-  extraContainerVolumes:
-    - name: scratch
-      emptyDir:
-        sizeLimit: 64Mi
-  extraVolumeMounts:
-    - name: scratch
-      mountPath: /tmp
-      readOnly: false
+  workflowPostgres:
+    migratorSecretName: workflow-postgres-migrator
+    runtimeSecretName: workflow-postgres-runtime
+    runtimeRoleName: ayni_runtime
+
+postgres:
+  enabled: true
+  image: postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3
+  serviceName: workflow-postgres
+  storage: 4Gi
+  secrets:
+    admin: workflow-postgres-admin
+    migrator: workflow-postgres-migrator
+    runtime: workflow-postgres-runtime
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
-  env:
-    # Bound Go scheduler parallelism within the local sub-core CPU quota.
-    GOMAXPROCS: "1"
-    GF_ANALYTICS_REPORTING_ENABLED: "false"
-    GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
-    GF_AUTH_ANONYMOUS_ENABLED: "true"
-    GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-    GF_AUTH_DISABLE_LOGIN_FORM: "true"
-    GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
-  datasources:
-    datasources.yaml:
-      apiVersion: 1
-      datasources:
-        - name: Prometheus
-          uid: prometheus
-          type: prometheus
-          access: proxy
-          url: http://prometheus:9090
-          isDefault: true
-          editable: false
-        - name: Jaeger
-          uid: jaeger
-          type: jaeger
-          access: proxy
-          url: http://jaeger:16686
-          editable: false
-  dashboardProviders:
-    dashboardproviders.yaml:
-      apiVersion: 1
-      providers:
-        - name: Ayni Orchestrator
-          orgId: 1
-          folder: Ayni Orchestrator
-          type: file
-          disableDeletion: true
-          editable: false
-          updateIntervalSeconds: 30
-          options:
-            path: /var/lib/grafana/dashboards/default
-  dashboardsConfigMaps:
-    default: grafana-dashboard
-  extraLabels:
-    app.kubernetes.io/part-of: ayni-orchestrator-observability
-    orchestrator.ayni.dev/stack: observability
-
-# Local transport only; application acceptance does not depend on this broker.
-jetstream:
-  enabled: true
-  serverImage: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
-  toolingImage: natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295
-  exporterImage: natsio/prometheus-nats-exporter:0.20.2@sha256:c623b608e148e31e1c1c878673a197f1828e58ce90de4f01d22f1baa84c8fee9
-  storageClassName: ""
-  # 2 GiB claim, 1 GiB broker budget, 512 MiB lifecycle budget leave overhead.
-  storageSize: 2Gi
-  maxFileBytes: 1073741824
-  lifecycle:
-    maxBytes: 536870912
-    maxMessages: 100000
-    maxAgeSeconds: 604800
-    duplicateWindowSeconds: 120
-    maxConsumers: 8
+      cpu: "1"
+      memory: 1Gi

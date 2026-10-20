@@ -1,20 +1,24 @@
-# Protocol release state
+# Private protocol releases
 
-The active private baseline is `repository-builders-v4` (see `BASELINE`).
+The active private baseline is `workflow-m1-private-v1` (see `BASELINE`).
 
-This intentional cutover removes the deployment-wide Ayni settings, installation,
-release picker and service-test RPCs and messages. Repository connections expose
-persisted onboarding status, reason and inspected revision. AnalyzeRepository
-requests analysis/retry independently from provider access and runtime replacement.
-Upgrade the server and regenerated clients together.
+This intentional clean reset exposes only the PostgreSQL-authoritative M1 Slice 1
+workflow contract:
 
-The authorized comparison reset applies only from `managed-images-v3` to
-`repository-builders-v4`. Subsequent changes compare against the established
-baseline with Buf breaking checks. Another reset requires an explicitly approved
-breaking contract change. Private bundles identify source revisions and checksums;
-creating descriptors does not publish endpoints or SDKs.
+- `ProjectService.CreateWorkspace` and `CreateProject`;
+- `ProjectConversationService.CreateConversation`, `SendMessage`,
+  `GetConversationSnapshot`, `ListConversationHistory`, and
+  `WatchConversation`;
+- the canonical workflow projection, receipt, history, and bounded error types.
 
-The prior baseline removed repository environment workflow installation resources.
-Earlier worker-owned task contracts, frozen execution limits and publication retry
-remain. Persisted history and retained task work survive migration; see
-[operations](../docs/technical/operations/operations.md).
+`WatchConversation` is reserved in the canonical contract and returns
+`UNIMPLEMENTED` until runtime Slice 3. The service is registered only on the
+trusted pod-loopback listener. Removed repository, runtime-profile, provider,
+connection, certificate, development-task, browser/BFF, and custom-client
+contracts are not compiled, reflected, or generated.
+
+The reset replaces `repository-builders-v4`; it does not preserve wire
+compatibility or authorize dual registration. Server and generated bindings must
+move together. After this reset, unchanged baseline markers use normal Buf
+breaking comparison. Any later reset requires a separately approved breaking
+contract decision.

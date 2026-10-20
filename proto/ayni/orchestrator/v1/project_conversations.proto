@@ -1,247 +1,79 @@
 syntax = "proto3";
+
 package ayni.orchestrator.v1;
 
-import "ayni/orchestrator/v1/agent_profiles.proto";
-import "ayni/orchestrator/v1/development_tasks.proto";
-import "google/protobuf/timestamp.proto";
+import "ayni/orchestrator/v1/workflow.proto";
 
-// Trusted operator conversation API; not available on the custom-client listener.
+// M1 exposes only the durable conversation path on the trusted operator listener.
 service ProjectConversationService {
-  rpc UpdateProjectConversationSettings(UpdateProjectConversationSettingsRequest) returns (UpdateProjectConversationSettingsResponse);
-  rpc CancelProjectAgentRun(CancelProjectAgentRunRequest) returns (CancelProjectAgentRunResponse);
-  rpc GetProjectConversationContext(GetProjectConversationContextRequest) returns (GetProjectConversationContextResponse);
-  rpc ListProjectConversationHistory(ListProjectConversationHistoryRequest) returns (ListProjectConversationHistoryResponse);
-  rpc WatchProjectConversation(WatchProjectConversationRequest) returns (stream WatchProjectConversationResponse);
-  rpc CreateProjectConversation(CreateProjectConversationRequest) returns (CreateProjectConversationResponse);
-  rpc ListProjectConversations(ListProjectConversationsRequest) returns (ListProjectConversationsResponse);
-  rpc GetProjectConversation(GetProjectConversationRequest) returns (GetProjectConversationResponse);
-  rpc SendProjectMessage(SendProjectMessageRequest) returns (SendProjectMessageResponse);
-  rpc DecideProjectPlan(DecideProjectPlanRequest) returns (DecideProjectPlanResponse);
-  rpc DecideProjectProposal(DecideProjectProposalRequest) returns (DecideProjectProposalResponse);
+  rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc GetConversationSnapshot(GetConversationSnapshotRequest) returns (GetConversationSnapshotResponse);
+  rpc ListConversationHistory(ListConversationHistoryRequest) returns (ListConversationHistoryResponse);
+  rpc WatchConversation(WatchConversationRequest) returns (stream WatchConversationResponse);
 }
-message ProjectConversation {
-  string id = 1;
+
+message CreateConversationRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string title = 4;
+}
+
+message CreateConversationResponse {
+  Conversation conversation = 1;
+  CommandReceipt receipt = 2;
+}
+
+message SendMessageRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  string content = 5;
+}
+
+message SendMessageResponse {
+  CommandReceipt receipt = 1;
+}
+
+message GetConversationSnapshotRequest {
+  string workspace_id = 1;
   string project_id = 2;
-  string title = 3;
-  repeated string repository_connection_ids = 4;
-  repeated ProjectMessage messages = 5;
-  repeated ProjectAgentRun runs = 6;
-  repeated ProjectTaskProposal proposals = 7;
-  uint64 update_cursor = 8;
-  google.protobuf.Timestamp created_at = 9;
-  ProjectPlan plan = 10;
-  optional uint32 planner_idle_timeout_seconds = 11;
-  uint32 effective_planner_idle_timeout_seconds = 12;
-  ProjectPlannerSession planner_session = 13;
-  // Latest accepted state per execution attempt; older evidence stays in history.
-  repeated ProjectWorkerUpdate worker_updates = 14;
+  string conversation_id = 3;
 }
-message ProjectMessage {
-  string id = 1;
-  string role = 2;
-  string content = 3;
-  google.protobuf.Timestamp created_at = 4;
-  string run_id = 5;
+
+message GetConversationSnapshotResponse {
+  ConversationSnapshot snapshot = 1;
 }
-message ProjectAgentRun {
-  string id = 1;
-  string state = 2;
-  string model = 3;
-  string connection_id = 4;
-  string credential_revision = 5;
-  uint32 model_calls = 6;
-  string failure = 7;
-  google.protobuf.Timestamp created_at = 8;
-  FrozenProviderCredentials provider_credentials = 9;
-  string purpose = 10;
-  ProviderTokenUsage token_usage = 11;
-  string session_id = 12;
-  uint64 session_generation = 13;
-  uint64 session_turn_sequence = 14;
-  google.protobuf.Timestamp session_deadline_at = 15;
-  bool session_managed = 16;
-  FrozenAgentProfile planner_profile = 17;
-  FrozenAgentProfile worker_profile = 18;
-}
-message ProjectTaskProposal {
-  string id = 1;
-  string run_id = 2;
-  string state = 3;
-  DevelopmentTaskRequest request = 4;
-  string task_id = 5;
-  string attempt_id = 6;
-  string failure = 7;
-  // create_task, cancel_task, retry_task, retry_publication.
-  string action = 8;
-  string target_task_id = 9;
-  FrozenRuntime researched_runtime = 10;
-}
-message CreateProjectConversationRequest {
-  string idempotency_key = 1;
+
+message ListConversationHistoryRequest {
+  string workspace_id = 1;
   string project_id = 2;
-  string title = 3;
-  repeated string repository_connection_ids = 4;
-  optional uint32 planner_idle_timeout_seconds = 5;
-}
-message WatchProjectConversationResponse {
-  ProjectConversation conversation = 1;
-}
-message CreateProjectConversationResponse {
-  ProjectConversation conversation = 1;
-}
-message GetProjectConversationResponse {
-  ProjectConversation conversation = 1;
-}
-message SendProjectMessageResponse {
-  ProjectConversation conversation = 1;
-}
-message DecideProjectProposalResponse {
-  ProjectConversation conversation = 1;
-}
-message ListProjectConversationsRequest {
-  string project_id = 1;
-}
-message ListProjectConversationsResponse {
-  repeated ProjectConversation conversations = 1;
-}
-message GetProjectConversationRequest {
-  string conversation_id = 1;
-}
-message SendProjectMessageRequest {
-  string idempotency_key = 1;
-  string conversation_id = 2;
-  string content = 3;
-}
-message DecideProjectProposalRequest {
-  string idempotency_key = 1;
-  string conversation_id = 2;
-  string proposal_id = 3;
-  // approve, reject, revise. Revisions are supplied as a new user message.
-  string decision = 4;
-}
-
-message WatchProjectConversationRequest {
-  string conversation_id = 1;
-  uint64 after_cursor = 2;
-}
-
-// Stable identity with append-only research snapshots. Approval admits the entire
-// reviewed version; lifecycle actions remain separate proposal confirmations.
-message ProjectPlan {
-  string id = 1;
-  repeated ProjectPlanVersion versions = 2;
-}
-message ProjectPlanVersion {
-  uint64 version = 1;
-  string run_id = 2;
-  string state = 3;
-  string findings = 4;
-  string scope = 5;
-  repeated string acceptance_criteria = 6;
-  repeated string proposal_ids = 7;
-  // Descriptive research only; this grants no environment change authority.
-  string dependency_environment_impact = 8;
-  google.protobuf.Timestamp created_at = 9;
-  string failure = 10;
-}
-message DecideProjectPlanRequest {
-  string idempotency_key = 1;
-  string conversation_id = 2;
-  string plan_id = 3;
-  uint64 version = 4;
-  // approve, reject, revise. Revisions are supplied as a new user message.
-  string decision = 5;
-}
-message DecideProjectPlanResponse {
-  ProjectConversation conversation = 1;
-}
-
-// Archive records are immutable safe projections, scoped to one conversation.
-message ProjectContextRecord {
-  uint64 sequence = 1;
-  string id = 2;
-  string kind = 3;
-  string source_id = 4;
-  string repository_id = 5;
-  string role = 6;
-  string content = 7;
-}
-message ProjectConversationSummary {
-  uint64 version = 1;
-  uint64 source_watermark = 2;
-  string content = 3;
-  repeated string source_record_ids = 4;
-}
-message GetProjectConversationContextRequest {
-  string project_id = 1;
-  string conversation_id = 2;
-}
-message GetProjectConversationContextResponse {
-  ProjectConversationSummary summary = 1;
-  uint64 source_watermark = 2;
-  uint64 archive_record_count = 3;
-  uint64 capacity_record_limit = 4;
-  uint32 recent_message_limit = 5;
-}
-message ListProjectConversationHistoryRequest {
-  string project_id = 1;
-  string conversation_id = 2;
-  uint64 before_sequence = 3;
-  uint64 snapshot_sequence = 4;
-  string query = 5;
+  string conversation_id = 3;
+  string snapshot_id = 4;
+  uint64 before_sequence = 5;
   uint32 limit = 6;
 }
-message ListProjectConversationHistoryResponse {
-  repeated ProjectContextRecord records = 1;
-  uint64 snapshot_sequence = 2;
+
+message ListConversationHistoryResponse {
+  repeated ConversationHistoryRecord records = 1;
+  string snapshot_id = 2;
   uint64 next_before_sequence = 3;
   bool has_more = 4;
-  uint64 archive_record_count = 5;
 }
 
-// Logical lifecycle only: credential and Kubernetes identities remain private.
-message ProjectPlannerSession {
-  string session_id = 1;
-  uint64 generation = 2;
-  string state = 3;
-  google.protobuf.Timestamp last_activity_at = 4;
-  google.protobuf.Timestamp idle_expires_at = 5;
-  string active_run_id = 6;
-}
-message UpdateProjectConversationSettingsRequest {
-  string idempotency_key = 1;
+message WatchConversationRequest {
+  string workspace_id = 1;
   string project_id = 2;
   string conversation_id = 3;
-  uint64 expected_update_cursor = 4;
-  optional uint32 planner_idle_timeout_seconds = 5;
-  bool inherit_workspace_timeout = 6;
-}
-message UpdateProjectConversationSettingsResponse {
-  ProjectConversation conversation = 1;
-}
-message CancelProjectAgentRunRequest {
-  string idempotency_key = 1;
-  string project_id = 2;
-  string conversation_id = 3;
-  string run_id = 4;
-}
-message CancelProjectAgentRunResponse {
-  ProjectConversation conversation = 1;
+  optional string after_cursor = 4;
 }
 
-// Derived from retained, accepted attempts. Model prose is never an outcome source.
-message ProjectWorkerUpdate {
-  TaskOrigin origin = 1;
-  string task_id = 2;
-  string attempt_id = 3;
-  uint32 attempt_number = 4;
-  uint64 resource_version = 5;
-  DevelopmentAttemptState state = 6;
-  optional string requested_input = 7;
-  WorkerProgress progress = 8;
-  WorkerResult result = 9;
-  PullRequestReceipt pull_request = 10;
-  bool publication_only = 11;
-  string failure = 12;
-  google.protobuf.Timestamp updated_at = 13;
+message WatchConversationResponse {
+  oneof frame {
+    ConversationSnapshot snapshot = 1;
+    ConversationUpdate update = 2;
+    ConversationWatchHeartbeat heartbeat = 3;
+  }
 }

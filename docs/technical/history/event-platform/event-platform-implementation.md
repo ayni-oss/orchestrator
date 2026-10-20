@@ -1,6 +1,6 @@
 # Event platform implementation proposal
 
-> Historical research from 11 October 2026. Start with the [current event platform](../../architecture/event-platform.md) for implemented behavior. The proposal and source inventory below preserve provenance.
+> Historical research from 11 October 2026. Start with the [current event platform](index.md) for implemented behavior. The proposal and source inventory below preserve provenance.
 
 Status: proposal, 11 October 2026. Application source audited at
 `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`; no implementation or cluster
@@ -96,7 +96,7 @@ frozen bindings and operation-specific evidence.
 Use generated ProtoJSON codecs inside structured CloudEvents JSON for the initial
 NATS contract. Test optional presence, unknown enums and supported schema versions.
 Enforce JSON compatibility alongside Buf checks; binary compatibility alone is
-insufficient. See the [payload and envelope contract](../../reference/cloudevents-contract.md#typed-payloads).
+insufficient. See the [payload and envelope contract](index.md).
 
 Separate activity sequence from authoritative aggregate revision. Missing advisory
 updates cannot block a final result; terminal acceptance uses current state and
@@ -120,7 +120,7 @@ Add OpenTelemetry at the shared Rust logging boundary and instrument verificatio
 first. Propagate creation context, link retries and flush short-lived workers
 within a bounded timeout. Collector failure does not consume execution retries.
 Keep JSON logs and Prometheus; use the separate
-[observability proposal](../../reference/observability-and-events.md) for instrumentation boundaries.
+[observability proposal](index.md) for instrumentation boundaries.
 
 ## Implementation order
 
@@ -184,7 +184,7 @@ tests pass. [Kubernetes watch semantics](https://kubernetes.io/docs/reference/us
 
 ## Where the detail lives
 
-- [Migration and retirement](../../operations/event-compatibility.md) defines per-flow cutover, compatibility gates and rollback.
+- [Migration and retirement](index.md) defines per-flow cutover, compatibility gates and rollback.
 - [Flow inventory](control-plane-event-flows.md) records current behavior and its source locations.
-- [CloudEvents contract](../../reference/cloudevents-contract.md) defines identity, encoding and tracing metadata.
-- [Observability approach](../../reference/observability-and-events.md) defines signals, instrumentation and diagnostic limits.
+- [CloudEvents contract](index.md) defines identity, encoding and tracing metadata.
+- [Observability approach](index.md) defines signals, instrumentation and diagnostic limits.

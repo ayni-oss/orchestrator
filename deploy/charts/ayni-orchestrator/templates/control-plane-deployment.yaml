@@ -1,8 +1,4 @@
 {{- if .Values.enabled }}
-{{- $openaiSecretName := .Values.runtime.modelSecret }}
-{{- if kindIs "string" .Values.connections.openaiSecretName }}
-{{- $openaiSecretName = .Values.connections.openaiSecretName }}
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,234 +7,99 @@ metadata:
     {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
     app.kubernetes.io/name: ayni-orchestrator-control-plane
 spec:
-  replicas: 1
-  strategy:
-    type: Recreate
+  replicas: {{ .Values.controlPlane.replicaCount }}
   selector:
     matchLabels:
       app.kubernetes.io/name: ayni-orchestrator-control-plane
   template:
     metadata:
-      annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/control-plane-config.yaml") . | sha256sum }}
-        checksum/telemetry: {{ toJson .Values.telemetry | sha256sum }}
-        checksum/runtime: {{ toJson .Values.runtime | sha256sum }}
       labels:
-        {{- if .Values.outbox.natsUrl }}
-        orchestrator.ayni.dev/jetstream-client: "true"
-        {{- end }}
         app.kubernetes.io/name: ayni-orchestrator-control-plane
         app.kubernetes.io/part-of: ayni-orchestrator
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/control-plane-config.yaml") . | sha256sum }}
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: ayni.io.node-restriction.kubernetes.io/builder
-                    operator: DoesNotExist
-      serviceAccountName: control-plane
       automountServiceAccountToken: false
       securityContext:
-        fsGroup: 10001
-        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-      containers:
-        - name: control-plane
-          image: {{ .Values.images.controlPlane | quote }}
+      initContainers:
+        - name: workflow-migrate
+          image: {{ required "images.controlPlane is required" .Values.images.controlPlane | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
-          {{- if .Values.development.hotReload.enabled }}
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              child=""
-              trap 'trap - TERM INT; if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 0' TERM INT
-              while :; do
-                /opt/source/target/debug/ayni-orchestrator-control-plane &
-                child=$!
-                wait "$child" || true
-                child=""
-                sleep 1
-              done
-          {{- end }}
-          ports:
-            - name: http
-              containerPort: 8080
-              protocol: TCP
-            - name: grpc
-              containerPort: 50051
-              protocol: TCP
-            {{- if .Values.customClients.enabled }}
-            - name: custom-grpc
-              containerPort: 50052
-              protocol: TCP
-            {{- end }}
+          command: ["/usr/local/bin/workflow-migrate"]
           envFrom:
             - configMapRef:
                 name: control-plane-config
-          env:
-            {{- if .Values.telemetry.tracesEndpoint }}
-            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              value: {{ .Values.telemetry.tracesEndpoint | quote }}
-            {{- else if .Values.telemetry.endpointConfigMap }}
-            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ .Values.telemetry.endpointConfigMap | quote }}
-                  key: traces-endpoint
-                  optional: true
-            {{- end }}
-            {{- if .Values.runtime.enabled }}
-            - name: ORCHESTRATOR_RUNTIME_CONFIG_PATH
-              value: /runtime-config/runtime.json
-            {{- end }}
-            - name: ORCHESTRATOR_OPENAI_SECRET_NAME
-              value: {{ $openaiSecretName | quote }}
-            {{- if $openaiSecretName }}
-            - name: OPENAI_API_KEY_PATH
-              value: /run/secrets/openai/api-key
-            {{- end }}
-          startupProbe:
-            httpGet:
-              path: /livez
-              port: http
-            periodSeconds: 2
-            failureThreshold: 60
-          livenessProbe:
-            httpGet:
-              path: /livez
-              port: http
-            initialDelaySeconds: 2
-            periodSeconds: 5
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: http
-            initialDelaySeconds: 2
-            periodSeconds: 5
           resources:
             {{- toYaml .Values.controlPlane.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-            readOnlyRootFilesystem: {{ not .Values.development.hotReload.enabled }}
-            runAsNonRoot: true
+            readOnlyRootFilesystem: true
           volumeMounts:
-            {{- if .Values.runtime.enabled }}
-            - name: runtime-config
-              mountPath: /runtime-config
+            - name: workflow-postgres-migrator
+              mountPath: /var/run/secrets/ayni/workflow-postgres-migrator
               readOnly: true
-            - name: runtime-outputs
-              mountPath: /runtime-outputs
-              readOnly: true
-            {{- end }}
-            - name: runtime-api-token
-              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-              readOnly: true
-            - name: durable-state
-              mountPath: /data
-            - name: control-plane-scratch
-              mountPath: /tmp
-            {{- if $openaiSecretName }}
-            - name: openai-api-key
-              mountPath: /run/secrets/openai
-              readOnly: true
-            {{- end }}
-            {{- if .Values.customClients.enabled }}
-            - name: custom-grpc-access
-              mountPath: /run/secrets/custom-grpc
-              readOnly: true
-            {{- end }}
-        - name: web
-          image: {{ .Values.images.web | quote }}
+      containers:
+        - name: control-plane
+          image: {{ required "images.controlPlane is required" .Values.images.controlPlane | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: control-plane-config
           ports:
-            - name: web
-              containerPort: 3000
+            - name: http
+              containerPort: {{ .Values.controlPlane.httpPort }}
               protocol: TCP
-          env:
-            - name: ORCHESTRATOR_GRPC_ADDRESS
-              value: 127.0.0.1:50051
-            - name: HOST
-              value: 0.0.0.0
-            - name: PORT
-              value: "3000"
-            - name: BODY_SIZE_LIMIT
-              value: "1048576"
-            - name: PROTOCOL_HEADER
-              value: x-forwarded-proto
-            - name: HOME
-              value: /tmp
+            - name: trusted-grpc
+              containerPort: {{ .Values.controlPlane.trustedGrpcPort }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /healthz
-              port: web
-            initialDelaySeconds: 2
-            periodSeconds: 5
-          readinessProbe:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          startupProbe:
             httpGet:
               path: /healthz
-              port: web
-            initialDelaySeconds: 2
-            periodSeconds: 5
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 60
           resources:
-            {{- toYaml .Values.web.resources | nindent 12 }}
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-            readOnlyRootFilesystem: {{ not .Values.development.hotReload.enabled }}
-            runAsNonRoot: true
+            readOnlyRootFilesystem: true
           volumeMounts:
-            - name: web-scratch
-              mountPath: /tmp
+            - name: workflow-postgres-runtime
+              mountPath: /var/run/secrets/ayni/workflow-postgres-runtime
+              readOnly: true
       volumes:
-        {{- if .Values.runtime.enabled }}
-        - name: runtime-config
-          configMap:
-            name: runtime-config
-        - name: runtime-outputs
-          persistentVolumeClaim:
-            claimName: {{ .Values.runtime.outputClaim }}
-        {{- end }}
-        - name: runtime-api-token
-          projected:
-            sources:
-              - serviceAccountToken:
-                  path: token
-                  expirationSeconds: 3600
-              - configMap:
-                  name: kube-root-ca.crt
-                  items:
-                    - key: ca.crt
-                      path: ca.crt
-              - downwardAPI:
-                  items:
-                    - path: namespace
-                      fieldRef:
-                        fieldPath: metadata.namespace
-        - name: durable-state
-          persistentVolumeClaim:
-            claimName: control-plane-state
-        - name: control-plane-scratch
-          emptyDir:
-            sizeLimit: 512Mi
-        - name: web-scratch
-          emptyDir:
-            sizeLimit: 64Mi
-        {{- if $openaiSecretName }}
-        - name: openai-api-key
+        - name: workflow-postgres-migrator
           secret:
-            secretName: {{ $openaiSecretName | quote }}
-            defaultMode: 288
-            optional: true
-        {{- end }}
-        {{- if .Values.customClients.enabled }}
-        - name: custom-grpc-access
+            secretName: {{ required "workflowPostgres.migratorSecretName is required" .Values.workflowPostgres.migratorSecretName | quote }}
+            items:
+              - key: url
+                path: url
+        - name: workflow-postgres-runtime
           secret:
-            secretName: {{ .Values.customClients.secretName }}
-            defaultMode: 288
-        {{- end }}
+            secretName: {{ required "workflowPostgres.runtimeSecretName is required" .Values.workflowPostgres.runtimeSecretName | quote }}
+            items:
+              - key: url
+                path: url
 {{- end }}

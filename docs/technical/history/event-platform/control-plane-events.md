@@ -1,6 +1,6 @@
 # Control-plane events and evidence
 
-> Historical research from 11 October 2026. Start with the [current event platform](../../architecture/event-platform.md) for implemented behavior. The proposal and source inventory below preserve provenance.
+> Historical research from 11 October 2026. Start with the [current event platform](index.md) for implemented behavior. The proposal and source inventory below preserve provenance.
 
 Research snapshot: 11 October 2026, orchestrator commit `1f4e03a44e3217d6e3cf14b9848096e0ca03c8ac`. Source analysis; deployed runtime behavior was not exercised. Current behavior is recorded in the linked inventory. The event protocol and JetStream placement below are research proposals, not an accepted architecture decision or implemented transport.
 
@@ -8,12 +8,12 @@ The control plane should advance on validated application evidence and controlle
 
 The [flow inventory](control-plane-event-flows.md) maps all implemented flows, their current signals, transition gates and cleanup ordering. The [contract catalog](control-plane-event-contracts.csv) indexes current RPCs, state vocabularies, resource events and worker tools.
 
-[Observability and lifecycle events](../../reference/observability-and-events.md) describes how
+[Observability and lifecycle events](index.md) describes how
 OpenTelemetry traces, logs and metrics complement these application contracts.
-The [CloudEvents contract](../../reference/cloudevents-contract.md) recommends a standard
+The [CloudEvents contract](index.md) recommends a standard
 envelope and defines its relationship to JetStream routing and trace context.
 The [implementation proposal](event-platform-implementation.md) develops this
-research into phased delivery with [retirement gates](../../operations/event-compatibility.md).
+research into phased delivery with [retirement gates](index.md).
 
 ## Findings that drive the design
 

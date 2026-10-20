@@ -2,44 +2,28 @@
 layout: home
 hero:
   name: Ayni Orchestrator
-  text: Development tasks you can review
-  tagline: Connect a repository, give a task a clear goal, and review a draft backed by quality evidence.
+  text: Durable workflow foundations
+  tagline: M1 Slice 1 is a contributor preview of PostgreSQL-authoritative hierarchy, message admission, snapshots, and history.
   actions:
     - theme: brand
-      text: Get started
-      link: /getting-started
-    - theme: alt
-      text: How it works
-      link: /how-it-works
-    - theme: alt
-      text: Run a task
-      link: /projects-and-tasks
-    - theme: alt
-      text: View on GitHub
+      text: View source
       link: https://github.com/ayni-oss/orchestrator
+    - theme: alt
+      text: Read the milestone
+      link: https://github.com/ayni-oss/orchestrator/blob/alpha/docs/technical/research/project-workflow-m1-durable-foundation.md
 features:
-  - title: Shared repository runtimes
-    details: Prepare a verified Ayni environment once and use it across projects that share the repository.
-    link: /repositories-and-runtimes
-  - title: Clear task limits
-    details: Choose the request, model, protected paths and deadline. Each task keeps its admitted inputs and limits.
-    link: /projects-and-tasks
-  - title: Quality with context
-    details: See execution, full repository checks and publication as separate outcomes, with unavailable evidence shown honestly.
-    link: /results-and-recovery
-  - title: Reviewable delivery
-    details: Inspect the draft and its quality report before deciding to merge. Retry retained publication without starting coding again.
-    link: /trust-and-quality
+  - title: PostgreSQL authority
+    details: Forward migrations, scoped idempotency, FIFO admission, exact outbox bytes, and bounded projections share one durable transaction boundary.
+  - title: Private by construction
+    details: Canonical workflow gRPC binds to pod loopback and is available only through an explicit trusted diagnostic port-forward.
+  - title: Honest slice boundary
+    details: Execution, resumable watches, providers, browser UX, and custom-client workflow access are deliberately deferred to later slices.
 ---
 
-## From request to review
+## Contributor preview
 
-Start by [connecting your repository](getting-started.md) and preparing its runtime.
-Add it to a project, describe the work, then follow progress and checks until a
-reviewable result is available. Ayni Orchestrator leaves the merge decision with you.
+The prior browser and SQLite workflow were removed in a clean cutover. The current runnable slice is intended for contributors validating the replacement foundation on Docker Desktop Kubernetes. It is not an adopted-user migration or shared-environment release.
 
-[Explore the complete flow](how-it-works.md) or
-[find the next recovery action](troubleshooting.md).
+Current evidence covers PostgreSQL 17.6 migrations, concurrent startup, rollback, scoped idempotency, FIFO admission, queue bounds, snapshots/history, readiness, canonical private-v1 mapping, and retained local storage.
 
-The current task works on one repository with an Ayni Managed runtime. Custom
-runtimes and coordinated work across repositories remain future capabilities.
+See the repository's [technical documentation](https://github.com/ayni-oss/orchestrator/tree/alpha/docs/technical) for architecture and local operations.

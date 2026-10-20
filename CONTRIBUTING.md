@@ -52,14 +52,18 @@ different purposes; both are required for protected branches.
 Use the pinned toolchain in `rust-toolchain.toml`:
 
 ```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
-cargo check --workspace --all-features
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-targets
+cargo check --workspace --all-targets
 pnpm install --frozen-lockfile
-pnpm frontend:check
-pnpm test:frontend
+pnpm typecheck
+pnpm test
+pnpm proto:check
+pnpm chart:check
 pnpm docs:check
+scripts/ci/check-workflow-postgres-feasibility.sh
+scripts/ci/check-workflow-private-v1-feasibility.sh
 ```
 
 Run affected protocol, Helm and repository quality checks described by

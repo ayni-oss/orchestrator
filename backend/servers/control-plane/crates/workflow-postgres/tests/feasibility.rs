@@ -1,33 +1,55 @@
-use ayni_orchestrator_workflow_postgres::{connect, migrate, migration_lock_id};
-use std::error::Error;
-use std::future::poll_fn;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{Barrier, mpsc};
-use tokio::task::JoinHandle;
-use tokio::time::{sleep, timeout};
-use tokio_postgres::{AsyncMessage, Client, Config, NoTls};
+use ayni_orchestrator_events::workflow::decode_command;
+use ayni_orchestrator_workflow_postgres::{
+    MigrationError, StoreError, WorkflowStore, connect, migrate, migrate_for_runtime,
+    migration_lock_id, validate, validate_for_runtime,
+};
+use std::{error::Error, sync::Arc, time::Duration};
+use tokio::{
+    sync::Barrier,
+    task::JoinHandle,
+    time::{sleep, timeout},
+};
+use tokio_postgres::Client;
 
 const DATABASE_URL_ENV: &str = "AYNI_POSTGRES_FEASIBILITY_URL";
+const RUNTIME_DATABASE_URL_ENV: &str = "AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL";
+const RUNTIME_DATABASE_ROLE_ENV: &str = "AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE";
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 #[ignore = "requires a disposable PostgreSQL 17 instance"]
 async fn postgres_feasibility_gate() -> TestResult {
     let database_url = std::env::var(DATABASE_URL_ENV)
         .map_err(|_| format!("set {DATABASE_URL_ENV} to a disposable PostgreSQL database"))?;
-    let (mut client, driver) = connect(&database_url).await?;
+    let runtime_database_url = std::env::var(RUNTIME_DATABASE_URL_ENV).map_err(|_| {
+        format!("set {RUNTIME_DATABASE_URL_ENV} to the disposable runtime-role database URL")
+    })?;
+    let runtime_database_role = std::env::var(RUNTIME_DATABASE_ROLE_ENV)
+        .map_err(|_| format!("set {RUNTIME_DATABASE_ROLE_ENV} to the runtime role name"))?;
+    let (client, driver) = connect(&database_url).await?;
     reset(&client).await?;
     prove_advisory_lock(&client, &database_url).await?;
     reset(&client).await?;
+    prove_migration_failure_rollback(&client, &database_url).await?;
     prove_concurrent_migrations(&client, &database_url).await?;
-    prove_transaction_rollback(&client, &database_url).await?;
-    prove_fifo_allocation(&client, &database_url).await?;
-    prove_exact_outbox_bytes(&client, &database_url).await?;
-    prove_notification_replay(&mut client, &database_url).await?;
+    migrate_for_runtime(&database_url, &runtime_database_role).await?;
+    validate(&runtime_database_url).await?;
+    prove_runtime_role(&runtime_database_url).await?;
+    prove_schema_drift_rejected(&client, &runtime_database_url).await?;
+    prove_runtime_privilege_drift_rejected(
+        &client,
+        &database_url,
+        &runtime_database_url,
+        &runtime_database_role,
+    )
+    .await?;
+    prove_transaction_rollback(&client).await?;
+    prove_admission_insert_rollbacks(&client, &runtime_database_url).await?;
+    prove_authoritative_store(&client, &runtime_database_url).await?;
+    prove_future_version_rejected(&client, &runtime_database_url).await?;
     driver.abort();
     println!(
-        "postgres-feasibility: advisory-lock=pass rollback=pass concurrent-migration=pass notification-replay=pass fifo-row-lock=pass exact-outbox=pass"
+        "postgres-runtime: advisory-lock=pass migration=pass migration-rollback=pass schema-drift=pass role-separation=pass privilege-drift=pass transaction-rollback=pass admission-rollback=pass scope=pass idempotency=pass fifo=pass queue-bound=pass exact-outbox=pass snapshot-history=pass future-version=pass"
     );
     Ok(())
 }
@@ -38,18 +60,9 @@ async fn prove_advisory_lock(client: &Client, database_url: &str) -> TestResult 
         .await?;
     let application_name = format!("ayni_m1_migration_lock_probe_{}", std::process::id());
     let migration_url = database_url_with_application_name(database_url, &application_name);
-    let blocked_migration = tokio::spawn(async move { migrate(&migration_url).await });
-    let waiting_pid = wait_for_advisory_lock_wait(
-        client,
-        &application_name,
-        migration_lock_id(),
-        &blocked_migration,
-    )
-    .await?;
-    assert!(
-        !blocked_migration.is_finished(),
-        "migration backend {waiting_pid} completed while its advisory lock was not granted"
-    );
+    let blocked = tokio::spawn(async move { migrate(&migration_url).await });
+    wait_for_advisory_lock_wait(client, &application_name, migration_lock_id(), &blocked).await?;
+    assert!(!blocked.is_finished());
     let schema_visible: bool = client
         .query_one(
             "SELECT to_regclass('public.workflow_schema_migrations') IS NOT NULL",
@@ -57,157 +70,592 @@ async fn prove_advisory_lock(client: &Client, database_url: &str) -> TestResult 
         )
         .await?
         .get(0);
-    assert!(
-        !schema_visible,
-        "migration DDL became visible before the lock"
-    );
+    assert!(!schema_visible);
     client
         .query_one("SELECT pg_advisory_unlock($1)", &[&migration_lock_id()])
         .await?;
-    blocked_migration.await??;
+    blocked.await??;
     Ok(())
+}
+
+async fn prove_migration_failure_rollback(client: &Client, database_url: &str) -> TestResult {
+    client
+        .batch_execute("CREATE TABLE workflow_projects (injected boolean)")
+        .await?;
+    assert!(matches!(
+        migrate(database_url).await,
+        Err(MigrationError::Database(_))
+    ));
+    let state = client
+        .query_one(
+            "SELECT \
+               to_regclass('public.workflow_projects') IS NOT NULL, \
+               to_regclass('public.workflow_schema_migrations') IS NULL, \
+               to_regclass('public.workflow_workspaces') IS NULL, \
+               to_regprocedure('public.workflow_ts_seconds(timestamptz)') IS NULL",
+            &[],
+        )
+        .await?;
+    assert!(state.get::<_, bool>(0));
+    assert!(state.get::<_, bool>(1));
+    assert!(state.get::<_, bool>(2));
+    assert!(state.get::<_, bool>(3));
+    reset(client).await
 }
 
 async fn prove_concurrent_migrations(client: &Client, database_url: &str) -> TestResult {
-    let starter_count = 8;
-    let barrier = Arc::new(Barrier::new(starter_count));
-    let mut migrations = Vec::new();
-    for _ in 0..starter_count {
-        let migration_url = database_url.to_owned();
+    let count = 8;
+    let barrier = Arc::new(Barrier::new(count));
+    let mut tasks = Vec::new();
+    for _ in 0..count {
+        let url = database_url.to_owned();
         let barrier = Arc::clone(&barrier);
-        migrations.push(tokio::spawn(async move {
+        tasks.push(tokio::spawn(async move {
             barrier.wait().await;
-            migrate(&migration_url).await
+            migrate(&url).await
         }));
     }
-    for migration in migrations {
-        migration.await??;
+    for task in tasks {
+        task.await??;
     }
-    let applied: i64 = client
+    let versions: i64 = client
         .query_one("SELECT count(*) FROM workflow_schema_migrations", &[])
         .await?
         .get(0);
-    assert_eq!(applied, 1);
+    assert_eq!(versions, 1);
     Ok(())
 }
 
-async fn prove_transaction_rollback(client: &Client, database_url: &str) -> TestResult {
-    let (mut rollback_client, rollback_driver) = connect(database_url).await?;
-    let transaction = rollback_client.transaction().await?;
-    transaction
-        .execute(
-            "INSERT INTO workflow_gate_conversations (id) VALUES ($1)",
-            &[&"rolled-back"],
+async fn prove_runtime_role(database_url: &str) -> TestResult {
+    let (client, driver) = connect(database_url).await?;
+    let privileges = client
+        .query_one(
+            "SELECT \
+               has_table_privilege(current_user, 'workflow_workspaces', 'SELECT,INSERT,UPDATE,DELETE'), \
+               has_table_privilege(current_user, 'workflow_schema_migrations', 'SELECT'), \
+               has_table_privilege(current_user, 'workflow_schema_migrations', 'INSERT,UPDATE,DELETE'), \
+               has_schema_privilege(current_user, 'public', 'CREATE')",
+            &[],
         )
         .await?;
-    transaction.rollback().await?;
-    let persisted: i64 = client
+    assert!(privileges.get::<_, bool>(0));
+    assert!(privileges.get::<_, bool>(1));
+    assert!(!privileges.get::<_, bool>(2));
+    assert!(!privileges.get::<_, bool>(3));
+    assert!(
+        client
+            .execute(
+                "DELETE FROM workflow_schema_migrations WHERE version = 1",
+                &[],
+            )
+            .await
+            .is_err()
+    );
+    driver.abort();
+    Ok(())
+}
+
+async fn prove_schema_drift_rejected(client: &Client, runtime_url: &str) -> TestResult {
+    client
+        .batch_execute("DROP FUNCTION workflow_ts_nanos(timestamptz)")
+        .await?;
+    assert!(matches!(
+        validate(runtime_url).await,
+        Err(MigrationError::InvalidSchema)
+    ));
+    client
+        .batch_execute(
+            "CREATE FUNCTION workflow_ts_nanos(value timestamptz) \
+             RETURNS bigint LANGUAGE sql IMMUTABLE PARALLEL SAFE \
+             RETURN (extract(microseconds FROM value)::bigint % 1000000) * 1000",
+        )
+        .await?;
+    validate(runtime_url).await?;
+    Ok(())
+}
+
+async fn prove_runtime_privilege_drift_rejected(
+    client: &Client,
+    migration_url: &str,
+    runtime_url: &str,
+    runtime_role: &str,
+) -> TestResult {
+    let quoted_role: String = client
+        .query_one("SELECT quote_ident($1)", &[&runtime_role])
+        .await?
+        .get(0);
+    client
+        .batch_execute(&format!(
+            "REVOKE DELETE ON workflow_workspaces FROM {quoted_role}"
+        ))
+        .await?;
+    assert!(matches!(
+        validate(runtime_url).await,
+        Err(MigrationError::InvalidRuntimePrivileges)
+    ));
+    migrate_for_runtime(migration_url, runtime_role).await?;
+    validate_for_runtime(runtime_url, runtime_role).await?;
+
+    client
+        .batch_execute(&format!(
+            "GRANT TRUNCATE ON workflow_workspaces TO {quoted_role}"
+        ))
+        .await?;
+    assert!(matches!(
+        validate_for_runtime(runtime_url, runtime_role).await,
+        Err(MigrationError::InvalidRuntimePrivileges)
+    ));
+    migrate_for_runtime(migration_url, runtime_role).await?;
+    validate_for_runtime(runtime_url, runtime_role).await?;
+    assert!(matches!(
+        validate_for_runtime(runtime_url, "different_runtime").await,
+        Err(MigrationError::InvalidRuntimeRole)
+    ));
+    Ok(())
+}
+
+async fn prove_transaction_rollback(client: &Client) -> TestResult {
+    client.batch_execute("BEGIN").await?;
+    client
+        .execute(
+            "INSERT INTO workflow_workspaces (id, display_name) VALUES ($1, $2)",
+            &[&"018f3f2e-72b7-7d4d-8000-000000000001", &"rolled back"],
+        )
+        .await?;
+    client.batch_execute("ROLLBACK").await?;
+    let retained: i64 = client
         .query_one(
-            "SELECT count(*) FROM workflow_gate_conversations WHERE id = $1",
-            &[&"rolled-back"],
+            "SELECT count(*) FROM workflow_workspaces WHERE display_name = 'rolled back'",
+            &[],
         )
         .await?
         .get(0);
-    assert_eq!(persisted, 0);
-    rollback_driver.abort();
+    assert_eq!(retained, 0);
     Ok(())
 }
 
-async fn prove_fifo_allocation(client: &Client, database_url: &str) -> TestResult {
-    client
-        .execute(
-            "INSERT INTO workflow_gate_conversations (id) VALUES ($1)",
-            &[&"conversation-race"],
+async fn prove_admission_insert_rollbacks(client: &Client, database_url: &str) -> TestResult {
+    let store = WorkflowStore::new(database_url.to_owned());
+    let workspace = store
+        .create_workspace("rollback-workspace", "Rollback Workspace")
+        .await?;
+    let project = store
+        .create_project(
+            "rollback-project",
+            &workspace.resource.id,
+            "Rollback Project",
+            "Prove admission rollback",
         )
         .await?;
-    let mut admissions = Vec::new();
-    for index in 0..16_u64 {
-        let admission_url = database_url.to_owned();
-        admissions.push(tokio::spawn(async move {
-            admit_turn(&admission_url, index).await
-        }));
+    let conversation = store
+        .create_conversation(
+            "rollback-conversation",
+            &workspace.resource.id,
+            &project.resource.id,
+            "Rollback Conversation",
+        )
+        .await?;
+    client
+        .batch_execute(
+            "CREATE FUNCTION ayni_abort_admission() RETURNS trigger \
+             LANGUAGE plpgsql AS $abort$ BEGIN RAISE EXCEPTION 'injected admission failure'; END; $abort$",
+        )
+        .await?;
+    let baseline = admission_state(client, &conversation.resource.id).await?;
+    let insert_points = [
+        ("workflow_command_receipts", "INSERT"),
+        ("workflow_conversations", "UPDATE"),
+        ("workflow_messages", "INSERT"),
+        ("workflow_turns", "INSERT"),
+        ("workflow_activities", "INSERT"),
+        ("workflow_updates", "INSERT"),
+        ("workflow_dispatch_intents", "INSERT"),
+        ("workflow_outbox", "INSERT"),
+    ];
+    for (index, (table, operation)) in insert_points.iter().enumerate() {
+        client
+            .batch_execute(&format!(
+                "CREATE TRIGGER ayni_abort_point BEFORE {operation} ON {table} \
+                 FOR EACH ROW EXECUTE FUNCTION ayni_abort_admission()"
+            ))
+            .await?;
+        let result = store
+            .send_message(
+                &format!("rollback-message-{index}"),
+                &workspace.resource.id,
+                &project.resource.id,
+                &conversation.resource.id,
+                "must roll back",
+            )
+            .await;
+        client
+            .batch_execute(&format!("DROP TRIGGER ayni_abort_point ON {table}"))
+            .await?;
+        assert!(matches!(result, Err(StoreError::Database(_))));
+        assert_eq!(
+            admission_state(client, &conversation.resource.id).await?,
+            baseline
+        );
     }
-    let mut allocated = Vec::new();
-    for admission in admissions {
-        allocated.push(admission.await??);
-    }
-    allocated.sort_unstable();
-    assert_eq!(allocated, (1_i64..=16).collect::<Vec<_>>());
+    client
+        .batch_execute("DROP FUNCTION ayni_abort_admission()")
+        .await?;
     Ok(())
 }
 
-async fn prove_exact_outbox_bytes(client: &Client, database_url: &str) -> TestResult {
-    let exact_bytes = vec![0, 1, 2, 127, 128, 254, 255];
+async fn admission_state(client: &Client, conversation_id: &str) -> TestResult<Vec<i64>> {
+    let row = client
+        .query_one(
+            "SELECT revision, next_turn_sequence, next_history_sequence, \
+               (SELECT count(*) FROM workflow_command_receipts), \
+               (SELECT count(*) FROM workflow_messages WHERE conversation_id = $1), \
+               (SELECT count(*) FROM workflow_turns WHERE conversation_id = $1), \
+               (SELECT count(*) FROM workflow_activities WHERE conversation_id = $1), \
+               (SELECT count(*) FROM workflow_updates WHERE conversation_id = $1), \
+               (SELECT count(*) FROM workflow_dispatch_intents WHERE conversation_id = $1), \
+               (SELECT count(*) FROM workflow_outbox WHERE conversation_id = $1) \
+             FROM workflow_conversations WHERE id = $1",
+            &[&conversation_id],
+        )
+        .await?;
+    Ok((0..row.len()).map(|index| row.get(index)).collect())
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "one end-to-end test keeps the authoritative transaction invariants in execution order"
+)]
+async fn prove_authoritative_store(client: &Client, database_url: &str) -> TestResult {
+    let store = WorkflowStore::new(database_url.to_owned());
+    let workspace = store.create_workspace("workspace-key", "Workspace").await?;
+    let workspace_replay = store.create_workspace("workspace-key", "Workspace").await?;
+    assert_eq!(workspace, workspace_replay);
+    assert!(matches!(
+        store.create_workspace("workspace-key", "Changed").await,
+        Err(StoreError::IdempotencyConflict)
+    ));
+    let project = store
+        .create_project(
+            "project-key",
+            &workspace.resource.id,
+            "Project",
+            "Durable workflow",
+        )
+        .await?;
+    let foreign_workspace = store.create_workspace("foreign-key", "Foreign").await?;
+    assert!(matches!(
+        store
+            .create_conversation(
+                "wrong-scope",
+                &foreign_workspace.resource.id,
+                &project.resource.id,
+                "Hidden",
+            )
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let conversation = store
+        .create_conversation(
+            "conversation-key",
+            &workspace.resource.id,
+            &project.resource.id,
+            "Conversation",
+        )
+        .await?;
+    let first = store
+        .send_message(
+            "same-message",
+            &workspace.resource.id,
+            &project.resource.id,
+            &conversation.resource.id,
+            "first",
+        )
+        .await?;
+    let first_replay = store
+        .send_message(
+            "same-message",
+            &workspace.resource.id,
+            &project.resource.id,
+            &conversation.resource.id,
+            "first",
+        )
+        .await?;
+    assert_eq!(first, first_replay);
+    assert!(matches!(
+        store
+            .send_message(
+                "same-message",
+                &workspace.resource.id,
+                &project.resource.id,
+                &conversation.resource.id,
+                "changed",
+            )
+            .await,
+        Err(StoreError::IdempotencyConflict)
+    ));
+
+    prove_concurrent_receipt_replay(
+        &store,
+        &workspace.resource.id,
+        &project.resource.id,
+        &conversation.resource.id,
+    )
+    .await?;
+    admit_concurrent_messages(
+        &store,
+        &workspace.resource.id,
+        &project.resource.id,
+        &conversation.resource.id,
+        15,
+    )
+    .await?;
+    let rows = client
+        .query(
+            "SELECT sequence, scheduling_state, dispatch_state FROM workflow_turns \
+             WHERE conversation_id = $1 ORDER BY sequence",
+            &[&conversation.resource.id],
+        )
+        .await?;
+    assert_eq!(rows.len(), 17);
+    for (index, row) in rows.iter().enumerate() {
+        assert_eq!(row.get::<_, i64>(0), i64::try_from(index)? + 1);
+        if index == 0 {
+            assert_eq!(row.get::<_, &str>(1), "eligible");
+            assert_eq!(row.get::<_, &str>(2), "pending");
+        } else {
+            assert_eq!(row.get::<_, &str>(1), "waiting_for_predecessor");
+            assert_eq!(row.get::<_, &str>(2), "not_eligible");
+        }
+    }
+    let outbox = store.pending_outbox(10).await?;
+    assert_eq!(outbox.len(), 1);
+    let (_, _, command) = decode_command(&outbox[0].event_bytes)?;
+    let binding = command.binding.ok_or("command binding is absent")?;
+    assert_eq!(binding.turn_id, first.turn_id);
+    assert_eq!(command.input_content, "first");
+
+    let snapshot = store
+        .get_snapshot(
+            &workspace.resource.id,
+            &project.resource.id,
+            &conversation.resource.id,
+        )
+        .await?;
+    assert_eq!(snapshot.nonterminal_turns.len(), 17);
+    assert_eq!(snapshot.recent_messages.len(), 16);
+    let history = store
+        .list_history(
+            &workspace.resource.id,
+            &project.resource.id,
+            &conversation.resource.id,
+            &snapshot.history_snapshot_id,
+            0,
+            10,
+        )
+        .await?;
+    assert_eq!(history.records.len(), 10);
+    assert!(history.has_more);
     client
         .execute(
-            "INSERT INTO workflow_gate_outbox (id, subject, event_bytes) VALUES ($1, $2, $3)",
+            "INSERT INTO workflow_history_snapshots \
+             (id, workspace_id, project_id, conversation_id, boundary_sequence, expires_at) \
+             VALUES ('expired-snapshot', $1, $2, $3, 0, clock_timestamp() - interval '1 second')",
             &[
-                &"outbox-1",
-                &"orchestrator.workflow.command.conversation.v1",
-                &exact_bytes,
+                &workspace.resource.id,
+                &project.resource.id,
+                &conversation.resource.id,
             ],
         )
         .await?;
-    let (replay_client, replay_driver) = connect(database_url).await?;
-    let replayed: Vec<u8> = replay_client
+    store
+        .get_snapshot(
+            &workspace.resource.id,
+            &project.resource.id,
+            &conversation.resource.id,
+        )
+        .await?;
+    let expired: i64 = client
         .query_one(
-            "SELECT event_bytes FROM workflow_gate_outbox WHERE id = $1",
-            &[&"outbox-1"],
+            "SELECT count(*) FROM workflow_history_snapshots WHERE id = 'expired-snapshot'",
+            &[],
         )
         .await?
         .get(0);
-    assert_eq!(replayed, exact_bytes);
-    replay_driver.abort();
+    assert_eq!(expired, 0);
+
+    prove_capacity_race(
+        client,
+        &store,
+        &workspace.resource.id,
+        &project.resource.id,
+        &conversation.resource.id,
+    )
+    .await?;
     Ok(())
 }
 
-async fn prove_notification_replay(client: &mut Client, database_url: &str) -> TestResult {
-    let (offline_listener, offline_messages, offline_driver) =
-        notification_connection(database_url).await?;
-    offline_listener
-        .batch_execute("LISTEN workflow_gate_updates")
-        .await?;
-    drop(offline_listener);
-    drop(offline_messages);
-    offline_driver.abort();
+async fn prove_concurrent_receipt_replay(
+    store: &WorkflowStore,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+) -> TestResult {
+    let callers = 8;
+    let barrier = Arc::new(Barrier::new(callers));
+    let mut sends = Vec::new();
+    for _ in 0..callers {
+        let store = store.clone();
+        let barrier = Arc::clone(&barrier);
+        let workspace_id = workspace_id.to_owned();
+        let project_id = project_id.to_owned();
+        let conversation_id = conversation_id.to_owned();
+        sends.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .send_message(
+                    "concurrent-replay",
+                    &workspace_id,
+                    &project_id,
+                    &conversation_id,
+                    "same concurrent content",
+                )
+                .await
+        }));
+    }
+    let mut receipts = Vec::new();
+    for send in sends {
+        receipts.push(send.await??);
+    }
+    assert!(receipts.windows(2).all(|pair| pair[0] == pair[1]));
+    Ok(())
+}
 
-    let first_cursor = append_event(client, "lost-notification").await?;
-    let (live_listener, mut live_messages, live_driver) =
-        notification_connection(database_url).await?;
-    live_listener
-        .batch_execute("LISTEN workflow_gate_updates")
-        .await?;
-    let recovered: Vec<i64> = live_listener
-        .query(
-            "SELECT cursor FROM workflow_gate_events WHERE cursor > $1 ORDER BY cursor",
-            &[&0_i64],
+async fn admit_concurrent_messages(
+    store: &WorkflowStore,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+    count: usize,
+) -> TestResult {
+    let barrier = Arc::new(Barrier::new(count));
+    let mut sends = Vec::new();
+    for index in 0..count {
+        let store = store.clone();
+        let barrier = Arc::clone(&barrier);
+        let workspace_id = workspace_id.to_owned();
+        let project_id = project_id.to_owned();
+        let conversation_id = conversation_id.to_owned();
+        sends.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .send_message(
+                    &format!("message-{index}"),
+                    &workspace_id,
+                    &project_id,
+                    &conversation_id,
+                    &format!("content-{index}"),
+                )
+                .await
+        }));
+    }
+    for send in sends {
+        send.await??;
+    }
+    Ok(())
+}
+
+async fn prove_capacity_race(
+    client: &Client,
+    store: &WorkflowStore,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+) -> TestResult {
+    for index in 17..96 {
+        store
+            .send_message(
+                &format!("capacity-{index}"),
+                workspace_id,
+                project_id,
+                conversation_id,
+                "queued",
+            )
+            .await?;
+    }
+    let callers = 8;
+    let barrier = Arc::new(Barrier::new(callers));
+    let mut sends = Vec::new();
+    for index in 0..callers {
+        let store = store.clone();
+        let barrier = Arc::clone(&barrier);
+        let workspace_id = workspace_id.to_owned();
+        let project_id = project_id.to_owned();
+        let conversation_id = conversation_id.to_owned();
+        sends.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .send_message(
+                    &format!("capacity-race-{index}"),
+                    &workspace_id,
+                    &project_id,
+                    &conversation_id,
+                    "queued",
+                )
+                .await
+        }));
+    }
+    let mut admitted = 0;
+    let mut rejected = 0;
+    for send in sends {
+        match send.await? {
+            Ok(_) => admitted += 1,
+            Err(StoreError::Capacity("turn_queue")) => rejected += 1,
+            Err(error) => return Err(Box::new(error)),
+        }
+    }
+    assert_eq!(admitted, 4);
+    assert_eq!(rejected, 4);
+    let retained: i64 = client
+        .query_one(
+            "SELECT count(*) FROM workflow_turns WHERE conversation_id = $1",
+            &[&conversation_id],
         )
         .await?
-        .into_iter()
-        .map(|row| row.get(0))
-        .collect();
-    assert_eq!(recovered, vec![first_cursor]);
-
-    let second_cursor = append_event(client, "live-notification").await?;
-    let payload = receive_notification(&mut live_messages).await?;
-    assert_eq!(payload, second_cursor.to_string());
-    live_driver.abort();
+        .get(0);
+    assert_eq!(retained, 100);
     Ok(())
 }
 
-async fn receive_notification(messages: &mut mpsc::Receiver<AsyncMessage>) -> TestResult<String> {
-    timeout(Duration::from_secs(2), async {
-        loop {
-            match messages.recv().await {
-                Some(AsyncMessage::Notification(notification)) => {
-                    break Ok(notification.payload().to_owned());
-                }
-                Some(_) => {}
-                None => break Err("notification connection ended".into()),
-            }
-        }
-    })
-    .await?
+async fn prove_future_version_rejected(client: &Client, database_url: &str) -> TestResult {
+    client
+        .execute(
+            "INSERT INTO workflow_schema_migrations (version, description, checksum) \
+             VALUES (2, 'future', 'sha256:future')",
+            &[],
+        )
+        .await?;
+    assert!(matches!(
+        validate(database_url).await,
+        Err(MigrationError::FutureVersion(2))
+    ));
+    client
+        .execute(
+            "DELETE FROM workflow_schema_migrations WHERE version = 2",
+            &[],
+        )
+        .await?;
+    Ok(())
+}
+
+async fn reset(client: &Client) -> TestResult {
+    client
+        .batch_execute(
+            "DROP SCHEMA public CASCADE; CREATE SCHEMA public; \
+             REVOKE CREATE ON SCHEMA public FROM PUBLIC; \
+             GRANT USAGE ON SCHEMA public TO PUBLIC;",
+        )
+        .await?;
+    Ok(())
 }
 
 fn database_url_with_application_name(database_url: &str, application_name: &str) -> String {
@@ -215,11 +663,11 @@ fn database_url_with_application_name(database_url: &str, application_name: &str
     format!("{database_url}{separator}application_name={application_name}")
 }
 
-async fn wait_for_advisory_lock_wait(
+async fn wait_for_advisory_lock_wait<T>(
     client: &Client,
     application_name: &str,
     lock_id: i64,
-    migration: &JoinHandle<Result<(), tokio_postgres::Error>>,
+    migration: &JoinHandle<T>,
 ) -> TestResult<i32> {
     timeout(Duration::from_secs(5), async {
         loop {
@@ -248,84 +696,4 @@ async fn wait_for_advisory_lock_wait(
     })
     .await
     .map_err(|_| "migration did not reach the expected advisory-lock wait within five seconds")?
-}
-
-async fn reset(client: &Client) -> TestResult {
-    client
-        .batch_execute(
-            "DROP TABLE IF EXISTS workflow_gate_turns CASCADE;\
-             DROP TABLE IF EXISTS workflow_gate_conversations CASCADE;\
-             DROP TABLE IF EXISTS workflow_gate_events CASCADE;\
-             DROP TABLE IF EXISTS workflow_gate_outbox CASCADE;\
-             DROP TABLE IF EXISTS workflow_schema_migrations CASCADE;",
-        )
-        .await?;
-    Ok(())
-}
-
-async fn admit_turn(database_url: &str, index: u64) -> TestResult<i64> {
-    let (mut client, driver) = connect(database_url).await?;
-    let transaction = client.transaction().await?;
-    let sequence: i64 = transaction
-        .query_one(
-            "SELECT next_sequence FROM workflow_gate_conversations WHERE id = $1 FOR UPDATE",
-            &[&"conversation-race"],
-        )
-        .await?
-        .get(0);
-    transaction
-        .execute(
-            "UPDATE workflow_gate_conversations SET next_sequence = $2 WHERE id = $1",
-            &[&"conversation-race", &(sequence + 1)],
-        )
-        .await?;
-    transaction
-        .execute(
-            "INSERT INTO workflow_gate_turns (id, conversation_id, sequence) VALUES ($1, $2, $3)",
-            &[&format!("turn-{index}"), &"conversation-race", &sequence],
-        )
-        .await?;
-    transaction.commit().await?;
-    driver.abort();
-    Ok(sequence)
-}
-
-async fn append_event(client: &mut Client, kind: &str) -> TestResult<i64> {
-    let transaction = client.transaction().await?;
-    let cursor: i64 = transaction
-        .query_one(
-            "INSERT INTO workflow_gate_events (conversation_id, kind) VALUES ($1, $2) RETURNING cursor",
-            &[&"conversation-race", &kind],
-        )
-        .await?
-        .get(0);
-    transaction
-        .query_one(
-            "SELECT pg_notify('workflow_gate_updates', $1)",
-            &[&cursor.to_string()],
-        )
-        .await?;
-    transaction.commit().await?;
-    Ok(cursor)
-}
-
-async fn notification_connection(
-    database_url: &str,
-) -> TestResult<(Client, mpsc::Receiver<AsyncMessage>, JoinHandle<()>)> {
-    let config: Config = database_url.parse()?;
-    let (client, mut connection) = config.connect(NoTls).await?;
-    let (sender, receiver) = mpsc::channel(16);
-    let driver = tokio::spawn(async move {
-        while let Some(message) = poll_fn(|context| connection.poll_message(context)).await {
-            match message {
-                Ok(message) => {
-                    if sender.send(message).await.is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    });
-    Ok((client, receiver, driver))
 }

@@ -5,42 +5,37 @@
 
 # Ayni Orchestrator
 
-Ayni Orchestrator is a control plane for worker-owned development tasks.
-Integrations manage provider access and repositories own shared runtimes.
-Workspaces share repositories and agent defaults; projects select workspace
-repositories around a goal and retain conversations. A project agent researches
-immutable repository checkouts and prepares versioned plans for human approval.
-Conversations reuse a planner environment between turns and retain searchable
-original records and a versioned working index after idle expiry or restart. OpenAI
-connections and project model defaults are configured in the operator UI.
-A task freezes its source, runtime digest, model, constraints,
-coding budget and deadline before one worker executes it.
+Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The worker attests its runtime, checks out source, codes, commits, runs full Ayni
-quality checks with bounded repairs, retains evidence and publishes a draft PR.
-Execution, quality and publication have independent outcomes. Publication retry
-uses retained final work without starting another coding session.
+The current runnable milestone is **M1 runtime Slice 1**. It provides:
 
-The control plane admits and schedules work, supplies scoped credentials, accepts
-validated results and handles cleanup. Ayni remains independently useful as a
-local CLI. Ayni Managed is supported; Custom Runtime and dependent
-multi-repository orchestration remain future work. Independent tasks can target
-several repositories in one project conversation.
+- PostgreSQL 17.6 as the sole workflow authority;
+- repository-owned forward migrations under an advisory lock;
+- minimal workspace, project, and conversation creation;
+- durable, scoped-idempotent message admission with FIFO turn ordering;
+- conversation snapshots and stable bounded history;
+- a canonical private-v1 gRPC API on a trusted pod-loopback listener;
+- a Docker Desktop Helm stack with distinct migration/runtime roles and retained storage.
+
+This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser/BFF, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime.
+
+JetStream delivery, executor ownership and results, resumable watches, providers, browser UX, and shared-environment release enter later slices.
+
+## Start locally
+
+```sh
+dev/ctl deploy
+dev/ctl check --expect-empty
+```
+
+See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
 
 ## Documentation
 
-The [human guide](docs/site/index.md), published at
-[orchestrator.ayni.build](https://orchestrator.ayni.build), covers setup,
-repositories, tasks, results and recovery with diagrams.
+- [Architecture](docs/technical/architecture/architecture.md)
+- [Operations](docs/technical/operations/operations.md)
+- [M1 durable foundation contract](docs/technical/research/project-workflow-m1-durable-foundation.md)
+- [Technical documentation index](docs/technical/README.md)
+- [Contributor preview](docs/site/index.md)
 
-[Technical documentation](docs/technical/README.md) stays in the repository for
-contributors, deployment maintainers and coding agents. It covers architecture,
-code boundaries, protocols and deployment internals and is excluded from the website.
-
-## Contributing and delivery
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and documentation authoring,
-[AGENTS.md](AGENTS.md) for repository rules, and [ROADMAP.md](ROADMAP.md) for the
-project and remaining work. Completed delivery lives in Git history, merged PRs
-and closed issues. [Historical decisions](docs/technical/decisions/README.md) preserve
-provenance; they do not override current guides.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository checks, [AGENTS.md](AGENTS.md) for repository rules, and [ROADMAP.md](ROADMAP.md) for later slices.

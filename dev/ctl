@@ -4,7 +4,6 @@ set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly repository_root="$(cd "$dev_directory/.." && pwd)"
 readonly scripts="$dev_directory/scripts"
-readonly tests="$dev_directory/tests"
 source "$dev_directory/lib/common.sh"
 cd "$repository_root"
 
@@ -12,50 +11,30 @@ usage() {
   cat <<'EOF'
 Usage: dev/ctl COMMAND [OPTIONS]
 
-Local Docker Desktop development:
-  init [--env-file PATH]       Create a private env file from the template
-  secrets [--env-file PATH]    Sync the env file into Kubernetes Secrets
-  deploy [--env-file PATH]     Sync Secrets, build images, and install or upgrade
-  redeploy [--env-file PATH]   Alias for deploy
-  up [--env-file PATH]         Alias for deploy
-  hot-reload [--env-file PATH] Deploy development images, then watch server and web source
-  check [--expect-empty]       Check the stack and optionally a fresh baseline
-  status                       Show the Helm release, pods, and retained claims
-  cleanup                      Uninstall stateless resources; preserve local data
-  down                         Alias for cleanup
-  purge NAMESPACE              Permanently delete an owned local namespace
-  render CP WORKER_DIGEST WEB   Render the complete development chart
-  dependencies                 Build locked Helm dependencies
-  eval [OPTIONS]              Run retained workflow evaluations (evals/run.py --help)
-  test NAME                    Run: observability, telemetry, custom-clients, jetstream, outbox, consumer, recovery, workspaces, plans, context, sessions, agent-profiles, workflow-evals, worker-evidence or environment-changes
-  help                         Show this help
+PostgreSQL-authoritative local Docker Desktop development:
+  secrets                       Create immutable local database-role Secrets
+  deploy | redeploy | up        Build and install or upgrade the Slice 1 stack
+  check [--expect-empty]        Check PostgreSQL migration and readiness
+  status                        Show the release, pods, and retained claims
+  cleanup | down                Uninstall resources while preserving database data
+  purge NAMESPACE               Permanently delete the owned local namespace
+  render CONTROL_PLANE_IMAGE    Render the complete development chart
+  dependencies                  Build locked Helm dependencies
+  help                          Show this help
 
-The default private env file is dev/.env. Override it with --env-file or set
-AYNI_ORCHESTRATOR_ENV_FILE. Commands always target the docker-desktop context.
+Commands always target the docker-desktop context. Override the namespace with
+AYNI_ORCHESTRATOR_NAMESPACE. Canonical private-v1 gRPC stays pod-local.
 EOF
-}
-
-env_file="${AYNI_ORCHESTRATOR_ENV_FILE:-$dev_directory/.env}"
-parse_env_file() {
-  if [[ $# -eq 0 ]]; then
-    return
-  fi
-  if [[ $# -eq 2 && "$1" == "--env-file" && -n "$2" ]]; then
-    env_file="$2"
-    return
-  fi
-  echo "usage: dev/ctl $command [--env-file PATH]" >&2
-  exit 2
 }
 
 cleanup_release() {
   local context namespace
   context="$(dev_context)"
   namespace="$(dev_namespace)"
-  if ! command -v helm >/dev/null 2>&1; then
+  command -v helm >/dev/null 2>&1 || {
     echo "Helm is required to uninstall the local release" >&2
     return 1
-  fi
+  }
   helm uninstall "$DEV_RELEASE_NAME" \
     --kube-context "$context" \
     --namespace "$namespace" \
@@ -63,44 +42,19 @@ cleanup_release() {
 }
 
 command="${1:-help}"
-if [[ $# -gt 0 ]]; then
-  shift
-fi
-
+[[ $# -eq 0 ]] || shift
 case "$command" in
   help | --help | -h)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl help" >&2; exit 2; }
     usage
     ;;
-  init)
-    parse_env_file "$@"
-    if [[ -e "$env_file" ]]; then
-      echo "environment file already exists: $env_file"
-      exit 0
-    fi
-    mkdir -p "$(dirname "$env_file")"
-    umask 077
-    cp "$dev_directory/.env.example" "$env_file"
-    chmod 0600 "$env_file"
-    echo "created $env_file; fill its values, then run dev/ctl secrets"
-    ;;
   secrets)
-    parse_env_file "$@"
-    "$scripts/configure-development-secrets.sh" --env-file "$env_file"
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl secrets" >&2; exit 2; }
+    "$scripts/configure-development-secrets.sh"
     ;;
   deploy | redeploy | up)
-    parse_env_file "$@"
-    "$scripts/configure-development-secrets.sh" --env-file "$env_file"
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl $command" >&2; exit 2; }
     "$scripts/deploy.sh"
-    ;;
-  hot-reload)
-    parse_env_file "$@"
-    if ! command -v tilt >/dev/null 2>&1; then
-      echo "Tilt is required for hot reload; install it, then run dev/ctl hot-reload again" >&2
-      exit 1
-    fi
-    "$scripts/configure-development-secrets.sh" --env-file "$env_file"
-    AYNI_ORCHESTRATOR_DEVELOPMENT_MODE=hot-reload "$scripts/deploy.sh"
-    exec tilt up
     ;;
   check)
     if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --expect-empty ) ]]; then
@@ -113,7 +67,7 @@ case "$command" in
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl status" >&2; exit 2; }
     context="$(dev_context)"
     namespace="$(dev_namespace)"
-    helm status ayni-orchestrator --kube-context "$context" --namespace "$namespace" || true
+    helm status "$DEV_RELEASE_NAME" --kube-context "$context" --namespace "$namespace" || true
     kubectl --context "$context" --namespace "$namespace" get pods,persistentvolumeclaims
     ;;
   cleanup | down)
@@ -129,83 +83,32 @@ case "$command" in
     fi
     case "$namespace" in
       ayni-orchestrator-*) ;;
-      *)
-        echo "refusing to purge a namespace outside the ayni-orchestrator-* development prefix" >&2
-        exit 1
-        ;;
+      *) echo "refusing to purge outside the ayni-orchestrator-* prefix" >&2; exit 1 ;;
     esac
     context="$(dev_context)"
     environment_label="$(kubectl --context "$context" get namespace "$namespace" \
       --ignore-not-found -o jsonpath='{.metadata.labels.orchestrator\.ayni\.dev/environment}')"
-    if [[ -n "$environment_label" && "$environment_label" != local ]]; then
-      echo "refusing to purge namespace without orchestrator.ayni.dev/environment=local" >&2
+    if [[ "$environment_label" != local ]]; then
+      echo "refusing to purge an absent or non-local namespace" >&2
       exit 1
     fi
-    if [[ -z "$environment_label" ]]; then
-      echo "refusing to purge an absent or unlabeled namespace; run dev/ctl secrets to label an existing local namespace" >&2
-      exit 1
-    fi
-    echo "permanently deleting local namespace $namespace, including Secrets, Jobs, and retained volumes" >&2
+    echo "permanently deleting local namespace $namespace, including PostgreSQL data" >&2
     cleanup_release
     kubectl --context "$context" delete namespace "$namespace" --wait=true
-    echo "deleted local development namespace $namespace"
     ;;
   render)
-    if [[ $# -ne 3 ]]; then
-      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE WORKER_DIGEST WEB_IMAGE" >&2
+    if [[ $# -ne 1 || -z "$1" || "$1" =~ [[:space:]] || "$1" == *','* ]]; then
+      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE" >&2
       exit 2
     fi
-    for image_ref in "$@"; do
-      if [[ -z "$image_ref" || "$image_ref" =~ [[:space:]] || "$image_ref" == *','* ]]; then
-        echo "image reference is empty or contains an unsupported character" >&2
-        exit 1
-      fi
-    done
-    case "${AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE:-local}" in
-      local) custom_clients=false ;;
-      custom-clients) custom_clients=true ;;
-      *)
-        echo "AYNI_ORCHESTRATOR_DEPLOYMENT_PROFILE must be local or custom-clients" >&2
-        exit 1
-        ;;
-    esac
     dev_build_chart_dependencies
     helm template "$DEV_RELEASE_NAME" "$DEV_CHART" \
       --namespace "$(dev_namespace)" \
-      --set-string "ayni-orchestrator.images.controlPlane=$1" \
-      --set ayni-orchestrator.runtime.enabled=true \
-      --set-string "ayni-orchestrator.runtime.workerImage=$2" \
-      --set-string "ayni-orchestrator.images.web=$3" \
-      --set "ayni-orchestrator.customClients.enabled=$custom_clients"
+      --set-string "ayni-orchestrator.images.controlPlane=$1"
     ;;
   dependencies)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl dependencies" >&2; exit 2; }
     dev_build_chart_dependencies
-    ;;
-  eval)
-    exec python3 "$repository_root/evals/run.py" "$@"
-    ;;
-  test)
-    test_name="${1:-}"
-    [[ $# -eq 1 || ( $# -eq 4 && ( "$test_name" == sessions || "$test_name" == agent-profiles || "$test_name" == workflow-evals ) ) || ( $# -eq 3 && ( "$test_name" == outbox || "$test_name" == consumer || "$test_name" == recovery || "$test_name" == workspaces || "$test_name" == plans || "$test_name" == context || "$test_name" == worker-evidence || "$test_name" == environment-changes ) ) ]] || {
-      echo "usage: dev/ctl test {observability|telemetry|custom-clients|jetstream|outbox|consumer|recovery|workspaces|plans|context|sessions|agent-profiles|workflow-evals|worker-evidence|environment-changes}" >&2
-      exit 2
-    }
-    case "$test_name" in
-      observability) "$scripts/check.sh" --observability-only ;;
-      custom-clients) "$tests/check-custom-clients.sh" ;;
-      jetstream) "$tests/jetstream.sh" ;;
-      telemetry) "$tests/telemetry.sh" ;;
-      workflow-evals) AYNI_SESSION_FIXTURE_PROFILES=1 AYNI_SESSION_FIXTURE_EVALS=1 "$tests/sessions.sh" "${2:?control-plane image required}" "${3:?web image required}" "${4:?worker image required}" ;;
-      agent-profiles) AYNI_SESSION_FIXTURE_PROFILES=1 "$tests/sessions.sh" "${2:?control-plane image required}" "${3:?web image required}" "${4:?worker image required}" ;;
-      sessions) "$tests/sessions.sh" "${2:?control-plane image required}" "${3:?web image required}" "${4:?worker image required}" ;;
-      environment-changes) "$tests/$1.sh" "${2:?worker image required}" "${3:?runtime image required}" ;;
-      outbox|consumer|recovery|workspaces|plans|context|worker-evidence) "$tests/$1.sh" "${2:?control-plane image required}" "${3:?web image required}" ;;
-      *)
-        echo "unknown development test: $test_name" >&2
-        exit 2
-        ;;
-    esac
     ;;
   *)
     echo "unknown development command: $command" >&2
