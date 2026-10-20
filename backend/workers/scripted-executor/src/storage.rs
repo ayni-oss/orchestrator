@@ -1,6 +1,9 @@
+use super::{CLAIM_REPORT_RESERVATION_BYTES, TERMINAL_REPORT_RESERVATION_BYTES};
 use super::{Command, LedgerError, LedgerLimits, Report, StoreOutcome};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use sha2::{Digest as _, Sha256};
+
+type ExistingReportRow = (String, Option<Vec<u8>>, String, String, i64);
 
 pub fn existing_command_outcome(
     transaction: &Transaction<'_>,
@@ -24,7 +27,7 @@ pub fn existing_command_outcome(
     {
         return Err(LedgerError::EventConflict);
     }
-    match existing_report_outcome(transaction, claim)? {
+    match existing_report_outcome(transaction, command.source, command.id, claim)? {
         Some(StoreOutcome::Duplicate) => Ok(Some(StoreOutcome::Duplicate)),
         Some(StoreOutcome::Stored) | None => Err(LedgerError::EventConflict),
     }
@@ -57,22 +60,38 @@ pub fn redelivered_command_outcome(
 
 pub fn existing_report_outcome(
     transaction: &Transaction<'_>,
+    command_source: &str,
+    command_event_id: &str,
     report: &Report<'_>,
 ) -> Result<Option<StoreOutcome>, LedgerError> {
-    let existing: Option<(String, Option<Vec<u8>>)> = transaction
+    let existing: Option<ExistingReportRow> = transaction
         .query_row(
-            "SELECT digest, event_bytes FROM reports WHERE source = ?1 AND event_id = ?2",
+            "SELECT digest, event_bytes, command_source, command_event_id, sequence \
+             FROM reports WHERE source = ?1 AND event_id = ?2",
             params![report.source, report.id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )
         .optional()?;
-    let Some((digest, bytes)) = existing else {
+    let Some((digest, bytes, retained_command_source, retained_command_event_id, sequence)) =
+        existing
+    else {
         return Ok(None);
     };
     if digest == exact_digest(report.exact_bytes)
         && bytes
             .as_deref()
             .is_none_or(|retained| retained == report.exact_bytes)
+        && retained_command_source == command_source
+        && retained_command_event_id == command_event_id
+        && sequence == i64::from(report.sequence)
     {
         Ok(Some(StoreOutcome::Duplicate))
     } else {
@@ -85,15 +104,24 @@ pub fn insert_report(
     command: &Command<'_>,
     report: &Report<'_>,
 ) -> Result<(), LedgerError> {
+    let reservation = match report.sequence {
+        1 => CLAIM_REPORT_RESERVATION_BYTES,
+        2 => TERMINAL_REPORT_RESERVATION_BYTES,
+        _ => return Err(LedgerError::Invalid),
+    };
+    let reserved_bytes = reservation
+        .checked_sub(report.exact_bytes.len())
+        .ok_or(LedgerError::Capacity)?;
     transaction.execute(
         "INSERT INTO reports \
-         (source, event_id, digest, event_bytes, command_source, command_event_id, sequence) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         (source, event_id, digest, event_bytes, reserved_bytes, command_source, command_event_id, sequence) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             report.source,
             report.id,
             exact_digest(report.exact_bytes),
             report.exact_bytes,
+            i64::try_from(reserved_bytes).map_err(|_| LedgerError::Capacity)?,
             command.source,
             command.id,
             i64::from(report.sequence),
@@ -106,14 +134,17 @@ pub fn reserve(
     transaction: &Transaction<'_>,
     limits: LedgerLimits,
     added_records: u64,
+    removed_records: u64,
     added_bytes: usize,
     removed_bytes: usize,
 ) -> Result<(), LedgerError> {
     let (records, bytes): (i64, i64) = transaction.query_row(
         "SELECT \
-           (SELECT count(*) FROM commands) + (SELECT count(*) FROM reports), \
+           (SELECT count(*) + COALESCE(sum(terminal_reserved_records), 0) FROM commands) + \
+           (SELECT count(*) FROM reports), \
            COALESCE((SELECT sum(COALESCE(length(event_bytes), 0) + terminal_reserved_bytes) FROM commands), 0) + \
-           COALESCE((SELECT sum(COALESCE(length(event_bytes), 0) + COALESCE(length(decision_bytes), 0)) FROM reports), 0)",
+           COALESCE((SELECT sum(COALESCE(length(event_bytes), 0) + reserved_bytes + \
+             COALESCE(length(decision_bytes), 0)) FROM reports), 0)",
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
@@ -121,6 +152,7 @@ pub fn reserve(
     let removed_bytes = u64::try_from(removed_bytes).map_err(|_| LedgerError::Capacity)?;
     if u64::try_from(records)
         .map_err(|_| LedgerError::Capacity)?
+        .saturating_sub(removed_records)
         .saturating_add(added_records)
         > limits.max_records
         || u64::try_from(bytes)

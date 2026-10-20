@@ -29,6 +29,7 @@ use storage::{
     redelivered_command_outcome, reserve,
 };
 
+const CLAIM_REPORT_RESERVATION_BYTES: usize = 24 * 1024;
 const TERMINAL_REPORT_RESERVATION_BYTES: usize = 40 * 1024;
 const RESOLVED_METADATA_RETENTION_SECONDS: u64 = 8 * 24 * 60 * 60;
 
@@ -122,10 +123,14 @@ struct RetainedDecisionReport {
     prior_digest: Option<String>,
     prior_bytes: Option<Vec<u8>>,
     report_bytes: Option<Vec<u8>>,
+    report_reserved_bytes: i64,
     report_digest: String,
     sequence: i64,
     command_source: String,
     command_event_id: String,
+    command_bytes: Option<Vec<u8>>,
+    terminal_reserved_bytes: i64,
+    terminal_reserved_records: i64,
 }
 
 struct RetainedCommandBinding {
@@ -243,23 +248,27 @@ impl Ledger {
             return Err(LedgerError::AcceptedOwnerCannotRotate);
         }
         transaction.execute(
-            "UPDATE commands SET state = 'rejected', terminal_reserved_bytes = 0 \
+            "UPDATE commands SET state = 'rejected', terminal_reserved_bytes = 0, \
+             terminal_reserved_records = 0 \
              WHERE turn_id = ?1 AND assignment_id = ?2 AND generation < ?3",
             params![validated.turn_id, validated.assignment_id, generation],
         )?;
         reserve(
             &transaction,
             self.limits,
-            2,
-            command.exact_bytes.len() + claim.exact_bytes.len() + TERMINAL_REPORT_RESERVATION_BYTES,
+            3,
+            0,
+            command.exact_bytes.len()
+                + CLAIM_REPORT_RESERVATION_BYTES
+                + TERMINAL_REPORT_RESERVATION_BYTES,
             0,
         )?;
         transaction.execute(
             "INSERT INTO commands \
              (source, event_id, digest, event_bytes, workspace_id, project_id, conversation_id, \
               turn_id, assignment_id, generation, execution_binding_revision, context_revision, \
-              terminal_reserved_bytes, state) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'claim_pending')",
+              terminal_reserved_bytes, terminal_reserved_records, state) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1, 'claim_pending')",
             params![
                 command.source,
                 command.id,
@@ -317,7 +326,9 @@ impl Ledger {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        if let Some(outcome) = existing_report_outcome(&transaction, report)? {
+        if let Some(outcome) =
+            existing_report_outcome(&transaction, command_source, command_event_id, report)?
+        {
             transaction.commit()?;
             return Ok(outcome);
         }
@@ -332,7 +343,8 @@ impl Ledger {
             &transaction,
             self.limits,
             1,
-            report.exact_bytes.len(),
+            1,
+            TERMINAL_REPORT_RESERVATION_BYTES,
             TERMINAL_REPORT_RESERVATION_BYTES,
         )?;
         let command = Command {
@@ -345,7 +357,8 @@ impl Ledger {
         };
         insert_report(&transaction, &command, report)?;
         transaction.execute(
-            "UPDATE commands SET state = 'terminal_pending', terminal_reserved_bytes = 0 \
+            "UPDATE commands SET state = 'terminal_pending', terminal_reserved_bytes = 0, \
+             terminal_reserved_records = 0 \
              WHERE source = ?1 AND event_id = ?2",
             params![command_source, command_event_id],
         )?;
@@ -551,8 +564,14 @@ fn retained_decision_report(
 ) -> Result<RetainedDecisionReport, LedgerError> {
     transaction
         .query_row(
-            "SELECT decision, decision_digest, decision_bytes, event_bytes, digest, sequence, command_source, command_event_id \
-             FROM reports WHERE source = ?1 AND event_id = ?2",
+            "SELECT reports.decision, reports.decision_digest, reports.decision_bytes, \
+             reports.event_bytes, reports.reserved_bytes, reports.digest, reports.sequence, \
+             reports.command_source, reports.command_event_id, commands.event_bytes, \
+             commands.terminal_reserved_bytes, commands.terminal_reserved_records \
+             FROM reports JOIN commands \
+               ON commands.source = reports.command_source \
+              AND commands.event_id = reports.command_event_id \
+             WHERE reports.source = ?1 AND reports.event_id = ?2",
             params![decision.report_source, decision.report_id],
             |row| {
                 Ok(RetainedDecisionReport {
@@ -560,10 +579,14 @@ fn retained_decision_report(
                     prior_digest: row.get(1)?,
                     prior_bytes: row.get(2)?,
                     report_bytes: row.get(3)?,
-                    report_digest: row.get(4)?,
-                    sequence: row.get(5)?,
-                    command_source: row.get(6)?,
-                    command_event_id: row.get(7)?,
+                    report_reserved_bytes: row.get(4)?,
+                    report_digest: row.get(5)?,
+                    sequence: row.get(6)?,
+                    command_source: row.get(7)?,
+                    command_event_id: row.get(8)?,
+                    command_bytes: row.get(9)?,
+                    terminal_reserved_bytes: row.get(10)?,
+                    terminal_reserved_records: row.get(11)?,
                 })
             },
         )
@@ -599,8 +622,7 @@ const fn command_transition(
 ) -> Result<(&'static str, bool), LedgerError> {
     match (sequence, accepted) {
         (1, true) => Ok(("accepted", false)),
-        (1, false) => Ok(("rejected", true)),
-        (2, false) => Ok(("terminal_pending", false)),
+        (1 | 2, false) => Ok(("rejected", true)),
         (2, true) => Ok(("completed", true)),
         _ => Err(LedgerError::Invalid),
     }

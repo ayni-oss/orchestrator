@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS commands (
     context_revision integer NOT NULL CHECK (context_revision > 0),
     signing_public_key blob CHECK (signing_public_key IS NULL OR length(signing_public_key) = 32),
     terminal_reserved_bytes integer NOT NULL CHECK (terminal_reserved_bytes >= 0),
+    terminal_reserved_records integer NOT NULL CHECK (terminal_reserved_records IN (0, 1)),
     state text NOT NULL CHECK (state IN ('claim_pending', 'accepted', 'terminal_pending', 'rejected', 'completed')),
     PRIMARY KEY (source, event_id),
     UNIQUE (turn_id, assignment_id, generation)
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS reports (
     event_id text NOT NULL,
     digest text NOT NULL,
     event_bytes blob,
+    reserved_bytes integer NOT NULL CHECK (reserved_bytes >= 0),
     command_source text NOT NULL,
     command_event_id text NOT NULL,
     sequence integer NOT NULL CHECK (sequence IN (1, 2)),

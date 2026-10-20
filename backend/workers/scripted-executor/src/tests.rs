@@ -504,6 +504,21 @@ fn terminal_report_requires_the_full_frozen_binding() -> Result<(), LedgerError>
         ),
         Err(LedgerError::Invalid)
     ));
+
+    let terminal = terminal_fixture(&command, WINNER, &WINNER_SEED, TERMINAL_ID)?;
+    ledger.retain_terminal_report(
+        &command.identity.source,
+        &command.identity.id,
+        &terminal.report(2),
+    )?;
+    assert!(matches!(
+        ledger.retain_terminal_report(
+            "urn:ayni:workflow:command:another",
+            "018f0f7b-6a4d-7a11-8d77-a7a8a9aaabac",
+            &terminal.report(2),
+        ),
+        Err(LedgerError::EventConflict)
+    ));
     Ok(())
 }
 
@@ -605,6 +620,145 @@ fn stale_generation_and_full_ledger_reject_atomically() -> Result<(), LedgerErro
         Err(LedgerError::Capacity)
     ));
     assert!(!full.can_execute(&command.identity.source, &command.identity.id)?);
+    Ok(())
+}
+
+#[test]
+fn command_claim_reserves_terminal_record_and_bounded_report_bytes() -> Result<(), LedgerError> {
+    let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
+    let mut ledger = open(
+        &directory,
+        LedgerLimits {
+            max_records: 5,
+            max_exact_bytes: LedgerLimits::m1_default().max_exact_bytes,
+        },
+        WINNER,
+        &WINNER_SEED,
+    )?;
+    let command = command_fixture(1, COMMAND_ID)?;
+    let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
+    ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
+
+    let (claim_bytes, claim_reserved, terminal_bytes, terminal_records): (i64, i64, i64, i64) =
+        ledger.connection.query_row(
+            "SELECT length(reports.event_bytes), reports.reserved_bytes, \
+             commands.terminal_reserved_bytes, commands.terminal_reserved_records \
+             FROM reports JOIN commands \
+               ON commands.source = reports.command_source \
+              AND commands.event_id = reports.command_event_id \
+             WHERE reports.source = ?1 AND reports.event_id = ?2",
+            params![claim.identity.source, claim.identity.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    assert_eq!(claim_bytes + claim_reserved, 24 * 1024);
+    assert_eq!(terminal_bytes, 40 * 1024);
+    assert_eq!(terminal_records, 1);
+
+    let mut second = command_fixture(1, "018f0f7b-6a4d-7a11-8d77-a7a8a9aaabac")?;
+    second.binding.turn_id = "turn:018f0f7b-6a4d-7a11-8d77-b7b8b9babbbc".into();
+    second.binding.assignment_id = "018f0f7b-6a4d-7a11-8d77-c7c8c9cacbcc".into();
+    let second_payload = ConversationTurnRequested {
+        binding: Some(second.binding.clone()),
+        input_message_id: "message:018f0f7b-6a4d-7a11-8d77-d7d8d9dadbdc".into(),
+        input_content: "second independent command".into(),
+        context: vec![],
+    };
+    second.bytes = encode_command(&second.identity, &event_metadata(), &second_payload)
+        .map_err(|_| LedgerError::Invalid)?;
+    let second_claim = claim_fixture(
+        &second,
+        WINNER,
+        &WINNER_SEED,
+        "018f0f7b-6a4d-7a11-8d77-e7e8e9eaebec",
+    )?;
+    assert!(matches!(
+        ledger.retain_command_and_claim(&second.command(), &second_claim.report(1)),
+        Err(LedgerError::Capacity)
+    ));
+
+    let accepted = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
+    ledger.record_decision(&Decision {
+        exact_bytes: &accepted,
+    })?;
+    let terminal = terminal_fixture(&command, WINNER, &WINNER_SEED, TERMINAL_ID)?;
+    ledger.retain_terminal_report(
+        &command.identity.source,
+        &command.identity.id,
+        &terminal.report(2),
+    )?;
+    let (terminal_event_bytes, terminal_margin, reserved_record): (i64, i64, i64) =
+        ledger.connection.query_row(
+            "SELECT length(reports.event_bytes), reports.reserved_bytes, \
+             commands.terminal_reserved_records \
+             FROM reports JOIN commands \
+               ON commands.source = reports.command_source \
+              AND commands.event_id = reports.command_event_id \
+             WHERE reports.source = ?1 AND reports.event_id = ?2",
+            params![terminal.identity.source, terminal.identity.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    assert_eq!(terminal_event_bytes + terminal_margin, 40 * 1024);
+    assert_eq!(reserved_record, 0);
+    Ok(())
+}
+
+#[test]
+fn rejected_terminal_decision_is_terminal_and_releases_exact_bytes() -> Result<(), LedgerError> {
+    let directory = TempDir::new().map_err(|_| LedgerError::Invalid)?;
+    let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
+    let command = command_fixture(1, COMMAND_ID)?;
+    let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
+    ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
+    let claim_decision = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
+    ledger.record_decision(&Decision {
+        exact_bytes: &claim_decision,
+    })?;
+
+    let terminal = terminal_fixture(&command, WINNER, &WINNER_SEED, TERMINAL_ID)?;
+    ledger.retain_terminal_report(
+        &command.identity.source,
+        &command.identity.id,
+        &terminal.report(2),
+    )?;
+    let rejection = decision_bytes(&command, &terminal, WINNER, WINNER, false, None, None)?;
+    ledger.record_decision(&Decision {
+        exact_bytes: &rejection,
+    })?;
+
+    let (state, command_bytes, reserved_bytes, reserved_records): (
+        String,
+        Option<Vec<u8>>,
+        i64,
+        i64,
+    ) = ledger.connection.query_row(
+        "SELECT state, event_bytes, terminal_reserved_bytes, terminal_reserved_records \
+         FROM commands WHERE source = ?1 AND event_id = ?2",
+        params![command.identity.source, command.identity.id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    assert_eq!(state, "rejected");
+    assert!(command_bytes.is_none());
+    assert_eq!(reserved_bytes, 0);
+    assert_eq!(reserved_records, 0);
+    let (report_bytes, report_reserved_bytes, decision): (Option<Vec<u8>>, i64, String) =
+        ledger.connection.query_row(
+            "SELECT event_bytes, reserved_bytes, decision FROM reports \
+             WHERE source = ?1 AND event_id = ?2",
+            params![terminal.identity.source, terminal.identity.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    assert!(report_bytes.is_none());
+    assert_eq!(report_reserved_bytes, 0);
+    assert_eq!(decision, "rejected");
+
+    assert!(!ledger.can_retire()?);
+    ledger.acknowledge_decision_at(&claim.identity.source, &claim.identity.id, 1_000)?;
+    ledger.acknowledge_decision_at(&terminal.identity.source, &terminal.identity.id, 1_000)?;
+    assert!(ledger.can_retire()?);
+    assert_eq!(
+        ledger.prune_resolved_metadata(1_000 + RESOLVED_METADATA_RETENTION_SECONDS)?,
+        3
+    );
     Ok(())
 }
 

@@ -64,16 +64,39 @@ impl Ledger {
             retained.sequence,
             &instance_id,
         )?;
+        let (command_state, cleanup_command) = command_transition(retained.sequence, accepted)?;
+        let removed_records = if cleanup_command {
+            u64::try_from(retained.terminal_reserved_records).map_err(|_| LedgerError::Invalid)?
+        } else {
+            0
+        };
+        let mut removed_bytes = retained
+            .report_bytes
+            .as_deref()
+            .map_or(0, <[u8]>::len)
+            .saturating_add(
+                usize::try_from(retained.report_reserved_bytes)
+                    .map_err(|_| LedgerError::Invalid)?,
+            );
+        if cleanup_command {
+            removed_bytes = removed_bytes
+                .saturating_add(retained.command_bytes.as_deref().map_or(0, <[u8]>::len))
+                .saturating_add(
+                    usize::try_from(retained.terminal_reserved_bytes)
+                        .map_err(|_| LedgerError::Invalid)?,
+                );
+        }
         reserve(
             &transaction,
             self.limits,
             0,
+            removed_records,
             decision.exact_bytes.len(),
-            retained.report_bytes.as_deref().map_or(0, <[u8]>::len),
+            removed_bytes,
         )?;
         transaction.execute(
             "UPDATE reports SET decision = ?3, decision_digest = ?4, decision_bytes = ?5, \
-             decision_consumer_sequence = ?6, event_bytes = NULL \
+             decision_consumer_sequence = ?6, event_bytes = NULL, reserved_bytes = 0 \
              WHERE source = ?1 AND event_id = ?2",
             params![
                 payload.report_source,
@@ -87,11 +110,11 @@ impl Ledger {
                     .map_err(|_| LedgerError::Invalid)?,
             ],
         )?;
-        let (command_state, cleanup_command) = command_transition(retained.sequence, accepted)?;
         transaction.execute(
             "UPDATE commands SET state = ?3, signing_public_key = COALESCE(?5, signing_public_key), \
              event_bytes = CASE WHEN ?4 THEN NULL ELSE event_bytes END, \
-             terminal_reserved_bytes = CASE WHEN ?4 THEN 0 ELSE terminal_reserved_bytes END \
+             terminal_reserved_bytes = CASE WHEN ?4 THEN 0 ELSE terminal_reserved_bytes END, \
+             terminal_reserved_records = CASE WHEN ?4 THEN 0 ELSE terminal_reserved_records END \
              WHERE source = ?1 AND event_id = ?2",
             params![
                 retained.command_source,
