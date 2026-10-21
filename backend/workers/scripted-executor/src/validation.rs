@@ -5,13 +5,13 @@ use ed25519_dalek::SigningKey;
 use rusqlite::{Connection, Transaction, params};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub(super) fn unix_seconds() -> Result<u64, LedgerError> {
+pub fn unix_seconds() -> Result<u64, LedgerError> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_secs())
         .map_err(|_| LedgerError::Invalid)
 }
-pub(super) fn validate_redelivered_command(command: &Command<'_>) -> Result<(), LedgerError> {
+pub fn validate_redelivered_command(command: &Command<'_>) -> Result<(), LedgerError> {
     validate_command(command)?;
     let (identity, _, payload) =
         decode_command(command.exact_bytes).map_err(|_| LedgerError::Invalid)?;
@@ -26,7 +26,7 @@ pub(super) fn validate_redelivered_command(command: &Command<'_>) -> Result<(), 
     }
     Ok(())
 }
-pub(super) const fn validate_command(command: &Command<'_>) -> Result<(), LedgerError> {
+pub const fn validate_command(command: &Command<'_>) -> Result<(), LedgerError> {
     if command.source.is_empty()
         || command.id.is_empty()
         || command.exact_bytes.is_empty()
@@ -39,7 +39,7 @@ pub(super) const fn validate_command(command: &Command<'_>) -> Result<(), Ledger
         Ok(())
     }
 }
-pub(super) const fn validate_report(report: &Report<'_>, sequence: u8) -> Result<(), LedgerError> {
+pub const fn validate_report(report: &Report<'_>, sequence: u8) -> Result<(), LedgerError> {
     if report.source.is_empty()
         || report.id.is_empty()
         || report.exact_bytes.is_empty()
@@ -50,16 +50,14 @@ pub(super) const fn validate_report(report: &Report<'_>, sequence: u8) -> Result
         Ok(())
     }
 }
-pub(super) fn retained_instance_id(connection: &Connection) -> Result<String, LedgerError> {
+pub fn retained_instance_id(connection: &Connection) -> Result<String, LedgerError> {
     Ok(connection.query_row(
         "SELECT instance_id FROM executor_identity WHERE singleton = 1",
         [],
         |row| row.get(0),
     )?)
 }
-pub(super) fn retained_signing_public_key(
-    connection: &Connection,
-) -> Result<[u8; 32], LedgerError> {
+pub fn retained_signing_public_key(connection: &Connection) -> Result<[u8; 32], LedgerError> {
     let seed: Vec<u8> = connection.query_row(
         "SELECT signing_seed FROM executor_identity WHERE singleton = 1",
         [],
@@ -68,7 +66,7 @@ pub(super) fn retained_signing_public_key(
     let seed: [u8; 32] = seed.try_into().map_err(|_| LedgerError::Invalid)?;
     Ok(SigningKey::from_bytes(&seed).verifying_key().to_bytes())
 }
-pub(super) fn decode_targeted_decision(
+pub fn decode_targeted_decision(
     exact_bytes: &[u8],
     instance_id: &str,
 ) -> Result<(ConversationReportDecision, bool), LedgerError> {
@@ -87,7 +85,7 @@ pub(super) fn decode_targeted_decision(
         ConversationReportDecisionKind::Unspecified => Err(LedgerError::Invalid),
     }
 }
-pub(super) fn retain_decision_consumer_sequence(
+pub fn retain_decision_consumer_sequence(
     transaction: &Transaction<'_>,
     report_source: &str,
     report_event_id: &str,

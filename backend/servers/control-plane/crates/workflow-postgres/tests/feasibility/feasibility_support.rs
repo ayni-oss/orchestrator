@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) async fn prove_capacity_race(
+pub async fn prove_capacity_race(
     client: &Client,
     store: &WorkflowStore,
     workspace_id: &str,
@@ -62,10 +62,7 @@ pub(super) async fn prove_capacity_race(
     Ok(())
 }
 
-pub(super) async fn prove_future_version_rejected(
-    client: &Client,
-    database_url: &str,
-) -> TestResult {
+pub async fn prove_future_version_rejected(client: &Client, database_url: &str) -> TestResult {
     client.execute("INSERT INTO workflow_schema_migrations (version, description, checksum) VALUES (3, 'future', 'sha256:future')", &[]).await?;
     assert!(matches!(
         validate(database_url).await,
