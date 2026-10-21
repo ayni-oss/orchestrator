@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 async-nats.workspace = true
+async-stream.workspace = true
 axum.workspace = true
 ayni-orchestrator-events = { path = "../../libs/events" }
 futures-util.workspace = true

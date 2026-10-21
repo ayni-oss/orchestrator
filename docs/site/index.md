@@ -17,7 +17,7 @@ features:
   - title: Durable handoff
     details: Authenticated JetStream and a retained scripted executor keep broker storage, ownership claims, decisions, and accepted results distinct.
   - title: Private by construction
-    details: Canonical workflow gRPC binds to pod loopback. Contributors can resume updates; providers, browser UX, and custom-client access remain deferred.
+    details: Canonical workflow gRPC binds to pod loopback. Contributors can resume updates; the local contributor console exercises scripted conversations. Real providers and shared access remain deferred.
 ---
 
 ## Contributor preview

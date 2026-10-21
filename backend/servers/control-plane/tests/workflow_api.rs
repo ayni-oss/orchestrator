@@ -1,3 +1,6 @@
+#[path = "support/console.rs"]
+mod console;
+
 use ayni_orchestrator_api::v1::{
     CreateConversationRequest, CreateProjectRequest, CreateWorkspaceRequest,
     GetConversationSnapshotRequest, ListConversationHistoryRequest, SendMessageRequest,
@@ -60,6 +63,7 @@ async fn trusted_listener_and_readiness_cover_private_workflow_boundary() -> Tes
     let (address, shutdown, server) = start_server(&database_url)?;
     let channel = connect(address).await?;
     exercise_hierarchy_and_admission(channel).await?;
+    console::exercise(address).await?;
     shutdown.send(true)?;
     server.await??;
     Ok(())

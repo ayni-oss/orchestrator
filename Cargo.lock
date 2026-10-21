@@ -191,10 +191,14 @@ dependencies = [
 name = "ayni-orchestrator-api"
 version = "0.1.0"
 dependencies = [
+ "pbjson",
+ "pbjson-build",
+ "pbjson-types",
  "prost",
  "prost-build",
  "prost-types",
  "protoc-bin-vendored",
+ "serde",
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
@@ -205,6 +209,7 @@ name = "ayni-orchestrator-control-plane"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "async-stream",
  "axum",
  "ayni-orchestrator-api",
  "ayni-orchestrator-events",
@@ -1771,6 +1776,21 @@ dependencies = [
  "itertools",
  "prost",
  "prost-types",
+]
+
+[[package]]
+name = "pbjson-types"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a14e2757d877c0f607a82ce1b8560e224370f159d66c5d52eb55ea187ef0350e"
+dependencies = [
+ "bytes",
+ "chrono",
+ "pbjson",
+ "pbjson-build",
+ "prost",
+ "prost-build",
+ "serde",
 ]
 
 [[package]]

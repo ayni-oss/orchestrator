@@ -1,6 +1,6 @@
 # Documentation
 
-The current public page is the [M1 Slice 2 contributor preview](site/index.md).
+The current public page is the [M1 Slice 3 contributor preview](site/index.md).
 
 Contributors and deployment maintainers should start with the [technical documentation](technical/README.md), which covers PostgreSQL authority, authenticated durable delivery, scripted-executor ownership, the canonical private-v1 contract, local deployment, validation, and operations.
 

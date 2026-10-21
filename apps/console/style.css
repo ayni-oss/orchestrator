@@ -1,0 +1,320 @@
+:root {
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;
+  color:#273e37;
+  background:#fbfcf9;
+  font-size:14px;
+  font-synthesis:none}
+* {
+  box-sizing:border-box}
+body {
+  margin:0;
+  display:grid;
+  grid-template-columns:280px 1fr;
+  min-height:100vh}
+aside {
+  background:#f0f3ed;
+  border-right:1px solid #dde4d9;
+  padding:28px 22px;
+  display:flex;
+  flex-direction:column;
+  gap:28px}
+header {
+  display:flex;
+  gap:12px;
+  align-items:center}
+header strong {
+  font-size:22px;
+  letter-spacing:-1px}
+small {
+  display:block;
+  font-size:11px;
+  color:#65776b;
+  line-height:1.6}
+.mark {
+  display:grid;
+  place-items:center;
+  width:38px;
+  height:38px;
+  background:#295644;
+  color:#fff;
+  border-radius:13px;
+  font-size:30px;
+  font-family:Georgia,serif}
+.badge {
+  margin-left:auto;
+  font-size:9px;
+  letter-spacing:1px;
+  border:1px solid #c8d5c5;
+  padding:5px 7px;
+  border-radius:5px}
+label {
+  display:block;
+  font-size:12px;
+  font-weight:600;
+  margin-bottom:8px}
+select,input,textarea {
+  width:100%;
+  background:#fff;
+  border:1px solid #d4ddd0;
+  border-radius:7px;
+  padding:10px;
+  color:inherit;
+  font:inherit}
+select {
+  margin-bottom:12px}
+input,textarea {
+  margin-top:7px}
+textarea {
+  resize:vertical}
+button {
+  cursor:pointer;
+  border:1px solid #cbd7c6;
+  border-radius:7px;
+  padding:9px 12px;
+  background:#fff;
+  color:#294f3f;
+  font:inherit;
+  font-weight:550}
+button:hover {
+  background:#e7eee1}
+button:disabled {
+  opacity:.45;
+  cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible {
+  outline:3px solid #8bad77;
+  outline-offset:2px}
+.select-row {
+  display:flex;
+  gap:6px}
+.select-row select {
+  flex:1;
+  min-width:0}
+.select-row button {
+  height:39px}
+details {
+  font-size:12px;
+  color:#53694e;
+  margin:6px 0 20px}
+summary {
+  cursor:pointer;
+  padding:5px 0}
+details form {
+  margin-top:12px}
+h2 {
+  font-size:13px;
+  margin:0 0 12px}
+.conversation-nav {
+  flex:1}
+#conversations {
+  display:grid;
+  gap:5px;
+  margin-bottom:12px}
+#conversations button {
+  border:0;
+  background:transparent;
+  text-align:left;
+  font-weight:450;
+  overflow-wrap:anywhere}
+#conversations button[aria-current=true] {
+  background:#dfe9d8;
+  color:#244d37;
+  font-weight:650}
+footer {
+  font-size:12px;
+  line-height:2}
+.dot {
+  display:inline-block;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#769c56;
+  margin-right:5px}
+main {
+  padding:0 42px 24px;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  height:100vh}
+.topbar {
+  min-height:66px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  border-bottom:1px solid #e7ece2;
+  font-size:12px;
+  color:#6a786b}
+#breadcrumb {
+  flex:1}
+#connection {
+  font-size:11px}
+#toggle-watch {
+  font-size:11px;
+  padding:6px 9px}
+.heading {
+  padding:34px 0 20px}
+.eyebrow {
+  font-size:10px;
+  letter-spacing:2px;
+  font-weight:700;
+  color:#77905c}
+h1 {
+  font-size:30px;
+  letter-spacing:-1px;
+  font-weight:500;
+  margin:10px 0}
+#subtitle {
+  color:#71806e;
+  font-size:12px}
+.workspace-content {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 230px;
+  gap:32px;
+  flex:1;
+  min-height:100px;
+  overflow:auto}
+.chat {
+  min-width:0;
+  padding-bottom:20px}
+.empty {
+  padding:55px 10px;
+  text-align:center;
+  color:#8a9880}
+.empty h2 {
+  font-size:18px;
+  font-weight:450;
+  color:#4a6350;
+  margin:18px 0 8px}
+.empty-icon {
+  font-size:38px;
+  color:#a0b78c}
+.empty p {
+  font-size:12px}
+.message {
+  margin-bottom:18px;
+  border:1px solid #e1e8dc;
+  border-radius:10px;
+  padding:16px 18px;
+  background:#fff}
+.message.user {
+  background:#eef3e8;
+  border-color:#e4ebdd}
+.message h3 {
+  font-size:11px;
+  font-weight:650;
+  margin:0 0 9px;
+  color:#5c7753}
+.message p {
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  line-height:1.65;
+  margin:0;
+  font-size:13px}
+.activity-panel {
+  border-left:1px solid #e3e9dd;
+  padding:8px 0 0 22px;
+  overflow-wrap:anywhere}
+.activity-panel h2 {
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:1px}
+#turn-state {
+  font-size:12px;
+  color:#71806e}
+#activity {
+  padding-left:16px;
+  font-size:11px;
+  line-height:1.6;
+  color:#64785b}
+#activity li {
+  padding:4px 0}
+dl {
+  font-size:10px}
+dt {
+  color:#7d8d74;
+  margin-top:8px}
+dd {
+  margin:3px 0;
+  font-family:ui-monospace,monospace}
+#send {
+  margin-top:18px;
+  border:1px solid #d8e1d2;
+  border-radius:10px;
+  background:#fff;
+  padding:10px 14px}
+#send textarea {
+  border:0;
+  outline-offset:0;
+  min-height:64px;
+  margin:0;
+  padding:6px;
+  font-size:13px}
+#send>div {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px}
+#send button,form button[type=submit] {
+  background:#315b43;
+  color:#fff;
+  border-color:#315b43}
+#send button span {
+  margin-left:16px}
+#error,#pending {
+  background:#fff3dc;
+  border:1px solid #ebd3a4;
+  border-radius:8px;
+  padding:12px 16px;
+  margin-bottom:15px;
+  font-size:12px;
+  overflow-wrap:anywhere}
+#pending p {
+  margin:6px 0}
+#older {
+  margin-bottom:16px;
+  font-size:11px}
+#history .message {
+  opacity:.85}
+.sr-only {
+  position:absolute;
+  width:1px;
+  height:1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0)}
+[hidden] {
+  display:none!important}
+@media(max-width:1000px) {
+  main {
+  padding:0 22px 20px}
+.workspace-content {
+  grid-template-columns:1fr}
+.activity-panel {
+  border-left:0;
+  border-top:1px solid #e3e9dd;
+  padding:16px 0}
+body {
+  grid-template-columns:240px 1fr}
+}
+@media(max-width:650px) {
+  body {
+  display:block}
+aside {
+  padding:16px;
+  gap:16px}
+main {
+  height:auto;
+  min-height:70vh}
+.workspace-content {
+  overflow:visible}
+.heading {
+  padding-top:18px}
+.conversation-nav {
+  max-height:250px;
+  overflow:auto}
+h1 {
+  font-size:25px}
+.topbar {
+  flex-wrap:wrap;
+  padding:10px 0}
+#send small {
+  display:none}
+}

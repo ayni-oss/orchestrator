@@ -43,6 +43,46 @@ All use seven-day age limits, a two-minute duplicate window, one local replica, 
 
 `dev/ctl check` verifies workload readiness, migration history through version 7, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
+## Contributor console
+
+After deploying and checking the stack, run:
+
+```sh
+dev/ctl console
+```
+
+Open `http://127.0.0.1:3000`. Create or select a workspace, project and conversation,
+then send a message. The console shows accepted messages, scripted responses,
+activity, waiting states, stable older history, and receipt/cursor diagnostics.
+Use Disconnect/Reconnect to exercise observation without cancelling admitted work.
+Refresh reloads the selected conversation from authoritative state. Open another
+tab to inspect the same conversation or select a different one.
+
+A failed command remains in that tab's pending panel. Retry sends its original
+key and exact content; do not clear browser storage to retry an ambiguous command.
+The gateway rejects foreign origins and hostnames, so use the printed numeric
+loopback URL. Stop with Ctrl-C. After a control-plane Pod restart, rerun the console
+command to forward the replacement Pod. `dev/ctl console 3001` selects another port.
+
+To repeat browser acceptance against the running console:
+
+```sh
+pnpm exec playwright install chromium
+pnpm console:acceptance
+```
+
+The scenario creates a separate workspace and retains its accepted data. It checks
+scripted responses, refresh, two tabs, reconnect, a lost command response followed
+by reload/retry, conversation isolation, older history, content escaping and mobile
+layout. Browser-boundary fixtures additionally check typed cursor expiry and a
+bounded slow-reader replay burst; real retention/backpressure is covered by the
+cumulative PostgreSQL gate. `CONSOLE_URL=http://127.0.0.1:3001` selects another local console port;
+`CONSOLE_EVIDENCE_DIRECTORY=/absolute/path` additionally saves a screenshot.
+
+The console is a trusted local contributor surface using the scripted executor;
+provider configuration and real agent sessions arrive in M2. See [console architecture](../architecture/contributor-console.md)
+for the transport decision, bounds, security and recovery semantics.
+
 ## Happy-path diagnostic
 
 `dev/ctl scenario` executes the credential-free diagnostic inside the control-plane Pod. It uses the pod-loopback private-v1 listener to create a workspace, project, and conversation; admit one message; observe the signed executor claim and accepted scripted response through a watch, reconnect after each update; and verify the terminal snapshot and stable history. It prints generated resource IDs and the final revision, never credentials or message content.

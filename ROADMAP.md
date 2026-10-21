@@ -41,6 +41,32 @@ M1 is delivered as cumulative, executable slices rather than one unsafe cutover.
 
 Slice 3 implements `WatchConversation` using an atomic PostgreSQL snapshot boundary and retained update replay. The cumulative acceptance harness exercises admission, broker delivery, ownership, reports, decisions, replay, capacity, and retained-state recovery. M1 does not deploy providers, browser UX, or custom-client workflow access. Later milestones build on the PostgreSQL and retained handoff authorities.
 
+### M1–M2 delivery scopes
+
+M1's three runtime slices are complete on `alpha`. The next four PRs bridge local
+browser access and deliver M2. Each PR is its own work item: its description owns
+requirements, acceptance criteria, failure/recovery cases, and validation evidence.
+Do not create a separate issue for these scopes. Each subsequent PR starts from
+current `origin/alpha` after its prerequisite merges.
+
+| PR | Scope | Observable outcome and acceptance |
+| --- | --- | --- |
+| 1: Contributor conversation console | Local browser gateway, canonical bounded hierarchy discovery, creation, message admission, history, activity, and resumable observation. | Exercise the scripted stack from the browser. Refresh, two tabs, disconnect/reconnect, slow readers, cursor expiry, and ambiguous command retries preserve scope and accepted work. |
+| 2: Configuration and isolated sessions | Versioned shared agent configuration and workspace instructions; admission-time revisions, model/provider binding and budget; isolated session provisioning, generations, fencing, wake-up, idle expiry, adoption and replacement, initially with scripted execution. Define the complete provider-call/cancellation contract, select one provider from evidence, and agree the initial bounded tool set. | Two conversations share configuration while keeping context, session storage and activity isolated. Later configuration edits do not rewrite admitted turns; replaced executors cannot advance state. |
+| 3: Real provider conversations | One provider in isolated sessions, bounded context, retained request intent/identity and result/usage, budget reservation, cancellation, explicit uncertain outcomes, direct scoped credential injection, and console provider/usage views. | Converse with a real provider through the console. An ambiguous paid call is never blindly retried; accepted results survive restarts and appear once. Provider safety ships with the first real calls. |
+| 4: Tools and complete M2 acceptance | Agreed bounded tools and authority limits, safe preparation/model/tool activity, remaining M2 recovery controls, and the cumulative M2 acceptance matrix. | Observe permitted tools and actionable failure states. Isolation and interruption tests span preparation, request uncertainty, accepted results, reconnect, session overlap and ledger cleanup. |
+
+The console remains a maintained local contributor surface through M2. It does not
+introduce shared-environment access or user management. M3/M4 retain plan approval,
+coding worktrees, Ayni task execution, quality evidence, and draft publication; MCP
+integrations remain M7. The [M2 handoff contract](docs/technical/research/project-workflow-m1-durable-foundation.md#m2-handoff)
+owns the inherited invariants and required provider/session safety behavior.
+
+Every runtime PR extends the cumulative harness and exercises affected behavior on
+Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded
+live-provider smoke test. Scripted and fixture timings do not predict real model
+latency. PR descriptions record any failed or blocked checks.
+
 ### Validation at every milestone
 
 | Level | Evidence |

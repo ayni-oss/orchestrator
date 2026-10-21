@@ -2,6 +2,7 @@
 
 pub mod broker;
 pub mod configuration;
+pub mod console;
 pub mod health;
 pub mod maintenance;
 pub mod workflow;

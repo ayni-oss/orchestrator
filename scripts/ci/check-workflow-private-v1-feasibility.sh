@@ -20,7 +20,7 @@ import re
 root = Path("proto/ayni/orchestrator/v1")
 expected = {
     "projects.proto": {
-        "ProjectService": ["CreateWorkspace", "CreateProject"],
+        "ProjectService": ["CreateWorkspace", "CreateProject", "ListWorkspaces", "ListProjects"],
     },
     "project_conversations.proto": {
         "ProjectConversationService": [
@@ -29,6 +29,7 @@ expected = {
             "GetConversationSnapshot",
             "ListConversationHistory",
             "WatchConversation",
+            "ListConversations",
         ],
     },
 }
@@ -64,7 +65,7 @@ for symbol in (
 PY
 
 # Superseded handwritten private-v1 RPC consumers must not survive the reset.
-legacy='ListWorkspaces|GetWorkspace|UpdateWorkspace|ArchiveWorkspace|WatchProjects|ListProjectSummaries|ListProjects|GetProject|UpdateProject|ArchiveProject|UpdateProjectConversationSettings|CancelProjectAgentRun|GetProjectConversationContext|ListProjectConversationHistory|WatchProjectConversation|CreateProjectConversation|ListProjectConversations|GetProjectConversation|SendProjectMessage|DecideProjectPlan|DecideProjectProposal'
+legacy='GetWorkspace|UpdateWorkspace|ArchiveWorkspace|WatchProjects|ListProjectSummaries|GetProject|UpdateProject|ArchiveProject|UpdateProjectConversationSettings|CancelProjectAgentRun|GetProjectConversationContext|ListProjectConversationHistory|WatchProjectConversation|CreateProjectConversation|ListProjectConversations|GetProjectConversation|SendProjectMessage|DecideProjectPlan|DecideProjectProposal'
 if rg -n --glob '!**/src/generated/**' --glob '!docs/**' --glob '!scripts/ci/check-workflow-private-v1-feasibility.sh' \
   "$legacy" backend clients packages apps dev; then
   printf '%s\n' 'superseded handwritten private-v1 consumer remains' >&2

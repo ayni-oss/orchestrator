@@ -15,6 +15,7 @@ Durable-workflow local Docker Desktop development:
   secrets                       Create immutable database and broker role Secrets
   deploy | redeploy | up        Build and install or upgrade the Slice 3 stack
   check [--expect-empty]        Check migrations, streams, and workload readiness
+  console [PORT]                Open the local contributor gateway (default 3000)
   scenario                      Run the message-to-scripted-response diagnostic
   acceptance ABSOLUTE_DIRECTORY Run warmed client gates and retained-state restarts
   status                        Show the release, pods, and retained claims
@@ -65,6 +66,10 @@ case "$command" in
       exit 2
     fi
     "$scripts/check.sh" "$@"
+    ;;
+  console)
+    [[ $# -le 1 ]] || { echo "usage: dev/ctl console [PORT]" >&2; exit 2; }
+    "$scripts/console.sh" "$@"
     ;;
   scenario)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl scenario" >&2; exit 2; }

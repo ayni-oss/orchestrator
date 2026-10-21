@@ -2,6 +2,7 @@ mod acceptance;
 mod capacity;
 mod delivery;
 mod delivery_failure;
+mod discovery;
 pub use delivery::DecisionAcknowledgement;
 mod ordered_reports;
 mod quarantine;

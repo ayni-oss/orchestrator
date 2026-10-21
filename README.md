@@ -7,7 +7,7 @@
 
 Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The current runnable milestone is **M1 runtime Slice 3**. It provides:
+The current runnable foundation is **M1 runtime Slice 3**, with a local contributor conversation console. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
 - repository-owned forward migrations under an advisory lock;
@@ -24,14 +24,17 @@ The current runnable milestone is **M1 runtime Slice 3**. It provides:
 
 This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser/BFF, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime.
 
-The cumulative M1 acceptance evidence is recorded in the delivery PR. Providers, browser UX, and shared-environment release enter later milestones.
+The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exercises the scripted stack; real providers and shared-environment release enter later milestones.
 
 ## Start locally
 
 ```sh
 dev/ctl deploy
 dev/ctl check --expect-empty
+dev/ctl console
 ```
+
+Open `http://127.0.0.1:3000` while the console command runs.
 
 See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
 
