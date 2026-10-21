@@ -14,6 +14,8 @@ pub struct Session {
     pub conversation_id: String,
     pub state: String,
     pub idle_timeout_seconds: u64,
+    /// Advisory readiness from one authoritative read snapshot; mutation rechecks.
+    pub can_replace: bool,
 }
 
 fn session(row: &Row) -> Result<Session, StoreError> {
@@ -25,6 +27,7 @@ fn session(row: &Row) -> Result<Session, StoreError> {
         conversation_id: row.get(4),
         state: row.get(5),
         idle_timeout_seconds: unsigned(row.get(6))?,
+        can_replace: false,
     })
 }
 
@@ -43,8 +46,15 @@ impl WorkflowStore {
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         super::support::conversation(&tx, workspace_id, project_id, conversation_id).await?;
-        let rows = tx.query("SELECT id,generation,workspace_id,project_id,conversation_id,state,idle_timeout_seconds FROM workflow_sessions WHERE workspace_id=$1 AND project_id=$2 AND conversation_id=$3 ORDER BY generation DESC LIMIT 100", &[&workspace_id,&project_id,&conversation_id]).await?;
-        let result = rows.iter().map(session).collect();
+        let rows = tx.query("SELECT s.id,s.generation,s.workspace_id,s.project_id,s.conversation_id,s.state,s.idle_timeout_seconds, s.state IN ('idle','expired') AND NOT EXISTS (SELECT 1 FROM workflow_turns t WHERE t.conversation_id=s.conversation_id AND t.execution_state NOT IN ('completed','failed')) AND NOT EXISTS (SELECT 1 FROM workflow_outbox o WHERE o.conversation_id=s.conversation_id AND o.state <> 'transferred') AS can_replace FROM workflow_sessions s WHERE s.workspace_id=$1 AND s.project_id=$2 AND s.conversation_id=$3 ORDER BY s.generation DESC LIMIT 100", &[&workspace_id,&project_id,&conversation_id]).await?;
+        let result = rows
+            .iter()
+            .map(|row| {
+                let mut value = session(row)?;
+                value.can_replace = row.get(7);
+                Ok(value)
+            })
+            .collect();
         tx.commit().await?;
         driver.abort();
         result
@@ -105,7 +115,7 @@ impl WorkflowStore {
         if let Some(row) = tx.query_opt("SELECT r.request_digest,s.id,s.generation,s.workspace_id,s.project_id,s.conversation_id,s.state,s.idle_timeout_seconds FROM workflow_session_receipts r JOIN workflow_sessions s ON s.id=r.session_id AND s.generation=r.generation WHERE r.conversation_id=$1 AND r.idempotency_key=$2", &[&conversation_id,&idempotency_key]).await? {
             let retained: Vec<u8> = row.get(0);
             if retained != digest { return Err(StoreError::IdempotencyConflict); }
-            let result = Session { id:row.get(1),generation:unsigned(row.get(2))?,workspace_id:row.get(3),project_id:row.get(4),conversation_id:row.get(5),state:"replaced".into(),idle_timeout_seconds:unsigned(row.get(7))? };
+            let result = Session { id:row.get(1),generation:unsigned(row.get(2))?,workspace_id:row.get(3),project_id:row.get(4),conversation_id:row.get(5),state:"replaced".into(),idle_timeout_seconds:unsigned(row.get(7))?,can_replace:false };
             tx.commit().await?;
             driver.abort();
             return Ok(result);

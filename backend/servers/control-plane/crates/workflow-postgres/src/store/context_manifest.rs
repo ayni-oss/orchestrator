@@ -3,6 +3,8 @@ use ayni_orchestrator_events::v1::{ConversationContextManifest, ConversationCont
 use sha2::{Digest as _, Sha256};
 use tokio_postgres::Transaction;
 
+pub(super) const MAX_CONTEXT_RECORDS: i64 = 10_000;
+
 /// A bounded page of immutable eligibility-time context, independent of watch retention.
 #[derive(Clone, Debug)]
 pub struct ContextManifestPage {
@@ -11,7 +13,46 @@ pub struct ContextManifestPage {
     pub next_after_ordinal: u64,
 }
 
-pub(super) async fn freeze(
+pub(super) async fn reserve_admission(
+    tx: &Transaction<'_>,
+    conversation: &str,
+    nonterminal: i64,
+) -> Result<(), StoreError> {
+    // The caller holds the conversation lock. Reserve one possible assistant
+    // message for each predecessor so FIFO promotion cannot exceed the manifest
+    // bound inside the predecessor's terminal-acceptance transaction.
+    let messages:i64=tx.query_one("SELECT count(*) FROM (SELECT 1 FROM workflow_messages WHERE conversation_id=$1 LIMIT 10001) bounded", &[&conversation]).await?.get(0);
+    if messages
+        .checked_add(nonterminal)
+        .and_then(|value| value.checked_add(1))
+        .is_none_or(|maximum| maximum > MAX_CONTEXT_RECORDS)
+    {
+        return Err(StoreError::Capacity("context_manifest"));
+    }
+    Ok(())
+}
+
+pub(super) async fn freeze_if_configured(
+    tx: &Transaction<'_>,
+    command: &support::CommandMaterialization<'_>,
+    configured: bool,
+) -> Result<Option<ConversationContextManifest>, StoreError> {
+    if !configured {
+        return Ok(None);
+    }
+    freeze(
+        tx,
+        command.workspace_id,
+        command.project_id,
+        command.conversation_id,
+        command.turn_id,
+        command.context_revision,
+    )
+    .await
+    .map(Some)
+}
+
+async fn freeze(
     tx: &Transaction<'_>,
     workspace: &str,
     project: &str,
@@ -34,7 +75,7 @@ pub(super) async fn freeze(
             count = count
                 .checked_add(1)
                 .ok_or(StoreError::Capacity("context_manifest"))?;
-            if count > 10_000 {
+            if count > MAX_CONTEXT_RECORDS {
                 return Err(StoreError::Capacity("context_manifest"));
             }
             let id: String = row.get(0);

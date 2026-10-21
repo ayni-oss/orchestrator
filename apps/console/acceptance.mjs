@@ -61,10 +61,31 @@ try {
   await page.locator('#create-conversation button').click();
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Connected');
   const content = 'A browser message <img src=x onerror="window.injected=true">';
+  // A canonical capacity rejection is definitive non-admission. The browser
+  // releases its pending key and permits the same content as a new command.
+  // Real capacity rollback/reservation behavior belongs to the PostgreSQL gate.
+  await page.route('**/api/SendMessage', route => route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ code: 'ResourceExhausted', reason: 'ERROR_REASON_BOUND_EXCEEDED', requestId: 'capacity-browser-fixture' }) }), { times: 1 });
+  await page.locator('#content').fill(content);
+  const rejectedAdmission = page.waitForResponse(response => new URL(response.url()).pathname === '/api/SendMessage');
+  await page.locator('#send button').click();
+  const rejectedResponse = await rejectedAdmission;
+  assert.equal(rejectedResponse.status(), 429);
+  const rejectedKey = rejectedResponse.request().postDataJSON().idempotencyKey;
+  await page.locator('#error').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => !document.querySelector('#send button').disabled);
+  assert.match(await page.locator('#error').textContent(), /ERROR_REASON_BOUND_EXCEEDED/);
+  assert.equal(await page.locator('#pending').isVisible(), false);
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('pending')), null);
+  assert.equal(await page.locator('#content').inputValue(), content);
+  const rejectedSnapshot = (await gateway(page, 'GetConversationSnapshot', await selection(page))).snapshot;
+  assert.equal((rejectedSnapshot.recentMessages || []).length, 0);
+  assert.equal((rejectedSnapshot.nonterminalTurns || []).length, 0);
   await page.locator('#content').fill(content);
   const firstAdmission = page.waitForResponse(response => new URL(response.url()).pathname === '/api/SendMessage');
   await page.locator('#send button').click();
-  const firstReceipt = (await (await firstAdmission).json()).receipt;
+  const firstResponse = await firstAdmission;
+  assert.notEqual(firstResponse.request().postDataJSON().idempotencyKey, rejectedKey);
+  const firstReceipt = (await firstResponse.json()).receipt;
   const firstScope = await selection(page);
   const firstInputs = await gateway(page, 'GetTurnInputs', { ...firstScope, turnId: firstReceipt.turnId });
   assert.deepEqual(firstInputs.configuration, firstConfiguration);
@@ -158,10 +179,18 @@ try {
   // retained command fences exactly that generation; the next message wakes a
   // new generation while the old conversation history remains available.
   await page.locator('#session-state').evaluate(element => { element.closest('details').open = true; });
-  await page.locator('#refresh-session').click();
-  await page.waitForFunction(() => document.querySelector('#session-state').textContent.includes('generation'));
+  const replacementDeadline = Date.now() + 60000;
+  while (true) {
+    const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/ListConversationSessions');
+    await page.locator('#refresh-session').click();
+    const result = await (await refreshed).json();
+    if (result.sessions?.[0]?.canReplace) break;
+    assert.ok(Date.now() < replacementDeadline, 'accepted work must settle before replacement becomes available');
+    await page.waitForTimeout(100);
+  }
+  await page.waitForFunction(() => !document.querySelector('#replace-session').disabled);
   const beforeReplacement = (await gateway(page, 'ListConversationSessions', firstScope)).sessions[0];
-  await page.route('**/api/ReplaceConversationSession', async route => { await route.fetch(); await route.abort('failed'); }, { times: 1 });
+  await page.route('**/api/ReplaceConversationSession', async route => { const accepted = await route.fetch(); assert.equal(accepted.status(), 200); await route.abort('failed'); }, { times: 1 });
   await page.locator('#replace-session').click();
   await page.locator('#error').waitFor({ state: 'visible' });
   await page.locator('#pending').waitFor({ state: 'visible' });
@@ -202,5 +231,5 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   if (evidence) { await mkdir(evidence, { recursive: true }); await page.screenshot({ path: `${evidence}/console.png`, fullPage: true }); }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['validation-correction', 'create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'configuration-editor', 'immutable-turn-inputs', 'stale-configuration-conflict', 'session-isolation', 'session-replacement-retry', 'session-generation-wakeup', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
+  console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['validation-correction', 'typed-capacity-rejection-resubmit-fixture', 'create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'configuration-editor', 'immutable-turn-inputs', 'stale-configuration-conflict', 'session-isolation', 'session-replacement-retry', 'session-generation-wakeup', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
 } finally { await browser.close(); }

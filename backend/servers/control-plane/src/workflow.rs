@@ -664,6 +664,7 @@ fn session(
         generation: value.generation,
         state: value.state,
         idle_timeout_seconds: value.idle_timeout_seconds,
+        can_replace: value.can_replace,
     }
 }
 

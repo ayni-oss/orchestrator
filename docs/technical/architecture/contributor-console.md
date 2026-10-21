@@ -59,9 +59,13 @@ execution remains scripted. Existing admitted turns keep their frozen inputs.
 
 The conversation session panel lists scoped retained generations and exposes
 idle replacement. A replacement command binds the exact expected generation.
-It cannot replace active work or unresolved handoffs; an ambiguous retry reuses
-the original command. The next eligible message wakes a new generation. Neither
-session controls nor configuration edits add gateway authority or credentials.
+The advisory `can_replace` flag enables the button after active turns and
+outbox handoffs settle; the command rechecks this boundary transactionally.
+Refresh the panel while it displays finishing accepted work. An ambiguous retry
+reuses the original command.
+
+The next eligible message wakes a new generation. Session controls and
+configuration edits retain the gateway's existing authority and credential boundary.
 
 ## Discovery, history and retries
 
@@ -80,7 +84,10 @@ resets that local pagination boundary on the next attempt.
 Before a mutation, the browser retains its exact method, scope, content and random
 idempotency key in tab-local session storage. Only one unresolved mutation is
 allowed per tab. Network failures retain that command and expose an explicit retry;
-retry and reload never generate a new key for it. Successful receipts clear it. Definitive validation, missing-parent or idempotency-conflict rejections clear the local retry so the user can correct the request; ambiguous transport failures retain it.
+retry and reload never generate a new key for it. Successful receipts clear it. Definitive validation, missing-parent, idempotency-conflict and canonical
+`RESOURCE_EXHAUSTED` with `ERROR_REASON_BOUND_EXCEEDED` rejections clear the local
+retry so the user can correct or resubmit the request. An untyped capacity error
+or ambiguous transport failure retains it.
 No automatic new-key resubmission follows an ambiguous outcome. Browser storage
 is a convenience for retries, not authority; clearing it can lose the local retry
 handle. Transcripts and replay cursors are not persisted in browser storage.

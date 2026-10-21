@@ -45,7 +45,7 @@ function controls() {
   $('pending-description').textContent = pending ? `${pending.method}: retry uses the original content, scope, and command key.` : '';
   $('toggle-watch').disabled = !scope.conversationId;
   $('refresh-session').disabled = !scope.conversationId || sending;
-  $('replace-session').disabled = !currentSession || !!pending || sending || discoveryBusy;
+  $('replace-session').disabled = !currentSession?.canReplace || !!pending || sending || discoveryBusy;
 }
 async function submit(method, body) {
   if (pending || sending) return;
@@ -75,7 +75,7 @@ async function retry() {
     }
   } catch (error) {
     // Canonical validation/scope/conflict rejections did not admit this command.
-    if (['InvalidArgument', 'NotFound', 'AlreadyExists', 'Aborted', 'FailedPrecondition'].includes(error.code)) { pending = null; store('pending', null); }
+    if (['InvalidArgument', 'NotFound', 'AlreadyExists', 'Aborted', 'FailedPrecondition'].includes(error.code) || (error.code === 'ResourceExhausted' && error.reason === 'ERROR_REASON_BOUND_EXCEEDED')) { pending = null; store('pending', null); }
     showError(error);
   }
   finally { sending = false; controls(); }
@@ -147,7 +147,7 @@ async function loadSession() {
   const result = await api('ListConversationSessions', selected);
   if (scopeKey(selected) !== scopeKey(scope)) return;
   currentSession = result.sessions?.[0];
-  $('session-state').textContent = currentSession ? `${currentSession.state} · generation ${currentSession.generation} · ${currentSession.id}` : 'Session starts with the first eligible message.';
+  $('session-state').textContent = currentSession ? `${currentSession.state} · generation ${currentSession.generation} · ${currentSession.id}${!currentSession.canReplace && ['idle', 'expired'].includes(currentSession.state) ? ' · finishing accepted work; refresh to check.' : ''}` : 'Session starts with the first eligible message.';
   controls();
 }
 function renderSnapshot(value) {

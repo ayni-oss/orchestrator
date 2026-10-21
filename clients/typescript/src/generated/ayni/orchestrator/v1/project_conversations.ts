@@ -118,6 +118,8 @@ export interface ConversationSession {
   generation: string;
   state: string;
   idleTimeoutSeconds: string;
+  /** Advisory readiness; replacement still checks generation and retained work atomically. */
+  canReplace: boolean;
 }
 
 export interface ListConversationSessionsRequest {
@@ -1554,6 +1556,7 @@ function createBaseConversationSession(): ConversationSession {
     generation: "0",
     state: "",
     idleTimeoutSeconds: "0",
+    canReplace: false,
   };
 }
 
@@ -1579,6 +1582,9 @@ export const ConversationSession: MessageFns<ConversationSession> = {
     }
     if (message.idleTimeoutSeconds !== "0") {
       writer.uint32(56).uint64(message.idleTimeoutSeconds);
+    }
+    if (message.canReplace !== false) {
+      writer.uint32(64).bool(message.canReplace);
     }
     return writer;
   },
@@ -1652,6 +1658,14 @@ export const ConversationSession: MessageFns<ConversationSession> = {
             message.idleTimeoutSeconds = reader.uint64().toString();
             continue;
           }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.canReplace = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1689,6 +1703,11 @@ export const ConversationSession: MessageFns<ConversationSession> = {
         : isSet(object.idle_timeout_seconds)
         ? globalThis.String(object.idle_timeout_seconds)
         : "0",
+      canReplace: isSet(object.canReplace)
+        ? globalThis.Boolean(object.canReplace)
+        : isSet(object.can_replace)
+        ? globalThis.Boolean(object.can_replace)
+        : false,
     };
   },
 
@@ -1715,6 +1734,9 @@ export const ConversationSession: MessageFns<ConversationSession> = {
     if (message.idleTimeoutSeconds !== "0") {
       obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
     }
+    if (message.canReplace !== false) {
+      obj.canReplace = message.canReplace;
+    }
     return obj;
   },
 
@@ -1730,6 +1752,7 @@ export const ConversationSession: MessageFns<ConversationSession> = {
     message.generation = object.generation ?? "0";
     message.state = object.state ?? "";
     message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    message.canReplace = object.canReplace ?? false;
     return message;
   },
 };

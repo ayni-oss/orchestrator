@@ -33,12 +33,17 @@ admitted turn input is immutable. `UpdateAgentConfiguration` uses expected
 revision and scoped idempotency. Resolve stale-edit conflicts by reading the
 current configuration, not by changing the command key and overwriting blindly.
 `GetTurnInputs` and `GetTurnContextInputs` expose bounded frozen input evidence.
+Admission reserves the 10,000-reference context limit conservatively, including
+possible predecessor responses. Capacity is rejected before message admission
+rather than while accepting a predecessor result.
 
 `ListConversationSessions` lists retained generations for one conversation.
 `ReplaceConversationSession` requires the expected generation and original
-idempotency key. It fences only an idle or expired generation with no retained
-active work or unresolved outbox handoff. The next eligible turn advances the
-generation. An active accepted execution recovers through its existing authority
+idempotency key. The listing's advisory `can_replace` flag becomes true only
+for an idle or expired generation with no active work or unresolved outbox handoff. The mutation
+rechecks that condition under the conversation lock before fencing it.
+
+The next eligible turn advances the generation. An active accepted execution recovers through its existing authority
 ledger; replacement is not an implicit retry.
 
 Session result ledgers and their scoped credentials join the retained-state

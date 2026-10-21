@@ -56,8 +56,12 @@ async fn session_expiry_replacement_and_stale_reports_preserve_frozen_turns() ->
         .await?
         .remove(0);
     assert_eq!(initial.generation, 1);
+    assert!(!initial.can_replace);
     let old = complete(&store, &client, &first.turn_id).await?;
+    assert_replace_availability(&store, &workspace.id, &project.id, &conversation.id, false)
+        .await?;
     drain_decisions(&store, &client, &conversation.id).await?;
+    assert_replace_availability(&store, &workspace.id, &project.id, &conversation.id, true).await?;
     client.execute("UPDATE workflow_sessions SET last_active_at=clock_timestamp()-interval '2 days' WHERE conversation_id=$1",&[&conversation.id]).await?;
     let expired = store.expire_idle_sessions().await?;
     assert!(expired.iter().any(|session| session.id == initial.id
@@ -120,6 +124,20 @@ async fn session_expiry_replacement_and_stale_reports_preserve_frozen_turns() ->
         frozen
     );
     driver.abort();
+    Ok(())
+}
+
+async fn assert_replace_availability(
+    store: &WorkflowStore,
+    workspace: &str,
+    project: &str,
+    conversation: &str,
+    expected: bool,
+) -> TestResult {
+    let sessions = store
+        .conversation_sessions(workspace, project, conversation)
+        .await?;
+    assert_eq!(sessions[0].can_replace, expected);
     Ok(())
 }
 

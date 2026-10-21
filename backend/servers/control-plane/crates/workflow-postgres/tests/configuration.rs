@@ -420,3 +420,101 @@ async fn assert_manifest_pages(
     assert_eq!(count, 103);
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with the runtime-role URL"]
+async fn context_capacity_reservation_keeps_terminal_promotion_committable() -> TestResult {
+    let admin_url = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
+    let runtime_url = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?;
+    ayni_orchestrator_workflow_postgres::migrate_for_runtime(
+        &admin_url,
+        &std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?,
+    )
+    .await?;
+    let store = WorkflowStore::new(runtime_url.clone());
+    let w = store
+        .create_workspace(&key(), "Context capacity")
+        .await?
+        .resource;
+    let p = store
+        .create_project(&key(), &w.id, "Capacity project", "")
+        .await?
+        .resource;
+    let c = store
+        .create_conversation(&key(), &w.id, &p.id, "Capacity conversation")
+        .await?
+        .resource;
+    let (mut admin, admin_driver) =
+        ayni_orchestrator_workflow_postgres::connect(&admin_url).await?;
+    seed_context_history(&mut admin, &w.id, &p.id, &c.id, 9997).await?;
+    let first = store
+        .send_message(&key(), &w.id, &p.id, &c.id, "Eligible at bound")
+        .await?;
+    let queued = store
+        .send_message(&key(), &w.id, &p.id, &c.id, "Queued at bound")
+        .await?;
+    let rejected_key = key();
+    let before = store.get_snapshot(&w.id, &p.id, &c.id).await?;
+    assert!(matches!(
+        store
+            .send_message(&rejected_key, &w.id, &p.id, &c.id, "Exceeds reserved bound")
+            .await,
+        Err(StoreError::Capacity("context_manifest"))
+    ));
+    let after = store.get_snapshot(&w.id, &p.id, &c.id).await?;
+    assert_eq!(before.conversation_revision, after.conversation_revision);
+    assert_eq!(before.message_count, after.message_count);
+    let receipts: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM workflow_command_receipts WHERE idempotency_key=$1",
+            &[&rejected_key],
+        )
+        .await?
+        .get(0);
+    assert_eq!(receipts, 0);
+    let (runtime, driver) = ayni_orchestrator_workflow_postgres::connect(&runtime_url).await?;
+    complete_turn(&store, &runtime, &first.turn_id).await?;
+    let page = store
+        .get_turn_context_inputs(&w.id, &p.id, &c.id, &queued.turn_id, 0, 1)
+        .await?;
+    assert_eq!(page.manifest.record_count, 10_000);
+    let first_state: String = runtime
+        .query_one(
+            "SELECT execution_state FROM workflow_turns WHERE id=$1",
+            &[&first.turn_id],
+        )
+        .await?
+        .get(0);
+    assert_eq!(first_state, "completed");
+    complete_turn(&store, &runtime, &queued.turn_id).await?;
+    assert!(matches!(
+        store
+            .send_message(&key(), &w.id, &p.id, &c.id, "Still over bound")
+            .await,
+        Err(StoreError::Capacity("context_manifest"))
+    ));
+    driver.abort();
+    admin_driver.abort();
+    Ok(())
+}
+
+async fn seed_context_history(
+    client: &mut tokio_postgres::Client,
+    workspace: &str,
+    project: &str,
+    conversation: &str,
+    count: i64,
+) -> TestResult {
+    let transaction = client.transaction().await?;
+    // Seed immutable retained messages in the disposable fixture without paying
+    // the quadratic cost of materializing thousands of unrelated test manifests.
+    transaction.execute("INSERT INTO workflow_messages(id,workspace_id,project_id,conversation_id,role,content,sequence) SELECT '019b0000-0000-7000-8000-'||lpad(value::text,12,'0'),$1,$2,$3,'user','retained context',value FROM generate_series(1,$4::bigint) value", &[&workspace,&project,&conversation,&count]).await?;
+    transaction.execute("INSERT INTO workflow_turns(id,workspace_id,project_id,conversation_id,input_message_id,sequence,execution_binding_revision,scheduling_state,dispatch_state,execution_state) SELECT '019a0000-0000-7000-8000-'||lpad(value::text,12,'0'),$1,$2,$3,'019b0000-0000-7000-8000-'||lpad(value::text,12,'0'),value,'scripted-v1','eligible','transferred','failed' FROM generate_series(1,$4::bigint) value", &[&workspace,&project,&conversation,&count]).await?;
+    transaction.execute("UPDATE workflow_messages SET turn_id='019a0000-0000-7000-8000-'||lpad(sequence::text,12,'0') WHERE conversation_id=$1", &[&conversation]).await?;
+    // Retired historical decisions release the corresponding broker reservations.
+    transaction.execute("INSERT INTO workflow_report_receipts(report_source,report_id,report_digest,exact_report_bytes,workspace_id,project_id,conversation_id,turn_id,assignment_id,executor_generation,report_sequence,executor_instance_id,decision,decision_event_id,decision_bytes) SELECT 'retained-fixture','019c0000-0000-7000-8000-'||lpad((value*2+report_sequence)::text,12,'0'),'sha256:'||repeat('0',64),decode('00','hex'),$1,$2,$3,'019a0000-0000-7000-8000-'||lpad(value::text,12,'0'),'retained-assignment',1,report_sequence,'retained-executor','accepted','019d0000-0000-7000-8000-'||lpad((value*2+report_sequence)::text,12,'0'),decode('00','hex') FROM generate_series(1,$4::bigint) value CROSS JOIN generate_series(1,2) report_sequence", &[&workspace,&project,&conversation,&count]).await?;
+    transaction.execute("INSERT INTO workflow_outbox(id,workspace_id,project_id,conversation_id,turn_id,subject,event_bytes,state) SELECT decision_event_id,workspace_id,project_id,conversation_id,turn_id,'retained-decision',decision_bytes,'transferred' FROM workflow_report_receipts WHERE conversation_id=$1", &[&conversation]).await?;
+    transaction.execute("UPDATE workflow_conversations SET next_turn_sequence=$2::bigint+1,next_history_sequence=$2::bigint+1 WHERE id=$1", &[&conversation,&count]).await?;
+    transaction.commit().await?;
+    Ok(())
+}

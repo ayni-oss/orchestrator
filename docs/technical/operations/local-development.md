@@ -59,8 +59,10 @@ Use Disconnect/Reconnect to exercise observation without cancelling admitted wor
 Refresh reloads the selected conversation from authoritative state. Open another
 tab to inspect the same conversation or select a different one.
 
-A failed command remains in that tab's pending panel. Retry sends its original
-key and exact content; do not clear browser storage to retry an ambiguous command.
+An ambiguous command remains in that tab's pending panel. Retry sends its
+original key and exact content; do not clear browser storage to retry it. A
+canonical capacity rejection confirms non-admission, clears pending state and
+allows a new submission after capacity is available.
 The gateway rejects foreign origins and hostnames, so use the printed numeric
 loopback URL. Stop with Ctrl-C. After a control-plane Pod restart, rerun the console
 command to forward the replacement Pod. `dev/ctl console 3001` selects another port.
@@ -76,7 +78,9 @@ The scenario creates a separate workspace and retains its accepted data. It chec
 scripted responses, refresh, two tabs, reconnect, a lost command response followed
 by reload/retry, conversation isolation, older history, content escaping and mobile
 layout. It also verifies configuration edits, frozen turn inputs, stale-tab
-conflicts, separate session identities and replacement retry/wake-up.
+conflicts, separate session identities and replacement retry/wake-up. A browser
+fixture verifies that a canonical capacity rejection clears pending state before
+legitimate resubmission; the PostgreSQL gate proves actual capacity behavior.
 Browser-boundary fixtures additionally check typed cursor expiry and a
 bounded slow-reader replay burst; real retention/backpressure is covered by the
 cumulative PostgreSQL gate. `CONSOLE_URL=http://127.0.0.1:3001` selects another local console port;
@@ -108,9 +112,15 @@ handoffs settle, **Replace idle session** fences that generation. The next
 eligible message starts the next generation. An active session cannot be replaced
 through this control; restore its retained executor and ledger instead.
 
-Context manifests retain at most 10,000 message references. A capacity failure
-requires an explicit new conversation or reviewed context policy; the runtime
-does not silently discard older inputs.
+The replacement button uses the server's advisory `can_replace` readiness flag.
+While the panel shows finishing accepted work, select **Refresh session** after
+the remaining outbox handoffs settle. The replacement command rechecks readiness
+transactionally, so a stale enabled button cannot bypass active-work protection.
+
+Context manifests retain at most 10,000 message references. Admission reserves
+space for possible predecessor responses before accepting a new input. A capacity
+rejection requires available room, an explicit new conversation or reviewed
+context policy; the runtime does not silently discard older inputs.
 
 Idle expiry preserves retained evidence. Restart within a valid generation
 adopts its retained identity and storage. Work after expiry or replacement starts
@@ -193,6 +203,17 @@ pnpm docs:check
 ```
 
 The PostgreSQL gate covers migrations through ordinal 9, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+
+After browser acceptance creates at least two conversations, inspect the deployed
+session boundary without reading Secret data:
+
+```sh
+python3 scripts/ci/check-session-topology.py --context docker-desktop --namespace ayni-orchestrator-dev
+```
+
+The check verifies retained namespace ownership, full worker scope, distinct
+per-generation PVCs, token mount boundaries and supervisor RBAC. It does not
+establish NetworkPolicy enforcement by the cluster network plugin.
 
 ## Cleanup
 

@@ -403,6 +403,7 @@ impl WorkflowStore {
         if nonterminal >= MAX_NONTERMINAL_TURNS {
             return Err(StoreError::Capacity("turn_queue"));
         }
+        context_manifest::reserve_admission(&transaction, conversation_id, nonterminal).await?;
         capacity::reserve_admission(&transaction).await?;
         let current_revision: i64 = conversation_row.get(0);
         let turn_sequence: i64 = conversation_row.get(1);

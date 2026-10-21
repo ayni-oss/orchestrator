@@ -556,13 +556,12 @@ pub(super) async fn materialize_command(
         .map_or(command.executor_generation, |scope| scope.generation);
     let event_id = new_id();
     let context = command_context(transaction, command.conversation_id, command.turn_id).await?;
-    let context_manifest = super::context_manifest::freeze(
+    let frozen_configuration =
+        super::configuration::execution_inputs(transaction, command.turn_id).await?;
+    let context_manifest = super::context_manifest::freeze_if_configured(
         transaction,
-        command.workspace_id,
-        command.project_id,
-        command.conversation_id,
-        command.turn_id,
-        command.context_revision,
+        &command,
+        frozen_configuration.is_some(),
     )
     .await?;
     let produced_at: String = transaction
@@ -574,8 +573,6 @@ pub(super) async fn materialize_command(
         )
         .await?
         .get(0);
-    let frozen_configuration =
-        super::configuration::execution_inputs(transaction, command.turn_id).await?;
     let mut payload = ConversationTurnRequested {
         binding: Some(ConversationTurnBinding {
             workspace_id: command.workspace_id.to_owned(),
@@ -593,7 +590,7 @@ pub(super) async fn materialize_command(
         input_content: command.input_content.to_owned(),
         context,
         frozen_configuration,
-        context_manifest: Some(context_manifest),
+        context_manifest,
         session,
     };
     let identity = EventIdentity {

@@ -54,7 +54,8 @@ receipt and turn. A later edit affects later admissions, including when an older
 turn is still queued. Dispatch and FIFO promotion use the admitted revision;
 provisioning must not reread today's instructions or model for yesterday's turn.
 Turns admitted before configuration snapshots remain bound to their original
-`scripted-v1` contract.
+`scripted-v1` contract. They retain their original optional context tail without
+retroactively acquiring configuration or a full context manifest.
 
 PR 2 defaults to provider/model `scripted`/`scripted` and retains scripted
 execution. Selecting `openai` requires an explicit model identifier. That desired
@@ -69,9 +70,13 @@ configuration does not imply shared working memory. Immutable references and
 digests preserve larger authorized inputs; exceeding a declared input limit is
 an actionable failure, never silent truncation or an invented summary.
 
-The context manifest retains at most 10,000 immutable message references. Exceeding
-that bound returns `context_manifest` capacity failure before dispatch. The event
-marks its inline tail complete or partial explicitly. `GetTurnContextInputs`
+The context manifest retains at most 10,000 immutable message references. Admission
+reserves capacity conservatively for retained messages, possible predecessor
+responses and the new input. Exhaustion returns `context_manifest` capacity
+failure before accepting the message. Successor promotion therefore cannot roll
+back an accepted predecessor outcome because its context later exceeds the bound.
+
+The event marks its inline tail complete or partial explicitly. `GetTurnContextInputs`
 returns at most 100 records and a 64 KiB content/metadata budget per page, with a
 stable ordinal cursor. These references survive watch cursor and history snapshot
 expiry; those observation windows never rewrite admitted execution inputs.
@@ -91,7 +96,7 @@ accept their own reports.
 | First claim | Accept only the application-issued assignment and current generation. A racing executor cannot acquire another conversation or replace the winner. |
 | Restart adoption | Reuse the retained session identity, ledger and exact pending reports after verifying scope and generation. An empty replacement ledger is not adoption. |
 | Idle expiry | Stop only idle sessions with no unresolved provider request or report handoff. Retain durable recovery evidence and wake on later eligible work. |
-| Replacement | Advance application authority before accepting a replacement owner. Old/new workload overlap cannot admit old-generation progress or terminal results. |
+| Replacement | List the advisory `can_replace` flag after turns and outbox handoffs settle. The replacement command rechecks authority transactionally before fencing the generation; later overlap cannot admit old-generation progress or terminal results. |
 | Cleanup | Release workload resources independently of accepted conversation history. Do not remove unresolved command, request, report or decision evidence. |
 
 Fencing prevents stale reports from changing accepted state; it cannot revoke an

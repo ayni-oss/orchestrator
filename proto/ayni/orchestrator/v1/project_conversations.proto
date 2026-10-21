@@ -103,6 +103,8 @@ message ConversationSession {
   uint64 generation = 5;
   string state = 6;
   uint64 idle_timeout_seconds = 7;
+  // Advisory readiness; replacement still checks generation and retained work atomically.
+  bool can_replace = 8;
 }
 message ListConversationSessionsRequest {
   string workspace_id = 1;
