@@ -1,7 +1,7 @@
 //! Production `PostgreSQL` observation invariants, run against the disposable gate.
 use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore, connect, migrate,
-    store::observation::{WatchEvent, WatchOptions, WatchStream},
+    store::observation::{ConversationUpdate, WatchEvent, WatchOptions, WatchStream},
 };
 use std::{
     error::Error,
@@ -198,10 +198,13 @@ async fn prove_reconnect_and_latency(
     scope: &Scope,
 ) -> TestResult {
     let mut watch = scope.watch(store, None, WatchOptions::default()).await?;
-    let WatchEvent::Snapshot(mut snapshot) = next(&mut watch).await? else {
+    let WatchEvent::Snapshot(snapshot) = next(&mut watch).await? else {
         return Err("missing snapshot".into());
     };
     let mut samples = Vec::new();
+    let mut committed_updates = Vec::new();
+    // Measure a connected watch. Its first five deliveries warm the actual
+    // listener/replay connections; reconnect setup is a separate recovery gate.
     for index in 0..105 {
         let tx = client.transaction().await?;
         let (_, revision) = append(&tx, scope, true).await?;
@@ -214,22 +217,14 @@ async fn prove_reconnect_and_latency(
         if index >= 5 {
             samples.push(committed.elapsed());
         }
-        snapshot.resume_cursor = update.cursor;
-        // Disconnect at each accepted state and replay the next committed row.
-        drop(watch);
-        watch = scope
-            .watch(
-                store,
-                Some(&snapshot.resume_cursor),
-                WatchOptions::default(),
-            )
-            .await?;
+        committed_updates.push(update);
     }
+    drop(watch);
     samples.sort();
     assert_eq!(samples.len(), 100);
     assert!(
         samples[94] <= Duration::from_millis(100),
-        "watch p95={:?}",
+        "connected watch p95={:?}",
         samples[94]
     );
     println!(
@@ -238,6 +233,50 @@ async fn prove_reconnect_and_latency(
         samples[94].as_micros(),
         samples[99].as_micros()
     );
+    prove_every_cursor_replay(store, scope, &snapshot.resume_cursor, &committed_updates).await
+}
+
+async fn prove_every_cursor_replay(
+    store: &WorkflowStore,
+    scope: &Scope,
+    initial_cursor: &str,
+    committed_updates: &[ConversationUpdate],
+) -> TestResult {
+    let mut cursor = initial_cursor.to_owned();
+    for expected in committed_updates {
+        let mut reconnected = scope
+            .watch(store, Some(&cursor), WatchOptions::default())
+            .await?;
+        let WatchEvent::Update(replayed) = next(&mut reconnected).await? else {
+            return Err("reconnect did not replay the next committed update".into());
+        };
+        assert_eq!(replayed.update_id, expected.update_id);
+        assert_eq!(replayed.activity_id, expected.activity_id);
+        assert_eq!(replayed.cursor, expected.cursor);
+        assert_eq!(
+            replayed.conversation_revision,
+            expected.conversation_revision
+        );
+        assert_eq!(replayed.kind, expected.kind);
+        assert_eq!(
+            replayed.affected_resource_ids,
+            expected.affected_resource_ids
+        );
+        assert_eq!(replayed.presentation_state, expected.presentation_state);
+        assert_eq!(replayed.waiting_on, expected.waiting_on);
+        assert_eq!(replayed.safe_reason, expected.safe_reason);
+        assert_eq!(replayed.accepted_at, expected.accepted_at);
+        assert_ne!(replayed.cursor, cursor);
+        cursor = replayed.cursor;
+        // Release this observation before reconnecting at its exact accepted cursor.
+        drop(reconnected);
+    }
+    let snapshot = store
+        .get_snapshot(&scope.workspace, &scope.project, &scope.conversation)
+        .await?;
+    assert_eq!(snapshot.resume_cursor, cursor);
+    assert_eq!(committed_updates.len(), 105);
+    println!("production-watch-every-cursor-replay: updates=105 exact-identity-and-content=pass");
     Ok(())
 }
 
