@@ -214,6 +214,8 @@ dependencies = [
  "http-body-util",
  "prost",
  "prost-types",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -310,22 +312,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "ayni-orchestrator-workflow-acceptance"
+version = "0.1.0"
+dependencies = [
+ "async-nats",
+ "ayni-orchestrator-api",
+ "ayni-orchestrator-control-plane",
+ "ayni-orchestrator-events",
+ "ayni-orchestrator-scripted-executor",
+ "ayni-orchestrator-workflow-postgres",
+ "ed25519-dalek",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "uuid",
+]
+
+[[package]]
 name = "ayni-orchestrator-workflow-postgres"
 version = "0.1.0"
 dependencies = [
  "ayni-orchestrator-events",
  "ed25519-dalek",
- "prost",
- "prost-build",
- "protoc-bin-vendored",
  "sha2 0.10.9",
  "thiserror",
  "tokio",
  "tokio-postgres",
  "tokio-stream",
- "tonic",
- "tonic-prost",
- "tonic-prost-build",
  "uuid",
 ]
 

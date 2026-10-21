@@ -13,6 +13,7 @@ The current implementation is M1 runtime Slice 2: PostgreSQL-authoritative workf
 ## Binding research
 
 - [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): full milestone contract and later-slice handoffs.
+- [M1 acceptance evidence](research/project-workflow-m1-acceptance-evidence.md): executable gates, reproduction, and coverage limits.
 - [Feasibility evidence](research/project-workflow-m1-feasibility-evidence.md): closed pre-implementation evidence.
 - [Refactor runbook](research/project-workflow-refactor-runbook.md) and [design worksheets](research/project-workflow-design-worksheets.md): investigation provenance.
 

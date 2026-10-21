@@ -7,6 +7,7 @@
 use tokio::task::JoinHandle;
 use tokio_postgres::{Client, Config, NoTls};
 
+pub mod metrics;
 pub mod migrations;
 pub mod model;
 pub mod store;
@@ -85,11 +86,3 @@ pub async fn validate_for_runtime(
     driver.abort();
     result
 }
-
-/// Feasibility-only generated snapshot/watch protocol retained until Slice 3.
-#[allow(clippy::all, clippy::pedantic, clippy::nursery)]
-pub mod watch_v1 {
-    tonic::include_proto!("ayni.orchestrator.feasibility.v1");
-}
-
-pub mod watch;

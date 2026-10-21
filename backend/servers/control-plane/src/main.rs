@@ -1,5 +1,5 @@
 use ayni_orchestrator_control_plane::{
-    Configuration, WorkflowReadiness, broker, router, serve_grpc,
+    Configuration, WorkflowReadiness, broker, maintenance, router, serve_grpc,
 };
 use ayni_orchestrator_workflow_postgres::WorkflowStore;
 use std::{io, process::ExitCode};
@@ -12,7 +12,7 @@ fn main() -> ExitCode {
         .enable_all()
         .build()
         .map_or(ExitCode::FAILURE, |runtime| {
-            runtime.block_on(control_plane_main())
+            runtime.block_on(Box::pin(control_plane_main()))
         });
     telemetry.shutdown();
     result
@@ -20,7 +20,7 @@ fn main() -> ExitCode {
 
 async fn control_plane_main() -> ExitCode {
     let span = ayni_orchestrator_observability::process_span("control-plane");
-    match run().instrument(span).await {
+    match Box::pin(run()).instrument(span).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             error!(
@@ -72,11 +72,16 @@ async fn run() -> Result<(), io::Error> {
         store.clone(),
         shutdown_receiver.clone(),
     );
+    let cleanup = maintenance::run(store.clone(), shutdown_receiver.clone());
     let publisher = broker::run_publisher(&configuration, store, shutdown_receiver);
     let result = tokio::try_join!(
         async { http_server.await.map_err(io::Error::other) },
         grpc_server,
         publisher,
+        async {
+            cleanup.await;
+            Ok(())
+        },
     )
     .map(|_| ());
     let _ = shutdown_sender.send(true);

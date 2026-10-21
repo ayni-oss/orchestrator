@@ -876,3 +876,92 @@ fn sqlite_full_rolls_back_command_and_claim_atomically() -> Result<(), LedgerErr
 
 #[path = "transport_tests.rs"]
 mod transport_tests;
+
+#[test]
+fn future_versions_retain_exact_bytes_without_execution_and_survive_cleanup()
+-> Result<(), Box<dyn std::error::Error>> {
+    use ayni_orchestrator_events::workflow::transport::{ConsumerRole, rejected_delivery};
+    let directory = TempDir::new()?;
+    let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
+    let command = command_fixture(1, COMMAND_ID)?;
+    let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
+    let decision = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
+    for (role, bytes) in [
+        (ConsumerRole::ExecutorCommand, command.bytes),
+        (ConsumerRole::ExecutorDecision, decision),
+    ] {
+        let current = String::from_utf8(bytes)?;
+        let future = current
+            .replace(".v1\"", ".v2\"")
+            .replace("/v1\"", "/v2\"")
+            .into_bytes();
+        let classified = rejected_delivery(role, &future).ok_or("future envelope was accepted")?;
+        assert!(classified.unsupported_version);
+        assert_eq!(
+            ledger.quarantine_transport(role, &future, 1, 10)?,
+            StoreOutcome::Stored
+        );
+        assert_eq!(
+            ledger.quarantine_transport(role, &future, 2, 10)?,
+            StoreOutcome::Duplicate
+        );
+        // A changed digest under the same event identity retains only conflict metadata.
+        let mut conflict = future.clone();
+        conflict.push(b' ');
+        assert_eq!(
+            ledger.quarantine_transport(role, &conflict, 3, 10)?,
+            StoreOutcome::Stored
+        );
+    }
+    assert!(ledger.executable_commands()?.is_empty());
+    assert_eq!(ledger.quarantine_health()?.unsupported, 2);
+    assert_eq!(ledger.quarantine_replay_batch()?.len(), 2);
+    // Only conflicts compact. Unsupported exact versions have no time-based expiry.
+    assert_eq!(ledger.prune_transport_quarantine(9 * 24 * 60 * 60)?, 2);
+    assert_eq!(ledger.quarantine_health()?.records, 2);
+    drop(ledger);
+    let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
+    for retained in ledger.quarantine_replay_batch()? {
+        assert!(rejected_delivery(retained.role, &retained.exact_bytes).is_some());
+        // Normal replay is allowed only once a future decoder supports the version.
+        ledger.resolve_quarantine(&retained)?;
+    }
+    assert_eq!(ledger.quarantine_health()?.records, 0);
+    Ok(())
+}
+
+#[test]
+fn inapplicable_decision_is_digest_only_and_does_not_block_later_valid_handoff()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
+    let command = command_fixture(1, COMMAND_ID)?;
+    let claim = claim_fixture(&command, WINNER, &WINNER_SEED, CLAIM_ID)?;
+    let decision = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
+    assert!(matches!(
+        ledger.record_decision_delivery(
+            &Decision {
+                exact_bytes: &decision
+            },
+            1
+        ),
+        Err(LedgerError::NotFound)
+    ));
+    ledger.quarantine_inapplicable_decision(&decision, 1, 10)?;
+    assert!(ledger.quarantine_replay_batch()?.is_empty());
+    assert!(ledger.executable_commands()?.is_empty());
+    assert_eq!(ledger.quarantine_health()?.records, 1);
+    // A later legitimate command/report and decision uses normal fenced authority.
+    ledger.retain_command_and_claim(&command.command(), &claim.report(1))?;
+    assert_eq!(
+        ledger.record_decision_delivery(
+            &Decision {
+                exact_bytes: &decision
+            },
+            2
+        )?,
+        StoreOutcome::Stored
+    );
+    assert_eq!(ledger.executable_commands()?.len(), 1);
+    Ok(())
+}

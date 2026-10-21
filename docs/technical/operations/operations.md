@@ -1,10 +1,10 @@
-# Slice 2 operations
+# Durable workflow operations
 
-This runbook covers the PostgreSQL-authoritative M1 Slice 2 control plane, isolated authenticated JetStream profile, and retained scripted executor. It does not authorize shared-environment deployment, production credentials, or production data migration.
+This runbook covers the PostgreSQL-authoritative M1 Slice 3 control plane, isolated authenticated JetStream profile, and retained scripted executor. It does not authorize shared-environment deployment, production credentials, or production data migration.
 
 ## Startup sequence
 
-1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through version 2, installs runtime grants, and validates the catalog manifest.
+1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through version 7, installs runtime grants, and validates the catalog manifest.
 2. PostgreSQL, JetStream, and executor-ledger retained volumes are mounted without deleting existing state.
 3. NATS starts with four password identities and no anonymous access. The administrative hook creates or updates the three exact streams and four durable consumers.
 4. The control plane validates the runtime database role, binds HTTP and loopback gRPC, loads only the application broker password, and resumes pending outbox/report acceptance.
@@ -14,7 +14,7 @@ Broker unavailability does not make PostgreSQL readiness false. Both broker clie
 
 ## Probes and checks
 
-`/healthz` reports process liveness without consulting dependencies. `/readyz` validates PostgreSQL migration version, checksums, catalog manifest, and exact runtime privileges. Database failure returns HTTP 503 without exposing a credential or raw diagnostic.
+`/healthz` reports process liveness without consulting dependencies. `/readyz` validates PostgreSQL migration version, checksums, catalog manifest, and exact runtime privileges. Database failure returns HTTP 503 without exposing a credential or raw diagnostic. A full or unsupported-version report quarantine also returns a named readiness failure. `/metrics` reports durable queue/outbox/quarantine pressure and process timing/counters using safe identities.
 
 Use the local operational checks:
 
@@ -23,13 +23,13 @@ dev/ctl check
 dev/ctl scenario
 ```
 
-`check` verifies all StatefulSets/Deployments, migration version 2, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
+`check` verifies all StatefulSets/Deployments, migration version 7, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
 
 ## Schema and stream changes
 
 Every forward migration requires a monotonically increasing version, stable checksum, transaction-safe DDL, advisory-lock concurrency evidence, explicit runtime grants, an updated manifest checksum, and malformed-schema/privilege failure tests. Never edit an applied migration.
 
-The broker profile is fixed for Slice 2. A reviewed change must preserve independent command/report/decision capacity, `discard=new`, oldest-record survival, seven-day age, denied delete/purge, the server/PVC headroom calculation, and least-subject ACLs. Provision consumers before new producers.
+The broker profile is fixed for M1. A reviewed change must preserve independent command/report/decision capacity, `discard=new`, oldest-record survival, seven-day age, denied delete/purge, the server/PVC headroom calculation, and least-subject ACLs. Provision consumers before new producers.
 
 ## Credentials and roles
 
@@ -64,7 +64,10 @@ SQLite workflow files from the superseded implementation are not backups. The ex
 | `IDEMPOTENCY_CONFLICT` | Scoped command key reused with changed bytes | Reconcile the caller and retain the original receipt |
 | `RESOURCE_EXHAUSTED` | FIFO or retained-capacity bound reached | Restore capacity without deleting accepted owner state |
 | `HISTORY_SNAPSHOT_EXPIRED` | Stable pagination boundary expired | Fetch a fresh snapshot and restart pagination |
-| `WatchConversation` is `UNIMPLEMENTED` | Expected Slice 2 behavior | Use snapshot/history; resumable watch enters Slice 3 |
+| `WATCH_CURSOR_EXPIRED` | Cursor predates the seven-day replay watermark | Resume without a cursor to receive an authoritative snapshot |
+| Watch `RESOURCE_EXHAUSTED` | Reader exhausted its bounded delivery buffer | Reconnect with the last consumed cursor |
+| `workflow_report_quarantine_full` | Report quarantine reached a count or byte limit | Restore compatible consumption; keep producing-side exact bytes |
+| `workflow_report_quarantine_unsupported_version` | Retained report requires a newer consumer | Upgrade the consumer before the producer and allow exact-byte replay |
 | Future schema version | Binary older than retained state | Deploy a compatible newer binary; never downgrade against retained stores |
 
 Logs expose only stable IDs and safe reason codes. User content, credentials, exact command/report bytes, signatures, and raw database diagnostics must not be logged.

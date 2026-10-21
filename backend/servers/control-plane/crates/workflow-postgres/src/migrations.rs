@@ -3,10 +3,15 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 2;
+pub const CURRENT_SCHEMA_VERSION: i64 = 7;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
+const MIGRATION_3: &str = include_str!("../migrations/0003_transport_quarantine.sql");
+const MIGRATION_4: &str = include_str!("../migrations/0004_watch_retention.sql");
+const MIGRATION_5: &str = include_str!("../migrations/0005_delivery_accounting.sql");
+const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.sql");
+const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
 
 #[derive(Debug, Error)]
 pub enum MigrationError {
@@ -103,6 +108,18 @@ async fn migrate_inner(
             )
             .await?;
     }
+    for (version, source, description) in [
+        (3_i64, MIGRATION_3, "M1 transport quarantine"),
+        (4_i64, MIGRATION_4, "M1 watch retention"),
+        (5_i64, MIGRATION_5, "M1 delivery accounting"),
+        (6_i64, MIGRATION_6, "M1 detached report rejection"),
+        (7_i64, MIGRATION_7, "M1 broker capacity observations"),
+    ] {
+        if current < version {
+            transaction.batch_execute(source).await?;
+            transaction.execute("INSERT INTO public.workflow_schema_migrations (version, description, checksum) VALUES ($1,$2,$3)", &[&version,&description,&migration_checksum(source)]).await?;
+        }
+    }
     validate_checksum(&transaction).await?;
     validate_schema(&transaction).await?;
     if let Some(runtime_role) = runtime_role {
@@ -155,7 +172,15 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
             rows.last().ok_or(MigrationError::InvalidHistory)?.get(0),
         ));
     }
-    let migrations = [(1_i64, MIGRATION_1), (2_i64, MIGRATION_2)];
+    let migrations = [
+        (1_i64, MIGRATION_1),
+        (2_i64, MIGRATION_2),
+        (3_i64, MIGRATION_3),
+        (4_i64, MIGRATION_4),
+        (5_i64, MIGRATION_5),
+        (6_i64, MIGRATION_6),
+        (7_i64, MIGRATION_7),
+    ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
     }
@@ -191,7 +216,15 @@ async fn validate_history(transaction: &Transaction<'_>) -> Result<(), Migration
 }
 
 async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
-    for (version, migration) in [(1_i64, MIGRATION_1), (2_i64, MIGRATION_2)] {
+    for (version, migration) in [
+        (1_i64, MIGRATION_1),
+        (2_i64, MIGRATION_2),
+        (3_i64, MIGRATION_3),
+        (4_i64, MIGRATION_4),
+        (5_i64, MIGRATION_5),
+        (6_i64, MIGRATION_6),
+        (7_i64, MIGRATION_7),
+    ] {
         let checksum: String = transaction
             .query_one(
                 "SELECT checksum FROM public.workflow_schema_migrations WHERE version = $1",
@@ -244,22 +277,25 @@ async fn apply_runtime_privileges(
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts FROM {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity FROM {role};\
              GRANT SELECT, INSERT ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts TO {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity TO {role};\
              GRANT UPDATE (revision, next_turn_sequence, next_history_sequence) \
                ON workflow_conversations TO {role};\
              GRANT UPDATE (resume_cursor) ON workflow_command_receipts TO {role};\
              GRANT UPDATE (dispatch_state, execution_state, response_message_id, failure_reason, updated_at, \
                scheduling_state, context_revision, assignment_id, executor_generation) ON workflow_turns TO {role};\
-             GRANT UPDATE (state, attempt_count, last_safe_reason, next_attempt_at, updated_at) \
+             GRANT UPDATE (state, attempt_count, last_safe_reason, next_attempt_at, updated_at, stream_sequence) \
                ON workflow_outbox TO {role};\
              GRANT UPDATE (eligible, command_event_id, exact_command_bytes, updated_at) \
                ON workflow_dispatch_intents TO {role};\
-             GRANT DELETE ON workflow_history_snapshots TO {role};\
+             GRANT DELETE ON workflow_history_snapshots, workflow_transport_quarantine, workflow_updates, workflow_activities, workflow_pending_reports TO {role};\
+             GRANT UPDATE (retained_messages,retained_bytes,observed_at) ON workflow_broker_capacity TO {role};\
+             GRANT UPDATE (state,stream_sequence,attempt_count,next_attempt_at,updated_at) ON workflow_transport_rejections TO {role};\
+             GRANT UPDATE (pruned_through_cursor) ON workflow_watch_watermarks TO {role};\
              REVOKE ALL PRIVILEGES ON SEQUENCE workflow_updates_cursor_seq FROM {role};\
              GRANT USAGE, SELECT ON SEQUENCE workflow_updates_cursor_seq TO {role};\
              REVOKE ALL PRIVILEGES ON FUNCTION workflow_ts_seconds(timestamptz), \
@@ -287,7 +323,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:85f2390965d874699d648a4efcf5373a52cdbd9e375447cb221f31e25bf3e5d2";
+    "sha256:fbff7938e04f066d1db07011e73a58f0cc28778a401799c6dcc54c9bd6e16fa4";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -391,7 +427,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                            current_user, table_name, 'UPDATE,TRUNCATE,REFERENCES,TRIGGER' \
                        ) \
                        AND has_table_privilege(current_user, table_name, 'DELETE') \
-                           = (table_name = 'public.workflow_history_snapshots') \
+                           = (table_name IN ('public.workflow_history_snapshots','public.workflow_transport_quarantine','public.workflow_updates','public.workflow_activities','public.workflow_pending_reports')) \
                    ) \
                    FROM unnest(ARRAY[ \
                        'public.workflow_workspaces', 'public.workflow_projects', \
@@ -399,7 +435,8 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        'public.workflow_messages', 'public.workflow_turns', \
                        'public.workflow_activities', 'public.workflow_updates', \
                        'public.workflow_dispatch_intents', 'public.workflow_outbox', \
-                       'public.workflow_history_snapshots', 'public.workflow_report_receipts' \
+                       'public.workflow_history_snapshots', 'public.workflow_report_receipts', \
+                       'public.workflow_transport_quarantine', 'public.workflow_watch_watermarks', 'public.workflow_pending_reports', 'public.workflow_transport_rejections', 'public.workflow_broker_capacity' \
                    ]) AS table_name \
                ) \
                AND ( \
@@ -408,6 +445,9 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        required.column_name, 'UPDATE' \
                    )) \
                    FROM (VALUES \
+                       ('workflow_broker_capacity','retained_messages'),('workflow_broker_capacity','retained_bytes'),('workflow_broker_capacity','observed_at'), \
+                       ('workflow_transport_rejections','state'),('workflow_transport_rejections','stream_sequence'),('workflow_transport_rejections','attempt_count'),('workflow_transport_rejections','next_attempt_at'),('workflow_transport_rejections','updated_at'), \
+                       ('workflow_watch_watermarks', 'pruned_through_cursor'), \
                        ('workflow_conversations', 'revision'), \
                        ('workflow_conversations', 'next_turn_sequence'), \
                        ('workflow_conversations', 'next_history_sequence'), \
@@ -426,6 +466,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        ('workflow_outbox', 'last_safe_reason'), \
                        ('workflow_outbox', 'next_attempt_at'), \
                        ('workflow_outbox', 'updated_at'), \
+                       ('workflow_outbox', 'stream_sequence'), \
                        ('workflow_dispatch_intents', 'eligible'), \
                        ('workflow_dispatch_intents', 'command_event_id'), \
                        ('workflow_dispatch_intents', 'exact_command_bytes'), \
@@ -442,7 +483,10 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                          candidate.column_name, 'UPDATE' \
                      ) \
                      AND NOT ( \
-                         (candidate.table_name = 'workflow_conversations' \
+                         (candidate.table_name='workflow_broker_capacity' AND candidate.column_name IN ('retained_messages','retained_bytes','observed_at')) \
+                         OR (candidate.table_name='workflow_transport_rejections' AND candidate.column_name IN ('state','stream_sequence','attempt_count','next_attempt_at','updated_at')) \
+                         OR (candidate.table_name = 'workflow_watch_watermarks' AND candidate.column_name = 'pruned_through_cursor') \
+                         OR (candidate.table_name = 'workflow_conversations' \
                           AND candidate.column_name IN ( \
                               'revision', 'next_turn_sequence', 'next_history_sequence' \
                           )) \
@@ -454,7 +498,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                                'context_revision', 'assignment_id', 'executor_generation')) \
                          OR (candidate.table_name = 'workflow_outbox' \
                              AND candidate.column_name IN ('state', 'attempt_count', 'last_safe_reason', \
-                               'next_attempt_at', 'updated_at')) \
+                               'next_attempt_at', 'updated_at', 'stream_sequence')) \
                          OR (candidate.table_name = 'workflow_dispatch_intents' \
                              AND candidate.column_name IN ( \
                                'eligible', 'command_event_id', 'exact_command_bytes', 'updated_at' \

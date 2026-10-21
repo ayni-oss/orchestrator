@@ -1,6 +1,6 @@
 # Local development
 
-The supported M1 Slice 2 stack runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted executor on Docker Desktop Kubernetes. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
+The supported M1 Slice 3 stack runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted executor on Docker Desktop Kubernetes. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
 
 ## Prerequisites
 
@@ -39,13 +39,13 @@ The pinned broker provisions three file-backed, `discard=new` streams:
 | `ORCHESTRATOR_WORKFLOW_REPORT_V1` | `orchestrator.workflow.report.conversation.v1` | 50,000 / 192 MiB |
 | `ORCHESTRATOR_WORKFLOW_DECISION_V1` | `orchestrator.workflow.accepted.conversation.v1.*` | 50,000 / 64 MiB |
 
-All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces its 192-MiB logical ledger contract.
+All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through version 2, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through version 7, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Happy-path diagnostic
 
-`dev/ctl scenario` executes the credential-free diagnostic inside the control-plane Pod. It uses the pod-loopback private-v1 listener to create a workspace, project, and conversation; admit one message; wait for the signed executor claim and accepted scripted response; and verify the terminal snapshot and stable history. It prints generated resource IDs and the final revision, never credentials or message content.
+`dev/ctl scenario` executes the credential-free diagnostic inside the control-plane Pod. It uses the pod-loopback private-v1 listener to create a workspace, project, and conversation; admit one message; observe the signed executor claim and accepted scripted response through a watch, reconnect after each update; and verify the terminal snapshot and stable history. It prints generated resource IDs and the final revision, never credentials or message content.
 
 For manual access, port-forward the Pod rather than the Service:
 
@@ -66,9 +66,18 @@ kubectl --context docker-desktop -n ayni-orchestrator-dev \
   port-forward service/control-plane 8080:8080
 curl --fail http://127.0.0.1:8080/healthz
 curl --fail http://127.0.0.1:8080/readyz
+curl --fail http://127.0.0.1:8080/metrics
 ```
 
 Broker unavailability leaves PostgreSQL readiness honest and delivery pending. PostgreSQL unavailability makes the command/snapshot boundary unavailable.
+
+## Watch recovery and retention
+
+Keep the last received cursor to resume `WatchConversation`. An empty cursor starts with a consistent snapshot; a valid cursor starts with the next durable update. Heartbeats have no cursor. A disconnected watch never cancels admitted work.
+
+`WATCH_CURSOR_EXPIRED` means the cursor predates the seven-day watermark. Reconnect without a cursor to recover authoritative current state. `RESOURCE_EXHAUSTED` closes a slow reader; resume from its last consumed cursor. Cleanup bounds each pass and preserves immutable receipts and unresolved transport evidence.
+
+`/readyz` names a full application report quarantine or unsupported retained version. Stop the incompatible producer, deploy a compatible consumer, and allow retained replay to resolve the entries. Malformed entries retain identity/digest diagnostics for eight days; unsupported exact bytes have no automatic expiry.
 
 ## Restart and retention check
 
@@ -99,7 +108,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migration version 2, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migration version 7, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 ## Cleanup
 

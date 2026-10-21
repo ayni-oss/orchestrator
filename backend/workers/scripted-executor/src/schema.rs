@@ -49,4 +49,17 @@ CREATE TABLE IF NOT EXISTS reports (
     UNIQUE (command_source, command_event_id, sequence),
     FOREIGN KEY (command_source, command_event_id) REFERENCES commands(source, event_id)
 );
+
+CREATE TABLE IF NOT EXISTS transport_quarantine (
+    consumer_role text NOT NULL CHECK (consumer_role IN ('executor_command','executor_decision')),
+    event_source text NOT NULL CHECK (length(event_source) <= 256),
+    event_id text NOT NULL CHECK (length(event_id) <= 128),
+    event_digest text NOT NULL CHECK (length(event_digest) = 71),
+    reason text NOT NULL CHECK (reason IN ('malformed','unsupported_version','event_conflict')),
+    exact_bytes blob CHECK (length(exact_bytes) <= 262144),
+    consumer_sequence integer NOT NULL CHECK (consumer_sequence > 0),
+    recorded_at_seconds integer NOT NULL CHECK (recorded_at_seconds >= 0),
+    PRIMARY KEY (consumer_role,event_source,event_id,event_digest),
+    CHECK ((reason='unsupported_version') = (exact_bytes IS NOT NULL))
+);
 ";

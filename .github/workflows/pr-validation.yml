@@ -186,8 +186,8 @@ jobs:
         run: cargo test --workspace --all-targets
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test PostgreSQL authority
-        run: scripts/ci/check-workflow-postgres-feasibility.sh
+      - name: Test cumulative M1 authority, transport and recovery
+        run: scripts/ci/check-workflow-m1.sh
 
   ayni:
     name: Ayni quality

@@ -1,4 +1,13 @@
 mod acceptance;
+mod capacity;
+mod delivery;
+mod delivery_failure;
+pub use delivery::DecisionAcknowledgement;
+mod ordered_reports;
+mod quarantine;
+pub use quarantine::{QuarantinedEvent, TransportHealth};
+pub mod observation;
+mod operational;
 mod support;
 
 use self::support::{
@@ -31,6 +40,8 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("workflow capacity is exhausted: {0}")]
     Capacity(&'static str),
+    #[error("WATCH_CURSOR_EXPIRED")]
+    WatchCursorExpired,
     #[error("HISTORY_SNAPSHOT_EXPIRED")]
     HistorySnapshotExpired,
     #[error("retained workflow state is invalid")]
@@ -303,6 +314,7 @@ impl WorkflowStore {
                 )
                 .await?
                 .get(0);
+            observation::notify(&transaction, &conversation_id).await?;
             set_receipt_cursor(&transaction, &command_id, &conversation_id, cursor).await?;
             receipt_and_resource(&transaction, &command_id).await?
         } else {
@@ -384,6 +396,7 @@ impl WorkflowStore {
         if nonterminal >= MAX_NONTERMINAL_TURNS {
             return Err(StoreError::Capacity("turn_queue"));
         }
+        capacity::reserve_admission(&transaction).await?;
         let current_revision: i64 = conversation_row.get(0);
         let turn_sequence: i64 = conversation_row.get(1);
         let history_sequence: i64 = conversation_row.get(2);
@@ -448,15 +461,71 @@ impl WorkflowStore {
     /// # Errors
     /// Returns validation, database, or retained-state errors.
     pub async fn mark_outbox_stored(&self, id: &str, event_bytes: &[u8]) -> Result<(), StoreError> {
+        self.mark_outbox_publication(id, event_bytes, 0).await
+    }
+
+    /// Retain the exact broker storage sequence for targeted ACK reconciliation.
+    ///
+    /// # Errors
+    /// Returns database, input or retained-state errors.
+    pub async fn mark_outbox_publication(
+        &self,
+        id: &str,
+        event_bytes: &[u8],
+        stream_sequence: u64,
+    ) -> Result<(), StoreError> {
+        self.mark_outbox_publication_at(
+            id,
+            event_bytes,
+            stream_sequence,
+            std::time::SystemTime::now(),
+        )
+        .await
+    }
+
+    /// Record a stored copy using the publication start time, preserving its age
+    /// across duplicate broker acknowledgements for the same sequence.
+    ///
+    /// # Errors
+    /// Returns invalid input, unavailable authority, or retained-state errors.
+    pub async fn mark_outbox_publication_at(
+        &self,
+        id: &str,
+        event_bytes: &[u8],
+        stream_sequence: u64,
+        published_at: std::time::SystemTime,
+    ) -> Result<(), StoreError> {
+        let published_at = published_at
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| StoreError::InvalidInput("publication_time"))?
+            .as_secs_f64();
+        let sequence = i64::try_from(stream_sequence)
+            .map_err(|_| StoreError::InvalidInput("stream_sequence"))?;
         validate_id(id, "outbox_id")?;
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let transaction = client.transaction().await?;
+        // Observation updates follow the same conversation, Turn, outbox lock
+        // order as admission and acceptance, including recovery activity.
+        transaction
+            .query_opt(
+                "SELECT c.id FROM workflow_conversations c JOIN workflow_outbox o \
+            ON o.conversation_id=c.id WHERE o.id=$1 FOR UPDATE OF c",
+                &[&id],
+            )
+            .await?;
+        let turn_before = transaction
+            .query_opt(
+                "SELECT t.dispatch_state FROM workflow_turns t JOIN workflow_outbox o \
+            ON o.turn_id=t.id WHERE o.id=$1 FOR UPDATE OF t",
+                &[&id],
+            )
+            .await?;
         let changed = transaction
             .execute(
                 "UPDATE workflow_outbox SET state = 'stored', attempt_count = attempt_count + 1, \
-                 last_safe_reason = '', updated_at = clock_timestamp() \
-                 WHERE id = $1 AND event_bytes = $2 AND state = 'pending'",
-                &[&id, &event_bytes],
+                 updated_at = CASE WHEN state='pending' OR stream_sequence < $3 THEN to_timestamp($4::double precision) ELSE updated_at END, stream_sequence = GREATEST(stream_sequence,$3), last_safe_reason = '', next_attempt_at = clock_timestamp() + interval '30 seconds' \
+                 WHERE id = $1 AND event_bytes = $2 AND state IN ('pending','stored')",
+                &[&id, &event_bytes, &sequence, &published_at],
             )
             .await?;
         if changed > 1 {
@@ -467,14 +536,29 @@ impl WorkflowStore {
                 .execute(
                     "UPDATE workflow_turns SET dispatch_state = 'stored', \
                      updated_at = clock_timestamp() \
-                     WHERE id = (SELECT turn_id FROM workflow_outbox WHERE id = $1) \
-                       AND dispatch_state = 'pending'",
+                     WHERE id = (SELECT turn_id FROM workflow_dispatch_intents WHERE command_event_id = $1) \
+                       AND dispatch_state IN ('pending','degraded')",
                     &[&id],
                 )
                 .await?;
             if turn_changed > 1 {
                 return Err(StoreError::CorruptState);
             }
+            if turn_changed == 1
+                && turn_before.is_some_and(|row| row.get::<_, String>(0) == "degraded")
+            {
+                delivery_failure::record_dispatch_recovery(&transaction, event_bytes).await?;
+            }
+        } else if delivery::mark_rejection_publication(
+            &transaction,
+            id,
+            event_bytes,
+            sequence,
+            published_at,
+        )
+        .await?
+        {
+            // Detached rejections have no domain Turn to advance.
         } else {
             let retained: Option<bool> = transaction
                 .query_opt(
@@ -599,11 +683,13 @@ impl WorkflowStore {
             .await?;
         let activity = transaction
             .query_opt(
-                "SELECT a.id, a.conversation_id, a.conversation_revision, u.cursor, a.turn_id, \
+                "SELECT a.id, a.conversation_id, a.conversation_revision, \
+                        COALESCE(u.cursor, w.pruned_through_cursor, 0), a.turn_id, \
                         a.stage, a.presentation_state, a.waiting_on, a.safe_reason, \
                         workflow_ts_seconds(a.accepted_at), workflow_ts_nanos(a.accepted_at), a.safe_detail \
                  FROM workflow_activities a \
-                 JOIN workflow_updates u ON u.activity_id = a.id \
+                 LEFT JOIN workflow_updates u ON u.activity_id = a.id \
+                 LEFT JOIN workflow_watch_watermarks w ON w.conversation_id = a.conversation_id \
                  WHERE a.conversation_id = $1 ORDER BY a.conversation_revision DESC LIMIT 1",
                 &[&conversation_id],
             )
@@ -613,7 +699,10 @@ impl WorkflowStore {
             .transpose()?;
         let cursor_value: i64 = transaction
             .query_one(
-                "SELECT COALESCE(max(cursor), 0) FROM workflow_updates WHERE conversation_id = $1",
+                "SELECT GREATEST( \
+                    COALESCE((SELECT max(cursor) FROM workflow_updates WHERE conversation_id = $1), 0), \
+                    COALESCE((SELECT pruned_through_cursor FROM workflow_watch_watermarks \
+                              WHERE conversation_id = $1), 0))",
                 &[&conversation_id],
             )
             .await?
@@ -730,9 +819,12 @@ impl WorkflowStore {
         let (client, driver) = crate::connect(&self.database_url).await?;
         let rows = client
             .query(
-                "SELECT id, conversation_id, turn_id, subject, event_bytes \
-                 FROM workflow_outbox WHERE state = 'pending' AND next_attempt_at <= clock_timestamp() \
-                 ORDER BY created_at LIMIT $1",
+                "SELECT id,conversation_id,turn_id,subject,event_bytes FROM ( \
+                 SELECT id,conversation_id,turn_id,subject,event_bytes,created_at,next_attempt_at FROM workflow_outbox \
+                   WHERE state IN ('pending','stored') AND next_attempt_at <= clock_timestamp() \
+                 UNION ALL SELECT decision_event_id,'','',subject,decision_bytes,created_at,next_attempt_at \
+                   FROM workflow_transport_rejections WHERE state IN ('pending','stored') \
+                   AND next_attempt_at <= clock_timestamp()) deliveries ORDER BY next_attempt_at,created_at LIMIT $1",
                 &[&i64::from(limit)],
             )
             .await?;

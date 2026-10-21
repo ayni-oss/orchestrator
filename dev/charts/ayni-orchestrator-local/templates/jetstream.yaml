@@ -33,6 +33,11 @@ data:
               "orchestrator.workflow.command.conversation.v1",
               "orchestrator.workflow.accepted.conversation.v1.*",
               "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application",
+              "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_COMMAND_V1.scripted-executor",
+              "$JS.API.STREAM.INFO.ORCHESTRATOR_WORKFLOW_COMMAND_V1",
+              "$JS.API.STREAM.INFO.ORCHESTRATOR_WORKFLOW_REPORT_V1",
+              "$JS.API.STREAM.INFO.ORCHESTRATOR_WORKFLOW_DECISION_V1",
+              "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_DECISION_V1.*",
               "$JS.API.CONSUMER.MSG.NEXT.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application",
               "$JS.ACK.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application.>"
             ] }

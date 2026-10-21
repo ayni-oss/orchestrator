@@ -3,7 +3,7 @@ layout: home
 hero:
   name: Ayni Orchestrator
   text: Durable workflow foundations
-  tagline: M1 Slice 2 is a contributor preview of PostgreSQL-authoritative conversations with durable delivery and a scripted response.
+  tagline: A contributor preview of durable conversations with scripted responses and resumable updates.
   actions:
     - theme: brand
       text: View source
@@ -17,7 +17,7 @@ features:
   - title: Durable handoff
     details: Authenticated JetStream and a retained scripted executor keep broker storage, ownership claims, decisions, and accepted results distinct.
   - title: Private by construction
-    details: Canonical workflow gRPC binds to pod loopback; resumable watches, providers, browser UX, and custom-client access remain deferred.
+    details: Canonical workflow gRPC binds to pod loopback. Contributors can resume updates; providers, browser UX, and custom-client access remain deferred.
 ---
 
 ## Contributor preview
