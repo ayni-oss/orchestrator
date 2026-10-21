@@ -29,7 +29,7 @@ function clearError() { $('error').hidden = true; }
 async function api(method, body) {
   const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
   const result = await response.json();
-  if (!response.ok) { const error = new Error(`${result.reason || result.code || 'Request failed'}${result.requestId ? ` · ${result.requestId}` : ''}`); error.reason = result.reason; throw error; }
+  if (!response.ok) { const error = new Error(`${result.reason || result.code || 'Request failed'}${result.requestId ? ` · ${result.requestId}` : ''}`); error.reason = result.reason; error.code = result.code; throw error; }
   return result;
 }
 function scopeBody() { return { workspaceId: scope.workspaceId, projectId: scope.projectId, conversationId: scope.conversationId }; }
@@ -65,7 +65,11 @@ async function retry() {
       if (result.conversation) scope = { workspaceId: result.conversation.workspaceId, projectId: result.conversation.projectId, conversationId: result.conversation.id };
       store('selection', scope); await loadDiscovery(); await selectConversation(scope.conversationId);
     }
-  } catch (error) { showError(error); }
+  } catch (error) {
+    // Canonical validation/scope/conflict rejections did not admit this command.
+    if (['InvalidArgument', 'NotFound', 'AlreadyExists'].includes(error.code)) { pending = null; store('pending', null); }
+    showError(error);
+  }
   finally { sending = false; controls(); }
 }
 function addOption(select, value, label) { const option = document.createElement('option'); option.value = value; option.textContent = label; select.append(option); }

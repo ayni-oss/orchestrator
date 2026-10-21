@@ -65,7 +65,7 @@ resets that local pagination boundary on the next attempt.
 Before a mutation, the browser retains its exact method, scope, content and random
 idempotency key in tab-local session storage. Only one unresolved mutation is
 allowed per tab. Network failures retain that command and expose an explicit retry;
-retry and reload never generate a new key for it. Successful receipts clear it.
+retry and reload never generate a new key for it. Successful receipts clear it. Definitive validation, missing-parent or idempotency-conflict rejections clear the local retry so the user can correct the request; ambiguous transport failures retain it.
 No automatic new-key resubmission follows an ambiguous outcome. Browser storage
 is a convenience for retries, not authority; clearing it can lose the local retry
 handle. Transcripts and replay cursors are not persisted in browser storage.

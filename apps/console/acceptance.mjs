@@ -19,6 +19,10 @@ try {
   await page.goto(endpoint);
   await page.locator('#workspace').waitFor({ state: 'visible' });
   await page.locator('#create-workspace').evaluate(form => { form.closest('details').open = true; });
+  await page.locator('#create-workspace input').fill(' Invalid padded name ');
+  await page.locator('#create-workspace button').click();
+  await page.locator('#error').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#pending').isVisible(), false);
   await page.locator('#create-workspace input').fill(run);
   await page.locator('#create-workspace button').click();
   await page.waitForFunction(() => !!document.querySelector('#workspace').value);
@@ -108,5 +112,5 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   if (evidence) { await mkdir(evidence, { recursive: true }); await page.screenshot({ path: `${evidence}/console.png`, fullPage: true }); }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
+  console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['validation-correction', 'create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
 } finally { await browser.close(); }
