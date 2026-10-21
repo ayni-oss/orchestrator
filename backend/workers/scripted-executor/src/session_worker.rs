@@ -20,6 +20,8 @@ use subtle::ConstantTimeEq as _;
 
 const SCHEMA: &str = "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS identity(singleton INTEGER PRIMARY KEY CHECK(singleton=1),session_id TEXT NOT NULL,generation INTEGER NOT NULL,conversation_id TEXT NOT NULL,workspace_id TEXT NOT NULL,project_id TEXT NOT NULL); CREATE TABLE IF NOT EXISTS policy(singleton INTEGER PRIMARY KEY CHECK(singleton=1),idle_timeout_seconds INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS results(command_id TEXT PRIMARY KEY,digest TEXT NOT NULL,request BLOB,result TEXT NOT NULL,retained_bytes INTEGER NOT NULL,acknowledged INTEGER NOT NULL DEFAULT 0,acknowledged_at INTEGER);";
 
+pub mod provider_session;
+
 const RESPONSE: &str = "The scripted executor completed this turn.";
 const MAX_RETAINED_BYTES: i64 = 256 * 1024 * 1024;
 
@@ -28,9 +30,15 @@ pub struct ExecutionResult {
     pub command_id: String,
     pub command_digest: String,
     pub response_content: String,
+    #[serde(default)]
+    pub failure_reason: String,
+    #[serde(default)]
+    pub provider_call: Option<ayni_orchestrator_events::v1::ProviderCallEvidence>,
 }
 
 struct WorkerState {
+    active: Mutex<std::collections::HashSet<String>>,
+    provider: Mutex<Option<ayni_orchestrator_providers::responses::ResponsesClient>>,
     session_id: String,
     generation: u64,
     conversation_id: String,
@@ -82,6 +90,8 @@ fn load_state() -> Result<Arc<WorkerState>, io::Error> {
         timeout,
     )?;
     Ok(Arc::new(WorkerState {
+        active: Mutex::new(std::collections::HashSet::new()),
+        provider: Mutex::new(provider_session::credential_client().ok()),
         session_id,
         generation,
         conversation_id,
@@ -105,6 +115,9 @@ fn open_ledger(
 ) -> Result<(Connection, Duration), io::Error> {
     let connection = Connection::open(path).map_err(io::Error::other)?;
     connection.execute_batch(SCHEMA).map_err(io::Error::other)?;
+    connection
+        .execute_batch(provider_session::SCHEMA)
+        .map_err(io::Error::other)?;
     connection
         .execute(
             "INSERT OR IGNORE INTO policy VALUES(1,?1)",
@@ -146,7 +159,10 @@ pub async fn run() -> Result<(), io::Error> {
         .route("/health", get(|| async { StatusCode::OK }))
         .route("/v1/execute", post(execute))
         .route("/v1/acknowledge", post(acknowledge))
-        .layer(DefaultBodyLimit::max(256 * 1024))
+        .route("/v1/provider-prepare", post(provider_session::prepare))
+        .route("/v1/provider-send", post(provider_session::send))
+        .route("/v1/cancel", post(provider_session::cancel))
+        .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081").await?;
     axum::serve(listener, app)
@@ -176,7 +192,7 @@ fn idle_and_resolved(state: &WorkerState) -> bool {
     });
     idle && connection
         .query_row(
-            "SELECT NOT EXISTS(SELECT 1 FROM results WHERE acknowledged=0)",
+            "SELECT NOT EXISTS(SELECT 1 FROM results WHERE acknowledged=0) AND NOT EXISTS(SELECT 1 FROM provider_calls WHERE settled=0)",
             [],
             |row| row.get::<_, bool>(0),
         )
@@ -215,6 +231,9 @@ async fn execute(
     {
         return Err(StatusCode::FORBIDDEN);
     }
+    if binding.execution_binding_revision != "scripted-v1" {
+        return Err(StatusCode::FORBIDDEN);
+    }
     let digest = digest(&body);
     let mut connection = state
         .connection
@@ -238,7 +257,7 @@ async fn execute(
         serde_json::from_str(&json).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?
     } else {
         tx.execute(
-            "DELETE FROM results WHERE acknowledged=1 AND acknowledged_at < unixepoch()-691200",
+            "DELETE FROM results WHERE acknowledged=1 AND acknowledged_at < unixepoch()-691200 AND command_id NOT IN (SELECT command_id FROM provider_calls)",
             [],
         )
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
@@ -260,6 +279,8 @@ async fn execute(
             command_id: identity.id.clone(),
             command_digest: digest.clone(),
             response_content: RESPONSE.to_owned(),
+            failure_reason: String::new(),
+            provider_call: None,
         };
         let json = serde_json::to_string(&result).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         tx.execute("INSERT INTO results(command_id,digest,request,result,retained_bytes) VALUES(?1,?2,?3,?4,?5)",params![identity.id,digest,body.as_ref(),json,bytes]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
@@ -295,6 +316,7 @@ async fn acknowledge(
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     // Keep a bounded digest/result tombstone for exact retries; release transcript accounting only.
     connection.execute("UPDATE results SET acknowledged=1,request=NULL,retained_bytes=0,acknowledged_at=COALESCE(acknowledged_at,unixepoch()) WHERE command_id=?1",[&body]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+    connection.execute("UPDATE provider_calls SET request=NULL WHERE command_id=?1 AND state IN ('completed','failed','cancelled') AND settled=1",[&body]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
     drop(connection);
     *state
         .last_request
@@ -322,7 +344,10 @@ mod tests {
 
     fn state(connection: Connection) -> Arc<WorkerState> {
         connection.execute_batch(SCHEMA).unwrap();
+        connection.execute_batch(provider_session::SCHEMA).unwrap();
         Arc::new(WorkerState {
+            active: Mutex::new(std::collections::HashSet::new()),
+            provider: Mutex::new(None),
             session_id: uuid::Uuid::now_v7().to_string(),
             generation: 1,
             conversation_id: uuid::Uuid::now_v7().to_string(),
@@ -542,6 +567,8 @@ mod tests {
         .unwrap()
         .0;
         let restarted = Arc::new(WorkerState {
+            active: Mutex::new(std::collections::HashSet::new()),
+            provider: Mutex::new(original.provider.lock().unwrap().clone()),
             session_id: original.session_id.clone(),
             generation: original.generation,
             conversation_id: original.conversation_id.clone(),

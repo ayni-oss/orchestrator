@@ -49,7 +49,10 @@ async fn run() -> Result<(), io::Error> {
     let http = router(WorkflowReadiness::new(
         runtime_database_url,
         runtime_database_role,
-    ));
+    ))
+    .merge(ayni_orchestrator_control_plane::session_authority::router(
+        store.clone(),
+    )?);
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
     let signal_sender = shutdown_sender.clone();
     let signal_task = tokio::spawn(async move {

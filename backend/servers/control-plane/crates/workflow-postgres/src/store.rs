@@ -5,6 +5,7 @@ mod context_manifest;
 mod delivery;
 mod delivery_failure;
 mod discovery;
+pub mod provider_calls;
 pub use delivery::DecisionAcknowledgement;
 mod ordered_reports;
 mod quarantine;
@@ -589,10 +590,6 @@ impl WorkflowStore {
     ///
     /// # Errors
     /// Returns validation, scope, database, or retained-state errors.
-    #[allow(
-        clippy::too_many_lines,
-        reason = "the repeatable-read projection is kept in one transaction for auditability"
-    )]
     pub async fn get_snapshot(
         &self,
         workspace_id: &str,
@@ -600,6 +597,32 @@ impl WorkflowStore {
         conversation_id: &str,
     ) -> Result<ConversationSnapshot, StoreError> {
         validate_scope(workspace_id, project_id, conversation_id)?;
+        for attempt in 0..8 {
+            let result = self
+                .get_snapshot_once(workspace_id, project_id, conversation_id)
+                .await;
+            let retry = matches!(&result,Err(StoreError::Database(error)) if error.code()==Some(&tokio_postgres::error::SqlState::T_R_SERIALIZATION_FAILURE));
+            if !retry || attempt == 7 {
+                return result;
+            }
+            // The retained history boundary's foreign key can race a conversation
+            // update after the repeatable-read snapshot. Retry the whole rolled-back
+            // projection, never admission, reports, or an external provider request.
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        unreachable!("bounded snapshot retry always returns its last result")
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the repeatable-read projection is kept in one transaction for auditability"
+    )]
+    async fn get_snapshot_once(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        conversation_id: &str,
+    ) -> Result<ConversationSnapshot, StoreError> {
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let transaction = client
             .build_transaction()

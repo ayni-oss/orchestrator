@@ -53,7 +53,7 @@ Slice 3 implements `WatchConversation` using an atomic PostgreSQL snapshot bound
 
 ### M1–M2 delivery scopes
 
-M1's three runtime slices are complete on `alpha`. The next four PRs bridge local
+M1's three runtime slices are complete on `alpha`. Four staged PRs bridge local
 browser access and deliver M2. Each PR is its own work item: its description owns
 requirements, acceptance criteria, failure/recovery cases, and validation evidence.
 Do not create a separate issue for these scopes. Each subsequent PR starts from
@@ -71,6 +71,10 @@ introduce shared-environment access or user management. M3/M4 retain plan approv
 coding worktrees, Ayni task execution, quality evidence, and draft publication; MCP
 integrations remain M7. The [M2 handoff contract](docs/technical/research/project-workflow-m1-durable-foundation.md#m2-handoff)
 owns the inherited invariants. The [conversation execution contract](docs/technical/architecture/conversation-execution.md) consolidates configuration, session, provider/cancellation and bounded-tool decisions within v1.
+
+The contributor console and configuration/session prerequisites are delivered.
+Real provider execution retains the same isolated session and signed acceptance
+boundaries; bounded tools remain the final M2 scope.
 
 Every runtime PR extends the cumulative harness and exercises affected behavior on
 Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded

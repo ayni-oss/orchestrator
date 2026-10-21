@@ -112,3 +112,15 @@ else
     --from-file=signing-seed-hex="$executor_directory/signing-seed-hex"
   echo "created immutable local JetStream role Secrets"
 fi
+
+# This bearer authorizes supervisor-to-application request admission only. Provider
+# API keys are separately provisioned directly in the conversation session namespace.
+if secret_exists workflow-session-authority; then
+  echo "local session authority Secret already exists"
+else
+  authority_directory="$scratch/workflow-session-authority"
+  mkdir -m 0700 "$authority_directory"
+  printf '%s' "$(openssl rand -hex 32)" > "$authority_directory/token"
+  create_immutable_secret workflow-session-authority --from-file=token="$authority_directory/token"
+  echo "created immutable local session authority Secret"
+fi

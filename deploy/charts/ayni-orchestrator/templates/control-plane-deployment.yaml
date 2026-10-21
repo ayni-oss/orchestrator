@@ -51,6 +51,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: control-plane-config
+          env:
+            - name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH
+              value: /var/run/secrets/ayni/session-authority/token
           ports:
             - name: http
               containerPort: {{ .Values.controlPlane.httpPort }}
@@ -93,7 +96,16 @@ spec:
             - name: workflow-jetstream-application
               mountPath: /var/run/secrets/ayni/workflow-jetstream-application
               readOnly: true
+            - name: session-authority
+              mountPath: /var/run/secrets/ayni/session-authority
+              readOnly: true
       volumes:
+        - name: session-authority
+          secret:
+            secretName: {{ .Values.providers.sessionAuthoritySecretName | quote }}
+            items:
+              - key: token
+                path: token
         - name: workflow-postgres-migrator
           secret:
             secretName: {{ required "workflowPostgres.migratorSecretName is required" .Values.workflowPostgres.migratorSecretName | quote }}

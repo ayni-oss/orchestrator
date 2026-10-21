@@ -8,6 +8,19 @@
 {{- if or (eq .Values.workflowJetstream.executorSecretName .Values.workflowJetstream.applicationSecretName) (eq .Values.workflowJetstream.executorSecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.workflowJetstream.executorSecretName .Values.workflowPostgres.migratorSecretName) }}
 {{- fail "workflow executor and application/database Secret names must differ" }}
 {{- end }}
+{{- if or (eq .Values.providers.sessionAuthoritySecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.workflowPostgres.migratorSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.workflowJetstream.applicationSecretName) (eq .Values.providers.sessionAuthoritySecretName .Values.workflowJetstream.executorSecretName) }}
+{{- fail "session authority Secret must be distinct from database and broker Secrets" }}
+{{- end }}
+{{- if .Values.providers.openai.fixtureEgress }}
+{{- if not .Values.providers.openai.enabled }}
+{{- fail "provider fixture egress requires explicit OpenAI execution enablement" }}
+{{- end }}
+{{- if ne .Values.providers.openai.baseUrl (printf "http://provider-fixture.%s.svc:8080/v1" .Release.Namespace) }}
+{{- fail "provider fixture egress requires the scoped local provider-fixture endpoint" }}
+{{- end }}
+{{- else if not (hasPrefix "https://" .Values.providers.openai.baseUrl) }}
+{{- fail "provider endpoint must use HTTPS outside the explicit fixture profile" }}
+{{- end }}
 {{- if eq (int .Values.controlPlane.httpPort) (int .Values.controlPlane.trustedGrpcPort) }}
 {{- fail "controlPlane HTTP and trusted gRPC ports must differ" }}
 {{- end }}

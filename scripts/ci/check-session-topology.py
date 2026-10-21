@@ -47,10 +47,21 @@ def main():
         assert labels["build.ayni/session-generation"] == generation
         assert conversations.setdefault(conversation, scope) == scope
         mounts = spec["volumes"]
-        assert len(mounts) == 2
+        assert len(mounts) in (2, 3)
         pvc = next(item["persistentVolumeClaim"]["claimName"] for item in mounts if "persistentVolumeClaim" in item)
-        token = next(item["secret"]["secretName"] for item in mounts if "secret" in item)
+        token = next(item["secret"]["secretName"] for item in mounts if item["name"] == "token")
         assert pvc == token == pod["metadata"]["name"]
+        provider = next((item for item in mounts if item["name"] == "provider"), None)
+        if provider:
+            assert provider["secret"]["secretName"] == "provider-openai-" + env["ORCHESTRATOR_SESSION_WORKSPACE_ID"].replace("-", "")
+            assert provider["secret"]["items"] == [{"key": "api-key", "path": "api-key"}]
+            assert provider["secret"]["optional"] is True
+            assert env["ORCHESTRATOR_OPENAI_API_KEY_PATH"] == "/var/run/provider/api-key"
+            assert not any(item.get("valueFrom") for item in container["env"])
+            mount = next(item for item in container["volumeMounts"] if item["name"] == "provider")
+            assert mount["mountPath"] == "/var/run/provider" and mount["readOnly"] is True
+        else:
+            assert "ORCHESTRATOR_OPENAI_API_KEY_PATH" not in env
         assert pvc not in volumes
         volumes.add(pvc)
         assert all("projected" not in item and "hostPath" not in item for item in mounts)

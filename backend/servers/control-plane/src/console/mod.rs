@@ -185,6 +185,12 @@ async fn rpc(
             list_conversations,
             v1::ListConversationsRequest
         ),
+        "ListProviderCalls" => forward!(
+            console.conversations(),
+            list_provider_calls,
+            v1::ListProviderCallsRequest
+        ),
+        "CancelTurn" => forward!(console.conversations(), cancel_turn, v1::CancelTurnRequest),
         "SendMessage" => forward!(
             console.conversations(),
             send_message,

@@ -46,8 +46,9 @@ A trusted scripted supervisor owns broker claims and signed reports. It provisio
 conversation-scoped Kubernetes workers with separate retained result ledgers.
 The session workers have no PostgreSQL credential, broker credential or Kubernetes
 API token. Session generation comes from PostgreSQL; replacement fences the old
-generation only after admitted work and report handoffs have settled. Paid
-provider calls remain disabled.
+generation only after admitted work and report handoffs have settled. Explicitly
+enabled OpenAI sessions use the [provider request contract](provider-requests.md)
+to retain sending intent, results, nullable usage and uncertain outcomes.
 
 ## Canonical private-v1 surface
 
@@ -55,7 +56,8 @@ provider calls remain disabled.
 
 `ProjectService` also supports `GetAgentConfiguration`, `UpdateAgentConfiguration`,
 `GetTurnInputs` and bounded `GetTurnContextInputs`. `ProjectConversationService`
-exposes `ListConversationSessions` and idempotent `ReplaceConversationSession`.
+exposes `ListConversationSessions`, idempotent `ReplaceConversationSession`,
+`ListProviderCalls` and durable scoped `CancelTurn`.
 
 There is no compatibility adapter for removed RPCs, SQLite workflow, browser/BFF path, or custom-client workflow listener.
 

@@ -1,0 +1,343 @@
+//! Foreground Responses requests with explicit bounds and no automatic retry.
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::time::Duration;
+
+/// Frozen provider input. Roles are supplied by accepted conversation history.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ContextMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// Exact request bytes and the conservative token reservation owned by one call.
+#[derive(Clone, Debug)]
+pub struct PreparedRequest {
+    pub bytes: Vec<u8>,
+    pub reserved_input_tokens: u64,
+    pub reserved_output_tokens: u64,
+}
+
+/// A nullable usage value always means unknown, never zero.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub total_tokens: Option<u64>,
+}
+
+/// Bounded evidence retained before any application report is published.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ResponseEvidence {
+    pub response_id: String,
+    pub model: String,
+    pub content: String,
+    pub usage: TokenUsage,
+    pub failure_reason: String,
+}
+
+/// Safe classifications deliberately omit raw provider diagnostics and request data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResponseError {
+    Configuration,
+    InputLimit,
+    Uncertain,
+}
+
+/// Construct one complete client-managed request without provider conversation state.
+///
+/// # Errors
+/// Rejects unknown roles, implicit models and inputs outside the admitted allowance.
+pub fn prepare(
+    model: &str,
+    instructions: &str,
+    messages: &[ContextMessage],
+    max_input: u64,
+    max_output: u64,
+    max_total: u64,
+) -> Result<PreparedRequest, ResponseError> {
+    if model.is_empty() || model.len() > 128 || max_output < 16 || messages.is_empty() {
+        return Err(ResponseError::Configuration);
+    }
+    if messages
+        .iter()
+        .any(|message| !matches!(message.role.as_str(), "user" | "assistant"))
+    {
+        return Err(ResponseError::Configuration);
+    }
+    // UTF-8 bytes conservatively cover byte-tokenized content. Reserve additional
+    // framing per message and for the request itself; never truncate history.
+    let input_bound = messages
+        .iter()
+        .try_fold(
+            u64::try_from(instructions.len())
+                .unwrap_or(u64::MAX)
+                .saturating_add(1024),
+            |sum, message| {
+                sum.checked_add(
+                    u64::try_from(message.content.len())
+                        .ok()?
+                        .checked_add(128)?,
+                )
+            },
+        )
+        .ok_or(ResponseError::InputLimit)?;
+    let remaining = max_total
+        .checked_sub(input_bound)
+        .ok_or(ResponseError::InputLimit)?;
+    let output = max_output.min(remaining);
+    if input_bound > max_input || output < 16 {
+        return Err(ResponseError::InputLimit);
+    }
+    let input = messages
+        .iter()
+        .map(|message| json!({"role":message.role,"content":message.content}))
+        .collect::<Vec<_>>();
+    let bytes = serde_json::to_vec(&json!({
+        "model":model,"instructions":instructions,"input":input,
+        "max_output_tokens":output,"store":false,"background":false,
+        "stream":false,"truncation":"disabled"
+    }))
+    .map_err(|_| ResponseError::Configuration)?;
+    Ok(PreparedRequest {
+        bytes,
+        reserved_input_tokens: input_bound,
+        reserved_output_tokens: output,
+    })
+}
+
+/// Provider connection confined to one isolated session. Credentials never enter evidence.
+#[derive(Clone)]
+pub struct ResponsesClient {
+    http: reqwest::Client,
+    endpoint: url::Url,
+    api_key: String,
+}
+
+impl ResponsesClient {
+    /// Construct a bounded client with redirects and retries disabled.
+    ///
+    /// # Errors
+    /// Returns a safe configuration error, never a credential-bearing URL or HTTP error.
+    pub fn new(api_key: &str, base_url: &str) -> Result<Self, ResponseError> {
+        let endpoint = url::Url::parse(base_url).map_err(|_| ResponseError::Configuration)?;
+        if api_key.trim().is_empty()
+            || api_key.len() > 4096
+            || api_key.chars().any(char::is_control)
+            || !matches!(endpoint.scheme(), "https" | "http")
+            || endpoint.host_str().is_none()
+            || !endpoint.username().is_empty()
+            || endpoint.password().is_some()
+            || endpoint.query().is_some()
+            || endpoint.fragment().is_some()
+            || base_url.split_once("://").is_none_or(|(_, rest)| {
+                rest.split('/')
+                    .next()
+                    .is_none_or(|authority| authority.contains('@'))
+            })
+        {
+            return Err(ResponseError::Configuration);
+        }
+        let endpoint = url::Url::parse(&format!("{}/responses", base_url.trim_end_matches('/')))
+            .map_err(|_| ResponseError::Configuration)?;
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(120))
+            .connect_timeout(Duration::from_secs(10))
+            .retry(reqwest::retry::never())
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|_| ResponseError::Configuration)?;
+        Ok(Self {
+            http,
+            endpoint,
+            api_key: api_key.to_owned(),
+        })
+    }
+
+    /// Send exactly once. Every failure after sending intent is conservatively uncertain.
+    ///
+    /// # Errors
+    /// All HTTP, transport, malformed-response and size failures retain uncertainty.
+    pub async fn send(
+        &self,
+        call_id: &str,
+        bytes: &[u8],
+    ) -> Result<ResponseEvidence, ResponseError> {
+        let mut response = self
+            .http
+            .post(self.endpoint.clone())
+            .bearer_auth(&self.api_key)
+            .header("content-type", "application/json")
+            .header("X-Client-Request-Id", call_id)
+            .body(bytes.to_owned())
+            .send()
+            .await
+            .map_err(|_| ResponseError::Uncertain)?;
+        if !response.status().is_success() {
+            return Err(ResponseError::Uncertain);
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| ResponseError::Uncertain)?
+        {
+            if body.len() + chunk.len() > 256 * 1024 {
+                return Err(ResponseError::Uncertain);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        parse_response(&body)
+    }
+}
+
+fn parse_response(bytes: &[u8]) -> Result<ResponseEvidence, ResponseError> {
+    let body: Value = serde_json::from_slice(bytes).map_err(|_| ResponseError::Uncertain)?;
+    let text = |name: &str| {
+        body.get(name)
+            .and_then(Value::as_str)
+            .filter(|value| {
+                !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
+            })
+            .map(str::to_owned)
+            .ok_or(ResponseError::Uncertain)
+    };
+    let response_id = text("id")?;
+    let model = text("model")?;
+    let (content, failure_reason) = match body.get("status").and_then(Value::as_str) {
+        Some("completed") => match response_content(&body) {
+            Ok(content) => (content, String::new()),
+            Err(reason) => (String::new(), reason.into()),
+        },
+        Some("incomplete") => (
+            String::new(),
+            if body
+                .pointer("/incomplete_details/reason")
+                .and_then(Value::as_str)
+                == Some("max_output_tokens")
+            {
+                "provider_output_limit"
+            } else {
+                "provider_rejected"
+            }
+            .into(),
+        ),
+        Some("failed") => (String::new(), "provider_rejected".into()),
+        _ => return Err(ResponseError::Uncertain),
+    };
+    let usage = body.get("usage");
+    let count = |name: &str| {
+        usage
+            .and_then(|usage| usage.get(name))
+            .and_then(Value::as_u64)
+    };
+    Ok(ResponseEvidence {
+        response_id,
+        model,
+        content,
+        failure_reason,
+        usage: TokenUsage {
+            input_tokens: count("input_tokens"),
+            output_tokens: count("output_tokens"),
+            total_tokens: count("total_tokens"),
+        },
+    })
+}
+
+fn response_content(body: &Value) -> Result<String, &'static str> {
+    let outputs = body
+        .get("output")
+        .and_then(Value::as_array)
+        .ok_or("provider_rejected")?;
+    let mut content = String::new();
+    for output in outputs {
+        match output.get("type").and_then(Value::as_str) {
+            Some("message") => {
+                if output.get("role").and_then(Value::as_str) != Some("assistant") {
+                    return Err("provider_rejected");
+                }
+                for item in output
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .ok_or("provider_rejected")?
+                {
+                    if item.get("type").and_then(Value::as_str) != Some("output_text") {
+                        return Err("provider_rejected");
+                    }
+                    content.push_str(
+                        item.get("text")
+                            .and_then(Value::as_str)
+                            .ok_or("provider_rejected")?,
+                    );
+                    if content.len() > 16384 {
+                        return Err("provider_output_limit");
+                    }
+                }
+            }
+            Some("reasoning") => {} // Reasoning is neither retained nor projected.
+            _ => return Err("provider_rejected"),
+        }
+    }
+    if content.is_empty() {
+        return Err("provider_rejected");
+    }
+    if content
+        .chars()
+        .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    {
+        return Err("provider_rejected");
+    }
+    Ok(content)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "fixture construction and assertions fail immediately on unexpected state"
+)]
+mod tests {
+    use super::*;
+    #[test]
+    fn request_is_client_managed_bounded_and_has_no_remote_tools() {
+        let request = prepare(
+            "explicit-model",
+            "frozen instructions",
+            &[ContextMessage {
+                role: "user".into(),
+                content: "hello".into(),
+            }],
+            2048,
+            512,
+            2560,
+        )
+        .unwrap();
+        let body: Value = serde_json::from_slice(&request.bytes).unwrap();
+        assert_eq!(body["store"], false);
+        assert_eq!(body["background"], false);
+        assert_eq!(body["truncation"], "disabled");
+        assert!(body.get("previous_response_id").is_none());
+        assert!(body.get("conversation").is_none());
+        assert!(body.get("tools").is_none());
+        assert!(
+            prepare(
+                "explicit-model",
+                "frozen instructions",
+                &[ContextMessage {
+                    role: "user".into(),
+                    content: "hello".into()
+                }],
+                100,
+                512,
+                2560
+            )
+            .is_err()
+        );
+    }
+    #[test]
+    fn missing_usage_stays_unknown_and_reasoning_is_not_output() {
+        let response = parse_response(br#"{"id":"resp_test","model":"model","status":"completed","output":[{"type":"reasoning","summary":[{"text":"private"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]}]}"#).unwrap();
+        assert_eq!(response.content, "answer");
+        assert_eq!(response.usage, TokenUsage::default());
+        assert_eq!(parse_response(br#"{"id":"resp_test","model":"model","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":4,"output_tokens":16,"total_tokens":20}}"#).unwrap().failure_reason,"provider_output_limit");
+    }
+}

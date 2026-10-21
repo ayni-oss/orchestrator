@@ -6,7 +6,8 @@ sessions](../../../ROADMAP.md#m1m2-delivery-scopes). It carries forward the
 and resolves the configuration, session, provider and tool boundaries identified
 by the [refactor research](../research/project-workflow-refactor-runbook.md).
 The delivery PR owns implementation status and acceptance evidence. Provider
-calls ship in PR 3; tool execution and complete M2 acceptance ship in PR 4.
+calls use the retained request lifecycle; tool execution and complete M2
+acceptance remain PR 4.
 
 ## One v1 contract throughout alpha
 
@@ -57,11 +58,10 @@ Turns admitted before configuration snapshots remain bound to their original
 `scripted-v1` contract. They retain their original optional context tail without
 retroactively acquiring configuration or a full context manifest.
 
-PR 2 defaults to provider/model `scripted`/`scripted` and retains scripted
-execution. Selecting `openai` requires an explicit model identifier. That desired
-configuration does not enable a model call: the actual execution binding remains
-`scripted-v1` until PR 3's explicit authority cutover. Do not claim configured
-provider access, actual usage or model latency from scripted results.
+The default provider/model is `scripted`/`scripted`. Selecting `openai` requires an explicit model identifier. Newly admitted OpenAI turns bind explicitly to the provider execution path.
+Deployment enablement and a directly mounted scoped credential are also required
+before network access. Previously admitted scripted turns retain `scripted-v1`.
+Do not infer provider access or usage from configuration or scripted results.
 
 At eligibility, freeze the originating conversation's bounded context through
 its accepted predecessor outcomes and current user message. Later queued input,
@@ -106,11 +106,12 @@ replacement into an implicit retry of a possibly paid call.
 
 ## Provider requests and cancellation
 
-OpenAI is the first provider. PR 3 uses an explicit model, foreground Responses
+OpenAI is the first provider. Execution uses an explicit model, foreground Responses
 requests and client-managed conversation context. The [provider request contract](provider-requests.md)
 defines request intent, budget reservation, uncertainty, retained results and
 cancellation. Its state machine and recovery matrix must pass before paid calls
-are enabled. A configuration selecting OpenAI does not itself authorize execution.
+are enabled. Configuration selects the admitted binding; deployment policy and scoped credentials
+gate its execution.
 
 ## Bounded tool authority for PR 4
 

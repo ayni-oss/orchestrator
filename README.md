@@ -7,7 +7,7 @@
 
 Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The runtime builds on **M1 runtime Slice 3**, with a local contributor conversation console, shared agent configuration and isolated scripted sessions. It provides:
+The runtime builds on **M1 runtime Slice 3**, with a local contributor conversation console, shared agent configuration and isolated conversation sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
 - repository-owned forward migrations under an advisory lock;
@@ -21,12 +21,14 @@ The runtime builds on **M1 runtime Slice 3**, with a local contributor conversat
 - bounded consumer quarantine, replay retention cleanup, and operational metrics;
 - immutable workspace instructions, provider/model settings and token budgets frozen at message admission;
 - conversation-scoped session generations, retained result ledgers, idle expiry and replacement;
+- bounded foreground OpenAI Responses requests with retained identity, reservation, result and nullable usage;
+- durable turn cancellation and explicit uncertain outcomes that never automatically retry paid calls;
 - a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
 - a Docker Desktop Helm stack with separated database/broker identities and retained storage.
 
 This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser/BFF, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime.
 
-The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exercises shared configuration and isolated scripted execution. Configuring OpenAI does not enable paid calls; real provider execution and bounded tools remain the subsequent M2 scopes. All Orchestrator interfaces stay v1 until alpha merges.
+The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exposes shared configuration, isolated sessions, provider usage and cancellation. OpenAI execution requires an explicit model, deployment enablement and a workspace-scoped credential mounted directly into its session. Scripted execution remains the default; bounded tools and complete M2 acceptance remain the next scope. All Orchestrator interfaces stay v1 until alpha merges.
 
 ## Start locally
 

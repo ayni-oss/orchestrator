@@ -136,9 +136,10 @@ export interface ConversationTurnReport {
   signingPublicKey: Buffer;
   signingKeyDigest: string;
   responseContent: string;
-  /** Closed classification code; currently only "script_failed". Never raw executor diagnostics. */
+  /** Closed safe classification code. Never raw executor or provider diagnostics. */
   failureReason: string;
   signature: Buffer;
+  providerCall?: ProviderCallEvidence | undefined;
 }
 
 export interface ConversationReportDecision {
@@ -180,6 +181,26 @@ export interface ConversationContextManifest {
   digest: string;
   recordCount: string;
   inlineComplete: boolean;
+}
+
+/** Retained facts from one foreground call. Missing usage remains unknown. */
+export interface ProviderCallEvidence {
+  callId: string;
+  provider: string;
+  model: string;
+  configurationRevisionId: string;
+  contextDigest: string;
+  requestDigest: string;
+  responseId: string;
+  reportedModel: string;
+  inputTokens?: string | undefined;
+  outputTokens?: string | undefined;
+  totalTokens?: string | undefined;
+  reservedInputTokens: string;
+  reservedOutputTokens: string;
+  reservedTotalTokens: string;
+  /** completed, failed, uncertain or cancelled; never raw provider diagnostics. */
+  state: string;
 }
 
 function createBaseConversationTurnBinding(): ConversationTurnBinding {
@@ -886,6 +907,7 @@ function createBaseConversationTurnReport(): ConversationTurnReport {
     responseContent: "",
     failureReason: "",
     signature: Buffer.alloc(0),
+    providerCall: undefined,
   };
 }
 
@@ -917,6 +939,9 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
     }
     if (message.signature.length !== 0) {
       writer.uint32(74).bytes(message.signature);
+    }
+    if (message.providerCall !== undefined) {
+      ProviderCallEvidence.encode(message.providerCall, writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -1006,6 +1031,14 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
             message.signature = Buffer.from(reader.bytes());
             continue;
           }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.providerCall = ProviderCallEvidence.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1053,6 +1086,11 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
         ? globalThis.String(object.failure_reason)
         : "",
       signature: isSet(object.signature) ? Buffer.from(bytesFromBase64(object.signature)) : Buffer.alloc(0),
+      providerCall: isSet(object.providerCall)
+        ? ProviderCallEvidence.fromJSON(object.providerCall)
+        : isSet(object.provider_call)
+        ? ProviderCallEvidence.fromJSON(object.provider_call)
+        : undefined,
     };
   },
 
@@ -1085,6 +1123,9 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
     if (message.signature.length !== 0) {
       obj.signature = base64FromBytes(message.signature);
     }
+    if (message.providerCall !== undefined) {
+      obj.providerCall = ProviderCallEvidence.toJSON(message.providerCall);
+    }
     return obj;
   },
 
@@ -1104,6 +1145,9 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
     message.responseContent = object.responseContent ?? "";
     message.failureReason = object.failureReason ?? "";
     message.signature = object.signature ?? Buffer.alloc(0);
+    message.providerCall = (object.providerCall !== undefined && object.providerCall !== null)
+      ? ProviderCallEvidence.fromPartial(object.providerCall)
+      : undefined;
     return message;
   },
 };
@@ -1783,6 +1827,363 @@ export const ConversationContextManifest: MessageFns<ConversationContextManifest
     message.digest = object.digest ?? "";
     message.recordCount = object.recordCount ?? "0";
     message.inlineComplete = object.inlineComplete ?? false;
+    return message;
+  },
+};
+
+function createBaseProviderCallEvidence(): ProviderCallEvidence {
+  return {
+    callId: "",
+    provider: "",
+    model: "",
+    configurationRevisionId: "",
+    contextDigest: "",
+    requestDigest: "",
+    responseId: "",
+    reportedModel: "",
+    inputTokens: undefined,
+    outputTokens: undefined,
+    totalTokens: undefined,
+    reservedInputTokens: "0",
+    reservedOutputTokens: "0",
+    reservedTotalTokens: "0",
+    state: "",
+  };
+}
+
+export const ProviderCallEvidence: MessageFns<ProviderCallEvidence> = {
+  encode(message: ProviderCallEvidence, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.callId !== "") {
+      writer.uint32(10).string(message.callId);
+    }
+    if (message.provider !== "") {
+      writer.uint32(18).string(message.provider);
+    }
+    if (message.model !== "") {
+      writer.uint32(26).string(message.model);
+    }
+    if (message.configurationRevisionId !== "") {
+      writer.uint32(34).string(message.configurationRevisionId);
+    }
+    if (message.contextDigest !== "") {
+      writer.uint32(42).string(message.contextDigest);
+    }
+    if (message.requestDigest !== "") {
+      writer.uint32(50).string(message.requestDigest);
+    }
+    if (message.responseId !== "") {
+      writer.uint32(58).string(message.responseId);
+    }
+    if (message.reportedModel !== "") {
+      writer.uint32(66).string(message.reportedModel);
+    }
+    if (message.inputTokens !== undefined) {
+      writer.uint32(72).uint64(message.inputTokens);
+    }
+    if (message.outputTokens !== undefined) {
+      writer.uint32(80).uint64(message.outputTokens);
+    }
+    if (message.totalTokens !== undefined) {
+      writer.uint32(88).uint64(message.totalTokens);
+    }
+    if (message.reservedInputTokens !== "0") {
+      writer.uint32(96).uint64(message.reservedInputTokens);
+    }
+    if (message.reservedOutputTokens !== "0") {
+      writer.uint32(104).uint64(message.reservedOutputTokens);
+    }
+    if (message.reservedTotalTokens !== "0") {
+      writer.uint32(112).uint64(message.reservedTotalTokens);
+    }
+    if (message.state !== "") {
+      writer.uint32(122).string(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProviderCallEvidence {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProviderCallEvidence();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.callId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.provider = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.configurationRevisionId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.contextDigest = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.requestDigest = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.responseId = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.reportedModel = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.inputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.outputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.totalTokens = reader.uint64().toString();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.reservedInputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.reservedOutputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 14: {
+            if (tag !== 112) {
+              break;
+            }
+
+            message.reservedTotalTokens = reader.uint64().toString();
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProviderCallEvidence {
+    return {
+      callId: isSet(object.callId)
+        ? globalThis.String(object.callId)
+        : isSet(object.call_id)
+        ? globalThis.String(object.call_id)
+        : "",
+      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      configurationRevisionId: isSet(object.configurationRevisionId)
+        ? globalThis.String(object.configurationRevisionId)
+        : isSet(object.configuration_revision_id)
+        ? globalThis.String(object.configuration_revision_id)
+        : "",
+      contextDigest: isSet(object.contextDigest)
+        ? globalThis.String(object.contextDigest)
+        : isSet(object.context_digest)
+        ? globalThis.String(object.context_digest)
+        : "",
+      requestDigest: isSet(object.requestDigest)
+        ? globalThis.String(object.requestDigest)
+        : isSet(object.request_digest)
+        ? globalThis.String(object.request_digest)
+        : "",
+      responseId: isSet(object.responseId)
+        ? globalThis.String(object.responseId)
+        : isSet(object.response_id)
+        ? globalThis.String(object.response_id)
+        : "",
+      reportedModel: isSet(object.reportedModel)
+        ? globalThis.String(object.reportedModel)
+        : isSet(object.reported_model)
+        ? globalThis.String(object.reported_model)
+        : "",
+      inputTokens: isSet(object.inputTokens)
+        ? globalThis.String(object.inputTokens)
+        : isSet(object.input_tokens)
+        ? globalThis.String(object.input_tokens)
+        : undefined,
+      outputTokens: isSet(object.outputTokens)
+        ? globalThis.String(object.outputTokens)
+        : isSet(object.output_tokens)
+        ? globalThis.String(object.output_tokens)
+        : undefined,
+      totalTokens: isSet(object.totalTokens)
+        ? globalThis.String(object.totalTokens)
+        : isSet(object.total_tokens)
+        ? globalThis.String(object.total_tokens)
+        : undefined,
+      reservedInputTokens: isSet(object.reservedInputTokens)
+        ? globalThis.String(object.reservedInputTokens)
+        : isSet(object.reserved_input_tokens)
+        ? globalThis.String(object.reserved_input_tokens)
+        : "0",
+      reservedOutputTokens: isSet(object.reservedOutputTokens)
+        ? globalThis.String(object.reservedOutputTokens)
+        : isSet(object.reserved_output_tokens)
+        ? globalThis.String(object.reserved_output_tokens)
+        : "0",
+      reservedTotalTokens: isSet(object.reservedTotalTokens)
+        ? globalThis.String(object.reservedTotalTokens)
+        : isSet(object.reserved_total_tokens)
+        ? globalThis.String(object.reserved_total_tokens)
+        : "0",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+    };
+  },
+
+  toJSON(message: ProviderCallEvidence): unknown {
+    const obj: any = {};
+    if (message.callId !== "") {
+      obj.callId = message.callId;
+    }
+    if (message.provider !== "") {
+      obj.provider = message.provider;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.configurationRevisionId !== "") {
+      obj.configurationRevisionId = message.configurationRevisionId;
+    }
+    if (message.contextDigest !== "") {
+      obj.contextDigest = message.contextDigest;
+    }
+    if (message.requestDigest !== "") {
+      obj.requestDigest = message.requestDigest;
+    }
+    if (message.responseId !== "") {
+      obj.responseId = message.responseId;
+    }
+    if (message.reportedModel !== "") {
+      obj.reportedModel = message.reportedModel;
+    }
+    if (message.inputTokens !== undefined) {
+      obj.inputTokens = message.inputTokens;
+    }
+    if (message.outputTokens !== undefined) {
+      obj.outputTokens = message.outputTokens;
+    }
+    if (message.totalTokens !== undefined) {
+      obj.totalTokens = message.totalTokens;
+    }
+    if (message.reservedInputTokens !== "0") {
+      obj.reservedInputTokens = message.reservedInputTokens;
+    }
+    if (message.reservedOutputTokens !== "0") {
+      obj.reservedOutputTokens = message.reservedOutputTokens;
+    }
+    if (message.reservedTotalTokens !== "0") {
+      obj.reservedTotalTokens = message.reservedTotalTokens;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProviderCallEvidence>): ProviderCallEvidence {
+    return ProviderCallEvidence.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProviderCallEvidence>): ProviderCallEvidence {
+    const message = createBaseProviderCallEvidence();
+    message.callId = object.callId ?? "";
+    message.provider = object.provider ?? "";
+    message.model = object.model ?? "";
+    message.configurationRevisionId = object.configurationRevisionId ?? "";
+    message.contextDigest = object.contextDigest ?? "";
+    message.requestDigest = object.requestDigest ?? "";
+    message.responseId = object.responseId ?? "";
+    message.reportedModel = object.reportedModel ?? "";
+    message.inputTokens = object.inputTokens ?? undefined;
+    message.outputTokens = object.outputTokens ?? undefined;
+    message.totalTokens = object.totalTokens ?? undefined;
+    message.reservedInputTokens = object.reservedInputTokens ?? "0";
+    message.reservedOutputTokens = object.reservedOutputTokens ?? "0";
+    message.reservedTotalTokens = object.reservedTotalTokens ?? "0";
+    message.state = object.state ?? "";
     return message;
   },
 };

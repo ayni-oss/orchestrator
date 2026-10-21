@@ -49,6 +49,8 @@ mod tests {
                 (
                     "ProjectConversationService",
                     BTreeSet::from([
+                        "ListProviderCalls",
+                        "CancelTurn",
                         "CreateConversation",
                         "GetConversationSnapshot",
                         "ListConversationHistory",

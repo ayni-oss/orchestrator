@@ -160,7 +160,7 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
         b_snapshot
             .nonterminal_turns
             .iter()
-            .all(|t| t.execution_binding_revision == "scripted-v1")
+            .all(|t| t.execution_binding_revision == "openai-responses-v1")
     );
     // Two concurrent edits from one expected identity produce one new revision.
     proposed.instructions = "Concurrent edit".into();
@@ -212,6 +212,16 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
             .await?,
         retained
     );
+    let current = store.get_agent_configuration(&workspace.id, "").await?;
+    let scripted = AgentConfiguration {
+        revision_id: String::new(),
+        provider: "scripted".into(),
+        model: "scripted".into(),
+        ..current.clone()
+    };
+    store
+        .update_agent_configuration(&key(), &current.revision_id, &scripted)
+        .await?;
     prove_large_context(&store, &runtime_url, &workspace.id, &project.id).await?;
     Ok(())
 }
@@ -373,6 +383,7 @@ async fn complete_turn(
             },
             failure_reason: String::new(),
             signature: Vec::new(),
+            provider_call: None,
         };
         sign_report(&identity, &mut report, &seed)?;
         let exact = encode_report(&identity, &metadata, &report)?;

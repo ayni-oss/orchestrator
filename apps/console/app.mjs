@@ -1,4 +1,4 @@
-import { newerOrEqual, describe, scopeKey, makeCommand, appendActivity } from './state.mjs';
+import { newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
 
 const $ = id => document.getElementById(id);
 const saved = key => { try { return JSON.parse(sessionStorage.getItem(key)); } catch { return null; } };
@@ -25,6 +25,7 @@ let chain = Promise.resolve();
 let queuedFrames = 0;
 let configuration;
 let currentSession;
+let providerQuery = 0;
 
 function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
 function clearError() { $('error').hidden = true; }
@@ -46,6 +47,8 @@ function controls() {
   $('toggle-watch').disabled = !scope.conversationId;
   $('refresh-session').disabled = !scope.conversationId || sending;
   $('replace-session').disabled = !currentSession?.canReplace || !!pending || sending || discoveryBusy;
+  $('refresh-provider-calls').disabled = !scope.conversationId || sending;
+  for (const button of document.querySelectorAll('[data-cancel-turn]')) button.disabled = !!pending || sending || discoveryBusy;
 }
 async function submit(method, body) {
   if (pending || sending) return;
@@ -65,6 +68,13 @@ async function retry() {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';
     } else if (command.method === 'UpdateAgentConfiguration') {
       if (command.body.configuration.workspaceId === scope.workspaceId) await loadConfiguration();
+    } else if (command.method === 'CancelTurn') {
+      if (scopeKey(command.body) === scopeKey(scope)) {
+        $('receipt').textContent = `${result.commandId || 'Accepted'} · ${result.state || 'cancellation requested'}`;
+        const selected = scopeBody();
+        const current = await api('GetConversationSnapshot', selected);
+        if (scopeKey(selected) === scopeKey(scope)) { renderSnapshot(current.snapshot); await loadProviderCalls(); }
+      }
     } else if (command.method === 'ReplaceConversationSession') {
       if (scopeKey(command.body) === scopeKey(scope)) await loadSession();
     } else {
@@ -150,6 +160,40 @@ async function loadSession() {
   $('session-state').textContent = currentSession ? `${currentSession.state} · generation ${currentSession.generation} · ${currentSession.id}${!currentSession.canReplace && ['idle', 'expired'].includes(currentSession.state) ? ' · finishing accepted work; refresh to check.' : ''}` : 'Session starts with the first eligible message.';
   controls();
 }
+async function loadProviderCalls() {
+  const selected = scopeBody();
+  const query = ++providerQuery;
+  if (!selected.conversationId) return;
+  const result = await api('ListProviderCalls', selected);
+  if (scopeKey(selected) !== scopeKey(scope) || query !== providerQuery) return;
+  const calls = result.calls || [];
+  $('provider-call-status').textContent = calls.length ? `${calls.length} retained provider call${calls.length === 1 ? '' : 's'}. Usage is reported tokens; missing usage remains unknown.` : 'No retained provider calls. Configuration alone does not show execution.';
+  $('provider-calls').replaceChildren();
+  for (const call of calls) {
+    const view = providerCallView(call);
+    const article = document.createElement('article'); article.className = 'provider-call';
+    const heading = document.createElement('h3'); heading.textContent = view.binding;
+    const state = document.createElement('p'); state.textContent = `${view.state}${call.safeReason ? ` · ${call.safeReason}` : ''}`;
+    const usage = document.createElement('p'); usage.textContent = `Reported usage: ${view.usage}`;
+    const reservation = document.createElement('p'); reservation.textContent = `Reserved allowance: ${view.reservation}`;
+    const identity = document.createElement('p'); identity.className = 'call-identity'; identity.textContent = `Call ${call.callId} · turn ${call.turnId}`;
+    article.append(heading, state, usage, reservation, identity);
+    if (call.reportedModel) { const model = document.createElement('p'); model.textContent = `Reported model: ${call.reportedModel}`; article.append(model); }
+    if (view.notice) { const notice = document.createElement('p'); notice.className = 'provider-notice'; notice.textContent = view.notice; article.append(notice); }
+    $('provider-calls').append(article);
+  }
+}
+function renderTurnControls(turns) {
+  $('turn-controls').replaceChildren();
+  for (const turn of turns) {
+    const item = document.createElement('li');
+    const label = document.createElement('span'); label.textContent = `Turn ${turn.sequence}: ${describe(turn.executionState)}`;
+    const button = document.createElement('button'); button.textContent = 'Cancel turn'; button.dataset.cancelTurn = turn.id;
+    const selected = { ...scopeBody(), turnId: turn.id };
+    button.onclick = () => submit('CancelTurn', selected);
+    item.append(label, button); $('turn-controls').append(item);
+  }
+}
 function renderSnapshot(value) {
   if (snapshot && !newerOrEqual(value.conversationRevision, snapshot.conversationRevision)) return;
   snapshot = value;
@@ -158,12 +202,14 @@ function renderSnapshot(value) {
   $('breadcrumb').textContent = `${$('workspace').selectedOptions[0]?.textContent || 'Workspace'} / ${$('project').selectedOptions[0]?.textContent || 'Project'}`;
   $('revision').textContent = value.conversationRevision || '0';
   $('messages').replaceChildren();
-  for (const message of value.recentMessages || []) addMessage($('messages'), message.role === 'MESSAGE_ROLE_USER' ? 'You' : 'Scripted executor', message.content, message.role === 'MESSAGE_ROLE_USER');
+  for (const message of value.recentMessages || []) addMessage($('messages'), message.role === 'MESSAGE_ROLE_USER' ? 'You' : 'Assistant', message.content, message.role === 'MESSAGE_ROLE_USER');
   if (!(value.recentMessages || []).length) showEmpty();
   const turns = value.nonterminalTurns || [];
+  renderTurnControls(turns);
   $('turn-state').textContent = turns.length ? `${turns.length} active or queued · ${describe(value.currentActivity?.presentationState)}${value.currentActivity?.waitingOn ? ` · waiting on ${describe(value.currentActivity.waitingOn)}` : ''}` : 'All accepted turns have finished.';
   if (value.currentActivity?.safeReason) $('turn-state').textContent += ` · ${value.currentActivity.safeReason}`;
   $('older').hidden = historySnapshotId ? !historyHasMore : !(value.historyCounts?.hasOlderHistory || false);
+  controls();
 }
 function showEmpty() {
   const empty = document.createElement('div'); empty.className = 'empty';
@@ -192,12 +238,18 @@ function openWatch(version) {
     chain = chain.then(async () => {
       if (version !== generation || current !== source) return;
       const frame = JSON.parse(event.data);
-      if (frame.snapshot) { renderSnapshot(frame.snapshot); cursor = frame.snapshot.resumeCursor; }
+      if (frame.snapshot) {
+        renderSnapshot(frame.snapshot); await loadProviderCalls();
+        if (version !== generation || current !== source) return;
+        cursor = frame.snapshot.resumeCursor;
+      }
       if (frame.update) {
         // Commit the browser cursor only after refreshing the authoritative projection.
         const result = await api('GetConversationSnapshot', scopeBody());
         if (version !== generation || current !== source) return;
         renderSnapshot(result.snapshot);
+        await loadProviderCalls();
+        if (version !== generation || current !== source) return;
         activities = appendActivity(activities, frame.update);
         $('activity').replaceChildren(...activities.map(update => { const li = document.createElement('li'); li.textContent = `${describe(update.presentationState)} · ${update.safeReason || 'workflow update'}`; return li; }));
         cursor = frame.update.cursor;
@@ -214,9 +266,10 @@ function openWatch(version) {
   });
 }
 async function selectConversation(id) {
-  closeWatch(); generation++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
+  closeWatch(); generation++; providerQuery++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
   scope.conversationId = id || ''; store('selection', scope);
   currentSession = undefined; $('session-state').textContent = 'No session.';
+  $('provider-call-status').textContent = 'No conversation selected.'; $('provider-calls').replaceChildren(); $('turn-controls').replaceChildren();
   $('messages').replaceChildren(); $('history').replaceChildren(); $('activity').replaceChildren(); historyBefore = '0'; historySnapshotId = ''; historyHasMore = true; historyIds = new Set();
   $('title').textContent = id ? 'Opening conversation…' : 'A place to work things through.';
   $('turn-state').textContent = 'No conversation selected.'; $('older').hidden = true; $('connection').textContent = id ? 'Connecting…' : 'Choose a conversation'; $('toggle-watch').textContent = 'Disconnect';
@@ -229,6 +282,7 @@ $('agent-configuration').onsubmit = event => {
   submit('UpdateAgentConfiguration', { expectedRevisionId: configuration.revisionId, configuration: { ...proposed, workspaceId: scope.workspaceId } });
 };
 $('refresh-session').onclick = () => loadSession().catch(showError);
+$('refresh-provider-calls').onclick = () => loadProviderCalls().catch(showError);
 $('replace-session').onclick = () => submit('ReplaceConversationSession', { ...scopeBody(), expectedGeneration: currentSession.generation });
 $('create-workspace').onsubmit = event => { event.preventDefault(); submit('CreateWorkspace', Object.fromEntries(new FormData(event.target))); };
 $('create-project').onsubmit = event => { event.preventDefault(); submit('CreateProject', { ...Object.fromEntries(new FormData(event.target)), workspaceId: scope.workspaceId }); };

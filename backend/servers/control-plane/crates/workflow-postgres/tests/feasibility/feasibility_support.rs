@@ -329,6 +329,7 @@ pub fn signed_report(
         response_content: response.to_owned(),
         failure_reason: String::new(),
         signature: Vec::new(),
+        provider_call: None,
     };
     sign_report(&identity, &mut report, seed)?;
     Ok(encode_report(&identity, metadata, &report)?)

@@ -839,7 +839,7 @@ fn validate_decision_binding(
     if accepted && retained.superseded {
         return Err(LedgerError::StaleGeneration);
     }
-    if !decision_state_matches(accepted, report_kind, &decision.turn_state)
+    if !decision_state_matches(accepted, report_kind, &decision.turn_state, &report_payload)
         || !sequence_matches_report_kind(sequence, report_kind)
         || !decision_scope_matches(decision, &retained)?
         || !decision_report_binding_matches(
@@ -875,14 +875,40 @@ fn decision_state_matches(
     accepted: bool,
     report_kind: ConversationTurnReportKind,
     turn_state: &str,
+    report: &ConversationTurnReport,
 ) -> bool {
-    !accepted
-        || matches!(
-            (report_kind, turn_state),
-            (ConversationTurnReportKind::Started, "processing")
-                | (ConversationTurnReportKind::Completed, "completed")
-                | (ConversationTurnReportKind::Failed, "failed")
-        )
+    if !accepted {
+        return true;
+    }
+    if matches!(
+        (report_kind, turn_state),
+        (ConversationTurnReportKind::Started, "processing")
+            | (ConversationTurnReportKind::Completed, "completed")
+            | (ConversationTurnReportKind::Failed, "failed")
+    ) {
+        return true;
+    }
+    let provider = report
+        .binding
+        .as_ref()
+        .is_some_and(|binding| binding.execution_binding_revision == "openai-responses-v1");
+    provider
+        && match (report_kind, turn_state) {
+            (ConversationTurnReportKind::Failed, "processing") => {
+                report.failure_reason == "provider_uncertain"
+                    && report
+                        .provider_call
+                        .as_ref()
+                        .is_some_and(|call| call.state == "uncertain")
+            }
+            // The application serializes cancellation with visible acceptance while
+            // still accepting factual provider result and usage evidence.
+            (ConversationTurnReportKind::Completed, "failed") => report
+                .provider_call
+                .as_ref()
+                .is_some_and(|call| call.state == "completed"),
+            _ => false,
+        }
 }
 
 const fn sequence_matches_report_kind(
