@@ -36,14 +36,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("ayni_orchestrator_v1_descriptor.bin");
 
     let mut prost = prost_build::Config::new();
-    prost.protoc_executable(protoc_bin_vendored::protoc_bin_path()?);
+    prost
+        .protoc_executable(protoc_bin_vendored::protoc_bin_path()?)
+        .compile_well_known_types()
+        .extern_path(".google.protobuf", "::pbjson_types");
     tonic_prost_build::configure()
-        .file_descriptor_set_path(descriptor)
+        .file_descriptor_set_path(&descriptor)
         .compile_with_config(
             prost,
             &sources,
             &[proto_root.clone(), protoc_bin_vendored::include_path()?],
         )?;
+
+    pbjson_build::Builder::new()
+        .register_descriptors(&fs::read(descriptor)?)?
+        .build(&[".ayni.orchestrator.v1"])?;
 
     println!("cargo:rerun-if-changed={}", proto_root.display());
     for source in sources {

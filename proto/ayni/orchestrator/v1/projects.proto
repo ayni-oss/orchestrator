@@ -9,6 +9,8 @@ import "google/protobuf/timestamp.proto";
 service ProjectService {
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
 }
 
 message Workspace {
@@ -61,4 +63,24 @@ message CreateProjectRequest {
 message CreateProjectResponse {
   Project project = 1;
   CommandReceipt receipt = 2;
+}
+
+// Live keyset discovery ordered by ID. Limit defaults to 50 and is at most 100.
+// Pages are not a frozen catalog snapshot; refresh to discover concurrent inserts.
+message ListWorkspacesRequest {
+  string after_id = 1;
+  uint32 limit = 2;
+}
+message ListWorkspacesResponse {
+  repeated Workspace workspaces = 1;
+  string next_after_id = 2;
+}
+message ListProjectsRequest {
+  string workspace_id = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListProjectsResponse {
+  repeated Project projects = 1;
+  string next_after_id = 2;
 }

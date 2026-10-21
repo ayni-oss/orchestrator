@@ -93,6 +93,22 @@ export interface WatchConversationResponse {
   } | undefined;
 }
 
+/**
+ * Live ID-ordered keyset discovery within one project. Limit defaults to 50,
+ * is at most 100, and does not provide a frozen catalog snapshot.
+ */
+export interface ListConversationsRequest {
+  workspaceId: string;
+  projectId: string;
+  afterId: string;
+  limit: number;
+}
+
+export interface ListConversationsResponse {
+  conversations: Conversation[];
+  nextAfterId: string;
+}
+
 function createBaseCreateConversationRequest(): CreateConversationRequest {
   return { idempotencyKey: "", workspaceId: "", projectId: "", title: "" };
 }
@@ -1272,6 +1288,226 @@ export const WatchConversationResponse: MessageFns<WatchConversationResponse> = 
   },
 };
 
+function createBaseListConversationsRequest(): ListConversationsRequest {
+  return { workspaceId: "", projectId: "", afterId: "", limit: 0 };
+}
+
+export const ListConversationsRequest: MessageFns<ListConversationsRequest> = {
+  encode(message: ListConversationsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.afterId !== "") {
+      writer.uint32(26).string(message.afterId);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(32).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListConversationsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListConversationsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.afterId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListConversationsRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      afterId: isSet(object.afterId)
+        ? globalThis.String(object.afterId)
+        : isSet(object.after_id)
+        ? globalThis.String(object.after_id)
+        : "",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: ListConversationsRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.afterId !== "") {
+      obj.afterId = message.afterId;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListConversationsRequest>): ListConversationsRequest {
+    return ListConversationsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListConversationsRequest>): ListConversationsRequest {
+    const message = createBaseListConversationsRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.afterId = object.afterId ?? "";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseListConversationsResponse(): ListConversationsResponse {
+  return { conversations: [], nextAfterId: "" };
+}
+
+export const ListConversationsResponse: MessageFns<ListConversationsResponse> = {
+  encode(message: ListConversationsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.conversations) {
+      Conversation.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextAfterId !== "") {
+      writer.uint32(18).string(message.nextAfterId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListConversationsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListConversationsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.conversations.push(Conversation.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextAfterId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListConversationsResponse {
+    return {
+      conversations: globalThis.Array.isArray(object?.conversations)
+        ? object.conversations.map((e: any) => Conversation.fromJSON(e))
+        : [],
+      nextAfterId: isSet(object.nextAfterId)
+        ? globalThis.String(object.nextAfterId)
+        : isSet(object.next_after_id)
+        ? globalThis.String(object.next_after_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListConversationsResponse): unknown {
+    const obj: any = {};
+    if (message.conversations?.length) {
+      obj.conversations = message.conversations.map((e) => Conversation.toJSON(e));
+    }
+    if (message.nextAfterId !== "") {
+      obj.nextAfterId = message.nextAfterId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListConversationsResponse>): ListConversationsResponse {
+    return ListConversationsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListConversationsResponse>): ListConversationsResponse {
+    const message = createBaseListConversationsResponse();
+    message.conversations = object.conversations?.map((e) => Conversation.fromPartial(e)) || [];
+    message.nextAfterId = object.nextAfterId ?? "";
+    return message;
+  },
+};
+
 /** M1 exposes only the durable conversation path on the trusted operator listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
@@ -1330,6 +1566,17 @@ export const ProjectConversationServiceService = {
       Buffer.from(WatchConversationResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): WatchConversationResponse => WatchConversationResponse.decode(value),
   },
+  listConversations: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListConversations" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListConversationsRequest): Buffer =>
+      Buffer.from(ListConversationsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListConversationsRequest => ListConversationsRequest.decode(value),
+    responseSerialize: (value: ListConversationsResponse): Buffer =>
+      Buffer.from(ListConversationsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListConversationsResponse => ListConversationsResponse.decode(value),
+  },
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
@@ -1338,6 +1585,7 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   getConversationSnapshot: handleUnaryCall<GetConversationSnapshotRequest, GetConversationSnapshotResponse>;
   listConversationHistory: handleUnaryCall<ListConversationHistoryRequest, ListConversationHistoryResponse>;
   watchConversation: handleServerStreamingCall<WatchConversationRequest, WatchConversationResponse>;
+  listConversations: handleUnaryCall<ListConversationsRequest, ListConversationsResponse>;
 }
 
 export interface ProjectConversationServiceClient extends Client {
@@ -1410,6 +1658,21 @@ export interface ProjectConversationServiceClient extends Client {
     metadata?: Metadata,
     options?: Partial<CallOptions>,
   ): ClientReadableStream<WatchConversationResponse>;
+  listConversations(
+    request: ListConversationsRequest,
+    callback: (error: ServiceError | null, response: ListConversationsResponse) => void,
+  ): ClientUnaryCall;
+  listConversations(
+    request: ListConversationsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListConversationsResponse) => void,
+  ): ClientUnaryCall;
+  listConversations(
+    request: ListConversationsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListConversationsResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const ProjectConversationServiceClient = makeGenericClientConstructor(

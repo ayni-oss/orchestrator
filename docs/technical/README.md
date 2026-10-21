@@ -1,6 +1,6 @@
 # Technical documentation
 
-The current implementation is M1 runtime Slice 2: PostgreSQL-authoritative workflow state, authenticated durable delivery, one retained scripted executor, and a trusted-loopback private-v1 API.
+The current implementation is M1 runtime Slice 3: PostgreSQL-authoritative workflow state, authenticated durable delivery, one retained scripted executor, and a trusted-loopback private-v1 API.
 
 ## Current implementation
 
@@ -20,3 +20,5 @@ The current implementation is M1 runtime Slice 2: PostgreSQL-authoritative workf
 The [event-platform history](history/event-platform/index.md) is retained as dated evidence, not as current runtime documentation. Superseded browser, SQLite workflow, runtime-worker, provider, compatibility-drain, and custom-client instructions were removed during the clean cutover.
 
 [Documentation authoring](contributing/documentation.md) defines the audience boundary. The [roadmap](../../ROADMAP.md) tracks later slices.
+
+- [Contributor console](architecture/contributor-console.md): local browser transport, discovery, and retry boundaries.

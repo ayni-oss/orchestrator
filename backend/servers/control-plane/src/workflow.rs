@@ -1,3 +1,4 @@
+use ayni_orchestrator_api::Timestamp;
 use ayni_orchestrator_api::{FILE_DESCRIPTOR_SET, v1, validation};
 use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore,
@@ -8,7 +9,7 @@ use ayni_orchestrator_workflow_postgres::{
     store::observation::{ConversationUpdate, WatchEvent, WatchOptions},
 };
 use prost::Message as _;
-use prost_types::{Any, Timestamp};
+use prost_types::Any;
 use std::{io, net::SocketAddr, pin::Pin};
 use tokio::sync::watch;
 use tokio_stream::{Stream, StreamExt as _};
@@ -86,6 +87,40 @@ pub async fn serve(
 
 #[tonic::async_trait]
 impl v1::project_service_server::ProjectService for WorkflowGrpc {
+    async fn list_workspaces(
+        &self,
+        request: Request<v1::ListWorkspacesRequest>,
+    ) -> Result<Response<v1::ListWorkspacesResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let page = self
+            .store
+            .list_workspaces(&value.after_id, value.limit)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ListWorkspacesResponse {
+            workspaces: page.resources.into_iter().map(workspace).collect(),
+            next_after_id: page.next_after_id,
+        }))
+    }
+
+    async fn list_projects(
+        &self,
+        request: Request<v1::ListProjectsRequest>,
+    ) -> Result<Response<v1::ListProjectsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let page = self
+            .store
+            .list_projects(&value.workspace_id, &value.after_id, value.limit)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ListProjectsResponse {
+            projects: page.resources.into_iter().map(project).collect(),
+            next_after_id: page.next_after_id,
+        }))
+    }
+
     async fn create_workspace(
         &self,
         request: Request<v1::CreateWorkspaceRequest>,
@@ -132,6 +167,28 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn list_conversations(
+        &self,
+        request: Request<v1::ListConversationsRequest>,
+    ) -> Result<Response<v1::ListConversationsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let page = self
+            .store
+            .list_conversations(
+                &value.workspace_id,
+                &value.project_id,
+                &value.after_id,
+                value.limit,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ListConversationsResponse {
+            conversations: page.resources.into_iter().map(conversation).collect(),
+            next_after_id: page.next_after_id,
+        }))
+    }
+
     async fn create_conversation(
         &self,
         request: Request<v1::CreateConversationRequest>,

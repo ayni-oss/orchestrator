@@ -30,7 +30,7 @@ The Kubernetes Service exposes HTTP only. Workflow gRPC binds to `127.0.0.1:5005
 
 ## Canonical private-v1 surface
 
-`ProjectService` supports `CreateWorkspace` and `CreateProject`. `ProjectConversationService` supports `CreateConversation`, `SendMessage`, `GetConversationSnapshot`, and `ListConversationHistory`. `WatchConversation` streams an atomic snapshot boundary or replays accepted updates strictly after a scoped cursor.
+`ProjectService` supports `CreateWorkspace`, `CreateProject`, `ListWorkspaces`, and `ListProjects`. `ProjectConversationService` supports `CreateConversation`, `SendMessage`, `GetConversationSnapshot`, and `ListConversationHistory`. `ListConversations` provides scoped bounded discovery. `WatchConversation` streams an atomic snapshot boundary or replays accepted updates strictly after a scoped cursor.
 
 There is no compatibility adapter for removed RPCs, SQLite workflow, browser/BFF path, or custom-client workflow listener.
 
@@ -83,3 +83,7 @@ PostgreSQL unavailability prevents a durable command receipt. Broker unavailabil
 Before any replacement admission, rollback may revert the runtime. After admission, preserve PostgreSQL, JetStream, and executor-ledger authority and repair forward. Return to Slice 1 only when no handoff is unresolved; otherwise intentionally reset the disposable namespace. The application quarantine stores malformed-event identity/digest evidence and exact bytes for valid unsupported versions. It deduplicates bounded identities and fails closed at its count or byte quota. Unsupported exact bytes survive until successful replay. Quarantine pressure is separate from PostgreSQL availability and appears in readiness. A terminal report that precedes its claim enters a bounded durable pending store; ordered reconciliation accepts it after ownership becomes authoritative. Wrong-scope and conflicting reports receive immutable targeted rejections without acquiring domain authority.
 
 A bounded maintenance pass runs every minute. It compacts expired watch deltas and malformed quarantine diagnostics after their retention periods. Immutable domain records and unresolved handoff evidence remain authoritative. HTTP `/metrics` exposes safe process timing/counters and durable backlog projections; message bodies and credentials never become metric labels.
+
+## Local browser access
+
+The [contributor console](contributor-console.md) forwards an allowlisted local JSON/SSE surface to canonical pod-loopback gRPC. It owns no workflow authority or credentials.

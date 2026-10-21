@@ -8,15 +8,17 @@ The trusted-loopback control-plane listener registers only:
 
 - `ProjectService.CreateWorkspace`;
 - `ProjectService.CreateProject`;
+- `ProjectService.ListWorkspaces` and `ProjectService.ListProjects` (bounded local discovery);
 - `ProjectConversationService.CreateConversation`;
 - `ProjectConversationService.SendMessage`;
 - `ProjectConversationService.GetConversationSnapshot`;
 - `ProjectConversationService.ListConversationHistory`;
-- `ProjectConversationService.WatchConversation`, which returns `UNIMPLEMENTED` until M1 Slice 3.
+- `ProjectConversationService.WatchConversation`, with atomic snapshots and durable replay;
+- `ProjectConversationService.ListConversations` (bounded project-scoped discovery).
 
 `workflow.proto` defines server-issued command receipts, scheduling/dispatch/execution/presentation states, messages, turns, activities, bounded terminal summaries, snapshots, history records, updates, and watch frames. Removed workflow RPCs have no compatibility adapter.
 
-The listener binds to pod loopback. Canonical sources and generated bindings do not imply a public endpoint, custom-client contract, browser API, or published SDK.
+The listener binds to pod loopback. Canonical sources and generated bindings do not imply a public endpoint, custom-client contract, published browser API, or published SDK. The local contributor gateway adapts an allowlist of canonical RPCs through Rust ProtoJSON and SSE.
 
 ## Generation and compatibility
 

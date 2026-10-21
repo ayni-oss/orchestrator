@@ -8,6 +8,7 @@ The supported Docker Desktop stack contains one Ayni control plane, PostgreSQL 1
 dev/ctl deploy
 dev/ctl check --expect-empty
 dev/ctl scenario
+dev/ctl console
 ```
 
 The first deploy creates distinct immutable database, application, executor, acceptance, and administrative Secrets without printing their values. Credentials appear only in Secret-backed files or `secretKeyRef` entries. PostgreSQL, JetStream, and the executor ledger each use retained storage.
@@ -25,3 +26,5 @@ dev/ctl purge ayni-orchestrator-dev
 ```
 
 The command refuses absent or unlabelled namespaces and deletes all retained local workflow data.
+
+`dev/ctl console` serves the contributor UI at `http://127.0.0.1:3000` through a loopback-only gateway and Pod port-forward. Stop with Ctrl-C; rerun it after a Pod restart.

@@ -11,6 +11,7 @@ service ProjectConversationService {
   rpc GetConversationSnapshot(GetConversationSnapshotRequest) returns (GetConversationSnapshotResponse);
   rpc ListConversationHistory(ListConversationHistoryRequest) returns (ListConversationHistoryResponse);
   rpc WatchConversation(WatchConversationRequest) returns (stream WatchConversationResponse);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
 }
 
 message CreateConversationRequest {
@@ -76,4 +77,17 @@ message WatchConversationResponse {
     ConversationUpdate update = 2;
     ConversationWatchHeartbeat heartbeat = 3;
   }
+}
+
+// Live ID-ordered keyset discovery within one project. Limit defaults to 50,
+// is at most 100, and does not provide a frozen catalog snapshot.
+message ListConversationsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string after_id = 3;
+  uint32 limit = 4;
+}
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+  string next_after_id = 2;
 }

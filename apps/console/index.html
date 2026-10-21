@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Ayni · Conversations</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.mjs"></script></head>
+<body>
+<aside>
+  <header><span class="mark">a</span><div><strong>Ayni</strong><small>Contributor console</small></div><span class="badge">LOCAL</span></header>
+  <nav aria-label="Workspace and project">
+    <label for="workspace">Workspace</label><div class="select-row"><select id="workspace"><option value="">Choose a workspace</option></select><button id="refresh" aria-label="Refresh resources" title="Refresh resources">↻</button></div>
+    <details><summary>New workspace</summary><form id="create-workspace"><label>Name<input name="displayName" required maxlength="256" placeholder="My workspace"></label><button type="submit">Create workspace</button></form></details>
+    <label for="project">Project</label><select id="project"><option value="">Choose a project</option></select>
+    <details><summary>New project</summary><form id="create-project"><label>Name<input name="displayName" required maxlength="256" placeholder="A new project"></label><label>Goal<textarea name="goal" maxlength="16384" rows="2"></textarea></label><button type="submit">Create project</button></form></details>
+  </nav>
+  <section class="conversation-nav"><div class="section-heading"><h2>Conversations</h2></div><div id="conversations"></div><button id="more-conversations" hidden>Load more conversations</button><details><summary>New conversation</summary><form id="create-conversation"><label>Title<input name="title" required maxlength="256" placeholder="What shall we explore?"></label><button type="submit">Create conversation</button></form></details></section>
+  <footer><span class="dot"></span> Scripted executor <small>Real providers arrive in M2.</small></footer>
+</aside>
+<main>
+  <div class="topbar"><span id="breadcrumb">Your workspace</span><span id="connection" role="status">Choose a conversation</span><button id="toggle-watch" disabled>Disconnect</button></div>
+  <section class="heading"><p class="eyebrow">CONVERSATIONS</p><h1 id="title">A place to work things through.</h1><p id="subtitle">Create a workspace, project, and conversation to try the durable workflow.</p></section>
+  <div id="error" role="alert" hidden></div>
+  <section id="pending" hidden><strong>A command is awaiting confirmation.</strong><p id="pending-description"></p><button id="retry">Retry the same command</button></section>
+  <div class="workspace-content">
+    <section class="chat" aria-label="Conversation"><button id="older" hidden>Load earlier history</button><div id="history"></div><div id="messages"><div class="empty"><span class="empty-icon">✳</span><h2>Start with a question.</h2><p>Messages, activity, and accepted responses will appear here.</p></div></div></section>
+    <section class="activity-panel" aria-label="Activity"><h2>Activity</h2><p id="turn-state">No conversation selected.</p><ol id="activity"></ol><details><summary>Diagnostics</summary><dl><dt>Revision</dt><dd id="revision">—</dd><dt>Cursor</dt><dd id="cursor">—</dd><dt>Last receipt</dt><dd id="receipt">—</dd></dl></details></section>
+  </div>
+  <form id="send"><label class="sr-only" for="content">Message</label><textarea id="content" name="content" rows="3" required maxlength="16384" placeholder="Send a message to this conversation…" disabled></textarea><div><small>Accepted work continues while you disconnect.</small><button type="submit" disabled>Send message <span aria-hidden="true">↑</span></button></div></form>
+</main>
+</body>
+</html>

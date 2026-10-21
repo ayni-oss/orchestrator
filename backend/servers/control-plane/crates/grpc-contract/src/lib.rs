@@ -7,7 +7,10 @@
 #[allow(clippy::all, clippy::pedantic, clippy::nursery)]
 pub mod v1 {
     tonic::include_proto!("ayni.orchestrator.v1");
+    include!(concat!(env!("OUT_DIR"), "/ayni.orchestrator.v1.serde.rs"));
 }
+
+pub use pbjson_types::Timestamp;
 
 /// Transport-level validation shared by the trusted workflow adapter.
 pub mod validation;
@@ -49,13 +52,19 @@ mod tests {
                         "CreateConversation",
                         "GetConversationSnapshot",
                         "ListConversationHistory",
+                        "ListConversations",
                         "SendMessage",
                         "WatchConversation",
                     ]),
                 ),
                 (
                     "ProjectService",
-                    BTreeSet::from(["CreateProject", "CreateWorkspace"]),
+                    BTreeSet::from([
+                        "CreateProject",
+                        "CreateWorkspace",
+                        "ListWorkspaces",
+                        "ListProjects"
+                    ]),
                 ),
             ])
         );

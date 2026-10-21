@@ -210,6 +210,10 @@ pub(super) async fn workspace(
         )
         .await?
         .ok_or(StoreError::NotFound)?;
+    workspace_from_row(&row)
+}
+
+pub(super) fn workspace_from_row(row: &Row) -> Result<Workspace, StoreError> {
     Ok(Workspace {
         id: row.get(0),
         display_name: row.get(1),
@@ -234,6 +238,10 @@ pub(super) async fn project(
         )
         .await?
         .ok_or(StoreError::NotFound)?;
+    project_from_row(&row)
+}
+
+pub(super) fn project_from_row(row: &Row) -> Result<Project, StoreError> {
     Ok(Project {
         id: row.get(0),
         workspace_id: row.get(1),
@@ -261,6 +269,10 @@ pub(super) async fn conversation(
         )
         .await?
         .ok_or(StoreError::NotFound)?;
+    conversation_from_row(&row)
+}
+
+pub(super) fn conversation_from_row(row: &Row) -> Result<Conversation, StoreError> {
     Ok(Conversation {
         id: row.get(0),
         workspace_id: row.get(1),
