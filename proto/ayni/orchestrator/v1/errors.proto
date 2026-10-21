@@ -27,6 +27,7 @@ enum ErrorReason {
   ERROR_REASON_NOT_IMPLEMENTED = 32;
   ERROR_REASON_IDEMPOTENCY_CONFLICT = 33;
   ERROR_REASON_HISTORY_SNAPSHOT_EXPIRED = 34;
+  ERROR_REASON_PLAN_VERSION_CONFLICT = 35;
 }
 
 // ErrorDetail is packed into the standard rich gRPC status details list.

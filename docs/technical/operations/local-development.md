@@ -46,7 +46,7 @@ the credentials or writing them to configuration files.
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 11, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 12, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -94,6 +94,23 @@ The console is a trusted local contributor surface with scripted execution by
 default. Shared configuration, isolated sessions, opt-in OpenAI calls, reported
 usage and cancellation are available. The three read tools use frozen inputs and have no mutation capability. See [console architecture](../architecture/contributor-console.md)
 for the transport decision, bounds, security and recovery semantics.
+
+## Plan review
+
+Open **Plans** in a selected conversation. Expand **Write or revise a plan**,
+enter objective, scope, constraints and unresolved questions, and optionally add
+proposed tasks. Saving retains a new immutable version with the project and
+originating conversation. Repository/source references are visibly unverified.
+
+Select a plan to review its content and history. **Edit current version** copies
+that version into a local draft. Another tab can publish a newer version, but
+watch refresh never overwrites your draft; stale saves require fresh review.
+The retry panel preserves an ambiguous save across reloads. Approval and task
+admission are not available in this slice.
+
+The cumulative browser acceptance includes structured task editing, lost-response
+replay, two-tab revision conflicts, draft preservation, history and scope checks.
+See [plan review](../architecture/plan-review.md) for limits and retained-state rules.
 
 ## Shared configuration and session controls
 
@@ -244,7 +261,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 11, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 12, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:

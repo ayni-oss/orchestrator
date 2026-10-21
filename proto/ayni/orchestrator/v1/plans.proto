@@ -1,0 +1,122 @@
+syntax = "proto3";
+package ayni.orchestrator.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Declared inputs are not verified repository evidence or execution permission.
+message PlanTaskSpecification {
+  string key = 1;
+  string objective = 2;
+  string scope = 3;
+  string out_of_scope = 4;
+  repeated string acceptance_criteria = 5;
+  string repository = 6;
+  string source_ref = 7;
+  string execution_limits = 8;
+  repeated string unresolved_inputs = 9;
+}
+message PlanContent {
+  string title = 1;
+  string objective = 2;
+  string scope = 3;
+  string out_of_scope = 4;
+  repeated string constraints = 5;
+  repeated string unresolved_questions = 6;
+  repeated PlanTaskSpecification tasks = 7;
+}
+message PlanSummary {
+  string id = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  string current_version_id = 5;
+  uint64 current_ordinal = 6;
+  string title = 7;
+  string follows_plan_id = 8;
+}
+message PlanVersion {
+  string id = 1;
+  string plan_id = 2;
+  string workspace_id = 3;
+  string project_id = 4;
+  string conversation_id = 5;
+  uint64 ordinal = 6;
+  string predecessor_id = 7;
+  string content_digest = 8;
+  PlanContent content = 9;
+  string author = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+message PlanWriteReceipt {
+  string command_id = 1;
+  string plan_id = 2;
+  string version_id = 3;
+  uint64 conversation_revision = 4;
+  string resume_cursor = 5;
+}
+message CreatePlanRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string idempotency_key = 4;
+  PlanContent content = 5;
+  string follows_plan_id = 6;
+}
+message RevisePlanRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string idempotency_key = 4;
+  string plan_id = 5;
+  string expected_version_id = 6;
+  PlanContent content = 7;
+}
+message CreatePlanResponse {
+  PlanVersion version = 1;
+  PlanWriteReceipt receipt = 2;
+}
+message RevisePlanResponse {
+  PlanVersion version = 1;
+  PlanWriteReceipt receipt = 2;
+}
+message GetPlanVersionRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string plan_id = 4;
+  // Empty selects the current version in one read.
+  string version_id = 5;
+}
+message GetPlanVersionResponse {
+  PlanVersion version = 1;
+}
+message ListPlansRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+}
+// At most 32 heads; included atomically in conversation snapshots too.
+message ListPlansResponse {
+  repeated PlanSummary plans = 1;
+}
+message ListPlanVersionsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string plan_id = 4;
+  // Exclusive descending ordinal; zero starts at the newest version.
+  uint64 before_ordinal = 5;
+  // Default 10, maximum 20. Versions never change during pagination.
+  uint32 limit = 6;
+}
+message PlanVersionSummary {
+  string id = 1;
+  uint64 ordinal = 2;
+  string content_digest = 3;
+  string author = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+message ListPlanVersionsResponse {
+  repeated PlanVersionSummary versions = 1;
+  uint64 next_before_ordinal = 2;
+}

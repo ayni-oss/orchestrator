@@ -86,7 +86,50 @@ pub async fn exercise(address: SocketAddr) -> Result {
     let (status, _) = call(&app, "ListProjects", json!({"workspaceId":"invalid"})).await?;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let scope = json!({"workspaceId":workspace_id,"projectId":project_id,"conversationId":conversations[0]});
+    plan_review(&app, &scope).await?;
     replay_watch(&app, scope).await
+}
+
+async fn plan_review(app: &axum::Router, scope: &Value) -> Result {
+    let mut command = scope.clone();
+    command["idempotencyKey"] = json!(Uuid::now_v7().to_string());
+    command["content"] =
+        json!({"title":"Review plan","objective":"Retain origin","scope":"Console"});
+    let (status, created) = call(app, "CreatePlan", command.clone()).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(call(app, "CreatePlan", command).await?.1, created);
+    let mut read = scope.clone();
+    read["planId"] = created["version"]["planId"].clone();
+    let (status, current) = call(app, "GetPlanVersion", read.clone()).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(current["version"], created["version"]);
+    let mut revise = read.clone();
+    revise["idempotencyKey"] = json!(Uuid::now_v7().to_string());
+    revise["expectedVersionId"] = created["version"]["id"].clone();
+    revise["content"] =
+        json!({"title":"Revised plan","objective":"Retain origin","scope":"Console"});
+    let (status, updated) = call(app, "RevisePlan", revise.clone()).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["version"]["ordinal"], "2");
+    revise["idempotencyKey"] = json!(Uuid::now_v7().to_string());
+    let (status, error) = call(app, "RevisePlan", revise).await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(error["reason"], "ERROR_REASON_PLAN_VERSION_CONFLICT");
+    let (_, history) = call(app, "ListPlanVersions", read.clone()).await?;
+    assert_eq!(history["versions"].as_array().ok_or("history")?.len(), 2);
+    read["versionId"] = created["version"]["id"].clone();
+    assert_eq!(
+        call(app, "GetPlanVersion", read).await?.1["version"],
+        created["version"]
+    );
+    let (_, plans) = call(app, "ListPlans", scope.clone()).await?;
+    assert_eq!(
+        plans["plans"][0]["currentVersionId"],
+        updated["version"]["id"]
+    );
+    let (_, snapshot) = call(app, "GetConversationSnapshot", scope.clone()).await?;
+    assert_eq!(snapshot["snapshot"]["plans"], plans["plans"]);
+    Ok(())
 }
 
 async fn replay_watch(app: &axum::Router, scope: Value) -> Result {

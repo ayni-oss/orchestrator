@@ -76,7 +76,8 @@ Repository-owned forward migrations live in `backend/servers/control-plane/crate
 8. migration 8 freezes immutable workspace configuration and turn input revisions;
 9. migration 9 retains conversation session generations and replacement receipts;
 10. migration 10 retains provider reservations, result evidence and cancellation receipts;
-11. migration 11 retains exact-call uncertainty acknowledgement receipts.
+11. migration 11 retains exact-call uncertainty acknowledgement receipts;
+12. migration 12 retains conversation-owned plans, immutable versions and exact write receipts.
 
 These ordinals are installation history within the v1 interface, not parallel
 schema interfaces.

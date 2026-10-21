@@ -84,6 +84,33 @@ Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bou
 live-provider smoke test. Scripted and fixture timings do not predict real model
 latency. PR descriptions record any failed or blocked checks.
 
+### M3 delivery scopes
+
+The [plans and approval contract](docs/technical/architecture/plans-and-approval.md)
+defines M3 ownership, immutable review, explicit authorization and atomic task
+admission. The [delivery plan](docs/technical/research/project-workflow-m3-delivery-plan.md)
+specifies four sequential PRs and their failure/recovery acceptance gates:
+
+| PR | Observable outcome |
+| --- | --- |
+| 1: Durable plan review | Conversation-owned immutable versions, bounded reads and console review survive reload and concurrent edits. |
+| 2: Agent plan proposals | Scope/constraint discussion produces validated, retained structured proposals without granting approval authority. |
+| 3: Approval and task admission | Explicit approval of one exact version atomically retains one receipt and the complete reviewed task set. |
+| 4: Cumulative M3 acceptance | Deployed interruption, retry, race, isolation and observation evidence closes the milestone. |
+
+Every admitted task retains workspace, project, originating conversation, plan
+version and approval receipt as immutable, constrained references. M4 carries
+that origin into attempts and reports. M6 routes questions/failures back to the
+originating conversation; M7 uses accepted outcomes for factual project continuity
+and bounded assessment without sharing private working context.
+
+M3 admits tasks in an awaiting-execution state; it does not dispatch coding work.
+One plan admits one approved task set. Follow-up work requires a new linked plan
+until later confirmed recovery defines replacement of admitted work. PR #238 combines
+the contract with the first operator-authored durable-review slice. Agent proposals,
+approval/admission and final M3 acceptance remain later slices; each delivery PR
+owns its acceptance evidence and status changes.
+
 ### Validation at every milestone
 
 | Level | Evidence |

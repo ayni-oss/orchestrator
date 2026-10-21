@@ -19,6 +19,24 @@
   <section class="heading"><p class="eyebrow">CONVERSATIONS</p><h1 id="title">A place to work things through.</h1><p id="subtitle">Create a workspace, project, and conversation to try the durable workflow.</p></section>
   <div id="error" role="alert" hidden></div>
   <section id="pending" hidden><strong>A command is awaiting confirmation.</strong><p id="pending-description"></p><button id="retry">Retry the same command</button></section>
+  <section class="plans-panel" aria-label="Plans">
+    <h2>Plans</h2><p>Review scope and proposed tasks here. Approval and execution arrive in later slices.</p>
+    <div id="plan-list"></div><p id="plan-review-status" role="status">Select a retained plan to review.</p>
+    <div id="plan-review"></div><div id="plan-history"></div><button id="plan-history-more" hidden>Load older plan versions</button>
+    <button id="plan-edit" disabled>Edit current version</button>
+    <details id="plan-editor-details"><summary>Write or revise a plan</summary><p id="plan-editing">New operator-authored draft.</p>
+      <form id="plan-editor">
+        <label>Plan title<input name="title" required maxlength="256"></label>
+        <label>Objective<textarea name="objective" required maxlength="4096"></textarea></label>
+        <label>Included scope<textarea name="scope" required maxlength="4096"></textarea></label>
+        <label>Excluded scope<textarea name="outOfScope" maxlength="4096"></textarea></label>
+        <label>Constraints · one per line<textarea name="constraints" maxlength="16384"></textarea></label>
+        <label>Unresolved questions · one per line<textarea name="unresolvedQuestions" maxlength="16384"></textarea></label>
+        <div id="plan-tasks"></div><button id="plan-add-task" type="button">Add proposed task</button>
+        <button id="plan-discard" type="button">Discard local draft</button><button type="submit">Save immutable version</button>
+      </form>
+    </details>
+  </section>
   <div class="workspace-content">
     <section class="chat" aria-label="Conversation"><button id="older" hidden>Load earlier history</button><div id="history"></div><div id="messages"><div class="empty"><span class="empty-icon">✳</span><h2>Start with a question.</h2><p>Messages, activity, and accepted responses will appear here.</p></div></div></section>
     <section class="activity-panel" aria-label="Activity"><h2>Activity</h2><p id="turn-state">No conversation selected.</p><ul id="turn-controls"></ul><ol id="activity"></ol><details open><summary>Provider calls and usage</summary><p id="provider-call-status" role="status">No conversation selected.</p><button id="refresh-provider-calls" disabled>Refresh provider calls</button><div id="provider-calls"></div></details><details><summary>Session</summary><p id="session-state">No session.</p><button id="refresh-session" disabled>Refresh session</button><button id="replace-session" disabled>Replace idle session</button></details><details><summary>Diagnostics</summary><dl><dt>Revision</dt><dd id="revision">—</dd><dt>Cursor</dt><dd id="cursor">—</dd><dt>Last receipt</dt><dd id="receipt">—</dd></dl></details></section>
