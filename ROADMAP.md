@@ -74,7 +74,10 @@ owns the inherited invariants. The [conversation execution contract](docs/techni
 
 The contributor console and configuration/session prerequisites are delivered.
 Real provider execution retains the same isolated session and signed acceptance
-boundaries; bounded tools remain the final M2 scope.
+boundaries. The final M2 slice adds scoped read tools, retained tool/provider
+exchanges, explicit uncertainty acknowledgement and the cumulative acceptance
+matrix. Its delivery PR records execution evidence and any blocked live-provider
+validation; implementation alone does not establish operational acceptance.
 
 Every runtime PR extends the cumulative harness and exercises affected behavior on
 Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded

@@ -28,8 +28,11 @@ export function providerCallView(call) {
     binding: `${call.provider || 'Unknown provider'} / ${call.model || 'Unknown model'}`,
     state: describe(call.state),
     usage: `Input ${tokenCount(call.inputTokens)} · output ${tokenCount(call.outputTokens)} · total ${tokenCount(call.totalTokens)}`,
+    tools: (call.toolInvocations || []).filter(tool => ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].includes(tool.name)).map(tool => `${tool.name} · ${tool.state || 'retained'}`),
     reservation: `Input ${tokenCount(call.reservedInputTokens)} · output ${tokenCount(call.reservedOutputTokens)} · total ${tokenCount(call.reservedTotalTokens)}`,
-    notice: call.state === 'uncertain'
+    notice: call.uncertaintyAcknowledged
+      ? 'Uncertain outcome acknowledged. The call may have incurred a charge. Its evidence remains retained and this call will not be retried.'
+      : call.state === 'uncertain'
       ? 'The external outcome is unknown. This call will not be retried automatically. Retain its call ID for reconciliation.'
       : call.cancellationRequested && unresolved
         ? 'Cancellation requested. The external outcome is unconfirmed; this does not confirm remote revocation or a refund.'

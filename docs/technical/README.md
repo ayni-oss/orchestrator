@@ -1,6 +1,6 @@
 # Technical documentation
 
-The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated conversation sessions with scripted and opt-in OpenAI execution. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls retain request identity, uncertainty and nullable usage; bounded tools and complete M2 acceptance remain the next scope.
+The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated conversation sessions with scripted and opt-in OpenAI execution. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls retain request identity, uncertainty and nullable usage; bounded read tools retain frozen inputs and invocation evidence.
 
 ## Current implementation
 
@@ -9,6 +9,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 - [Conversation execution](architecture/conversation-execution.md): consolidated M2 contract, alpha v1 policy, frozen configuration, isolated sessions, provider uncertainty and tool authority.
 - [Code organization](architecture/code-organization.md): production ownership and dependency direction.
 - [Local development](operations/local-development.md): Docker Desktop deployment, diagnostics, validation, restart, and cleanup.
+- [Conversation acceptance](operations/conversation-acceptance.md): cumulative M2 recovery gates and evidence limits.
 - [Operations](operations/operations.md): startup, probes, schema changes, credentials, backup, and failure handling.
 - [Protocol tooling](../../proto/README.md): canonical protobuf generation and compatibility policy.
 

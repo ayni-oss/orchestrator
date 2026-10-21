@@ -42,7 +42,7 @@ The pinned broker provisions three file-backed, `discard=new` streams:
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 10, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 11, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -88,7 +88,7 @@ cumulative PostgreSQL gate. `CONSOLE_URL=http://127.0.0.1:3001` selects another 
 
 The console is a trusted local contributor surface with scripted execution by
 default. Shared configuration, isolated sessions, opt-in OpenAI calls, reported
-usage and cancellation are available. Bounded tools remain the next M2 scope. See [console architecture](../architecture/contributor-console.md)
+usage and cancellation are available. The three read tools use frozen inputs and have no mutation capability. See [console architecture](../architecture/contributor-console.md)
 for the transport decision, bounds, security and recovery semantics.
 
 ## Shared configuration and session controls
@@ -159,14 +159,21 @@ uncertain call may have incurred cost even after cancellation is requested.
 An uncertain external outcome blocks automatic resending and session retirement.
 Restore the retained worker ledger and reconcile the exact call ID. Do not delete
 its PVC, replace its identity or generate a new attempt to make the warning go
-away. This delivery exposes retained evidence and holds uncertain calls; it
-does not provide a reconciliation override or new-attempt command. Accepted results replay from retained evidence and appear once.
+away. Use the explicit possible-charge acknowledgement only after reviewing the exact
+call ID and request digest. It closes the held turn and retires its generation
+after the accepted uncertainty report and outbox handoffs settle. Queued work can
+then start in a fresh session; the uncertain request is never resent. Unknown
+usage, its reservation, the acknowledgement receipt and the old ledger remain
+retained. Accepted results replay from retained evidence and appear once.
 
 The deterministic [provider fixture](../../../dev/fixtures/provider/README.md)
 exercises request mapping, reported and missing usage, uncertainty, cancellation
 receipts and reconnect without a real provider credential. Its browser acceptance
 is separate from the scripted console suite and does not establish real-provider
-latency or availability. Bounded tools and the complete M2 matrix remain later work.
+latency or availability. The final M2 fixture also exercises scoped tool reads and tool-limit failures.
+The initial tool profile requires a model that emits function calls without
+reasoning items; mixed reasoning/tool responses fail explicitly as
+`provider_tool_rejected`.
 
 ## Happy-path diagnostic
 
@@ -233,7 +240,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 10, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 11, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:

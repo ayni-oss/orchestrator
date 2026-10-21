@@ -57,7 +57,8 @@ to retain sending intent, results, nullable usage and uncertain outcomes.
 `ProjectService` also supports `GetAgentConfiguration`, `UpdateAgentConfiguration`,
 `GetTurnInputs` and bounded `GetTurnContextInputs`. `ProjectConversationService`
 exposes `ListConversationSessions`, idempotent `ReplaceConversationSession`,
-`ListProviderCalls` and durable scoped `CancelTurn`.
+`ListProviderCalls`, durable scoped `CancelTurn` and exact-call
+`AcknowledgeProviderUncertainty`.
 
 There is no compatibility adapter for removed RPCs, SQLite workflow, browser/BFF path, or custom-client workflow listener.
 
@@ -73,7 +74,9 @@ Repository-owned forward migrations live in `backend/servers/control-plane/crate
 6. migration 6 retains detached wrong-scope and conflicting-report rejection decisions;
 7. migration 7 records conservative broker capacity observations;
 8. migration 8 freezes immutable workspace configuration and turn input revisions;
-9. migration 9 retains conversation session generations and replacement receipts.
+9. migration 9 retains conversation session generations and replacement receipts;
+10. migration 10 retains provider reservations, result evidence and cancellation receipts;
+11. migration 11 retains exact-call uncertainty acknowledgement receipts.
 
 These ordinals are installation history within the v1 interface, not parallel
 schema interfaces.

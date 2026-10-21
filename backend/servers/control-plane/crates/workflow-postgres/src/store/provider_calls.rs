@@ -49,6 +49,7 @@ pub struct ProviderCall {
     pub state: String,
     pub safe_reason: String,
     pub cancellation_requested: bool,
+    pub uncertainty_acknowledged: bool,
 }
 
 pub struct CancellationReceipt {
@@ -112,6 +113,18 @@ impl WorkflowStore {
             ..Default::default()
         };
         if request.action == "context" {
+            let preparing: bool = tx.query_one("SELECT EXISTS(SELECT 1 FROM workflow_activities WHERE conversation_id=$1 AND turn_id=$2 AND stage='preparation')", &[&binding.conversation_id,&binding.turn_id]).await?.get(0);
+            if response.allowed && request.after_ordinal == 0 && !preparing {
+                super::acceptance::append_activity(
+                    &tx,
+                    binding,
+                    "preparation",
+                    "processing",
+                    "preparation",
+                    "",
+                )
+                .await?;
+            }
             tx.commit().await?;
             driver.abort();
             let page = self
@@ -164,7 +177,7 @@ impl WorkflowStore {
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         support::conversation(&tx, workspace, project, conversation).await?;
-        let rows=tx.query("SELECT p.turn_id,p.evidence,p.state,p.safe_reason,EXISTS(SELECT 1 FROM workflow_cancellation_receipts c WHERE c.turn_id=p.turn_id AND c.cancellation_requested) FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.workspace_id=$1 AND t.project_id=$2 AND t.conversation_id=$3 ORDER BY t.sequence DESC LIMIT 100", &[&workspace,&project,&conversation]).await?;
+        let rows=tx.query("SELECT p.turn_id,p.evidence,p.state,p.safe_reason,EXISTS(SELECT 1 FROM workflow_cancellation_receipts c WHERE c.turn_id=p.turn_id AND c.cancellation_requested),EXISTS(SELECT 1 FROM workflow_provider_uncertainty_receipts r WHERE r.turn_id=p.turn_id) FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.workspace_id=$1 AND t.project_id=$2 AND t.conversation_id=$3 ORDER BY t.sequence DESC LIMIT 100", &[&workspace,&project,&conversation]).await?;
         let result = rows
             .iter()
             .map(|row| {
@@ -176,6 +189,7 @@ impl WorkflowStore {
                     state: row.get(2),
                     safe_reason: row.get(3),
                     cancellation_requested: row.get(4),
+                    uncertainty_acknowledged: row.get(5),
                 })
             })
             .collect();
@@ -421,8 +435,133 @@ pub(super) async fn retain_evidence(
         }
         tx.execute("INSERT INTO workflow_provider_calls(turn_id,call_id,state,evidence) VALUES($1,$2,$3,$4)", &[&binding.turn_id,&evidence.call_id,&evidence.state,&evidence.encode_to_vec()]).await?;
     }
+    for tool in &evidence.tool_invocations {
+        super::acceptance::append_activity(
+            tx,
+            binding,
+            "tool_execution",
+            "processing",
+            "",
+            &tool.name,
+        )
+        .await?;
+    }
     let settled = (!was_admitted && matches!(evidence.state.as_str(), "failed" | "cancelled"))
         || evidence.total_tokens.is_some();
     tx.execute("UPDATE workflow_provider_calls SET state=$2,evidence=$3,safe_reason=$4,reservation_settled=$5 WHERE turn_id=$1", &[&binding.turn_id,&evidence.state,&evidence.encode_to_vec(),&report.failure_reason,&settled]).await?;
     Ok(evidence.state == "uncertain")
+}
+
+/// Immutable receipt for an operator's explicit uncertain-call retirement.
+pub struct UncertaintyReceipt {
+    pub command_id: String,
+    pub turn_id: String,
+    pub call_id: String,
+}
+
+impl WorkflowStore {
+    /// Close an explicitly reviewed uncertain turn and fence its session without
+    /// rewriting provider evidence, settling unknown usage, or retrying a call.
+    ///
+    /// # Errors
+    /// Rejects wrong scope, changed receipts, sending calls, missing signed
+    /// uncertainty decisions, or unresolved outbox handoffs.
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::too_many_lines,
+        reason = "exact scoped identity and immutable receipt are checked in one transaction"
+    )]
+    pub async fn acknowledge_provider_uncertainty(
+        &self,
+        workspace: &str,
+        project: &str,
+        conversation: &str,
+        turn: &str,
+        call: &str,
+        expected_digest: &str,
+        key: &str,
+        acknowledge_possible_charge: bool,
+    ) -> Result<UncertaintyReceipt, StoreError> {
+        support::validate_scope(workspace, project, conversation)?;
+        support::validate_id(turn, "turn_id")?;
+        support::validate_key(key)?;
+        if !acknowledge_possible_charge {
+            return Err(StoreError::InvalidInput("acknowledge_possible_charge"));
+        }
+        let digest = support::request_digest(
+            "AcknowledgeProviderUncertainty",
+            &[
+                workspace.as_bytes(),
+                project.as_bytes(),
+                conversation.as_bytes(),
+                turn.as_bytes(),
+                call.as_bytes(),
+                expected_digest.as_bytes(),
+                &[1],
+            ],
+        )
+        .to_vec();
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let tx = client.transaction().await?;
+        tx.query_opt("SELECT id FROM workflow_conversations WHERE workspace_id=$1 AND project_id=$2 AND id=$3 FOR UPDATE", &[&workspace,&project,&conversation]).await?.ok_or(StoreError::NotFound)?;
+        if let Some(row) = tx.query_opt("SELECT request_digest,command_id,turn_id,call_id FROM workflow_provider_uncertainty_receipts WHERE conversation_id=$1 AND idempotency_key=$2", &[&conversation,&key]).await? {
+            let retained: Vec<u8> = row.get(0);
+            if retained != digest { return Err(StoreError::IdempotencyConflict); }
+            let result = UncertaintyReceipt { command_id:row.get(1), turn_id:row.get(2), call_id:row.get(3) };
+            tx.commit().await?;
+            driver.abort();
+            return Ok(result);
+        }
+        let row=tx.query_opt("SELECT p.state,p.evidence,t.execution_state,d.exact_command_bytes,EXISTS(SELECT 1 FROM workflow_report_receipts r WHERE r.turn_id=t.id AND r.report_sequence=2 AND r.decision='accepted'),EXISTS(SELECT 1 FROM workflow_outbox o WHERE o.conversation_id=t.conversation_id AND o.state <> 'transferred') FROM workflow_turns t JOIN workflow_provider_calls p ON p.turn_id=t.id JOIN workflow_dispatch_intents d ON d.turn_id=t.id WHERE t.workspace_id=$1 AND t.project_id=$2 AND t.conversation_id=$3 AND t.id=$4", &[&workspace,&project,&conversation,&turn]).await?.ok_or(StoreError::NotFound)?;
+        let binding = uncertainty_binding(&row, call, expected_digest)?;
+        if !super::sessions::current_generation(&tx, turn).await? {
+            return Err(StoreError::InvalidInput("session_generation"));
+        }
+        let receipt = UncertaintyReceipt {
+            command_id: support::new_id(),
+            turn_id: turn.into(),
+            call_id: call.into(),
+        };
+        tx.execute("INSERT INTO workflow_provider_uncertainty_receipts(conversation_id,idempotency_key,request_digest,command_id,turn_id,call_id) VALUES($1,$2,$3,$4,$5,$6)", &[&conversation,&key,&digest,&receipt.command_id,&turn,&call]).await?;
+        tx.execute("UPDATE workflow_turns SET execution_state='failed',failure_reason='provider_uncertain',updated_at=clock_timestamp() WHERE id=$1", &[&turn]).await?;
+        tx.execute("UPDATE workflow_sessions s SET state='replaced' FROM workflow_turn_sessions t WHERE t.turn_id=$1 AND s.id=t.session_id AND s.generation=t.generation", &[&turn]).await?;
+        super::acceptance::append_activity(
+            &tx,
+            &binding,
+            "provider_uncertain",
+            "failed",
+            "",
+            "provider_uncertainty_acknowledged",
+        )
+        .await?;
+        super::acceptance::promote_successor(&tx, conversation).await?;
+        tx.commit().await?;
+        driver.abort();
+        Ok(receipt)
+    }
+}
+
+fn uncertainty_binding(
+    row: &tokio_postgres::Row,
+    call: &str,
+    expected_digest: &str,
+) -> Result<ConversationTurnBinding, StoreError> {
+    let evidence = ProviderCallEvidence::decode(row.get::<_, Vec<u8>>(1).as_slice())
+        .map_err(|_| StoreError::CorruptState)?;
+    if evidence.call_id != call || evidence.request_digest != expected_digest {
+        return Err(StoreError::InvalidInput("provider_call_binding"));
+    }
+    if row.get::<_, String>(0) != "uncertain"
+        || row.get::<_, String>(2) != "processing"
+        || !row.get::<_, bool>(4)
+        || row.get::<_, bool>(5)
+    {
+        return Err(StoreError::InvalidInput("provider_uncertainty_not_ready"));
+    }
+    let bytes: Vec<u8> = row
+        .get::<_, Option<Vec<u8>>>(3)
+        .ok_or(StoreError::CorruptState)?;
+    let (_, _, command) = decode_command(&bytes).map_err(|_| StoreError::CorruptState)?;
+    let binding = command.binding.ok_or(StoreError::CorruptState)?;
+    Ok(binding)
 }

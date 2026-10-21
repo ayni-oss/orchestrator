@@ -227,6 +227,8 @@ export enum ActivityStage {
   ACTIVITY_STAGE_AGENT_WAKEUP = 7,
   ACTIVITY_STAGE_PROVIDER_REQUEST = 8,
   ACTIVITY_STAGE_PROVIDER_UNCERTAIN = 9,
+  ACTIVITY_STAGE_TOOL_EXECUTION = 10,
+  ACTIVITY_STAGE_PREPARATION = 11,
   UNRECOGNIZED = -1,
 }
 
@@ -262,6 +264,12 @@ export function activityStageFromJSON(object: any): ActivityStage {
     case 9:
     case "ACTIVITY_STAGE_PROVIDER_UNCERTAIN":
       return ActivityStage.ACTIVITY_STAGE_PROVIDER_UNCERTAIN;
+    case 10:
+    case "ACTIVITY_STAGE_TOOL_EXECUTION":
+      return ActivityStage.ACTIVITY_STAGE_TOOL_EXECUTION;
+    case 11:
+    case "ACTIVITY_STAGE_PREPARATION":
+      return ActivityStage.ACTIVITY_STAGE_PREPARATION;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -291,6 +299,10 @@ export function activityStageToJSON(object: ActivityStage): string {
       return "ACTIVITY_STAGE_PROVIDER_REQUEST";
     case ActivityStage.ACTIVITY_STAGE_PROVIDER_UNCERTAIN:
       return "ACTIVITY_STAGE_PROVIDER_UNCERTAIN";
+    case ActivityStage.ACTIVITY_STAGE_TOOL_EXECUTION:
+      return "ACTIVITY_STAGE_TOOL_EXECUTION";
+    case ActivityStage.ACTIVITY_STAGE_PREPARATION:
+      return "ACTIVITY_STAGE_PREPARATION";
     case ActivityStage.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

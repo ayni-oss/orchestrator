@@ -2,7 +2,9 @@
 import http from 'node:http';
 const port = Number(process.env.PORT || 8080);
 const delay = Number(process.env.PROVIDER_FIXTURE_DELAY_MS || 5000);
-const counters = { calls: 0, modes: {}, requestIds: [] };
+const counters = { calls: 0, modes: {}, requestIds: [], toolContinuations: 0 };
+const toolNames = ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'];
+const validTools = tools => tools === undefined || (Array.isArray(tools) && tools.length === toolNames.length && new Set(tools.map(tool => tool.name)).size === toolNames.length && tools.every(tool => tool.type === 'function' && toolNames.includes(tool.name) && tool.strict === true && tool.parameters?.type === 'object' && tool.parameters?.additionalProperties === false && Object.keys(tool.parameters.properties || {}).length === 0 && Array.isArray(tool.parameters.required) && tool.parameters.required.length === 0));
 const server = http.createServer(async (request, response) => {
   if (request.url === '/health') { response.writeHead(200).end('ok'); return; }
   if (request.method === 'GET' && request.url === '/stats') {
@@ -18,21 +20,45 @@ const server = http.createServer(async (request, response) => {
   }
   let body;
   try { body = JSON.parse(Buffer.concat(chunks).toString()); } catch { response.writeHead(400).end(); return; }
-  if (body.model !== 'fixture-model' || body.store !== false || body.background !== false || body.stream !== false || body.truncation !== 'disabled' || !Array.isArray(body.input) || !Number.isInteger(body.max_output_tokens) || body.max_output_tokens < 1 || body.previous_response_id || body.conversation || body.tools) {
+  if (body.model !== 'fixture-model' || body.store !== false || body.background !== false || body.stream !== false || body.truncation !== 'disabled' || !Array.isArray(body.input) || !Number.isInteger(body.max_output_tokens) || body.max_output_tokens < 1 || body.previous_response_id || body.conversation || !validTools(body.tools)) {
     response.writeHead(400).end(); return;
   }
   const content = body.input.filter(item => item.role === 'user').at(-1)?.content || '';
-  const mode = ['no-usage', 'disconnect', 'delay'].find(value => content.includes(`fixture:${value}`)) || 'completed';
+  const mode = ['no-usage', 'disconnect', 'delay', 'tool-scope', 'tool-limit', 'tool-args', 'tool-unknown', 'tool-restart', 'tools'].find(value => content.includes(`fixture:${value}`)) || 'completed';
   counters.calls++;
   const sequence = counters.calls;
   counters.modes[mode] = (counters.modes[mode] || 0) + 1;
   counters.requestIds.push(request.headers['x-client-request-id'] || 'missing');
   if (mode === 'disconnect') { response.destroy(); return; }
   if (mode === 'delay') await new Promise(resolve => setTimeout(resolve, delay));
+  const outputs = body.input.filter(item => item.type === 'function_call_output');
+  if (mode === 'tool-restart' && outputs.length) await new Promise(resolve => setTimeout(resolve, 30000));
+  if (mode === 'tools' && outputs.length) {
+    const expected = new Map(body.input.filter(item => item.type === 'function_call').map(item => [item.call_id, item.name]));
+    if (outputs.length !== 3 || new Set(outputs.map(item => item.call_id)).size !== 3 || outputs.some(item => !expected.has(item.call_id) || typeof item.output !== 'string' || Buffer.byteLength(item.output) > 32768)) { response.writeHead(400).end(); return; }
+    try {
+      for (const item of outputs) {
+        const value = JSON.parse(item.output);
+        switch (expected.get(item.call_id)) {
+          case 'read_workspace_instructions': if (typeof value.instructions !== 'string' || !value.revision_id) throw new Error(); break;
+          case 'read_project_status': if (typeof value.objective !== 'string' || !value.project_id || !value.status) throw new Error(); break;
+          case 'read_conversation_history': if (!Array.isArray(value.records) || !value.records.some(record => record.role === 'user' && record.content.includes('fixture:tools'))) throw new Error(); break;
+          default: throw new Error();
+        }
+      }
+    } catch { response.writeHead(400).end(); return; }
+    counters.toolContinuations++;
+  }
+  const toolMode = mode.startsWith('tool-') || mode === 'tools';
   const result = {
     id: `resp_fixture_${sequence}`, object: 'response', model: 'fixture-model', status: 'completed',
     output: [{ id: `msg_fixture_${sequence}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: `Provider fixture response ${sequence}.`, annotations: [] }] }],
   };
+  if (toolMode && outputs.length === 0) {
+    if (!body.tools) { response.writeHead(400).end(); return; }
+    const names = mode === 'tool-limit' ? Array.from({ length: 9 }, () => toolNames[0]) : mode === 'tools' ? toolNames : [mode === 'tool-unknown' ? 'shell' : toolNames[0]];
+    result.output = names.map((name, index) => ({ id: `fc_fixture_${sequence}_${index}`, type: 'function_call', status: 'completed', call_id: `call_fixture_${sequence}_${index}`, name, arguments: mode === 'tool-scope' ? '{"conversation_id":"another-conversation"}' : mode === 'tool-args' ? JSON.stringify({ payload: 'x'.repeat(4096) }) : '{}' }));
+  }
   if (mode !== 'no-usage') result.usage = { input_tokens: 12, output_tokens: 8, total_tokens: 20 };
   response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(result));
 });

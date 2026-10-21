@@ -226,6 +226,10 @@ async fn immutable_configuration_freezes_admission_and_isolates_conversations() 
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one bounded manifest scenario asserts frozen project and history inputs together"
+)]
 async fn prove_large_context(
     store: &WorkflowStore,
     runtime_url: &str,
@@ -267,6 +271,17 @@ async fn prove_large_context(
         .await?
         .get(0);
     let (_, _, command) = ayni_orchestrator_events::workflow::decode_command(&bytes)?;
+    let project_snapshot = command
+        .project_status
+        .as_ref()
+        .ok_or("missing project snapshot")?;
+    assert_eq!(project_snapshot.project_id, project_id);
+    assert_eq!(project_snapshot.status, "registered");
+    assert!(project_snapshot.project_resource_version > 0);
+    assert_eq!(
+        project_snapshot.context_revision,
+        command.binding.as_ref().ok_or("binding")?.context_revision
+    );
     let reference = command
         .context_manifest
         .as_ref()

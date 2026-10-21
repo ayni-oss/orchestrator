@@ -46,7 +46,7 @@ impl WorkflowStore {
         let (mut client, driver) = crate::connect(&self.database_url).await?;
         let tx = client.transaction().await?;
         super::support::conversation(&tx, workspace_id, project_id, conversation_id).await?;
-        let rows = tx.query("SELECT s.id,s.generation,s.workspace_id,s.project_id,s.conversation_id,s.state,s.idle_timeout_seconds, s.state IN ('idle','expired') AND NOT EXISTS (SELECT 1 FROM workflow_turns t WHERE t.conversation_id=s.conversation_id AND t.execution_state NOT IN ('completed','failed')) AND NOT EXISTS (SELECT 1 FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.conversation_id=s.conversation_id AND (p.state IN ('sending','uncertain') OR NOT p.reservation_settled)) AND NOT EXISTS (SELECT 1 FROM workflow_outbox o WHERE o.conversation_id=s.conversation_id AND o.state <> 'transferred') AS can_replace FROM workflow_sessions s WHERE s.workspace_id=$1 AND s.project_id=$2 AND s.conversation_id=$3 ORDER BY s.generation DESC LIMIT 100", &[&workspace_id,&project_id,&conversation_id]).await?;
+        let rows = tx.query("SELECT s.id,s.generation,s.workspace_id,s.project_id,s.conversation_id,s.state,s.idle_timeout_seconds, s.state IN ('idle','expired') AND NOT EXISTS (SELECT 1 FROM workflow_turns t WHERE t.conversation_id=s.conversation_id AND t.execution_state NOT IN ('completed','failed')) AND NOT EXISTS (SELECT 1 FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.conversation_id=s.conversation_id AND (p.state IN ('sending','uncertain') OR NOT p.reservation_settled) AND NOT EXISTS(SELECT 1 FROM workflow_provider_uncertainty_receipts r WHERE r.turn_id=p.turn_id)) AND NOT EXISTS (SELECT 1 FROM workflow_outbox o WHERE o.conversation_id=s.conversation_id AND o.state <> 'transferred') AS can_replace FROM workflow_sessions s WHERE s.workspace_id=$1 AND s.project_id=$2 AND s.conversation_id=$3 ORDER BY s.generation DESC LIMIT 100", &[&workspace_id,&project_id,&conversation_id]).await?;
         let result = rows
             .iter()
             .map(|row| {
@@ -72,7 +72,7 @@ impl WorkflowStore {
         let mut expired = Vec::new();
         for row in candidates {
             let conversation_id: String = row.get(0);
-            let rows = tx.query("UPDATE workflow_sessions s SET state='expired' WHERE conversation_id=$1 AND state='idle' AND last_active_at + idle_timeout_seconds * interval '1 second' < clock_timestamp() AND NOT EXISTS (SELECT 1 FROM workflow_turns t WHERE t.conversation_id=$1 AND t.execution_state NOT IN ('completed','failed')) AND NOT EXISTS (SELECT 1 FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.conversation_id=$1 AND (p.state IN ('sending','uncertain') OR NOT p.reservation_settled)) AND NOT EXISTS (SELECT 1 FROM workflow_outbox o WHERE o.conversation_id=$1 AND o.state NOT IN ('transferred')) RETURNING id,generation,workspace_id,project_id,conversation_id,state,idle_timeout_seconds", &[&conversation_id]).await?;
+            let rows = tx.query("UPDATE workflow_sessions s SET state='expired' WHERE conversation_id=$1 AND state='idle' AND last_active_at + idle_timeout_seconds * interval '1 second' < clock_timestamp() AND NOT EXISTS (SELECT 1 FROM workflow_turns t WHERE t.conversation_id=$1 AND t.execution_state NOT IN ('completed','failed')) AND NOT EXISTS (SELECT 1 FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.conversation_id=$1 AND (p.state IN ('sending','uncertain') OR NOT p.reservation_settled) AND NOT EXISTS(SELECT 1 FROM workflow_provider_uncertainty_receipts r WHERE r.turn_id=p.turn_id)) AND NOT EXISTS (SELECT 1 FROM workflow_outbox o WHERE o.conversation_id=$1 AND o.state NOT IN ('transferred')) RETURNING id,generation,workspace_id,project_id,conversation_id,state,idle_timeout_seconds", &[&conversation_id]).await?;
             for row in rows {
                 expired.push(session(&row)?);
             }
@@ -120,7 +120,7 @@ impl WorkflowStore {
             driver.abort();
             return Ok(result);
         }
-        let active: bool = tx.query_one("SELECT EXISTS (SELECT 1 FROM workflow_turns WHERE conversation_id=$1 AND execution_state NOT IN ('completed','failed')) OR EXISTS (SELECT 1 FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.conversation_id=$1 AND (p.state IN ('sending','uncertain') OR NOT p.reservation_settled)) OR EXISTS (SELECT 1 FROM workflow_outbox WHERE conversation_id=$1 AND state <> 'transferred')", &[&conversation_id]).await?.get(0);
+        let active: bool = tx.query_one("SELECT EXISTS (SELECT 1 FROM workflow_turns WHERE conversation_id=$1 AND execution_state NOT IN ('completed','failed')) OR EXISTS (SELECT 1 FROM workflow_provider_calls p JOIN workflow_turns t ON t.id=p.turn_id WHERE t.conversation_id=$1 AND (p.state IN ('sending','uncertain') OR NOT p.reservation_settled) AND NOT EXISTS(SELECT 1 FROM workflow_provider_uncertainty_receipts r WHERE r.turn_id=p.turn_id)) OR EXISTS (SELECT 1 FROM workflow_outbox WHERE conversation_id=$1 AND state <> 'transferred')", &[&conversation_id]).await?.get(0);
         if active {
             return Err(StoreError::InvalidInput("session_has_retained_work"));
         }

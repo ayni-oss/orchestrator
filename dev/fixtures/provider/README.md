@@ -41,3 +41,59 @@ cancellation race. Other inputs return a completed response with reported usage.
 `GET /stats` exposes counts and correlation IDs for proving that replay does not
 make another provider request. These fixtures establish protocol and recovery
 behavior, not live-provider latency or availability.
+
+## Bounded tools and recovery
+
+`fixture:tools` requests the three permitted scoped reads in one response. The
+continuation must contain their matching call IDs and bounded JSON outputs. The
+fixture rejects provider-native tools, additional capabilities and mismatched
+outputs. It keeps only counts and correlation IDs, including a
+`toolContinuations` counter; it does not retain tool output.
+
+The acceptance scenario also submits `fixture:tool-scope` (a model-supplied
+conversation ID), `fixture:tool-limit` (nine invocations), `fixture:tool-args`
+(over 4 KiB arguments) and `fixture:tool-unknown` (a shell capability). Each must
+fail explicitly without a second provider request or assistant response. These
+are malicious provider fixtures, not newly granted capabilities. The scenario
+checks accumulated usage, tool replay after reconnect and the explicit
+possible-charge acknowledgement, including a lost acknowledgement response.
+
+Run fixture protocol tests without a deployment:
+
+```sh
+node --test apps/console/provider-fixture.test.mjs apps/console/state.test.mjs
+```
+
+## Bounded live smoke
+
+The live smoke uses one existing, idle conversation in an explicitly configured
+OpenAI workspace. Provision the scoped credential through the documented session
+mount; the smoke never reads, prints, copies or configures a credential. Select
+an explicit model, a total turn allowance of at most 32,768 tokens and an output
+allowance of at most 2,048 tokens. Provider pricing is not inferred from tokens.
+The invocation below authorizes one possibly paid turn:
+
+```sh
+AYNI_ALLOW_PAID_PROVIDER_SMOKE=1 \
+AYNI_SMOKE_WORKSPACE_ID=<workspace-uuid> \
+AYNI_SMOKE_PROJECT_ID=<project-uuid> \
+AYNI_SMOKE_CONVERSATION_ID=<conversation-uuid> \
+  node apps/console/provider-live-smoke.mjs
+```
+
+It asks for the three scoped reads, waits for retained completion and checks
+reconnect without another lifecycle. It requires retained evidence for all three reads. A model that declines them
+fails the smoke; that is not a reason to retry the turn automatically. It prints only scope, receipt/call identity
+and reported usage. It submits no automatic retry. If admission is ambiguous,
+retain the printed key and use the canonical receipt recovery; if the provider
+outcome is uncertain, preserve the request and ledger for explicit recovery.
+A failed or unrun smoke is not live-provider evidence.
+
+The deployed scenario also deletes two exact, ownership-checked session Pods in
+its own workspace. After accepted tool completion, a later turn adopts the same
+session generation and PVC without resending the completed request. For
+`fixture:tool-restart`, the fixture returns one scoped read and pauses the
+continuation response for 30 seconds. The scenario waits until that continuation
+was received, deletes its exact worker Pod, and requires an uncertain outcome
+with the same retained PVC and tool evidence. Reconnect must not resend the
+continuation. No database, broker, session volume or retained history is deleted.

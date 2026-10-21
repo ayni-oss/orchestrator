@@ -1,3 +1,7 @@
+mod errors;
+use errors::RequestContext;
+use prost::Message as _;
+
 use ayni_orchestrator_api::Timestamp;
 use ayni_orchestrator_api::{FILE_DESCRIPTOR_SET, v1, validation};
 use ayni_orchestrator_workflow_postgres::{
@@ -8,17 +12,13 @@ use ayni_orchestrator_workflow_postgres::{
     },
     store::observation::{ConversationUpdate, WatchEvent, WatchOptions},
 };
-use prost::Message as _;
-use prost_types::Any;
 use std::{io, net::SocketAddr, pin::Pin};
 use tokio::sync::watch;
 use tokio_stream::{Stream, StreamExt as _};
 use tonic::{Code, Request, Response, Status, transport::Server};
-use uuid::Uuid;
 
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 3 * 1024 * 1024;
-const ERROR_DETAIL_TYPE_URL: &str = "type.googleapis.com/ayni.orchestrator.v1.ErrorDetail";
 type ConversationStream =
     Pin<Box<dyn Stream<Item = Result<v1::WatchConversationResponse, Status>> + Send + 'static>>;
 
@@ -310,17 +310,59 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
                         reserved_output_tokens: evidence.reserved_output_tokens,
                         reserved_total_tokens: evidence.reserved_total_tokens,
                         cancellation_requested: call.cancellation_requested,
+                        uncertainty_acknowledged: call.uncertainty_acknowledged,
                         safe_reason: call.safe_reason,
                         response_id: evidence.response_id,
                         reported_model: evidence.reported_model,
                         request_digest: evidence.request_digest,
                         context_digest: evidence.context_digest,
                         configuration_revision_id: evidence.configuration_revision_id,
+                        tool_invocations: evidence
+                            .tool_invocations
+                            .into_iter()
+                            .map(|tool| v1::ToolInvocation {
+                                invocation_id: tool.invocation_id,
+                                name: tool.name,
+                                input_digest: tool.input_digest,
+                                output_digest: tool.output_digest,
+                                state: tool.state,
+                            })
+                            .collect(),
                     }
                 })
                 .collect(),
         }))
     }
+    async fn acknowledge_provider_uncertainty(
+        &self,
+        request: Request<v1::AcknowledgeProviderUncertaintyRequest>,
+    ) -> Result<Response<v1::AcknowledgeProviderUncertaintyResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let result = self
+            .store
+            .acknowledge_provider_uncertainty(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+                &value.turn_id,
+                &value.call_id,
+                &value.request_digest,
+                &value.idempotency_key,
+                value.acknowledge_possible_charge,
+            )
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(
+            context.response(v1::AcknowledgeProviderUncertaintyResponse {
+                command_id: result.command_id,
+                turn_id: result.turn_id,
+                call_id: result.call_id,
+                state: "acknowledged".into(),
+            }),
+        )
+    }
+
     async fn cancel_turn(
         &self,
         request: Request<v1::CancelTurnRequest>,
@@ -583,123 +625,6 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
     }
 }
 
-#[derive(Clone)]
-struct RequestContext {
-    request_id: String,
-}
-
-impl RequestContext {
-    fn new<T>(request: &Request<T>) -> Self {
-        let request_id = request
-            .metadata()
-            .get("x-request-id")
-            .and_then(|value| value.to_str().ok())
-            .filter(|value| valid_request_id(value))
-            .map_or_else(|| Uuid::now_v7().to_string(), str::to_owned);
-        Self { request_id }
-    }
-
-    fn response<T>(&self, value: T) -> Response<T> {
-        let mut response = Response::new(value);
-        if let Ok(value) = self.request_id.parse() {
-            response.metadata_mut().insert("x-request-id", value);
-        }
-        response
-    }
-
-    fn validation(&self, error: &validation::ValidationError) -> Status {
-        self.status(
-            Code::InvalidArgument,
-            error.reason,
-            "workflow request validation failed",
-        )
-    }
-
-    fn store(&self, error: &StoreError) -> Status {
-        match error {
-            StoreError::InvalidInput(_) => self.status(
-                Code::InvalidArgument,
-                v1::ErrorReason::InvalidInput,
-                "workflow request validation failed",
-            ),
-            StoreError::NotFound => self.status(
-                Code::NotFound,
-                v1::ErrorReason::ResourceNotFound,
-                "workflow resource was not found",
-            ),
-            StoreError::IdempotencyConflict => self.status(
-                Code::AlreadyExists,
-                v1::ErrorReason::IdempotencyConflict,
-                "idempotency key conflicts with the retained request",
-            ),
-            StoreError::Capacity(_) => self.status(
-                Code::ResourceExhausted,
-                v1::ErrorReason::BoundExceeded,
-                "workflow capacity is exhausted",
-            ),
-            StoreError::WatchCursorExpired => self.status(
-                Code::FailedPrecondition,
-                v1::ErrorReason::WatchCursorExpired,
-                "watch cursor expired; reconnect without a cursor for a snapshot",
-            ),
-            StoreError::HistorySnapshotExpired => self.status(
-                Code::FailedPrecondition,
-                v1::ErrorReason::HistorySnapshotExpired,
-                "history snapshot expired",
-            ),
-            StoreError::CorruptState => self.status(
-                Code::FailedPrecondition,
-                v1::ErrorReason::FailedPrecondition,
-                "retained workflow state is invalid",
-            ),
-            StoreError::ConfigurationRevisionConflict => self.status(
-                Code::Aborted,
-                v1::ErrorReason::FailedPrecondition,
-                "configuration revision changed",
-            ),
-            StoreError::Database(_) => self.status(
-                Code::Unavailable,
-                v1::ErrorReason::Internal,
-                "authoritative workflow state is unavailable",
-            ),
-        }
-    }
-
-    fn status(&self, code: Code, reason: v1::ErrorReason, message: &str) -> Status {
-        let detail = v1::ErrorDetail {
-            reason: reason as i32,
-            message: message.to_owned(),
-            resource_type: None,
-            resource_id: None,
-            metadata: Vec::new(),
-            request_id: Some(self.request_id.clone()),
-        };
-        let rich = RichStatus {
-            code: code as i32,
-            message: message.to_owned(),
-            details: vec![Any {
-                type_url: ERROR_DETAIL_TYPE_URL.to_owned(),
-                value: detail.encode_to_vec(),
-            }],
-        };
-        let mut status = Status::with_details(code, message, rich.encode_to_vec().into());
-        if let Ok(value) = self.request_id.parse() {
-            status.metadata_mut().insert("x-request-id", value);
-        }
-        status
-    }
-}
-
-#[derive(Clone, PartialEq, prost::Message)]
-struct RichStatus {
-    #[prost(int32, tag = "1")]
-    code: i32,
-    #[prost(string, tag = "2")]
-    message: String,
-    #[prost(message, repeated, tag = "3")]
-    details: Vec<Any>,
-}
-
 fn workspace(value: model::Workspace) -> v1::Workspace {
     v1::Workspace {
         id: value.id,
@@ -861,6 +786,8 @@ fn activity(value: model::Activity) -> v1::Activity {
             "agent_wakeup" => v1::ActivityStage::AgentWakeup,
             "provider_request" => v1::ActivityStage::ProviderRequest,
             "provider_uncertain" => v1::ActivityStage::ProviderUncertain,
+            "tool_execution" => v1::ActivityStage::ToolExecution,
+            "preparation" => v1::ActivityStage::Preparation,
             _ => v1::ActivityStage::Unspecified,
         } as i32,
         presentation_state: presentation(value.presentation_state),

@@ -25,3 +25,42 @@ test('Responses fixture validates isolation profile and exposes missing usage an
   assert.deepEqual(stats.requestIds, ['fixed-call-id', 'fixed-call-id', 'fixed-call-id']);
   assert.equal(JSON.stringify(stats).includes('provider-fixture-key'), false);
 });
+
+test('Responses fixture advertises only scoped reads and validates tool continuations', async t => {
+  const fixtureProcess = spawn(globalThis.process.execPath, [new URL('../../dev/fixtures/provider/server.mjs', import.meta.url).pathname], { env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => fixtureProcess.kill('SIGTERM'));
+  const [ready] = await Promise.race([once(fixtureProcess.stdout, 'data'), once(fixtureProcess, 'exit').then(([code]) => { throw new Error(`fixture exited: ${code}`); })]);
+  const endpoint = `http://127.0.0.1:${JSON.parse(ready).port}`;
+  const names = ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'];
+  const tools = names.map(name => ({ type: 'function', name, strict: true, parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } }));
+  const request = content => ({ model: 'fixture-model', input: [{ role: 'user', content }], tools, max_output_tokens: 512, store: false, background: false, stream: false, truncation: 'disabled' });
+  const send = body => fetch(`${endpoint}/v1/responses`, { method: 'POST', headers: { authorization: 'Bearer provider-fixture-key', 'content-type': 'application/json', 'x-client-request-id': 'scoped-tool-fixture' }, body: JSON.stringify(body) });
+  assert.equal((await send({ ...request('fixture:tools'), tools: [{ type: 'web_search' }] })).status, 400);
+  assert.equal((await send({ ...request('fixture:tools'), tools: [...tools, tools[0]] })).status, 400);
+  assert.equal((await send({ ...request('fixture:tools'), tools: tools.map(tool => ({ ...tool, parameters: { ...tool.parameters, additionalProperties: true } })) })).status, 400);
+  const prepared = request('fixture:tools');
+  const response = await (await send(prepared)).json();
+  assert.deepEqual(response.output.map(call => call.name), names);
+  const values = [
+    { revision_id: 'revision', instructions: 'frozen' },
+    { project_id: 'project', objective: 'factual objective', status: 'active', context_revision: '7' },
+    { records: [{ message_id: 'input', sequence: 1, role: 'user', content: 'fixture:tools' }] },
+  ];
+  const outputs = response.output.map((call, index) => ({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(values[index]) }));
+  const continuation = { ...prepared, input: [...prepared.input, ...response.output, ...outputs] };
+  assert.equal((await send({ ...continuation, input: [...prepared.input, ...response.output, { ...outputs[0], call_id: 'foreign' }, ...outputs.slice(1)] })).status, 400);
+  const completed = await (await send(continuation)).json();
+  assert.equal(completed.output[0].type, 'message');
+  assert.match(completed.output[0].content[0].text, /Provider fixture response/);
+  const stats = await (await fetch(`${endpoint}/stats`)).json();
+  assert.equal(stats.toolContinuations, 1);
+  assert.equal(JSON.stringify(stats).includes('factual objective'), false, 'fixture statistics do not retain tool output');
+  const overLimit = await (await send(request('fixture:tool-limit'))).json();
+  assert.equal(overLimit.output.length, 9);
+  const foreignScope = await (await send(request('fixture:tool-scope'))).json();
+  assert.deepEqual(JSON.parse(foreignScope.output[0].arguments), { conversation_id: 'another-conversation' });
+  const oversized = await (await send(request('fixture:tool-args'))).json();
+  assert.ok(Buffer.byteLength(oversized.output[0].arguments) > 4096);
+  const unknown = await (await send(request('fixture:tool-unknown'))).json();
+  assert.equal(unknown.output[0].name, 'shell');
+});

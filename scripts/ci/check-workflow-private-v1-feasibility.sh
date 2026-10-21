@@ -40,7 +40,7 @@ expected = {
     },
     "project_conversations.proto": {
         "ProjectConversationService": [
-            "ListProviderCalls", "CancelTurn",
+            "ListProviderCalls", "AcknowledgeProviderUncertainty", "CancelTurn",
             "CreateConversation",
             "SendMessage",
             "GetConversationSnapshot",

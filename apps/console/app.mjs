@@ -49,6 +49,7 @@ function controls() {
   $('replace-session').disabled = !currentSession?.canReplace || !!pending || sending || discoveryBusy;
   $('refresh-provider-calls').disabled = !scope.conversationId || sending;
   for (const button of document.querySelectorAll('[data-cancel-turn]')) button.disabled = !!pending || sending || discoveryBusy;
+  for (const button of document.querySelectorAll('[data-acknowledge-call]')) button.disabled = !!pending || sending || discoveryBusy || !button.closest('article').querySelector('input[type=checkbox]')?.checked;
 }
 async function submit(method, body) {
   if (pending || sending) return;
@@ -74,6 +75,11 @@ async function retry() {
         const selected = scopeBody();
         const current = await api('GetConversationSnapshot', selected);
         if (scopeKey(selected) === scopeKey(scope)) { renderSnapshot(current.snapshot); await loadProviderCalls(); }
+      }
+    } else if (command.method === 'AcknowledgeProviderUncertainty') {
+      if (scopeKey(command.body) === scopeKey(scope)) {
+        $('receipt').textContent = `${result.commandId || 'Accepted'} · uncertainty acknowledged`;
+        await loadProviderCalls(); await loadSession();
       }
     } else if (command.method === 'ReplaceConversationSession') {
       if (scopeKey(command.body) === scopeKey(scope)) await loadSession();
@@ -178,10 +184,22 @@ async function loadProviderCalls() {
     const reservation = document.createElement('p'); reservation.textContent = `Reserved allowance: ${view.reservation}`;
     const identity = document.createElement('p'); identity.className = 'call-identity'; identity.textContent = `Call ${call.callId} · turn ${call.turnId}`;
     article.append(heading, state, usage, reservation, identity);
+    if (view.tools.length) { const tools = document.createElement('p'); tools.textContent = `Scoped reads: ${view.tools.join(' · ')}`; article.append(tools); }
     if (call.reportedModel) { const model = document.createElement('p'); model.textContent = `Reported model: ${call.reportedModel}`; article.append(model); }
     if (view.notice) { const notice = document.createElement('p'); notice.className = 'provider-notice'; notice.textContent = view.notice; article.append(notice); }
+    if (call.state === 'uncertain' && !call.uncertaintyAcknowledged) {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.dataset.acknowledgeConsent = call.callId;
+      label.append(checkbox, document.createTextNode(' I acknowledge this call may have incurred a charge. Keep its evidence and stop this turn without retrying it.'));
+      const button = document.createElement('button'); button.textContent = 'Acknowledge uncertain outcome'; button.dataset.acknowledgeCall = call.callId;
+      const acknowledgement = { ...selected, turnId: call.turnId, callId: call.callId, requestDigest: call.requestDigest, acknowledgePossibleCharge: true };
+      button.onclick = () => { if (checkbox.checked) submit('AcknowledgeProviderUncertainty', acknowledgement); };
+      checkbox.onchange = controls;
+      article.append(label, button);
+    }
     $('provider-calls').append(article);
   }
+  controls();
 }
 function renderTurnControls(turns) {
   $('turn-controls').replaceChildren();

@@ -86,8 +86,14 @@ An uncertain call keeps its identity, reservation and recovery evidence. The
 panel explains that it will not be retried automatically. Refresh, reconnect,
 Pod replacement and cancellation cannot resolve uncertainty. The operator must
 reconcile the exact call and its retained evidence before authorizing further
-work. Uncertain calls remain held: this delivery has no reconciliation override or
-new-attempt command. The console cannot silently repeat a paid call.
+work. An explicit acknowledgement binds the call and request digest and records
+that a charge may have occurred. After the uncertain report and outbox handoffs settle,
+acknowledgement closes the held turn and retires its session generation. Queued
+work can then enter a fresh generation. The acknowledgement preserves uncertain
+evidence, unknown usage and the reservation; it does not resend the call.
+
+Tool activity lists allowlisted tool names, invocation IDs, states and digests.
+Arguments, read outputs, full prompts and model reasoning stay out of activity.
 
 ## Discovery, history and retries
 

@@ -173,6 +173,8 @@ export interface ProviderCall {
   requestDigest: string;
   contextDigest: string;
   configurationRevisionId: string;
+  toolInvocations: ToolInvocation[];
+  uncertaintyAcknowledged: boolean;
 }
 
 export interface ListProviderCallsResponse {
@@ -192,6 +194,34 @@ export interface CancelTurnResponse {
   turnId: string;
   state: string;
   cancellationRequested: boolean;
+}
+
+/** Allowlisted activity metadata; never tool arguments or raw output. */
+export interface ToolInvocation {
+  invocationId: string;
+  name: string;
+  inputDigest: string;
+  outputDigest: string;
+  state: string;
+}
+
+/** Explicitly retire an unresolved call without inventing usage or resending it. */
+export interface AcknowledgeProviderUncertaintyRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  turnId: string;
+  callId: string;
+  requestDigest: string;
+  idempotencyKey: string;
+  acknowledgePossibleCharge: boolean;
+}
+
+export interface AcknowledgeProviderUncertaintyResponse {
+  commandId: string;
+  turnId: string;
+  callId: string;
+  state: string;
 }
 
 function createBaseCreateConversationRequest(): CreateConversationRequest {
@@ -2342,6 +2372,8 @@ function createBaseProviderCall(): ProviderCall {
     requestDigest: "",
     contextDigest: "",
     configurationRevisionId: "",
+    toolInvocations: [],
+    uncertaintyAcknowledged: false,
   };
 }
 
@@ -2400,6 +2432,12 @@ export const ProviderCall: MessageFns<ProviderCall> = {
     }
     if (message.configurationRevisionId !== "") {
       writer.uint32(146).string(message.configurationRevisionId);
+    }
+    for (const v of message.toolInvocations) {
+      ToolInvocation.encode(v!, writer.uint32(154).fork()).join();
+    }
+    if (message.uncertaintyAcknowledged !== false) {
+      writer.uint32(160).bool(message.uncertaintyAcknowledged);
     }
     return writer;
   },
@@ -2561,6 +2599,22 @@ export const ProviderCall: MessageFns<ProviderCall> = {
             message.configurationRevisionId = reader.string();
             continue;
           }
+          case 19: {
+            if (tag !== 154) {
+              break;
+            }
+
+            message.toolInvocations.push(ToolInvocation.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 20: {
+            if (tag !== 160) {
+              break;
+            }
+
+            message.uncertaintyAcknowledged = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2653,6 +2707,16 @@ export const ProviderCall: MessageFns<ProviderCall> = {
         : isSet(object.configuration_revision_id)
         ? globalThis.String(object.configuration_revision_id)
         : "",
+      toolInvocations: globalThis.Array.isArray(object?.toolInvocations)
+        ? object.toolInvocations.map((e: any) => ToolInvocation.fromJSON(e))
+        : globalThis.Array.isArray(object?.tool_invocations)
+        ? object.tool_invocations.map((e: any) => ToolInvocation.fromJSON(e))
+        : [],
+      uncertaintyAcknowledged: isSet(object.uncertaintyAcknowledged)
+        ? globalThis.Boolean(object.uncertaintyAcknowledged)
+        : isSet(object.uncertainty_acknowledged)
+        ? globalThis.Boolean(object.uncertainty_acknowledged)
+        : false,
     };
   },
 
@@ -2712,6 +2776,12 @@ export const ProviderCall: MessageFns<ProviderCall> = {
     if (message.configurationRevisionId !== "") {
       obj.configurationRevisionId = message.configurationRevisionId;
     }
+    if (message.toolInvocations?.length) {
+      obj.toolInvocations = message.toolInvocations.map((e) => ToolInvocation.toJSON(e));
+    }
+    if (message.uncertaintyAcknowledged !== false) {
+      obj.uncertaintyAcknowledged = message.uncertaintyAcknowledged;
+    }
     return obj;
   },
 
@@ -2738,6 +2808,8 @@ export const ProviderCall: MessageFns<ProviderCall> = {
     message.requestDigest = object.requestDigest ?? "";
     message.contextDigest = object.contextDigest ?? "";
     message.configurationRevisionId = object.configurationRevisionId ?? "";
+    message.toolInvocations = object.toolInvocations?.map((e) => ToolInvocation.fromPartial(e)) || [];
+    message.uncertaintyAcknowledged = object.uncertaintyAcknowledged ?? false;
     return message;
   },
 };
@@ -3093,6 +3165,502 @@ export const CancelTurnResponse: MessageFns<CancelTurnResponse> = {
   },
 };
 
+function createBaseToolInvocation(): ToolInvocation {
+  return { invocationId: "", name: "", inputDigest: "", outputDigest: "", state: "" };
+}
+
+export const ToolInvocation: MessageFns<ToolInvocation> = {
+  encode(message: ToolInvocation, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.invocationId !== "") {
+      writer.uint32(10).string(message.invocationId);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.inputDigest !== "") {
+      writer.uint32(26).string(message.inputDigest);
+    }
+    if (message.outputDigest !== "") {
+      writer.uint32(34).string(message.outputDigest);
+    }
+    if (message.state !== "") {
+      writer.uint32(42).string(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ToolInvocation {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseToolInvocation();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.invocationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.inputDigest = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.outputDigest = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ToolInvocation {
+    return {
+      invocationId: isSet(object.invocationId)
+        ? globalThis.String(object.invocationId)
+        : isSet(object.invocation_id)
+        ? globalThis.String(object.invocation_id)
+        : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      inputDigest: isSet(object.inputDigest)
+        ? globalThis.String(object.inputDigest)
+        : isSet(object.input_digest)
+        ? globalThis.String(object.input_digest)
+        : "",
+      outputDigest: isSet(object.outputDigest)
+        ? globalThis.String(object.outputDigest)
+        : isSet(object.output_digest)
+        ? globalThis.String(object.output_digest)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+    };
+  },
+
+  toJSON(message: ToolInvocation): unknown {
+    const obj: any = {};
+    if (message.invocationId !== "") {
+      obj.invocationId = message.invocationId;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.inputDigest !== "") {
+      obj.inputDigest = message.inputDigest;
+    }
+    if (message.outputDigest !== "") {
+      obj.outputDigest = message.outputDigest;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ToolInvocation>): ToolInvocation {
+    return ToolInvocation.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ToolInvocation>): ToolInvocation {
+    const message = createBaseToolInvocation();
+    message.invocationId = object.invocationId ?? "";
+    message.name = object.name ?? "";
+    message.inputDigest = object.inputDigest ?? "";
+    message.outputDigest = object.outputDigest ?? "";
+    message.state = object.state ?? "";
+    return message;
+  },
+};
+
+function createBaseAcknowledgeProviderUncertaintyRequest(): AcknowledgeProviderUncertaintyRequest {
+  return {
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    turnId: "",
+    callId: "",
+    requestDigest: "",
+    idempotencyKey: "",
+    acknowledgePossibleCharge: false,
+  };
+}
+
+export const AcknowledgeProviderUncertaintyRequest: MessageFns<AcknowledgeProviderUncertaintyRequest> = {
+  encode(message: AcknowledgeProviderUncertaintyRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.turnId !== "") {
+      writer.uint32(34).string(message.turnId);
+    }
+    if (message.callId !== "") {
+      writer.uint32(42).string(message.callId);
+    }
+    if (message.requestDigest !== "") {
+      writer.uint32(50).string(message.requestDigest);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(58).string(message.idempotencyKey);
+    }
+    if (message.acknowledgePossibleCharge !== false) {
+      writer.uint32(64).bool(message.acknowledgePossibleCharge);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AcknowledgeProviderUncertaintyRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAcknowledgeProviderUncertaintyRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.callId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.requestDigest = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.acknowledgePossibleCharge = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AcknowledgeProviderUncertaintyRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      callId: isSet(object.callId)
+        ? globalThis.String(object.callId)
+        : isSet(object.call_id)
+        ? globalThis.String(object.call_id)
+        : "",
+      requestDigest: isSet(object.requestDigest)
+        ? globalThis.String(object.requestDigest)
+        : isSet(object.request_digest)
+        ? globalThis.String(object.request_digest)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      acknowledgePossibleCharge: isSet(object.acknowledgePossibleCharge)
+        ? globalThis.Boolean(object.acknowledgePossibleCharge)
+        : isSet(object.acknowledge_possible_charge)
+        ? globalThis.Boolean(object.acknowledge_possible_charge)
+        : false,
+    };
+  },
+
+  toJSON(message: AcknowledgeProviderUncertaintyRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.callId !== "") {
+      obj.callId = message.callId;
+    }
+    if (message.requestDigest !== "") {
+      obj.requestDigest = message.requestDigest;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.acknowledgePossibleCharge !== false) {
+      obj.acknowledgePossibleCharge = message.acknowledgePossibleCharge;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AcknowledgeProviderUncertaintyRequest>): AcknowledgeProviderUncertaintyRequest {
+    return AcknowledgeProviderUncertaintyRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AcknowledgeProviderUncertaintyRequest>): AcknowledgeProviderUncertaintyRequest {
+    const message = createBaseAcknowledgeProviderUncertaintyRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.turnId = object.turnId ?? "";
+    message.callId = object.callId ?? "";
+    message.requestDigest = object.requestDigest ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.acknowledgePossibleCharge = object.acknowledgePossibleCharge ?? false;
+    return message;
+  },
+};
+
+function createBaseAcknowledgeProviderUncertaintyResponse(): AcknowledgeProviderUncertaintyResponse {
+  return { commandId: "", turnId: "", callId: "", state: "" };
+}
+
+export const AcknowledgeProviderUncertaintyResponse: MessageFns<AcknowledgeProviderUncertaintyResponse> = {
+  encode(message: AcknowledgeProviderUncertaintyResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    if (message.turnId !== "") {
+      writer.uint32(18).string(message.turnId);
+    }
+    if (message.callId !== "") {
+      writer.uint32(26).string(message.callId);
+    }
+    if (message.state !== "") {
+      writer.uint32(34).string(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AcknowledgeProviderUncertaintyResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAcknowledgeProviderUncertaintyResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.callId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AcknowledgeProviderUncertaintyResponse {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      callId: isSet(object.callId)
+        ? globalThis.String(object.callId)
+        : isSet(object.call_id)
+        ? globalThis.String(object.call_id)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+    };
+  },
+
+  toJSON(message: AcknowledgeProviderUncertaintyResponse): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.callId !== "") {
+      obj.callId = message.callId;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AcknowledgeProviderUncertaintyResponse>): AcknowledgeProviderUncertaintyResponse {
+    return AcknowledgeProviderUncertaintyResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AcknowledgeProviderUncertaintyResponse>): AcknowledgeProviderUncertaintyResponse {
+    const message = createBaseAcknowledgeProviderUncertaintyResponse();
+    message.commandId = object.commandId ?? "";
+    message.turnId = object.turnId ?? "";
+    message.callId = object.callId ?? "";
+    message.state = object.state ?? "";
+    return message;
+  },
+};
+
 /** M1 exposes only the durable conversation path on the trusted operator listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
@@ -3106,6 +3674,19 @@ export const ProjectConversationServiceService = {
     responseSerialize: (value: ListProviderCallsResponse): Buffer =>
       Buffer.from(ListProviderCallsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListProviderCallsResponse => ListProviderCallsResponse.decode(value),
+  },
+  acknowledgeProviderUncertainty: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/AcknowledgeProviderUncertainty" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AcknowledgeProviderUncertaintyRequest): Buffer =>
+      Buffer.from(AcknowledgeProviderUncertaintyRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AcknowledgeProviderUncertaintyRequest =>
+      AcknowledgeProviderUncertaintyRequest.decode(value),
+    responseSerialize: (value: AcknowledgeProviderUncertaintyResponse): Buffer =>
+      Buffer.from(AcknowledgeProviderUncertaintyResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): AcknowledgeProviderUncertaintyResponse =>
+      AcknowledgeProviderUncertaintyResponse.decode(value),
   },
   cancelTurn: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/CancelTurn" as const,
@@ -3212,6 +3793,10 @@ export const ProjectConversationServiceService = {
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
   listProviderCalls: handleUnaryCall<ListProviderCallsRequest, ListProviderCallsResponse>;
+  acknowledgeProviderUncertainty: handleUnaryCall<
+    AcknowledgeProviderUncertaintyRequest,
+    AcknowledgeProviderUncertaintyResponse
+  >;
   cancelTurn: handleUnaryCall<CancelTurnRequest, CancelTurnResponse>;
   createConversation: handleUnaryCall<CreateConversationRequest, CreateConversationResponse>;
   sendMessage: handleUnaryCall<SendMessageRequest, SendMessageResponse>;
@@ -3238,6 +3823,21 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListProviderCallsResponse) => void,
+  ): ClientUnaryCall;
+  acknowledgeProviderUncertainty(
+    request: AcknowledgeProviderUncertaintyRequest,
+    callback: (error: ServiceError | null, response: AcknowledgeProviderUncertaintyResponse) => void,
+  ): ClientUnaryCall;
+  acknowledgeProviderUncertainty(
+    request: AcknowledgeProviderUncertaintyRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: AcknowledgeProviderUncertaintyResponse) => void,
+  ): ClientUnaryCall;
+  acknowledgeProviderUncertainty(
+    request: AcknowledgeProviderUncertaintyRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: AcknowledgeProviderUncertaintyResponse) => void,
   ): ClientUnaryCall;
   cancelTurn(
     request: CancelTurnRequest,

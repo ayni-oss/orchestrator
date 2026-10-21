@@ -40,7 +40,10 @@ async fn fixture(body: &'static str, delay: Duration) -> Fixture {
                     assert!(headers.get("x-client-request-id").is_some());
                     assert_eq!(request["store"], false);
                     assert_eq!(request["truncation"], "disabled");
-                    assert!(request.get("tools").is_none());
+                    assert_eq!(
+                        request["tools"],
+                        ayni_orchestrator_providers::responses::scoped_tools()
+                    );
                     count.fetch_add(1, Ordering::SeqCst);
                     notify.notify_one();
                     tokio::time::sleep(delay).await;
@@ -148,6 +151,7 @@ fn command(state: &WorkerState) -> PrepareInput {
             record_count: 1,
             inline_complete: true,
         }),
+        project_status: None,
     };
     let command_bytes = encode_command(
         &EventIdentity {
@@ -489,3 +493,6 @@ async fn credentials_appearing_after_worker_start_are_loaded_before_preparation(
     assert_eq!(result.response_content, "bounded answer");
     assert_eq!(fixture.count.load(Ordering::SeqCst), 1);
 }
+
+#[path = "provider_session/tool_tests.rs"]
+mod tool_tests;

@@ -3,7 +3,7 @@ layout: home
 hero:
   name: Ayni Orchestrator
   text: Durable workflow foundations
-  tagline: A contributor preview of isolated conversations, opt-in OpenAI responses and resumable updates.
+  tagline: A contributor preview of isolated conversations, opt-in OpenAI responses, scoped read tools and resumable updates.
   actions:
     - theme: brand
       text: View source
@@ -17,7 +17,7 @@ features:
   - title: Durable handoff
     details: Authenticated JetStream and retained conversation sessions keep broker storage, ownership claims, decisions, and accepted results distinct.
   - title: Private by construction
-    details: Canonical workflow gRPC binds to pod loopback. Contributors can resume updates; the local contributor console supports scripted and explicitly enabled OpenAI conversations, reported usage and cancellation. Shared access remains deferred.
+    details: Canonical workflow gRPC binds to pod loopback. Contributors can resume updates; the local contributor console supports scripted and explicitly enabled OpenAI conversations, reported usage, cancellation and explicit uncertainty acknowledgement. Shared access remains deferred.
 ---
 
 ## Contributor preview

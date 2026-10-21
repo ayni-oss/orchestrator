@@ -109,6 +109,10 @@ pub fn router(console: Console) -> Router {
         .with_state(console)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the bounded RPC allowlist is kept together for auditability"
+)]
 async fn rpc(
     State(console): State<Console>,
     Path(method): Path<String>,
@@ -189,6 +193,11 @@ async fn rpc(
             console.conversations(),
             list_provider_calls,
             v1::ListProviderCallsRequest
+        ),
+        "AcknowledgeProviderUncertainty" => forward!(
+            console.conversations(),
+            acknowledge_provider_uncertainty,
+            v1::AcknowledgeProviderUncertaintyRequest
         ),
         "CancelTurn" => forward!(console.conversations(), cancel_turn, v1::CancelTurnRequest),
         "SendMessage" => forward!(

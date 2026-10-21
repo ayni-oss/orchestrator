@@ -58,6 +58,7 @@ fn command() -> Vec<u8> {
             record_count: 1,
             inline_complete: false,
         }),
+        project_status: None,
     };
     encode_command(
         &EventIdentity {
