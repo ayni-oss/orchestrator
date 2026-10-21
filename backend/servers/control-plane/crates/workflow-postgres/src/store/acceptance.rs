@@ -178,6 +178,15 @@ impl WorkflowStore {
             decision.accepted = false;
             decision.safe_reason = "stale_generation";
         }
+        if decision.accepted {
+            if parsed.report.failure_reason == "provider_uncertain" {
+                decision.turn_state = "processing";
+            } else if super::provider_calls::cancellation_requested(&transaction, &binding.turn_id)
+                .await?
+            {
+                decision.turn_state = "failed";
+            }
+        }
         let receipt = insert_decision(
             &transaction,
             exact_report_bytes,
@@ -187,14 +196,48 @@ impl WorkflowStore {
         )
         .await?;
         if decision.accepted {
-            apply_terminal(&transaction, binding, &parsed.report, kind).await?;
-            super::sessions::finish_turn(&transaction, &binding.turn_id).await?;
-            promote_successor(&transaction, &binding.conversation_id).await?;
+            apply_accepted_outcome(&transaction, binding, &parsed.report, kind).await?;
         }
         transaction.commit().await?;
         driver.abort();
         Ok(receipt)
     }
+}
+
+async fn apply_accepted_outcome(
+    transaction: &Transaction<'_>,
+    binding: &ConversationTurnBinding,
+    report: &ConversationTurnReport,
+    kind: ConversationTurnReportKind,
+) -> Result<(), StoreError> {
+    let uncertain = super::provider_calls::retain_evidence(transaction, binding, report).await?;
+    let cancelled =
+        super::provider_calls::cancellation_requested(transaction, &binding.turn_id).await?;
+    if uncertain {
+        transaction.execute("UPDATE workflow_turns SET failure_reason='provider_uncertain',updated_at=clock_timestamp() WHERE id=$1", &[&binding.turn_id]).await?;
+        append_activity(
+            transaction,
+            binding,
+            "provider_uncertain",
+            "processing",
+            "",
+            "provider_uncertain",
+        )
+        .await?;
+    } else {
+        let mut terminal = report.clone();
+        let terminal_kind = if cancelled {
+            terminal.response_content.clear();
+            terminal.failure_reason = "cancelled".into();
+            ConversationTurnReportKind::Failed
+        } else {
+            kind
+        };
+        apply_terminal(transaction, binding, &terminal, terminal_kind).await?;
+        super::sessions::finish_turn(transaction, &binding.turn_id).await?;
+        promote_successor(transaction, &binding.conversation_id).await?;
+    }
+    Ok(())
 }
 
 fn parse_report(
@@ -695,7 +738,7 @@ pub(super) async fn append_activity(
     Ok(())
 }
 
-async fn promote_successor(
+pub(super) async fn promote_successor(
     transaction: &Transaction<'_>,
     conversation_id: &str,
 ) -> Result<(), StoreError> {

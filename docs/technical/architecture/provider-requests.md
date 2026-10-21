@@ -1,18 +1,17 @@
 # Provider request contract
 
 This is the provider safety mechanism required by the
-[conversation execution contract](conversation-execution.md). It is a binding
-entry contract for M2 PR 3, not a claim of implemented provider execution.
+[conversation execution contract](conversation-execution.md). It is the binding
+contract for the OpenAI execution path in isolated conversation sessions.
 All Orchestrator-owned types and retained formats remain v1 through alpha.
 
 ## Provider selection
 
-The initial provider is **OpenAI**. The repository already has a bounded OpenAI
-client constructor in `backend/libs/providers`; retaining that boundary avoids
-adding another provider or agent framework. It is evidence of client setup,
-not evidence that M2 requests, persistence or cancellation work.
+The initial provider is **OpenAI**. The bounded Responses adapter in `backend/libs/providers` maps frozen conversation
+inputs to foreground requests. Session storage owns request lifecycle and result
+retention; the control plane owns admission, cancellation and visible acceptance.
 
-PR 3 uses an explicitly configured model with the Responses API, foreground
+Execution uses an explicitly configured model with the Responses API, foreground
 execution and `store: false`. Supply the frozen context on each call; do not use
 provider conversation IDs or `previous_response_id` as conversation authority.
 OpenAI documents both client-managed and provider-managed

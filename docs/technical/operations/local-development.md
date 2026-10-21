@@ -1,7 +1,7 @@
 # Local development
 
 The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted supervisor on Docker Desktop Kubernetes. The supervisor
-provisions isolated scripted workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
+provisions isolated conversation workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ The pinned broker provisions three file-backed, `discard=new` streams:
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 9, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 10, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -86,9 +86,9 @@ bounded slow-reader replay burst; real retention/backpressure is covered by the
 cumulative PostgreSQL gate. `CONSOLE_URL=http://127.0.0.1:3001` selects another local console port;
 `CONSOLE_EVIDENCE_DIRECTORY=/absolute/path` additionally saves a screenshot.
 
-The console is a trusted local contributor surface using the scripted executor;
-shared configuration and isolated scripted session controls are available now.
-Paid provider calls and bounded tools remain later M2 scopes. See [console architecture](../architecture/contributor-console.md)
+The console is a trusted local contributor surface with scripted execution by
+default. Shared configuration, isolated sessions, opt-in OpenAI calls, reported
+usage and cancellation are available. Bounded tools remain the next M2 scope. See [console architecture](../architecture/contributor-console.md)
 for the transport decision, bounds, security and recovery semantics.
 
 ## Shared configuration and session controls
@@ -101,8 +101,9 @@ queued turns. Configuration edits from a stale tab are rejected; refresh the
 resources and review the current instructions before saving again.
 
 `scripted`/`scripted` is the default provider/model. Selecting OpenAI requires an
-explicit model and records desired configuration only. Execution remains scripted;
-no provider credential or paid call is enabled. The fixed interface version is
+explicit model. Newly admitted turns retain that provider binding; deployment
+enablement and a workspace-scoped credential mounted directly into the worker
+are required before a paid call. Existing admitted scripted turns remain scripted. The fixed interface version is
 v1; displayed configuration revision IDs identify immutable content.
 
 Open **Session** in a conversation's activity panel and select **Refresh session**.
@@ -126,7 +127,7 @@ Idle expiry preserves retained evidence. Restart within a valid generation
 adopts its retained identity and storage. Work after expiry or replacement starts
 the next generation with separate storage. Replacing a generation preserves accepted
 conversation history; it does not authorize deleting ledger volumes or retrying
-uncertain future provider calls. See [session authority](../architecture/conversation-execution.md#isolated-session-authority)
+uncertain provider calls. See [session authority](../architecture/conversation-execution.md#isolated-session-authority)
 for the full lifecycle contract.
 
 The supervisor provisions workers in `<workflow-namespace>-sessions`, for example
@@ -134,8 +135,38 @@ The supervisor provisions workers in `<workflow-namespace>-sessions`, for exampl
 characters. Each generation has a distinct 512 MiB result-ledger PVC and immutable
 bearer Secret. A worker mounts neither broker/database credentials nor a Kubernetes
 API token. Its request listener checks the bearer and complete parent scope.
-NetworkPolicy declares supervisor-only ingress and denied worker egress;
+NetworkPolicy declares supervisor-only ingress and an explicit provider egress policy;
 enforcement depends on the local cluster network plugin.
+
+## Provider conversations and recovery
+
+Select **OpenAI** and an explicit model in shared configuration only after the
+operator enables OpenAI execution and configures a workspace-scoped credential
+for direct session injection. Never paste credentials into instructions, messages
+or the browser configuration form. Provider credentials do not pass through the
+console, canonical API, broker or transcript.
+
+The **Provider calls and usage** panel shows retained call IDs, the frozen
+provider/model, reservations and nullable reported usage. **Unknown** means the
+provider did not report that counter; it does not mean zero usage. Select
+**Refresh provider calls** to reread the retained projection.
+
+Use **Cancel turn** to cancel a specific queued or active turn. Disconnecting a
+watch only stops observation. An ambiguous cancellation command retains its exact
+turn, scope and command key; **Retry the same command** replays it. A sending or
+uncertain call may have incurred cost even after cancellation is requested.
+
+An uncertain external outcome blocks automatic resending and session retirement.
+Restore the retained worker ledger and reconcile the exact call ID. Do not delete
+its PVC, replace its identity or generate a new attempt to make the warning go
+away. This delivery exposes retained evidence and holds uncertain calls; it
+does not provide a reconciliation override or new-attempt command. Accepted results replay from retained evidence and appear once.
+
+The deterministic [provider fixture](../../../dev/fixtures/provider/README.md)
+exercises request mapping, reported and missing usage, uncertainty, cancellation
+receipts and reconnect without a real provider credential. Its browser acceptance
+is separate from the scripted console suite and does not establish real-provider
+latency or availability. Bounded tools and the complete M2 matrix remain later work.
 
 ## Happy-path diagnostic
 
@@ -202,7 +233,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 9, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 10, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:

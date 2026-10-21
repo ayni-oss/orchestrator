@@ -162,4 +162,47 @@ bash -n \
   "$repository_root/dev/scripts/deploy.sh" \
   "$repository_root/dev/scripts/check.sh"
 
-echo "Helm authenticated workflow Slice 2 checks passed"
+# Real calls require deployment opt-in; credentials are still mounted only by
+# kubelet into the assigned session, never rendered as values or worker env.
+grep -q 'name: session-authority' "$reusable_render"
+grep -q 'name: ORCHESTRATOR_SESSION_AUTHORITY_URL' <<<"$executor_container"
+grep -q 'name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH' <<<"$control_container"
+grep -q 'name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH' <<<"$executor_container"
+grep -q 'secretName: "workflow-session-authority"' "$reusable_render"
+! grep -q 'name: OPENAI_BASE_URL' "$reusable_render"
+! grep -q 'key: api-key' "$reusable_render"
+! grep -q 'port: 443' "$reusable_render"
+grep -A1 'name: ORCHESTRATOR_OPENAI_ENABLED' "$reusable_render" | grep -q 'value: "false"'
+provider_render="$scratch/provider.yaml"
+helm template provider "$reusable_chart" --namespace test \
+  --set providers.openai.enabled=true > "$provider_render"
+grep -q 'secretName: "workflow-session-authority"' "$provider_render"
+grep -q 'ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH' "$provider_render"
+grep -q 'value: "https://api.openai.com/v1"' "$provider_render"
+grep -q 'port: 443' "$provider_render"
+! grep -q 'key: api-key' "$provider_render"
+! grep -q '^kind: Secret$' "$provider_render"
+fixture_render="$scratch/fixture.yaml"
+helm template fixture "$reusable_chart" --namespace test \
+  --set providers.openai.enabled=true --set providers.openai.fixtureEgress=true \
+  --set-string providers.openai.baseUrl=http://provider-fixture.test.svc:8080/v1 > "$fixture_render"
+grep -q 'app: provider-fixture' "$fixture_render"
+! grep -q 'cidr: 0.0.0.0/0' "$fixture_render"
+if helm template invalid "$reusable_chart" \
+  --set providers.openai.enabled=true --set-string providers.openai.baseUrl=http://arbitrary.example/v1 >/dev/null 2>&1; then
+  echo "provider chart accepted cleartext outside its scoped fixture profile" >&2
+  exit 1
+fi
+if helm template invalid "$reusable_chart" \
+  --set providers.openai.enabled=true --set providers.openai.fixtureEgress=true \
+  --set-string providers.openai.baseUrl=http://arbitrary.example/v1 >/dev/null 2>&1; then
+  echo "provider fixture profile accepted an unrelated endpoint" >&2
+  exit 1
+fi
+if helm template invalid "$reusable_chart" \
+  --set-string providers.sessionAuthoritySecretName=workflow-jetstream-executor >/dev/null 2>&1; then
+  echo "provider chart accepted aliased authority and broker Secrets" >&2
+  exit 1
+fi
+
+echo "Helm authenticated workflow and provider isolation checks passed"

@@ -34,7 +34,10 @@ fn namespace() -> RuntimeResult<String> {
     Ok(value)
 }
 
-pub async fn execute(configuration: &Configuration, command_bytes: &[u8]) -> RuntimeResult<String> {
+pub async fn execute(
+    configuration: &Configuration,
+    command_bytes: &[u8],
+) -> RuntimeResult<ExecutionResult> {
     let (identity, _, command) = decode_command(command_bytes)?;
     let scope = command
         .session
@@ -69,6 +72,9 @@ pub async fn execute(configuration: &Configuration, command_bytes: &[u8]) -> Run
     let http = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
+    if binding.execution_binding_revision == "openai-responses-v1" {
+        return execute_provider(&http, &address, &token, command_bytes).await;
+    }
     let mut response = http
         .post(format!("http://{address}:8081/v1/execute"))
         .bearer_auth(&token)
@@ -91,7 +97,7 @@ pub async fn execute(configuration: &Configuration, command_bytes: &[u8]) -> Run
     if response.command_id != identity.id || response.command_digest != digest(command_bytes) {
         return Err(io::Error::other("session result binding mismatch").into());
     }
-    Ok(response.response_content)
+    Ok(response)
 }
 
 async fn ensure_storage(
@@ -170,15 +176,23 @@ async fn ensure_pod(
     binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
     image: &str,
 ) -> RuntimeResult {
+    let endpoint = if env::var("ORCHESTRATOR_OPENAI_ENABLED").as_deref() == Ok("true") {
+        Some(env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".into()))
+    } else {
+        None
+    };
+    let pod = desired_pod(name, scope, binding, image, endpoint.as_deref())?;
     if let Some(existing) = api.get_opt(name).await? {
         verify_labels(existing.metadata.labels.as_ref(), scope)?;
         let phase = existing
             .status
             .as_ref()
             .and_then(|status| status.phase.as_deref());
-        if !matches!(phase, Some("Succeeded" | "Failed")) {
+        if !matches!(phase, Some("Succeeded" | "Failed")) && same_recipe(&existing, &pod) {
             return Ok(());
         }
+        // Adopt the same retained generation/PVC. A sending ledger survives this
+        // process restart as uncertainty; changing a workload never admits a call.
         let delete = DeleteParams {
             preconditions: Some(kube::api::Preconditions {
                 uid: existing.metadata.uid,
@@ -187,17 +201,83 @@ async fn ensure_pod(
             ..DeleteParams::default()
         };
         api.delete(name, &delete).await?;
-        for _ in 0..60 {
-            if api.get_opt(name).await?.is_none() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
+        wait_deleted(api, name).await?;
     }
-    let pod: Pod = serde_json::from_value(
+    create_or_race(api.create(&PostParams::default(), &pod).await)
+}
+
+fn desired_pod(
+    name: &str,
+    scope: &SessionExecutionScope,
+    binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
+    image: &str,
+    provider_endpoint: Option<&str>,
+) -> RuntimeResult<Pod> {
+    let mut pod: Pod = serde_json::from_value(
         json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"labels":labels(scope)},"spec":{"automountServiceAccountToken":false,"restartPolicy":"Never","terminationGracePeriodSeconds":10,"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"runAsGroup":10001,"fsGroup":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"session","image":image,"imagePullPolicy":"IfNotPresent","args":["session-worker"],"env":[{"name":"ORCHESTRATOR_SESSION_ID","value":scope.session_id},{"name":"ORCHESTRATOR_SESSION_GENERATION","value":scope.generation.to_string()},{"name":"ORCHESTRATOR_SESSION_CONVERSATION_ID","value":binding.conversation_id},{"name":"ORCHESTRATOR_SESSION_WORKSPACE_ID","value":binding.workspace_id},{"name":"ORCHESTRATOR_SESSION_PROJECT_ID","value":binding.project_id},{"name":"ORCHESTRATOR_SESSION_IDLE_SECONDS","value":scope.idle_timeout_seconds.to_string()},{"name":"ORCHESTRATOR_SESSION_TOKEN_PATH","value":"/var/run/session/token"},{"name":"ORCHESTRATOR_SESSION_LEDGER_PATH","value":"/var/lib/ayni-session/results.sqlite"}],"ports":[{"name":"session","containerPort":8081}],"readinessProbe":{"httpGet":{"path":"/health","port":"session"},"periodSeconds":1},"resources":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"cpu":"500m","memory":"256Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},"volumeMounts":[{"name":"ledger","mountPath":"/var/lib/ayni-session"},{"name":"token","mountPath":"/var/run/session","readOnly":true}]}],"volumes":[{"name":"ledger","persistentVolumeClaim":{"claimName":name}},{"name":"token","secret":{"secretName":name,"items":[{"key":"token","path":"token"}]}}]}}),
     )?;
-    create_or_race(api.create(&PostParams::default(), &pod).await)
+    if let Some(endpoint) = provider_endpoint {
+        let workspace = uuid::Uuid::parse_str(&binding.workspace_id)?;
+        let spec = pod
+            .spec
+            .as_mut()
+            .ok_or_else(|| io::Error::other("session Pod invalid"))?;
+        let container = spec
+            .containers
+            .first_mut()
+            .ok_or_else(|| io::Error::other("session Pod invalid"))?;
+        container
+            .env
+            .get_or_insert_default()
+            .extend(serde_json::from_value::<
+                Vec<k8s_openapi::api::core::v1::EnvVar>,
+            >(json!([
+                {"name":"ORCHESTRATOR_OPENAI_API_KEY_PATH","value":"/var/run/provider/api-key"},
+                {"name":"OPENAI_BASE_URL","value":endpoint}
+            ]))?);
+        container
+            .volume_mounts
+            .get_or_insert_default()
+            .push(serde_json::from_value(
+                json!({"name":"provider","mountPath":"/var/run/provider","readOnly":true}),
+            )?);
+        spec.volumes.get_or_insert_default().push(serde_json::from_value(json!({"name":"provider","secret":{"secretName":format!("provider-openai-{}",workspace.simple()),"items":[{"key":"api-key","path":"api-key"}],"optional":true}}))?);
+    }
+    let mut recipe_spec = pod.spec.clone();
+    if let Some(spec) = recipe_spec.as_mut() {
+        for container in &mut spec.containers {
+            if let Some(env) = container.env.as_mut() {
+                env.retain(|entry| entry.name != "ORCHESTRATOR_SESSION_IDLE_SECONDS");
+            }
+        }
+    }
+    let recipe = digest(&serde_json::to_vec(&recipe_spec)?);
+    pod.metadata
+        .annotations
+        .get_or_insert_default()
+        .insert("build.ayni/session-recipe-digest".into(), recipe);
+    Ok(pod)
+}
+
+fn same_recipe(existing: &Pod, desired: &Pod) -> bool {
+    let recipe = |pod: &Pod| {
+        pod.metadata
+            .annotations
+            .as_ref()
+            .and_then(|annotations| annotations.get("build.ayni/session-recipe-digest"))
+            .cloned()
+    };
+    recipe(existing).is_some() && recipe(existing) == recipe(desired)
+}
+
+async fn wait_deleted(api: &Api<Pod>, name: &str) -> RuntimeResult {
+    for _ in 0..120 {
+        if api.get_opt(name).await?.is_none() {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    Err(io::Error::other("session restart waiting for retained workload termination").into())
 }
 
 async fn wait_address(api: &Api<Pod>, name: &str) -> RuntimeResult<String> {
@@ -423,3 +503,231 @@ mod tests {
         Ok(())
     }
 }
+
+#[derive(serde::Deserialize)]
+struct Authority {
+    #[serde(default)]
+    records: Vec<ayni_orchestrator_events::v1::ConversationContextRecord>,
+    #[serde(default)]
+    next_after_ordinal: u64,
+    #[serde(default)]
+    allowed: bool,
+    #[serde(default)]
+    cancellation_requested: bool,
+    #[serde(default)]
+    state: String,
+}
+
+struct ProviderRuntime {
+    enabled: bool,
+    authority_url: String,
+    authority_token: String,
+}
+
+impl ProviderRuntime {
+    fn from_environment() -> RuntimeResult<Self> {
+        let path = env::var("ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH")
+            .map_err(|_| io::Error::other("session authority unavailable"))?;
+        let authority_token = std::fs::read_to_string(path)
+            .map_err(|_| io::Error::other("session authority unavailable"))?;
+        let authority_url = env::var("ORCHESTRATOR_SESSION_AUTHORITY_URL")
+            .map_err(|_| io::Error::other("session authority unavailable"))?;
+        Ok(Self {
+            enabled: env::var("ORCHESTRATOR_OPENAI_ENABLED").as_deref() == Ok("true"),
+            authority_url,
+            authority_token,
+        })
+    }
+}
+
+async fn authority(
+    http: &reqwest::Client,
+    body: serde_json::Value,
+    runtime: &ProviderRuntime,
+) -> RuntimeResult<Authority> {
+    let response = http
+        .post(&runtime.authority_url)
+        .bearer_auth(runtime.authority_token.trim())
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()?;
+    bounded_json(response, 256 * 1024).await
+}
+
+async fn bounded_json<T: serde::de::DeserializeOwned>(
+    mut response: reqwest::Response,
+    maximum: usize,
+) -> RuntimeResult<T> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len() + chunk.len() > maximum {
+            return Err(io::Error::other("session response bound exceeded").into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+async fn execute_provider(
+    http: &reqwest::Client,
+    address: &str,
+    token: &str,
+    command_bytes: &[u8],
+) -> RuntimeResult<ExecutionResult> {
+    let runtime = ProviderRuntime::from_environment()?;
+    execute_provider_with_runtime(
+        http,
+        &format!("http://{address}:8081"),
+        token,
+        command_bytes,
+        &runtime,
+    )
+    .await
+}
+
+async fn execute_provider_with_runtime(
+    http: &reqwest::Client,
+    worker_url: &str,
+    token: &str,
+    command_bytes: &[u8],
+    runtime: &ProviderRuntime,
+) -> RuntimeResult<ExecutionResult> {
+    use crate::session_worker::provider_session::{
+        CancelInput, Preparation, PrepareInput, SendInput,
+    };
+    let (identity, _, command) = decode_command(command_bytes)?;
+    let command_digest = digest(command_bytes);
+    let failure = |reason: &str| ExecutionResult {
+        command_id: identity.id.clone(),
+        command_digest: command_digest.clone(),
+        response_content: String::new(),
+        failure_reason: reason.into(),
+        provider_call: None,
+    };
+    let mut records = Vec::new();
+    let mut after = 0;
+    loop {
+        let page = authority(
+            http,
+            json!({"command_bytes":command_bytes,"action":"context","after_ordinal":after}),
+            runtime,
+        )
+        .await?;
+        if records.len() + page.records.len() > 10000 {
+            return Ok(failure("provider_input_limit"));
+        }
+        records.extend(page.records);
+        let bytes = records.iter().try_fold(0_usize, |sum, record| {
+            sum.checked_add(record.content.len() + 128)
+        });
+        let input_bound = command
+            .frozen_configuration
+            .as_ref()
+            .map_or(0, |config| config.max_input_tokens);
+        if bytes.is_none_or(|bytes| u64::try_from(bytes).unwrap_or(u64::MAX) > input_bound) {
+            return Ok(failure("provider_input_limit"));
+        }
+        if page.next_after_ordinal == 0 {
+            break;
+        }
+        if page.next_after_ordinal <= after {
+            return Err(io::Error::other("context cursor invalid").into());
+        }
+        after = page.next_after_ordinal;
+    }
+    let prepared = http
+        .post(format!("{worker_url}/v1/provider-prepare"))
+        .bearer_auth(token)
+        .json(&PrepareInput {
+            command_bytes: command_bytes.to_vec(),
+            context: records,
+        })
+        .send()
+        .await?;
+    if prepared.status() == reqwest::StatusCode::FAILED_DEPENDENCY {
+        return Ok(failure("provider_credentials_unavailable"));
+    }
+    if matches!(
+        prepared.status(),
+        reqwest::StatusCode::UNPROCESSABLE_ENTITY | reqwest::StatusCode::PAYLOAD_TOO_LARGE
+    ) {
+        return Ok(failure("provider_input_limit"));
+    }
+    let prepared: Preparation = bounded_json(prepared.error_for_status()?, 64 * 1024).await?;
+    if let Some(result) = prepared.result {
+        return validate_result(result, &identity.id, &command_digest);
+    }
+    let disabled = !runtime.enabled;
+    let permit = provider_permit(http, command_bytes, &prepared, runtime).await?;
+    let disabled_without_call = disabled && permit.state == "cancelled";
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(150))
+        .retry(reqwest::retry::never())
+        .build()?;
+    let send = client
+        .post(format!("{worker_url}/v1/provider-send"))
+        .bearer_auth(token)
+        .json(&SendInput {
+            command_id: identity.id.clone(),
+            request_digest: prepared.request_digest,
+            allowed: permit.allowed,
+            state: permit.state,
+        })
+        .send();
+    tokio::pin!(send);
+    let mut interval = tokio::time::interval(Duration::from_millis(250));
+    let mut stopped = false;
+    loop {
+        tokio::select! {
+            response=&mut send=>{let response:ExecutionResult=bounded_json(response?.error_for_status()?,64*1024).await?;if disabled_without_call {return Ok(failure("provider_credentials_unavailable"));} return validate_result(response,&identity.id,&command_digest);}
+            _=interval.tick(),if !stopped=>{
+                let cancellation=authority(http,json!({"command_bytes":command_bytes,"action":"poll"}),runtime).await;
+                if cancellation.as_ref().map_or(true, |state|state.cancellation_requested) {
+                    http.post(format!("{worker_url}/v1/cancel")).bearer_auth(token).json(&CancelInput {command_id:identity.id.clone(),command_digest:command_digest.clone()}).send().await?.error_for_status()?;
+                    stopped=true;
+                }
+            }
+        }
+    }
+}
+
+async fn provider_permit(
+    http: &reqwest::Client,
+    command_bytes: &[u8],
+    prepared: &crate::session_worker::provider_session::Preparation,
+    runtime: &ProviderRuntime,
+) -> RuntimeResult<Authority> {
+    if runtime.enabled {
+        return authority(http,json!({"command_bytes":command_bytes,"action":"admit","call_id":prepared.call_id,"request_digest":prepared.request_digest,"context_digest":prepared.context_digest,"reserved_input_tokens":prepared.reserved_input_tokens,"reserved_output_tokens":prepared.reserved_output_tokens,"reserved_total_tokens":prepared.reserved_total_tokens}),runtime).await;
+    }
+    let mut prior = authority(
+        http,
+        json!({"command_bytes":command_bytes,"action":"poll"}),
+        runtime,
+    )
+    .await?;
+    prior.allowed = false;
+    if !matches!(prior.state.as_str(), "sending" | "uncertain") {
+        prior.state = "cancelled".into();
+    }
+    Ok(prior)
+}
+
+fn validate_result(
+    result: ExecutionResult,
+    command_id: &str,
+    command_digest: &str,
+) -> RuntimeResult<ExecutionResult> {
+    if result.command_id != command_id
+        || result.command_digest != command_digest
+        || result.response_content.len() > 16384
+    {
+        return Err(io::Error::other("session result binding mismatch").into());
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+#[path = "session_supervisor_tests.rs"]
+mod provider_recovery_tests;

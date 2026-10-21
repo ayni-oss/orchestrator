@@ -391,6 +391,7 @@ pub(super) async fn record_message_admission(
     let context_revision = record_message_and_turn(transaction, &message).await?;
     super::configuration::freeze_turn_inputs(transaction, message.workspace_id, message.turn_id)
         .await?;
+    transaction.execute("UPDATE workflow_turns t SET execution_binding_revision=CASE c.provider WHEN 'openai' THEN 'openai-responses-v1' ELSE 'scripted-v1' END FROM workflow_turn_inputs i JOIN workflow_agent_configurations c ON c.workspace_id=i.workspace_id AND c.revision_id=i.configuration_revision_id WHERE t.id=$1 AND i.turn_id=t.id", &[&message.turn_id]).await?;
     let waiting_on = if message.eligible {
         "delivery"
     } else {
@@ -546,6 +547,10 @@ async fn command_context(
         .collect()
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "command bytes, dispatch intent and outbox are materialized atomically"
+)]
 pub(super) async fn materialize_command(
     transaction: &Transaction<'_>,
     command: CommandMaterialization<'_>,
@@ -573,6 +578,13 @@ pub(super) async fn materialize_command(
         )
         .await?
         .get(0);
+    let execution_binding_revision: String = transaction
+        .query_one(
+            "SELECT execution_binding_revision FROM workflow_turns WHERE id=$1",
+            &[&command.turn_id],
+        )
+        .await?
+        .get(0);
     let mut payload = ConversationTurnRequested {
         binding: Some(ConversationTurnBinding {
             workspace_id: command.workspace_id.to_owned(),
@@ -581,7 +593,7 @@ pub(super) async fn materialize_command(
             turn_id: command.turn_id.to_owned(),
             assignment_id: command.assignment_id.to_owned(),
             executor_generation,
-            execution_binding_revision: EXECUTION_BINDING.to_owned(),
+            execution_binding_revision,
             context_revision: unsigned(command.context_revision)?,
             command_event_id: event_id.clone(),
             command_digest: String::new(),

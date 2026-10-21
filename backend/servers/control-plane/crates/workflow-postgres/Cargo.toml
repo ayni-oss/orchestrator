@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 ayni-orchestrator-events = { path = "../../../../libs/events" }
 sha2.workspace = true
+serde.workspace = true
+prost.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }

@@ -277,6 +277,75 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn list_provider_calls(
+        &self,
+        request: Request<v1::ListProviderCallsRequest>,
+    ) -> Result<Response<v1::ListProviderCallsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let calls = self
+            .store
+            .list_provider_calls(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+            )
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::ListProviderCallsResponse {
+            calls: calls
+                .into_iter()
+                .map(|call| {
+                    let evidence = call.evidence;
+                    v1::ProviderCall {
+                        turn_id: call.turn_id,
+                        call_id: evidence.call_id,
+                        provider: evidence.provider,
+                        model: evidence.model,
+                        state: call.state,
+                        input_tokens: evidence.input_tokens,
+                        output_tokens: evidence.output_tokens,
+                        total_tokens: evidence.total_tokens,
+                        reserved_input_tokens: evidence.reserved_input_tokens,
+                        reserved_output_tokens: evidence.reserved_output_tokens,
+                        reserved_total_tokens: evidence.reserved_total_tokens,
+                        cancellation_requested: call.cancellation_requested,
+                        safe_reason: call.safe_reason,
+                        response_id: evidence.response_id,
+                        reported_model: evidence.reported_model,
+                        request_digest: evidence.request_digest,
+                        context_digest: evidence.context_digest,
+                        configuration_revision_id: evidence.configuration_revision_id,
+                    }
+                })
+                .collect(),
+        }))
+    }
+    async fn cancel_turn(
+        &self,
+        request: Request<v1::CancelTurnRequest>,
+    ) -> Result<Response<v1::CancelTurnResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let result = self
+            .store
+            .cancel_turn(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+                &value.turn_id,
+                &value.idempotency_key,
+            )
+            .await
+            .map_err(|e| context.store(&e))?;
+        Ok(context.response(v1::CancelTurnResponse {
+            command_id: result.command_id,
+            turn_id: result.turn_id,
+            state: result.state,
+            cancellation_requested: result.cancellation_requested,
+        }))
+    }
+
     async fn list_conversation_sessions(
         &self,
         request: Request<v1::ListConversationSessionsRequest>,
@@ -790,6 +859,8 @@ fn activity(value: model::Activity) -> v1::Activity {
             "terminal" => v1::ActivityStage::Terminal,
             "provisioning" => v1::ActivityStage::Provisioning,
             "agent_wakeup" => v1::ActivityStage::AgentWakeup,
+            "provider_request" => v1::ActivityStage::ProviderRequest,
+            "provider_uncertain" => v1::ActivityStage::ProviderUncertain,
             _ => v1::ActivityStage::Unspecified,
         } as i32,
         presentation_state: presentation(value.presentation_state),

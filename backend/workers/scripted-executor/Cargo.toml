@@ -15,6 +15,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 async-nats.workspace = true
+ayni-orchestrator-providers = { path = "../../libs/providers" }
 ayni-orchestrator-events = { path = "../../libs/events" }
 futures-util.workspace = true
 ed25519-dalek.workspace = true

@@ -1,9 +1,8 @@
 # Contributor conversation console
 
-The local contributor console exercises the canonical workflow with the retained
-scripted executor. It is maintained through M2, where real isolated sessions and
-provider conversations will use the same surface. Shared configuration and
-scripted session inspection/replacement use canonical v1 methods.
+The local contributor console exercises the canonical workflow with retained
+isolated sessions. Shared configuration, scripted or OpenAI execution, provider
+usage, cancellation and session inspection/replacement use canonical v1 methods.
 
 ## Access and authority
 
@@ -54,8 +53,8 @@ and [gRPC-Web's supported transports](https://github.com/grpc/grpc-web#streaming
 The workspace configuration editor reads and updates the canonical immutable
 configuration snapshot. Updates carry the displayed expected revision and the
 same retained idempotency key on retry. A stale edit fails without changing the
-current configuration. Desired provider/model settings are visible while actual
-execution remains scripted. Existing admitted turns keep their frozen inputs.
+current configuration. Provider/model settings apply at admission. Actual provider calls and reported
+usage appear separately in the conversation panel. Existing admitted turns keep their frozen inputs.
 
 The conversation session panel lists scoped retained generations and exposes
 idle replacement. A replacement command binds the exact expected generation.
@@ -66,6 +65,29 @@ reuses the original command.
 
 The next eligible message wakes a new generation. Session controls and
 configuration edits retain the gateway's existing authority and credential boundary.
+
+## Provider usage and cancellation
+
+**Provider calls and usage** lists retained calls for the selected conversation.
+Each entry shows its frozen provider/model, call and turn IDs, state, reserved
+allowance and reported token usage. An omitted usage counter displays **Unknown**;
+it never becomes zero. Currency cost is not inferred from token counts. The list
+refreshes after workflow updates, on reconnect and with **Refresh provider calls**.
+Assistant transcript labels do not imply a specific provider.
+
+**Cancel turn** binds the exact active or queued turn and uses the same retained
+command retry mechanism as message admission. Closing the watch or tab does not
+cancel accepted work. Cancellation can stop work before sending; it cannot prove
+that an in-flight foreground request was revoked or refunded. Results and usage
+already retained remain factual evidence even when cancellation wins visible
+terminal acceptance.
+
+An uncertain call keeps its identity, reservation and recovery evidence. The
+panel explains that it will not be retried automatically. Refresh, reconnect,
+Pod replacement and cancellation cannot resolve uncertainty. The operator must
+reconcile the exact call and its retained evidence before authorizing further
+work. Uncertain calls remain held: this delivery has no reconciliation override or
+new-attempt command. The console cannot silently repeat a paid call.
 
 ## Discovery, history and retries
 

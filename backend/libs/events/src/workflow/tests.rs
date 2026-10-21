@@ -83,6 +83,7 @@ fn report_signature_bytes_are_stable_and_signature_is_excluded() -> Result<(), C
         signing_public_key: public_key.to_vec(),
         signing_key_digest: signing_key_digest(&public_key),
         signature: vec![],
+        provider_call: None,
         ..Default::default()
     };
     let expected = report_signing_bytes(&identity, &payload)?;
@@ -322,4 +323,26 @@ fn execution_inputs_and_session_scope_are_bounded_and_bound_to_the_command()
         .instructions = "a".repeat(MAX_CONTENT_BYTES + 1);
     assert!(encode_command(&identity, &metadata, &payload).is_err());
     Ok(())
+}
+
+#[test]
+fn provider_usage_preserves_unknown_and_rejects_inconsistent_or_unbounded_counts() {
+    use crate::v1::ProviderCallEvidence;
+    let mut call = ProviderCallEvidence::default();
+    assert!(provider_counters_valid(&call));
+    assert_eq!(call.total_tokens, None);
+    call.input_tokens = Some(0);
+    call.output_tokens = Some(0);
+    call.total_tokens = Some(0);
+    assert!(provider_counters_valid(&call));
+    call.input_tokens = Some(4);
+    call.output_tokens = Some(2);
+    call.total_tokens = Some(5);
+    assert!(!provider_counters_valid(&call));
+    call.output_tokens = None;
+    call.total_tokens = Some(3);
+    assert!(!provider_counters_valid(&call));
+    call.input_tokens = Some(u64::MAX);
+    call.total_tokens = None;
+    assert!(!provider_counters_valid(&call));
 }

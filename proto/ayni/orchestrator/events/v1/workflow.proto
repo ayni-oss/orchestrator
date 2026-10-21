@@ -54,9 +54,10 @@ message ConversationTurnReport {
   bytes signing_public_key = 5;
   string signing_key_digest = 6;
   string response_content = 7;
-  // Closed classification code; currently only "script_failed". Never raw executor diagnostics.
+  // Closed safe classification code. Never raw executor or provider diagnostics.
   string failure_reason = 8;
   bytes signature = 9;
+  ProviderCallEvidence provider_call = 10;
 }
 
 enum ConversationReportDecisionKind {
@@ -102,4 +103,24 @@ message ConversationContextManifest {
   string digest = 2;
   uint64 record_count = 3;
   bool inline_complete = 4;
+}
+
+// Retained facts from one foreground call. Missing usage remains unknown.
+message ProviderCallEvidence {
+  string call_id = 1;
+  string provider = 2;
+  string model = 3;
+  string configuration_revision_id = 4;
+  string context_digest = 5;
+  string request_digest = 6;
+  string response_id = 7;
+  string reported_model = 8;
+  optional uint64 input_tokens = 9;
+  optional uint64 output_tokens = 10;
+  optional uint64 total_tokens = 11;
+  uint64 reserved_input_tokens = 12;
+  uint64 reserved_output_tokens = 13;
+  uint64 reserved_total_tokens = 14;
+  // completed, failed, uncertain or cancelled; never raw provider diagnostics.
+  string state = 15;
 }

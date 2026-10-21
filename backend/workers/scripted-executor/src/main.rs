@@ -143,6 +143,7 @@ async fn run_connected(
                 let _ = session_supervisor::cleanup(configuration).await;
                 replay_quarantine(context, configuration, ledger).await?;
                 publish_pending_reports(context, ledger.pending_reports()?).await?;
+                execute_ready(context, configuration, ledger, None).await?;
                 commands_paused=false;
                 decisions_paused=false;
             }
@@ -259,6 +260,7 @@ fn claim_bytes(
         response_content: String::new(),
         failure_reason: String::new(),
         signature: Vec::new(),
+        provider_call: None,
     };
     sign_report(&identity, &mut report, &configuration.seed)?;
     Ok(encode_report(&identity, metadata, &report)?)
@@ -325,10 +327,16 @@ async fn execute_ready(
 ) -> RuntimeResult {
     for command in ledger.executable_commands()? {
         let (identity, metadata, payload) = decode_command(&command.exact_bytes)?;
-        let response_content = if payload.session.is_some() {
+        let result = if payload.session.is_some() {
             session_supervisor::execute(configuration, &command.exact_bytes).await?
         } else {
-            SCRIPTED_RESPONSE.to_owned()
+            session_worker::ExecutionResult {
+                command_id: identity.id.clone(),
+                command_digest: digest(&command.exact_bytes),
+                response_content: SCRIPTED_RESPONSE.to_owned(),
+                failure_reason: String::new(),
+                provider_call: None,
+            }
         };
         let binding = payload
             .binding
@@ -346,13 +354,18 @@ async fn execute_ready(
                 command_digest: digest(&command.exact_bytes),
                 ..binding
             }),
-            kind: ConversationTurnReportKind::Completed.into(),
+            kind: if result.failure_reason.is_empty() {
+                ConversationTurnReportKind::Completed.into()
+            } else {
+                ConversationTurnReportKind::Failed.into()
+            },
             report_sequence: 2,
             executor_instance_id: configuration.instance_id.clone(),
             signing_public_key: Vec::new(),
             signing_key_digest: signing_key_digest(&public_key),
-            response_content,
-            failure_reason: String::new(),
+            response_content: result.response_content,
+            failure_reason: result.failure_reason,
+            provider_call: result.provider_call,
             signature: Vec::new(),
         };
         sign_report(&report_identity, &mut report, &configuration.seed)?;

@@ -257,6 +257,8 @@ dependencies = [
  "prost-types",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "subtle",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -320,7 +322,10 @@ version = "0.1.0"
 name = "ayni-orchestrator-providers"
 version = "0.1.0"
 dependencies = [
+ "reqwest",
  "rig-core",
+ "serde",
+ "serde_json",
  "url",
 ]
 
@@ -342,6 +347,7 @@ dependencies = [
  "async-nats",
  "axum",
  "ayni-orchestrator-events",
+ "ayni-orchestrator-providers",
  "ed25519-dalek",
  "futures-util",
  "k8s-openapi",
@@ -385,6 +391,8 @@ version = "0.1.0"
 dependencies = [
  "ayni-orchestrator-events",
  "ed25519-dalek",
+ "prost",
+ "serde",
  "sha2 0.10.9",
  "thiserror",
  "tokio",

@@ -148,6 +148,52 @@ export interface ReplaceConversationSessionResponse {
   session?: ConversationSession | undefined;
 }
 
+export interface ListProviderCallsRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+}
+
+export interface ProviderCall {
+  turnId: string;
+  callId: string;
+  provider: string;
+  model: string;
+  state: string;
+  inputTokens?: string | undefined;
+  outputTokens?: string | undefined;
+  totalTokens?: string | undefined;
+  reservedInputTokens: string;
+  reservedOutputTokens: string;
+  reservedTotalTokens: string;
+  cancellationRequested: boolean;
+  safeReason: string;
+  responseId: string;
+  reportedModel: string;
+  requestDigest: string;
+  contextDigest: string;
+  configurationRevisionId: string;
+}
+
+export interface ListProviderCallsResponse {
+  calls: ProviderCall[];
+}
+
+export interface CancelTurnRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  turnId: string;
+  idempotencyKey: string;
+}
+
+export interface CancelTurnResponse {
+  commandId: string;
+  turnId: string;
+  state: string;
+  cancellationRequested: boolean;
+}
+
 function createBaseCreateConversationRequest(): CreateConversationRequest {
   return { idempotencyKey: "", workspaceId: "", projectId: "", title: "" };
 }
@@ -2163,9 +2209,913 @@ export const ReplaceConversationSessionResponse: MessageFns<ReplaceConversationS
   },
 };
 
+function createBaseListProviderCallsRequest(): ListProviderCallsRequest {
+  return { workspaceId: "", projectId: "", conversationId: "" };
+}
+
+export const ListProviderCallsRequest: MessageFns<ListProviderCallsRequest> = {
+  encode(message: ListProviderCallsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListProviderCallsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListProviderCallsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListProviderCallsRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListProviderCallsRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListProviderCallsRequest>): ListProviderCallsRequest {
+    return ListProviderCallsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListProviderCallsRequest>): ListProviderCallsRequest {
+    const message = createBaseListProviderCallsRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    return message;
+  },
+};
+
+function createBaseProviderCall(): ProviderCall {
+  return {
+    turnId: "",
+    callId: "",
+    provider: "",
+    model: "",
+    state: "",
+    inputTokens: undefined,
+    outputTokens: undefined,
+    totalTokens: undefined,
+    reservedInputTokens: "0",
+    reservedOutputTokens: "0",
+    reservedTotalTokens: "0",
+    cancellationRequested: false,
+    safeReason: "",
+    responseId: "",
+    reportedModel: "",
+    requestDigest: "",
+    contextDigest: "",
+    configurationRevisionId: "",
+  };
+}
+
+export const ProviderCall: MessageFns<ProviderCall> = {
+  encode(message: ProviderCall, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.turnId !== "") {
+      writer.uint32(10).string(message.turnId);
+    }
+    if (message.callId !== "") {
+      writer.uint32(18).string(message.callId);
+    }
+    if (message.provider !== "") {
+      writer.uint32(26).string(message.provider);
+    }
+    if (message.model !== "") {
+      writer.uint32(34).string(message.model);
+    }
+    if (message.state !== "") {
+      writer.uint32(42).string(message.state);
+    }
+    if (message.inputTokens !== undefined) {
+      writer.uint32(48).uint64(message.inputTokens);
+    }
+    if (message.outputTokens !== undefined) {
+      writer.uint32(56).uint64(message.outputTokens);
+    }
+    if (message.totalTokens !== undefined) {
+      writer.uint32(64).uint64(message.totalTokens);
+    }
+    if (message.reservedInputTokens !== "0") {
+      writer.uint32(72).uint64(message.reservedInputTokens);
+    }
+    if (message.reservedOutputTokens !== "0") {
+      writer.uint32(80).uint64(message.reservedOutputTokens);
+    }
+    if (message.reservedTotalTokens !== "0") {
+      writer.uint32(88).uint64(message.reservedTotalTokens);
+    }
+    if (message.cancellationRequested !== false) {
+      writer.uint32(96).bool(message.cancellationRequested);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(106).string(message.safeReason);
+    }
+    if (message.responseId !== "") {
+      writer.uint32(114).string(message.responseId);
+    }
+    if (message.reportedModel !== "") {
+      writer.uint32(122).string(message.reportedModel);
+    }
+    if (message.requestDigest !== "") {
+      writer.uint32(130).string(message.requestDigest);
+    }
+    if (message.contextDigest !== "") {
+      writer.uint32(138).string(message.contextDigest);
+    }
+    if (message.configurationRevisionId !== "") {
+      writer.uint32(146).string(message.configurationRevisionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProviderCall {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProviderCall();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.callId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.provider = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.inputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.outputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.totalTokens = reader.uint64().toString();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.reservedInputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 10: {
+            if (tag !== 80) {
+              break;
+            }
+
+            message.reservedOutputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 11: {
+            if (tag !== 88) {
+              break;
+            }
+
+            message.reservedTotalTokens = reader.uint64().toString();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.cancellationRequested = reader.bool();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.responseId = reader.string();
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.reportedModel = reader.string();
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.requestDigest = reader.string();
+            continue;
+          }
+          case 17: {
+            if (tag !== 138) {
+              break;
+            }
+
+            message.contextDigest = reader.string();
+            continue;
+          }
+          case 18: {
+            if (tag !== 146) {
+              break;
+            }
+
+            message.configurationRevisionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProviderCall {
+    return {
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      callId: isSet(object.callId)
+        ? globalThis.String(object.callId)
+        : isSet(object.call_id)
+        ? globalThis.String(object.call_id)
+        : "",
+      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      inputTokens: isSet(object.inputTokens)
+        ? globalThis.String(object.inputTokens)
+        : isSet(object.input_tokens)
+        ? globalThis.String(object.input_tokens)
+        : undefined,
+      outputTokens: isSet(object.outputTokens)
+        ? globalThis.String(object.outputTokens)
+        : isSet(object.output_tokens)
+        ? globalThis.String(object.output_tokens)
+        : undefined,
+      totalTokens: isSet(object.totalTokens)
+        ? globalThis.String(object.totalTokens)
+        : isSet(object.total_tokens)
+        ? globalThis.String(object.total_tokens)
+        : undefined,
+      reservedInputTokens: isSet(object.reservedInputTokens)
+        ? globalThis.String(object.reservedInputTokens)
+        : isSet(object.reserved_input_tokens)
+        ? globalThis.String(object.reserved_input_tokens)
+        : "0",
+      reservedOutputTokens: isSet(object.reservedOutputTokens)
+        ? globalThis.String(object.reservedOutputTokens)
+        : isSet(object.reserved_output_tokens)
+        ? globalThis.String(object.reserved_output_tokens)
+        : "0",
+      reservedTotalTokens: isSet(object.reservedTotalTokens)
+        ? globalThis.String(object.reservedTotalTokens)
+        : isSet(object.reserved_total_tokens)
+        ? globalThis.String(object.reserved_total_tokens)
+        : "0",
+      cancellationRequested: isSet(object.cancellationRequested)
+        ? globalThis.Boolean(object.cancellationRequested)
+        : isSet(object.cancellation_requested)
+        ? globalThis.Boolean(object.cancellation_requested)
+        : false,
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      responseId: isSet(object.responseId)
+        ? globalThis.String(object.responseId)
+        : isSet(object.response_id)
+        ? globalThis.String(object.response_id)
+        : "",
+      reportedModel: isSet(object.reportedModel)
+        ? globalThis.String(object.reportedModel)
+        : isSet(object.reported_model)
+        ? globalThis.String(object.reported_model)
+        : "",
+      requestDigest: isSet(object.requestDigest)
+        ? globalThis.String(object.requestDigest)
+        : isSet(object.request_digest)
+        ? globalThis.String(object.request_digest)
+        : "",
+      contextDigest: isSet(object.contextDigest)
+        ? globalThis.String(object.contextDigest)
+        : isSet(object.context_digest)
+        ? globalThis.String(object.context_digest)
+        : "",
+      configurationRevisionId: isSet(object.configurationRevisionId)
+        ? globalThis.String(object.configurationRevisionId)
+        : isSet(object.configuration_revision_id)
+        ? globalThis.String(object.configuration_revision_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ProviderCall): unknown {
+    const obj: any = {};
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.callId !== "") {
+      obj.callId = message.callId;
+    }
+    if (message.provider !== "") {
+      obj.provider = message.provider;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.inputTokens !== undefined) {
+      obj.inputTokens = message.inputTokens;
+    }
+    if (message.outputTokens !== undefined) {
+      obj.outputTokens = message.outputTokens;
+    }
+    if (message.totalTokens !== undefined) {
+      obj.totalTokens = message.totalTokens;
+    }
+    if (message.reservedInputTokens !== "0") {
+      obj.reservedInputTokens = message.reservedInputTokens;
+    }
+    if (message.reservedOutputTokens !== "0") {
+      obj.reservedOutputTokens = message.reservedOutputTokens;
+    }
+    if (message.reservedTotalTokens !== "0") {
+      obj.reservedTotalTokens = message.reservedTotalTokens;
+    }
+    if (message.cancellationRequested !== false) {
+      obj.cancellationRequested = message.cancellationRequested;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.responseId !== "") {
+      obj.responseId = message.responseId;
+    }
+    if (message.reportedModel !== "") {
+      obj.reportedModel = message.reportedModel;
+    }
+    if (message.requestDigest !== "") {
+      obj.requestDigest = message.requestDigest;
+    }
+    if (message.contextDigest !== "") {
+      obj.contextDigest = message.contextDigest;
+    }
+    if (message.configurationRevisionId !== "") {
+      obj.configurationRevisionId = message.configurationRevisionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProviderCall>): ProviderCall {
+    return ProviderCall.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProviderCall>): ProviderCall {
+    const message = createBaseProviderCall();
+    message.turnId = object.turnId ?? "";
+    message.callId = object.callId ?? "";
+    message.provider = object.provider ?? "";
+    message.model = object.model ?? "";
+    message.state = object.state ?? "";
+    message.inputTokens = object.inputTokens ?? undefined;
+    message.outputTokens = object.outputTokens ?? undefined;
+    message.totalTokens = object.totalTokens ?? undefined;
+    message.reservedInputTokens = object.reservedInputTokens ?? "0";
+    message.reservedOutputTokens = object.reservedOutputTokens ?? "0";
+    message.reservedTotalTokens = object.reservedTotalTokens ?? "0";
+    message.cancellationRequested = object.cancellationRequested ?? false;
+    message.safeReason = object.safeReason ?? "";
+    message.responseId = object.responseId ?? "";
+    message.reportedModel = object.reportedModel ?? "";
+    message.requestDigest = object.requestDigest ?? "";
+    message.contextDigest = object.contextDigest ?? "";
+    message.configurationRevisionId = object.configurationRevisionId ?? "";
+    return message;
+  },
+};
+
+function createBaseListProviderCallsResponse(): ListProviderCallsResponse {
+  return { calls: [] };
+}
+
+export const ListProviderCallsResponse: MessageFns<ListProviderCallsResponse> = {
+  encode(message: ListProviderCallsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.calls) {
+      ProviderCall.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListProviderCallsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListProviderCallsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.calls.push(ProviderCall.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListProviderCallsResponse {
+    return {
+      calls: globalThis.Array.isArray(object?.calls) ? object.calls.map((e: any) => ProviderCall.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ListProviderCallsResponse): unknown {
+    const obj: any = {};
+    if (message.calls?.length) {
+      obj.calls = message.calls.map((e) => ProviderCall.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListProviderCallsResponse>): ListProviderCallsResponse {
+    return ListProviderCallsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListProviderCallsResponse>): ListProviderCallsResponse {
+    const message = createBaseListProviderCallsResponse();
+    message.calls = object.calls?.map((e) => ProviderCall.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseCancelTurnRequest(): CancelTurnRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", turnId: "", idempotencyKey: "" };
+}
+
+export const CancelTurnRequest: MessageFns<CancelTurnRequest> = {
+  encode(message: CancelTurnRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.turnId !== "") {
+      writer.uint32(34).string(message.turnId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(42).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelTurnRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelTurnRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelTurnRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: CancelTurnRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelTurnRequest>): CancelTurnRequest {
+    return CancelTurnRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelTurnRequest>): CancelTurnRequest {
+    const message = createBaseCancelTurnRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.turnId = object.turnId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseCancelTurnResponse(): CancelTurnResponse {
+  return { commandId: "", turnId: "", state: "", cancellationRequested: false };
+}
+
+export const CancelTurnResponse: MessageFns<CancelTurnResponse> = {
+  encode(message: CancelTurnResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    if (message.turnId !== "") {
+      writer.uint32(18).string(message.turnId);
+    }
+    if (message.state !== "") {
+      writer.uint32(26).string(message.state);
+    }
+    if (message.cancellationRequested !== false) {
+      writer.uint32(32).bool(message.cancellationRequested);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelTurnResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelTurnResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.cancellationRequested = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelTurnResponse {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      cancellationRequested: isSet(object.cancellationRequested)
+        ? globalThis.Boolean(object.cancellationRequested)
+        : isSet(object.cancellation_requested)
+        ? globalThis.Boolean(object.cancellation_requested)
+        : false,
+    };
+  },
+
+  toJSON(message: CancelTurnResponse): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.cancellationRequested !== false) {
+      obj.cancellationRequested = message.cancellationRequested;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelTurnResponse>): CancelTurnResponse {
+    return CancelTurnResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelTurnResponse>): CancelTurnResponse {
+    const message = createBaseCancelTurnResponse();
+    message.commandId = object.commandId ?? "";
+    message.turnId = object.turnId ?? "";
+    message.state = object.state ?? "";
+    message.cancellationRequested = object.cancellationRequested ?? false;
+    return message;
+  },
+};
+
 /** M1 exposes only the durable conversation path on the trusted operator listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
+  listProviderCalls: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListProviderCalls" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListProviderCallsRequest): Buffer =>
+      Buffer.from(ListProviderCallsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListProviderCallsRequest => ListProviderCallsRequest.decode(value),
+    responseSerialize: (value: ListProviderCallsResponse): Buffer =>
+      Buffer.from(ListProviderCallsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListProviderCallsResponse => ListProviderCallsResponse.decode(value),
+  },
+  cancelTurn: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/CancelTurn" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CancelTurnRequest): Buffer => Buffer.from(CancelTurnRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelTurnRequest => CancelTurnRequest.decode(value),
+    responseSerialize: (value: CancelTurnResponse): Buffer => Buffer.from(CancelTurnResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CancelTurnResponse => CancelTurnResponse.decode(value),
+  },
   createConversation: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/CreateConversation" as const,
     requestStream: false as const,
@@ -2261,6 +3211,8 @@ export const ProjectConversationServiceService = {
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
+  listProviderCalls: handleUnaryCall<ListProviderCallsRequest, ListProviderCallsResponse>;
+  cancelTurn: handleUnaryCall<CancelTurnRequest, CancelTurnResponse>;
   createConversation: handleUnaryCall<CreateConversationRequest, CreateConversationResponse>;
   sendMessage: handleUnaryCall<SendMessageRequest, SendMessageResponse>;
   getConversationSnapshot: handleUnaryCall<GetConversationSnapshotRequest, GetConversationSnapshotResponse>;
@@ -2272,6 +3224,36 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
 }
 
 export interface ProjectConversationServiceClient extends Client {
+  listProviderCalls(
+    request: ListProviderCallsRequest,
+    callback: (error: ServiceError | null, response: ListProviderCallsResponse) => void,
+  ): ClientUnaryCall;
+  listProviderCalls(
+    request: ListProviderCallsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListProviderCallsResponse) => void,
+  ): ClientUnaryCall;
+  listProviderCalls(
+    request: ListProviderCallsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListProviderCallsResponse) => void,
+  ): ClientUnaryCall;
+  cancelTurn(
+    request: CancelTurnRequest,
+    callback: (error: ServiceError | null, response: CancelTurnResponse) => void,
+  ): ClientUnaryCall;
+  cancelTurn(
+    request: CancelTurnRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CancelTurnResponse) => void,
+  ): ClientUnaryCall;
+  cancelTurn(
+    request: CancelTurnRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CancelTurnResponse) => void,
+  ): ClientUnaryCall;
   createConversation(
     request: CreateConversationRequest,
     callback: (error: ServiceError | null, response: CreateConversationResponse) => void,

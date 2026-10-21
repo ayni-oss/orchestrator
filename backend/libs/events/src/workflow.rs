@@ -539,6 +539,23 @@ fn validate_binding_extensions(
     validate_extensions(event, &binding_extensions(binding))
 }
 
+fn provider_counters_valid(call: &super::v1::ProviderCallEvidence) -> bool {
+    if [call.input_tokens, call.output_tokens, call.total_tokens]
+        .iter()
+        .flatten()
+        .any(|value| *value > i64::MAX.cast_unsigned())
+    {
+        return false;
+    }
+    if call.total_tokens.is_some_and(|total| {
+        call.input_tokens.is_some_and(|input| input > total)
+            || call.output_tokens.is_some_and(|output| output > total)
+    }) {
+        return false;
+    }
+    !matches!((call.input_tokens,call.output_tokens,call.total_tokens),(Some(input),Some(output),Some(total)) if input.checked_add(output)!=Some(total))
+}
+
 fn validate_decision_extensions(
     event: &Event,
     payload: &ConversationReportDecision,
@@ -567,7 +584,10 @@ fn validate_binding(binding: &ConversationTurnBinding, report: bool) -> Result<(
     .all(|value| resource_identifier(value))
         || !simple_identifier(&binding.assignment_id)
         || binding.executor_generation == 0
-        || binding.execution_binding_revision != "scripted-v1"
+        || !matches!(
+            binding.execution_binding_revision.as_str(),
+            "scripted-v1" | "openai-responses-v1"
+        )
         || binding.context_revision == 0
         || binding.command_event_id.parse::<uuid::Uuid>().is_err()
         || (report && !digest(&binding.command_digest))
@@ -671,6 +691,7 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
         }
         ConversationTurnReportKind::Unspecified => false,
     };
+    validate_provider_evidence(payload, binding, kind)?;
     if !sequence_valid
         || !outcome_valid
         || uuid::Uuid::parse_str(&payload.executor_instance_id).is_err()
@@ -679,6 +700,57 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
         || (!signed && !payload.signature.is_empty())
     {
         return Err(ContractError::Invalid("conversation report"));
+    }
+    Ok(())
+}
+
+fn validate_provider_evidence(
+    payload: &ConversationTurnReport,
+    binding: &ConversationTurnBinding,
+    kind: ConversationTurnReportKind,
+) -> Result<(), ContractError> {
+    let Some(call) = payload.provider_call.as_ref() else {
+        if binding.execution_binding_revision == "openai-responses-v1"
+            && kind != ConversationTurnReportKind::Started
+            && !(kind == ConversationTurnReportKind::Failed
+                && matches!(
+                    payload.failure_reason.as_str(),
+                    "provider_credentials_unavailable" | "provider_input_limit" | "cancelled"
+                ))
+        {
+            return Err(ContractError::Invalid("missing provider evidence"));
+        }
+        return Ok(());
+    };
+    if binding.execution_binding_revision != "openai-responses-v1"
+        || kind == ConversationTurnReportKind::Started
+        || call.call_id != binding.command_event_id
+        || call.provider != "openai"
+        || call.model.is_empty()
+        || call.model.len() > 256
+        || !resource_identifier(&call.configuration_revision_id)
+        || !digest(&call.context_digest)
+        || !digest(&call.request_digest)
+        || call.response_id.len() > 256
+        || call.reported_model.len() > 256
+        || !provider_counters_valid(call)
+        || [&call.model, &call.response_id, &call.reported_model]
+            .iter()
+            .any(|value| value.chars().any(char::is_control))
+        || call.reserved_input_tokens == 0
+        || call.reserved_output_tokens == 0
+        || call.reserved_total_tokens == 0
+        || !matches!(
+            call.state.as_str(),
+            "completed" | "failed" | "uncertain" | "cancelled"
+        )
+        || (kind == ConversationTurnReportKind::Completed
+            && (call.state != "completed"
+                || call.response_id.is_empty()
+                || call.reported_model.is_empty()))
+        || (call.state == "uncertain" && payload.failure_reason != "provider_uncertain")
+    {
+        return Err(ContractError::Invalid("provider evidence"));
     }
     Ok(())
 }
@@ -736,7 +808,16 @@ fn decision_reason_valid(decision: ConversationReportDecisionKind, reason: &str)
 }
 
 fn report_failure_reason(value: &str) -> bool {
-    matches!(value, "script_failed")
+    matches!(
+        value,
+        "script_failed"
+            | "provider_uncertain"
+            | "provider_rejected"
+            | "provider_input_limit"
+            | "provider_output_limit"
+            | "provider_credentials_unavailable"
+            | "cancelled"
+    )
 }
 
 fn decision_rejection_reason(value: &str) -> bool {

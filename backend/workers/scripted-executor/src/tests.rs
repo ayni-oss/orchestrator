@@ -967,3 +967,6 @@ fn inapplicable_decision_is_digest_only_and_does_not_block_later_valid_handoff()
     assert_eq!(ledger.executable_commands()?.len(), 1);
     Ok(())
 }
+
+#[path = "provider_decision_tests.rs"]
+mod provider_decision_tests;

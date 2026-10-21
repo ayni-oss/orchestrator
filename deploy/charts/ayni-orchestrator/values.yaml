@@ -21,6 +21,16 @@ workflowJetstream:
   executorUsername: workflow-executor
   executorSecretName: workflow-jetstream-executor
 
+providers:
+  openai:
+    # Enabling this permits paid requests only for explicitly configured workspaces
+    # with a provider-openai-<workspace UUID without hyphens> Secret in the session namespace.
+    enabled: false
+    baseUrl: https://api.openai.com/v1
+    # Local deterministic fixture access is a separate explicit network capability.
+    fixtureEgress: false
+  sessionAuthoritySecretName: workflow-session-authority
+
 scriptedExecutor:
   storage: 512Mi
   resources:

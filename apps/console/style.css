@@ -318,3 +318,34 @@ h1 {
 #send small {
   display:none}
 }
+
+#turn-controls {
+  list-style:none;
+  padding:0;
+  font-size:11px}
+#turn-controls li {
+  display:grid;
+  gap:8px;
+  margin-bottom:12px}
+#turn-controls button,#refresh-provider-calls {
+  font-size:11px}
+#provider-call-status,.provider-call {
+  font-size:11px;
+  line-height:1.6}
+.provider-call {
+  border-top:1px solid #e3e9dd;
+  margin-top:14px;
+  padding-top:10px}
+.provider-call h3 {
+  font-size:12px;
+  margin:0 0 6px}
+.provider-call p {
+  margin:6px 0}
+.call-identity {
+  font-family:ui-monospace,monospace;
+  font-size:10px;
+  overflow-wrap:anywhere}
+.provider-notice {
+  background:#fff3dc;
+  border-radius:5px;
+  padding:8px}

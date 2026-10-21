@@ -6,6 +6,8 @@ import "ayni/orchestrator/v1/workflow.proto";
 
 // M1 exposes only the durable conversation path on the trusted operator listener.
 service ProjectConversationService {
+  rpc ListProviderCalls(ListProviderCallsRequest) returns (ListProviderCallsResponse);
+  rpc CancelTurn(CancelTurnRequest) returns (CancelTurnResponse);
   rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc GetConversationSnapshot(GetConversationSnapshotRequest) returns (GetConversationSnapshotResponse);
@@ -125,4 +127,46 @@ message ReplaceConversationSessionRequest {
 }
 message ReplaceConversationSessionResponse {
   ConversationSession session = 1;
+}
+
+message ListProviderCallsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+}
+message ProviderCall {
+  string turn_id = 1;
+  string call_id = 2;
+  string provider = 3;
+  string model = 4;
+  string state = 5;
+  optional uint64 input_tokens = 6;
+  optional uint64 output_tokens = 7;
+  optional uint64 total_tokens = 8;
+  uint64 reserved_input_tokens = 9;
+  uint64 reserved_output_tokens = 10;
+  uint64 reserved_total_tokens = 11;
+  bool cancellation_requested = 12;
+  string safe_reason = 13;
+  string response_id = 14;
+  string reported_model = 15;
+  string request_digest = 16;
+  string context_digest = 17;
+  string configuration_revision_id = 18;
+}
+message ListProviderCallsResponse {
+  repeated ProviderCall calls = 1;
+}
+message CancelTurnRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string turn_id = 4;
+  string idempotency_key = 5;
+}
+message CancelTurnResponse {
+  string command_id = 1;
+  string turn_id = 2;
+  string state = 3;
+  bool cancellation_requested = 4;
 }
