@@ -1206,7 +1206,7 @@ export const ListProjectsResponse: MessageFns<ListProjectsResponse> = {
   },
 };
 
-/** M1 keeps only minimal hierarchy creation on the trusted operator listener. */
+/** Minimal hierarchy commands and bounded discovery on the trusted operator listener. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
   createWorkspace: {

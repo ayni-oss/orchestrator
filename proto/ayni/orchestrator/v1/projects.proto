@@ -5,7 +5,7 @@ package ayni.orchestrator.v1;
 import "ayni/orchestrator/v1/workflow.proto";
 import "google/protobuf/timestamp.proto";
 
-// M1 keeps only minimal hierarchy creation on the trusted operator listener.
+// Minimal hierarchy commands and bounded discovery on the trusted operator listener.
 service ProjectService {
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);

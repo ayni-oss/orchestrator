@@ -1,10 +1,14 @@
-The local PostgreSQL-authoritative Slice 2 stack is installed.
+The local PostgreSQL-authoritative Slice 3 stack is installed.
 
 Verify dependencies and workloads:
   dev/ctl check
 
 Run the message-to-scripted-response scenario:
   dev/ctl scenario
+
+Local contributor browser console:
+  dev/ctl console
+  Open http://127.0.0.1:3000 while the command runs.
 
 Health:
   kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
