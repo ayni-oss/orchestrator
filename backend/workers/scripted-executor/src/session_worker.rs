@@ -263,7 +263,7 @@ async fn execute(
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         let retained: i64 = tx
             .query_row(
-                "SELECT COALESCE(sum(retained_bytes),0) FROM results",
+                "SELECT COALESCE(sum(COALESCE(length(request),0)+length(CAST(result AS BLOB))),0)+(SELECT COALESCE(sum(COALESCE(length(request),0)+length(CAST(evidence AS BLOB))),0) FROM provider_calls)+(SELECT COALESCE(sum(length(CAST(state AS BLOB))),0) FROM provider_loops) FROM results",
                 [],
                 |row| row.get(0),
             )

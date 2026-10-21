@@ -51,6 +51,7 @@ mod tests {
                     BTreeSet::from([
                         "ListProviderCalls",
                         "CancelTurn",
+                        "AcknowledgeProviderUncertainty",
                         "CreateConversation",
                         "GetConversationSnapshot",
                         "ListConversationHistory",

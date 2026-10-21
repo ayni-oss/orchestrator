@@ -126,6 +126,7 @@ export interface ConversationTurnRequested {
   session?: SessionExecutionScope | undefined;
   frozenConfiguration?: AgentExecutionConfiguration | undefined;
   contextManifest?: ConversationContextManifest | undefined;
+  projectStatus?: ProjectStatusSnapshot | undefined;
 }
 
 export interface ConversationTurnReport {
@@ -200,6 +201,27 @@ export interface ProviderCallEvidence {
   reservedOutputTokens: string;
   reservedTotalTokens: string;
   /** completed, failed, uncertain or cancelled; never raw provider diagnostics. */
+  state: string;
+  toolInvocations: ToolInvocationEvidence[];
+}
+
+/** Factual project inputs frozen in the retained eligibility command. */
+export interface ProjectStatusSnapshot {
+  snapshotId: string;
+  projectId: string;
+  objective: string;
+  /** registered: a persisted project; does not assert objective completion. */
+  status: string;
+  contextRevision: string;
+  projectResourceVersion: string;
+}
+
+/** Safe metadata only. Arguments and output remain in the scoped worker ledger. */
+export interface ToolInvocationEvidence {
+  invocationId: string;
+  name: string;
+  inputDigest: string;
+  outputDigest: string;
   state: string;
 }
 
@@ -706,6 +728,7 @@ function createBaseConversationTurnRequested(): ConversationTurnRequested {
     session: undefined,
     frozenConfiguration: undefined,
     contextManifest: undefined,
+    projectStatus: undefined,
   };
 }
 
@@ -731,6 +754,9 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
     }
     if (message.contextManifest !== undefined) {
       ConversationContextManifest.encode(message.contextManifest, writer.uint32(58).fork()).join();
+    }
+    if (message.projectStatus !== undefined) {
+      ProjectStatusSnapshot.encode(message.projectStatus, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -804,6 +830,14 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
             message.contextManifest = ConversationContextManifest.decode(reader, reader.uint32());
             continue;
           }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.projectStatus = ProjectStatusSnapshot.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -843,6 +877,11 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
         : isSet(object.context_manifest)
         ? ConversationContextManifest.fromJSON(object.context_manifest)
         : undefined,
+      projectStatus: isSet(object.projectStatus)
+        ? ProjectStatusSnapshot.fromJSON(object.projectStatus)
+        : isSet(object.project_status)
+        ? ProjectStatusSnapshot.fromJSON(object.project_status)
+        : undefined,
     };
   },
 
@@ -869,6 +908,9 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
     if (message.contextManifest !== undefined) {
       obj.contextManifest = ConversationContextManifest.toJSON(message.contextManifest);
     }
+    if (message.projectStatus !== undefined) {
+      obj.projectStatus = ProjectStatusSnapshot.toJSON(message.projectStatus);
+    }
     return obj;
   },
 
@@ -891,6 +933,9 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
       : undefined;
     message.contextManifest = (object.contextManifest !== undefined && object.contextManifest !== null)
       ? ConversationContextManifest.fromPartial(object.contextManifest)
+      : undefined;
+    message.projectStatus = (object.projectStatus !== undefined && object.projectStatus !== null)
+      ? ProjectStatusSnapshot.fromPartial(object.projectStatus)
       : undefined;
     return message;
   },
@@ -1848,6 +1893,7 @@ function createBaseProviderCallEvidence(): ProviderCallEvidence {
     reservedOutputTokens: "0",
     reservedTotalTokens: "0",
     state: "",
+    toolInvocations: [],
   };
 }
 
@@ -1897,6 +1943,9 @@ export const ProviderCallEvidence: MessageFns<ProviderCallEvidence> = {
     }
     if (message.state !== "") {
       writer.uint32(122).string(message.state);
+    }
+    for (const v of message.toolInvocations) {
+      ToolInvocationEvidence.encode(v!, writer.uint32(130).fork()).join();
     }
     return writer;
   },
@@ -2034,6 +2083,14 @@ export const ProviderCallEvidence: MessageFns<ProviderCallEvidence> = {
             message.state = reader.string();
             continue;
           }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.toolInvocations.push(ToolInvocationEvidence.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2111,6 +2168,11 @@ export const ProviderCallEvidence: MessageFns<ProviderCallEvidence> = {
         ? globalThis.String(object.reserved_total_tokens)
         : "0",
       state: isSet(object.state) ? globalThis.String(object.state) : "",
+      toolInvocations: globalThis.Array.isArray(object?.toolInvocations)
+        ? object.toolInvocations.map((e: any) => ToolInvocationEvidence.fromJSON(e))
+        : globalThis.Array.isArray(object?.tool_invocations)
+        ? object.tool_invocations.map((e: any) => ToolInvocationEvidence.fromJSON(e))
+        : [],
     };
   },
 
@@ -2161,6 +2223,9 @@ export const ProviderCallEvidence: MessageFns<ProviderCallEvidence> = {
     if (message.state !== "") {
       obj.state = message.state;
     }
+    if (message.toolInvocations?.length) {
+      obj.toolInvocations = message.toolInvocations.map((e) => ToolInvocationEvidence.toJSON(e));
+    }
     return obj;
   },
 
@@ -2183,6 +2248,324 @@ export const ProviderCallEvidence: MessageFns<ProviderCallEvidence> = {
     message.reservedInputTokens = object.reservedInputTokens ?? "0";
     message.reservedOutputTokens = object.reservedOutputTokens ?? "0";
     message.reservedTotalTokens = object.reservedTotalTokens ?? "0";
+    message.state = object.state ?? "";
+    message.toolInvocations = object.toolInvocations?.map((e) => ToolInvocationEvidence.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseProjectStatusSnapshot(): ProjectStatusSnapshot {
+  return {
+    snapshotId: "",
+    projectId: "",
+    objective: "",
+    status: "",
+    contextRevision: "0",
+    projectResourceVersion: "0",
+  };
+}
+
+export const ProjectStatusSnapshot: MessageFns<ProjectStatusSnapshot> = {
+  encode(message: ProjectStatusSnapshot, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.snapshotId !== "") {
+      writer.uint32(10).string(message.snapshotId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.objective !== "") {
+      writer.uint32(26).string(message.objective);
+    }
+    if (message.status !== "") {
+      writer.uint32(34).string(message.status);
+    }
+    if (message.contextRevision !== "0") {
+      writer.uint32(40).uint64(message.contextRevision);
+    }
+    if (message.projectResourceVersion !== "0") {
+      writer.uint32(48).uint64(message.projectResourceVersion);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProjectStatusSnapshot {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseProjectStatusSnapshot();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.snapshotId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.objective = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.status = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.contextRevision = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.projectResourceVersion = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ProjectStatusSnapshot {
+    return {
+      snapshotId: isSet(object.snapshotId)
+        ? globalThis.String(object.snapshotId)
+        : isSet(object.snapshot_id)
+        ? globalThis.String(object.snapshot_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      objective: isSet(object.objective) ? globalThis.String(object.objective) : "",
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      contextRevision: isSet(object.contextRevision)
+        ? globalThis.String(object.contextRevision)
+        : isSet(object.context_revision)
+        ? globalThis.String(object.context_revision)
+        : "0",
+      projectResourceVersion: isSet(object.projectResourceVersion)
+        ? globalThis.String(object.projectResourceVersion)
+        : isSet(object.project_resource_version)
+        ? globalThis.String(object.project_resource_version)
+        : "0",
+    };
+  },
+
+  toJSON(message: ProjectStatusSnapshot): unknown {
+    const obj: any = {};
+    if (message.snapshotId !== "") {
+      obj.snapshotId = message.snapshotId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.objective !== "") {
+      obj.objective = message.objective;
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.contextRevision !== "0") {
+      obj.contextRevision = message.contextRevision;
+    }
+    if (message.projectResourceVersion !== "0") {
+      obj.projectResourceVersion = message.projectResourceVersion;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ProjectStatusSnapshot>): ProjectStatusSnapshot {
+    return ProjectStatusSnapshot.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ProjectStatusSnapshot>): ProjectStatusSnapshot {
+    const message = createBaseProjectStatusSnapshot();
+    message.snapshotId = object.snapshotId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.objective = object.objective ?? "";
+    message.status = object.status ?? "";
+    message.contextRevision = object.contextRevision ?? "0";
+    message.projectResourceVersion = object.projectResourceVersion ?? "0";
+    return message;
+  },
+};
+
+function createBaseToolInvocationEvidence(): ToolInvocationEvidence {
+  return { invocationId: "", name: "", inputDigest: "", outputDigest: "", state: "" };
+}
+
+export const ToolInvocationEvidence: MessageFns<ToolInvocationEvidence> = {
+  encode(message: ToolInvocationEvidence, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.invocationId !== "") {
+      writer.uint32(10).string(message.invocationId);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.inputDigest !== "") {
+      writer.uint32(26).string(message.inputDigest);
+    }
+    if (message.outputDigest !== "") {
+      writer.uint32(34).string(message.outputDigest);
+    }
+    if (message.state !== "") {
+      writer.uint32(42).string(message.state);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ToolInvocationEvidence {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseToolInvocationEvidence();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.invocationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.inputDigest = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.outputDigest = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ToolInvocationEvidence {
+    return {
+      invocationId: isSet(object.invocationId)
+        ? globalThis.String(object.invocationId)
+        : isSet(object.invocation_id)
+        ? globalThis.String(object.invocation_id)
+        : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      inputDigest: isSet(object.inputDigest)
+        ? globalThis.String(object.inputDigest)
+        : isSet(object.input_digest)
+        ? globalThis.String(object.input_digest)
+        : "",
+      outputDigest: isSet(object.outputDigest)
+        ? globalThis.String(object.outputDigest)
+        : isSet(object.output_digest)
+        ? globalThis.String(object.output_digest)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+    };
+  },
+
+  toJSON(message: ToolInvocationEvidence): unknown {
+    const obj: any = {};
+    if (message.invocationId !== "") {
+      obj.invocationId = message.invocationId;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.inputDigest !== "") {
+      obj.inputDigest = message.inputDigest;
+    }
+    if (message.outputDigest !== "") {
+      obj.outputDigest = message.outputDigest;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ToolInvocationEvidence>): ToolInvocationEvidence {
+    return ToolInvocationEvidence.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ToolInvocationEvidence>): ToolInvocationEvidence {
+    const message = createBaseToolInvocationEvidence();
+    message.invocationId = object.invocationId ?? "";
+    message.name = object.name ?? "";
+    message.inputDigest = object.inputDigest ?? "";
+    message.outputDigest = object.outputDigest ?? "";
     message.state = object.state ?? "";
     return message;
   },

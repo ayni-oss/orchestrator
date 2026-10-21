@@ -37,6 +37,7 @@ message ConversationTurnRequested {
   SessionExecutionScope session = 5;
   AgentExecutionConfiguration frozen_configuration = 6;
   ConversationContextManifest context_manifest = 7;
+  ProjectStatusSnapshot project_status = 8;
 }
 
 enum ConversationTurnReportKind {
@@ -123,4 +124,25 @@ message ProviderCallEvidence {
   uint64 reserved_total_tokens = 14;
   // completed, failed, uncertain or cancelled; never raw provider diagnostics.
   string state = 15;
+  repeated ToolInvocationEvidence tool_invocations = 16;
+}
+
+// Factual project inputs frozen in the retained eligibility command.
+message ProjectStatusSnapshot {
+  string snapshot_id = 1;
+  string project_id = 2;
+  string objective = 3;
+  // registered: a persisted project; does not assert objective completion.
+  string status = 4;
+  uint64 context_revision = 5;
+  uint64 project_resource_version = 6;
+}
+
+// Safe metadata only. Arguments and output remain in the scoped worker ledger.
+message ToolInvocationEvidence {
+  string invocation_id = 1;
+  string name = 2;
+  string input_digest = 3;
+  string output_digest = 4;
+  string state = 5;
 }

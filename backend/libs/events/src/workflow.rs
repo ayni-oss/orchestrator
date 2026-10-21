@@ -598,6 +598,28 @@ fn validate_binding(binding: &ConversationTurnBinding, report: bool) -> Result<(
     Ok(())
 }
 
+#[allow(
+    clippy::suspicious_operation_groupings,
+    reason = "snapshot identity binds the event while scope and revision bind its turn"
+)]
+fn validate_project_snapshot(
+    payload: &ConversationTurnRequested,
+    binding: &ConversationTurnBinding,
+    identity: &EventIdentity,
+) -> Result<(), ContractError> {
+    if let Some(snapshot) = &payload.project_status
+        && (snapshot.snapshot_id != identity.id
+            || snapshot.project_id != binding.project_id
+            || snapshot.context_revision != binding.context_revision
+            || snapshot.project_resource_version == 0
+            || snapshot.objective.len() > MAX_CONTENT_BYTES
+            || snapshot.status != "registered")
+    {
+        return Err(ContractError::Invalid("project status snapshot"));
+    }
+    Ok(())
+}
+
 fn validate_command<'a>(
     payload: &'a ConversationTurnRequested,
     identity: &EventIdentity,
@@ -616,6 +638,7 @@ fn validate_command<'a>(
     {
         return Err(ContractError::Invalid("session execution scope"));
     }
+    validate_project_snapshot(payload, binding, identity)?;
     if let Some(manifest) = &payload.context_manifest {
         let inline_count =
             u64::try_from(payload.context.len()).map_err(|_| ContractError::Oversized)?;
@@ -734,6 +757,7 @@ fn validate_provider_evidence(
         || call.response_id.len() > 256
         || call.reported_model.len() > 256
         || !provider_counters_valid(call)
+        || !tool_invocations_valid(&call.tool_invocations)
         || [&call.model, &call.response_id, &call.reported_model]
             .iter()
             .any(|value| value.chars().any(char::is_control))
@@ -753,6 +777,24 @@ fn validate_provider_evidence(
         return Err(ContractError::Invalid("provider evidence"));
     }
     Ok(())
+}
+
+fn tool_invocations_valid(tools: &[super::v1::ToolInvocationEvidence]) -> bool {
+    let mut ids = std::collections::HashSet::new();
+    tools.len() <= 8
+        && tools.iter().all(|tool| {
+            simple_identifier(&tool.invocation_id)
+                && ids.insert(&tool.invocation_id)
+                && matches!(
+                    tool.name.as_str(),
+                    "read_workspace_instructions"
+                        | "read_project_status"
+                        | "read_conversation_history"
+                )
+                && digest(&tool.input_digest)
+                && digest(&tool.output_digest)
+                && matches!(tool.state.as_str(), "completed" | "rejected")
+        })
 }
 
 fn validate_decision(payload: &ConversationReportDecision) -> Result<(), ContractError> {
@@ -815,6 +857,12 @@ fn report_failure_reason(value: &str) -> bool {
             | "provider_rejected"
             | "provider_input_limit"
             | "provider_output_limit"
+            | "provider_interrupted"
+            | "provider_tool_rejected"
+            | "provider_tool_limit"
+            | "provider_tool_output_limit"
+            | "provider_budget_exhausted"
+            | "provider_usage_unknown"
             | "provider_credentials_unavailable"
             | "cancelled"
     )

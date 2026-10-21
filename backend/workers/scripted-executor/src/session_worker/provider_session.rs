@@ -1,11 +1,11 @@
-//! One paid request per admitted turn; a sending replay is never a new request.
+//! Bounded scoped reads and paid exchanges; a sending replay is never a new request.
 use super::*;
 use ayni_orchestrator_events::v1::{ConversationContextRecord, ProviderCallEvidence};
 use ayni_orchestrator_providers::responses::{
     ContextMessage, ResponsesClient, prepare as prepare_request,
 };
 
-pub(super) const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS provider_calls(command_id TEXT PRIMARY KEY,command_digest TEXT NOT NULL,request BLOB,request_digest TEXT NOT NULL,evidence TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('prepared','sending','completed','failed','uncertain','cancelled')),cancelled INTEGER NOT NULL DEFAULT 0,settled INTEGER NOT NULL DEFAULT 0);";
+pub(super) const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS provider_calls(command_id TEXT PRIMARY KEY,command_digest TEXT NOT NULL,request BLOB,request_digest TEXT NOT NULL,evidence TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('prepared','sending','completed','failed','uncertain','cancelled')),cancelled INTEGER NOT NULL DEFAULT 0,settled INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS provider_loops(command_id TEXT PRIMARY KEY,state TEXT NOT NULL);";
 
 #[derive(Deserialize, Serialize)]
 pub struct PrepareInput {
@@ -25,7 +25,7 @@ pub struct Preparation {
     pub result: Option<ExecutionResult>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct SendInput {
     pub command_id: String,
     pub request_digest: String,
@@ -69,7 +69,7 @@ pub(super) async fn prepare(
     let PreparedCall {
         identity,
         command_digest,
-        request_digest,
+        mut request_digest,
         context_digest,
         prepared,
         evidence,
@@ -90,33 +90,42 @@ pub(super) async fn prepare(
         .optional()
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     if let Some((prior_command, prior_request)) = existing {
-        if prior_command != command_digest || prior_request != request_digest {
+        if prior_command != command_digest {
             return Err(StatusCode::CONFLICT);
         }
+        request_digest = prior_request;
     } else {
         ensure_provider(&state, credential_client)?;
         tx.execute("DELETE FROM provider_calls WHERE state IN ('completed','failed','cancelled') AND settled=1 AND command_id IN (SELECT command_id FROM results WHERE acknowledged=1 AND acknowledged_at < unixepoch()-691200)", []).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        tx.execute("DELETE FROM provider_loops WHERE command_id NOT IN (SELECT command_id FROM provider_calls)", []).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         tx.execute("DELETE FROM results WHERE acknowledged=1 AND acknowledged_at < unixepoch()-691200 AND command_id NOT IN (SELECT command_id FROM provider_calls)", []).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let loop_json = serde_json::to_string(&ProviderLoop::new(&input, &prepared.bytes)?)
+            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        let json = serde_json::to_string(&evidence).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         let count: i64 = tx
             .query_row("SELECT count(*) FROM provider_calls", [], |row| row.get(0))
             .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         let retained: i64 = tx
             .query_row(
-                "SELECT COALESCE(sum(COALESCE(length(request),0)+length(evidence)),0)+(SELECT COALESCE(sum(length(result)),0) FROM results) FROM provider_calls",
+                "SELECT COALESCE(sum(COALESCE(length(request),0)+length(CAST(evidence AS BLOB))),0)+(SELECT COALESCE(sum(length(CAST(result AS BLOB))),0) FROM results)+(SELECT COALESCE(sum(length(CAST(state AS BLOB))),0) FROM provider_loops) FROM provider_calls",
                 [],
                 |row| row.get(0),
             )
             .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         if count >= 50000
             || retained
-                + i64::try_from(prepared.bytes.len() + 64 * 1024)
+                + i64::try_from(prepared.bytes.len() + loop_json.len() + json.len() + 64 * 1024)
                     .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?
                 > MAX_RETAINED_BYTES
         {
             return Err(StatusCode::INSUFFICIENT_STORAGE);
         }
-        let json = serde_json::to_string(&evidence).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         tx.execute("INSERT INTO provider_calls(command_id,command_digest,request,request_digest,evidence,state) VALUES(?1,?2,?3,?4,?5,'prepared')",params![identity.id,command_digest,prepared.bytes,request_digest,json]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+        tx.execute(
+            "INSERT INTO provider_loops(command_id,state) VALUES(?1,?2)",
+            params![identity.id, loop_json],
+        )
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     }
     let (retained_state, json): (String, String) = tx
         .query_row(
@@ -187,6 +196,12 @@ fn build_preparation(
     if context_digest != manifest.digest {
         return Err(StatusCode::CONFLICT);
     }
+    let command_digest = digest(&input.command_bytes);
+    if let Some(retained) =
+        retained_preparation(state, &identity, &command_digest, &context_digest)?
+    {
+        return Ok(retained);
+    }
     let messages = input
         .context
         .iter()
@@ -204,7 +219,6 @@ fn build_preparation(
         config.max_total_tokens,
     )
     .map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
-    let command_digest = digest(&input.command_bytes);
     let request_digest = digest(&prepared.bytes);
     let evidence = ProviderCallEvidence {
         call_id: identity.id.clone(),
@@ -213,9 +227,9 @@ fn build_preparation(
         configuration_revision_id: config.revision_id.clone(),
         context_digest: context_digest.clone(),
         request_digest: request_digest.clone(),
-        reserved_input_tokens: prepared.reserved_input_tokens,
-        reserved_output_tokens: prepared.reserved_output_tokens,
-        reserved_total_tokens: prepared.reserved_input_tokens + prepared.reserved_output_tokens,
+        reserved_input_tokens: config.max_input_tokens,
+        reserved_output_tokens: config.max_output_tokens,
+        reserved_total_tokens: config.max_input_tokens + config.max_output_tokens,
         state: "prepared".into(),
         ..Default::default()
     };
@@ -227,6 +241,39 @@ fn build_preparation(
         prepared,
         evidence,
     })
+}
+
+fn retained_preparation(
+    state: &WorkerState,
+    identity: &ayni_orchestrator_events::EventIdentity,
+    command_digest: &str,
+    context_digest: &str,
+) -> Result<Option<PreparedCall>, StatusCode> {
+    let row: Option<(String, String, Option<Vec<u8>>, String)> = state.connection.lock()
+        .map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?.query_row(
+            "SELECT command_digest,request_digest,request,evidence FROM provider_calls WHERE command_id=?1",
+            [&identity.id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)))
+        .optional().map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+    let Some((retained_command, request_digest, bytes, json)) = row else {
+        return Ok(None);
+    };
+    if retained_command != command_digest {
+        return Err(StatusCode::CONFLICT);
+    }
+    let evidence: ProviderCallEvidence =
+        serde_json::from_str(&json).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    Ok(Some(PreparedCall {
+        identity: identity.clone(),
+        command_digest: command_digest.into(),
+        request_digest,
+        context_digest: context_digest.into(),
+        prepared: ayni_orchestrator_providers::responses::PreparedRequest {
+            bytes: bytes.unwrap_or_default(),
+            reserved_input_tokens: evidence.reserved_input_tokens,
+            reserved_output_tokens: evidence.reserved_output_tokens,
+        },
+        evidence,
+    }))
 }
 
 // Kept identical to the authoritative context-manifest digest contract.
@@ -261,13 +308,16 @@ pub(super) async fn send(
         evidence,
         command_digest,
         send_allowed,
+        allow_new_requests,
         replay,
     } = begin_send(&state, &input)?;
     if let Some(result) = replay {
         return Ok(axum::Json(result));
     }
     let (evidence, response_content, failure_reason) = if send_allowed {
-        perform_request(&state, &input, &request, evidence).await
+        let mut authorized_input = input.clone();
+        authorized_input.allowed = allow_new_requests;
+        perform_request(&state, &authorized_input, &request, evidence).await
     } else {
         (evidence, String::new(), String::new())
     };
@@ -287,6 +337,7 @@ struct SendState {
     evidence: ProviderCallEvidence,
     command_digest: String,
     send_allowed: bool,
+    allow_new_requests: bool,
     replay: Option<ExecutionResult>,
 }
 
@@ -318,12 +369,24 @@ fn begin_send(state: &WorkerState, input: &SendInput) -> Result<SendState, Statu
             evidence: ProviderCallEvidence::default(),
             command_digest,
             send_allowed: false,
+            allow_new_requests: false,
             replay: Some(result),
         });
     }
     let mut evidence: ProviderCallEvidence =
         serde_json::from_str(&json).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
-    let send_allowed = prior_state == "prepared" && input.allowed && !cancelled;
+    // Completed exchange checkpoints can reconstruct a terminal outcome without
+    // sending again. No replay grants authority for another paid exchange.
+    let has_checkpoint: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM provider_loops WHERE command_id=?1)",
+            [&input.command_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let send_allowed = (prior_state == "prepared" && input.allowed && !cancelled)
+        || (prior_state == "sending" && has_checkpoint && !cancelled);
+    let allow_new_requests = prior_state == "prepared" && input.allowed && !cancelled;
     evidence.state = if send_allowed {
         "sending"
     } else if prior_state == "prepared" && (cancelled || input.state == "cancelled") {
@@ -348,6 +411,7 @@ fn begin_send(state: &WorkerState, input: &SendInput) -> Result<SendState, Statu
         evidence,
         command_digest,
         send_allowed,
+        allow_new_requests,
         replay: None,
     })
 }
@@ -358,34 +422,21 @@ async fn perform_request(
     request: &[u8],
     mut evidence: ProviderCallEvidence,
 ) -> (ProviderCallEvidence, String, String) {
-    let mut failure_reason = String::new();
-    let mut response_content = String::new();
-    let client = state.provider.lock().ok().and_then(|client| client.clone());
-    if let Some(client) = client {
-        let response = client.send(&input.command_id, request);
-        tokio::pin!(response);
-        let mut interval = tokio::time::interval(Duration::from_millis(100));
-        loop {
-            tokio::select! {
-                result=&mut response=>{
-                    match result {
-                        Ok(response)=>{evidence.response_id=response.response_id;evidence.reported_model=response.model;evidence.input_tokens=response.usage.input_tokens;evidence.output_tokens=response.usage.output_tokens;evidence.total_tokens=response.usage.total_tokens;failure_reason=response.failure_reason;evidence.state=if failure_reason.is_empty(){"completed"}else{"failed"}.into();response_content=response.content;},
-                        Err(_)=>{evidence.state="uncertain".into();}
-                    }
-                    break;
-                }
-                _=interval.tick()=>{
-                    let cancelled=state.connection.lock().ok().and_then(|connection| connection.query_row("SELECT cancelled FROM provider_calls WHERE command_id=?1",[&input.command_id],|row|row.get::<_,bool>(0)).ok()).unwrap_or(true);
-                    if cancelled {evidence.state="uncertain".into();break;}
-                }
-            }
-        }
+    if let Ok((content, reason)) = tools::execute(state, input, request, &mut evidence).await {
+        (evidence, content, reason)
     } else {
         evidence.state = "uncertain".into();
+        // Earlier completed exchanges do not establish usage for a later
+        // exchange whose external outcome is unconfirmed.
+        evidence.input_tokens = None;
+        evidence.output_tokens = None;
+        evidence.total_tokens = None;
+        (evidence, String::new(), String::new())
     }
-
-    (evidence, response_content, failure_reason)
 }
+
+mod tools;
+use tools::ProviderLoop;
 
 fn retain_result(
     state: &WorkerState,
@@ -426,7 +477,8 @@ fn retain_result(
             input.command_id,
             evidence.state,
             serde_json::to_string(&evidence).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?,
-            evidence.total_tokens.is_some() || evidence.state == "cancelled"
+            evidence.total_tokens.is_some()
+                || (evidence.state == "cancelled" && evidence.response_id.is_empty())
         ],
     )
     .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;

@@ -535,3 +535,166 @@ async fn snapshot_history_boundary_retries_concurrent_conversation_progress() ->
     progress.await??;
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires disposable migrated PostgreSQL with runtime-role URL"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "recovery receipt, scope and generation boundaries form one scenario"
+)]
+async fn explicit_uncertainty_retirement_preserves_evidence_and_fences_generation() -> TestResult {
+    let f = Fixture::new().await?;
+    let turn = f.send().await?;
+    let call = f.claim(&turn).await?;
+    let queued = f.send().await?;
+    let ack_key = key();
+    let ack = |conversation: String, digest: String, key: String, charge| {
+        let store = f.store.clone();
+        let workspace = f.workspace.clone();
+        let project = f.project.clone();
+        let turn = turn.clone();
+        let call = call.evidence.call_id.clone();
+        async move {
+            store
+                .acknowledge_provider_uncertainty(
+                    &workspace,
+                    &project,
+                    &conversation,
+                    &turn,
+                    &call,
+                    &digest,
+                    &key,
+                    charge,
+                )
+                .await
+        }
+    };
+    assert!(
+        f.store
+            .session_authority(&call.request("admit"))
+            .await?
+            .allowed
+    );
+    assert!(matches!(
+        ack(
+            f.conversation.clone(),
+            call.evidence.request_digest.clone(),
+            ack_key.clone(),
+            true
+        )
+        .await,
+        Err(StoreError::InvalidInput("provider_uncertainty_not_ready"))
+    ));
+    let report = call.terminal("uncertain", None)?;
+    assert!(f.store.accept_terminal_report(&report).await?.accepted);
+    assert!(matches!(
+        ack(
+            f.conversation.clone(),
+            call.evidence.request_digest.clone(),
+            ack_key.clone(),
+            false
+        )
+        .await,
+        Err(StoreError::InvalidInput("acknowledge_possible_charge"))
+    ));
+    assert!(matches!(
+        ack(
+            f.conversation.clone(),
+            format!("sha256:{}", "b".repeat(64)),
+            ack_key.clone(),
+            true
+        )
+        .await,
+        Err(StoreError::InvalidInput("provider_call_binding"))
+    ));
+    assert!(matches!(
+        ack(
+            key(),
+            call.evidence.request_digest.clone(),
+            ack_key.clone(),
+            true
+        )
+        .await,
+        Err(StoreError::NotFound)
+    ));
+    // Simulate completed decision delivery in this storage-only acceptance fixture.
+    f.client
+        .execute(
+            "UPDATE workflow_outbox SET state='transferred' WHERE conversation_id=$1",
+            &[&f.conversation],
+        )
+        .await?;
+    let receipt = ack(
+        f.conversation.clone(),
+        call.evidence.request_digest.clone(),
+        ack_key.clone(),
+        true,
+    )
+    .await?;
+    assert_eq!(
+        ack(
+            f.conversation.clone(),
+            call.evidence.request_digest.clone(),
+            ack_key.clone(),
+            true
+        )
+        .await?
+        .command_id,
+        receipt.command_id
+    );
+    assert!(matches!(
+        ack(
+            f.conversation.clone(),
+            format!("sha256:{}", "b".repeat(64)),
+            ack_key,
+            true
+        )
+        .await,
+        Err(StoreError::IdempotencyConflict)
+    ));
+    assert_eq!(f.state(&turn).await?, "failed");
+    assert!(!f.settled(&turn).await?);
+    let calls = f
+        .store
+        .list_provider_calls(&f.workspace, &f.project, &f.conversation)
+        .await?;
+    assert_eq!(calls[0].state, "uncertain");
+    assert!(calls[0].uncertainty_acknowledged);
+    assert_eq!(calls[0].evidence.total_tokens, None);
+    let sessions = f
+        .store
+        .conversation_sessions(&f.workspace, &f.project, &f.conversation)
+        .await?;
+    assert_eq!(sessions[1].state, "replaced");
+    assert_eq!(sessions[0].generation, call.binding.executor_generation + 1);
+    let successor = f.claim(&queued).await?;
+    assert_eq!(
+        successor.binding.executor_generation,
+        sessions[0].generation
+    );
+    assert!(matches!(
+        f.store.session_authority(&call.request("admit")).await,
+        Err(StoreError::InvalidInput("stale_command"))
+    ));
+    // Original report replay remains its original accepted receipt; cannot rewrite terminal state.
+    assert!(f.store.accept_terminal_report(&report).await?.accepted);
+    assert_eq!(f.state(&turn).await?, "failed");
+    let stale_result = call.terminal("completed", Some(16))?;
+    assert!(
+        !f.store
+            .accept_terminal_report(&stale_result)
+            .await?
+            .accepted
+    );
+    let snapshot = f
+        .store
+        .get_snapshot(&f.workspace, &f.project, &f.conversation)
+        .await?;
+    assert!(
+        snapshot
+            .recent_messages
+            .iter()
+            .all(|message| message.content != "Retained provider result")
+    );
+    Ok(())
+}

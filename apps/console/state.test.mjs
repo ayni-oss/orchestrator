@@ -48,3 +48,25 @@ test('ambiguous cancellation preserves exact turn, parent scope and receipt key 
   assert.equal(reloaded.body.idempotencyKey, 'cancel-key');
   assert.equal(scopeKey(reloaded.body), 'w/p/c');
 });
+test('acknowledged uncertainty preserves possible-charge warning without promising a known result', () => {
+  const view = providerCallView({ state: 'uncertain', uncertaintyAcknowledged: true, cancellationRequested: true });
+  assert.match(view.notice, /may have incurred a charge/);
+  assert.match(view.notice, /evidence remains retained/);
+  assert.match(view.notice, /will not be retried/);
+  assert.equal(view.state, 'uncertain');
+});
+test('ambiguous uncertainty acknowledgement freezes exact evidence identity and explicit consent', () => {
+  const command = makeCommand('AcknowledgeProviderUncertainty', { workspaceId: 'w', projectId: 'p', conversationId: 'c', turnId: 't', callId: 'call', requestDigest: 'sha256:original', acknowledgePossibleCharge: true }, 'ack-key');
+  assert.deepEqual(JSON.parse(JSON.stringify(command)), command);
+  assert.equal(command.body.acknowledgePossibleCharge, true);
+  assert.equal(command.body.requestDigest, 'sha256:original');
+});
+test('tool activity projects allowlisted names and state without arguments or output', () => {
+  const view = providerCallView({ toolInvocations: [
+    { name: 'read_project_status', state: 'completed', arguments: 'private args', output: 'private output' },
+    { name: 'shell', state: 'completed', output: 'private shell output' },
+  ] });
+  assert.deepEqual(view.tools, ['read_project_status · completed']);
+  assert.equal(JSON.stringify(view).includes('private'), false);
+  assert.equal(JSON.stringify(view).includes('shell'), false);
+});

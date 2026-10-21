@@ -38,6 +38,17 @@ const waitFor = async (read, predicate, label) => {
   }
   throw new Error(`Timed out: ${label}`);
 };
+const kube = (...arguments_) => execFileSync('kubectl', ['--context', 'docker-desktop', '-n', `${namespace}-sessions`, ...arguments_], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const workerIdentity = session => {
+  const name = `session-${session.id.replaceAll('-', '')}-${session.generation}`;
+  const pod = JSON.parse(kube('get', 'pod', name, '-o', 'json'));
+  assert.equal(pod.metadata.labels['build.ayni/session-id'], session.id);
+  assert.equal(pod.metadata.labels['build.ayni/session-generation'], session.generation);
+  const pvcName = pod.spec.volumes.find(volume => volume.name === 'ledger').persistentVolumeClaim.claimName;
+  const pvc = JSON.parse(kube('get', 'pvc', pvcName, '-o', 'json'));
+  return { name, podUid: pod.metadata.uid, pvcName, pvcUid: pvc.metadata.uid };
+};
+const stopWorker = identity => kube('delete', 'pod', identity.name, '--wait=true', '--timeout=30s');
 const key = () => crypto.randomUUID();
 let scope;
 const calls = async () => (await gateway('ListProviderCalls', scope)).calls || [];
@@ -59,7 +70,7 @@ try {
   const scripted = await send('This turn was admitted before the provider cutover.');
   await terminal(scripted.turnId);
   assert.equal((await stats()).calls, before.calls);
-  await gateway('UpdateAgentConfiguration', { idempotencyKey: key(), expectedRevisionId: configuration.revisionId, configuration: { workspaceId: workspace.id, provider: 'openai', model: 'fixture-model', instructions: 'Use only this frozen conversation context.', maxInputTokens: configuration.maxInputTokens, maxOutputTokens: configuration.maxOutputTokens, maxTotalTokens: configuration.maxTotalTokens, idleTimeoutSeconds: configuration.idleTimeoutSeconds } });
+  await gateway('UpdateAgentConfiguration', { idempotencyKey: key(), expectedRevisionId: configuration.revisionId, configuration: { workspaceId: workspace.id, provider: 'openai', model: 'fixture-model', instructions: 'Use only this frozen conversation context.', maxInputTokens: 65536, maxOutputTokens: 4096, maxTotalTokens: 131072, idleTimeoutSeconds: configuration.idleTimeoutSeconds } });
   assert.equal((await gateway('GetTurnInputs', { ...scope, turnId: scripted.turnId })).configuration.provider, 'scripted');
   await page.evaluate(scope => sessionStorage.setItem('selection', JSON.stringify(scope)), scope);
   await page.reload();
@@ -80,8 +91,31 @@ try {
   await page.getByText('Provider fixture response ', { exact: false }).first().waitFor();
   const afterReload = await stats();
   assert.equal(afterReload.calls, before.calls + 1, 'reload must not create another provider call');
+  const tools = await send('fixture:tools');
+  await terminal(tools.turnId);
+  const toolCall = (await calls()).find(call => call.turnId === tools.turnId);
+  assert.equal(toolCall.state, 'completed', 'all three bounded reads complete before the final response');
+  assert.deepEqual(toolCall.toolInvocations.map(tool => tool.name).sort(), ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].sort());
+  assert.ok(toolCall.toolInvocations.every(tool => tool.invocationId && tool.inputDigest && tool.outputDigest));
+  assert.equal(toolCall.totalTokens, '40', 'tool continuation usage accumulates across both requests');
+  const afterTools = await stats();
+  assert.equal(afterTools.calls, afterReload.calls + 2, 'one tool request and one continuation');
+  assert.equal(afterTools.toolContinuations, (before.toolContinuations || 0) + 1);
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Connected');
+  assert.equal((await stats()).calls, afterTools.calls, 'tool result replay does not call the provider');
+  const completedSession = (await gateway('ListConversationSessions', scope)).sessions[0];
+  const completedWorker = workerIdentity(completedSession);
+  stopWorker(completedWorker);
   const second = await send('fixture:no-usage');
   await terminal(second.turnId);
+  const adoptedSession = (await gateway('ListConversationSessions', scope)).sessions[0];
+  assert.equal(adoptedSession.id, completedSession.id);
+  assert.equal(adoptedSession.generation, completedSession.generation);
+  const adoptedWorker = workerIdentity(adoptedSession);
+  assert.notEqual(adoptedWorker.podUid, completedWorker.podUid, 'the completed worker was recreated');
+  assert.equal(adoptedWorker.pvcUid, completedWorker.pvcUid, 'adoption keeps the accepted-result ledger');
+  assert.equal((await stats()).calls, afterTools.calls + 1, 'adoption does not resend the prior completed tool turn');
   const unknown = (await calls()).find(call => call.turnId === second.turnId);
   assert.ok(unknown?.responseId);
   assert.equal(unknown.inputTokens, undefined);
@@ -127,7 +161,35 @@ try {
   assert.equal(cancelled.state, 'uncertain');
   assert.equal((await stats()).calls, uncertainCalls, 'cancellation must not resend an uncertain call');
   const retained = await snapshot();
-  assert.equal((retained.recentMessages || []).filter(message => message.role === 'MESSAGE_ROLE_ASSISTANT').length, 3);
+  assert.equal((retained.recentMessages || []).filter(message => message.role === 'MESSAGE_ROLE_ASSISTANT').length, 4);
+  await page.locator('#refresh-provider-calls').click();
+  const acknowledgeButton = page.locator(`[data-acknowledge-call="${cancelled.callId}"]`);
+  await acknowledgeButton.waitFor();
+  assert.equal(await acknowledgeButton.isDisabled(), true, 'possible-charge consent is required');
+  await page.locator(`[data-acknowledge-consent="${cancelled.callId}"]`).check();
+  let acknowledgementCommand;
+  await page.route('**/api/AcknowledgeProviderUncertainty', async route => {
+    acknowledgementCommand = route.request().postDataJSON();
+    const accepted = await route.fetch();
+    assert.equal(accepted.status(), 200);
+    await route.abort('connectionfailed');
+  }, { times: 1 });
+  await acknowledgeButton.click();
+  await waitFor(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('pending'))), value => value?.method === 'AcknowledgeProviderUncertainty', 'retained uncertainty acknowledgement');
+  await page.reload();
+  await page.locator('#pending').waitFor({ state: 'visible' });
+  const acknowledgementReplay = page.waitForResponse(response => new URL(response.url()).pathname === '/api/AcknowledgeProviderUncertainty');
+  await page.locator('#retry').click();
+  const acknowledgedResponse = await acknowledgementReplay;
+  assert.equal(acknowledgedResponse.status(), 200);
+  assert.deepEqual(acknowledgedResponse.request().postDataJSON(), acknowledgementCommand);
+  assert.equal(acknowledgementCommand.acknowledgePossibleCharge, true);
+  await page.locator('#pending').waitFor({ state: 'hidden' });
+  const acknowledged = (await calls()).find(call => call.turnId === uncertainTurn.turnId);
+  assert.equal(acknowledged.state, 'uncertain', 'acknowledgement preserves the factual external outcome');
+  assert.equal(acknowledged.uncertaintyAcknowledged, true);
+  assert.equal((await stats()).calls, uncertainCalls, 'acknowledgement never retries a possibly paid call');
+  await page.getByText(/Uncertain outcome acknowledged/).waitFor();
   // A separate conversation tests cancellation while network I/O is in flight.
   const uncertainScope = scope;
   const delayedConversation = (await gateway('CreateConversation', { workspaceId: workspace.id, projectId: project.id, title: 'Provider cancellation race', idempotencyKey: key() })).conversation;
@@ -139,11 +201,48 @@ try {
   const delayedCall = await waitFor(calls, values => values.some(call => call.turnId === delayed.turnId && call.cancellationRequested && ['uncertain', 'cancelled', 'completed'].includes(call.state)), 'in-flight cancellation evidence');
   assert.ok(delayedCall.find(call => call.turnId === delayed.turnId).cancellationRequested);
   assert.equal((await snapshot()).recentMessages.filter(message => message.role === 'MESSAGE_ROLE_ASSISTANT').length, 0, 'cancellation suppresses a later assistant result');
+  for (const mode of ['tool-scope', 'tool-limit', 'tool-args', 'tool-unknown']) {
+    const rejectedConversation = (await gateway('CreateConversation', { workspaceId: workspace.id, projectId: project.id, title: `Bounded ${mode}`, idempotencyKey: key() })).conversation;
+    scope = { ...scope, conversationId: rejectedConversation.id };
+    const count = (await stats()).calls;
+    const rejected = await send(`fixture:${mode}`);
+    const value = await terminal(rejected.turnId);
+    const rejectedTurn = value.recentTerminalTurns.find(turn => turn.id === rejected.turnId);
+    assert.equal(rejectedTurn.presentationState, 'PRESENTATION_STATE_FAILED', `${mode} fails explicitly`);
+    assert.match(rejectedTurn.safeFailureReason, /^provider_tool_/, `${mode} exposes a safe tool rejection`);
+    assert.equal((await stats()).calls, count + 1, `${mode} never sends a continuation`);
+    assert.equal(value.recentMessages.filter(message => message.role === 'MESSAGE_ROLE_ASSISTANT').length, 0);
+  }
+  const restartConversation = (await gateway('CreateConversation', { workspaceId: workspace.id, projectId: project.id, title: 'Continuation sending restart', idempotencyKey: key() })).conversation;
+  scope = { ...scope, conversationId: restartConversation.id };
+  const beforeRestart = await stats();
+  const restartTurn = await send('fixture:tool-restart');
+  await waitFor(stats, value => (value.modes['tool-restart'] || 0) === (beforeRestart.modes['tool-restart'] || 0) + 2, 'continuation accepted before its delayed result');
+  const sendingSession = (await gateway('ListConversationSessions', scope)).sessions[0];
+  const sendingWorker = workerIdentity(sendingSession);
+  stopWorker(sendingWorker);
+  const recoveredCalls = await waitFor(calls, values => values.some(call => call.turnId === restartTurn.turnId && call.state === 'uncertain'), 'sending continuation recovers as uncertain');
+  const recovered = recoveredCalls.find(call => call.turnId === restartTurn.turnId);
+  assert.equal(recovered.totalTokens, undefined, 'the second external outcome keeps cumulative usage unknown');
+  assert.equal(recovered.toolInvocations.length, 1, 'the first retained tool result survives worker loss');
+  const recoveredSession = (await gateway('ListConversationSessions', scope)).sessions[0];
+  assert.equal(recoveredSession.id, sendingSession.id);
+  assert.equal(recoveredSession.generation, sendingSession.generation);
+  const recoveredWorker = workerIdentity(recoveredSession);
+  assert.notEqual(recoveredWorker.podUid, sendingWorker.podUid);
+  assert.equal(recoveredWorker.pvcUid, sendingWorker.pvcUid, 'interruption preserves the unresolved ledger');
+  const requestCount = (await stats()).calls;
+  assert.equal(requestCount, beforeRestart.calls + 2);
+  await page.evaluate(scope => sessionStorage.setItem('selection', JSON.stringify(scope)), scope);
+  await page.reload();
+  await page.getByText(/The external outcome is unknown/).waitFor();
+  assert.equal((await stats()).calls, requestCount, 'recovered sending intent never resends the continuation');
+  assert.equal((await snapshot()).recentMessages.filter(message => message.role === 'MESSAGE_ROLE_ASSISTANT').length, 0);
   scope = uncertainScope;
   assert.deepEqual(errors, []);
   if (process.env.CONSOLE_EVIDENCE_DIRECTORY) {
     await mkdir(process.env.CONSOLE_EVIDENCE_DIRECTORY, { recursive: true });
     await page.screenshot({ path: `${process.env.CONSOLE_EVIDENCE_DIRECTORY}/provider-console.png`, fullPage: true });
   }
-  console.log(JSON.stringify({ outcome: 'passed', scope, checks: ['scripted-to-openai-cutover', 'responses-request-profile', 'retained-response-usage', 'reload-no-resend', 'unknown-usage-reservation', 'uncertainty-no-resend', 'queued-cancellation-no-call', 'in-flight-cancellation', 'cancellation-receipt-replay', 'exactly-once-visible-results'], calls: (await stats()).calls - before.calls }));
+  console.log(JSON.stringify({ outcome: 'passed', scope, checks: ['scripted-to-openai-cutover', 'responses-request-profile', 'retained-response-usage', 'reload-no-resend', 'unknown-usage-reservation', 'uncertainty-no-resend', 'queued-cancellation-no-call', 'in-flight-cancellation', 'cancellation-receipt-replay', 'exactly-once-visible-results', 'three-scoped-read-tools', 'tool-usage-accounting', 'tool-replay-no-resend', 'foreign-tool-scope-rejected', 'tool-invocation-limit', 'tool-argument-limit', 'unknown-tool-rejected', 'uncertainty-acknowledgement-consent', 'uncertainty-acknowledgement-receipt-replay', 'uncertainty-evidence-preserved', 'completed-tool-worker-adoption', 'continuation-sending-worker-loss', 'retained-pvc-identity', 'continuation-no-resend'], calls: (await stats()).calls - before.calls }));
 } finally { await browser.close(); }

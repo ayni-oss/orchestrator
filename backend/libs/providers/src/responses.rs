@@ -34,6 +34,30 @@ pub struct ResponseEvidence {
     pub content: String,
     pub usage: TokenUsage,
     pub failure_reason: String,
+    /// Validated function-call envelopes only; provider reasoning is discarded.
+    #[serde(default)]
+    pub tool_calls: Vec<FunctionCall>,
+}
+
+/// A model request has no authority until the session validates it against its frozen scope.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct FunctionCall {
+    pub call_id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+/// The complete initial capability catalog. Parameters cannot select another scope.
+#[must_use]
+pub fn scoped_tools() -> Value {
+    Value::Array([
+        ("read_workspace_instructions", "Read this turn's frozen workspace instructions."),
+        ("read_project_status", "Read the originating project's retained factual status snapshot."),
+        ("read_conversation_history", "Read accepted originating-conversation history through the frozen eligibility boundary."),
+    ].into_iter().map(|(name, description)| json!({
+        "type":"function","name":name,"description":description,"strict":true,
+        "parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}
+    })).collect())
 }
 
 /// Safe classifications deliberately omit raw provider diagnostics and request data.
@@ -65,23 +89,44 @@ pub fn prepare(
     {
         return Err(ResponseError::Configuration);
     }
-    // UTF-8 bytes conservatively cover byte-tokenized content. Reserve additional
-    // framing per message and for the request itself; never truncate history.
-    let input_bound = messages
+    let input = messages
         .iter()
-        .try_fold(
-            u64::try_from(instructions.len())
-                .unwrap_or(u64::MAX)
-                .saturating_add(1024),
-            |sum, message| {
-                sum.checked_add(
-                    u64::try_from(message.content.len())
-                        .ok()?
-                        .checked_add(128)?,
-                )
-            },
-        )
-        .ok_or(ResponseError::InputLimit)?;
+        .map(|message| json!({"role":message.role,"content":message.content}))
+        .collect::<Vec<_>>();
+    prepare_items(
+        model,
+        instructions,
+        &input,
+        max_input,
+        max_output,
+        max_total,
+    )
+}
+
+/// Prepare a stateless continuation using only previously validated input items.
+///
+/// # Errors
+/// Rejects a request that exceeds the remaining cumulative allowance.
+pub fn prepare_items(
+    model: &str,
+    instructions: &str,
+    input: &[Value],
+    max_input: u64,
+    max_output: u64,
+    max_total: u64,
+) -> Result<PreparedRequest, ResponseError> {
+    let tools = scoped_tools();
+    // Count all serialized tool definitions, call envelopes and outputs, including
+    // escaped UTF-8, with conservative framing. Never truncate an authorized read.
+    let input_bound = u64::try_from(
+        serde_json::to_vec(&json!({
+            "instructions":instructions,"input":input,"tools":tools
+        }))
+        .map_err(|_| ResponseError::Configuration)?
+        .len(),
+    )
+    .map_err(|_| ResponseError::InputLimit)?
+    .saturating_add(1024);
     let remaining = max_total
         .checked_sub(input_bound)
         .ok_or(ResponseError::InputLimit)?;
@@ -89,12 +134,9 @@ pub fn prepare(
     if input_bound > max_input || output < 16 {
         return Err(ResponseError::InputLimit);
     }
-    let input = messages
-        .iter()
-        .map(|message| json!({"role":message.role,"content":message.content}))
-        .collect::<Vec<_>>();
     let bytes = serde_json::to_vec(&json!({
         "model":model,"instructions":instructions,"input":input,
+        "tools":tools,
         "max_output_tokens":output,"store":false,"background":false,
         "stream":false,"truncation":"disabled"
     }))
@@ -204,8 +246,9 @@ fn parse_response(bytes: &[u8]) -> Result<ResponseEvidence, ResponseError> {
     };
     let response_id = text("id")?;
     let model = text("model")?;
+    let mut tool_calls = Vec::new();
     let (content, failure_reason) = match body.get("status").and_then(Value::as_str) {
-        Some("completed") => match response_content(&body) {
+        Some("completed") => match response_content(&body, &mut tool_calls) {
             Ok(content) => (content, String::new()),
             Err(reason) => (String::new(), reason.into()),
         },
@@ -236,6 +279,7 @@ fn parse_response(bytes: &[u8]) -> Result<ResponseEvidence, ResponseError> {
         model,
         content,
         failure_reason,
+        tool_calls,
         usage: TokenUsage {
             input_tokens: count("input_tokens"),
             output_tokens: count("output_tokens"),
@@ -244,12 +288,16 @@ fn parse_response(bytes: &[u8]) -> Result<ResponseEvidence, ResponseError> {
     })
 }
 
-fn response_content(body: &Value) -> Result<String, &'static str> {
+fn response_content(
+    body: &Value,
+    tool_calls: &mut Vec<FunctionCall>,
+) -> Result<String, &'static str> {
     let outputs = body
         .get("output")
         .and_then(Value::as_array)
         .ok_or("provider_rejected")?;
     let mut content = String::new();
+    let mut reasoning = false;
     for output in outputs {
         match output.get("type").and_then(Value::as_str) {
             Some("message") => {
@@ -274,11 +322,44 @@ fn response_content(body: &Value) -> Result<String, &'static str> {
                     }
                 }
             }
-            Some("reasoning") => {} // Reasoning is neither retained nor projected.
+            Some("reasoning") => reasoning = true, // Never retain or project reasoning.
+            Some("function_call") => {
+                let field = |name: &str, max: usize| {
+                    output
+                        .get(name)
+                        .and_then(Value::as_str)
+                        .filter(|value| {
+                            !value.is_empty()
+                                && value.len() <= max
+                                && !value.chars().any(char::is_control)
+                        })
+                        .map(str::to_owned)
+                        .ok_or("provider_tool_rejected")
+                };
+                let call = FunctionCall {
+                    call_id: field("call_id", 128)?,
+                    name: field("name", 128)?,
+                    arguments: output
+                        .get("arguments")
+                        .and_then(Value::as_str)
+                        .filter(|value| value.len() <= 4096)
+                        .ok_or("provider_tool_rejected")?
+                        .to_owned(),
+                };
+                if tool_calls.len() >= 8 {
+                    return Err("provider_tool_limit");
+                }
+                tool_calls.push(call);
+            }
             _ => return Err("provider_rejected"),
         }
     }
-    if content.is_empty() {
+    // Reasoning models require these items on continuation. This execution
+    // profile deliberately does not retain them, so fail before running tools.
+    if reasoning && !tool_calls.is_empty() {
+        return Err("provider_tool_rejected");
+    }
+    if content.is_empty() && tool_calls.is_empty() {
         return Err("provider_rejected");
     }
     if content
@@ -298,7 +379,7 @@ fn response_content(body: &Value) -> Result<String, &'static str> {
 mod tests {
     use super::*;
     #[test]
-    fn request_is_client_managed_bounded_and_has_no_remote_tools() {
+    fn request_is_client_managed_and_exposes_only_scoped_reads() {
         let request = prepare(
             "explicit-model",
             "frozen instructions",
@@ -317,7 +398,7 @@ mod tests {
         assert_eq!(body["truncation"], "disabled");
         assert!(body.get("previous_response_id").is_none());
         assert!(body.get("conversation").is_none());
-        assert!(body.get("tools").is_none());
+        assert_eq!(body["tools"], scoped_tools());
         assert!(
             prepare(
                 "explicit-model",

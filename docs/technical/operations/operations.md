@@ -5,7 +5,7 @@ conversation-scoped session workers. It does not authorize shared-environment de
 
 ## Startup sequence
 
-1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through ordinal 9, installs runtime grants, and validates the catalog manifest.
+1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through ordinal 11, installs runtime grants, and validates the catalog manifest.
 2. PostgreSQL, JetStream, and executor-ledger retained volumes are mounted without deleting existing state.
 3. NATS starts with four password identities and no anonymous access. The administrative hook creates or updates the three exact streams and four durable consumers.
 4. The control plane validates the runtime database role, binds HTTP and loopback gRPC, loads only the application broker password, and resumes pending outbox/report acceptance.
@@ -24,7 +24,7 @@ dev/ctl check
 dev/ctl scenario
 ```
 
-`check` verifies all StatefulSets/Deployments, migrations through ordinal 9, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
+`check` verifies all StatefulSets/Deployments, migrations through ordinal 11, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
 
 ## Configuration and session recovery
 
@@ -50,21 +50,46 @@ Session result ledgers and their scoped credentials join the retained-state
 boundary. Preserve them with PostgreSQL, JetStream and the supervisor ledger.
 A session worker has no database credential, broker credential or Kubernetes API
 token. The trusted supervisor alone provisions session workloads. Provider
-credentials remain disabled in the scripted scope.
+credentials are mounted directly only into explicitly enabled, workspace-scoped
+OpenAI sessions.
 
 The dedicated session namespace is `<workflow-namespace>-sessions`, labelled
 with its parent namespace and retained by Helm. Each generation has an immutable
 bearer Secret and its own 512 MiB PVC. The supervisor has get/create/delete Pod
 rights and get/create Secret/PVC rights only in that namespace. Workers have no
-Kubernetes API token. The NetworkPolicy declares supervisor-only ingress and no
-worker egress; cluster network enforcement must be verified separately.
+Kubernetes API token. The NetworkPolicy declares supervisor-only ingress and no arbitrary
+worker egress except the explicitly configured provider path; cluster network
+enforcement must be verified separately.
 
 Worker ledgers retain exact requests and results until the application decision
 handoff. Resolved entries release request contents and retain digest/result
 tombstones for eight days. Execution prunes expired resolved tombstones and
 fails closed at 50,000 rows or 256 MiB active retained bytes. Idle exit requires
-no unacknowledged result. Restart adopts the same generation's PVC; a turn after
+no unacknowledged result or unresolved provider reservation. Restart adopts the same generation's PVC; a turn after
 expiry/replacement receives a new generation and separate PVC.
+
+## Provider and tool recovery
+
+The session ledger retains each provider exchange and bounded tool invocation.
+A sending exchange without retained response evidence is uncertain and cannot be
+resent automatically. A retained final response replays its exact result through
+the existing signed report and application decision.
+
+Use `AcknowledgeProviderUncertainty` only after reviewing the exact call ID,
+request digest and possible charge. The command requires a scoped idempotency
+key and an explicit possible-charge acknowledgement. Once the accepted uncertainty
+report and outbox handoffs settle, one transaction records the receipt, closes the
+held turn, retires its generation and promotes queued work.
+
+Acknowledgement preserves the old ledger and uncertain call evidence. Unknown
+usage and its reservation remain unknown and charged. It neither reconciles a
+provider result nor retries the uncertain request. Keep the retired generation's
+PVC for operator investigation.
+
+Tool failures use safe reason codes. Review the read bound or admitted budget
+before submitting new work; changing instructions cannot grant another scope or
+capability. Activity exposes tool identifiers and digests, never arguments,
+outputs or reasoning.
 
 ## Schema and stream changes
 

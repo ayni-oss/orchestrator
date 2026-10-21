@@ -72,9 +72,12 @@ coding worktrees, Ayni task execution, quality evidence, and draft publication; 
 integrations remain M7. The [M2 handoff contract](docs/technical/research/project-workflow-m1-durable-foundation.md#m2-handoff)
 owns the inherited invariants. The [conversation execution contract](docs/technical/architecture/conversation-execution.md) consolidates configuration, session, provider/cancellation and bounded-tool decisions within v1.
 
-The contributor console and configuration/session prerequisites are delivered.
-Real provider execution retains the same isolated session and signed acceptance
-boundaries; bounded tools remain the final M2 scope.
+M2 conversation execution is implemented: the contributor console, shared frozen
+configuration, isolated sessions, one real provider, bounded read tools and explicit
+uncertainty recovery share the signed acceptance boundary. Cumulative acceptance
+covers deterministic failure fixtures, deployed session interruption and a bounded
+live-provider smoke. The delivery PR owns the execution evidence. M3 plans and
+approval are the next implementation scope.
 
 Every runtime PR extends the cumulative harness and exercises affected behavior on
 Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded

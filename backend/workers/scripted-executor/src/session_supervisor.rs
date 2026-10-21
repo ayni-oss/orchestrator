@@ -58,6 +58,7 @@ pub async fn execute(
     let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &namespace);
     let secrets: Api<Secret> = Api::namespaced(client, &namespace);
+    retire_previous_pod(&pods, scope, binding).await?;
     ensure_storage(&pvcs, &name, scope).await?;
     let token = ensure_token(&secrets, &name, scope).await?;
     ensure_pod(&pods, &name, scope, binding, &image).await?;
@@ -98,6 +99,94 @@ pub async fn execute(
         return Err(io::Error::other("session result binding mismatch").into());
     }
     Ok(response)
+}
+
+// A newly accepted generation fences the immediately preceding generation.
+// Delete only the owned Pod; unresolved ledger PVCs and bearer Secrets remain.
+async fn retire_previous_pod(
+    api: &Api<Pod>,
+    scope: &SessionExecutionScope,
+    binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
+) -> RuntimeResult {
+    if scope.generation <= 1 {
+        return Ok(());
+    }
+    let previous = SessionExecutionScope {
+        generation: scope.generation - 1,
+        ..scope.clone()
+    };
+    let previous_name = name(&previous)?;
+    if let Some(pod) = api.get_opt(&previous_name).await? {
+        let delete = retirement_preconditions(&pod, &previous, binding)?;
+        match api.delete(&previous_name, &delete).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(error)) if error.code == 404 => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
+fn retirement_preconditions(
+    pod: &Pod,
+    scope: &SessionExecutionScope,
+    binding: &ayni_orchestrator_events::v1::ConversationTurnBinding,
+) -> RuntimeResult<DeleteParams> {
+    verify_labels(pod.metadata.labels.as_ref(), scope)?;
+    if !pod.metadata.labels.as_ref().is_some_and(|labels| {
+        labels
+            .get("app.kubernetes.io/name")
+            .is_some_and(|value| value == "ayni-conversation-session")
+            && labels
+                .get("app.kubernetes.io/part-of")
+                .is_some_and(|value| value == "ayni-orchestrator")
+    }) {
+        return Err(io::Error::other("retired session ownership mismatch").into());
+    }
+    let env = pod
+        .spec
+        .as_ref()
+        .and_then(|spec| {
+            spec.containers
+                .iter()
+                .find(|container| container.name == "session")
+        })
+        .and_then(|container| container.env.as_ref())
+        .ok_or_else(|| io::Error::other("retired session scope missing"))?;
+    for (name, expected) in [
+        (
+            "ORCHESTRATOR_SESSION_WORKSPACE_ID",
+            binding.workspace_id.as_str(),
+        ),
+        (
+            "ORCHESTRATOR_SESSION_PROJECT_ID",
+            binding.project_id.as_str(),
+        ),
+        (
+            "ORCHESTRATOR_SESSION_CONVERSATION_ID",
+            binding.conversation_id.as_str(),
+        ),
+    ] {
+        if !env
+            .iter()
+            .any(|item| item.name == name && item.value.as_deref() == Some(expected))
+        {
+            return Err(io::Error::other("retired session scope mismatch").into());
+        }
+    }
+    let uid = pod
+        .metadata
+        .uid
+        .clone()
+        .filter(|uid| !uid.is_empty())
+        .ok_or_else(|| io::Error::other("retired session UID missing"))?;
+    Ok(DeleteParams {
+        preconditions: Some(kube::api::Preconditions {
+            uid: Some(uid),
+            resource_version: None,
+        }),
+        ..DeleteParams::default()
+    })
 }
 
 async fn ensure_storage(
@@ -489,6 +578,45 @@ mod tests {
         assert!(
             retain_route(&configuration, &command_id, "other-session", &digest, exact).is_err()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn retired_pod_deletion_requires_scope_labels_and_uid() -> RuntimeResult {
+        let scope = SessionExecutionScope {
+            session_id: uuid::Uuid::now_v7().to_string(),
+            generation: 1,
+            idle_timeout_seconds: 30,
+        };
+        let binding = ayni_orchestrator_events::v1::ConversationTurnBinding {
+            workspace_id: "workspace".into(),
+            project_id: "project".into(),
+            conversation_id: "conversation".into(),
+            ..Default::default()
+        };
+        let mut pod = desired_pod(&name(&scope)?, &scope, &binding, "fixture-image", None)?;
+        assert!(retirement_preconditions(&pod, &scope, &binding).is_err());
+        pod.metadata.uid = Some("retained-pod-uid".into());
+        let delete = retirement_preconditions(&pod, &scope, &binding)?;
+        assert_eq!(
+            delete
+                .preconditions
+                .and_then(|preconditions| preconditions.uid)
+                .as_deref(),
+            Some("retained-pod-uid")
+        );
+        let other = ayni_orchestrator_events::v1::ConversationTurnBinding {
+            conversation_id: "other".into(),
+            ..binding.clone()
+        };
+        assert!(retirement_preconditions(&pod, &scope, &other).is_err());
+        let other_scope = SessionExecutionScope {
+            generation: 2,
+            ..scope.clone()
+        };
+        assert!(retirement_preconditions(&pod, &other_scope, &binding).is_err());
+        pod.metadata.labels = None;
+        assert!(retirement_preconditions(&pod, &scope, &binding).is_err());
         Ok(())
     }
 

@@ -100,3 +100,27 @@ Neither idle expiry, Pod loss nor automatic retry resolves uncertainty. Any
 operator recovery action binds the exact call and observed evidence. Unknown
 results remain visible with a safe reason and no raw provider error body.
 
+
+## Tool continuations and explicit recovery
+
+The Responses adapter exposes only the three reads in the
+[conversation execution contract](conversation-execution.md#bounded-tool-authority).
+The initial tool profile accepts function calls without reasoning items. A
+response that combines reasoning with tool calls fails as `provider_tool_rejected`
+before tool execution or continuation. The runtime does not guess model behavior
+from a name or retain reasoning to satisfy a continuation requirement.
+
+Each exchange retains sending intent, bounded provider evidence and tool results
+before a continuation. Tool output comes from frozen turn inputs. The model
+cannot supply a workspace, project or conversation identity.
+
+All exchanges share the admitted turn budget. Unknown usage prevents another
+paid continuation. A recovered sending exchange remains uncertain; a retained
+terminal result replays through the signed acceptance handoff.
+
+`AcknowledgeProviderUncertainty` binds the exact parent scope, turn, call ID,
+request digest and idempotency key. The operator must explicitly acknowledge a
+possible charge. Once the uncertainty report and outbox handoffs settle, the
+transaction closes the held turn, retires its generation and promotes queued work
+into a fresh session. It preserves uncertain evidence, unknown usage, charged
+reservation and the old ledger; it cannot create a replacement paid attempt.

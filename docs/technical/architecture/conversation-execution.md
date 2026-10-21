@@ -6,8 +6,8 @@ sessions](../../../ROADMAP.md#m1m2-delivery-scopes). It carries forward the
 and resolves the configuration, session, provider and tool boundaries identified
 by the [refactor research](../research/project-workflow-refactor-runbook.md).
 The delivery PR owns implementation status and acceptance evidence. Provider
-calls use the retained request lifecycle; tool execution and complete M2
-acceptance remain PR 4.
+calls and tool continuations use the retained request lifecycle. The final M2
+delivery adds bounded reads and cumulative recovery acceptance.
 
 ## One v1 contract throughout alpha
 
@@ -113,7 +113,7 @@ cancellation. Its state machine and recovery matrix must pass before paid calls
 are enabled. Configuration selects the admitted binding; deployment policy and scoped credentials
 gate its execution.
 
-## Bounded tool authority for PR 4
+## Bounded tool authority
 
 The initial tool set consists only of scoped reads:
 
@@ -122,6 +122,10 @@ The initial tool set consists only of scoped reads:
 | `read_workspace_instructions` | Read the instructions in the turn's frozen configuration revision. |
 | `read_project_status` | Read the originating project's objective and factual status at an explicitly retained snapshot. No other conversation transcript, plan or reasoning. |
 | `read_conversation_history` | Read bounded accepted history from the originating conversation through the frozen eligibility boundary. |
+
+Project status freezes at turn eligibility alongside the originating conversation
+context. It contains the project objective and factual status, never another
+conversation transcript. Replaying the command uses that retained snapshot.
 
 Each invocation carries the turn/assignment/generation, a stable invocation ID,
 validated arguments, an input digest and bounded retained output. Tools cannot

@@ -6,6 +6,8 @@ metadata:
   labels:
     {{- include "local.commonLabels" . | nindent 4 }}
 data:
+  start.sh: |
+    {{- .Files.Get "files/jetstream-start.sh" | nindent 4 }}
   nats.conf: |
     server_name: workflow-jetstream
     port: 4222
@@ -261,6 +263,7 @@ spec:
         - name: nats
           image: {{ .Values.jetstream.serverImage | quote }}
           imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/config/start.sh"]
           args: ["--config=/config/nats.conf"]
           env:
             - name: WORKFLOW_ADMIN_PASSWORD

@@ -269,6 +269,7 @@ fn execution_inputs_and_session_scope_are_bounded_and_bound_to_the_command()
         input_message_id: format!("message:{}", uuid::Uuid::now_v7()),
         input_content: "hello".into(),
         context: Vec::new(),
+        project_status: None,
         frozen_configuration: Some(AgentExecutionConfiguration {
             revision_id: uuid::Uuid::now_v7().to_string(),
             instructions: "Workspace instructions".into(),
@@ -345,4 +346,74 @@ fn provider_usage_preserves_unknown_and_rejects_inconsistent_or_unbounded_counts
     call.input_tokens = Some(u64::MAX);
     call.total_tokens = None;
     assert!(!provider_counters_valid(&call));
+}
+
+#[test]
+fn project_snapshot_cannot_expand_command_scope_or_claim_completion() -> Result<(), ContractError> {
+    let id = identity();
+    let binding = binding(&id.id);
+    let mut payload = ConversationTurnRequested {
+        binding: Some(binding.clone()),
+        input_message_id: format!("message:{}", uuid::Uuid::now_v7()),
+        input_content: "hello".into(),
+        project_status: Some(crate::v1::ProjectStatusSnapshot {
+            snapshot_id: id.id.clone(),
+            project_id: binding.project_id,
+            objective: "Factual goal".into(),
+            status: "registered".into(),
+            context_revision: binding.context_revision,
+            project_resource_version: 1,
+        }),
+        ..Default::default()
+    };
+    assert!(encode_command(&id, &metadata(), &payload).is_ok());
+    payload
+        .project_status
+        .as_mut()
+        .ok_or(ContractError::Invalid("snapshot"))?
+        .project_id = format!("project:{}", uuid::Uuid::now_v7());
+    assert!(encode_command(&id, &metadata(), &payload).is_err());
+    payload
+        .project_status
+        .as_mut()
+        .ok_or(ContractError::Invalid("snapshot"))?
+        .project_id = payload
+        .binding
+        .as_ref()
+        .ok_or(ContractError::Invalid("binding"))?
+        .project_id
+        .clone();
+    payload
+        .project_status
+        .as_mut()
+        .ok_or(ContractError::Invalid("snapshot"))?
+        .status = "completed".into();
+    assert!(encode_command(&id, &metadata(), &payload).is_err());
+    Ok(())
+}
+
+#[test]
+fn tool_projection_rejects_untrusted_names_duplicate_ids_and_unbounded_batches() {
+    let tool = crate::v1::ToolInvocationEvidence {
+        invocation_id: "invocation_1".into(),
+        name: "read_project_status".into(),
+        input_digest: format!("sha256:{}", "a".repeat(64)),
+        output_digest: format!("sha256:{}", "b".repeat(64)),
+        state: "completed".into(),
+    };
+    assert!(tool_invocations_valid(std::slice::from_ref(&tool)));
+    assert!(!tool_invocations_valid(&[tool.clone(), tool.clone()]));
+    let mut unknown = tool.clone();
+    unknown.name = "shell".into();
+    assert!(!tool_invocations_valid(&[unknown]));
+    let mut untrusted = tool.clone();
+    untrusted.invocation_id = "raw diagnostic\nsecret".into();
+    assert!(!tool_invocations_valid(&[untrusted]));
+    let tools = (0..9)
+        .map(|index| crate::v1::ToolInvocationEvidence {
+            invocation_id: format!("invocation_{index}"),
+            ..tool.clone()
+        })
+        .collect::<Vec<_>>();
+    assert!(!tool_invocations_valid(&tools));
 }

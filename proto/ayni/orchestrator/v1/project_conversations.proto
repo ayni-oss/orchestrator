@@ -7,6 +7,7 @@ import "ayni/orchestrator/v1/workflow.proto";
 // M1 exposes only the durable conversation path on the trusted operator listener.
 service ProjectConversationService {
   rpc ListProviderCalls(ListProviderCallsRequest) returns (ListProviderCallsResponse);
+  rpc AcknowledgeProviderUncertainty(AcknowledgeProviderUncertaintyRequest) returns (AcknowledgeProviderUncertaintyResponse);
   rpc CancelTurn(CancelTurnRequest) returns (CancelTurnResponse);
   rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
@@ -153,6 +154,8 @@ message ProviderCall {
   string request_digest = 16;
   string context_digest = 17;
   string configuration_revision_id = 18;
+  repeated ToolInvocation tool_invocations = 19;
+  bool uncertainty_acknowledged = 20;
 }
 message ListProviderCallsResponse {
   repeated ProviderCall calls = 1;
@@ -169,4 +172,31 @@ message CancelTurnResponse {
   string turn_id = 2;
   string state = 3;
   bool cancellation_requested = 4;
+}
+
+// Allowlisted activity metadata; never tool arguments or raw output.
+message ToolInvocation {
+  string invocation_id = 1;
+  string name = 2;
+  string input_digest = 3;
+  string output_digest = 4;
+  string state = 5;
+}
+
+// Explicitly retire an unresolved call without inventing usage or resending it.
+message AcknowledgeProviderUncertaintyRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string turn_id = 4;
+  string call_id = 5;
+  string request_digest = 6;
+  string idempotency_key = 7;
+  bool acknowledge_possible_charge = 8;
+}
+message AcknowledgeProviderUncertaintyResponse {
+  string command_id = 1;
+  string turn_id = 2;
+  string call_id = 3;
+  string state = 4;
 }

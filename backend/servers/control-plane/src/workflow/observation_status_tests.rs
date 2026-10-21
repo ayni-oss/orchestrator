@@ -1,3 +1,4 @@
+use super::errors::RichStatus;
 use super::*;
 
 #[test]
