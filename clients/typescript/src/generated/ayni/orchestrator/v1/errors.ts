@@ -20,6 +20,7 @@ export enum ErrorReason {
   ERROR_REASON_NOT_IMPLEMENTED = 32,
   ERROR_REASON_IDEMPOTENCY_CONFLICT = 33,
   ERROR_REASON_HISTORY_SNAPSHOT_EXPIRED = 34,
+  ERROR_REASON_PLAN_VERSION_CONFLICT = 35,
   UNRECOGNIZED = -1,
 }
 
@@ -58,6 +59,9 @@ export function errorReasonFromJSON(object: any): ErrorReason {
     case 34:
     case "ERROR_REASON_HISTORY_SNAPSHOT_EXPIRED":
       return ErrorReason.ERROR_REASON_HISTORY_SNAPSHOT_EXPIRED;
+    case 35:
+    case "ERROR_REASON_PLAN_VERSION_CONFLICT":
+      return ErrorReason.ERROR_REASON_PLAN_VERSION_CONFLICT;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -89,6 +93,8 @@ export function errorReasonToJSON(object: ErrorReason): string {
       return "ERROR_REASON_IDEMPOTENCY_CONFLICT";
     case ErrorReason.ERROR_REASON_HISTORY_SNAPSHOT_EXPIRED:
       return "ERROR_REASON_HISTORY_SNAPSHOT_EXPIRED";
+    case ErrorReason.ERROR_REASON_PLAN_VERSION_CONFLICT:
+      return "ERROR_REASON_PLAN_VERSION_CONFLICT";
     case ErrorReason.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

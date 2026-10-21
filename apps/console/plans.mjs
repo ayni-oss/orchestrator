@@ -1,0 +1,137 @@
+// Local edits and immutable reviewed versions have independent state.
+import { scopeKey } from './state.mjs';
+const $ = id => document.getElementById(id);
+const lines = value => value.split('\n').map(s => s.trim()).filter(Boolean);
+const blank = () => ({ title: '', objective: '', scope: '', outOfScope: '', constraints: [], unresolvedQuestions: [], tasks: [] });
+export function planDraftKey(scope) { return `plan-draft:${scopeKey(scope)}`; }
+export function planCommand(scope, draft) {
+  const { planId, expectedVersionId, content } = draft;
+  return planId ? { method: 'RevisePlan', body: { ...scope, planId, expectedVersionId, content } }
+    : { method: 'CreatePlan', body: { ...scope, content } };
+}
+
+export function mountPlans({ getScope, api, submit, showError, saved, store, controls }) {
+  let owner = '';
+  let draft = { content: blank() };
+  let reviewed;
+  let heads = [];
+  let query = 0;
+  let historyBefore = '0';
+  let historyPlan = '';
+  const fields = ['title', 'objective', 'scope', 'outOfScope', 'constraints', 'unresolvedQuestions'];
+  const taskFields = ['key', 'objective', 'scope', 'outOfScope', 'acceptanceCriteria', 'repository', 'sourceRef', 'executionLimits', 'unresolvedInputs'];
+  const arrays = ['constraints', 'unresolvedQuestions', 'acceptanceCriteria', 'unresolvedInputs'];
+  const inputValue = (name, value) => arrays.includes(name) ? lines(value) : value;
+  const displayValue = value => Array.isArray(value) ? value.join('\n') : value || '';
+  function persist() { store(planDraftKey(getScope()), draft); }
+  function readEditor() {
+    for (const name of fields) draft.content[name] = inputValue(name, $('plan-editor').querySelector(`:scope > label [name="${name}"]`).value);
+    draft.content.tasks = [...$('plan-tasks').children].map(card => Object.fromEntries(taskFields.map(name => [name, inputValue(name, card.querySelector(`[name="${name}"]`).value)])));
+    persist();
+  }
+  function taskEditor(value) {
+    const card = document.createElement('fieldset');
+    const legend = document.createElement('legend'); legend.textContent = 'Proposed task'; card.append(legend);
+    const labels = { key: 'Task key', objective: 'Task objective', scope: 'Included scope', outOfScope: 'Excluded scope', acceptanceCriteria: 'Acceptance criteria · one per line', repository: 'Declared repository', sourceRef: 'Declared source reference', executionLimits: 'Execution limits', unresolvedInputs: 'Unresolved inputs · one per line' };
+    for (const name of taskFields) {
+      const label = document.createElement('label'); label.textContent = labels[name];
+      const input = document.createElement(['key', 'repository', 'sourceRef'].includes(name) ? 'input' : 'textarea');
+      input.name = name; input.value = displayValue(value[name]);
+      input.maxLength = name === 'key' ? 64 : name === 'repository' ? 1024 : name === 'sourceRef' ? 256 : 4096;
+      input.required = ['key', 'objective', 'scope'].includes(name);
+      label.append(input); card.append(label);
+    }
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove proposed task';
+    remove.onclick = () => { card.remove(); readEditor(); };
+    card.append(remove); return card;
+  }
+  function renderEditor() {
+    for (const name of fields) $('plan-editor').querySelector(`:scope > label [name="${name}"]`).value = displayValue(draft.content[name]);
+    $('plan-tasks').replaceChildren(...draft.content.tasks.map(taskEditor));
+    $('plan-editing').textContent = draft.planId ? `Revising version ${draft.expectedVersionId}. A concurrent edit will require review.` : 'New operator-authored draft.';
+    controls();
+  }
+  function paragraph(parent, label, value) {
+    const section = document.createElement('div');
+    const title = document.createElement('strong'); title.textContent = label;
+    const text = document.createElement('p'); text.textContent = displayValue(value) || 'Not specified';
+    section.append(title, text); parent.append(section);
+  }
+  function showVersion(value) {
+    reviewed = value;
+    $('plan-review').replaceChildren();
+    const heading = document.createElement('h3'); heading.textContent = `${value.content.title} · version ${value.ordinal}`;
+    $('plan-review').append(heading);
+    paragraph($('plan-review'), 'Origin', `Project ${value.projectId} · conversation ${value.conversationId}`);
+    paragraph($('plan-review'), 'Retained version', `${value.id}\n${value.contentDigest}\nAuthor: ${value.author}`);
+    for (const [name,label] of [['objective','Objective'],['scope','Included scope'],['outOfScope','Excluded scope'],['constraints','Constraints'],['unresolvedQuestions','Unresolved questions']]) paragraph($('plan-review'),label,value.content[name]);
+    for (const task of value.content.tasks || []) {
+      const article = document.createElement('article'); article.className = 'plan-task';
+      paragraph(article, `Proposed task ${task.key}`, task.objective);
+      for (const [name,label] of [['scope','Included scope'],['outOfScope','Excluded scope'],['acceptanceCriteria','Acceptance criteria'],['repository','Declared repository · unverified'],['sourceRef','Declared source · unverified'],['executionLimits','Execution limits'],['unresolvedInputs','Unresolved inputs']]) paragraph(article,label,task[name]);
+      $('plan-review').append(article);
+    }
+    $('plan-review-status').textContent = 'Retained proposal. Approval and task admission are not available yet.';
+    controls();
+  }
+  async function open(planId, versionId = '') {
+    const selected = { ...getScope() }; const ticket = ++query;
+    const result = await api('GetPlanVersion', { ...selected, planId, versionId });
+    if (ticket !== query || scopeKey(selected) !== owner) return;
+    showVersion(result.version);
+    if (historyPlan !== planId) { historyPlan = planId; historyBefore = '0'; $('plan-history').replaceChildren(); }
+    await history(true);
+  }
+  async function history(reset = false) {
+    if (!reviewed) return;
+    const selected = { ...getScope() }; const planId = reviewed.planId;
+    const page = await api('ListPlanVersions', { ...selected, planId, beforeOrdinal: reset ? '0' : historyBefore, limit: 10 });
+    if (scopeKey(selected) !== owner || reviewed?.planId !== planId) return;
+    if (reset) $('plan-history').replaceChildren();
+    for (const version of page.versions || []) {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = `Review version ${version.ordinal}`; button.dataset.planVersion = version.id;
+      button.onclick = () => open(planId, version.id).catch(showError); $('plan-history').append(button);
+    }
+    historyBefore = page.nextBeforeOrdinal || '0'; $('plan-history-more').hidden = historyBefore === '0';
+  }
+  function update(plans = []) {
+    heads = plans;
+    $('plan-list').replaceChildren();
+    for (const plan of heads) {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = `${plan.title} · version ${plan.currentOrdinal}`; button.dataset.planId = plan.id;
+      button.onclick = () => open(plan.id).catch(showError); $('plan-list').append(button);
+    }
+    if (reviewed && heads.find(h => h.id === reviewed.planId)?.currentVersionId !== reviewed.id) $('plan-review-status').textContent = 'A newer version exists. Your reviewed version and local draft remain unchanged. Select the plan to review its current version.';
+  }
+  function select() {
+    const next = scopeKey(getScope());
+    if (next === owner) return;
+    owner = next; query++; reviewed = undefined; heads = []; historyPlan = ''; historyBefore = '0';
+    draft = saved(planDraftKey(getScope())) || { content: blank() };
+    $('plan-review').replaceChildren(); $('plan-history').replaceChildren(); $('plan-list').replaceChildren();
+    $('plan-history-more').hidden = true; $('plan-review-status').textContent = 'Select a retained plan to review.';
+    renderEditor();
+  }
+  function accepted(command, result) {
+    // Only clear the draft belonging to the exact accepted command. Another scope may be open.
+    const key = planDraftKey(command.body); store(key, null);
+    if (scopeKey(command.body) !== owner) return;
+    draft = { content: blank() }; renderEditor(); showVersion(result.version);
+    api('ListPlans', getScope()).then(result => { if (planDraftKey(command.body) === planDraftKey(getScope())) update(result.plans); }).catch(showError);
+    historyPlan = result.version.planId; historyBefore = '0'; history(true).catch(showError);
+  }
+  $('plan-editor').oninput = readEditor;
+  $('plan-editor').onsubmit = event => { event.preventDefault(); readEditor(); const command = planCommand(getScope(), draft); submit(command.method, command.body); };
+  $('plan-add-task').onclick = () => { if (draft.content.tasks.length >= 32) { showError(new Error('A plan can contain at most 32 proposed tasks.')); return; } $('plan-tasks').append(taskEditor({})); readEditor(); controls(); };
+  $('plan-discard').onclick = () => { draft = { content: blank() }; store(planDraftKey(getScope()), null); renderEditor(); };
+  $('plan-edit').onclick = () => {
+    if (!reviewed) return;
+    if (draft.content.title || draft.content.objective || draft.content.scope || draft.content.tasks.length) { showError(new Error('Save or discard the local draft before editing a retained version.')); return; }
+    if (heads.find(h => h.id === reviewed.planId)?.currentVersionId !== reviewed.id) { showError(new Error('Review the current version before revising this plan.')); return; }
+    draft = { planId: reviewed.planId, expectedVersionId: reviewed.id, content: structuredClone(reviewed.content) };
+    draft.content.tasks ||= []; draft.content.constraints ||= []; draft.content.unresolvedQuestions ||= [];
+    persist(); renderEditor(); $('plan-editor-details').open = true;
+  };
+  $('plan-history-more').onclick = () => history().catch(showError);
+  return { select, update, accepted, canEdit: () => !!reviewed };
+}

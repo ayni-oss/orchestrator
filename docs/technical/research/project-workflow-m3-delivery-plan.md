@@ -1,6 +1,6 @@
 # M3 delivery plan
 
-Date: 2026-10-21. Status: implementation plan; no M3 runtime delivery claimed.
+Date: 2026-10-21. Status: staged implementation plan. PR #238 combines this contract with the first durable-review slice; later slices remain planned.
 
 ## What this decides
 
@@ -96,7 +96,7 @@ Keep deterministic fixtures separate from live-provider evidence; neither establ
 - Run required Ayni quality/managed-lock, Helm, security and documentation checks for the affected scope.
 - Deploy checkout-built images through `dev/ctl` using the explicit `docker-desktop` context.
 - Interrupt proposal/report/acceptance and approval/observation boundaries; retain source revisions, workload identities and observed receipts.
-- For this documentation-only contract PR, review consistency, whitespace, local links, Mermaid conventions and the documentation build. Runtime tests do not establish unimplemented behavior.
+- PR #238 includes runtime code for durable plan review and must satisfy the runtime checks above. The [plan review reference](../architecture/plan-review.md) records the concrete first-slice contracts.
 
 ## Whys
 

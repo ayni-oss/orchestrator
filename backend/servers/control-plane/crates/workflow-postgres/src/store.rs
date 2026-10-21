@@ -5,6 +5,7 @@ mod context_manifest;
 mod delivery;
 mod delivery_failure;
 mod discovery;
+mod plans;
 pub mod provider_calls;
 pub use delivery::DecisionAcknowledgement;
 mod ordered_reports;
@@ -45,6 +46,8 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("CONFIGURATION_REVISION_CONFLICT")]
     ConfigurationRevisionConflict,
+    #[error("PLAN_VERSION_CONFLICT")]
+    PlanVersionConflict,
     #[error("workflow capacity is exhausted: {0}")]
     Capacity(&'static str),
     #[error("WATCH_CURSOR_EXPIRED")]
@@ -738,9 +741,11 @@ impl WorkflowStore {
             )
             .await?
             .get(0);
+        let plans = plans::summaries(&transaction, conversation_id).await?;
         transaction.commit().await?;
         driver.abort();
         Ok(ConversationSnapshot {
+            plans,
             workspace_id: workspace_id.to_owned(),
             project_id: project_id.to_owned(),
             conversation_id: conversation_id.to_owned(),

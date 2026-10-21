@@ -40,6 +40,7 @@ expected = {
     },
     "project_conversations.proto": {
         "ProjectConversationService": [
+            "CreatePlan", "RevisePlan", "GetPlanVersion", "ListPlans", "ListPlanVersions",
             "ListProviderCalls", "AcknowledgeProviderUncertainty", "CancelTurn",
             "CreateConversation",
             "SendMessage",
@@ -50,7 +51,7 @@ expected = {
         ],
     },
 }
-expected_files = set(expected) | {"errors.proto", "workflow.proto"}
+expected_files = set(expected) | {"errors.proto", "workflow.proto", "plans.proto"}
 actual_files = {path.name for path in root.glob("*.proto")}
 if actual_files != expected_files:
     raise SystemExit(

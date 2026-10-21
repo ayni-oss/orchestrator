@@ -49,6 +49,11 @@ mod tests {
                 (
                     "ProjectConversationService",
                     BTreeSet::from([
+                        "CreatePlan",
+                        "RevisePlan",
+                        "GetPlanVersion",
+                        "ListPlans",
+                        "ListPlanVersions",
                         "ListProviderCalls",
                         "CancelTurn",
                         "AcknowledgeProviderUncertainty",

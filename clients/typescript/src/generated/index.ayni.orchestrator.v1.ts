@@ -6,6 +6,7 @@
 /* eslint-disable */
 
 export * from "./ayni/orchestrator/v1/errors";
+export * from "./ayni/orchestrator/v1/plans";
 export * from "./ayni/orchestrator/v1/workflow";
 export * from "./ayni/orchestrator/v1/project_conversations";
 export * from "./ayni/orchestrator/v1/projects";

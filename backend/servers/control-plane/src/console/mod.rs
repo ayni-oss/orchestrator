@@ -82,6 +82,15 @@ pub fn router(console: Console) -> Router {
             }),
         )
         .route(
+            "/plans.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript")],
+                    include_str!("../../../../../apps/console/plans.mjs"),
+                )
+            }),
+        )
+        .route(
             "/state.mjs",
             get(|| async {
                 (
@@ -137,6 +146,19 @@ async fn rpc(
         }};
     }
     match method.as_str() {
+        "CreatePlan" => forward!(console.conversations(), create_plan, v1::CreatePlanRequest),
+        "RevisePlan" => forward!(console.conversations(), revise_plan, v1::RevisePlanRequest),
+        "GetPlanVersion" => forward!(
+            console.conversations(),
+            get_plan_version,
+            v1::GetPlanVersionRequest
+        ),
+        "ListPlans" => forward!(console.conversations(), list_plans, v1::ListPlansRequest),
+        "ListPlanVersions" => forward!(
+            console.conversations(),
+            list_plan_versions,
+            v1::ListPlanVersionsRequest
+        ),
         "CreateWorkspace" => forward!(
             console.projects(),
             create_workspace,
@@ -343,7 +365,7 @@ impl IntoResponse for ApiError {
         let code = match self.0.code() {
             Code::InvalidArgument => StatusCode::BAD_REQUEST,
             Code::NotFound | Code::Unimplemented => StatusCode::NOT_FOUND,
-            Code::AlreadyExists | Code::FailedPrecondition => StatusCode::CONFLICT,
+            Code::AlreadyExists | Code::Aborted | Code::FailedPrecondition => StatusCode::CONFLICT,
             Code::ResourceExhausted => StatusCode::TOO_MANY_REQUESTS,
             Code::Unavailable | Code::DeadlineExceeded => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

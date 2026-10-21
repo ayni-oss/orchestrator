@@ -254,6 +254,7 @@ pub struct TerminalTurnSummary {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversationSnapshot {
+    pub plans: Vec<crate::plans::PlanSummary>,
     pub workspace_id: String,
     pub project_id: String,
     pub conversation_id: String,

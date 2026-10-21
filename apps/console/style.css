@@ -349,3 +349,13 @@ h1 {
   background:#fff3dc;
   border-radius:5px;
   padding:8px}
+
+.plans-panel{margin:0 32px 24px;padding:20px 0;border-top:1px solid #dde4d9}
+.plans-panel p{white-space:pre-wrap;overflow-wrap:anywhere}
+#plan-list,#plan-history{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+#plan-editor{display:grid;gap:12px;max-width:760px}
+#plan-editor textarea{min-height:72px}
+#plan-editor fieldset{min-width:0;padding:16px;margin:12px 0;border:1px solid #dde4d9}
+#plan-editor input,#plan-editor textarea{width:100%;box-sizing:border-box}
+.plan-task{margin:16px 0;padding:12px 0;border-top:1px solid #dde4d9}
+@media(max-width:700px){.plans-panel{margin:0 16px 16px}}

@@ -1,3 +1,4 @@
+import { mountPlans } from './plans.mjs';
 import { newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
 
 const $ = id => document.getElementById(id);
@@ -26,6 +27,7 @@ let queuedFrames = 0;
 let configuration;
 let currentSession;
 let providerQuery = 0;
+const plans = mountPlans({ getScope: scopeBody, api, submit, showError, saved, store, controls });
 
 function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
 function clearError() { $('error').hidden = true; }
@@ -38,9 +40,10 @@ async function api(method, body) {
 function scopeBody() { return { workspaceId: scope.workspaceId, projectId: scope.projectId, conversationId: scope.conversationId }; }
 function controls() {
   for (const form of document.querySelectorAll('form')) {
-    const unavailable = !!pending || sending || discoveryBusy || (form.id === 'agent-configuration' && (!configuration || configuration.workspaceId !== scope.workspaceId)) || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'send' && !scope.conversationId);
+    const unavailable = !!pending || sending || discoveryBusy || (form.id === 'agent-configuration' && (!configuration || configuration.workspaceId !== scope.workspaceId)) || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'send' && !scope.conversationId) || (form.id === 'plan-editor' && !scope.conversationId);
     for (const input of form.elements) input.disabled = unavailable;
   }
+  $('plan-edit').disabled = !plans.canEdit() || !!pending || sending || discoveryBusy;
   $('pending').hidden = !pending;
   $('retry').disabled = sending;
   $('pending-description').textContent = pending ? `${pending.method}: retry uses the original content, scope, and command key.` : '';
@@ -65,7 +68,9 @@ async function retry() {
     const result = await api(command.method, command.body);
     pending = null; store('pending', null);
     $('receipt').textContent = result.receipt?.commandId || 'Accepted';
-    if (command.method === 'SendMessage') {
+    if (['CreatePlan', 'RevisePlan'].includes(command.method)) {
+      plans.accepted(command, result);
+    } else if (command.method === 'SendMessage') {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';
     } else if (command.method === 'UpdateAgentConfiguration') {
       if (command.body.configuration.workspaceId === scope.workspaceId) await loadConfiguration();
@@ -215,6 +220,7 @@ function renderTurnControls(turns) {
 function renderSnapshot(value) {
   if (snapshot && !newerOrEqual(value.conversationRevision, snapshot.conversationRevision)) return;
   snapshot = value;
+  plans.update(value.plans);
   $('title').textContent = value.title;
   $('subtitle').textContent = 'Messages and activity retained by the workflow.';
   $('breadcrumb').textContent = `${$('workspace').selectedOptions[0]?.textContent || 'Workspace'} / ${$('project').selectedOptions[0]?.textContent || 'Project'}`;
@@ -286,6 +292,7 @@ function openWatch(version) {
 async function selectConversation(id) {
   closeWatch(); generation++; providerQuery++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
   scope.conversationId = id || ''; store('selection', scope);
+  plans.select();
   currentSession = undefined; $('session-state').textContent = 'No session.';
   $('provider-call-status').textContent = 'No conversation selected.'; $('provider-calls').replaceChildren(); $('turn-controls').replaceChildren();
   $('messages').replaceChildren(); $('history').replaceChildren(); $('activity').replaceChildren(); historyBefore = '0'; historySnapshotId = ''; historyHasMore = true; historyIds = new Set();

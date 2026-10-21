@@ -76,6 +76,11 @@ impl RequestContext {
                 v1::ErrorReason::FailedPrecondition,
                 "retained workflow state is invalid",
             ),
+            StoreError::PlanVersionConflict => self.status(
+                Code::Aborted,
+                v1::ErrorReason::PlanVersionConflict,
+                "plan version changed; review the current version",
+            ),
             StoreError::ConfigurationRevisionConflict => self.status(
                 Code::Aborted,
                 v1::ErrorReason::FailedPrecondition,

@@ -8,7 +8,7 @@ The durable workflow path separates transport contracts, PostgreSQL authority, b
 | `proto/ayni/orchestrator/events/v1` | Exact command, signed report, and targeted decision payloads |
 | `backend/libs/events` | Bounded CloudEvent encoding, identity/binding validation, signing, and strict verification |
 | `backend/servers/control-plane/crates/grpc-contract` | Generated Rust API and transport-level request validation |
-| `backend/servers/control-plane/crates/workflow-postgres` | Forward migrations, immutable configuration/turn inputs, session generations, authoritative transactions, report decisions, FIFO promotion, projections and exact outbox bytes |
+| `backend/servers/control-plane/crates/workflow-postgres` | Forward migrations, immutable configuration/turn inputs, session generations, authoritative transactions, report decisions, FIFO promotion, projections, immutable plan review and exact outbox bytes |
 | `backend/servers/control-plane` | Secret-file configuration, HTTP probes, loopback gRPC, outbox publication, report consumption, and process lifecycle |
 | `backend/workers/scripted-executor` | Retained broker authority ledger, claim fencing, targeted decisions, scoped Kubernetes session provisioning and deterministic session workers |
 | `deploy/charts/ayni-orchestrator` | Reusable control-plane/executor workloads consuming administrator-owned Secrets |

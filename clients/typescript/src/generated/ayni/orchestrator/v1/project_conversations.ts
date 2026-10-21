@@ -21,6 +21,18 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import {
+  CreatePlanRequest,
+  CreatePlanResponse,
+  GetPlanVersionRequest,
+  GetPlanVersionResponse,
+  ListPlansRequest,
+  ListPlansResponse,
+  ListPlanVersionsRequest,
+  ListPlanVersionsResponse,
+  RevisePlanRequest,
+  RevisePlanResponse,
+} from "./plans";
+import {
   CommandReceipt,
   Conversation,
   ConversationHistoryRecord,
@@ -3664,6 +3676,55 @@ export const AcknowledgeProviderUncertaintyResponse: MessageFns<AcknowledgeProvi
 /** M1 exposes only the durable conversation path on the trusted operator listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
+  createPlan: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/CreatePlan" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreatePlanRequest): Buffer => Buffer.from(CreatePlanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreatePlanRequest => CreatePlanRequest.decode(value),
+    responseSerialize: (value: CreatePlanResponse): Buffer => Buffer.from(CreatePlanResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CreatePlanResponse => CreatePlanResponse.decode(value),
+  },
+  revisePlan: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/RevisePlan" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RevisePlanRequest): Buffer => Buffer.from(RevisePlanRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RevisePlanRequest => RevisePlanRequest.decode(value),
+    responseSerialize: (value: RevisePlanResponse): Buffer => Buffer.from(RevisePlanResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RevisePlanResponse => RevisePlanResponse.decode(value),
+  },
+  getPlanVersion: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/GetPlanVersion" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetPlanVersionRequest): Buffer =>
+      Buffer.from(GetPlanVersionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetPlanVersionRequest => GetPlanVersionRequest.decode(value),
+    responseSerialize: (value: GetPlanVersionResponse): Buffer =>
+      Buffer.from(GetPlanVersionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetPlanVersionResponse => GetPlanVersionResponse.decode(value),
+  },
+  listPlans: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListPlans" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListPlansRequest): Buffer => Buffer.from(ListPlansRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListPlansRequest => ListPlansRequest.decode(value),
+    responseSerialize: (value: ListPlansResponse): Buffer => Buffer.from(ListPlansResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListPlansResponse => ListPlansResponse.decode(value),
+  },
+  listPlanVersions: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListPlanVersions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListPlanVersionsRequest): Buffer =>
+      Buffer.from(ListPlanVersionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListPlanVersionsRequest => ListPlanVersionsRequest.decode(value),
+    responseSerialize: (value: ListPlanVersionsResponse): Buffer =>
+      Buffer.from(ListPlanVersionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListPlanVersionsResponse => ListPlanVersionsResponse.decode(value),
+  },
   listProviderCalls: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/ListProviderCalls" as const,
     requestStream: false as const,
@@ -3792,6 +3853,11 @@ export const ProjectConversationServiceService = {
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
+  createPlan: handleUnaryCall<CreatePlanRequest, CreatePlanResponse>;
+  revisePlan: handleUnaryCall<RevisePlanRequest, RevisePlanResponse>;
+  getPlanVersion: handleUnaryCall<GetPlanVersionRequest, GetPlanVersionResponse>;
+  listPlans: handleUnaryCall<ListPlansRequest, ListPlansResponse>;
+  listPlanVersions: handleUnaryCall<ListPlanVersionsRequest, ListPlanVersionsResponse>;
   listProviderCalls: handleUnaryCall<ListProviderCallsRequest, ListProviderCallsResponse>;
   acknowledgeProviderUncertainty: handleUnaryCall<
     AcknowledgeProviderUncertaintyRequest,
@@ -3809,6 +3875,81 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
 }
 
 export interface ProjectConversationServiceClient extends Client {
+  createPlan(
+    request: CreatePlanRequest,
+    callback: (error: ServiceError | null, response: CreatePlanResponse) => void,
+  ): ClientUnaryCall;
+  createPlan(
+    request: CreatePlanRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CreatePlanResponse) => void,
+  ): ClientUnaryCall;
+  createPlan(
+    request: CreatePlanRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CreatePlanResponse) => void,
+  ): ClientUnaryCall;
+  revisePlan(
+    request: RevisePlanRequest,
+    callback: (error: ServiceError | null, response: RevisePlanResponse) => void,
+  ): ClientUnaryCall;
+  revisePlan(
+    request: RevisePlanRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RevisePlanResponse) => void,
+  ): ClientUnaryCall;
+  revisePlan(
+    request: RevisePlanRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RevisePlanResponse) => void,
+  ): ClientUnaryCall;
+  getPlanVersion(
+    request: GetPlanVersionRequest,
+    callback: (error: ServiceError | null, response: GetPlanVersionResponse) => void,
+  ): ClientUnaryCall;
+  getPlanVersion(
+    request: GetPlanVersionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetPlanVersionResponse) => void,
+  ): ClientUnaryCall;
+  getPlanVersion(
+    request: GetPlanVersionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetPlanVersionResponse) => void,
+  ): ClientUnaryCall;
+  listPlans(
+    request: ListPlansRequest,
+    callback: (error: ServiceError | null, response: ListPlansResponse) => void,
+  ): ClientUnaryCall;
+  listPlans(
+    request: ListPlansRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListPlansResponse) => void,
+  ): ClientUnaryCall;
+  listPlans(
+    request: ListPlansRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListPlansResponse) => void,
+  ): ClientUnaryCall;
+  listPlanVersions(
+    request: ListPlanVersionsRequest,
+    callback: (error: ServiceError | null, response: ListPlanVersionsResponse) => void,
+  ): ClientUnaryCall;
+  listPlanVersions(
+    request: ListPlanVersionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListPlanVersionsResponse) => void,
+  ): ClientUnaryCall;
+  listPlanVersions(
+    request: ListPlanVersionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListPlanVersionsResponse) => void,
+  ): ClientUnaryCall;
   listProviderCalls(
     request: ListProviderCallsRequest,
     callback: (error: ServiceError | null, response: ListProviderCallsResponse) => void,

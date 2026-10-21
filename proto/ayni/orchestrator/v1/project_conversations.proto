@@ -2,10 +2,16 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
+import "ayni/orchestrator/v1/plans.proto";
 import "ayni/orchestrator/v1/workflow.proto";
 
 // M1 exposes only the durable conversation path on the trusted operator listener.
 service ProjectConversationService {
+  rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse);
+  rpc RevisePlan(RevisePlanRequest) returns (RevisePlanResponse);
+  rpc GetPlanVersion(GetPlanVersionRequest) returns (GetPlanVersionResponse);
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
+  rpc ListPlanVersions(ListPlanVersionsRequest) returns (ListPlanVersionsResponse);
   rpc ListProviderCalls(ListProviderCallsRequest) returns (ListProviderCallsResponse);
   rpc AcknowledgeProviderUncertainty(AcknowledgeProviderUncertaintyRequest) returns (AcknowledgeProviderUncertaintyResponse);
   rpc CancelTurn(CancelTurnRequest) returns (CancelTurnResponse);

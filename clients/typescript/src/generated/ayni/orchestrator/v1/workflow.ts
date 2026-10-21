@@ -7,6 +7,7 @@
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { Timestamp } from "../../../google/protobuf/timestamp";
+import { PlanSummary } from "./plans";
 
 /**
  * Durable workflow state is authoritative in PostgreSQL. Transport state remains
@@ -548,6 +549,7 @@ export enum ConversationUpdateKind {
   CONVERSATION_UPDATE_KIND_TURN_EXECUTION_CHANGED = 4,
   CONVERSATION_UPDATE_KIND_TERMINAL_OUTCOME_ACCEPTED = 5,
   CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED = 6,
+  CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED = 7,
   UNRECOGNIZED = -1,
 }
 
@@ -574,6 +576,9 @@ export function conversationUpdateKindFromJSON(object: any): ConversationUpdateK
     case 6:
     case "CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED":
       return ConversationUpdateKind.CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED;
+    case 7:
+    case "CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED":
+      return ConversationUpdateKind.CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -597,6 +602,8 @@ export function conversationUpdateKindToJSON(object: ConversationUpdateKind): st
       return "CONVERSATION_UPDATE_KIND_TERMINAL_OUTCOME_ACCEPTED";
     case ConversationUpdateKind.CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED:
       return "CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED";
+    case ConversationUpdateKind.CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED:
+      return "CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED";
     case ConversationUpdateKind.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -711,6 +718,7 @@ export interface ConversationSnapshot {
   resumeCursor: string;
   title: string;
   createdAt?: Date | undefined;
+  plans: PlanSummary[];
 }
 
 export interface ConversationHistoryRecord {
@@ -2338,6 +2346,7 @@ function createBaseConversationSnapshot(): ConversationSnapshot {
     resumeCursor: "",
     title: "",
     createdAt: undefined,
+    plans: [],
   };
 }
 
@@ -2381,6 +2390,9 @@ export const ConversationSnapshot: MessageFns<ConversationSnapshot> = {
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(106).fork()).join();
+    }
+    for (const v of message.plans) {
+      PlanSummary.encode(v!, writer.uint32(114).fork()).join();
     }
     return writer;
   },
@@ -2502,6 +2514,14 @@ export const ConversationSnapshot: MessageFns<ConversationSnapshot> = {
             message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.plans.push(PlanSummary.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -2577,6 +2597,9 @@ export const ConversationSnapshot: MessageFns<ConversationSnapshot> = {
         : isSet(object.created_at)
         ? fromJsonTimestamp(object.created_at)
         : undefined,
+      plans: globalThis.Array.isArray(object?.plans)
+        ? object.plans.map((e: any) => PlanSummary.fromJSON(e))
+        : [],
     };
   },
 
@@ -2621,6 +2644,9 @@ export const ConversationSnapshot: MessageFns<ConversationSnapshot> = {
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
     }
+    if (message.plans?.length) {
+      obj.plans = message.plans.map((e) => PlanSummary.toJSON(e));
+    }
     return obj;
   },
 
@@ -2646,6 +2672,7 @@ export const ConversationSnapshot: MessageFns<ConversationSnapshot> = {
     message.resumeCursor = object.resumeCursor ?? "";
     message.title = object.title ?? "";
     message.createdAt = object.createdAt ?? undefined;
+    message.plans = object.plans?.map((e) => PlanSummary.fromPartial(e)) || [];
     return message;
   },
 };

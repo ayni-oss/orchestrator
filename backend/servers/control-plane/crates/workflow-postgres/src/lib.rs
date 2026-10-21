@@ -10,6 +10,7 @@ use tokio_postgres::{Client, Config, NoTls};
 pub mod metrics;
 pub mod migrations;
 pub mod model;
+pub mod plans;
 pub mod store;
 
 pub use migrations::{

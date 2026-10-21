@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package ayni.orchestrator.v1;
 
+import "ayni/orchestrator/v1/plans.proto";
 import "google/protobuf/timestamp.proto";
 
 // Durable workflow state is authoritative in PostgreSQL. Transport state remains
@@ -97,6 +98,7 @@ enum ConversationUpdateKind {
   CONVERSATION_UPDATE_KIND_TURN_EXECUTION_CHANGED = 4;
   CONVERSATION_UPDATE_KIND_TERMINAL_OUTCOME_ACCEPTED = 5;
   CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED = 6;
+  CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED = 7;
 }
 
 // The original result of one idempotent command. Replays return these fields
@@ -206,6 +208,7 @@ message ConversationSnapshot {
   string resume_cursor = 11;
   string title = 12;
   google.protobuf.Timestamp created_at = 13;
+  repeated PlanSummary plans = 14;
 }
 
 message ConversationHistoryRecord {

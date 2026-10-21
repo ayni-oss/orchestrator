@@ -1,6 +1,7 @@
 // Run against an already deployed local stack and `dev/ctl console`.
 // Each run creates its own workspace and preserves accepted application data.
 import { chromium } from 'playwright';
+import { exercisePlans } from './plan-acceptance.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const endpoint = process.env.CONSOLE_URL || 'http://127.0.0.1:3000';
@@ -219,6 +220,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Connected');
   // A replay burst must release the slow browser stream and catch up from its
   // processed cursor, keeping the local promise queue bounded.
+  await exercisePlans({ page, context, endpoint, gateway, scope: firstScope });
   const retainedCursor = await page.locator('#cursor').textContent();
   const burst = Array.from({ length: 80 }, () => `event: frame\ndata: ${JSON.stringify({ update: { cursor: retainedCursor, conversationRevision: '1' } })}\n\n`).join('');
   await page.route('**/watch?**', route => route.fulfill({ status: 200, contentType: 'text/event-stream', body: burst }), { times: 1 });
