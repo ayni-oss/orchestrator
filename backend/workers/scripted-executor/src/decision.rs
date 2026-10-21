@@ -164,11 +164,10 @@ impl Ledger {
         self.mark_decision_acknowledged_at(report_source, report_event_id, unix_seconds()?)
     }
 
-    /// Test-only direct acknowledgement after a simulated broker confirmation.
+    /// Record a decision acknowledgement after `JetStream` confirms it.
     ///
     /// # Errors
-    /// Returns missing decisions, invalid clocks, or SQL failures.
-    #[cfg(test)]
+    /// Returns missing decisions, invalid clocks, or `SQLite` failures.
     pub fn acknowledge_decision(
         &self,
         report_source: &str,

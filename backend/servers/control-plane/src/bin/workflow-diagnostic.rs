@@ -1,14 +1,16 @@
 use ayni_orchestrator_api::v1::{
-    CreateConversationRequest, CreateProjectRequest, CreateWorkspaceRequest,
+    ConversationSnapshot, CreateConversationRequest, CreateProjectRequest, CreateWorkspaceRequest,
     GetConversationSnapshotRequest, ListConversationHistoryRequest, SendMessageRequest,
     project_conversation_service_client::ProjectConversationServiceClient,
     project_service_client::ProjectServiceClient,
 };
-use std::{env, error::Error, io, net::SocketAddr, process::ExitCode};
+use std::{env, error::Error, io, net::SocketAddr, process::ExitCode, time::Duration};
+use tokio::time::{Instant, sleep};
 use tonic::transport::Endpoint;
 use uuid::Uuid;
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:50051";
+const SCRIPTED_RESPONSE: &str = "The scripted executor completed this turn.";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -48,7 +50,7 @@ async fn run() -> Result<String, Box<dyn Error>> {
             idempotency_key: format!("diagnostic-project-{nonce}"),
             display_name: "Diagnostic project".to_owned(),
             workspace_id: workspace.id.clone(),
-            goal: "Verify durable Slice 1 admission and reads".to_owned(),
+            goal: "Verify durable Slice 2 execution and reads".to_owned(),
         })
         .await?
         .into_inner();
@@ -83,21 +85,13 @@ async fn run() -> Result<String, Box<dyn Error>> {
         .into_inner();
     require_receipt(message_response.receipt, "SendMessage")?;
 
-    let snapshot = conversations
-        .get_conversation_snapshot(GetConversationSnapshotRequest {
-            workspace_id: workspace.id.clone(),
-            project_id: project.id.clone(),
-            conversation_id: conversation.id.clone(),
-        })
-        .await?
-        .into_inner()
-        .snapshot
-        .ok_or_else(|| invalid_response("GetConversationSnapshot omitted snapshot"))?;
-    if snapshot.recent_messages.len() != 1 || snapshot.nonterminal_turns.len() != 1 {
-        return Err(
-            invalid_response("snapshot did not contain the admitted message and turn").into(),
-        );
-    }
+    let snapshot = wait_for_scripted_response(
+        &mut conversations,
+        &workspace.id,
+        &project.id,
+        &conversation.id,
+    )
+    .await?;
 
     let history = conversations
         .list_conversation_history(ListConversationHistoryRequest {
@@ -110,14 +104,57 @@ async fn run() -> Result<String, Box<dyn Error>> {
         })
         .await?
         .into_inner();
-    if history.records.len() != 1 {
-        return Err(invalid_response("history did not contain the admitted message").into());
+    if history.records.len() < 2
+        || !history
+            .records
+            .iter()
+            .any(|record| record.content_or_outcome == SCRIPTED_RESPONSE)
+    {
+        return Err(invalid_response("history did not contain the scripted response").into());
     }
 
     Ok(format!(
-        "workflow diagnostic passed workspace_id={} project_id={} conversation_id={} revision={}",
+        "workflow Slice 2 diagnostic passed workspace_id={} project_id={} conversation_id={} revision={}",
         workspace.id, project.id, conversation.id, snapshot.conversation_revision
     ))
+}
+
+async fn wait_for_scripted_response(
+    conversations: &mut ProjectConversationServiceClient<tonic::transport::Channel>,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+) -> Result<ConversationSnapshot, Box<dyn Error>> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let snapshot = conversations
+            .get_conversation_snapshot(GetConversationSnapshotRequest {
+                workspace_id: workspace_id.to_owned(),
+                project_id: project_id.to_owned(),
+                conversation_id: conversation_id.to_owned(),
+            })
+            .await?
+            .into_inner()
+            .snapshot
+            .ok_or_else(|| invalid_response("GetConversationSnapshot omitted snapshot"))?;
+        let response_present = snapshot
+            .recent_messages
+            .iter()
+            .any(|message| message.content == SCRIPTED_RESPONSE);
+        if snapshot.nonterminal_turns.is_empty()
+            && snapshot.recent_terminal_turns.len() == 1
+            && response_present
+        {
+            return Ok(snapshot);
+        }
+        if Instant::now() >= deadline {
+            return Err(invalid_response(
+                "scripted execution did not become terminal before the diagnostic deadline",
+            )
+            .into());
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
 }
 
 fn parse_endpoint(mut arguments: impl Iterator<Item = String>) -> Result<String, io::Error> {

@@ -78,6 +78,27 @@ pub enum StoreOutcome {
     Duplicate,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetainedEvent {
+    pub source: String,
+    pub id: String,
+    pub exact_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandDelivery {
+    New,
+    PendingClaim(RetainedEvent),
+    Resolved,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingDecisionAck {
+    pub report_source: String,
+    pub report_id: String,
+    pub consumer_sequence: u64,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LedgerError {
     #[error("SQLite ledger error: {0}")]
@@ -449,6 +470,113 @@ impl Ledger {
             .optional()?
             .flatten()
             .ok_or(LedgerError::NotFound)
+    }
+
+    /// Classify an exact command delivery without creating a second claim.
+    ///
+    /// # Errors
+    /// Returns validation, changed-byte conflicts, or `SQLite` failures.
+    pub fn classify_command_delivery(
+        &mut self,
+        command: &Command<'_>,
+    ) -> Result<CommandDelivery, LedgerError> {
+        let exists: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM commands WHERE source = ?1 AND event_id = ?2)",
+            params![command.source, command.id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Ok(CommandDelivery::New);
+        }
+        self.retain_redelivered_command(command)?;
+        let claim: Option<(String, String, Option<Vec<u8>>)> = self
+            .connection
+            .query_row(
+                "SELECT source, event_id, event_bytes FROM reports \
+                 WHERE command_source = ?1 AND command_event_id = ?2 AND sequence = 1",
+                params![command.source, command.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        match claim {
+            Some((source, id, Some(exact_bytes))) => {
+                Ok(CommandDelivery::PendingClaim(RetainedEvent {
+                    source,
+                    id,
+                    exact_bytes,
+                }))
+            }
+            Some((_, _, None)) => Ok(CommandDelivery::Resolved),
+            None => Err(LedgerError::EventConflict),
+        }
+    }
+
+    /// Return all unresolved exact report bytes for reconnect publication.
+    ///
+    /// # Errors
+    /// Returns `SQLite` failures or invalid retained state.
+    pub fn pending_reports(&self) -> Result<Vec<RetainedEvent>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source, event_id, event_bytes FROM reports \
+             WHERE decision IS NULL AND event_bytes IS NOT NULL \
+             ORDER BY rowid",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(RetainedEvent {
+                source: row.get(0)?,
+                id: row.get(1)?,
+                exact_bytes: row.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Return commands authorized for deterministic execution after restart.
+    ///
+    /// # Errors
+    /// Returns `SQLite` failures or invalid retained state.
+    pub fn executable_commands(&self) -> Result<Vec<RetainedEvent>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source, event_id, event_bytes FROM commands \
+             WHERE state = 'accepted' AND event_bytes IS NOT NULL ORDER BY rowid",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(RetainedEvent {
+                source: row.get(0)?,
+                id: row.get(1)?,
+                exact_bytes: row.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Return decisions committed locally but not yet reconciled with the
+    /// server-confirmed consumer acknowledgement floor.
+    ///
+    /// # Errors
+    /// Returns `SQLite` failures or invalid retained sequences.
+    pub fn pending_decision_acknowledgements(
+        &self,
+    ) -> Result<Vec<PendingDecisionAck>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source, event_id, decision_consumer_sequence FROM reports \
+             WHERE decision IS NOT NULL AND decision_acked = 0 \
+               AND decision_consumer_sequence IS NOT NULL ORDER BY decision_consumer_sequence",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let consumer_sequence: i64 = row.get(2)?;
+            Ok((row.get(0)?, row.get(1)?, consumer_sequence))
+        })?;
+        rows.map(|row| {
+            let (report_source, report_id, consumer_sequence) = row?;
+            Ok(PendingDecisionAck {
+                report_source,
+                report_id,
+                consumer_sequence: u64::try_from(consumer_sequence)
+                    .map_err(|_| LedgerError::Invalid)?,
+            })
+        })
+        .collect()
     }
 }
 

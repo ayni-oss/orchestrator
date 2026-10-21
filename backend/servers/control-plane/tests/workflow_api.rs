@@ -25,7 +25,7 @@ type TestServer = (
 
 #[tokio::test]
 #[ignore = "requires the disposable PostgreSQL gate"]
-async fn trusted_listener_and_readiness_cover_slice_one() -> TestResult {
+async fn trusted_listener_and_readiness_cover_private_workflow_boundary() -> TestResult {
     let database_url = env::var(TEST_URL_VARIABLE)
         .map_err(|_| io::Error::other(format!("{TEST_URL_VARIABLE} is required")))?;
     let runtime_role = env::var(TEST_ROLE_VARIABLE)
@@ -182,7 +182,7 @@ async fn exercise_hierarchy_and_admission(channel: Channel) -> TestResult {
                 idempotency_key: format!("grpc-project-{nonce}"),
                 display_name: "gRPC project".to_owned(),
                 workspace_id: workspace.id.clone(),
-                goal: "exercise the Slice 1 contract".to_owned(),
+                goal: "exercise the private workflow contract".to_owned(),
             },
             &nonce,
         ))
@@ -270,7 +270,7 @@ async fn exercise_conversation(
         ))
         .await
         .err()
-        .ok_or("Slice 1 watch unexpectedly succeeded")?;
+        .ok_or("pre-watch workflow boundary unexpectedly streamed an update")?;
     assert_eq!(watch.code(), Code::Unimplemented);
     Ok(())
 }

@@ -7,19 +7,22 @@
 
 Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The current runnable milestone is **M1 runtime Slice 1**. It provides:
+The current runnable milestone is **M1 runtime Slice 2**. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
 - repository-owned forward migrations under an advisory lock;
 - minimal workspace, project, and conversation creation;
 - durable, scoped-idempotent message admission with FIFO turn ordering;
-- conversation snapshots and stable bounded history;
-- a canonical private-v1 gRPC API on a trusted pod-loopback listener;
-- a Docker Desktop Helm stack with distinct migration/runtime roles and retained storage.
+- an isolated authenticated three-stream JetStream profile;
+- exact-byte command and decision publication with broker storage kept separate from ownership;
+- a retained scripted executor with signed claim, acceptance, and terminal-report handoffs;
+- accepted scripted responses, FIFO successor promotion, snapshots, and stable bounded history;
+- a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
+- a Docker Desktop Helm stack with separated database/broker identities and retained storage.
 
 This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser/BFF, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime.
 
-JetStream delivery, executor ownership and results, resumable watches, providers, browser UX, and shared-environment release enter later slices.
+Resumable watches, quarantine and exhaustive fault/capacity acceptance, providers, browser UX, and shared-environment release enter later slices.
 
 ## Start locally
 

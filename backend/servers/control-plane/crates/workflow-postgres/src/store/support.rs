@@ -492,20 +492,34 @@ pub(super) struct CommandMaterialization<'a> {
     pub(super) receipt_command_id: &'a str,
 }
 
-pub(super) async fn materialize_command(
+async fn command_context(
     transaction: &Transaction<'_>,
-    command: CommandMaterialization<'_>,
-) -> Result<(), StoreError> {
-    let event_id = new_id();
+    conversation_id: &str,
+    turn_id: &str,
+) -> Result<Vec<ConversationContextRecord>, StoreError> {
     let rows = transaction
         .query(
-            "SELECT id, sequence, role, content FROM workflow_messages \
-             WHERE conversation_id = $1 ORDER BY sequence",
-            &[&command.conversation_id],
+            "SELECT recent.id, recent.sequence, recent.role, recent.content \
+             FROM ( \
+               SELECT message.id, message.sequence, message.role, message.content, \
+                      message_turn.sequence AS turn_sequence \
+               FROM workflow_messages message \
+               JOIN workflow_turns message_turn \
+                 ON message_turn.conversation_id = message.conversation_id \
+                AND message_turn.id = message.turn_id \
+               JOIN workflow_turns target \
+                 ON target.conversation_id = message.conversation_id AND target.id = $2 \
+               WHERE message.conversation_id = $1 AND message_turn.sequence <= target.sequence \
+               ORDER BY message_turn.sequence DESC, \
+                 CASE message.role WHEN 'assistant' THEN 0 ELSE 1 END, message.sequence DESC \
+               LIMIT 100 \
+             ) recent \
+             ORDER BY recent.turn_sequence, \
+               CASE recent.role WHEN 'user' THEN 0 ELSE 1 END, recent.sequence",
+            &[&conversation_id, &turn_id],
         )
         .await?;
-    let context = rows
-        .iter()
+    rows.iter()
         .map(|row| {
             Ok(ConversationContextRecord {
                 message_id: row.get(0),
@@ -514,7 +528,15 @@ pub(super) async fn materialize_command(
                 content: row.get(3),
             })
         })
-        .collect::<Result<Vec<_>, StoreError>>()?;
+        .collect()
+}
+
+pub(super) async fn materialize_command(
+    transaction: &Transaction<'_>,
+    command: CommandMaterialization<'_>,
+) -> Result<(), StoreError> {
+    let event_id = new_id();
+    let context = command_context(transaction, command.conversation_id, command.turn_id).await?;
     let produced_at: String = transaction
         .query_one(
             "SELECT to_char(accepted_at AT TIME ZONE 'UTC', \
@@ -524,7 +546,7 @@ pub(super) async fn materialize_command(
         )
         .await?
         .get(0);
-    let payload = ConversationTurnRequested {
+    let mut payload = ConversationTurnRequested {
         binding: Some(ConversationTurnBinding {
             workspace_id: command.workspace_id.to_owned(),
             project_id: command.project_id.to_owned(),
@@ -549,15 +571,33 @@ pub(super) async fn materialize_command(
         produced_at,
         traceparent: traceparent(),
     };
-    let bytes = encode_command(&identity, &metadata, &payload).map_err(|error| match error {
-        ayni_orchestrator_events::ContractError::Oversized => StoreError::Capacity("command"),
-        _ => StoreError::CorruptState,
-    })?;
-    transaction
+    let bytes = loop {
+        match encode_command(&identity, &metadata, &payload) {
+            Ok(bytes) => break bytes,
+            Err(ayni_orchestrator_events::ContractError::Oversized) => {
+                let Some(oldest) = payload
+                    .context
+                    .iter()
+                    .position(|record| record.message_id != command.input_message_id)
+                else {
+                    return Err(StoreError::Capacity("command"));
+                };
+                payload.context.remove(oldest);
+            }
+            Err(_) => return Err(StoreError::CorruptState),
+        }
+    };
+    let dispatch_changed = transaction
         .execute(
             "INSERT INTO workflow_dispatch_intents \
              (turn_id, workspace_id, project_id, conversation_id, eligible, command_event_id, \
-              exact_command_bytes) VALUES ($1, $2, $3, $4, true, $5, $6)",
+              exact_command_bytes) VALUES ($1, $2, $3, $4, true, $5, $6) \
+             ON CONFLICT (turn_id) DO UPDATE SET eligible = true, \
+              command_event_id = EXCLUDED.command_event_id, \
+              exact_command_bytes = EXCLUDED.exact_command_bytes, updated_at = clock_timestamp() \
+             WHERE NOT workflow_dispatch_intents.eligible \
+               AND workflow_dispatch_intents.command_event_id = '' \
+               AND workflow_dispatch_intents.exact_command_bytes IS NULL",
             &[
                 &command.turn_id,
                 &command.workspace_id,
@@ -568,6 +608,9 @@ pub(super) async fn materialize_command(
             ],
         )
         .await?;
+    if dispatch_changed != 1 {
+        return Err(StoreError::CorruptState);
+    }
     transaction
         .execute(
             "INSERT INTO workflow_outbox \

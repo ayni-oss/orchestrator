@@ -2,16 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["enabled", "images", "workflowPostgres", "controlPlane"],
+  "required": ["enabled", "images", "workflowPostgres", "workflowJetstream", "scriptedExecutor", "controlPlane"],
   "properties": {
     "global": { "type": "object" },
     "enabled": { "type": "boolean" },
     "images": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["controlPlane", "pullPolicy"],
+      "required": ["controlPlane", "scriptedExecutor", "pullPolicy"],
       "properties": {
         "controlPlane": { "type": "string", "minLength": 1 },
+        "scriptedExecutor": { "type": "string", "minLength": 1 },
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
       }
     },
@@ -25,6 +26,27 @@
         "runtimeRoleName": { "type": "string", "pattern": "^[a-z_][a-z0-9_]{0,62}$" }
       }
     },
+    "workflowJetstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "username", "applicationSecretName", "executorUsername", "executorSecretName"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^nats://" },
+        "username": { "type": "string", "pattern": "^[a-z0-9-]{1,128}$" },
+        "applicationSecretName": { "type": "string", "minLength": 1 },
+        "executorUsername": { "type": "string", "pattern": "^[a-z0-9-]{1,128}$" },
+        "executorSecretName": { "type": "string", "minLength": 1 }
+      }
+    },
+    "scriptedExecutor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storage", "resources"],
+      "properties": {
+        "storage": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" },
+        "resources": { "$ref": "#/$defs/resources" }
+      }
+    },
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
@@ -33,24 +55,27 @@
         "replicaCount": { "type": "integer", "minimum": 1 },
         "httpPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "trustedGrpcPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "resources": {
+        "resources": { "$ref": "#/$defs/resources" }
+      }
+    }
+  },
+  "$defs": {
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["requests", "limits"],
-          "properties": {
-            "requests": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["cpu", "memory"],
-              "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
-            },
-            "limits": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["cpu", "memory"],
-              "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
-            }
-          }
+          "required": ["cpu", "memory"],
+          "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cpu", "memory"],
+          "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
         }
       }
     }

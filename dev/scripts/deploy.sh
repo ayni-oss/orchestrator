@@ -26,32 +26,44 @@ namespace="$(dev_namespace)"
 dev_build_chart_dependencies
 dev_check_capacity 8
 control_plane_image_ref="$(dev_build_image control-plane)"
+executor_image_ref="$(dev_build_image scripted-executor)"
 dev_load_image "$control_plane_image_ref"
+dev_load_image "$executor_image_ref"
 
 echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
   --namespace "$namespace" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
+  --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image_ref" \
   --wait \
   --timeout 5m
 
-kubectl --context "$context" --namespace "$namespace" rollout status \
-  statefulset/workflow-postgres --timeout=5m
-kubectl --context "$context" --namespace "$namespace" rollout status \
-  deployment/control-plane --timeout=5m
+for workload in \
+  statefulset/workflow-postgres \
+  statefulset/workflow-jetstream \
+  statefulset/scripted-executor \
+  deployment/control-plane; do
+  kubectl --context "$context" --namespace "$namespace" rollout status \
+    "$workload" --timeout=5m
+done
 
-pod="$(kubectl --context "$context" --namespace "$namespace" get pods \
-  -l app.kubernetes.io/name=ayni-orchestrator-control-plane \
-  -o jsonpath='{.items[0].metadata.name}')"
-actual_image="$(kubectl --context "$context" --namespace "$namespace" get pod "$pod" \
-  -o jsonpath='{.spec.containers[?(@.name=="control-plane")].image}')"
-actual_image_id="$(kubectl --context "$context" --namespace "$namespace" get pod "$pod" \
-  -o jsonpath='{.status.containerStatuses[?(@.name=="control-plane")].imageID}')"
-if [[ "$actual_image" != "$control_plane_image_ref" || -z "$actual_image_id" ]]; then
-  echo "the ready control-plane pod does not report the deployed image identity" >&2
-  exit 1
-fi
+verify_workload_image() {
+  local selector="$1" container="$2" expected="$3" pod actual image_id
+  pod="$(kubectl --context "$context" --namespace "$namespace" get pods \
+    -l "app.kubernetes.io/name=$selector" -o jsonpath='{.items[0].metadata.name}')"
+  actual="$(kubectl --context "$context" --namespace "$namespace" get pod "$pod" \
+    -o "jsonpath={.spec.containers[?(@.name==\"$container\")].image}")"
+  image_id="$(kubectl --context "$context" --namespace "$namespace" get pod "$pod" \
+    -o "jsonpath={.status.containerStatuses[?(@.name==\"$container\")].imageID}")"
+  if [[ "$actual" != "$expected" || -z "$image_id" ]]; then
+    echo "the ready $container pod does not report the deployed image identity" >&2
+    exit 1
+  fi
+  echo "deployed pod=$pod image=$actual imageID=$image_id"
+}
 
-echo "deployed pod=$pod control_plane_image=$actual_image imageID=$actual_image_id"
-dev_prune_images "$control_plane_image_ref"
+verify_workload_image ayni-orchestrator-control-plane control-plane "$control_plane_image_ref"
+verify_workload_image ayni-orchestrator-scripted-executor scripted-executor "$executor_image_ref"
+dev_prune_images control-plane "$control_plane_image_ref"
+dev_prune_images scripted-executor "$executor_image_ref"

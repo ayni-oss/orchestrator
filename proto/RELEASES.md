@@ -2,8 +2,9 @@
 
 The active private baseline is `workflow-m1-private-v1` (see `BASELINE`).
 
-This intentional clean reset exposes only the PostgreSQL-authoritative M1 Slice 1
-workflow contract:
+This baseline introduced the PostgreSQL-authoritative workflow contract in M1
+Slice 1. Slice 2 retains the same private-v1 surface while adding durable delivery
+and scripted execution behind it:
 
 - `ProjectService.CreateWorkspace` and `CreateProject`;
 - `ProjectConversationService.CreateConversation`, `SendMessage`,

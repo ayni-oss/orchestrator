@@ -36,11 +36,10 @@ The [M1 durable foundation contract](docs/technical/research/project-workflow-m1
 M1 is delivered as cumulative, executable slices rather than one unsafe cutover.
 
 1. **PostgreSQL authority and canonical private-v1.** Minimal hierarchy, scoped idempotency, FIFO message admission, exact outbox bytes, snapshots/history, readiness, trusted-loopback APIs, local PostgreSQL, and deletion of superseded callers.
-2. **Durable delivery.** Isolated authenticated JetStream streams publish retained exact command bytes without treating broker storage as executor ownership.
-3. **Executor ownership and watches.** A scripted executor durably claims work; report decisions and resumable watch replay survive restarts and reconnects.
-4. **Cumulative failure acceptance.** Interrupt each commit/publication/claim/report/ack boundary and prove no accepted work or retry bytes are lost.
+2. **Durable scripted handoff.** Isolated authenticated JetStream streams, a retained scripted executor, signed ownership claims, application report decisions, accepted responses, and FIFO successor promotion survive application, broker, and executor restarts without treating broker storage as ownership.
+3. **Resumable observation and cumulative acceptance.** Notification-backed watch replay, quarantine, retention cleanup, metrics, version-skew/capacity evidence, and interruption at every commit/publication/claim/report/decision/ack boundary prove no accepted work or retry bytes are lost.
 
-Slice 1 intentionally returns `UNIMPLEMENTED` for `WatchConversation`. It does not deploy JetStream, an executor, providers, browser UX, or custom-client workflow access. Later slices must build on the PostgreSQL authority rather than recreate compatibility paths.
+Slice 2 intentionally returns `UNIMPLEMENTED` for `WatchConversation`. It does not deploy providers, browser UX, or custom-client workflow access. Later slices must build on the PostgreSQL and retained handoff authorities rather than recreate compatibility paths.
 
 ### Validation at every milestone
 

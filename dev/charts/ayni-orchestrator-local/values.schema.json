@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ayni-orchestrator", "postgres"],
+  "required": ["ayni-orchestrator", "postgres", "jetstream"],
   "properties": {
     "ayni-orchestrator": { "type": "object" },
     "postgres": {
@@ -22,6 +22,31 @@
             "admin": { "type": "string", "minLength": 1 },
             "migrator": { "type": "string", "minLength": 1 },
             "runtime": { "type": "string", "minLength": 1 }
+          }
+        },
+        "resources": { "type": "object" }
+      }
+    },
+    "jetstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "serverImage", "toolingImage", "storage", "maxFileBytes", "executorInstanceId", "secrets", "resources"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "serverImage": { "type": "string", "const": "nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4" },
+        "toolingImage": { "type": "string", "const": "natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295" },
+        "storage": { "type": "string", "const": "2Gi" },
+        "maxFileBytes": { "type": "integer", "const": 1073741824 },
+        "executorInstanceId": { "type": "string", "const": "018f0f7b-6a4d-7a11-8d77-010203040506" },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["admin", "application", "executor", "acceptance"],
+          "properties": {
+            "admin": { "type": "string", "minLength": 1 },
+            "application": { "type": "string", "minLength": 1 },
+            "executor": { "type": "string", "minLength": 1 },
+            "acceptance": { "type": "string", "minLength": 1 }
           }
         },
         "resources": { "type": "object" }

@@ -1,75 +1,74 @@
-# Slice 1 operations
+# Slice 2 operations
 
-This runbook covers the PostgreSQL-authoritative M1 Slice 1 control plane. It does not authorize shared-environment deployment or production data migration.
+This runbook covers the PostgreSQL-authoritative M1 Slice 2 control plane, isolated authenticated JetStream profile, and retained scripted executor. It does not authorize shared-environment deployment, production credentials, or production data migration.
 
 ## Startup sequence
 
-1. The migration init container reads only the migration PostgreSQL URL from its mounted Secret file.
-2. It connects with the migration role and acquires the fixed transaction-scoped advisory lock.
-3. It validates contiguous migration history and retained checksums.
-4. It applies forward migration 1 if the database is empty.
-5. It validates the exact catalog manifest, removes blanket default grants, and grants the configured runtime role explicit application privileges with read-only migration history.
-6. The serving container reads only the runtime URL from its separate Secret file.
-7. It repeats version, catalog-manifest, and least-privilege validation through the runtime role.
-8. It binds HTTP and trusted-loopback gRPC listeners.
+1. The migration init container reads only its PostgreSQL URL, takes the transaction-scoped advisory lock, validates retained history/checksums, applies migrations through version 2, installs runtime grants, and validates the catalog manifest.
+2. PostgreSQL, JetStream, and executor-ledger retained volumes are mounted without deleting existing state.
+3. NATS starts with four password identities and no anonymous access. The administrative hook creates or updates the three exact streams and four durable consumers.
+4. The control plane validates the runtime database role, binds HTTP and loopback gRPC, loads only the application broker password, and resumes pending outbox/report acceptance.
+5. The executor validates its retained instance/key identity, binds the pre-provisioned command and targeted-decision consumers, reconciles decision ACK floors, republishes pending reports, and resumes accepted commands.
 
-Any failure exits the process. Kubernetes restarts it; readiness never becomes successful while PostgreSQL or the schema is unavailable.
+Broker unavailability does not make PostgreSQL readiness false. Both broker clients retry without discarding retained owner state.
 
-## Probes
+## Probes and checks
 
-`/healthz` means the process can answer HTTP. It intentionally does not depend on PostgreSQL.
+`/healthz` reports process liveness without consulting dependencies. `/readyz` validates PostgreSQL migration version, checksums, catalog manifest, and exact runtime privileges. Database failure returns HTTP 503 without exposing a credential or raw diagnostic.
 
-`/readyz` opens a runtime-role connection and validates migration version, checksum, the deterministic PostgreSQL catalog manifest, and exact runtime privileges. A failure returns HTTP 503 without exposing a database error or credential.
+Use the local operational checks:
 
-Use both signals. Liveness should not restart a healthy process only because PostgreSQL is temporarily unavailable; readiness removes it from service.
+```sh
+dev/ctl check
+dev/ctl scenario
+```
 
-## Schema changes
+`check` verifies all StatefulSets/Deployments, migration version 2, exact stream policy/capacity, named consumers, and executor-ledger initialization. `scenario` proves one private-v1 message reaches one accepted scripted response.
 
-Migrations are repository-owned forward SQL. Each released migration needs:
+## Schema and stream changes
 
-- a monotonically increasing version;
-- a stable description and retained SHA-256 checksum;
-- transaction-safe DDL;
-- concurrent-start evidence under the advisory lock;
-- explicit runtime grants for newly created application tables, sequences, and functions;
-- read-only runtime access to migration history with no schema-creation authority;
-- an updated catalog-manifest checksum and malformed-schema/privilege failure tests.
+Every forward migration requires a monotonically increasing version, stable checksum, transaction-safe DDL, advisory-lock concurrency evidence, explicit runtime grants, an updated manifest checksum, and malformed-schema/privilege failure tests. Never edit an applied migration.
 
-Never edit an applied migration. A checksum mismatch, gap, unknown future version, or missing object is an operator-visible startup failure. Repair from a trusted matching backup or roll forward with a reviewed migration; do not rewrite migration history.
+The broker profile is fixed for Slice 2. A reviewed change must preserve independent command/report/decision capacity, `discard=new`, oldest-record survival, seven-day age, denied delete/purge, the server/PVC headroom calculation, and least-subject ACLs. Provision consumers before new producers.
 
 ## Credentials and roles
 
-The reusable chart never creates credentials. Administrators provide two differently named immutable Secrets containing a `url` key and configure `workflowPostgres.runtimeRoleName` to match the runtime URL:
+The reusable chart consumes four differently named immutable Secrets:
 
-- the migration owner, which can create schema objects;
-- the runtime role, which has only the required table/column mutations, reads but cannot mutate migration history, and cannot create schemas or temporary objects, own workflow objects, inherit roles, or delegate grants.
+- migration PostgreSQL URL;
+- runtime PostgreSQL URL;
+- application NATS password; and
+- executor NATS password, retained instance ID, and Ed25519 seed.
 
-The database administrator Secret belongs only to the local PostgreSQL chart and is not mounted into the control plane. URLs are files, not ConfigMap values, environment variables, logs, command-line arguments, API fields, or diagnostic output.
+The local chart additionally owns separate NATS administrative and acceptance-harness passwords. The database administrator belongs only to PostgreSQL. Secret contents never enter ConfigMaps, command arguments, logs, events, gRPC, or JetStream payloads.
 
-Immutable Secret rotation uses new Secret names followed by a chart update and rollout. For the disposable local environment, the supported reset is `dev/ctl purge <exact-namespace>` followed by deploy. Do not patch an immutable credential in place.
+Rotate immutable credentials with new Secret names and an ordered workload rollout. Do not retire the executor credential, key, consumer, or ledger while a targeted decision is unresolved. The disposable local reset is `dev/ctl purge <exact-namespace>` followed by deploy; do not patch an immutable Secret in place.
 
 ## Backup and restore
 
-The local StatefulSet claim is retained across Helm uninstall. Namespace deletion removes it.
+Ordinary Helm uninstall retains PostgreSQL, JetStream, and executor-ledger PVCs. Namespace deletion removes them.
 
-For a backup, quiesce workflow writes, use PostgreSQL-native backup tooling, and retain the migration table with application relations. A restore is acceptable only when migration version and checksum match the running binary. Start one control-plane replica first and wait for readiness before admitting traffic.
+A consistent backup quiesces admission and preserves all three stores. PostgreSQL alone is insufficient while any command/report/decision handoff is unresolved. Restore only matching migration/checksum and protocol revisions, start stateful dependencies first, then one control plane and the retained executor, and run `dev/ctl check` before admitting new work.
 
-This clean-slate slice does not import SQLite state. SQLite files and compatibility-drain output are not valid PostgreSQL backups.
+SQLite workflow files from the superseded implementation are not backups. The executor ledger is a separate current protocol store and must not be imported into PostgreSQL.
 
 ## Failure handling
 
 | Signal | Interpretation | Action |
 | --- | --- | --- |
-| `/healthz` fails | Process or pod is unavailable | Inspect pod status and safe redacted logs |
-| `/healthz` passes, `/readyz` fails | PostgreSQL connection, permission, migration, checksum, or schema failure | Check database readiness and migration history; do not bypass validation |
-| `IDEMPOTENCY_CONFLICT` | Same scoped key was used with changed bytes | Reconcile the caller bug; use the retained original receipt for the original request |
-| `RESOURCE_EXHAUSTED` | The 100-turn nonterminal bound was reached | Wait for a later slice to complete turns or reset the disposable test namespace |
-| `HISTORY_SNAPSHOT_EXPIRED` | Stable pagination boundary exceeded its lifetime | Fetch a new conversation snapshot and restart pagination |
-| `WatchConversation` is `UNIMPLEMENTED` | Expected Slice 1 behavior | Use snapshot/history; watch replay enters Slice 3 |
-| Future schema version | Binary is older than retained state | Deploy a compatible newer binary; never downgrade against the database |
+| `/healthz` fails | Process or Pod unavailable | Inspect Pod status and safe redacted logs |
+| `/readyz` fails | PostgreSQL connection, role, migration, checksum, or schema failure | Repair the database boundary; never bypass validation |
+| Outbox remains `pending`/`stored` | Broker unavailable/full or no accepted owner | Restore broker/executor; preserve exact PostgreSQL bytes |
+| Turn remains `processing` | Accepted retained executor has not produced an accepted terminal report | Restore that executor and its ledger; M1 does not reassign an accepted owner |
+| Executor transport retries | Stream/consumer/ACL unavailable | Repair the pre-provisioned broker profile; do not grant admin rights to the workload |
+| `IDEMPOTENCY_CONFLICT` | Scoped command key reused with changed bytes | Reconcile the caller and retain the original receipt |
+| `RESOURCE_EXHAUSTED` | FIFO or retained-capacity bound reached | Restore capacity without deleting accepted owner state |
+| `HISTORY_SNAPSHOT_EXPIRED` | Stable pagination boundary expired | Fetch a fresh snapshot and restart pagination |
+| `WatchConversation` is `UNIMPLEMENTED` | Expected Slice 2 behavior | Use snapshot/history; resumable watch enters Slice 3 |
+| Future schema version | Binary older than retained state | Deploy a compatible newer binary; never downgrade against retained stores |
 
-Errors and logs expose only stable safe reasons. User content, database URLs, passwords, exact command bytes, and raw database diagnostics must not be logged.
+Logs expose only stable IDs and safe reason codes. User content, credentials, exact command/report bytes, signatures, and raw database diagnostics must not be logged.
 
 ## Rollback boundary
 
-Before the first PostgreSQL command is accepted, revert the chart and binary. After admission, roll forward. Because this is a disposable replacement environment with no adopted data, a deliberate namespace reset is allowed; silently deleting or importing retained SQLite data is not.
+Before the first PostgreSQL command, the chart and binaries can be reverted. After admission, roll forward while preserving all retained owners. Roll back to Slice 1 only after proving no command/report/decision handoff is unresolved. Otherwise repair forward or explicitly reset the isolated disposable namespace; never silently delete a PVC or translate data back into SQLite.

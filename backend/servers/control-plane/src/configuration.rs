@@ -13,6 +13,9 @@ pub struct Configuration {
     migration_database_url_path: PathBuf,
     runtime_database_url_path: PathBuf,
     runtime_database_role: String,
+    broker_url: String,
+    broker_username: String,
+    broker_password_path: PathBuf,
 }
 
 impl Configuration {
@@ -23,6 +26,10 @@ impl Configuration {
     pub const DEFAULT_RUNTIME_DATABASE_URL_PATH: &'static str =
         "/var/run/secrets/ayni/workflow-postgres-runtime/url";
     pub const DEFAULT_RUNTIME_DATABASE_ROLE: &'static str = "ayni_runtime";
+    pub const DEFAULT_BROKER_URL: &'static str = "nats://jetstream:4222";
+    pub const DEFAULT_BROKER_USERNAME: &'static str = "workflow-application";
+    pub const DEFAULT_BROKER_PASSWORD_PATH: &'static str =
+        "/var/run/secrets/ayni/workflow-jetstream-application/password";
 
     /// Read and validate the replacement control-plane configuration.
     ///
@@ -44,6 +51,14 @@ impl Configuration {
             ),
             &env::var("ORCHESTRATOR_WORKFLOW_DATABASE_ROLE")
                 .unwrap_or_else(|_| Self::DEFAULT_RUNTIME_DATABASE_ROLE.to_owned()),
+            &env::var("ORCHESTRATOR_WORKFLOW_BROKER_URL")
+                .unwrap_or_else(|_| Self::DEFAULT_BROKER_URL.to_owned()),
+            &env::var("ORCHESTRATOR_WORKFLOW_BROKER_USERNAME")
+                .unwrap_or_else(|_| Self::DEFAULT_BROKER_USERNAME.to_owned()),
+            PathBuf::from(
+                env::var("ORCHESTRATOR_WORKFLOW_BROKER_PASSWORD_PATH")
+                    .unwrap_or_else(|_| Self::DEFAULT_BROKER_PASSWORD_PATH.to_owned()),
+            ),
         )
     }
 
@@ -51,12 +66,19 @@ impl Configuration {
     ///
     /// # Errors
     /// Returns a safe configuration error for malformed addresses or secret paths.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the constructor keeps all security-sensitive endpoint and Secret inputs explicit"
+    )]
     pub fn from_values(
         http_bind_address: &str,
         grpc_bind_address: &str,
         migration_database_url_path: PathBuf,
         runtime_database_url_path: PathBuf,
         runtime_database_role: &str,
+        broker_url: &str,
+        broker_username: &str,
+        broker_password_path: PathBuf,
     ) -> Result<Self, ConfigurationError> {
         let http_bind_address = SocketAddr::from_str(http_bind_address)
             .map_err(|_| ConfigurationError::InvalidHttpAddress)?;
@@ -74,12 +96,23 @@ impl Configuration {
             return Err(ConfigurationError::DuplicateDatabaseSecretPath);
         }
         validate_database_role(runtime_database_role)?;
+        validate_broker_url(broker_url)?;
+        validate_broker_username(broker_username)?;
+        validate_secret_path(&broker_password_path)?;
+        if broker_password_path == migration_database_url_path
+            || broker_password_path == runtime_database_url_path
+        {
+            return Err(ConfigurationError::DuplicateSecretPath);
+        }
         Ok(Self {
             http_bind_address,
             grpc_bind_address,
             migration_database_url_path,
             runtime_database_url_path,
             runtime_database_role: runtime_database_role.to_owned(),
+            broker_url: broker_url.to_owned(),
+            broker_username: broker_username.to_owned(),
+            broker_password_path,
         })
     }
 
@@ -113,6 +146,25 @@ impl Configuration {
     pub fn runtime_database_role(&self) -> &str {
         &self.runtime_database_role
     }
+
+    #[must_use]
+    pub fn broker_url(&self) -> &str {
+        &self.broker_url
+    }
+
+    #[must_use]
+    pub fn broker_username(&self) -> &str {
+        &self.broker_username
+    }
+
+    /// Load the application broker password without exposing it in diagnostics.
+    ///
+    /// # Errors
+    /// Returns an I/O error without including secret contents.
+    pub fn broker_password(&self) -> Result<String, io::Error> {
+        read_secret(&self.broker_password_path)
+            .map_err(|_| io::Error::other("workflow broker Secret is unavailable"))
+    }
 }
 
 fn validate_secret_path(path: &Path) -> Result<(), ConfigurationError> {
@@ -131,6 +183,35 @@ fn validate_database_role(role: &str) -> Result<(), ConfigurationError> {
         })
     {
         Err(ConfigurationError::InvalidDatabaseRole)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_broker_url(value: &str) -> Result<(), ConfigurationError> {
+    let authority = value
+        .strip_prefix("nats://")
+        .ok_or(ConfigurationError::InvalidBrokerUrl)?;
+    if authority.is_empty()
+        || value.len() > 512
+        || authority
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || matches!(byte, b'@' | b'/' | b'?' | b'#'))
+    {
+        Err(ConfigurationError::InvalidBrokerUrl)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_broker_username(value: &str) -> Result<(), ConfigurationError> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        Err(ConfigurationError::InvalidBrokerUsername)
     } else {
         Ok(())
     }
@@ -162,6 +243,12 @@ pub enum ConfigurationError {
     DuplicateDatabaseSecretPath,
     #[error("ORCHESTRATOR_WORKFLOW_DATABASE_ROLE is invalid")]
     InvalidDatabaseRole,
+    #[error("ORCHESTRATOR_WORKFLOW_BROKER_URL is invalid")]
+    InvalidBrokerUrl,
+    #[error("ORCHESTRATOR_WORKFLOW_BROKER_USERNAME is invalid")]
+    InvalidBrokerUsername,
+    #[error("workflow database and broker Secret paths must differ")]
+    DuplicateSecretPath,
 }
 
 #[cfg(test)]
@@ -177,6 +264,9 @@ mod tests {
                 PathBuf::from("/migration"),
                 PathBuf::from("/runtime"),
                 "ayni_runtime",
+                "nats://jetstream:4222",
+                "workflow-application",
+                PathBuf::from("/broker"),
             ),
             Err(ConfigurationError::UnsafeGrpcAddress)
         ));
@@ -187,6 +277,9 @@ mod tests {
                 PathBuf::from("/migration"),
                 PathBuf::from("/runtime"),
                 "ayni_runtime",
+                "nats://jetstream:4222",
+                "workflow-application",
+                PathBuf::from("/broker"),
             ),
             Err(ConfigurationError::DuplicateAddress)
         ));
@@ -201,6 +294,9 @@ mod tests {
                 PathBuf::from("/shared"),
                 PathBuf::from("/shared"),
                 "ayni_runtime",
+                "nats://jetstream:4222",
+                "workflow-application",
+                PathBuf::from("/broker"),
             ),
             Err(ConfigurationError::DuplicateDatabaseSecretPath)
         ));
@@ -211,8 +307,69 @@ mod tests {
                 PathBuf::from("/migration"),
                 PathBuf::from("/runtime"),
                 "Migrator;DROP ROLE",
+                "nats://jetstream:4222",
+                "workflow-application",
+                PathBuf::from("/broker"),
             ),
             Err(ConfigurationError::InvalidDatabaseRole)
+        ));
+    }
+
+    #[test]
+    fn broker_identity_and_secret_path_fail_closed() {
+        let invalid_url = Configuration::from_values(
+            "0.0.0.0:8080",
+            "127.0.0.1:50051",
+            PathBuf::from("/migration"),
+            PathBuf::from("/runtime"),
+            "ayni_runtime",
+            "https://broker",
+            "workflow-application",
+            PathBuf::from("/broker"),
+        );
+        assert!(matches!(
+            invalid_url,
+            Err(ConfigurationError::InvalidBrokerUrl)
+        ));
+        assert!(matches!(
+            Configuration::from_values(
+                "0.0.0.0:8080",
+                "127.0.0.1:50051",
+                PathBuf::from("/migration"),
+                PathBuf::from("/runtime"),
+                "ayni_runtime",
+                "nats://user:password@jetstream:4222",
+                "workflow-application",
+                PathBuf::from("/broker"),
+            ),
+            Err(ConfigurationError::InvalidBrokerUrl)
+        ));
+        let invalid_identity = Configuration::from_values(
+            "0.0.0.0:8080",
+            "127.0.0.1:50051",
+            PathBuf::from("/migration"),
+            PathBuf::from("/runtime"),
+            "ayni_runtime",
+            "nats://jetstream:4222",
+            "application;admin",
+            PathBuf::from("broker"),
+        );
+        assert!(matches!(
+            invalid_identity,
+            Err(ConfigurationError::InvalidBrokerUsername)
+        ));
+        assert!(matches!(
+            Configuration::from_values(
+                "0.0.0.0:8080",
+                "127.0.0.1:50051",
+                PathBuf::from("/migration"),
+                PathBuf::from("/runtime"),
+                "ayni_runtime",
+                "nats://jetstream:4222",
+                "workflow-application",
+                PathBuf::from("/runtime"),
+            ),
+            Err(ConfigurationError::DuplicateSecretPath)
         ));
     }
 }

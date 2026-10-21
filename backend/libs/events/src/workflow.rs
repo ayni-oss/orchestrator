@@ -688,7 +688,7 @@ fn validate_decision(payload: &ConversationReportDecision) -> Result<(), Contrac
         || !decision_reason_valid(decision, &payload.safe_reason)
         || !matches!(
             payload.turn_state.as_str(),
-            "processing" | "completed" | "failed"
+            "queued" | "processing" | "completed" | "failed"
         )
     {
         return Err(ContractError::Invalid("report decision"));
@@ -989,7 +989,18 @@ mod tests {
         };
         let metadata = metadata();
         let bytes = encode_decision(&identity, &metadata, &payload)?;
-        assert_eq!(decode_decision(&bytes)?, (identity, metadata, payload));
+        assert_eq!(
+            decode_decision(&bytes)?,
+            (identity.clone(), metadata.clone(), payload.clone())
+        );
+
+        let mut rejected = payload;
+        rejected.decision = ConversationReportDecisionKind::Rejected.into();
+        rejected.accepted_executor_instance_id.clear();
+        rejected.safe_reason = "invalid_signature".into();
+        rejected.turn_state = "queued".into();
+        let bytes = encode_decision(&identity, &metadata, &rejected)?;
+        assert_eq!(decode_decision(&bytes)?, (identity, metadata, rejected));
         Ok(())
     }
 }

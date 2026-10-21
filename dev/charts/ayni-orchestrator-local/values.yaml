@@ -2,11 +2,27 @@ ayni-orchestrator:
   enabled: true
   images:
     controlPlane: local/ayni-orchestrator-control-plane:replace-me
+    scriptedExecutor: local/ayni-orchestrator-scripted-executor:replace-me
     pullPolicy: IfNotPresent
   workflowPostgres:
     migratorSecretName: workflow-postgres-migrator
     runtimeSecretName: workflow-postgres-runtime
     runtimeRoleName: ayni_runtime
+  workflowJetstream:
+    url: nats://jetstream:4222
+    username: workflow-application
+    applicationSecretName: workflow-jetstream-application
+    executorUsername: workflow-executor
+    executorSecretName: workflow-jetstream-executor
+  scriptedExecutor:
+    storage: 512Mi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
 
 postgres:
   enabled: true
@@ -23,4 +39,24 @@ postgres:
       memory: 256Mi
     limits:
       cpu: "1"
+      memory: 1Gi
+
+jetstream:
+  enabled: true
+  serverImage: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
+  toolingImage: natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295
+  storage: 2Gi
+  maxFileBytes: 1073741824
+  executorInstanceId: 018f0f7b-6a4d-7a11-8d77-010203040506
+  secrets:
+    admin: workflow-jetstream-admin
+    application: workflow-jetstream-application
+    executor: workflow-jetstream-executor
+    acceptance: workflow-jetstream-acceptance
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
       memory: 1Gi

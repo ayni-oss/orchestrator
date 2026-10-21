@@ -14,60 +14,97 @@ export HELM_REPOSITORY_CACHE="$scratch/cache"
 export HELM_PLUGINS="$scratch/plugins"
 mkdir -p "$scratch/cache" "$scratch/plugins"
 
+control_image=local/control-plane:test
+executor_image=local/scripted-executor:test
 helm dependency build "$local_chart" >/dev/null
-helm lint "$reusable_chart" --set-string images.controlPlane=local/control-plane:test >/dev/null
-helm lint "$local_chart" --set-string ayni-orchestrator.images.controlPlane=local/control-plane:test >/dev/null
+helm lint "$reusable_chart" \
+  --set-string images.controlPlane="$control_image" \
+  --set-string images.scriptedExecutor="$executor_image" >/dev/null
+helm lint "$local_chart" \
+  --set-string ayni-orchestrator.images.controlPlane="$control_image" \
+  --set-string ayni-orchestrator.images.scriptedExecutor="$executor_image" >/dev/null
 
 reusable_render="$scratch/reusable.yaml"
 local_render="$scratch/local.yaml"
 helm template reusable "$reusable_chart" --namespace test \
-  --set-string images.controlPlane=local/control-plane:test > "$reusable_render"
+  --set-string images.controlPlane="$control_image" \
+  --set-string images.scriptedExecutor="$executor_image" > "$reusable_render"
 helm template local "$local_chart" --namespace test \
-  --set-string ayni-orchestrator.images.controlPlane=local/control-plane:test > "$local_render"
+  --set-string ayni-orchestrator.images.controlPlane="$control_image" \
+  --set-string ayni-orchestrator.images.scriptedExecutor="$executor_image" > "$local_render"
 
 # The reusable chart consumes administrator-owned immutable Secrets and never
-# renders credentials or a database resource.
+# renders a database, broker, or credential value.
 grep -q 'name: workflow-postgres-migrator' "$reusable_render"
 grep -q 'name: workflow-postgres-runtime' "$reusable_render"
 grep -q 'ORCHESTRATOR_WORKFLOW_MIGRATION_DATABASE_URL_PATH' "$reusable_render"
 grep -q 'ORCHESTRATOR_WORKFLOW_DATABASE_URL_PATH' "$reusable_render"
 grep -q 'ORCHESTRATOR_WORKFLOW_DATABASE_ROLE: "ayni_runtime"' "$reusable_render"
+grep -q 'name: workflow-jetstream-application' "$reusable_render"
+grep -q 'name: workflow-jetstream-executor' "$reusable_render"
+grep -q 'ORCHESTRATOR_WORKFLOW_BROKER_URL: "nats://jetstream:4222"' "$reusable_render"
+grep -q 'ORCHESTRATOR_EXECUTOR_LEDGER_PATH' "$reusable_render"
+grep -q 'helm.sh/resource-policy: keep' "$reusable_render"
+! grep -q '^kind: Secret$' "$reusable_render"
+! grep -q 'postgresql://' "$reusable_render"
+! grep -q '^  nats.conf:' "$reusable_render"
+! grep -qi 'sqlite' "$reusable_render"
+! grep -q 'name: web' "$reusable_render"
+
 migration_container="$(awk '/^      initContainers:/{capture=1} /^      containers:/{if(capture){exit}} capture{print}' "$reusable_render")"
-serving_container="$(awk '/^      containers:/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$reusable_render")"
+control_container="$(awk '/^        - name: control-plane$/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$reusable_render")"
+executor_container="$(awk '/^        - name: scripted-executor$/{capture=1} /^      volumes:/{if(capture){exit}} capture{print}' "$reusable_render")"
 grep -q 'name: workflow-migrate' <<<"$migration_container"
 grep -q 'workflow-postgres-migrator' <<<"$migration_container"
 ! grep -q 'workflow-postgres-runtime' <<<"$migration_container"
-grep -q 'name: control-plane' <<<"$serving_container"
-grep -q 'workflow-postgres-runtime' <<<"$serving_container"
-! grep -q 'workflow-postgres-migrator' <<<"$serving_container"
-! grep -q '^kind: Secret$' "$reusable_render"
-! grep -q 'postgresql://' "$reusable_render"
-! grep -qi 'sqlite' "$reusable_render"
-! grep -q 'name: web' "$reusable_render"
-! grep -qi 'jetstream' "$reusable_render"
+! grep -q 'workflow-jetstream' <<<"$migration_container"
+grep -q 'name: control-plane' <<<"$control_container"
+grep -q 'workflow-postgres-runtime' <<<"$control_container"
+grep -q 'workflow-jetstream-application' <<<"$control_container"
+! grep -q 'workflow-postgres-migrator' <<<"$control_container"
+! grep -q 'workflow-jetstream-executor' <<<"$control_container"
+grep -q 'name: scripted-executor' <<<"$executor_container"
+grep -q 'workflow-jetstream-executor' <<<"$executor_container"
+! grep -q 'workflow-postgres' <<<"$executor_container"
+! grep -q 'workflow-jetstream-application' <<<"$executor_container"
 
-# The trusted workflow listener is container-local and absent from the Service.
+# The trusted workflow listener remains container-local and absent from Service.
 grep -q 'ORCHESTRATOR_GRPC_BIND_ADDRESS: "127.0.0.1:50051"' "$reusable_render"
 service_block="$(awk '/^kind: Service$/{in_service=1} /^---$/{if(in_service){exit}} in_service{print}' "$reusable_render")"
 ! grep -q 'trusted-grpc' <<<"$service_block"
 
-# The local chart pins PostgreSQL, retains its claim, and wires all credentials
-# through Secret references rather than ConfigMaps or command arguments.
-grep -q 'kind: StatefulSet' "$local_render"
+# The local chart pins stateful dependencies, renders the isolated three-stream
+# profile, and injects four distinct broker roles only through Secret refs.
 grep -q 'image: "postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3"' "$local_render"
-grep -q 'helm.sh/resource-policy: keep' "$local_render"
-grep -q 'secretKeyRef:' "$local_render"
+grep -q 'image: "nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4"' "$local_render"
+grep -q 'image: "natsio/nats-box:0.20.0@sha256:d2f04223f40e016f77922a8115d34b0cd5fad2ec10b19b39316ae92d07f3d295"' "$local_render"
 grep -q 'defaultMode: 0555' "$local_render"
 grep -q "stat -c '%u:%g' /var/lib/postgresql/data" "$local_render"
 grep -q 'chown -R 999:999 /var/lib/postgresql/data' "$local_render"
 ! grep -q 'ALTER DEFAULT PRIVILEGES' "$local_render"
+grep -q 'max_payload: 327680' "$local_render"
+for stream in ORCHESTRATOR_WORKFLOW_COMMAND_V1 ORCHESTRATOR_WORKFLOW_REPORT_V1 ORCHESTRATOR_WORKFLOW_DECISION_V1; do
+  grep -q "$stream" "$local_render"
+done
+grep -q '"max_bytes": 268435456' "$local_render"
+grep -q '"max_bytes": 201326592' "$local_render"
+grep -q '"max_bytes": 67108864' "$local_render"
+grep -q '"discard": "new"' "$local_render"
+grep -q '"deny_delete": true' "$local_render"
+grep -q '"deny_purge": true' "$local_render"
+grep -q 'user: "workflow-application"' "$local_render"
+grep -q 'user: "workflow-executor"' "$local_render"
+grep -q 'user: "workflow-acceptance"' "$local_render"
+grep -q 'user: "workflow-admin"' "$local_render"
+grep -q 'secretKeyRef:' "$local_render"
+grep -q 'helm.sh/resource-policy: keep' "$local_render"
 ! grep -q 'postgresql://' "$local_render"
-! grep -qi 'sqlite' "$local_render"
-! grep -qi 'jetstream' "$local_render"
+! grep -Eqi 'password: [a-f0-9]{32,}' "$local_render"
 ! grep -q 'name: web' "$local_render"
 
-# Schemas reject unsafe or unsupported configuration.
-if helm template invalid "$reusable_chart" --set-string workflowPostgres.runtimeSecretName= >/dev/null 2>&1; then
+# Schemas and render-time guards reject unsafe role aliasing and unpinned inputs.
+if helm template invalid "$reusable_chart" \
+  --set-string workflowPostgres.runtimeSecretName= >/dev/null 2>&1; then
   echo "reusable chart accepted an empty runtime Secret name" >&2
   exit 1
 fi
@@ -77,8 +114,12 @@ if helm template invalid "$reusable_chart" \
   exit 1
 fi
 if helm template invalid "$reusable_chart" \
-  --set controlPlane.httpPort=50051 \
-  --set controlPlane.trustedGrpcPort=50051 >/dev/null 2>&1; then
+  --set-string workflowJetstream.executorSecretName=workflow-jetstream-application >/dev/null 2>&1; then
+  echo "reusable chart accepted one Secret for application and executor roles" >&2
+  exit 1
+fi
+if helm template invalid "$reusable_chart" \
+  --set controlPlane.httpPort=50051 --set controlPlane.trustedGrpcPort=50051 >/dev/null 2>&1; then
   echo "reusable chart accepted overlapping HTTP and trusted gRPC ports" >&2
   exit 1
 fi
@@ -87,8 +128,29 @@ if helm template invalid "$local_chart" \
   echo "local chart accepted one Secret for migration and runtime roles" >&2
   exit 1
 fi
-if helm template invalid "$local_chart" --set-string postgres.image=postgres:latest >/dev/null 2>&1; then
+if helm template invalid "$local_chart" \
+  --set-string postgres.image=postgres:latest >/dev/null 2>&1; then
   echo "local chart accepted an unpinned PostgreSQL image" >&2
+  exit 1
+fi
+if helm template invalid "$local_chart" \
+  --set-string jetstream.serverImage=nats:latest >/dev/null 2>&1; then
+  echo "local chart accepted an unpinned NATS image" >&2
+  exit 1
+fi
+if helm template invalid "$local_chart" \
+  --set-string jetstream.secrets.executor=workflow-jetstream-application >/dev/null 2>&1; then
+  echo "local chart accepted aliased JetStream role Secrets" >&2
+  exit 1
+fi
+if helm template invalid "$local_chart" \
+  --set-string jetstream.secrets.admin=workflow-postgres-admin >/dev/null 2>&1; then
+  echo "local chart accepted aliased PostgreSQL and JetStream role Secrets" >&2
+  exit 1
+fi
+if helm template invalid "$local_chart" \
+  --set-string ayni-orchestrator.workflowPostgres.runtimeSecretName=other-runtime >/dev/null 2>&1; then
+  echo "local chart accepted mismatched reusable-workload and PostgreSQL Secrets" >&2
   exit 1
 fi
 
@@ -100,4 +162,4 @@ bash -n \
   "$repository_root/dev/scripts/deploy.sh" \
   "$repository_root/dev/scripts/check.sh"
 
-echo "Helm PostgreSQL Slice 1 checks passed"
+echo "Helm authenticated workflow Slice 2 checks passed"

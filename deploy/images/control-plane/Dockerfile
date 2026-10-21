@@ -9,9 +9,10 @@ RUN --mount=type=cache,id=ayni-orchestrator-control-cargo-registry,target=/usr/l
     --mount=type=cache,id=ayni-orchestrator-control-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=ayni-orchestrator-control-target,target=/workspace/target \
     cargo build --locked --release --package ayni-orchestrator-control-plane \
-      --bin ayni-orchestrator-control-plane --bin workflow-migrate \
+      --bin ayni-orchestrator-control-plane --bin workflow-migrate --bin workflow-diagnostic \
     && install --mode=0755 target/release/ayni-orchestrator-control-plane /tmp/ayni-orchestrator-control-plane \
-    && install --mode=0755 target/release/workflow-migrate /tmp/workflow-migrate
+    && install --mode=0755 target/release/workflow-migrate /tmp/workflow-migrate \
+    && install --mode=0755 target/release/workflow-diagnostic /tmp/workflow-diagnostic
 
 FROM debian:bookworm-slim
 
@@ -22,5 +23,6 @@ RUN apt-get update \
 USER 10001
 COPY --from=builder /tmp/ayni-orchestrator-control-plane /usr/local/bin/ayni-orchestrator-control-plane
 COPY --from=builder /tmp/workflow-migrate /usr/local/bin/workflow-migrate
+COPY --from=builder /tmp/workflow-diagnostic /usr/local/bin/workflow-diagnostic
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/ayni-orchestrator-control-plane"]

@@ -1,3 +1,4 @@
+mod acceptance;
 mod support;
 
 use self::support::{
@@ -437,6 +438,59 @@ impl WorkflowStore {
         transaction.commit().await?;
         driver.abort();
         Ok(receipt)
+    }
+
+    /// Mark one exact outbox record as durably stored by `JetStream`.
+    ///
+    /// This never transfers application authority: an accepted executor claim is
+    /// still required before the command may leave `PostgreSQL` recovery ownership.
+    ///
+    /// # Errors
+    /// Returns validation, database, or retained-state errors.
+    pub async fn mark_outbox_stored(&self, id: &str, event_bytes: &[u8]) -> Result<(), StoreError> {
+        validate_id(id, "outbox_id")?;
+        let (mut client, driver) = crate::connect(&self.database_url).await?;
+        let transaction = client.transaction().await?;
+        let changed = transaction
+            .execute(
+                "UPDATE workflow_outbox SET state = 'stored', attempt_count = attempt_count + 1, \
+                 last_safe_reason = '', updated_at = clock_timestamp() \
+                 WHERE id = $1 AND event_bytes = $2 AND state = 'pending'",
+                &[&id, &event_bytes],
+            )
+            .await?;
+        if changed > 1 {
+            return Err(StoreError::CorruptState);
+        }
+        if changed == 1 {
+            let turn_changed = transaction
+                .execute(
+                    "UPDATE workflow_turns SET dispatch_state = 'stored', \
+                     updated_at = clock_timestamp() \
+                     WHERE id = (SELECT turn_id FROM workflow_outbox WHERE id = $1) \
+                       AND dispatch_state = 'pending'",
+                    &[&id],
+                )
+                .await?;
+            if turn_changed > 1 {
+                return Err(StoreError::CorruptState);
+            }
+        } else {
+            let retained: Option<bool> = transaction
+                .query_opt(
+                    "SELECT event_bytes = $2 AND state IN ('stored', 'transferred') \
+                     FROM workflow_outbox WHERE id = $1",
+                    &[&id, &event_bytes],
+                )
+                .await?
+                .map(|row| row.get(0));
+            if retained != Some(true) {
+                return Err(StoreError::CorruptState);
+            }
+        }
+        transaction.commit().await?;
+        driver.abort();
+        Ok(())
     }
 
     /// Read one repeatable-read conversation snapshot and establish a history boundary.

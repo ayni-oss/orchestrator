@@ -1,19 +1,22 @@
 # Code organization
 
-The Slice 1 workflow path has three production ownership boundaries.
+The Slice 2 workflow path separates transport contracts, PostgreSQL authority, broker I/O, and executor ownership.
 
 | Path | Responsibility |
 | --- | --- |
-| `proto/ayni/orchestrator/v1` | Canonical private-v1 commands, receipts, workflow projections, errors, snapshots, and history |
+| `proto/ayni/orchestrator/v1` | Canonical private-v1 commands, receipts, projections, snapshots, history, and future watch frames |
+| `proto/ayni/orchestrator/events/v1` | Exact command, signed report, and targeted decision payloads |
+| `backend/libs/events` | Bounded CloudEvent encoding, identity/binding validation, signing, and strict verification |
 | `backend/servers/control-plane/crates/grpc-contract` | Generated Rust API and transport-level request validation |
-| `backend/servers/control-plane/crates/workflow-postgres` | Forward migrations, authoritative transactions, idempotency, snapshots, history, and exact outbox bytes |
-| `backend/servers/control-plane` | Configuration, secret-file loading, HTTP probes, trusted-loopback gRPC mapping, and process lifecycle |
-| `deploy/charts/ayni-orchestrator` | Reusable control-plane chart consuming administrator-owned database Secrets |
-| `dev/charts/ayni-orchestrator-local` | Docker Desktop PostgreSQL 17.6 StatefulSet, role bootstrap, retained PVC, and reusable-chart composition |
+| `backend/servers/control-plane/crates/workflow-postgres` | Forward migrations, authoritative transactions, report decisions, FIFO promotion, projections, and exact outbox bytes |
+| `backend/servers/control-plane` | Secret-file configuration, HTTP probes, loopback gRPC, outbox publication, report consumption, and process lifecycle |
+| `backend/workers/scripted-executor` | Retained SQLite ledger, claim fencing, targeted-decision handling, and deterministic response execution |
+| `deploy/charts/ayni-orchestrator` | Reusable control-plane/executor workloads consuming administrator-owned Secrets |
+| `dev/charts/ayni-orchestrator-local` | Docker Desktop PostgreSQL, authenticated three-stream JetStream, retained PVCs, and reusable-chart composition |
 | `clients/typescript` | Generated canonical TypeScript bindings and generation checks |
 
-`workflow-postgres` does not depend on the gRPC contract. The control plane maps persistence models and safe errors into the canonical transport. This keeps database transaction rules independent of listener policy and avoids making generated transport types authoritative state.
+`workflow-postgres` does not depend on gRPC or a NATS client. The control plane maps persistence models into the canonical API and moves exact persisted bytes across the broker. The executor never receives a PostgreSQL credential. Its ledger library is transport-independent; the binary applies JetStream ACK ordering around ledger commits.
 
-The migration role exists only for startup schema work. `WorkflowStore` always receives the runtime-role URL. Configuration reads both URLs from mounted Secret files and does not accept database credentials in command-line arguments or ConfigMaps.
+Migration, runtime, application-broker, executor-broker/signing, acceptance, and administrative identities remain distinct. Configuration loads long-lived credentials from mounted files and does not accept them in command-line arguments or ConfigMaps.
 
-Future-slice feasibility code is explicitly named and isolated. It must not be registered in the Slice 1 listener or deployed by the local chart.
+Slice 3 work—quarantine, complete fault injection, retention cleanup, metrics, and notification-backed watches—must extend these retained ownership boundaries rather than introduce a second authority.

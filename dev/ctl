@@ -11,14 +11,16 @@ usage() {
   cat <<'EOF'
 Usage: dev/ctl COMMAND [OPTIONS]
 
-PostgreSQL-authoritative local Docker Desktop development:
-  secrets                       Create immutable local database-role Secrets
-  deploy | redeploy | up        Build and install or upgrade the Slice 1 stack
-  check [--expect-empty]        Check PostgreSQL migration and readiness
+Durable-workflow local Docker Desktop development:
+  secrets                       Create immutable database and broker role Secrets
+  deploy | redeploy | up        Build and install or upgrade the Slice 2 stack
+  check [--expect-empty]        Check migrations, streams, and workload readiness
+  scenario                      Run the message-to-scripted-response diagnostic
   status                        Show the release, pods, and retained claims
-  cleanup | down                Uninstall resources while preserving database data
+  cleanup | down                Uninstall while preserving authoritative stores
   purge NAMESPACE               Permanently delete the owned local namespace
-  render CONTROL_PLANE_IMAGE    Render the complete development chart
+  render CONTROL_IMAGE EXECUTOR_IMAGE
+                                Render the complete development chart
   dependencies                  Build locked Helm dependencies
   help                          Show this help
 
@@ -63,6 +65,17 @@ case "$command" in
     fi
     "$scripts/check.sh" "$@"
     ;;
+  scenario)
+    [[ $# -eq 0 ]] || { echo "usage: dev/ctl scenario" >&2; exit 2; }
+    context="$(dev_context)"
+    namespace="$(dev_namespace)"
+    pod="$(kubectl --context "$context" --namespace "$namespace" get pods \
+      -l app.kubernetes.io/name=ayni-orchestrator-control-plane \
+      -o jsonpath='{.items[0].metadata.name}')"
+    kubectl --context "$context" --namespace "$namespace" exec "$pod" \
+      --container control-plane -- /usr/local/bin/workflow-diagnostic \
+      --endpoint http://127.0.0.1:50051
+    ;;
   status)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl status" >&2; exit 2; }
     context="$(dev_context)"
@@ -92,19 +105,20 @@ case "$command" in
       echo "refusing to purge an absent or non-local namespace" >&2
       exit 1
     fi
-    echo "permanently deleting local namespace $namespace, including PostgreSQL data" >&2
+    echo "permanently deleting local namespace $namespace, including PostgreSQL, JetStream, and executor data" >&2
     cleanup_release
     kubectl --context "$context" delete namespace "$namespace" --wait=true
     ;;
   render)
-    if [[ $# -ne 1 || -z "$1" || "$1" =~ [[:space:]] || "$1" == *','* ]]; then
-      echo "usage: dev/ctl render CONTROL_PLANE_IMAGE" >&2
+    if [[ $# -ne 2 || -z "$1" || -z "$2" || "$1" =~ [[:space:]] || "$2" =~ [[:space:]] || "$1" == *','* || "$2" == *','* ]]; then
+      echo "usage: dev/ctl render CONTROL_IMAGE EXECUTOR_IMAGE" >&2
       exit 2
     fi
     dev_build_chart_dependencies
     helm template "$DEV_RELEASE_NAME" "$DEV_CHART" \
       --namespace "$(dev_namespace)" \
-      --set-string "ayni-orchestrator.images.controlPlane=$1"
+      --set-string "ayni-orchestrator.images.controlPlane=$1" \
+      --set-string "ayni-orchestrator.images.scriptedExecutor=$2"
     ;;
   dependencies)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl dependencies" >&2; exit 2; }

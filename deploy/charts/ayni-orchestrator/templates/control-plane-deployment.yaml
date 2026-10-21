@@ -16,6 +16,7 @@ spec:
       labels:
         app.kubernetes.io/name: ayni-orchestrator-control-plane
         app.kubernetes.io/part-of: ayni-orchestrator
+        orchestrator.ayni.dev/jetstream-client: "true"
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/control-plane-config.yaml") . | sha256sum }}
     spec:
@@ -89,6 +90,9 @@ spec:
             - name: workflow-postgres-runtime
               mountPath: /var/run/secrets/ayni/workflow-postgres-runtime
               readOnly: true
+            - name: workflow-jetstream-application
+              mountPath: /var/run/secrets/ayni/workflow-jetstream-application
+              readOnly: true
       volumes:
         - name: workflow-postgres-migrator
           secret:
@@ -102,4 +106,10 @@ spec:
             items:
               - key: url
                 path: url
+        - name: workflow-jetstream-application
+          secret:
+            secretName: {{ required "workflowJetstream.applicationSecretName is required" .Values.workflowJetstream.applicationSecretName | quote }}
+            items:
+              - key: password
+                path: password
 {{- end }}
