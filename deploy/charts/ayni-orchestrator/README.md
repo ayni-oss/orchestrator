@@ -1,25 +1,29 @@
 # Ayni Orchestrator Helm chart
 
-This reusable chart deploys the Slice 1 control plane. PostgreSQL is the sole workflow authority; the chart does not install a database or create credentials.
+This reusable chart deploys the M1 Slice 2 control plane and one retained scripted executor. PostgreSQL remains the workflow authority and authenticated JetStream provides durable transport. The chart does not install either dependency or create credentials.
 
 ## Required Secrets
 
-Create two immutable, administrator-owned Secrets before installing the chart:
+Create four distinct immutable, administrator-owned Secrets before installing:
 
-- `workflowPostgres.migratorSecretName`: a `url` key for the migration-owner role.
-- `workflowPostgres.runtimeSecretName`: a `url` key for the least-privilege application role.
-- `workflowPostgres.runtimeRoleName`: the runtime role named by that URL. It must be distinct from the migration owner so the migration runner can grant only application-table DML and read-only migration history.
+- `workflowPostgres.migratorSecretName`: a `url` key for the migration-owner role;
+- `workflowPostgres.runtimeSecretName`: a `url` key for the least-privilege application role;
+- `workflowJetstream.applicationSecretName`: a `password` key for the application broker identity; and
+- `workflowJetstream.executorSecretName`: `password`, `instance-id`, and `signing-seed-hex` keys owned only by the scripted executor.
 
-The two Secret names must differ. Database URLs never enter a ConfigMap or command-line argument. A startup init container mounts only the migration URL, applies and validates the schema, removes unsafe default grants, and grants the named runtime role. The serving container mounts only the runtime URL and validates the exact catalog manifest and runtime privileges before binding listeners.
+`workflowPostgres.runtimeRoleName` must name the role in the runtime URL. All Secret names must differ. Database URLs, broker passwords, and the executor signing seed never enter ConfigMaps or command arguments. The migration init container mounts only the migration URL, the serving container mounts the runtime URL plus its broker password, and the executor mounts only its own broker/signing Secret and retained ledger.
+
+The executor PVC retains exact commands and signed reports across restarts. The chart marks that claim with `helm.sh/resource-policy: keep`; deletion requires an explicit operator action after unresolved decisions are repaired or the disposable environment is intentionally reset.
 
 ## Deployment boundary
 
-This Slice 1 chart is a contributor-preview deployment for an isolated trusted environment. The current PostgreSQL connector is plaintext and intentionally supports Docker Desktop acceptance only. Do not use it for shared or production credentials or traffic; verified TLS configuration is required before that deployment boundary can expand.
+Slice 2 supports an isolated trusted local environment. PostgreSQL and NATS transport are plaintext only within that boundary. Do not use shared or production credentials or traffic until verified TLS and the later operational acceptance work are complete.
 
 ## Listeners
 
 - HTTP health and readiness are exposed through the `control-plane` Service.
-- Canonical private-v1 gRPC binds to pod loopback only. Use an explicit pod port-forward for trusted diagnostics.
-- No custom-client workflow listener is installed in Slice 1.
+- Canonical private-v1 gRPC binds to pod loopback only. Use an explicit pod port-forward or the in-pod diagnostic.
+- The scripted executor has no network listener, database credential, or Kubernetes API token.
+- No custom-client workflow listener is installed.
 
-See `values.yaml` for the complete supported values surface.
+See `values.yaml` for the supported values surface.

@@ -9,24 +9,24 @@ use ayni_orchestrator_events::v1::{
     ConversationReportDecision, ConversationReportDecisionKind, ConversationTurnBinding,
     ConversationTurnReport, ConversationTurnReportKind,
 };
-use ayni_orchestrator_events::workflow::{
-    decode_command, decode_decision, decode_report, verify_report_signature,
-};
-use ed25519_dalek::SigningKey;
+use ayni_orchestrator_events::workflow::{decode_command, decode_report, verify_report_signature};
 use rusqlite::{Connection, OptionalExtension as _, Transaction, TransactionBehavior, params};
-use std::{
-    path::Path,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::path::Path;
 
 mod decision;
 mod schema;
 mod storage;
+mod validation;
 
 use schema::SCHEMA;
 use storage::{
     exact_digest, existing_command_outcome, existing_report_outcome, insert_report,
     redelivered_command_outcome, reserve,
+};
+use validation::{
+    decode_targeted_decision, retain_decision_consumer_sequence, retained_instance_id,
+    retained_signing_public_key, unix_seconds, validate_command, validate_redelivered_command,
+    validate_report,
 };
 
 const CLAIM_REPORT_RESERVATION_BYTES: usize = 24 * 1024;
@@ -76,6 +76,27 @@ pub struct Decision<'a> {
 pub enum StoreOutcome {
     Stored,
     Duplicate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetainedEvent {
+    pub source: String,
+    pub id: String,
+    pub exact_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandDelivery {
+    New,
+    PendingClaim(RetainedEvent),
+    Resolved,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingDecisionAck {
+    pub report_source: String,
+    pub report_id: String,
+    pub consumer_sequence: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -450,112 +471,113 @@ impl Ledger {
             .flatten()
             .ok_or(LedgerError::NotFound)
     }
-}
 
-fn unix_seconds() -> Result<u64, LedgerError> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .map_err(|_| LedgerError::Invalid)
-}
-
-fn validate_redelivered_command(command: &Command<'_>) -> Result<(), LedgerError> {
-    validate_command(command)?;
-    let (identity, _, payload) =
-        decode_command(command.exact_bytes).map_err(|_| LedgerError::Invalid)?;
-    let binding = payload.binding.ok_or(LedgerError::Invalid)?;
-    if identity.source != command.source
-        || identity.id != command.id
-        || binding.turn_id != command.turn_id
-        || binding.assignment_id != command.assignment_id
-        || binding.executor_generation != command.executor_generation
-    {
-        return Err(LedgerError::Invalid);
+    /// Classify an exact command delivery without creating a second claim.
+    ///
+    /// # Errors
+    /// Returns validation, changed-byte conflicts, or `SQLite` failures.
+    pub fn classify_command_delivery(
+        &mut self,
+        command: &Command<'_>,
+    ) -> Result<CommandDelivery, LedgerError> {
+        let exists: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM commands WHERE source = ?1 AND event_id = ?2)",
+            params![command.source, command.id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Ok(CommandDelivery::New);
+        }
+        self.retain_redelivered_command(command)?;
+        let claim: Option<(String, String, Option<Vec<u8>>)> = self
+            .connection
+            .query_row(
+                "SELECT source, event_id, event_bytes FROM reports \
+                 WHERE command_source = ?1 AND command_event_id = ?2 AND sequence = 1",
+                params![command.source, command.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        match claim {
+            Some((source, id, Some(exact_bytes))) => {
+                Ok(CommandDelivery::PendingClaim(RetainedEvent {
+                    source,
+                    id,
+                    exact_bytes,
+                }))
+            }
+            Some((_, _, None)) => Ok(CommandDelivery::Resolved),
+            None => Err(LedgerError::EventConflict),
+        }
     }
-    Ok(())
-}
 
-const fn validate_command(command: &Command<'_>) -> Result<(), LedgerError> {
-    if command.source.is_empty()
-        || command.id.is_empty()
-        || command.exact_bytes.is_empty()
-        || command.turn_id.is_empty()
-        || command.assignment_id.is_empty()
-        || command.executor_generation == 0
-    {
-        return Err(LedgerError::Invalid);
+    /// Return all unresolved exact report bytes for reconnect publication.
+    ///
+    /// # Errors
+    /// Returns `SQLite` failures or invalid retained state.
+    pub fn pending_reports(&self) -> Result<Vec<RetainedEvent>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source, event_id, event_bytes FROM reports \
+             WHERE decision IS NULL AND event_bytes IS NOT NULL \
+             ORDER BY rowid",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(RetainedEvent {
+                source: row.get(0)?,
+                id: row.get(1)?,
+                exact_bytes: row.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
-    Ok(())
-}
 
-const fn validate_report(report: &Report<'_>, sequence: u8) -> Result<(), LedgerError> {
-    if report.source.is_empty()
-        || report.id.is_empty()
-        || report.exact_bytes.is_empty()
-        || report.sequence != sequence
-    {
-        return Err(LedgerError::Invalid);
+    /// Return commands authorized for deterministic execution after restart.
+    ///
+    /// # Errors
+    /// Returns `SQLite` failures or invalid retained state.
+    pub fn executable_commands(&self) -> Result<Vec<RetainedEvent>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source, event_id, event_bytes FROM commands \
+             WHERE state = 'accepted' AND event_bytes IS NOT NULL ORDER BY rowid",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(RetainedEvent {
+                source: row.get(0)?,
+                id: row.get(1)?,
+                exact_bytes: row.get(2)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
-    Ok(())
-}
 
-fn retained_instance_id(connection: &Connection) -> Result<String, LedgerError> {
-    Ok(connection.query_row(
-        "SELECT instance_id FROM executor_identity WHERE singleton = 1",
-        [],
-        |row| row.get(0),
-    )?)
-}
-
-fn retained_signing_public_key(connection: &Connection) -> Result<[u8; 32], LedgerError> {
-    let seed: Vec<u8> = connection.query_row(
-        "SELECT signing_seed FROM executor_identity WHERE singleton = 1",
-        [],
-        |row| row.get(0),
-    )?;
-    let seed: [u8; 32] = seed.try_into().map_err(|_| LedgerError::Invalid)?;
-    Ok(SigningKey::from_bytes(&seed).verifying_key().to_bytes())
-}
-
-fn decode_targeted_decision(
-    exact_bytes: &[u8],
-    instance_id: &str,
-) -> Result<(ConversationReportDecision, bool), LedgerError> {
-    if exact_bytes.is_empty() {
-        return Err(LedgerError::Invalid);
+    /// Return decisions committed locally but not yet reconciled with the
+    /// server-confirmed consumer acknowledgement floor.
+    ///
+    /// # Errors
+    /// Returns `SQLite` failures or invalid retained sequences.
+    pub fn pending_decision_acknowledgements(
+        &self,
+    ) -> Result<Vec<PendingDecisionAck>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT source, event_id, decision_consumer_sequence FROM reports \
+             WHERE decision IS NOT NULL AND decision_acked = 0 \
+               AND decision_consumer_sequence IS NOT NULL ORDER BY decision_consumer_sequence",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let consumer_sequence: i64 = row.get(2)?;
+            Ok((row.get(0)?, row.get(1)?, consumer_sequence))
+        })?;
+        rows.map(|row| {
+            let (report_source, report_id, consumer_sequence) = row?;
+            Ok(PendingDecisionAck {
+                report_source,
+                report_id,
+                consumer_sequence: u64::try_from(consumer_sequence)
+                    .map_err(|_| LedgerError::Invalid)?,
+            })
+        })
+        .collect()
     }
-    let (_, _, payload) = decode_decision(exact_bytes).map_err(|_| LedgerError::Invalid)?;
-    if payload.target_executor_instance_id != instance_id {
-        return Err(LedgerError::Invalid);
-    }
-    let accepted = match ConversationReportDecisionKind::try_from(payload.decision)
-        .map_err(|_| LedgerError::Invalid)?
-    {
-        ConversationReportDecisionKind::Accepted => true,
-        ConversationReportDecisionKind::Rejected => false,
-        ConversationReportDecisionKind::Unspecified => return Err(LedgerError::Invalid),
-    };
-    Ok((payload, accepted))
-}
-
-fn retain_decision_consumer_sequence(
-    transaction: &Transaction<'_>,
-    report_source: &str,
-    report_event_id: &str,
-    consumer_sequence: Option<u64>,
-) -> Result<(), LedgerError> {
-    let Some(consumer_sequence) = consumer_sequence else {
-        return Ok(());
-    };
-    let consumer_sequence = i64::try_from(consumer_sequence).map_err(|_| LedgerError::Invalid)?;
-    transaction.execute(
-        "UPDATE reports SET decision_consumer_sequence = \
-         CASE WHEN COALESCE(decision_consumer_sequence, 0) < ?3 THEN ?3 \
-              ELSE decision_consumer_sequence END \
-         WHERE source = ?1 AND event_id = ?2",
-        params![report_source, report_event_id, consumer_sequence],
-    )?;
-    Ok(())
 }
 
 fn retained_decision_report(

@@ -2,6 +2,12 @@
 {{- if eq .Values.workflowPostgres.migratorSecretName .Values.workflowPostgres.runtimeSecretName }}
 {{- fail "workflowPostgres migrator and runtime Secret names must differ" }}
 {{- end }}
+{{- if or (eq .Values.workflowJetstream.applicationSecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.workflowJetstream.applicationSecretName .Values.workflowPostgres.migratorSecretName) }}
+{{- fail "workflow JetStream application and PostgreSQL Secret names must differ" }}
+{{- end }}
+{{- if or (eq .Values.workflowJetstream.executorSecretName .Values.workflowJetstream.applicationSecretName) (eq .Values.workflowJetstream.executorSecretName .Values.workflowPostgres.runtimeSecretName) (eq .Values.workflowJetstream.executorSecretName .Values.workflowPostgres.migratorSecretName) }}
+{{- fail "workflow executor and application/database Secret names must differ" }}
+{{- end }}
 {{- if eq (int .Values.controlPlane.httpPort) (int .Values.controlPlane.trustedGrpcPort) }}
 {{- fail "controlPlane HTTP and trusted gRPC ports must differ" }}
 {{- end }}
@@ -20,4 +26,7 @@ data:
   ORCHESTRATOR_WORKFLOW_MIGRATION_DATABASE_URL_PATH: /var/run/secrets/ayni/workflow-postgres-migrator/url
   ORCHESTRATOR_WORKFLOW_DATABASE_URL_PATH: /var/run/secrets/ayni/workflow-postgres-runtime/url
   ORCHESTRATOR_WORKFLOW_DATABASE_ROLE: {{ .Values.workflowPostgres.runtimeRoleName | quote }}
+  ORCHESTRATOR_WORKFLOW_BROKER_URL: {{ .Values.workflowJetstream.url | quote }}
+  ORCHESTRATOR_WORKFLOW_BROKER_USERNAME: {{ .Values.workflowJetstream.username | quote }}
+  ORCHESTRATOR_WORKFLOW_BROKER_PASSWORD_PATH: /var/run/secrets/ayni/workflow-jetstream-application/password
 {{- end }}

@@ -1,4 +1,4 @@
-The Ayni Orchestrator Slice 1 control plane is installed.
+The Ayni Orchestrator Slice 2 control plane and scripted executor are installed.
 
 Health endpoint:
   kubectl --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:{{ .Values.controlPlane.httpPort }}
@@ -7,7 +7,11 @@ Trusted private-v1 diagnostic endpoint (pod-local only):
   POD=$(kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
   kubectl --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:{{ .Values.controlPlane.trustedGrpcPort }}
 
-The chart never creates database credentials. It expects immutable Secrets
-{{ .Values.workflowPostgres.migratorSecretName | quote }} and
-{{ .Values.workflowPostgres.runtimeSecretName | quote }}, each with a `url` key.
-The runtime URL must authenticate as {{ .Values.workflowPostgres.runtimeRoleName | quote }}.
+The chart never creates database or broker credentials. It expects four distinct
+immutable Secrets: {{ .Values.workflowPostgres.migratorSecretName | quote }},
+{{ .Values.workflowPostgres.runtimeSecretName | quote }},
+{{ .Values.workflowJetstream.applicationSecretName | quote }}, and
+{{ .Values.workflowJetstream.executorSecretName | quote }}. The runtime database
+URL must authenticate as {{ .Values.workflowPostgres.runtimeRoleName | quote }}.
+The executor PVC is retained after uninstall and must not be deleted while a
+command/report/decision handoff is unresolved.

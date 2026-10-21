@@ -1,8 +1,8 @@
-# M1 Slice 1 architecture
+# M1 Slice 2 architecture
 
-M1 Slice 1 is a clean replacement workflow foundation. It provides durable hierarchy creation, message admission, conversation snapshots, and bounded history. PostgreSQL is the only workflow authority.
+M1 Slice 2 extends the clean PostgreSQL workflow authority with authenticated durable delivery and one retained scripted executor. PostgreSQL decides admission, ownership, report acceptance, and visible conversation state. JetStream retains transport copies; no broker ACK independently changes application authority.
 
-The binding scope and later-slice boundaries are defined in the [durable foundation contract](../research/project-workflow-m1-durable-foundation.md). This page describes only the implemented Slice 1 runtime.
+The complete M1 contract and later-slice boundary are defined in the [durable foundation contract](../research/project-workflow-m1-durable-foundation.md).
 
 ## Runtime boundary
 
@@ -14,53 +14,63 @@ config:
   layout: elk
 ---
 flowchart LR
-    D[Trusted operator diagnostic] -->|pod port-forward| G[Private-v1 gRPC\nloopback only]
+    D[Trusted operator diagnostic] -->|pod loopback| G[Private-v1 gRPC]
     G --> C[Control plane]
-    C -->|migration URL file| M[(PostgreSQL 17.6\nmigration role)]
-    C -->|runtime URL file| R[(PostgreSQL 17.6\nruntime role)]
     H[HTTP probes] --> C
+    C -->|runtime role| P[(PostgreSQL 17.6\nauthority)]
+    C -->|command + decision bytes| J[(Authenticated\nJetStream)]
+    J -->|command delivery| E[Scripted executor]
+    E -->|signed claim + report| J
+    E -->|retained exact bytes| L[(SQLite ledger PVC)]
+    J -->|report delivery| C
+    J -->|targeted decision| E
 ```
 
-The control plane exposes:
-
-- `/healthz`, which reports process liveness without consulting dependencies;
-- `/readyz`, which validates the current migration version and schema through the runtime database role;
-- `ProjectService` and `ProjectConversationService` on `127.0.0.1:50051` inside the pod.
-
-The Kubernetes Service exposes HTTP only. Workflow gRPC is intentionally absent from Services and custom-client listeners. Operators opt into diagnostic access with a pod port-forward.
+The Kubernetes Service exposes HTTP only. Workflow gRPC binds to `127.0.0.1:50051` in the control-plane Pod. The executor has no listener, database credential, or Kubernetes API token.
 
 ## Canonical private-v1 surface
 
-`ProjectService` supports `CreateWorkspace` and `CreateProject`.
+`ProjectService` supports `CreateWorkspace` and `CreateProject`. `ProjectConversationService` supports `CreateConversation`, `SendMessage`, `GetConversationSnapshot`, and `ListConversationHistory`. `WatchConversation` remains present but returns `UNIMPLEMENTED` until Slice 3.
 
-`ProjectConversationService` supports:
-
-- `CreateConversation`;
-- `SendMessage`;
-- `GetConversationSnapshot`;
-- `ListConversationHistory`;
-- `WatchConversation`, which is present in the canonical contract but returns `UNIMPLEMENTED` until Slice 3.
-
-The reset has no compatibility adapter for removed RPCs. Browser/BFF callers, the old workflow owner, and its SQLite tests were deleted together.
+There is no compatibility adapter for removed RPCs, SQLite workflow, browser/BFF path, or custom-client workflow listener.
 
 ## PostgreSQL authority
 
-Repository-owned forward SQL migrations live in `backend/servers/control-plane/crates/workflow-postgres/migrations`. A startup init container takes a transaction-scoped advisory lock, checks contiguous migration history and checksums, applies version 1 once, and validates a deterministic catalog manifest covering workflow relations, columns, defaults, constraints, indexes, sequences, and functions. Future, missing, modified, extra, and malformed schema states fail closed. The init container mounts only the migration credential and must complete before the serving container starts.
+Repository-owned forward migrations live in `backend/servers/control-plane/crates/workflow-postgres/migrations`:
 
-Serving traffic uses a separate named runtime role. The local database bootstrap grants only connection and schema use initially; the migration runner removes blanket defaults, grants explicit DML on application tables plus required sequence/function use, and keeps migration history read-only. Runtime startup and readiness verify those privileges and reject schema-creation authority. The runtime role receives only required reads/inserts, two bounded column updates, expired-snapshot deletion, and required sequence/function use; it cannot create schemas or temporary objects, own workflow objects, delegate grants, or inherit roles. The PostgreSQL administrator credential is never mounted into the control plane.
+1. version 1 creates hierarchy, receipts, FIFO turns, activity/update projections, dispatch intents, exact command outbox bytes, snapshots, and history;
+2. version 2 adds immutable signed-report receipts and exact targeted-decision bytes.
 
-Every accepted command commits its receipt and authoritative mutation in one transaction. The receipt key is scoped by principal, method, parent, and idempotency key. An exact replay returns the original command ID, accepted time, resource IDs, revision, cursor, and presentation state. Reusing a key with a different request digest returns `IDEMPOTENCY_CONFLICT`.
+Startup takes a transaction-scoped advisory lock, validates contiguous history and every checksum, applies missing migrations, installs explicit runtime grants, and verifies a deterministic catalog manifest. The migration and runtime credentials are separate. Runtime has only the table/column/sequence/function privileges required by current transactions.
 
-`SendMessage` locks the conversation row before assigning FIFO turn, history, and conversation revisions. It atomically creates the user message, turn, activity, update, dispatch intent, and exact command-event outbox bytes. The nonterminal queue is bounded at 100 turns.
+`SendMessage` commits its scoped idempotency receipt, user message, FIFO turn, activity/update, dispatch intent, and exact command event atomically. A broker storage ACK moves dispatch from `pending` to `stored`; only an accepted signed claim moves it to `transferred` and execution to `processing`.
+
+The report consumer commits the immutable report receipt, acceptance or rejection decision, targeted decision outbox, and any accepted state change before its consumer ACK. An accepted terminal report inserts one assistant message, terminal state/activity, and the next FIFO command in one transaction. Promoted context contains the bounded newest predecessor records that fit plus the current user message, never later queued input.
+
+## Durable transport and ownership
+
+The isolated broker uses three file-backed `limits` streams:
+
+| Stream | Publisher | Consumer | Local capacity |
+| --- | --- | --- | --- |
+| `ORCHESTRATOR_WORKFLOW_COMMAND_V1` | application outbox | scripted executor | 25,000 / 256 MiB |
+| `ORCHESTRATOR_WORKFLOW_REPORT_V1` | executor ledger | application | 50,000 / 192 MiB |
+| `ORCHESTRATOR_WORKFLOW_DECISION_V1` | application outbox | targeted executor and harness | 50,000 / 64 MiB |
+
+Each uses `discard=new`, file storage, one local replica, seven-day age, a two-minute duplicate window, denied delete/purge, and a 260-KiB stored-message limit. `Nats-Msg-Id` derives from producer source plus event ID, but correctness does not depend on the broker duplicate window.
+
+Anonymous access is disabled. Application, executor, acceptance, and administrative passwords are distinct. Subject ACLs prevent the executor from publishing decisions or reading PostgreSQL and prevent the application from consuming commands. The admin identity is unavailable to workloads.
+
+The executor persists its instance identity, Ed25519 seed, exact command, and signed claim in a full-synchronous SQLite ledger before command ACK. It executes only after durably recording the matching targeted acceptance. Terminal bytes are retained before publication. A decision is committed locally before its delivery ACK; restart reconciliation uses the retained consumer sequence and server ACK floor.
 
 ## Read projections
 
-`GetConversationSnapshot` uses a repeatable-read transaction. It returns the recent message window, nonterminal turns, bounded terminal summaries, current activity, counts, a resume cursor, and a short-lived history snapshot ID.
+`GetConversationSnapshot` uses repeatable read and returns recent messages, nonterminal turns, bounded terminal summaries, current activity, counts, a resume cursor, and a short-lived history snapshot ID. `ListConversationHistory` provides stable reverse pagination from that boundary. Pages are bounded at 100 records; expired boundaries return `HISTORY_SNAPSHOT_EXPIRED`.
 
-`ListConversationHistory` uses that snapshot ID and boundary for stable reverse pagination. Pages are bounded at 100 records. Expired boundaries fail with `HISTORY_SNAPSHOT_EXPIRED`; the caller requests a new snapshot rather than silently changing views.
+Slice 2 diagnostics poll these authoritative reads. Notification-backed resumable streaming enters Slice 3.
 
 ## Failure and rollout model
 
-There is no SQLite import, dual write, old-schema migration, shared broker adaptation, or compatibility namespace. Before the first accepted PostgreSQL command, rollback means reverting the binary and chart. After admission, this disposable replacement slice rolls forward or explicitly resets its isolated namespace; an old runtime must never open the PostgreSQL workflow store.
+PostgreSQL unavailability prevents a durable command receipt. Broker unavailability leaves accepted outbox work visible and pending without making database readiness false. Command ACK, report ACK, broker storage ACK, application decision, and targeted decision ACK remain separate boundaries.
 
-JetStream delivery, executor ownership/results, resumable watch replay, providers, browser UX, and public/custom-client workflow access enter later slices. The retained feasibility harnesses do not make those paths production runtime behavior.
+Before any replacement admission, rollback may revert the runtime. After admission, preserve PostgreSQL, JetStream, and executor-ledger authority and repair forward. Return to Slice 1 only when no handoff is unresolved; otherwise intentionally reset the disposable namespace. Slice 3 adds quarantine, complete restart/capacity/version-skew acceptance, retention cleanup, metrics, and resumable watches.

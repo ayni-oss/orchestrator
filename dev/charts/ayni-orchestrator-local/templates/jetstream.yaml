@@ -1,0 +1,436 @@
+{{- define "local.workflowJetstreamConfig" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-jetstream-config
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+data:
+  nats.conf: |
+    server_name: workflow-jetstream
+    port: 4222
+    http: 127.0.0.1:8222
+    max_payload: 327680
+    max_connections: 64
+    max_pending: 16777216
+    jetstream {
+      store_dir: /data/jetstream
+      max_memory_store: 0
+      max_file_store: {{ int64 .Values.jetstream.maxFileBytes }}
+    }
+    authorization {
+      users: [
+        {
+          user: "workflow-admin"
+          password: $WORKFLOW_ADMIN_PASSWORD
+          permissions: { publish: ">", subscribe: ">" }
+        },
+        {
+          user: "workflow-application"
+          password: $WORKFLOW_APPLICATION_PASSWORD
+          permissions: {
+            publish: { allow: [
+              "orchestrator.workflow.command.conversation.v1",
+              "orchestrator.workflow.accepted.conversation.v1.*",
+              "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application",
+              "$JS.API.CONSUMER.MSG.NEXT.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application",
+              "$JS.ACK.ORCHESTRATOR_WORKFLOW_REPORT_V1.workflow-application.>"
+            ] }
+            subscribe: { allow: ["_INBOX.>"] }
+          }
+        },
+        {
+          user: "workflow-executor"
+          password: $WORKFLOW_EXECUTOR_PASSWORD
+          permissions: {
+            publish: { allow: [
+              "orchestrator.workflow.report.conversation.v1",
+              "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_COMMAND_V1.scripted-executor",
+              "$JS.API.CONSUMER.MSG.NEXT.ORCHESTRATOR_WORKFLOW_COMMAND_V1.scripted-executor",
+              "$JS.ACK.ORCHESTRATOR_WORKFLOW_COMMAND_V1.scripted-executor.>",
+              "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_DECISION_V1.executor-{{ .Values.jetstream.executorInstanceId }}",
+              "$JS.API.CONSUMER.MSG.NEXT.ORCHESTRATOR_WORKFLOW_DECISION_V1.executor-{{ .Values.jetstream.executorInstanceId }}",
+              "$JS.ACK.ORCHESTRATOR_WORKFLOW_DECISION_V1.executor-{{ .Values.jetstream.executorInstanceId }}.>"
+            ] }
+            subscribe: { allow: ["_INBOX.>"] }
+          }
+        },
+        {
+          user: "workflow-acceptance"
+          password: $WORKFLOW_ACCEPTANCE_PASSWORD
+          permissions: {
+            publish: { allow: [
+              "$JS.API.CONSUMER.INFO.ORCHESTRATOR_WORKFLOW_DECISION_V1.acceptance-harness",
+              "$JS.API.CONSUMER.MSG.NEXT.ORCHESTRATOR_WORKFLOW_DECISION_V1.acceptance-harness",
+              "$JS.ACK.ORCHESTRATOR_WORKFLOW_DECISION_V1.acceptance-harness.>"
+            ] }
+            subscribe: { allow: ["_INBOX.>"] }
+          }
+        }
+      ]
+    }
+  command.json: |
+    {
+      "name": "ORCHESTRATOR_WORKFLOW_COMMAND_V1",
+      "subjects": ["orchestrator.workflow.command.conversation.v1"],
+      "retention": "limits",
+      "storage": "file",
+      "num_replicas": 1,
+      "discard": "new",
+      "max_bytes": 268435456,
+      "max_msgs": 25000,
+      "max_age": 604800000000000,
+      "max_msg_size": 266240,
+      "max_consumers": 1,
+      "duplicate_window": 120000000000,
+      "deny_delete": true,
+      "deny_purge": true,
+      "allow_rollup_hdrs": false
+    }
+  report.json: |
+    {
+      "name": "ORCHESTRATOR_WORKFLOW_REPORT_V1",
+      "subjects": ["orchestrator.workflow.report.conversation.v1"],
+      "retention": "limits",
+      "storage": "file",
+      "num_replicas": 1,
+      "discard": "new",
+      "max_bytes": 201326592,
+      "max_msgs": 50000,
+      "max_age": 604800000000000,
+      "max_msg_size": 266240,
+      "max_consumers": 1,
+      "duplicate_window": 120000000000,
+      "deny_delete": true,
+      "deny_purge": true,
+      "allow_rollup_hdrs": false
+    }
+  decision.json: |
+    {
+      "name": "ORCHESTRATOR_WORKFLOW_DECISION_V1",
+      "subjects": ["orchestrator.workflow.accepted.conversation.v1.*"],
+      "retention": "limits",
+      "storage": "file",
+      "num_replicas": 1,
+      "discard": "new",
+      "max_bytes": 67108864,
+      "max_msgs": 50000,
+      "max_age": 604800000000000,
+      "max_msg_size": 266240,
+      "max_consumers": 2,
+      "duplicate_window": 120000000000,
+      "deny_delete": true,
+      "deny_purge": true,
+      "allow_rollup_hdrs": false
+    }
+  command-consumer.json: |
+    {
+      "durable_name": "scripted-executor",
+      "deliver_policy": "all",
+      "ack_policy": "explicit",
+      "ack_wait": 30000000000,
+      "max_deliver": -1,
+      "filter_subject": "orchestrator.workflow.command.conversation.v1",
+      "replay_policy": "instant",
+      "max_ack_pending": 1
+    }
+  report-consumer.json: |
+    {
+      "durable_name": "workflow-application",
+      "deliver_policy": "all",
+      "ack_policy": "explicit",
+      "ack_wait": 30000000000,
+      "max_deliver": -1,
+      "filter_subject": "orchestrator.workflow.report.conversation.v1",
+      "replay_policy": "instant",
+      "max_ack_pending": 16
+    }
+  executor-decision-consumer.json: |
+    {
+      "durable_name": "executor-{{ .Values.jetstream.executorInstanceId }}",
+      "deliver_policy": "all",
+      "ack_policy": "explicit",
+      "ack_wait": 30000000000,
+      "max_deliver": -1,
+      "filter_subject": "orchestrator.workflow.accepted.conversation.v1.{{ .Values.jetstream.executorInstanceId }}",
+      "replay_policy": "instant",
+      "max_ack_pending": 16
+    }
+  acceptance-consumer.json: |
+    {
+      "durable_name": "acceptance-harness",
+      "deliver_policy": "all",
+      "ack_policy": "explicit",
+      "ack_wait": 30000000000,
+      "max_deliver": -1,
+      "filter_subject": "orchestrator.workflow.accepted.conversation.v1.*",
+      "replay_policy": "instant",
+      "max_ack_pending": 16
+    }
+{{- end -}}
+{{- if .Values.jetstream.enabled }}
+{{- $workflow := index .Values "ayni-orchestrator" }}
+{{- if or (ne $workflow.workflowJetstream.url "nats://jetstream:4222") (ne $workflow.workflowJetstream.username "workflow-application") (ne $workflow.workflowJetstream.executorUsername "workflow-executor") }}
+{{- fail "local workflow JetStream endpoint and role names are fixed" }}
+{{- end }}
+{{- if or (ne $workflow.workflowJetstream.applicationSecretName .Values.jetstream.secrets.application) (ne $workflow.workflowJetstream.executorSecretName .Values.jetstream.secrets.executor) }}
+{{- fail "local reusable-workload and JetStream role Secret names must match" }}
+{{- end }}
+{{- if or (ne $workflow.workflowPostgres.migratorSecretName .Values.postgres.secrets.migrator) (ne $workflow.workflowPostgres.runtimeSecretName .Values.postgres.secrets.runtime) }}
+{{- fail "local reusable-workload and PostgreSQL role Secret names must match" }}
+{{- end }}
+{{- $streamBytes := add 268435456 201326592 67108864 }}
+{{- if gt (int64 $streamBytes) (int64 .Values.jetstream.maxFileBytes) }}
+{{- fail "workflow JetStream stream budgets exceed the server file budget" }}
+{{- end }}
+{{- $secrets := list .Values.postgres.secrets.admin .Values.postgres.secrets.migrator .Values.postgres.secrets.runtime .Values.jetstream.secrets.admin .Values.jetstream.secrets.application .Values.jetstream.secrets.executor .Values.jetstream.secrets.acceptance }}
+{{- if ne (len (uniq $secrets)) 7 }}
+{{- fail "local PostgreSQL and JetStream role Secret names must all differ" }}
+{{- end }}
+{{ include "local.workflowJetstreamConfig" . }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workflow-jetstream-data
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: workflow-jetstream
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.jetstream.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jetstream
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: workflow-jetstream
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: workflow-jetstream
+  ports:
+    - name: client
+      port: 4222
+      targetPort: client
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: workflow-jetstream
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: workflow-jetstream
+spec:
+  serviceName: jetstream
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workflow-jetstream
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: workflow-jetstream
+        app.kubernetes.io/part-of: ayni-orchestrator
+      annotations:
+        checksum/config: {{ include "local.workflowJetstreamConfig" . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nats
+          image: {{ .Values.jetstream.serverImage | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/config/nats.conf"]
+          env:
+            - name: WORKFLOW_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jetstream.secrets.admin | quote }}
+                  key: password
+            - name: WORKFLOW_APPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jetstream.secrets.application | quote }}
+                  key: password
+            - name: WORKFLOW_EXECUTOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jetstream.secrets.executor | quote }}
+                  key: password
+            - name: WORKFLOW_ACCEPTANCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jetstream.secrets.acceptance | quote }}
+                  key: password
+          ports:
+            - name: client
+              containerPort: 4222
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+            periodSeconds: 3
+            timeoutSeconds: 2
+          livenessProbe:
+            tcpSocket:
+              port: client
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.jetstream.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: workflow-jetstream-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: workflow-jetstream-data
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workflow-jetstream-clients
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: workflow-jetstream
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              orchestrator.ayni.dev/jetstream-client: "true"
+      ports:
+        - port: 4222
+          protocol: TCP
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: workflow-jetstream-provision
+  labels:
+    {{- include "local.commonLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: 180
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        orchestrator.ayni.dev/jetstream-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: provision
+          image: {{ .Values.jetstream.toolingImage | quote }}
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp
+          env:
+            - name: WORKFLOW_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jetstream.secrets.admin | quote }}
+                  key: password
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export NATS_URL=nats://jetstream:4222
+              export NATS_USER=workflow-admin
+              export NATS_PASSWORD="$WORKFLOW_ADMIN_PASSWORD"
+              for attempt in $(seq 1 60); do
+                if nats --timeout=2s account info >/dev/null 2>&1; then break; fi
+                sleep 2
+              done
+              nats stream ls --names >/tmp/streams
+              configure_stream() {
+                stream="$1"; config="$2"
+                if grep -qx "$stream" /tmp/streams; then
+                  nats stream edit "$stream" --config="$config" --force
+                else
+                  nats stream add --config="$config" --defaults
+                fi
+              }
+              configure_consumer() {
+                stream="$1"; consumer="$2"; config="$3"
+                if nats consumer info "$stream" "$consumer" >/dev/null 2>&1; then
+                  nats consumer edit "$stream" "$consumer" --config="$config" --force
+                else
+                  nats consumer add "$stream" --config="$config"
+                fi
+              }
+              configure_stream ORCHESTRATOR_WORKFLOW_COMMAND_V1 /config/command.json
+              configure_stream ORCHESTRATOR_WORKFLOW_REPORT_V1 /config/report.json
+              configure_stream ORCHESTRATOR_WORKFLOW_DECISION_V1 /config/decision.json
+              configure_consumer ORCHESTRATOR_WORKFLOW_COMMAND_V1 scripted-executor /config/command-consumer.json
+              configure_consumer ORCHESTRATOR_WORKFLOW_REPORT_V1 workflow-application /config/report-consumer.json
+              configure_consumer ORCHESTRATOR_WORKFLOW_DECISION_V1 executor-{{ .Values.jetstream.executorInstanceId }} /config/executor-decision-consumer.json
+              configure_consumer ORCHESTRATOR_WORKFLOW_DECISION_V1 acceptance-harness /config/acceptance-consumer.json
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: scratch
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: workflow-jetstream-config
+        - name: scratch
+          emptyDir:
+            sizeLimit: 16Mi
+{{- end }}

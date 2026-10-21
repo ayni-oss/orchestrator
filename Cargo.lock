@@ -204,10 +204,13 @@ dependencies = [
 name = "ayni-orchestrator-control-plane"
 version = "0.1.0"
 dependencies = [
+ "async-nats",
  "axum",
  "ayni-orchestrator-api",
+ "ayni-orchestrator-events",
  "ayni-orchestrator-observability",
  "ayni-orchestrator-workflow-postgres",
+ "futures-util",
  "http-body-util",
  "prost",
  "prost-types",
@@ -296,12 +299,14 @@ dependencies = [
  "async-nats",
  "ayni-orchestrator-events",
  "ed25519-dalek",
+ "futures-util",
  "rusqlite",
  "sha2 0.10.9",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-stream",
+ "uuid",
 ]
 
 [[package]]
@@ -309,6 +314,7 @@ name = "ayni-orchestrator-workflow-postgres"
 version = "0.1.0"
 dependencies = [
  "ayni-orchestrator-events",
+ "ed25519-dalek",
  "prost",
  "prost-build",
  "protoc-bin-vendored",

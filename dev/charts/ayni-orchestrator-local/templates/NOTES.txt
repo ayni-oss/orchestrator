@@ -1,16 +1,18 @@
-The local PostgreSQL-authoritative Slice 1 stack is installed.
+The local PostgreSQL-authoritative Slice 2 stack is installed.
 
-Wait for readiness:
-  kubectl --namespace {{ .Release.Namespace }} rollout status statefulset/workflow-postgres
-  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/control-plane
+Verify dependencies and workloads:
+  dev/ctl check
+
+Run the message-to-scripted-response scenario:
+  dev/ctl scenario
 
 Health:
-  kubectl --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
+  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward service/control-plane 8080:8080
 
 Trusted private-v1 diagnostics:
-  POD=$(kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
-  kubectl --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:50051
+  POD=$(kubectl --context docker-desktop --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/name=ayni-orchestrator-control-plane -o jsonpath='{.items[0].metadata.name}')
+  kubectl --context docker-desktop --namespace {{ .Release.Namespace }} port-forward pod/$POD 50051:50051
 
-The PostgreSQL PVC is retained when the Helm release is removed. Use the
-explicit `dev/ctl purge` confirmation flow to delete the development namespace
-and its data.
+PostgreSQL, JetStream, and executor-ledger PVCs are retained when the Helm
+release is removed. Use the explicit `dev/ctl purge` confirmation flow to
+delete the development namespace and all retained workflow data.

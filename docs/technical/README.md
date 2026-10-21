@@ -1,6 +1,6 @@
 # Technical documentation
 
-The current implementation is M1 runtime Slice 1: a clean PostgreSQL-authoritative workflow foundation with a trusted-loopback private-v1 API.
+The current implementation is M1 runtime Slice 2: PostgreSQL-authoritative workflow state, authenticated durable delivery, one retained scripted executor, and a trusted-loopback private-v1 API.
 
 ## Current implementation
 

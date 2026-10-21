@@ -19,6 +19,9 @@ tonic.workspace = true
 tonic-prost.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+ed25519-dalek.workspace = true
+
 [build-dependencies]
 prost-build.workspace = true
 protoc-bin-vendored.workspace = true

@@ -1,4 +1,6 @@
-use ayni_orchestrator_control_plane::{Configuration, WorkflowReadiness, router, serve_grpc};
+use ayni_orchestrator_control_plane::{
+    Configuration, WorkflowReadiness, broker, router, serve_grpc,
+};
 use ayni_orchestrator_workflow_postgres::WorkflowStore;
 use std::{io, process::ExitCode};
 use tokio::{net::TcpListener, signal, sync::watch};
@@ -65,10 +67,16 @@ async fn run() -> Result<(), io::Error> {
             let _ = http_shutdown.changed().await;
         }
     });
-    let grpc_server = serve_grpc(configuration.grpc_bind_address(), store, shutdown_receiver);
+    let grpc_server = serve_grpc(
+        configuration.grpc_bind_address(),
+        store.clone(),
+        shutdown_receiver.clone(),
+    );
+    let publisher = broker::run_publisher(&configuration, store, shutdown_receiver);
     let result = tokio::try_join!(
         async { http_server.await.map_err(io::Error::other) },
-        grpc_server
+        grpc_server,
+        publisher,
     )
     .map(|_| ());
     let _ = shutdown_sender.send(true);

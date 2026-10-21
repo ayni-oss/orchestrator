@@ -1,7 +1,8 @@
 //! `PostgreSQL` authority for the replacement project-conversation workflow.
 //!
-//! This crate owns forward schema migrations and transaction boundaries for M1.
-//! `JetStream` delivery is outside Slice 1; gRPC policy remains in the control-plane adapter.
+//! This crate owns forward schema migrations, exact outbox intent, report acceptance,
+//! and domain transaction boundaries for M1. Broker I/O and gRPC policy remain in the
+//! control-plane adapter.
 
 use tokio::task::JoinHandle;
 use tokio_postgres::{Client, Config, NoTls};

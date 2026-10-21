@@ -297,6 +297,15 @@ pub struct HistoryPage {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReportDecisionReceipt {
+    pub report_source: String,
+    pub report_id: String,
+    pub decision_event_id: String,
+    pub accepted: bool,
+    pub safe_reason: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutboxRecord {
     pub id: String,
     pub conversation_id: String,

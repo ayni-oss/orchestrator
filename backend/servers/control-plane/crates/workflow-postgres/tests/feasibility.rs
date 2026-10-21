@@ -1,8 +1,18 @@
-use ayni_orchestrator_events::workflow::decode_command;
-use ayni_orchestrator_workflow_postgres::{
-    MigrationError, StoreError, WorkflowStore, connect, migrate, migrate_for_runtime,
-    migration_lock_id, validate, validate_client_for_runtime, validate_for_runtime,
+use ayni_orchestrator_events::{
+    EventIdentity,
+    v1::{ConversationTurnBinding, ConversationTurnReport, ConversationTurnReportKind},
+    workflow::{
+        WorkflowEventMetadata, decode_command, decode_report, encode_report, sign_report,
+        signing_key_digest,
+    },
 };
+use ayni_orchestrator_workflow_postgres::{
+    CURRENT_SCHEMA_VERSION, MigrationError, StoreError, WorkflowStore, connect, migrate,
+    migrate_for_runtime, migration_lock_id, validate, validate_client_for_runtime,
+    validate_for_runtime,
+};
+use ed25519_dalek::SigningKey;
+use sha2::{Digest as _, Sha256};
 use std::{error::Error, sync::Arc, time::Duration};
 use tokio::{
     sync::Barrier,
@@ -10,6 +20,11 @@ use tokio::{
     time::{sleep, timeout},
 };
 use tokio_postgres::Client;
+use uuid::Uuid;
+
+#[path = "feasibility/feasibility_support.rs"]
+mod feasibility_support;
+use feasibility_support::{prove_capacity_race, prove_future_version_rejected};
 
 const DATABASE_URL_ENV: &str = "AYNI_POSTGRES_FEASIBILITY_URL";
 const RUNTIME_DATABASE_URL_ENV: &str = "AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL";
@@ -50,7 +65,7 @@ async fn postgres_feasibility_gate() -> TestResult {
     prove_future_version_rejected(&client, &runtime_database_url).await?;
     driver.abort();
     println!(
-        "postgres-runtime: advisory-lock=pass migration=pass migration-rollback=pass schema-drift=pass role-separation=pass privilege-drift=pass transaction-rollback=pass admission-rollback=pass scope=pass idempotency=pass fifo=pass queue-bound=pass exact-outbox=pass snapshot-history=pass future-version=pass"
+        "postgres-runtime: advisory-lock=pass migration=pass migration-rollback=pass schema-drift=pass role-separation=pass privilege-drift=pass transaction-rollback=pass admission-rollback=pass scope=pass idempotency=pass fifo=pass queue-bound=pass exact-outbox=pass report-acceptance=pass fifo-promotion=pass snapshot-history=pass future-version=pass"
     );
     Ok(())
 }
@@ -123,7 +138,7 @@ async fn prove_concurrent_migrations(client: &Client, database_url: &str) -> Tes
         .query_one("SELECT count(*) FROM workflow_schema_migrations", &[])
         .await?
         .get(0);
-    assert_eq!(versions, 1);
+    assert_eq!(versions, CURRENT_SCHEMA_VERSION);
     Ok(())
 }
 
@@ -261,6 +276,18 @@ async fn prove_runtime_privilege_drift_rejected(
     client
         .batch_execute(&format!(
             "REVOKE INSERT ON workflow_workspaces FROM {quoted_role}"
+        ))
+        .await?;
+    assert!(matches!(
+        validate(runtime_url).await,
+        Err(MigrationError::InvalidRuntimePrivileges)
+    ));
+    migrate_for_runtime(migration_url, runtime_role).await?;
+    validate_for_runtime(runtime_url, runtime_role).await?;
+
+    client
+        .batch_execute(&format!(
+            "REVOKE UPDATE (dispatch_state) ON workflow_turns FROM {quoted_role}"
         ))
         .await?;
     assert!(matches!(
@@ -605,6 +632,7 @@ async fn prove_authoritative_store(client: &Client, database_url: &str) -> TestR
         .get(0);
     assert_eq!(expired, 0);
 
+    prove_report_acceptance(client, &store, &workspace.resource.id, &project.resource.id).await?;
     prove_capacity_race(
         client,
         &store,
@@ -614,6 +642,235 @@ async fn prove_authoritative_store(client: &Client, database_url: &str) -> TestR
     )
     .await?;
     Ok(())
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "the report handoff scenario keeps claim, terminal, and FIFO evidence in causal order"
+)]
+async fn prove_report_acceptance(
+    client: &Client,
+    store: &WorkflowStore,
+    workspace_id: &str,
+    project_id: &str,
+) -> TestResult {
+    let conversation = store
+        .create_conversation(
+            "report-conversation",
+            workspace_id,
+            project_id,
+            "Report acceptance",
+        )
+        .await?;
+    let first = store
+        .send_message(
+            "report-first",
+            workspace_id,
+            project_id,
+            &conversation.resource.id,
+            "first scripted input",
+        )
+        .await?;
+    let second = store
+        .send_message(
+            "report-second",
+            workspace_id,
+            project_id,
+            &conversation.resource.id,
+            "second scripted input",
+        )
+        .await?;
+    store
+        .send_message(
+            "report-third",
+            workspace_id,
+            project_id,
+            &conversation.resource.id,
+            "third queued input",
+        )
+        .await?;
+    let first_outbox = store
+        .pending_outbox(1_000)
+        .await?
+        .into_iter()
+        .find(|record| record.turn_id == first.turn_id)
+        .ok_or("first command is absent")?;
+    let (command_identity, metadata, command) = decode_command(&first_outbox.event_bytes)?;
+    let binding = command.binding.ok_or("first command binding is absent")?;
+    let winner = Uuid::now_v7().to_string();
+    let winner_seed = [7_u8; 32];
+    let claim = signed_report(
+        &binding,
+        &metadata,
+        &first_outbox.event_bytes,
+        &winner,
+        &winner_seed,
+        ConversationTurnReportKind::Started,
+        "",
+    )?;
+    let attacker = Uuid::now_v7().to_string();
+    let invalid_claim = signed_report(
+        &binding,
+        &metadata,
+        &first_outbox.event_bytes,
+        &attacker,
+        &[5_u8; 32],
+        ConversationTurnReportKind::Started,
+        "",
+    )?;
+    let (invalid_identity, invalid_metadata, mut invalid_payload) = decode_report(&invalid_claim)?;
+    *invalid_payload
+        .signature
+        .first_mut()
+        .ok_or("claim signature is absent")? ^= 1;
+    let invalid_claim = encode_report(&invalid_identity, &invalid_metadata, &invalid_payload)?;
+    let invalid_receipt = store.accept_claim(&invalid_claim).await?;
+    assert!(!invalid_receipt.accepted);
+    assert_eq!(invalid_receipt.safe_reason, "invalid_signature");
+
+    let claim_receipt = store.accept_claim(&claim).await?;
+    assert!(claim_receipt.accepted);
+    assert_eq!(store.accept_claim(&claim).await?, claim_receipt);
+
+    let loser = Uuid::now_v7().to_string();
+    let losing_claim = signed_report(
+        &binding,
+        &metadata,
+        &first_outbox.event_bytes,
+        &loser,
+        &[9_u8; 32],
+        ConversationTurnReportKind::Started,
+        "",
+    )?;
+    let losing_receipt = store.accept_claim(&losing_claim).await?;
+    assert!(!losing_receipt.accepted);
+    assert_eq!(losing_receipt.safe_reason, "claim_lost");
+
+    let terminal = signed_report(
+        &binding,
+        &metadata,
+        &first_outbox.event_bytes,
+        &winner,
+        &winner_seed,
+        ConversationTurnReportKind::Completed,
+        "scripted response",
+    )?;
+    let invalid_terminal = signed_report(
+        &binding,
+        &metadata,
+        &first_outbox.event_bytes,
+        &winner,
+        &winner_seed,
+        ConversationTurnReportKind::Completed,
+        "untrusted response",
+    )?;
+    let (invalid_identity, invalid_metadata, mut invalid_payload) =
+        decode_report(&invalid_terminal)?;
+    *invalid_payload
+        .signature
+        .first_mut()
+        .ok_or("terminal signature is absent")? ^= 1;
+    let invalid_terminal = encode_report(&invalid_identity, &invalid_metadata, &invalid_payload)?;
+    let invalid_receipt = store.accept_terminal_report(&invalid_terminal).await?;
+    assert!(!invalid_receipt.accepted);
+    assert_eq!(invalid_receipt.safe_reason, "invalid_signature");
+
+    let terminal_receipt = store.accept_terminal_report(&terminal).await?;
+    assert!(terminal_receipt.accepted);
+    assert_eq!(
+        store.accept_terminal_report(&terminal).await?,
+        terminal_receipt
+    );
+
+    let snapshot = store
+        .get_snapshot(workspace_id, project_id, &conversation.resource.id)
+        .await?;
+    assert_eq!(snapshot.nonterminal_turns.len(), 2);
+    assert_eq!(snapshot.recent_terminal_turns.len(), 1);
+    assert!(
+        snapshot
+            .recent_messages
+            .iter()
+            .any(|message| message.content == "scripted response")
+    );
+    let report_count: i64 = client
+        .query_one(
+            "SELECT count(*) FROM workflow_report_receipts WHERE turn_id = $1",
+            &[&first.turn_id],
+        )
+        .await?
+        .get(0);
+    assert_eq!(report_count, 5);
+
+    let promoted = store
+        .pending_outbox(1_000)
+        .await?
+        .into_iter()
+        .filter_map(|record| decode_command(&record.event_bytes).ok())
+        .find(|(_, _, command)| {
+            command
+                .binding
+                .as_ref()
+                .is_some_and(|candidate| candidate.turn_id == second.turn_id)
+        })
+        .ok_or("promoted command is absent")?;
+    let promoted_command = promoted.2;
+    assert_eq!(promoted_command.input_content, "second scripted input");
+    let context = promoted_command
+        .context
+        .iter()
+        .map(|record| record.content.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        context,
+        [
+            "first scripted input",
+            "scripted response",
+            "second scripted input"
+        ]
+    );
+    assert!(!context.contains(&"third queued input"));
+    assert_eq!(binding.command_event_id, command_identity.id);
+    Ok(())
+}
+
+fn signed_report(
+    binding: &ConversationTurnBinding,
+    metadata: &WorkflowEventMetadata,
+    command_bytes: &[u8],
+    executor: &str,
+    seed: &[u8; 32],
+    kind: ConversationTurnReportKind,
+    response: &str,
+) -> TestResult<Vec<u8>> {
+    let identity = EventIdentity {
+        source: format!("ayni://orchestrator/supervisors/{executor}"),
+        id: Uuid::now_v7().to_string(),
+    };
+    let public_key = SigningKey::from_bytes(seed).verifying_key().to_bytes();
+    let mut report_binding = binding.clone();
+    report_binding.command_digest = format!("sha256:{:x}", Sha256::digest(command_bytes));
+    let mut report = ConversationTurnReport {
+        binding: Some(report_binding),
+        kind: kind.into(),
+        report_sequence: if kind == ConversationTurnReportKind::Started {
+            1
+        } else {
+            2
+        },
+        executor_instance_id: executor.to_owned(),
+        signing_public_key: if kind == ConversationTurnReportKind::Started {
+            public_key.to_vec()
+        } else {
+            Vec::new()
+        },
+        signing_key_digest: signing_key_digest(&public_key),
+        response_content: response.to_owned(),
+        failure_reason: String::new(),
+        signature: Vec::new(),
+    };
+    sign_report(&identity, &mut report, seed)?;
+    Ok(encode_report(&identity, metadata, &report)?)
 }
 
 async fn prove_concurrent_receipt_replay(
@@ -683,89 +940,6 @@ async fn admit_concurrent_messages(
     for send in sends {
         send.await??;
     }
-    Ok(())
-}
-
-async fn prove_capacity_race(
-    client: &Client,
-    store: &WorkflowStore,
-    workspace_id: &str,
-    project_id: &str,
-    conversation_id: &str,
-) -> TestResult {
-    for index in 17..96 {
-        store
-            .send_message(
-                &format!("capacity-{index}"),
-                workspace_id,
-                project_id,
-                conversation_id,
-                "queued",
-            )
-            .await?;
-    }
-    let callers = 8;
-    let barrier = Arc::new(Barrier::new(callers));
-    let mut sends = Vec::new();
-    for index in 0..callers {
-        let store = store.clone();
-        let barrier = Arc::clone(&barrier);
-        let workspace_id = workspace_id.to_owned();
-        let project_id = project_id.to_owned();
-        let conversation_id = conversation_id.to_owned();
-        sends.push(tokio::spawn(async move {
-            barrier.wait().await;
-            store
-                .send_message(
-                    &format!("capacity-race-{index}"),
-                    &workspace_id,
-                    &project_id,
-                    &conversation_id,
-                    "queued",
-                )
-                .await
-        }));
-    }
-    let mut admitted = 0;
-    let mut rejected = 0;
-    for send in sends {
-        match send.await? {
-            Ok(_) => admitted += 1,
-            Err(StoreError::Capacity("turn_queue")) => rejected += 1,
-            Err(error) => return Err(Box::new(error)),
-        }
-    }
-    assert_eq!(admitted, 4);
-    assert_eq!(rejected, 4);
-    let retained: i64 = client
-        .query_one(
-            "SELECT count(*) FROM workflow_turns WHERE conversation_id = $1",
-            &[&conversation_id],
-        )
-        .await?
-        .get(0);
-    assert_eq!(retained, 100);
-    Ok(())
-}
-
-async fn prove_future_version_rejected(client: &Client, database_url: &str) -> TestResult {
-    client
-        .execute(
-            "INSERT INTO workflow_schema_migrations (version, description, checksum) \
-             VALUES (2, 'future', 'sha256:future')",
-            &[],
-        )
-        .await?;
-    assert!(matches!(
-        validate(database_url).await,
-        Err(MigrationError::FutureVersion(2))
-    ));
-    client
-        .execute(
-            "DELETE FROM workflow_schema_migrations WHERE version = 2",
-            &[],
-        )
-        .await?;
     Ok(())
 }
 

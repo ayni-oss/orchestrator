@@ -1,5 +1,6 @@
 //! Replacement M1 workflow control plane.
 
+pub mod broker;
 pub mod configuration;
 pub mod health;
 pub mod workflow;

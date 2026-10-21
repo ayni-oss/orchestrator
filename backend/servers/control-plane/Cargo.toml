@@ -9,7 +9,10 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+async-nats.workspace = true
 axum.workspace = true
+ayni-orchestrator-events = { path = "../../libs/events" }
+futures-util.workspace = true
 ayni-orchestrator-api = { path = "crates/grpc-contract" }
 ayni-orchestrator-observability = { path = "../../libs/observability" }
 ayni-orchestrator-workflow-postgres = { path = "crates/workflow-postgres" }

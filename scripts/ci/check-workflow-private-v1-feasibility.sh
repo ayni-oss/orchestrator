@@ -77,7 +77,7 @@ grep -q 'DEFAULT_GRPC_BIND_ADDRESS.*' backend/servers/control-plane/src/configur
 grep -q '"127.0.0.1:50051"' backend/servers/control-plane/src/configuration.rs
 grep -q 'if !address.ip().is_loopback()' backend/servers/control-plane/src/workflow.rs
 if rg -n '50052|custom.?client' backend/servers/control-plane/src deploy/charts/ayni-orchestrator/templates dev/charts/ayni-orchestrator-local/templates; then
-  printf '%s\n' 'custom-client workflow exposure remains in the Slice 1 runtime' >&2
+  printf '%s\n' 'custom-client workflow exposure remains in the current runtime' >&2
   exit 1
 fi
 

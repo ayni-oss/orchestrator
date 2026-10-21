@@ -9,6 +9,10 @@ use ed25519_dalek::{Signature, Signer as _, SigningKey, VerifyingKey};
 use prost::Message as _;
 use sha2::{Digest as _, Sha256};
 
+#[path = "workflow/workflow_hex.rs"]
+mod workflow_hex;
+use workflow_hex::{canonical_hex, lowercase_hexadecimal};
+
 pub const APPLICATION_SOURCE: &str = "ayni://orchestrator/supervisors/workflow-application";
 pub const COMMAND_SUBJECT: &str = "orchestrator.workflow.command.conversation.v1";
 pub const REPORT_SUBJECT: &str = "orchestrator.workflow.report.conversation.v1";
@@ -464,13 +468,6 @@ fn traceparent(value: &str) -> bool {
         && parts.next().is_none()
 }
 
-fn canonical_hex(value: &str, length: usize) -> bool {
-    value.len() == length
-        && value
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
-}
-
 fn validate_application_identity(identity: &EventIdentity) -> Result<(), ContractError> {
     validate_identity(identity)?;
     if identity.source.as_str() != APPLICATION_SOURCE {
@@ -688,7 +685,7 @@ fn validate_decision(payload: &ConversationReportDecision) -> Result<(), Contrac
         || !decision_reason_valid(decision, &payload.safe_reason)
         || !matches!(
             payload.turn_state.as_str(),
-            "processing" | "completed" | "failed"
+            "queued" | "processing" | "completed" | "failed"
         )
     {
         return Err(ContractError::Invalid("report decision"));
@@ -701,16 +698,6 @@ fn workflow_subject(binding: &ConversationTurnBinding) -> String {
         "conversations/{}/turns/{}",
         binding.conversation_id, binding.turn_id
     )
-}
-
-fn lowercase_hexadecimal(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut result = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        result.push(char::from(HEX[usize::from(byte >> 4)]));
-        result.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    result
 }
 
 fn decision_reason_valid(decision: ConversationReportDecisionKind, reason: &str) -> bool {
@@ -989,7 +976,18 @@ mod tests {
         };
         let metadata = metadata();
         let bytes = encode_decision(&identity, &metadata, &payload)?;
-        assert_eq!(decode_decision(&bytes)?, (identity, metadata, payload));
+        assert_eq!(
+            decode_decision(&bytes)?,
+            (identity.clone(), metadata.clone(), payload.clone())
+        );
+
+        let mut rejected = payload;
+        rejected.decision = ConversationReportDecisionKind::Rejected.into();
+        rejected.accepted_executor_instance_id.clear();
+        rejected.safe_reason = "invalid_signature".into();
+        rejected.turn_state = "queued".into();
+        let bytes = encode_decision(&identity, &metadata, &rejected)?;
+        assert_eq!(decode_decision(&bytes)?, (identity, metadata, rejected));
         Ok(())
     }
 }

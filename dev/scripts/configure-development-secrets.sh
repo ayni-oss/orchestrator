@@ -10,7 +10,7 @@ if [[ $# -ne 0 ]]; then
 fi
 for command in kubectl openssl; do
   command -v "$command" >/dev/null 2>&1 || {
-    echo "$command is required to configure local PostgreSQL Secrets" >&2
+    echo "$command is required to configure local workflow Secrets" >&2
     exit 1
   }
 done
@@ -22,24 +22,37 @@ kubectl --context "$context" create namespace "$namespace" \
 kubectl --context "$context" label namespace "$namespace" \
   orchestrator.ayni.dev/environment=local --overwrite >/dev/null
 
-if kubectl --context "$context" --namespace "$namespace" get secret workflow-postgres-admin >/dev/null 2>&1; then
-  for name in workflow-postgres-migrator workflow-postgres-runtime; do
-    kubectl --context "$context" --namespace "$namespace" get secret "$name" >/dev/null 2>&1 || {
-      echo "local PostgreSQL Secrets are incomplete; purge the namespace to replace the immutable set" >&2
-      exit 1
-    }
-  done
-  echo "local PostgreSQL Secrets already exist"
-  exit 0
-fi
-
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 chmod 0700 "$scratch"
+
+secret_exists() {
+  kubectl --context "$context" --namespace "$namespace" get secret "$1" >/dev/null 2>&1
+}
+
+require_complete_set() {
+  local label="$1"; shift
+  local present=0 name
+  for name in "$@"; do
+    if secret_exists "$name"; then present=$((present + 1)); fi
+  done
+  if [[ "$present" -ne 0 && "$present" -ne "$#" ]]; then
+    echo "local $label Secrets are incomplete; purge the namespace to replace the immutable set" >&2
+    exit 1
+  fi
+  [[ "$present" -eq "$#" ]]
+}
+
+create_immutable_secret() {
+  local name="$1"; shift
+  kubectl --context "$context" --namespace "$namespace" create secret generic "$name" "$@" >/dev/null
+  kubectl --context "$context" --namespace "$namespace" patch secret "$name" \
+    --type=merge --patch '{"immutable":true}' >/dev/null
+}
+
 database=ayni_workflow
 service="workflow-postgres.${namespace}.svc.cluster.local"
-
-create_role_secret() {
+create_database_role_secret() {
   local name="$1" username="$2" password url directory
   directory="$scratch/$name"
   mkdir -m 0700 "$directory"
@@ -48,27 +61,54 @@ create_role_secret() {
   printf '%s' "$username" > "$directory/username"
   printf '%s' "$password" > "$directory/password"
   printf '%s' "$url" > "$directory/url"
-  kubectl --context "$context" --namespace "$namespace" create secret generic "$name" \
+  create_immutable_secret "$name" \
     --from-file=username="$directory/username" \
     --from-file=password="$directory/password" \
-    --from-file=url="$directory/url" >/dev/null
-  kubectl --context "$context" --namespace "$namespace" patch secret "$name" \
-    --type=merge --patch '{"immutable":true}' >/dev/null
+    --from-file=url="$directory/url"
 }
 
-admin_directory="$scratch/workflow-postgres-admin"
-mkdir -m 0700 "$admin_directory"
-printf '%s' ayni_admin > "$admin_directory/username"
-openssl rand -hex 32 > "$admin_directory/password"
-printf '%s' "$database" > "$admin_directory/database"
-kubectl --context "$context" --namespace "$namespace" create secret generic workflow-postgres-admin \
-  --from-file=username="$admin_directory/username" \
-  --from-file=password="$admin_directory/password" \
-  --from-file=database="$admin_directory/database" >/dev/null
-kubectl --context "$context" --namespace "$namespace" patch secret workflow-postgres-admin \
-  --type=merge --patch '{"immutable":true}' >/dev/null
+if require_complete_set PostgreSQL \
+  workflow-postgres-admin workflow-postgres-migrator workflow-postgres-runtime; then
+  echo "local PostgreSQL Secrets already exist"
+else
+  admin_directory="$scratch/workflow-postgres-admin"
+  mkdir -m 0700 "$admin_directory"
+  printf '%s' ayni_admin > "$admin_directory/username"
+  openssl rand -hex 32 > "$admin_directory/password"
+  printf '%s' "$database" > "$admin_directory/database"
+  create_immutable_secret workflow-postgres-admin \
+    --from-file=username="$admin_directory/username" \
+    --from-file=password="$admin_directory/password" \
+    --from-file=database="$admin_directory/database"
+  create_database_role_secret workflow-postgres-migrator ayni_migrator
+  create_database_role_secret workflow-postgres-runtime ayni_runtime
+  echo "created immutable local PostgreSQL Secrets"
+fi
 
-create_role_secret workflow-postgres-migrator ayni_migrator
-create_role_secret workflow-postgres-runtime ayni_runtime
+create_password_secret() {
+  local name="$1" directory
+  directory="$scratch/$name"
+  mkdir -m 0700 "$directory"
+  printf '%s' "$(openssl rand -hex 32)" > "$directory/password"
+  create_immutable_secret "$name" --from-file=password="$directory/password"
+}
 
-echo "created immutable local PostgreSQL Secrets"
+if require_complete_set JetStream \
+  workflow-jetstream-admin workflow-jetstream-application \
+  workflow-jetstream-executor workflow-jetstream-acceptance; then
+  echo "local JetStream Secrets already exist"
+else
+  create_password_secret workflow-jetstream-admin
+  create_password_secret workflow-jetstream-application
+  create_password_secret workflow-jetstream-acceptance
+  executor_directory="$scratch/workflow-jetstream-executor"
+  mkdir -m 0700 "$executor_directory"
+  printf '%s' "$(openssl rand -hex 32)" > "$executor_directory/password"
+  printf '%s' 018f0f7b-6a4d-7a11-8d77-010203040506 > "$executor_directory/instance-id"
+  printf '%s' "$(openssl rand -hex 32)" > "$executor_directory/signing-seed-hex"
+  create_immutable_secret workflow-jetstream-executor \
+    --from-file=password="$executor_directory/password" \
+    --from-file=instance-id="$executor_directory/instance-id" \
+    --from-file=signing-seed-hex="$executor_directory/signing-seed-hex"
+  echo "created immutable local JetStream role Secrets"
+fi

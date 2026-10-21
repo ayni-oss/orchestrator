@@ -2,6 +2,7 @@ enabled: true
 
 images:
   controlPlane: local/ayni-orchestrator-control-plane:replace-me
+  scriptedExecutor: local/ayni-orchestrator-scripted-executor:replace-me
   pullPolicy: IfNotPresent
 
 workflowPostgres:
@@ -10,6 +11,25 @@ workflowPostgres:
   migratorSecretName: workflow-postgres-migrator
   runtimeSecretName: workflow-postgres-runtime
   runtimeRoleName: ayni_runtime
+
+workflowJetstream:
+  # The application identity may publish command/decision facts and consume reports.
+  # This immutable Secret contains only its own `password` key.
+  url: nats://jetstream:4222
+  username: workflow-application
+  applicationSecretName: workflow-jetstream-application
+  executorUsername: workflow-executor
+  executorSecretName: workflow-jetstream-executor
+
+scriptedExecutor:
+  storage: 512Mi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 controlPlane:
   replicaCount: 1

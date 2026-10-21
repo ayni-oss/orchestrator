@@ -1,6 +1,6 @@
 apiVersion: v2
 name: ayni-orchestrator
-description: PostgreSQL-authoritative Ayni Orchestrator control plane
+description: PostgreSQL-authoritative control plane and retained scripted executor
 home: https://github.com/ayni-oss/orchestrator
 type: application
 version: 0.1.0

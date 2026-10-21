@@ -9,6 +9,6 @@ not an active backlog or a statement of current behavior.
 - [Implementation proposal](event-platform-implementation.md)
 - [Snapshot contract catalog](control-plane-event-contracts.csv)
 
-Start with the [current Slice 1 architecture](../../architecture/architecture.md).
+Start with the [current Slice 2 architecture](../../architecture/architecture.md).
 Source links in the archived documents refer to the audited commit and do not
 describe the clean-slate replacement runtime.

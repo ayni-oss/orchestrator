@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
 
-# Build the control-plane image and print its immutable local reference.
+# Build one local Rust workload image and print its immutable local reference.
 dev_build_image() {
   local component="${1:?component is required}"
   local requested_image_ref="${2:-}"
-  if [[ "$component" != control-plane ]]; then
-    echo "component must be control-plane" >&2
-    return 2
-  fi
+  local repository dockerfile
+  case "$component" in
+    control-plane)
+      repository=ayni-orchestrator-control-plane
+      dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/control-plane/Dockerfile"
+      ;;
+    scripted-executor)
+      repository=ayni-orchestrator-scripted-executor
+      dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/scripted-executor/Dockerfile"
+      ;;
+    *)
+      echo "component must be control-plane or scripted-executor" >&2
+      return 2
+      ;;
+  esac
 
-  local dockerfile="$DEV_REPOSITORY_ROOT/deploy/images/control-plane/Dockerfile"
   local revision full_revision source_status source_dirty build_image_ref image_ref image_id content_id
   revision="$(git -C "$DEV_REPOSITORY_ROOT" rev-parse --short=12 HEAD)" || return
   full_revision="$(git -C "$DEV_REPOSITORY_ROOT" rev-parse HEAD)" || return
   source_status="$(git -C "$DEV_REPOSITORY_ROOT" status --porcelain)" || return
   source_dirty=false
   [[ -z "$source_status" ]] || source_dirty=true
-  build_image_ref="${requested_image_ref:-local/ayni-orchestrator-control-plane:build-git-${revision}-$$}"
+  build_image_ref="${requested_image_ref:-local/${repository}:build-git-${revision}-$$}"
 
   docker build \
     --file "$dockerfile" \
@@ -33,7 +43,7 @@ dev_build_image() {
       return 1
     fi
     content_id="${image_id#sha256:}"
-    image_ref="local/ayni-orchestrator-control-plane:git-${revision}-${content_id:0:12}"
+    image_ref="local/${repository}:git-${revision}-${content_id:0:12}"
     docker image tag "$build_image_ref" "$image_ref" || return
     docker image remove "$build_image_ref" >/dev/null || return
   fi
@@ -64,9 +74,16 @@ dev_load_image() {
   echo "loaded image=$image_ref node=$node_name" >&2
 }
 
-# Remove only obsolete project control-plane tags, never cache or volumes.
+# Remove only obsolete tags for one project workload, never caches or volumes.
 dev_prune_images() (
-  local current_image_ref="${1:?control-plane image is required}"
+  local component="${1:?component is required}"
+  local current_image_ref="${2:?current image is required}"
+  local repository
+  case "$component" in
+    control-plane) repository=ayni-orchestrator-control-plane ;;
+    scripted-executor) repository=ayni-orchestrator-scripted-executor ;;
+    *) echo "unknown image component: $component" >&2; return 2 ;;
+  esac
   local node_id temporary_directory keep runtime_ref local_ref image_ref
   node_id="$(docker inspect desktop-control-plane --format '{{.Id}}')"
   temporary_directory="$(mktemp -d)"
@@ -75,7 +92,7 @@ dev_prune_images() (
   printf '%s\n' "$current_image_ref" > "$keep"
   kubectl --context docker-desktop get pods --all-namespaces \
     -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' \
-    | sed 's#^docker.io/##' | grep '^local/ayni-orchestrator-control-plane:' >> "$keep" || true
+    | sed 's#^docker.io/##' | grep "^local/${repository}:" >> "$keep" || true
   sort -u "$keep" -o "$keep"
 
   while IFS= read -r runtime_ref; do
@@ -84,12 +101,12 @@ dev_prune_images() (
       docker exec "$node_id" ctr --namespace k8s.io images remove "$runtime_ref" >/dev/null
       echo "removed obsolete node image $local_ref" >&2
     fi
-  done < <(docker exec "$node_id" ctr --namespace k8s.io images list --quiet | grep '^docker.io/local/ayni-orchestrator-control-plane:' || true)
+  done < <(docker exec "$node_id" ctr --namespace k8s.io images list --quiet | grep "^docker.io/local/${repository}:" || true)
 
   while IFS= read -r image_ref; do
     if ! grep -Fxq "$image_ref" "$keep"; then
       docker image remove "$image_ref" >/dev/null
       echo "removed obsolete host image $image_ref" >&2
     fi
-  done < <(docker image list --format '{{.Repository}}:{{.Tag}}' | grep '^local/ayni-orchestrator-control-plane:' || true)
+  done < <(docker image list --format '{{.Repository}}:{{.Tag}}' | grep "^local/${repository}:" || true)
 )

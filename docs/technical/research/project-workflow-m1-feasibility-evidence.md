@@ -57,8 +57,8 @@ and gate scripts remain intact. Runtime Slice 1 deliberately removes those local
 broker/executor fixtures rather than carrying an unused or shared-broker profile.
 They return with the isolated topology in runtime Slice 2.
 
-The active Slice 1 checkout retains and runs only its current authority and cutover
-gates:
+At that revision, the active Slice 1 checkout retained and ran only its authority and
+cutover gates:
 
 ```sh
 scripts/ci/check-workflow-postgres-feasibility.sh

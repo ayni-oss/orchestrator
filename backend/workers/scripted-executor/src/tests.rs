@@ -253,11 +253,20 @@ fn crash_reopen_preserves_claim_and_blocks_execution_until_decision() -> Result<
         );
         assert!(!ledger.can_execute(&command.identity.source, &command.identity.id)?);
     }
-    let ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
+    let mut ledger = open(&directory, LedgerLimits::m1_default(), WINNER, &WINNER_SEED)?;
     assert_eq!(
         ledger.exact_report_bytes(&claim.identity.source, &claim.identity.id)?,
         claim.bytes
     );
+    assert_eq!(
+        ledger.classify_command_delivery(&command.command())?,
+        CommandDelivery::PendingClaim(RetainedEvent {
+            source: claim.identity.source.clone(),
+            id: claim.identity.id.clone(),
+            exact_bytes: claim.bytes,
+        })
+    );
+    assert_eq!(ledger.pending_reports()?.len(), 1);
     Ok(())
 }
 
@@ -295,16 +304,42 @@ fn decisions_are_bound_and_duplicates_survive_cleanup() -> Result<(), LedgerErro
 
     let accepted = decision_bytes(&command, &claim, WINNER, WINNER, true, None, None)?;
     assert_eq!(
-        ledger.record_decision(&Decision {
-            exact_bytes: &accepted,
-        })?,
+        ledger.record_decision_delivery(
+            &Decision {
+                exact_bytes: &accepted,
+            },
+            4,
+        )?,
         StoreOutcome::Stored
     );
+    assert_eq!(
+        ledger.pending_decision_acknowledgements()?,
+        vec![PendingDecisionAck {
+            report_source: claim.identity.source.clone(),
+            report_id: claim.identity.id.clone(),
+            consumer_sequence: 4,
+        }]
+    );
+    assert!(matches!(
+        ledger.reconcile_decision_ack_floor(
+            &claim.identity.source,
+            &claim.identity.id,
+            &format!("executor-{WINNER}"),
+            3,
+        ),
+        Err(LedgerError::DecisionAckPending)
+    ));
+    ledger.reconcile_decision_ack_floor(
+        &claim.identity.source,
+        &claim.identity.id,
+        &format!("executor-{WINNER}"),
+        4,
+    )?;
+    assert!(ledger.pending_decision_acknowledgements()?.is_empty());
     assert_eq!(
         ledger.retain_command_and_claim(&command.command(), &claim.report(1))?,
         StoreOutcome::Duplicate
     );
-    ledger.acknowledge_decision(&claim.identity.source, &claim.identity.id)?;
     assert_eq!(
         ledger.record_decision(&Decision {
             exact_bytes: &accepted,
