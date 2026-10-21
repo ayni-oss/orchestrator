@@ -7,7 +7,7 @@
 
 Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The runtime builds on **M1 runtime Slice 3**, with a local contributor conversation console, shared agent configuration and isolated conversation sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
+The runtime provides **M2 conversation execution** on the M1 durable foundation, with a local contributor console, shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
 - repository-owned forward migrations under an advisory lock;

@@ -40,6 +40,10 @@ The pinned broker provisions three file-backed, `discard=new` streams:
 | `ORCHESTRATOR_WORKFLOW_REPORT_V1` | `orchestrator.workflow.report.conversation.v1` | 50,000 / 192 MiB |
 | `ORCHESTRATOR_WORKFLOW_DECISION_V1` | `orchestrator.workflow.accepted.conversation.v1.*` | 50,000 / 64 MiB |
 
+The broker launcher encodes Secret-backed passwords as quoted NATS strings in
+process memory. This preserves numeric-looking and escaped values without changing
+the credentials or writing them to configuration files.
+
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
 `dev/ctl check` verifies workload readiness, migration history through ordinal 11, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
