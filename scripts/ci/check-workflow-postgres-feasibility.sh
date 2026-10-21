@@ -7,6 +7,7 @@ readonly PASSWORD="feasibility-only"
 readonly DATABASE="workflow_gate"
 readonly RUNTIME_ROLE="ayni_gate_runtime"
 readonly RUNTIME_PASSWORD="runtime-feasibility-only"
+export M1_FIXTURE_POSTGRES_CONTAINER="$CONTAINER"
 
 cleanup() {
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
@@ -19,11 +20,12 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 docker pull "$IMAGE"
+port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 docker run --detach --rm \
   --name "$CONTAINER" \
   --env "POSTGRES_PASSWORD=$PASSWORD" \
   --env "POSTGRES_DB=$DATABASE" \
-  --publish 127.0.0.1::5432 \
+  --publish "127.0.0.1:${port}:5432" \
   "$IMAGE" >/dev/null
 
 ready=false
@@ -55,6 +57,8 @@ export AYNI_POSTGRES_FEASIBILITY_URL="postgresql://postgres:${PASSWORD}@127.0.0.
 export AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL="postgresql://${RUNTIME_ROLE}:${RUNTIME_PASSWORD}@127.0.0.1:${port}/${DATABASE}"
 export AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE="$RUNTIME_ROLE"
 cargo test --locked -p ayni-orchestrator-workflow-postgres --test feasibility -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test prior_schema_upgrade -- --ignored --nocapture
+cargo test --locked -p ayni-orchestrator-workflow-postgres --test transport_retention -- --ignored --nocapture
 export AYNI_POSTGRES_FEASIBILITY_URL="$AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL"
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --nocapture
 cargo test --locked -p ayni-orchestrator-control-plane --test workflow_api -- --ignored --nocapture
@@ -63,3 +67,9 @@ cargo test --locked -p ayni-orchestrator-workflow-postgres --test watch_feasibil
 
 echo "postgres-image=$IMAGE"
 echo "postgres-platform=$(docker image inspect "$IMAGE" --format '{{.Os}}/{{.Architecture}}')"
+
+if [[ "${AYNI_M1_RUN_INTEGRATED:-0}" == 1 ]]; then
+  # The integrated gate keeps this disposable authority alive while the pinned
+  # authenticated broker fixture exercises the full canonical gRPC handoff.
+  scripts/ci/check-workflow-jetstream.sh
+fi

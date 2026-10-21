@@ -1,511 +1,416 @@
-use ayni_orchestrator_workflow_postgres::watch::{
-    WatchService, append_update, append_update_timed, reset_conversation,
+//! Production `PostgreSQL` observation invariants, run against the disposable gate.
+use ayni_orchestrator_workflow_postgres::{
+    StoreError, WorkflowStore, connect, migrate,
+    store::observation::{ConversationUpdate, WatchEvent, WatchOptions, WatchStream},
 };
-use ayni_orchestrator_workflow_postgres::watch_v1::workflow_watch_feasibility_client::WorkflowWatchFeasibilityClient;
-use ayni_orchestrator_workflow_postgres::watch_v1::workflow_watch_feasibility_server::WorkflowWatchFeasibilityServer;
-use ayni_orchestrator_workflow_postgres::watch_v1::{
-    GetSnapshotRequest, WatchConversationRequest, WatchFrame, watch_frame,
+use std::{
+    error::Error,
+    time::{Duration, Instant},
 };
-use ayni_orchestrator_workflow_postgres::{connect, migrate};
-use std::error::Error;
-use std::time::{Duration, Instant};
-use tokio::net::TcpListener;
 use tokio::time::{sleep, timeout};
-use tokio_stream::wrappers::TcpListenerStream;
-use tonic::{Code, Status, Streaming, transport::Endpoint, transport::Server};
+use tokio_postgres::{Client, Transaction};
+use tokio_stream::StreamExt as _;
+use uuid::Uuid;
 
-const DATABASE_URL_ENV: &str = "AYNI_POSTGRES_FEASIBILITY_URL";
-const CONVERSATION: &str = "conversation:018f0f7b-6a4d-7a11-8d77-414243444546";
-const OTHER_CONVERSATION: &str = "conversation:018f0f7b-6a4d-7a11-8d77-515253545556";
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
-type WatchClient = WorkflowWatchFeasibilityClient<tonic::transport::Channel>;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "requires a disposable PostgreSQL 17 instance"]
-async fn tonic_snapshot_watch_feasibility_gate() -> TestResult {
-    let database_url = std::env::var(DATABASE_URL_ENV)
-        .map_err(|_| format!("set {DATABASE_URL_ENV} to a disposable PostgreSQL database"))?;
-    migrate(&database_url).await?;
-    reset_conversation(&database_url, CONVERSATION, "Feasibility conversation").await?;
-    reset_conversation(&database_url, OTHER_CONVERSATION, "Other conversation").await?;
-
-    let service = WatchService::new(database_url.clone()).with_limits(
-        128,
-        Duration::from_millis(10),
-        Duration::from_secs(60),
+async fn postgres_observation_preserves_boundaries_replay_expiry_and_backpressure() -> TestResult {
+    let url = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
+    migrate(&url).await?;
+    let store = WorkflowStore::new(url.clone());
+    let nonce = Uuid::now_v7().to_string();
+    let workspace = store
+        .create_workspace(&format!("watch-workspace-{nonce}"), "Observation gate")
+        .await?
+        .resource;
+    let project = store
+        .create_project(
+            &format!("watch-project-{nonce}"),
+            &workspace.id,
+            "Observation gate",
+            "",
+        )
+        .await?
+        .resource;
+    let conversation = store
+        .create_conversation(
+            &format!("watch-conversation-{nonce}"),
+            &workspace.id,
+            &project.id,
+            "Observation gate",
+        )
+        .await?
+        .resource;
+    let scope = Scope {
+        workspace: workspace.id,
+        project: project.id,
+        conversation: conversation.id,
+    };
+    let (mut client, driver) = connect(&url).await?;
+    prove_active_connection_loss(&url, &client, &scope).await?;
+    prove_atomic_snapshot(&store, &mut client, &scope).await?;
+    prove_notification_loss(&store, &mut client, &scope).await?;
+    prove_reconnect_and_latency(&store, &mut client, &scope).await?;
+    prove_slow_reader(&store, &mut client, &scope).await?;
+    prove_expiry_and_snapshot_recovery(&store, &client, &scope).await?;
+    driver.abort();
+    println!(
+        "production-watch: atomic-boundary=pass lost-notification=pass reconnect=pass scope=pass future-cursor=pass slow-reader=pass expiry=pass snapshot-recovery=pass current-activity-retained=pass"
     );
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
-    let server = tokio::spawn(
-        Server::builder()
-            .add_service(WorkflowWatchFeasibilityServer::new(service))
-            .serve_with_incoming(TcpListenerStream::new(listener)),
-    );
-    let mut client = WorkflowWatchFeasibilityClient::connect(format!("http://{address}")).await?;
-
-    prove_atomic_snapshot_boundary(&database_url, &mut client).await?;
-    let snapshot_latencies = measure_snapshot_race(&database_url, &mut client).await?;
-    prove_cursorless_watch(&database_url, &mut client).await?;
-    prove_notification_replay_and_expiry(&database_url, &mut client).await?;
-    prove_slow_reader_recovery(&database_url, &mut client).await?;
-    let watch_latencies = measure_watch_latency(&database_url, &mut client).await?;
-    print_latency_evidence(&snapshot_latencies, &watch_latencies);
-
-    server.abort();
     Ok(())
 }
 
-async fn prove_atomic_snapshot_boundary(
-    database_url: &str,
-    client: &mut WatchClient,
-) -> TestResult {
-    let (mut pending_client, pending_driver) = connect(database_url).await?;
-    let pending = pending_client.transaction().await?;
-    let pending_revision: i64 = pending
-        .query_one(
-            "UPDATE workflow_watch_conversations SET revision = revision + 1 \
-             WHERE id = $1 RETURNING revision",
-            &[&CONVERSATION],
-        )
-        .await?
-        .get(0);
-    let pending_cursor: i64 = pending
-        .query_one(
-            "INSERT INTO workflow_watch_updates \
-             (conversation_id, revision, kind, safe_payload) VALUES ($1, $2, 'boundary', 'held') \
-             RETURNING cursor",
-            &[&CONVERSATION, &pending_revision],
-        )
-        .await?
-        .get(0);
-    pending
-        .query_one(
-            "SELECT pg_notify('workflow_watch_update', $1)",
-            &[&CONVERSATION],
-        )
-        .await?;
-    let mut watch = client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: CONVERSATION.into(),
-            after_cursor: None,
-        })
-        .await?
-        .into_inner();
-    let snapshot_frame = next_frame(
-        &mut watch,
-        "atomic-boundary watch ended before its snapshot",
-    )
-    .await?;
-    let Some(watch_frame::Frame::Snapshot(snapshot)) = snapshot_frame.frame else {
-        return Err("atomic-boundary watch did not begin with a snapshot".into());
-    };
-    assert_eq!(snapshot.revision, 0);
-    assert_eq!(cursor_value(&snapshot.resume_cursor)?, 0);
-    pending.commit().await?;
-    let update_frame = next_frame(
-        &mut watch,
-        "atomic-boundary watch lost the concurrent update",
-    )
-    .await?;
-    assert_eq!(frame_cursor(&update_frame)?, pending_cursor);
-    let Some(watch_frame::Frame::Update(update)) = update_frame.frame else {
-        return Err("atomic-boundary watch emitted a non-update frame".into());
-    };
-    assert_eq!(update.revision, 1);
-    pending_driver.abort();
-    reset_conversation(database_url, CONVERSATION, "Feasibility conversation").await?;
-    Ok(())
+struct Scope {
+    workspace: String,
+    project: String,
+    conversation: String,
 }
 
-async fn measure_snapshot_race(
-    database_url: &str,
-    client: &mut WatchClient,
-) -> TestResult<Vec<Duration>> {
-    let update_url = database_url.to_owned();
-    let updater = tokio::spawn(async move {
-        for index in 0..100_u64 {
-            append_update(
-                &update_url,
-                CONVERSATION,
-                "race",
-                &format!("update-{index}"),
-                true,
+impl Scope {
+    async fn watch(
+        &self,
+        store: &WorkflowStore,
+        cursor: Option<&str>,
+        options: WatchOptions,
+    ) -> Result<WatchStream, StoreError> {
+        store
+            .watch(
+                &self.workspace,
+                &self.project,
+                &self.conversation,
+                cursor,
+                options,
+            )
+            .await
+    }
+}
+
+async fn next(watch: &mut WatchStream) -> TestResult<WatchEvent> {
+    Ok(timeout(Duration::from_secs(3), watch.next())
+        .await?
+        .ok_or("watch ended")??)
+}
+
+async fn append(
+    transaction: &Transaction<'_>,
+    scope: &Scope,
+    notify: bool,
+) -> TestResult<(i64, i64)> {
+    let revision: i64 = transaction.query_one("UPDATE workflow_conversations SET revision = revision + 1 WHERE id = $1 RETURNING revision", &[&scope.conversation]).await?.get(0);
+    let activity = Uuid::now_v7().to_string();
+    transaction.execute("INSERT INTO workflow_activities (id, workspace_id, project_id, conversation_id, conversation_revision, stage, presentation_state) VALUES ($1,$2,$3,$4,$5,'execution','processing')", &[&activity, &scope.workspace, &scope.project, &scope.conversation, &revision]).await?;
+    let cursor: i64 = transaction.query_one("INSERT INTO workflow_updates (id, activity_id, workspace_id, project_id, conversation_id, conversation_revision, kind, affected_resource_ids, presentation_state) VALUES ($1,$2,$3,$4,$5,$6,'turn_state_changed',ARRAY[$5],'processing') RETURNING cursor", &[&Uuid::now_v7().to_string(), &activity, &scope.workspace, &scope.project, &scope.conversation, &revision]).await?.get(0);
+    if notify {
+        transaction
+            .query_one(
+                "SELECT pg_notify('workflow_update', $1)",
+                &[&scope.conversation],
             )
             .await?;
-            sleep(Duration::from_millis(1)).await;
-        }
-        Ok::<_, tokio_postgres::Error>(())
-    });
-    let mut latencies = Vec::with_capacity(110);
-    for _ in 0..110 {
-        let started = Instant::now();
-        let snapshot = client
-            .get_snapshot(GetSnapshotRequest {
-                conversation_id: CONVERSATION.into(),
-            })
-            .await?
-            .into_inner();
-        latencies.push(started.elapsed());
-        let boundary = cursor_value(&snapshot.resume_cursor)?;
-        assert_eq!(
-            snapshot.revision,
-            revision_at_boundary(database_url, boundary).await?
-        );
     }
-    updater.await??;
-    Ok(latencies)
+    Ok((cursor, revision))
 }
 
-async fn prove_cursorless_watch(database_url: &str, client: &mut WatchClient) -> TestResult {
-    let mut watch = client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: CONVERSATION.into(),
-            after_cursor: None,
-        })
-        .await?
-        .into_inner();
-    let snapshot_frame =
-        next_frame(&mut watch, "cursorless watch ended before its snapshot").await?;
-    let Some(watch_frame::Frame::Snapshot(snapshot)) = snapshot_frame.frame else {
-        return Err("cursorless watch did not begin with a snapshot".into());
-    };
-    let snapshot_cursor = cursor_value(&snapshot.resume_cursor)?;
-    let (next_cursor, _) = append_update(
-        database_url,
-        CONVERSATION,
-        "after_snapshot",
-        "visible",
-        true,
-    )
-    .await?;
-    let update_frame = next_frame(&mut watch, "watch ended before its update").await?;
-    let Some(watch_frame::Frame::Update(update)) = update_frame.frame else {
-        return Err("watch returned a non-update frame".into());
-    };
-    assert!(cursor_value(&update.cursor)? > snapshot_cursor);
-    assert_eq!(cursor_value(&update.cursor)?, next_cursor);
-    Ok(())
-}
-
-async fn prove_notification_replay_and_expiry(
-    database_url: &str,
-    client: &mut WatchClient,
+async fn prove_atomic_snapshot(
+    store: &WorkflowStore,
+    client: &mut Client,
+    scope: &Scope,
 ) -> TestResult {
-    let latest = client
-        .get_snapshot(GetSnapshotRequest {
-            conversation_id: CONVERSATION.into(),
-        })
-        .await?
-        .into_inner();
-    let mut watch = client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: CONVERSATION.into(),
-            after_cursor: Some(latest.resume_cursor),
-        })
-        .await?
-        .into_inner();
-    let (lost_cursor, _) = append_update(
-        database_url,
-        CONVERSATION,
-        "lost_notification",
-        "replayed",
-        false,
-    )
-    .await?;
-    let replayed = timeout(Duration::from_millis(500), watch.message())
-        .await??
-        .ok_or("lost notification was not recovered from the table")?;
-    let Some(watch_frame::Frame::Update(replayed)) = replayed.frame else {
-        return Err("lost-notification replay was not an update".into());
+    let pending = client.transaction().await?;
+    let (_, pending_revision) = append(&pending, scope, true).await?;
+    let mut watch = scope.watch(store, None, WatchOptions::default()).await?;
+    let WatchEvent::Snapshot(snapshot) = next(&mut watch).await? else {
+        return Err("missing atomic snapshot".into());
     };
-    assert_eq!(cursor_value(&replayed.cursor)?, lost_cursor);
-    reject_cross_conversation_cursor(client, &replayed.cursor).await?;
-    let pruned_cursor = advance_retention_watermark(database_url).await?;
-    assert!(pruned_cursor > lost_cursor);
-    assert_active_watch_expired(&mut watch).await?;
-    assert_expired_cursor_rejected(client, lost_cursor - 1).await?;
-    assert_cursorless_recovery(client).await?;
-    Ok(())
-}
-
-async fn reject_cross_conversation_cursor(client: &mut WatchClient, cursor: &str) -> TestResult {
-    let Err(status) = client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: OTHER_CONVERSATION.into(),
-            after_cursor: Some(cursor.to_owned()),
-        })
-        .await
-    else {
-        return Err("cross-conversation cursor unexpectedly succeeded".into());
-    };
-    assert_eq!(status.code(), Code::InvalidArgument);
-    Ok(())
-}
-
-async fn advance_retention_watermark(database_url: &str) -> TestResult<i64> {
-    let (mut client, driver) = connect(database_url).await?;
-    let transaction = client.transaction().await?;
-    let revision: i64 = transaction
-        .query_one(
-            "UPDATE workflow_watch_conversations SET revision = revision + 1 \
-             WHERE id = $1 RETURNING revision",
-            &[&CONVERSATION],
-        )
-        .await?
-        .get(0);
-    let cursor: i64 = transaction
-        .query_one(
-            "INSERT INTO workflow_watch_updates \
-             (conversation_id, revision, kind, safe_payload) \
-             VALUES ($1, $2, 'retention_race', 'pruned-before-replay') RETURNING cursor",
-            &[&CONVERSATION, &revision],
-        )
-        .await?
-        .get(0);
-    transaction
-        .execute(
-            "DELETE FROM workflow_watch_updates WHERE conversation_id = $1 AND cursor <= $2",
-            &[&CONVERSATION, &cursor],
-        )
-        .await?;
-    transaction
-        .execute(
-            "UPDATE workflow_watch_watermarks SET pruned_through_cursor = $2 \
-             WHERE conversation_id = $1",
-            &[&CONVERSATION, &cursor],
-        )
-        .await?;
-    transaction.commit().await?;
-    driver.abort();
-    Ok(cursor)
-}
-
-async fn assert_active_watch_expired(watch: &mut Streaming<WatchFrame>) -> TestResult {
-    let Err(status) = timeout(Duration::from_secs(2), watch.message()).await? else {
-        return Err("active watch silently crossed its retained watermark".into());
-    };
-    assert_eq!(status.code(), Code::FailedPrecondition);
-    assert_eq!(status.message(), "WATCH_CURSOR_EXPIRED");
-    Ok(())
-}
-
-async fn assert_expired_cursor_rejected(client: &mut WatchClient, cursor: i64) -> TestResult {
-    let Err(status) = client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: CONVERSATION.into(),
-            after_cursor: Some(format!("v1|{CONVERSATION}|{cursor}")),
-        })
-        .await
-    else {
-        return Err("expired cursor unexpectedly succeeded".into());
-    };
-    assert_eq!(status.code(), Code::FailedPrecondition);
-    assert_eq!(status.message(), "WATCH_CURSOR_EXPIRED");
-    Ok(())
-}
-
-async fn assert_cursorless_recovery(client: &mut WatchClient) -> TestResult {
-    let frame = client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: CONVERSATION.into(),
-            after_cursor: None,
-        })
-        .await?
-        .into_inner()
-        .message()
-        .await?
-        .ok_or("snapshot recovery watch ended")?;
-    assert!(matches!(frame.frame, Some(watch_frame::Frame::Snapshot(_))));
-    Ok(())
-}
-
-async fn prove_slow_reader_recovery(database_url: &str, client: &mut WatchClient) -> TestResult {
-    let slow_service = WatchService::new(database_url.to_owned()).with_limits(
-        1,
-        Duration::from_millis(5),
-        Duration::from_secs(60),
+    assert_eq!(
+        snapshot.conversation_revision + 1,
+        u64::try_from(pending_revision)?
     );
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
-    let server = tokio::spawn(
-        Server::builder()
-            .add_service(WorkflowWatchFeasibilityServer::new(slow_service))
-            .serve_with_incoming(TcpListenerStream::new(listener)),
+    pending.commit().await?;
+    let WatchEvent::Update(update) = next(&mut watch).await? else {
+        return Err("snapshot/commit gap".into());
+    };
+    assert_eq!(
+        update.conversation_revision,
+        u64::try_from(pending_revision)?
     );
-    let channel = Endpoint::from_shared(format!("http://{address}"))?
-        .initial_stream_window_size(1_024)
-        .connect()
-        .await?;
-    let mut slow_client = WorkflowWatchFeasibilityClient::new(channel);
-    let resume_cursor = client
-        .get_snapshot(GetSnapshotRequest {
-            conversation_id: CONVERSATION.into(),
-        })
-        .await?
-        .into_inner()
-        .resume_cursor;
-    let mut healthy = open_watch(client, resume_cursor.clone()).await?;
-    let mut slow = open_watch(&mut slow_client, resume_cursor.clone()).await?;
-    let committed = append_backpressure_updates(database_url).await?;
-    sleep(Duration::from_millis(100)).await;
-    let initial_slow_cursor = cursor_value(&resume_cursor)?;
-    let (eviction, last_slow_cursor) = observe_eviction(&mut slow, initial_slow_cursor).await?;
-    assert_eq!(eviction.code(), Code::ResourceExhausted);
-    assert_stream_cursors(&mut healthy, &committed).await?;
-    assert!(last_slow_cursor < *committed.last().ok_or("no backpressure updates")?);
-    assert_resumed_cursors(client, &committed, last_slow_cursor).await?;
-    server.abort();
-    Ok(())
-}
-
-async fn open_watch(
-    client: &mut WatchClient,
-    after_cursor: String,
-) -> TestResult<Streaming<WatchFrame>> {
-    Ok(client
-        .watch_conversation(WatchConversationRequest {
-            conversation_id: CONVERSATION.into(),
-            after_cursor: Some(after_cursor),
-        })
-        .await?
-        .into_inner())
-}
-
-async fn append_backpressure_updates(database_url: &str) -> TestResult<Vec<i64>> {
-    let payload = "x".repeat(8 * 1_024);
-    let mut cursors = Vec::with_capacity(32);
-    for index in 0..32 {
-        let (cursor, _) = append_update(
-            database_url,
-            CONVERSATION,
-            "backpressure",
-            &format!("queued-{index}:{payload}"),
-            true,
+    assert_ne!(snapshot.resume_cursor, update.cursor);
+    drop(watch);
+    let mut resumed = scope
+        .watch(
+            store,
+            Some(&snapshot.resume_cursor),
+            WatchOptions::default(),
         )
         .await?;
-        cursors.push(cursor);
-    }
-    Ok(cursors)
-}
-
-async fn observe_eviction(
-    stream: &mut Streaming<WatchFrame>,
-    mut last_cursor: i64,
-) -> TestResult<(Status, i64)> {
-    loop {
-        match timeout(Duration::from_secs(2), stream.message()).await? {
-            Ok(Some(frame)) => {
-                let cursor = frame_cursor(&frame)?;
-                assert!(cursor > last_cursor);
-                last_cursor = cursor;
-            }
-            Err(status) => return Ok((status, last_cursor)),
-            Ok(None) => return Err("slow watcher ended without a status".into()),
-        }
-    }
-}
-
-async fn assert_stream_cursors(stream: &mut Streaming<WatchFrame>, expected: &[i64]) -> TestResult {
-    for expected_cursor in expected {
-        let frame = next_frame(stream, "healthy watcher ended during slow-reader test").await?;
-        assert_eq!(frame_cursor(&frame)?, *expected_cursor);
-    }
+    let WatchEvent::Update(replay) = next(&mut resumed).await? else {
+        return Err("replay missing".into());
+    };
+    assert_eq!(replay.cursor, update.cursor);
+    assert_eq!(replay.update_id, update.update_id);
+    assert!(matches!(
+        scope
+            .watch(
+                store,
+                Some("workflow-cursor-v1:another-conversation:1"),
+                WatchOptions::default()
+            )
+            .await,
+        Err(StoreError::InvalidInput(_))
+    ));
+    let future = format!(
+        "workflow-cursor-v1:{}:9223372036854775807",
+        scope.conversation
+    );
+    assert!(matches!(
+        scope
+            .watch(store, Some(&future), WatchOptions::default())
+            .await,
+        Err(StoreError::InvalidInput(_))
+    ));
     Ok(())
 }
 
-async fn assert_resumed_cursors(
-    client: &mut WatchClient,
-    expected: &[i64],
-    after: i64,
+async fn prove_notification_loss(
+    store: &WorkflowStore,
+    client: &mut Client,
+    scope: &Scope,
 ) -> TestResult {
-    let mut stream = open_watch(client, format!("v1|{CONVERSATION}|{after}")).await?;
-    for expected_cursor in expected.iter().copied().filter(|cursor| *cursor > after) {
-        let frame = next_frame(&mut stream, "resumed slow watcher ended during replay").await?;
-        assert_eq!(frame_cursor(&frame)?, expected_cursor);
-    }
+    let mut watch = scope.watch(store, None, WatchOptions::default()).await?;
+    assert!(matches!(next(&mut watch).await?, WatchEvent::Snapshot(_)));
+    // Let LISTEN and the immediate replay finish before omitting notification.
+    sleep(Duration::from_millis(30)).await;
+    let tx = client.transaction().await?;
+    let (_, revision) = append(&tx, scope, false).await?;
+    tx.commit().await?;
+    let WatchEvent::Update(update) = next(&mut watch).await? else {
+        return Err("notification loss did not replay".into());
+    };
+    assert_eq!(update.conversation_revision, u64::try_from(revision)?);
     Ok(())
 }
 
-async fn measure_watch_latency(
-    database_url: &str,
-    client: &mut WatchClient,
-) -> TestResult<Vec<Duration>> {
-    let current = client
-        .get_snapshot(GetSnapshotRequest {
-            conversation_id: CONVERSATION.into(),
-        })
-        .await?
-        .into_inner();
-    let mut watch = open_watch(client, current.resume_cursor).await?;
-    let mut latencies = Vec::with_capacity(110);
-    for index in 0..110_u64 {
-        let (expected_cursor, _, started) = append_update_timed(
-            database_url,
-            CONVERSATION,
-            "latency",
-            &format!("sample-{index}"),
-            true,
-        )
-        .await?;
-        let frame = next_frame(&mut watch, "latency watch ended").await?;
-        assert_eq!(frame_cursor(&frame)?, expected_cursor);
-        latencies.push(started.elapsed());
+async fn prove_reconnect_and_latency(
+    store: &WorkflowStore,
+    client: &mut Client,
+    scope: &Scope,
+) -> TestResult {
+    let mut watch = scope.watch(store, None, WatchOptions::default()).await?;
+    let WatchEvent::Snapshot(snapshot) = next(&mut watch).await? else {
+        return Err("missing snapshot".into());
+    };
+    let mut samples = Vec::new();
+    let mut committed_updates = Vec::new();
+    // Measure a connected watch. Its first five deliveries warm the actual
+    // listener/replay connections; reconnect setup is a separate recovery gate.
+    for index in 0..105 {
+        let tx = client.transaction().await?;
+        let (_, revision) = append(&tx, scope, true).await?;
+        tx.commit().await?;
+        let committed = Instant::now();
+        let WatchEvent::Update(update) = next(&mut watch).await? else {
+            return Err("missing update".into());
+        };
+        assert_eq!(update.conversation_revision, u64::try_from(revision)?);
+        if index >= 5 {
+            samples.push(committed.elapsed());
+        }
+        committed_updates.push(update);
     }
-    Ok(latencies)
-}
-
-async fn next_frame(stream: &mut Streaming<WatchFrame>, ended: &str) -> TestResult<WatchFrame> {
-    timeout(Duration::from_secs(2), stream.message())
-        .await??
-        .ok_or_else(|| ended.into())
-}
-
-fn print_latency_evidence(snapshot_latencies: &[Duration], watch_latencies: &[Duration]) {
-    let (snapshot_p50, snapshot_p95, snapshot_max) = distribution(&snapshot_latencies[10..]);
-    let (watch_p50, watch_p95, watch_max) = distribution(&watch_latencies[10..]);
+    drop(watch);
+    samples.sort();
+    assert_eq!(samples.len(), 100);
+    assert!(
+        samples[94] <= Duration::from_millis(100),
+        "connected watch p95={:?}",
+        samples[94]
+    );
     println!(
-        "tonic-watch-feasibility: atomic-boundary=pass notification-replay=pass cursor-expiry=pass slow-reader=pass snapshot-p50-ms={:.3} snapshot-p95-ms={:.3} snapshot-max-ms={:.3} commit-ack-to-client-watch-p50-ms={:.3} commit-ack-to-client-watch-p95-ms={:.3} commit-ack-to-client-watch-max-ms={:.3} samples=100",
-        snapshot_p50.as_secs_f64() * 1000.0,
-        snapshot_p95.as_secs_f64() * 1000.0,
-        snapshot_max.as_secs_f64() * 1000.0,
-        watch_p50.as_secs_f64() * 1000.0,
-        watch_p95.as_secs_f64() * 1000.0,
-        watch_max.as_secs_f64() * 1000.0,
+        "production-watch-commit-to-observed: samples=100 p50-us={} p95-us={} max-us={}",
+        samples[49].as_micros(),
+        samples[94].as_micros(),
+        samples[99].as_micros()
     );
+    prove_every_cursor_replay(store, scope, &snapshot.resume_cursor, &committed_updates).await
 }
 
-async fn revision_at_boundary(database_url: &str, boundary: i64) -> TestResult<u64> {
-    let (client, driver) = connect(database_url).await?;
-    let revision: i64 = client
+async fn prove_every_cursor_replay(
+    store: &WorkflowStore,
+    scope: &Scope,
+    initial_cursor: &str,
+    committed_updates: &[ConversationUpdate],
+) -> TestResult {
+    let mut cursor = initial_cursor.to_owned();
+    for expected in committed_updates {
+        let mut reconnected = scope
+            .watch(store, Some(&cursor), WatchOptions::default())
+            .await?;
+        let WatchEvent::Update(replayed) = next(&mut reconnected).await? else {
+            return Err("reconnect did not replay the next committed update".into());
+        };
+        assert_eq!(replayed.update_id, expected.update_id);
+        assert_eq!(replayed.activity_id, expected.activity_id);
+        assert_eq!(replayed.cursor, expected.cursor);
+        assert_eq!(
+            replayed.conversation_revision,
+            expected.conversation_revision
+        );
+        assert_eq!(replayed.kind, expected.kind);
+        assert_eq!(
+            replayed.affected_resource_ids,
+            expected.affected_resource_ids
+        );
+        assert_eq!(replayed.presentation_state, expected.presentation_state);
+        assert_eq!(replayed.waiting_on, expected.waiting_on);
+        assert_eq!(replayed.safe_reason, expected.safe_reason);
+        assert_eq!(replayed.accepted_at, expected.accepted_at);
+        assert_ne!(replayed.cursor, cursor);
+        cursor = replayed.cursor;
+        // Release this observation before reconnecting at its exact accepted cursor.
+        drop(reconnected);
+    }
+    let snapshot = store
+        .get_snapshot(&scope.workspace, &scope.project, &scope.conversation)
+        .await?;
+    assert_eq!(snapshot.resume_cursor, cursor);
+    assert_eq!(committed_updates.len(), 105);
+    println!("production-watch-every-cursor-replay: updates=105 exact-identity-and-content=pass");
+    Ok(())
+}
+
+async fn prove_slow_reader(
+    store: &WorkflowStore,
+    client: &mut Client,
+    scope: &Scope,
+) -> TestResult {
+    let options = WatchOptions {
+        buffer_capacity: 1,
+        slow_reader_timeout: Duration::from_millis(25),
+        ..WatchOptions::default()
+    };
+    let mut stalled = scope.watch(store, None, options).await?;
+    // Keep the initial snapshot in its one-frame buffer while state progresses.
+    let tx = client.transaction().await?;
+    append(&tx, scope, true).await?;
+    tx.commit().await?;
+    sleep(Duration::from_millis(200)).await;
+    assert!(matches!(
+        stalled.next().await,
+        Some(Err(StoreError::Capacity("watch_buffer")))
+    ));
+    let snapshot = store
+        .get_snapshot(&scope.workspace, &scope.project, &scope.conversation)
+        .await?;
+    let mut healthy = scope
+        .watch(
+            store,
+            Some(&snapshot.resume_cursor),
+            WatchOptions::default(),
+        )
+        .await?;
+    let tx = client.transaction().await?;
+    let (_, revision) = append(&tx, scope, true).await?;
+    tx.commit().await?;
+    let WatchEvent::Update(update) = next(&mut healthy).await? else {
+        return Err("slow reader blocked authority".into());
+    };
+    assert_eq!(update.conversation_revision, u64::try_from(revision)?);
+    Ok(())
+}
+
+async fn prove_expiry_and_snapshot_recovery(
+    store: &WorkflowStore,
+    client: &Client,
+    scope: &Scope,
+) -> TestResult {
+    let oldest: i64 = client
         .query_one(
-            "SELECT COALESCE(max(revision), 0) FROM workflow_watch_updates \
-             WHERE conversation_id = $1 AND cursor <= $2",
-            &[&CONVERSATION, &boundary],
+            "SELECT min(cursor) FROM workflow_updates WHERE conversation_id = $1",
+            &[&scope.conversation],
         )
         .await?
         .get(0);
-    driver.abort();
-    Ok(u64::try_from(revision)?)
+    let old_cursor = format!("workflow-cursor-v1:{}:{oldest}", scope.conversation);
+    // A clock reversal must never compact a fresh earlier cursor to reach an old later one.
+    client.execute("UPDATE workflow_updates SET accepted_at = clock_timestamp() - interval '8 days' WHERE conversation_id = $1 AND cursor > $2", &[&scope.conversation, &oldest]).await?;
+    let before: i64 = client
+        .query_one(
+            "SELECT count(*) FROM workflow_updates WHERE conversation_id = $1",
+            &[&scope.conversation],
+        )
+        .await?
+        .get(0);
+    store.cleanup_observation().await?;
+    let after: i64 = client
+        .query_one(
+            "SELECT count(*) FROM workflow_updates WHERE conversation_id = $1",
+            &[&scope.conversation],
+        )
+        .await?
+        .get(0);
+    assert_eq!(before, after, "retention crossed an unexpired cursor");
+    client.execute("UPDATE workflow_updates SET accepted_at = clock_timestamp() - interval '8 days' WHERE conversation_id = $1", &[&scope.conversation]).await?;
+    assert!(store.cleanup_observation().await? > 0);
+    assert!(matches!(
+        scope
+            .watch(store, Some(&old_cursor), WatchOptions::default())
+            .await,
+        Err(StoreError::WatchCursorExpired)
+    ));
+    let mut recovered = scope.watch(store, None, WatchOptions::default()).await?;
+    let WatchEvent::Snapshot(snapshot) = next(&mut recovered).await? else {
+        return Err("expiry recovery did not snapshot".into());
+    };
+    assert!(snapshot.current_activity.is_some());
+    assert!(
+        scope
+            .watch(
+                store,
+                Some(&snapshot.resume_cursor),
+                WatchOptions::default()
+            )
+            .await
+            .is_ok()
+    );
+    Ok(())
 }
 
-fn frame_cursor(frame: &WatchFrame) -> TestResult<i64> {
-    match &frame.frame {
-        Some(watch_frame::Frame::Update(update)) => cursor_value(&update.cursor),
-        _ => Err("expected an update frame".into()),
+async fn prove_active_connection_loss(url: &str, admin: &Client, scope: &Scope) -> TestResult {
+    let separator = if url.contains('?') { '&' } else { '?' };
+    let name = format!("observation_outage_{}", Uuid::now_v7().simple());
+    let named = WorkflowStore::new(format!("{url}{separator}application_name={name}"));
+    let mut watch = scope.watch(&named, None, WatchOptions::default()).await?;
+    assert!(matches!(next(&mut watch).await?, WatchEvent::Snapshot(_)));
+    // Confirm the replay connection is established before disrupting it.
+    for _ in 0..100 {
+        let count: i64 = admin
+            .query_one(
+                "SELECT count(*) FROM pg_stat_activity WHERE application_name = $1",
+                &[&name],
+            )
+            .await?
+            .get(0);
+        if count >= 2 {
+            break;
+        }
+        sleep(Duration::from_millis(5)).await;
     }
-}
-
-fn cursor_value(cursor: &str) -> TestResult<i64> {
-    cursor
-        .rsplit('|')
-        .next()
-        .ok_or_else(|| Box::<dyn Error + Send + Sync>::from("cursor has no value"))?
-        .parse()
-        .map_err(Into::into)
-}
-
-fn distribution(values: &[Duration]) -> (Duration, Duration, Duration) {
-    let mut sorted = values.to_vec();
-    sorted.sort_unstable();
-    (sorted[49], sorted[94], sorted[99])
+    admin
+        .query(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = $1",
+            &[&name],
+        )
+        .await?;
+    let terminal = timeout(Duration::from_secs(3), watch.next())
+        .await?
+        .ok_or("disrupted watch ended without error")?;
+    assert!(matches!(terminal, Err(StoreError::Database(_))));
+    let mut reconnected = scope.watch(&named, None, WatchOptions::default()).await?;
+    assert!(matches!(
+        next(&mut reconnected).await?,
+        WatchEvent::Snapshot(_)
+    ));
+    Ok(())
 }

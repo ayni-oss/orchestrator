@@ -11,6 +11,7 @@ use ayni_orchestrator_events::{
     workflow::{
         REPORT_SUBJECT, decode_command, decode_decision, encode_report, sign_report,
         signing_key_digest,
+        transport::{ConsumerRole, rejected_delivery},
     },
 };
 use ayni_orchestrator_scripted_executor::{
@@ -19,7 +20,15 @@ use ayni_orchestrator_scripted_executor::{
 use ed25519_dalek::SigningKey;
 use futures_util::StreamExt as _;
 use sha2::{Digest as _, Sha256};
-use std::{env, error::Error, fs, io, path::PathBuf, time::Duration};
+use std::{
+    collections::VecDeque,
+    env,
+    error::Error,
+    fs, io,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
+};
 use tokio::time;
 use uuid::Uuid;
 
@@ -40,6 +49,9 @@ async fn main() -> RuntimeResult {
         &configuration.instance_id,
         &configuration.seed,
     )?;
+    // Ledger readiness is independent of broker availability. In a fresh local
+    // install the broker streams are provisioned after workloads become ready.
+    write_health(&configuration, &ledger)?;
     loop {
         let connected = connect(&configuration);
         let context = tokio::select! {
@@ -75,6 +87,7 @@ async fn connect(configuration: &Configuration) -> RuntimeResult<jetstream::Cont
         configuration.password.clone(),
     )
     .connection_timeout(Duration::from_secs(3))
+    .request_timeout(Some(Duration::from_secs(3)))
     .max_reconnects(None)
     .connect(&configuration.broker_url)
     .await?;
@@ -106,21 +119,35 @@ async fn run_connected(
             )?;
         }
     }
+    maintain_ledger(configuration, ledger)?;
+    replay_quarantine(context, configuration, ledger).await?;
     publish_pending_reports(context, ledger.pending_reports()?).await?;
-    execute_ready(context, configuration, ledger).await?;
+    execute_ready(context, configuration, ledger, None).await?;
     let mut commands = command_consumer.messages().await?;
     let mut decisions = decision_consumer.messages().await?;
+    let mut maintenance = time::interval(Duration::from_secs(30));
+    let mut commands_paused = false;
+    let mut decisions_paused = false;
     loop {
         tokio::select! {
-            command = commands.next() => {
+            _ = maintenance.tick() => {
+                maintain_ledger(configuration, ledger)?;
+                replay_quarantine(context, configuration, ledger).await?;
+                publish_pending_reports(context, ledger.pending_reports()?).await?;
+                commands_paused=false;
+                decisions_paused=false;
+            }
+            command = commands.next(), if !commands_paused => {
                 let command = command
                     .ok_or_else(|| io::Error::other("command consumer stopped"))??;
-                handle_command(context, configuration, ledger, &command).await?;
+                commands_paused=delivery_paused(handle_command(context, configuration, ledger, &command).await)?;
+                write_health(configuration,ledger)?;
             }
-            decision = decisions.next() => {
+            decision = decisions.next(), if !decisions_paused => {
                 let decision = decision
                     .ok_or_else(|| io::Error::other("decision consumer stopped"))??;
-                handle_decision(context, configuration, ledger, &decision).await?;
+                decisions_paused=delivery_paused(handle_decision(context, configuration, ledger, &decision).await)?;
+                write_health(configuration,ledger)?;
             }
             result = shutdown_signal() => {
                 result?;
@@ -136,7 +163,29 @@ async fn handle_command(
     ledger: &mut Ledger,
     message: &jetstream::Message,
 ) -> RuntimeResult {
-    let (identity, metadata, payload) = decode_command(&message.payload)?;
+    if quarantine_delivery(
+        ConsumerRole::ExecutorCommand,
+        configuration,
+        ledger,
+        message,
+    )
+    .await?
+    {
+        return Ok(());
+    }
+    handle_command_bytes(context, configuration, ledger, &message.payload).await?;
+    message.double_ack().await?;
+    Ok(())
+}
+
+async fn handle_command_bytes(
+    context: &jetstream::Context,
+    configuration: &Configuration,
+    ledger: &mut Ledger,
+    bytes: &[u8],
+) -> RuntimeResult {
+    let received = Instant::now();
+    let (identity, metadata, payload) = decode_command(bytes)?;
     let binding = payload
         .binding
         .as_ref()
@@ -144,20 +193,14 @@ async fn handle_command(
     let command = Command {
         source: &identity.source,
         id: &identity.id,
-        exact_bytes: &message.payload,
+        exact_bytes: bytes,
         turn_id: &binding.turn_id,
         assignment_id: &binding.assignment_id,
         executor_generation: binding.executor_generation,
     };
     match ledger.classify_command_delivery(&command)? {
         CommandDelivery::New => {
-            let claim = claim_bytes(
-                configuration,
-                &identity,
-                &metadata,
-                binding,
-                &message.payload,
-            )?;
+            let claim = claim_bytes(configuration, &identity, &metadata, binding, bytes)?;
             let (claim_identity, _, _) = ayni_orchestrator_events::workflow::decode_report(&claim)?;
             ledger.retain_command_and_claim(
                 &command,
@@ -168,6 +211,7 @@ async fn handle_command(
                     sequence: 1,
                 },
             )?;
+            record_handoff(0, received.elapsed());
             publish_exact(context, &claim_identity.source, &claim_identity.id, &claim).await?;
         }
         CommandDelivery::PendingClaim(claim) => {
@@ -175,7 +219,6 @@ async fn handle_command(
         }
         CommandDelivery::Resolved => {}
     }
-    message.double_ack().await?;
     Ok(())
 }
 
@@ -218,23 +261,54 @@ async fn handle_decision(
     ledger: &mut Ledger,
     message: &jetstream::Message,
 ) -> RuntimeResult {
+    let received = Instant::now();
+    if quarantine_delivery(
+        ConsumerRole::ExecutorDecision,
+        configuration,
+        ledger,
+        message,
+    )
+    .await?
+    {
+        return Ok(());
+    }
     let (_, _, payload) = decode_decision(&message.payload)?;
     let consumer_sequence = message.info()?.consumer_sequence;
-    ledger.record_decision_delivery(
+    let decision_result = ledger.record_decision_delivery(
         &Decision {
             exact_bytes: &message.payload,
         },
         consumer_sequence,
-    )?;
+    );
+    match decision_result {
+        Ok(_) => {}
+        Err(
+            ayni_orchestrator_scripted_executor::LedgerError::Invalid
+            | ayni_orchestrator_scripted_executor::LedgerError::NotFound
+            | ayni_orchestrator_scripted_executor::LedgerError::EventConflict
+            | ayni_orchestrator_scripted_executor::LedgerError::StaleGeneration,
+        ) => {
+            ledger.quarantine_inapplicable_decision(
+                &message.payload,
+                consumer_sequence,
+                now_seconds()?,
+            )?;
+            message.double_ack().await?;
+            return write_health(configuration, ledger);
+        }
+        Err(error) => return Err(error.into()),
+    }
     message.double_ack().await?;
     ledger.acknowledge_decision(&payload.report_source, &payload.report_id)?;
-    execute_ready(context, configuration, ledger).await
+    execute_ready(context, configuration, ledger, Some(received)).await?;
+    write_health(configuration, ledger)
 }
 
 async fn execute_ready(
     context: &jetstream::Context,
     configuration: &Configuration,
     ledger: &mut Ledger,
+    decision_received: Option<Instant>,
 ) -> RuntimeResult {
     for command in ledger.executable_commands()? {
         let (identity, metadata, payload) = decode_command(&command.exact_bytes)?;
@@ -275,6 +349,9 @@ async fn execute_ready(
                 sequence: 2,
             },
         )?;
+        if let Some(received) = decision_received {
+            record_handoff(1, received.elapsed());
+        }
         publish_exact(
             context,
             &report_identity.source,
@@ -452,4 +529,162 @@ fn decode_seed(value: &str) -> Result<[u8; 32], io::Error> {
             .map_err(|_| io::Error::other("executor signing seed is invalid"))?;
     }
     Ok(seed)
+}
+
+async fn quarantine_delivery(
+    role: ConsumerRole,
+    configuration: &Configuration,
+    ledger: &mut Ledger,
+    message: &jetstream::Message,
+) -> RuntimeResult<bool> {
+    if rejected_delivery(role, &message.payload).is_none() {
+        return Ok(false);
+    }
+    let result = ledger.quarantine_transport(
+        role,
+        &message.payload,
+        message.info()?.consumer_sequence,
+        now_seconds()?,
+    );
+    write_health(configuration, ledger)?;
+    result?;
+    message.double_ack().await?;
+    Ok(true)
+}
+
+async fn replay_quarantine(
+    context: &jetstream::Context,
+    configuration: &Configuration,
+    ledger: &mut Ledger,
+) -> RuntimeResult {
+    for event in ledger.quarantine_replay_batch()? {
+        if rejected_delivery(event.role, &event.exact_bytes).is_some() {
+            continue;
+        }
+        match event.role {
+            ConsumerRole::ExecutorCommand => {
+                handle_command_bytes(context, configuration, ledger, &event.exact_bytes).await?;
+            }
+            ConsumerRole::ExecutorDecision => {
+                let (_, _, payload) = decode_decision(&event.exact_bytes)?;
+                ledger.record_decision_delivery(
+                    &Decision {
+                        exact_bytes: &event.exact_bytes,
+                    },
+                    event.consumer_sequence,
+                )?;
+                // This delivery was ACKed only after the original quarantine commit.
+                ledger.acknowledge_decision(&payload.report_source, &payload.report_id)?;
+                execute_ready(context, configuration, ledger, None).await?;
+            }
+            ConsumerRole::ApplicationReport => {
+                return Err(io::Error::other("invalid executor quarantine role").into());
+            }
+        }
+        ledger.resolve_quarantine(&event)?;
+    }
+    Ok(())
+}
+
+fn now_seconds() -> RuntimeResult<u64> {
+    Ok(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs())
+}
+
+fn maintain_ledger(configuration: &Configuration, ledger: &mut Ledger) -> RuntimeResult {
+    let now = now_seconds()?;
+    ledger.prune_resolved_metadata(now)?;
+    ledger.prune_transport_quarantine(now)?;
+    write_health(configuration, ledger)
+}
+
+fn write_health(configuration: &Configuration, ledger: &Ledger) -> RuntimeResult {
+    let health = ledger.quarantine_health()?;
+    let pressure = ledger.pressure()?;
+    let timings = handoff_snapshot();
+    let body = format!(
+        "{{\"ready\":{},\"quarantine_records\":{},\"quarantine_bytes\":{},\"quarantine_unsupported\":{},\"quarantine_full\":{},\"ledger_records\":{},\"ledger_bytes\":{},\"ledger_full\":{},\"pending_reports\":{},\"unresolved_commands\":{},\"command_claim_samples\":{},\"command_claim_p95_seconds\":{},\"decision_terminal_samples\":{},\"decision_terminal_p95_seconds\":{}}}\n",
+        health.unsupported == 0 && !health.full && !pressure.full,
+        health.records,
+        health.bytes,
+        health.unsupported,
+        health.full,
+        pressure.records,
+        pressure.bytes,
+        pressure.full,
+        pressure.pending_reports,
+        pressure.unresolved_commands,
+        timings[0].0,
+        timings[0].1,
+        timings[1].0,
+        timings[1].1
+    );
+    let path = configuration.ledger_path.with_extension("health.json");
+    let temporary = configuration.ledger_path.with_extension("health.tmp");
+    fs::write(&temporary, body)?;
+    fs::rename(temporary, path)?;
+    Ok(())
+}
+
+#[derive(Default)]
+struct HandoffTiming {
+    seen: u64,
+    samples: VecDeque<Duration>,
+}
+static HANDOFF_TIMINGS: OnceLock<Mutex<[HandoffTiming; 2]>> = OnceLock::new();
+
+fn record_handoff(index: usize, elapsed: Duration) {
+    let timings = HANDOFF_TIMINGS
+        .get_or_init(|| Mutex::new([HandoffTiming::default(), HandoffTiming::default()]));
+    if let Ok(mut timings) = timings.lock() {
+        let Some(timing) = timings.get_mut(index) else {
+            return;
+        };
+        timing.seen = timing.seen.saturating_add(1);
+        // Discard ten warm-up operations; retain a bounded sliding distribution.
+        if timing.seen > 10 {
+            if timing.samples.len() == 1000 {
+                timing.samples.pop_front();
+            }
+            timing.samples.push_back(elapsed);
+        }
+    }
+}
+
+fn handoff_snapshot() -> [(usize, f64); 2] {
+    let Some(timings) = HANDOFF_TIMINGS.get() else {
+        return [(0, 0.0); 2];
+    };
+    let Ok(timings) = timings.lock() else {
+        return [(0, 0.0); 2];
+    };
+    std::array::from_fn(|index| {
+        let mut samples = timings[index].samples.iter().copied().collect::<Vec<_>>();
+        samples.sort_unstable();
+        let position = (samples.len() * 95).div_ceil(100).saturating_sub(1);
+        (
+            samples.len(),
+            samples.get(position).map_or(0.0, Duration::as_secs_f64),
+        )
+    })
+}
+
+fn delivery_paused(result: RuntimeResult) -> RuntimeResult<bool> {
+    match result {
+        Ok(()) => Ok(false),
+        Err(error)
+            if matches!(
+                error.downcast_ref::<ayni_orchestrator_scripted_executor::LedgerError>(),
+                Some(
+                    ayni_orchestrator_scripted_executor::LedgerError::Capacity
+                        | ayni_orchestrator_scripted_executor::LedgerError::QuarantineCapacity
+                )
+            ) =>
+        {
+            eprintln!("scripted executor consumer paused: retained store capacity exhausted");
+            Ok(true)
+        }
+        Err(error) => Err(error),
+    }
 }

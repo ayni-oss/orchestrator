@@ -13,6 +13,8 @@ use sha2::{Digest as _, Sha256};
 mod workflow_hex;
 use workflow_hex::{canonical_hex, lowercase_hexadecimal};
 
+pub mod transport;
+
 pub const APPLICATION_SOURCE: &str = "ayni://orchestrator/supervisors/workflow-application";
 pub const COMMAND_SUBJECT: &str = "orchestrator.workflow.command.conversation.v1";
 pub const REPORT_SUBJECT: &str = "orchestrator.workflow.report.conversation.v1";
@@ -646,7 +648,7 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
     };
     if !sequence_valid
         || !outcome_valid
-        || !simple_identifier(&payload.executor_instance_id)
+        || uuid::Uuid::parse_str(&payload.executor_instance_id).is_err()
         || !digest(&payload.signing_key_digest)
         || (signed && payload.signature.len() != 64)
         || (!signed && !payload.signature.is_empty())

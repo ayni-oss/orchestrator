@@ -9,23 +9,15 @@ publish.workspace = true
 
 [dependencies]
 ayni-orchestrator-events = { path = "../../../../libs/events" }
-prost.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
-tokio-stream = { workspace = true, features = ["net"] }
-tonic.workspace = true
-tonic-prost.workspace = true
+tokio-stream.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 ed25519-dalek.workspace = true
-
-[build-dependencies]
-prost-build.workspace = true
-protoc-bin-vendored.workspace = true
-tonic-prost-build.workspace = true
 
 [lints]
 workspace = true

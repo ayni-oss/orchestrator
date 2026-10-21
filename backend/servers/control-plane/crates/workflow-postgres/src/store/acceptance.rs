@@ -1,3 +1,4 @@
+mod rejections;
 use super::{StoreError, WorkflowStore};
 use crate::{
     connect,
@@ -32,7 +33,7 @@ struct ClaimAuthority {
     assignment_id: String,
     executor_generation: i64,
     command_event_id: String,
-    command_bytes: Vec<u8>,
+    command_bytes: Option<Vec<u8>>,
     accepted_executor: Option<String>,
 }
 
@@ -43,7 +44,7 @@ struct TerminalAuthority {
     assignment_id: String,
     executor_generation: i64,
     command_event_id: String,
-    command_bytes: Vec<u8>,
+    command_bytes: Option<Vec<u8>>,
     claim_bytes: Option<Vec<u8>>,
 }
 
@@ -72,6 +73,13 @@ impl WorkflowStore {
             .ok_or(StoreError::CorruptState)?;
         let (mut client, driver) = connect(&self.database_url).await?;
         let transaction = client.transaction().await?;
+        if let Some(receipt) =
+            rejections::detached_rejection(&transaction, &parsed, exact_report_bytes).await?
+        {
+            transaction.commit().await?;
+            driver.abort();
+            return Ok(receipt);
+        }
         if let Some(receipt) = prior_receipt(&transaction, &parsed).await? {
             transaction.commit().await?;
             driver.abort();
@@ -130,6 +138,13 @@ impl WorkflowStore {
             .ok_or(StoreError::CorruptState)?;
         let (mut client, driver) = connect(&self.database_url).await?;
         let transaction = client.transaction().await?;
+        if let Some(receipt) =
+            rejections::detached_rejection(&transaction, &parsed, exact_report_bytes).await?
+        {
+            transaction.commit().await?;
+            driver.abort();
+            return Ok(receipt);
+        }
         if let Some(receipt) = prior_receipt(&transaction, &parsed).await? {
             transaction.commit().await?;
             driver.abort();
@@ -266,7 +281,10 @@ fn decide_claim<'a>(
     let binding_matches = binding.execution_binding_revision == authority.binding_revision
         && i64::try_from(binding.context_revision).ok() == Some(authority.context_revision)
         && binding.command_event_id == authority.command_event_id
-        && binding.command_digest == digest(&authority.command_bytes);
+        && authority
+            .command_bytes
+            .as_deref()
+            .is_some_and(|bytes| binding.command_digest == digest(bytes));
     let safe_reason = if binding.assignment_id != authority.assignment_id
         || generation != authority.executor_generation
     {
@@ -353,7 +371,10 @@ fn decide_terminal<'a>(
     let binding_matches = binding.execution_binding_revision == authority.binding_revision
         && i64::try_from(binding.context_revision).ok() == Some(authority.context_revision)
         && binding.command_event_id == authority.command_event_id
-        && binding.command_digest == digest(&authority.command_bytes);
+        && authority
+            .command_bytes
+            .as_deref()
+            .is_some_and(|bytes| binding.command_digest == digest(bytes));
     let signature_valid = claim.as_ref().is_some_and(|(_, _, claim)| {
         claim.executor_instance_id == parsed.report.executor_instance_id
             && claim
@@ -462,6 +483,7 @@ async fn insert_decision(
 ) -> Result<ReportDecisionReceipt, StoreError> {
     let (decision_id, decision_bytes) =
         decision_fact(transaction, parsed, binding, decision).await?;
+    super::capacity::reserve_decision(transaction, !decision.accepted).await?;
     transaction
         .execute(
             "INSERT INTO workflow_report_receipts \
@@ -581,7 +603,7 @@ async fn apply_terminal(
     append_activity(transaction, binding, "execution", presentation, "", failure).await
 }
 
-async fn append_activity(
+pub(super) async fn append_activity(
     transaction: &Transaction<'_>,
     binding: &ConversationTurnBinding,
     stage: &str,
@@ -644,6 +666,7 @@ async fn append_activity(
             ],
         )
         .await?;
+    super::observation::notify(transaction, &binding.conversation_id).await?;
     Ok(())
 }
 
@@ -710,4 +733,12 @@ async fn promote_successor(
 fn digest(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     format!("sha256:{digest:x}")
+}
+
+pub(super) async fn detached_report_decision(
+    transaction: &Transaction<'_>,
+    bytes: &[u8],
+) -> Result<Option<ReportDecisionReceipt>, StoreError> {
+    let parsed = parse_terminal_report(bytes)?;
+    rejections::detached_rejection(transaction, &parsed, bytes).await
 }

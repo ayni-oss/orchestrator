@@ -14,7 +14,9 @@ use rusqlite::{Connection, OptionalExtension as _, Transaction, TransactionBehav
 use std::path::Path;
 
 mod decision;
+mod quarantine;
 mod schema;
+pub use quarantine::{LedgerPressure, QuarantineHealth, QuarantineReplay};
 mod storage;
 mod validation;
 
@@ -44,7 +46,7 @@ impl LedgerLimits {
     pub const fn m1_default() -> Self {
         Self {
             max_records: 50_000,
-            max_exact_bytes: 192 * 1024 * 1024,
+            max_exact_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -113,6 +115,8 @@ pub enum LedgerError {
     AcceptedOwnerCannotRotate,
     #[error("executor ledger capacity is exhausted")]
     Capacity,
+    #[error("executor transport quarantine capacity is exhausted")]
+    QuarantineCapacity,
     #[error("the report or command does not exist")]
     NotFound,
     #[error("the decision consumer has not durably acknowledged this delivery")]

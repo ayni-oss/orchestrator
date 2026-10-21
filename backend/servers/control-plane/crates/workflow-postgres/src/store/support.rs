@@ -426,6 +426,7 @@ pub(super) async fn record_message_admission(
         )
         .await?
         .get(0);
+    super::observation::notify(transaction, message.conversation_id).await?;
     set_receipt_cursor(
         transaction,
         message.command_id,

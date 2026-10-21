@@ -13,9 +13,10 @@ Usage: dev/ctl COMMAND [OPTIONS]
 
 Durable-workflow local Docker Desktop development:
   secrets                       Create immutable database and broker role Secrets
-  deploy | redeploy | up        Build and install or upgrade the Slice 2 stack
+  deploy | redeploy | up        Build and install or upgrade the Slice 3 stack
   check [--expect-empty]        Check migrations, streams, and workload readiness
   scenario                      Run the message-to-scripted-response diagnostic
+  acceptance ABSOLUTE_DIRECTORY Run warmed client gates and retained-state restarts
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
   purge NAMESPACE               Permanently delete the owned local namespace
@@ -75,6 +76,9 @@ case "$command" in
     kubectl --context "$context" --namespace "$namespace" exec "$pod" \
       --container control-plane -- /usr/local/bin/workflow-diagnostic \
       --endpoint http://127.0.0.1:50051
+    ;;
+  acceptance)
+    "$scripts/acceptance.sh" "$@"
     ;;
   status)
     [[ $# -eq 0 ]] || { echo "usage: dev/ctl status" >&2; exit 2; }

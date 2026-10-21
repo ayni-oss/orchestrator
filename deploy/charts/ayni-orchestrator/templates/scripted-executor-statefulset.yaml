@@ -46,6 +46,15 @@ spec:
               value: /var/run/secrets/ayni/workflow-jetstream-executor/signing-seed-hex
             - name: ORCHESTRATOR_EXECUTOR_LEDGER_PATH
               value: /var/lib/ayni-executor/ledger.sqlite
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - 'grep -q ''"ready":true'' /var/lib/ayni-executor/ledger.health.json'
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
           resources:
             {{- toYaml .Values.scriptedExecutor.resources | nindent 12 }}
           securityContext:

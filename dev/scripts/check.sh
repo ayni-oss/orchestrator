@@ -26,12 +26,21 @@ done
 postgres_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
   -l app.kubernetes.io/name=workflow-postgres \
   -o jsonpath='{.items[0].metadata.name}')"
+read -r expected_count expected_version < <(python3 - "$DEV_REPOSITORY_ROOT" <<'PYTHON'
+from pathlib import Path
+import sys
+paths=Path(sys.argv[1]).joinpath('backend/servers/control-plane/crates/workflow-postgres/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')
+versions=sorted(int(path.name.split('_',1)[0]) for path in paths)
+assert versions == list(range(1, len(versions)+1)), 'migration files must be contiguous'
+print(len(versions), max(versions))
+PYTHON
+)
 migration_count="$(kubectl --context "$context" --namespace "$namespace" exec "$postgres_pod" -- \
-  sh -ec 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --no-align --command="SELECT count(*) FROM workflow_schema_migrations WHERE version BETWEEN 1 AND 2"')"
+  sh -ec 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --no-align --command="SELECT count(*) FROM workflow_schema_migrations"')"
 latest_migration="$(kubectl --context "$context" --namespace "$namespace" exec "$postgres_pod" -- \
   sh -ec 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --no-align --command="SELECT max(version) FROM workflow_schema_migrations"')"
-if [[ "$migration_count" != 2 || "$latest_migration" != 2 ]]; then
-  echo "expected the complete Slice 2 migration history through version 2" >&2
+if [[ "$migration_count" != "$expected_count" || "$latest_migration" != "$expected_version" ]]; then
+  echo "expected the complete Slice 3 migration history through version $expected_version" >&2
   exit 1
 fi
 
@@ -84,4 +93,4 @@ executor_pod="$(kubectl --context "$context" --namespace "$namespace" get pod \
 kubectl --context "$context" --namespace "$namespace" exec "$executor_pod" -- \
   test -f /var/lib/ayni-executor/ledger.sqlite
 
-echo "local Slice 2 stack ready: PostgreSQL migration v2, three retained streams, control plane, and scripted executor passed"
+echo "local Slice 3 stack ready: PostgreSQL migration v$expected_version, three retained streams, control plane, and scripted executor passed"

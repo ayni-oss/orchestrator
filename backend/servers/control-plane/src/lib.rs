@@ -3,6 +3,7 @@
 pub mod broker;
 pub mod configuration;
 pub mod health;
+pub mod maintenance;
 pub mod workflow;
 
 pub use configuration::{Configuration, ConfigurationError};

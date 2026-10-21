@@ -5,12 +5,13 @@ use ayni_orchestrator_workflow_postgres::{
         self, DispatchState, ExecutionState, HistoryKind, MessageRole, PresentationState,
         ReceiptKind, SchedulingState,
     },
+    store::observation::{ConversationUpdate, WatchEvent, WatchOptions},
 };
 use prost::Message as _;
 use prost_types::{Any, Timestamp};
 use std::{io, net::SocketAddr, pin::Pin};
 use tokio::sync::watch;
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamExt as _};
 use tonic::{Code, Request, Response, Status, transport::Server};
 use uuid::Uuid;
 
@@ -173,9 +174,15 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
             )
             .await
             .map_err(|error| context.store(&error))?;
-        Ok(context.response(v1::SendMessageResponse {
+        let handoff = std::time::Instant::now();
+        let response = context.response(v1::SendMessageResponse {
             receipt: Some(receipt(accepted)),
-        }))
+        });
+        ayni_orchestrator_workflow_postgres::metrics::observe(
+            "workflow_receipt_handoff_seconds",
+            handoff.elapsed(),
+        );
+        Ok(response)
     }
 
     async fn get_conversation_snapshot(
@@ -199,9 +206,17 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
             )
             .await
             .map_err(|error| context.store(&error))?;
-        Ok(context.response(v1::GetConversationSnapshotResponse {
+        let response = v1::GetConversationSnapshotResponse {
             snapshot: Some(snapshot(durable_snapshot)),
-        }))
+        };
+        if response.encoded_len() > MAX_RESPONSE_BYTES {
+            return Err(context.status(
+                Code::ResourceExhausted,
+                v1::ErrorReason::BoundExceeded,
+                "workflow snapshot exceeds response bound",
+            ));
+        }
+        Ok(context.response(response))
     }
 
     async fn list_conversation_history(
@@ -223,12 +238,20 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
             )
             .await
             .map_err(|error| context.store(&error))?;
-        Ok(context.response(v1::ListConversationHistoryResponse {
+        let response = v1::ListConversationHistoryResponse {
             records: page.records.into_iter().map(history_record).collect(),
             snapshot_id: page.snapshot_id,
             next_before_sequence: page.next_before_sequence,
             has_more: page.has_more,
-        }))
+        };
+        if response.encoded_len() > MAX_RESPONSE_BYTES {
+            return Err(context.status(
+                Code::ResourceExhausted,
+                v1::ErrorReason::BoundExceeded,
+                "workflow history exceeds response bound",
+            ));
+        }
+        Ok(context.response(response))
     }
 
     type WatchConversationStream = ConversationStream;
@@ -245,14 +268,44 @@ impl v1::project_conversation_service_server::ProjectConversationService for Wor
             &request.conversation_id,
         )
         .map_err(|error| context.validation(&error))?;
-        Err(context.status(
-            Code::Unimplemented,
-            v1::ErrorReason::NotImplemented,
-            "WatchConversation enters in M1 runtime Slice 3",
-        ))
+        let stream = self
+            .store
+            .watch(
+                &request.workspace_id,
+                &request.project_id,
+                &request.conversation_id,
+                request.after_cursor.as_deref(),
+                WatchOptions::default(),
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        let response_context = context.clone();
+        Ok(context.response(Box::pin(stream.map(move |event| {
+            let frame = match event.map_err(|error| response_context.store(&error))? {
+                WatchEvent::Snapshot(value) => {
+                    let value = snapshot(*value);
+                    if value.encoded_len() > MAX_RESPONSE_BYTES - 16 {
+                        return Err(response_context.status(
+                            Code::ResourceExhausted,
+                            v1::ErrorReason::BoundExceeded,
+                            "workflow snapshot exceeds response bound",
+                        ));
+                    }
+                    v1::watch_conversation_response::Frame::Snapshot(value)
+                }
+                WatchEvent::Update(value) => v1::watch_conversation_response::Frame::Update(
+                    update(value).map_err(|error| response_context.store(&error))?,
+                ),
+                WatchEvent::Heartbeat => v1::watch_conversation_response::Frame::Heartbeat(
+                    v1::ConversationWatchHeartbeat {},
+                ),
+            };
+            Ok(v1::WatchConversationResponse { frame: Some(frame) })
+        })) as ConversationStream))
     }
 }
 
+#[derive(Clone)]
 struct RequestContext {
     request_id: String,
 }
@@ -305,6 +358,11 @@ impl RequestContext {
                 Code::ResourceExhausted,
                 v1::ErrorReason::BoundExceeded,
                 "workflow capacity is exhausted",
+            ),
+            StoreError::WatchCursorExpired => self.status(
+                Code::FailedPrecondition,
+                v1::ErrorReason::WatchCursorExpired,
+                "watch cursor expired; reconnect without a cursor for a snapshot",
             ),
             StoreError::HistorySnapshotExpired => self.status(
                 Code::FailedPrecondition,
@@ -588,4 +646,118 @@ fn valid_request_id(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn update(value: ConversationUpdate) -> Result<v1::ConversationUpdate, StoreError> {
+    let kind = match (value.kind.as_str(), value.presentation_state) {
+        ("conversation_created", _) => v1::ConversationUpdateKind::ConversationCreated,
+        ("message_admitted", _) => v1::ConversationUpdateKind::MessageAdmitted,
+        ("turn_state_changed", PresentationState::Completed | PresentationState::Failed) => {
+            v1::ConversationUpdateKind::TerminalOutcomeAccepted
+        }
+        ("turn_state_changed", PresentationState::Queued) => {
+            v1::ConversationUpdateKind::TurnSchedulingChanged
+        }
+        ("turn_state_changed", _) => v1::ConversationUpdateKind::TurnExecutionChanged,
+        _ => return Err(StoreError::CorruptState),
+    };
+    Ok(v1::ConversationUpdate {
+        update_id: value.update_id,
+        activity_id: value.activity_id,
+        cursor: value.cursor,
+        conversation_revision: value.conversation_revision,
+        kind: kind as i32,
+        affected_resource_ids: value.affected_resource_ids,
+        presentation_state: presentation(value.presentation_state),
+        waiting_on: waiting_on(&value.waiting_on),
+        safe_reason: value.safe_reason,
+        accepted_at: Some(timestamp(value.accepted_at)),
+    })
+}
+
+#[cfg(test)]
+mod observation_status_tests {
+    use super::*;
+
+    #[test]
+    fn accepted_receipt_handoff_meets_owned_latency_bound() {
+        let context = RequestContext::new(&Request::new(()));
+        let mut samples = Vec::new();
+        for index in 0..105 {
+            // Bounded persistence fake yields an already-committed receipt. The
+            // owned adapter converts it and hands the response to Tonic directly.
+            let accepted = model::CommandReceipt {
+                command_id: "bounded-command".into(),
+                kind: ReceiptKind::SendMessage,
+                workspace_id: "bounded-workspace".into(),
+                project_id: "bounded-project".into(),
+                conversation_id: "bounded-conversation".into(),
+                message_id: "bounded-message".into(),
+                turn_id: "bounded-turn".into(),
+                accepted_at: model::Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                },
+                conversation_revision: 1,
+                resume_cursor: "bounded-cursor".into(),
+                presentation_state: PresentationState::Accepted,
+            };
+            let committed = std::time::Instant::now();
+            let response = context.response(v1::SendMessageResponse {
+                receipt: Some(receipt(accepted)),
+            });
+            assert_eq!(
+                response
+                    .get_ref()
+                    .receipt
+                    .as_ref()
+                    .map(|value| value.conversation_revision),
+                Some(1)
+            );
+            if index >= 5 {
+                samples.push(committed.elapsed());
+            }
+        }
+        samples.sort();
+        assert_eq!(samples.len(), 100);
+        assert!(samples[94] <= std::time::Duration::from_millis(50));
+        println!(
+            "owned-receipt-handoff: samples=100 p95-us={} max-us={}",
+            samples[94].as_micros(),
+            samples[99].as_micros()
+        );
+    }
+
+    #[test]
+    fn cursor_expiry_and_backpressure_keep_machine_readable_reasons() {
+        let context = RequestContext::new(&Request::new(()));
+        for (error, code, reason) in [
+            (
+                StoreError::WatchCursorExpired,
+                Code::FailedPrecondition,
+                v1::ErrorReason::WatchCursorExpired,
+            ),
+            (
+                StoreError::Capacity("watch_buffer"),
+                Code::ResourceExhausted,
+                v1::ErrorReason::BoundExceeded,
+            ),
+        ] {
+            let status = context.store(&error);
+            assert_eq!(status.code(), code);
+            let rich = RichStatus::decode(status.details()).unwrap_or_default();
+            let details = rich
+                .details
+                .first()
+                .and_then(|detail| v1::ErrorDetail::decode(detail.value.as_slice()).ok());
+            assert_eq!(
+                details.as_ref().map(|detail| detail.reason),
+                Some(reason as i32)
+            );
+            assert_eq!(
+                details.and_then(|detail| detail.request_id),
+                Some(context.request_id.clone())
+            );
+        }
+    }
 }

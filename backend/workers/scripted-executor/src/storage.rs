@@ -141,10 +141,11 @@ pub fn reserve(
     let (records, bytes): (i64, i64) = transaction.query_row(
         "SELECT \
            (SELECT count(*) + COALESCE(sum(terminal_reserved_records), 0) FROM commands) + \
-           (SELECT count(*) FROM reports), \
+           (SELECT count(*) FROM reports) + (SELECT count(*) FROM transport_quarantine), \
            COALESCE((SELECT sum(COALESCE(length(event_bytes), 0) + terminal_reserved_bytes) FROM commands), 0) + \
            COALESCE((SELECT sum(COALESCE(length(event_bytes), 0) + reserved_bytes + \
-             COALESCE(length(decision_bytes), 0)) FROM reports), 0)",
+             COALESCE(length(decision_bytes), 0)) FROM reports), 0) + \
+           COALESCE((SELECT sum(COALESCE(length(exact_bytes),0)+length(event_source)+length(event_id)+length(event_digest)+128) FROM transport_quarantine),0)",
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;

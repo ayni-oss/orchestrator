@@ -34,6 +34,7 @@ async fn trusted_listener_and_readiness_cover_private_workflow_boundary() -> Tes
 
     let readiness = router(WorkflowReadiness::new(database_url.clone(), runtime_role));
     let response = readiness
+        .clone()
         .oneshot(
             axum::http::Request::builder()
                 .uri("/readyz")
@@ -42,6 +43,19 @@ async fn trusted_listener_and_readiness_cover_private_workflow_boundary() -> Tes
         .await?;
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let _ = response.into_body().collect().await?;
+    let metrics = readiness
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/metrics")
+                .body(axum::body::Body::empty())?,
+        )
+        .await?;
+    assert_eq!(metrics.status(), axum::http::StatusCode::OK);
+    let metrics = String::from_utf8(metrics.into_body().collect().await?.to_bytes().to_vec())?;
+    assert!(metrics.contains("workflow_database_ready 1"));
+    assert!(metrics.contains("workflow_"));
+    assert!(!metrics.contains("durable admission"));
+    assert!(!metrics.contains("postgresql://"));
 
     let (address, shutdown, server) = start_server(&database_url)?;
     let channel = connect(address).await?;
@@ -258,20 +272,91 @@ async fn exercise_conversation(
         .into_inner();
     assert_eq!(history.records.len(), 1);
 
-    let watch = conversations
+    exercise_watch(
+        conversations,
+        nonce,
+        workspace_id,
+        project_id,
+        &conversation.id,
+        snapshot.conversation_revision,
+    )
+    .await
+}
+
+async fn exercise_watch(
+    conversations: &mut ProjectConversationServiceClient<Channel>,
+    nonce: &str,
+    workspace_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+    expected_revision: u64,
+) -> TestResult {
+    let mut watch = conversations
         .watch_conversation(request(
             WatchConversationRequest {
                 workspace_id: workspace_id.to_owned(),
                 project_id: project_id.to_owned(),
-                conversation_id: conversation.id,
+                conversation_id: conversation_id.to_owned(),
                 after_cursor: None,
+            },
+            nonce,
+        ))
+        .await?
+        .into_inner();
+    let first = tokio::time::timeout(Duration::from_secs(3), watch.message())
+        .await??
+        .ok_or("watch missing snapshot")?;
+    let Some(ayni_orchestrator_api::v1::watch_conversation_response::Frame::Snapshot(
+        watch_snapshot,
+    )) = first.frame
+    else {
+        return Err("watch did not start at an atomic snapshot".into());
+    };
+    assert_eq!(watch_snapshot.conversation_revision, expected_revision);
+    let response = conversations
+        .send_message(request(
+            SendMessageRequest {
+                idempotency_key: format!("grpc-watch-message-{nonce}"),
+                workspace_id: workspace_id.to_owned(),
+                project_id: project_id.to_owned(),
+                conversation_id: conversation_id.to_owned(),
+                content: "observed admission".into(),
+            },
+            nonce,
+        ))
+        .await?
+        .into_inner()
+        .receipt
+        .ok_or("receipt missing")?;
+    let update = tokio::time::timeout(Duration::from_secs(3), watch.message())
+        .await??
+        .ok_or("watch missing durable update")?;
+    let Some(ayni_orchestrator_api::v1::watch_conversation_response::Frame::Update(update)) =
+        update.frame
+    else {
+        return Err("watch did not deliver admitted update".into());
+    };
+    assert_eq!(update.cursor, response.resume_cursor);
+    assert_eq!(update.conversation_revision, response.conversation_revision);
+    assert_eq!(
+        update.kind,
+        ayni_orchestrator_api::v1::ConversationUpdateKind::MessageAdmitted as i32
+    );
+    drop(watch);
+    let cross_scope = conversations
+        .watch_conversation(request(
+            WatchConversationRequest {
+                workspace_id: workspace_id.to_owned(),
+                project_id: project_id.to_owned(),
+                conversation_id: conversation_id.to_owned(),
+                after_cursor: Some("workflow-cursor-v1:other:1".into()),
             },
             nonce,
         ))
         .await
         .err()
-        .ok_or("pre-watch workflow boundary unexpectedly streamed an update")?;
-    assert_eq!(watch.code(), Code::Unimplemented);
+        .ok_or("cross-scope watch succeeded")?;
+    assert_eq!(cross_scope.code(), Code::InvalidArgument);
     Ok(())
 }
 

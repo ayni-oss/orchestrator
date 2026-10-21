@@ -39,7 +39,7 @@ M1 is delivered as cumulative, executable slices rather than one unsafe cutover.
 2. **Durable scripted handoff.** Isolated authenticated JetStream streams, a retained scripted executor, signed ownership claims, application report decisions, accepted responses, and FIFO successor promotion survive application, broker, and executor restarts without treating broker storage as ownership.
 3. **Resumable observation and cumulative acceptance.** Notification-backed watch replay, quarantine, retention cleanup, metrics, version-skew/capacity evidence, and interruption at every commit/publication/claim/report/decision/ack boundary prove no accepted work or retry bytes are lost.
 
-Slice 2 intentionally returns `UNIMPLEMENTED` for `WatchConversation`. It does not deploy providers, browser UX, or custom-client workflow access. Later slices must build on the PostgreSQL and retained handoff authorities rather than recreate compatibility paths.
+Slice 3 implements `WatchConversation` using an atomic PostgreSQL snapshot boundary and retained update replay. The cumulative acceptance harness exercises admission, broker delivery, ownership, reports, decisions, replay, capacity, and retained-state recovery. M1 does not deploy providers, browser UX, or custom-client workflow access. Later milestones build on the PostgreSQL and retained handoff authorities.
 
 ### Validation at every milestone
 

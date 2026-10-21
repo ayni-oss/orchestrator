@@ -24,13 +24,16 @@ use uuid::Uuid;
 
 #[path = "feasibility/feasibility_support.rs"]
 mod feasibility_support;
-use feasibility_support::{prove_capacity_race, prove_future_version_rejected};
+use feasibility_support::{
+    prove_capacity_race, prove_decision_capacity_rollbacks, prove_future_version_rejected,
+    prove_stored_command_retry, prove_targeted_ack_release, prove_terminal_projection_and_fifo,
+    signed_report,
+};
 
 const DATABASE_URL_ENV: &str = "AYNI_POSTGRES_FEASIBILITY_URL";
 const RUNTIME_DATABASE_URL_ENV: &str = "AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL";
 const RUNTIME_DATABASE_ROLE_ENV: &str = "AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE";
 type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 #[ignore = "requires a disposable PostgreSQL 17 instance"]
 async fn postgres_feasibility_gate() -> TestResult {
@@ -695,6 +698,7 @@ async fn prove_report_acceptance(
         .into_iter()
         .find(|record| record.turn_id == first.turn_id)
         .ok_or("first command is absent")?;
+    prove_stored_command_retry(client, store, &first_outbox).await?;
     let (command_identity, metadata, command) = decode_command(&first_outbox.event_bytes)?;
     let binding = command.binding.ok_or("first command binding is absent")?;
     let winner = Uuid::now_v7().to_string();
@@ -782,95 +786,17 @@ async fn prove_report_acceptance(
         terminal_receipt
     );
 
-    let snapshot = store
-        .get_snapshot(workspace_id, project_id, &conversation.resource.id)
-        .await?;
-    assert_eq!(snapshot.nonterminal_turns.len(), 2);
-    assert_eq!(snapshot.recent_terminal_turns.len(), 1);
-    assert!(
-        snapshot
-            .recent_messages
-            .iter()
-            .any(|message| message.content == "scripted response")
-    );
-    let report_count: i64 = client
-        .query_one(
-            "SELECT count(*) FROM workflow_report_receipts WHERE turn_id = $1",
-            &[&first.turn_id],
-        )
-        .await?
-        .get(0);
-    assert_eq!(report_count, 5);
-
-    let promoted = store
-        .pending_outbox(1_000)
-        .await?
-        .into_iter()
-        .filter_map(|record| decode_command(&record.event_bytes).ok())
-        .find(|(_, _, command)| {
-            command
-                .binding
-                .as_ref()
-                .is_some_and(|candidate| candidate.turn_id == second.turn_id)
-        })
-        .ok_or("promoted command is absent")?;
-    let promoted_command = promoted.2;
-    assert_eq!(promoted_command.input_content, "second scripted input");
-    let context = promoted_command
-        .context
-        .iter()
-        .map(|record| record.content.as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        context,
-        [
-            "first scripted input",
-            "scripted response",
-            "second scripted input"
-        ]
-    );
-    assert!(!context.contains(&"third queued input"));
-    assert_eq!(binding.command_event_id, command_identity.id);
+    prove_terminal_projection_and_fifo(
+        client,
+        store,
+        &binding,
+        &second.turn_id,
+        &command_identity.id,
+    )
+    .await?;
+    prove_targeted_ack_release(store, &claim_receipt, &terminal_receipt).await?;
+    prove_decision_capacity_rollbacks(client, store, &losing_claim).await?;
     Ok(())
-}
-
-fn signed_report(
-    binding: &ConversationTurnBinding,
-    metadata: &WorkflowEventMetadata,
-    command_bytes: &[u8],
-    executor: &str,
-    seed: &[u8; 32],
-    kind: ConversationTurnReportKind,
-    response: &str,
-) -> TestResult<Vec<u8>> {
-    let identity = EventIdentity {
-        source: format!("ayni://orchestrator/supervisors/{executor}"),
-        id: Uuid::now_v7().to_string(),
-    };
-    let public_key = SigningKey::from_bytes(seed).verifying_key().to_bytes();
-    let mut report_binding = binding.clone();
-    report_binding.command_digest = format!("sha256:{:x}", Sha256::digest(command_bytes));
-    let mut report = ConversationTurnReport {
-        binding: Some(report_binding),
-        kind: kind.into(),
-        report_sequence: if kind == ConversationTurnReportKind::Started {
-            1
-        } else {
-            2
-        },
-        executor_instance_id: executor.to_owned(),
-        signing_public_key: if kind == ConversationTurnReportKind::Started {
-            public_key.to_vec()
-        } else {
-            Vec::new()
-        },
-        signing_key_digest: signing_key_digest(&public_key),
-        response_content: response.to_owned(),
-        failure_reason: String::new(),
-        signature: Vec::new(),
-    };
-    sign_report(&identity, &mut report, seed)?;
-    Ok(encode_report(&identity, metadata, &report)?)
 }
 
 async fn prove_concurrent_receipt_replay(
