@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio_postgres::{Client, Transaction};
 
 pub const MIGRATION_LOCK_ID: i64 = 4_702_199_126_064_921;
-pub const CURRENT_SCHEMA_VERSION: i64 = 7;
+pub const CURRENT_SCHEMA_VERSION: i64 = 9;
 
 const MIGRATION_1: &str = include_str!("../migrations/0001_durable_foundation.sql");
 const MIGRATION_2: &str = include_str!("../migrations/0002_report_acceptance.sql");
@@ -12,6 +12,8 @@ const MIGRATION_4: &str = include_str!("../migrations/0004_watch_retention.sql")
 const MIGRATION_5: &str = include_str!("../migrations/0005_delivery_accounting.sql");
 const MIGRATION_6: &str = include_str!("../migrations/0006_transport_rejections.sql");
 const MIGRATION_7: &str = include_str!("../migrations/0007_broker_capacity.sql");
+const MIGRATION_8: &str = include_str!("../migrations/0008_agent_configuration.sql");
+const MIGRATION_9: &str = include_str!("../migrations/0009_sessions.sql");
 
 #[derive(Debug, Error)]
 pub enum MigrationError {
@@ -114,6 +116,12 @@ async fn migrate_inner(
         (5_i64, MIGRATION_5, "M1 delivery accounting"),
         (6_i64, MIGRATION_6, "M1 detached report rejection"),
         (7_i64, MIGRATION_7, "M1 broker capacity observations"),
+        (
+            8_i64,
+            MIGRATION_8,
+            "Workspace agent configuration and frozen turn inputs",
+        ),
+        (9_i64, MIGRATION_9, "Isolated conversation sessions"),
     ] {
         if current < version {
             transaction.batch_execute(source).await?;
@@ -180,6 +188,8 @@ async fn validate_inner(client: &Client) -> Result<(), MigrationError> {
         (5_i64, MIGRATION_5),
         (6_i64, MIGRATION_6),
         (7_i64, MIGRATION_7),
+        (8_i64, MIGRATION_8),
+        (9_i64, MIGRATION_9),
     ];
     if rows.len() != migrations.len() {
         return Err(MigrationError::InvalidHistory);
@@ -224,6 +234,8 @@ async fn validate_checksum(transaction: &Transaction<'_>) -> Result<(), Migratio
         (5_i64, MIGRATION_5),
         (6_i64, MIGRATION_6),
         (7_i64, MIGRATION_7),
+        (8_i64, MIGRATION_8),
+        (9_i64, MIGRATION_9),
     ] {
         let checksum: String = transaction
             .query_one(
@@ -277,12 +289,14 @@ async fn apply_runtime_privileges(
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity FROM {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages FROM {role};\
              GRANT SELECT, INSERT ON TABLE \
                workflow_workspaces, workflow_projects, workflow_conversations, \
                workflow_command_receipts, workflow_messages, workflow_turns, \
                workflow_activities, workflow_updates, workflow_dispatch_intents, \
-               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity TO {role};\
+               workflow_outbox, workflow_history_snapshots, workflow_report_receipts, workflow_transport_quarantine, workflow_watch_watermarks, workflow_pending_reports, workflow_transport_rejections, workflow_broker_capacity, workflow_agent_configurations, workflow_agent_configuration_heads, workflow_configuration_receipts, workflow_turn_inputs, workflow_sessions, workflow_turn_sessions, workflow_session_receipts, workflow_context_manifests, workflow_context_manifest_messages TO {role};\
+             GRANT UPDATE (state,idle_timeout_seconds,last_active_at) ON workflow_sessions TO {role};\
+             GRANT UPDATE (revision_id) ON workflow_agent_configuration_heads TO {role};\
              GRANT UPDATE (revision, next_turn_sequence, next_history_sequence) \
                ON workflow_conversations TO {role};\
              GRANT UPDATE (resume_cursor) ON workflow_command_receipts TO {role};\
@@ -323,7 +337,7 @@ fn validate_role_name(runtime_role: &str) -> Result<(), MigrationError> {
 }
 
 const SCHEMA_MANIFEST_CHECKSUM: &str =
-    "sha256:fbff7938e04f066d1db07011e73a58f0cc28778a401799c6dcc54c9bd6e16fa4";
+    "sha256:5b3b0f2eb910d697df9032965a9c412df972e08e3780d62dbdabd4daabe0c563";
 
 async fn validate_schema(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let manifest: String = transaction
@@ -436,7 +450,7 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        'public.workflow_activities', 'public.workflow_updates', \
                        'public.workflow_dispatch_intents', 'public.workflow_outbox', \
                        'public.workflow_history_snapshots', 'public.workflow_report_receipts', \
-                       'public.workflow_transport_quarantine', 'public.workflow_watch_watermarks', 'public.workflow_pending_reports', 'public.workflow_transport_rejections', 'public.workflow_broker_capacity' \
+                       'public.workflow_transport_quarantine', 'public.workflow_watch_watermarks', 'public.workflow_pending_reports', 'public.workflow_transport_rejections', 'public.workflow_broker_capacity', 'public.workflow_agent_configurations', 'public.workflow_agent_configuration_heads', 'public.workflow_configuration_receipts', 'public.workflow_turn_inputs', 'public.workflow_sessions', 'public.workflow_turn_sessions', 'public.workflow_session_receipts', 'public.workflow_context_manifests', 'public.workflow_context_manifest_messages' \
                    ]) AS table_name \
                ) \
                AND ( \
@@ -445,6 +459,8 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                        required.column_name, 'UPDATE' \
                    )) \
                    FROM (VALUES \
+                       ('workflow_sessions','state'),('workflow_sessions','idle_timeout_seconds'),('workflow_sessions','last_active_at'), \
+                       ('workflow_agent_configuration_heads','revision_id'), \
                        ('workflow_broker_capacity','retained_messages'),('workflow_broker_capacity','retained_bytes'),('workflow_broker_capacity','observed_at'), \
                        ('workflow_transport_rejections','state'),('workflow_transport_rejections','stream_sequence'),('workflow_transport_rejections','attempt_count'),('workflow_transport_rejections','next_attempt_at'),('workflow_transport_rejections','updated_at'), \
                        ('workflow_watch_watermarks', 'pruned_through_cursor'), \
@@ -483,7 +499,9 @@ async fn validate_runtime_privileges(client: &Client) -> Result<(), MigrationErr
                          candidate.column_name, 'UPDATE' \
                      ) \
                      AND NOT ( \
-                         (candidate.table_name='workflow_broker_capacity' AND candidate.column_name IN ('retained_messages','retained_bytes','observed_at')) \
+                         (candidate.table_name='workflow_sessions' AND candidate.column_name IN ('state','idle_timeout_seconds','last_active_at')) \
+                         OR (candidate.table_name='workflow_agent_configuration_heads' AND candidate.column_name='revision_id') \
+                         OR (candidate.table_name='workflow_broker_capacity' AND candidate.column_name IN ('retained_messages','retained_bytes','observed_at')) \
                          OR (candidate.table_name='workflow_transport_rejections' AND candidate.column_name IN ('state','stream_sequence','attempt_count','next_attempt_at','updated_at')) \
                          OR (candidate.table_name = 'workflow_watch_watermarks' AND candidate.column_name = 'pruned_through_cursor') \
                          OR (candidate.table_name = 'workflow_conversations' \

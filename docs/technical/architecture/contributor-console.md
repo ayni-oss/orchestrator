@@ -2,7 +2,8 @@
 
 The local contributor console exercises the canonical workflow with the retained
 scripted executor. It is maintained through M2, where real isolated sessions and
-provider conversations will use the same surface.
+provider conversations will use the same surface. Shared configuration and
+scripted session inspection/replacement use canonical v1 methods.
 
 ## Access and authority
 
@@ -47,6 +48,20 @@ cursorless because a cursor alone is insufficient to rebuild browser state.
 
 Alternatives and protocol references: [SSE and EventSource](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)
 and [gRPC-Web's supported transports](https://github.com/grpc/grpc-web#streaming-support).
+
+## Shared configuration and sessions
+
+The workspace configuration editor reads and updates the canonical immutable
+configuration snapshot. Updates carry the displayed expected revision and the
+same retained idempotency key on retry. A stale edit fails without changing the
+current configuration. Desired provider/model settings are visible while actual
+execution remains scripted. Existing admitted turns keep their frozen inputs.
+
+The conversation session panel lists scoped retained generations and exposes
+idle replacement. A replacement command binds the exact expected generation.
+It cannot replace active work or unresolved handoffs; an ambiguous retry reuses
+the original command. The next eligible message wakes a new generation. Neither
+session controls nor configuration edits add gateway authority or credentials.
 
 ## Discovery, history and retries
 

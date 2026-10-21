@@ -1,0 +1,71 @@
+{{- if .Values.enabled }}
+{{- if gt (len .Release.Namespace) 54 }}
+{{- fail "release namespace must be at most 54 characters to reserve the -sessions suffix" }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: conversation-session-supervisor
+  labels:
+    {{- include "ayni-orchestrator.commonLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Release.Namespace }}-sessions
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    app.kubernetes.io/part-of: ayni-orchestrator
+    build.ayni/parent-namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: conversation-session-supervisor
+  namespace: {{ .Release.Namespace }}-sessions
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "secrets"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: conversation-session-supervisor
+  namespace: {{ .Release.Namespace }}-sessions
+subjects:
+  - kind: ServiceAccount
+    name: conversation-session-supervisor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: conversation-session-supervisor
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: conversation-session-isolation
+  namespace: {{ .Release.Namespace }}-sessions
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ayni-conversation-session
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-orchestrator-scripted-executor
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress: []
+{{- end }}

@@ -12,6 +12,8 @@ service ProjectConversationService {
   rpc ListConversationHistory(ListConversationHistoryRequest) returns (ListConversationHistoryResponse);
   rpc WatchConversation(WatchConversationRequest) returns (stream WatchConversationResponse);
   rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc ListConversationSessions(ListConversationSessionsRequest) returns (ListConversationSessionsResponse);
+  rpc ReplaceConversationSession(ReplaceConversationSessionRequest) returns (ReplaceConversationSessionResponse);
 }
 
 message CreateConversationRequest {
@@ -90,4 +92,35 @@ message ListConversationsRequest {
 message ListConversationsResponse {
   repeated Conversation conversations = 1;
   string next_after_id = 2;
+}
+
+// A generation fences stale executors; it is not an interface version.
+message ConversationSession {
+  string id = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  uint64 generation = 5;
+  string state = 6;
+  uint64 idle_timeout_seconds = 7;
+}
+message ListConversationSessionsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+}
+message ListConversationSessionsResponse {
+  repeated ConversationSession sessions = 1;
+}
+// Replacement is allowed only after accepted work and handoffs have settled.
+// Ambiguous retries retain both the idempotency key and expected generation.
+message ReplaceConversationSessionRequest {
+  string idempotency_key = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  uint64 expected_generation = 5;
+}
+message ReplaceConversationSessionResponse {
+  ConversationSession session = 1;
 }

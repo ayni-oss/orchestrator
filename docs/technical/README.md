@@ -1,10 +1,11 @@
 # Technical documentation
 
-The current implementation is M1 runtime Slice 3: PostgreSQL-authoritative workflow state, authenticated durable delivery, one retained scripted executor, and a trusted-loopback private-v1 API.
+The runtime combines the M1 durable foundation with shared immutable agent configuration and isolated scripted conversation sessions. PostgreSQL owns workflow and session authority; authenticated durable delivery and the trusted-loopback API remain v1 through alpha. Real provider calls and bounded tools remain subsequent M2 scopes.
 
 ## Current implementation
 
 - [Architecture](architecture/architecture.md): authority, transactions, API surface, projections, and failure boundaries.
+- [Conversation execution](architecture/conversation-execution.md): consolidated M2 contract, alpha v1 policy, frozen configuration, isolated sessions, provider uncertainty and tool authority.
 - [Code organization](architecture/code-organization.md): production ownership and dependency direction.
 - [Local development](operations/local-development.md): Docker Desktop deployment, diagnostics, validation, restart, and cleanup.
 - [Operations](operations/operations.md): startup, probes, schema changes, credentials, backup, and failure handling.

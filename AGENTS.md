@@ -75,6 +75,21 @@
   Retries must not duplicate work or external actions; stale results must not
   replace newer desired state. Test restart, cancellation, and cleanup behavior.
 
+## Alpha interface versioning
+
+- Keep every Orchestrator-owned API, event, schema and retained format at v1
+  until alpha merges. Consolidate the canonical contract in place; do not create
+  parallel v2/v3 interfaces or milestone-specific compatibility implementations.
+- Immutable configuration revision IDs, conversation revisions, assignment/session
+  generations and SQL migration ordinals identify changing data or installation
+  steps. They are not interface versions and must still advance to preserve
+  frozen inputs, ordering, fencing and retained-state recovery.
+- Keep source contracts, generated bindings, consumers, fixtures and docs in sync.
+  Preserve exact dependency pins and historical research provenance. Unsupported
+  future-version rejection fixtures do not establish supported interfaces.
+- Use the [conversation execution contract](docs/technical/architecture/conversation-execution.md)
+  for the consolidated M2 configuration, session, provider and tool boundaries.
+
 ## Repository workflow
 
 - Use descriptive, unbranded branches; never use codex/ or cortex/ prefixes.

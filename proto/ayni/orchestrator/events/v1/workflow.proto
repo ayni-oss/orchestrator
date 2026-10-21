@@ -22,11 +22,21 @@ message ConversationContextRecord {
   string content = 4;
 }
 
+// Application-issued workload identity; generations are fencing counters, not API versions.
+message SessionExecutionScope {
+  string session_id = 1;
+  uint64 generation = 2;
+  uint64 idle_timeout_seconds = 3;
+}
+
 message ConversationTurnRequested {
   ConversationTurnBinding binding = 1;
   string input_message_id = 2;
   string input_content = 3;
   repeated ConversationContextRecord context = 4;
+  SessionExecutionScope session = 5;
+  AgentExecutionConfiguration frozen_configuration = 6;
+  ConversationContextManifest context_manifest = 7;
 }
 
 enum ConversationTurnReportKind {
@@ -72,4 +82,24 @@ message ConversationReportDecision {
   string project_id = 12;
   string conversation_id = 13;
   string turn_id = 14;
+}
+
+// Exact immutable admission inputs; desired provider is not execution authority.
+message AgentExecutionConfiguration {
+  string revision_id = 1;
+  string instructions = 2;
+  string provider = 3;
+  string model = 4;
+  uint64 max_input_tokens = 5;
+  uint64 max_output_tokens = 6;
+  uint64 max_total_tokens = 7;
+  uint64 idle_timeout_seconds = 8;
+}
+
+// Immutable eligibility-time history reference. Inline records may be only a tail.
+message ConversationContextManifest {
+  string id = 1;
+  string digest = 2;
+  uint64 record_count = 3;
+  bool inline_complete = 4;
 }

@@ -35,6 +35,17 @@ Classification does not assign priority. The automation owns those five
 `kind/*` labels on pull requests and reapplies the classification when a title
 changes.
 
+## Alpha contracts
+
+All Orchestrator-owned interfaces remain v1 until alpha merges. Extend the
+canonical API, event, schema and retained format contracts in place rather than
+adding parallel versions. Regenerate bindings and update consumers in the same
+PR. Immutable configuration revision IDs, ordering revisions, executor/session
+generations and SQL migration ordinals still advance: they identify data and
+installation steps, not another interface. Exact dependency versions remain
+pinned. See the [conversation execution contract](docs/technical/architecture/conversation-execution.md)
+for the consolidated M2 decisions and retained-state rules.
+
 ## Developer Certificate of Origin
 
 Every commit, including maintainer commits, must carry a valid DCO sign-off:

@@ -86,7 +86,11 @@ impl WorkflowStore {
             return Ok(receipt);
         }
         let authority = claim_authority(&transaction, binding).await?;
-        let decision = decide_claim(&parsed, binding, &authority)?;
+        let mut decision = decide_claim(&parsed, binding, &authority)?;
+        if !super::sessions::current_generation(&transaction, &binding.turn_id).await? {
+            decision.accepted = false;
+            decision.safe_reason = "stale_generation";
+        }
         let receipt = insert_decision(
             &transaction,
             exact_report_bytes,
@@ -114,7 +118,23 @@ impl WorkflowStore {
             if turn_changed != 1 || outbox_changed != 1 {
                 return Err(StoreError::CorruptState);
             }
-            append_activity(&transaction, binding, "execution", "processing", "", "").await?;
+            let session = transaction
+                .query_opt(
+                    "SELECT generation FROM workflow_turn_sessions WHERE turn_id=$1",
+                    &[&binding.turn_id],
+                )
+                .await?;
+            let (stage, waiting) = session.as_ref().map_or(("execution", ""), |row| {
+                (
+                    if row.get::<_, i64>(0) > 1 {
+                        "agent_wakeup"
+                    } else {
+                        "provisioning"
+                    },
+                    "provisioning",
+                )
+            });
+            append_activity(&transaction, binding, stage, "processing", waiting, "").await?;
         }
         transaction.commit().await?;
         driver.abort();
@@ -153,7 +173,11 @@ impl WorkflowStore {
         let authority = terminal_authority(&transaction, binding).await?;
         let kind = ConversationTurnReportKind::try_from(parsed.report.kind)
             .map_err(|_| StoreError::InvalidInput("executor_report"))?;
-        let decision = decide_terminal(&parsed, binding, &authority, kind)?;
+        let mut decision = decide_terminal(&parsed, binding, &authority, kind)?;
+        if !super::sessions::current_generation(&transaction, &binding.turn_id).await? {
+            decision.accepted = false;
+            decision.safe_reason = "stale_generation";
+        }
         let receipt = insert_decision(
             &transaction,
             exact_report_bytes,
@@ -164,6 +188,7 @@ impl WorkflowStore {
         .await?;
         if decision.accepted {
             apply_terminal(&transaction, binding, &parsed.report, kind).await?;
+            super::sessions::finish_turn(&transaction, &binding.turn_id).await?;
             promote_successor(&transaction, &binding.conversation_id).await?;
         }
         transaction.commit().await?;

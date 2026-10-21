@@ -223,6 +223,8 @@ export enum ActivityStage {
   ACTIVITY_STAGE_DISPATCH = 3,
   ACTIVITY_STAGE_EXECUTION = 4,
   ACTIVITY_STAGE_TERMINAL = 5,
+  ACTIVITY_STAGE_PROVISIONING = 6,
+  ACTIVITY_STAGE_AGENT_WAKEUP = 7,
   UNRECOGNIZED = -1,
 }
 
@@ -246,6 +248,12 @@ export function activityStageFromJSON(object: any): ActivityStage {
     case 5:
     case "ACTIVITY_STAGE_TERMINAL":
       return ActivityStage.ACTIVITY_STAGE_TERMINAL;
+    case 6:
+    case "ACTIVITY_STAGE_PROVISIONING":
+      return ActivityStage.ACTIVITY_STAGE_PROVISIONING;
+    case 7:
+    case "ACTIVITY_STAGE_AGENT_WAKEUP":
+      return ActivityStage.ACTIVITY_STAGE_AGENT_WAKEUP;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -267,6 +275,10 @@ export function activityStageToJSON(object: ActivityStage): string {
       return "ACTIVITY_STAGE_EXECUTION";
     case ActivityStage.ACTIVITY_STAGE_TERMINAL:
       return "ACTIVITY_STAGE_TERMINAL";
+    case ActivityStage.ACTIVITY_STAGE_PROVISIONING:
+      return "ACTIVITY_STAGE_PROVISIONING";
+    case ActivityStage.ACTIVITY_STAGE_AGENT_WAKEUP:
+      return "ACTIVITY_STAGE_AGENT_WAKEUP";
     case ActivityStage.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -368,6 +380,7 @@ export enum WaitingOn {
   WAITING_ON_PREDECESSOR = 1,
   WAITING_ON_DELIVERY = 2,
   WAITING_ON_EXECUTOR = 3,
+  WAITING_ON_PROVISIONING = 4,
   UNRECOGNIZED = -1,
 }
 
@@ -385,6 +398,9 @@ export function waitingOnFromJSON(object: any): WaitingOn {
     case 3:
     case "WAITING_ON_EXECUTOR":
       return WaitingOn.WAITING_ON_EXECUTOR;
+    case 4:
+    case "WAITING_ON_PROVISIONING":
+      return WaitingOn.WAITING_ON_PROVISIONING;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -402,6 +418,8 @@ export function waitingOnToJSON(object: WaitingOn): string {
       return "WAITING_ON_DELIVERY";
     case WaitingOn.WAITING_ON_EXECUTOR:
       return "WAITING_ON_EXECUTOR";
+    case WaitingOn.WAITING_ON_PROVISIONING:
+      return "WAITING_ON_PROVISIONING";
     case WaitingOn.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

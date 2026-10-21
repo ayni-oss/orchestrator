@@ -14,7 +14,28 @@ const page = await context.newPage();
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 const run = `Console acceptance ${Date.now()}`;
-const completed = () => page.waitForFunction(() => document.querySelector('#turn-state').textContent === 'All accepted turns have finished.');
+const completed = () => page.waitForFunction(() => document.querySelector('#turn-state').textContent === 'All accepted turns have finished.', null, { timeout: 120000 });
+const gateway = async (tab, method, body) => {
+  const result = await tab.evaluate(async ({ method, body }) => {
+    const response = await fetch(`/api/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+    return { status: response.status, body: await response.json() };
+  }, { method, body });
+  assert.equal(result.status, 200, `${method}: ${JSON.stringify(result.body)}`);
+  return result.body;
+};
+const selection = tab => tab.evaluate(() => JSON.parse(sessionStorage.getItem('selection')));
+const saveInstructions = async (instructions) => {
+  const previous = await page.locator('#configuration-status').textContent();
+  await page.locator('#agent-configuration').evaluate(form => { form.closest('details').open = true; });
+  await page.locator('#agent-configuration [name="instructions"]').fill(instructions);
+  const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/UpdateAgentConfiguration');
+  await page.locator('#agent-configuration button').click();
+  const response = await saved;
+  assert.equal(response.status(), 200);
+  const result = await response.json();
+  await page.waitForFunction(previous => document.querySelector('#configuration-status').textContent !== previous && document.querySelector('#configuration-status').textContent.includes('interface v1'), previous);
+  return result.configuration;
+};
 try {
   await page.goto(endpoint);
   await page.locator('#workspace').waitFor({ state: 'visible' });
@@ -26,6 +47,11 @@ try {
   await page.locator('#create-workspace input').fill(run);
   await page.locator('#create-workspace button').click();
   await page.waitForFunction(() => !!document.querySelector('#workspace').value);
+  await page.locator('#agent-configuration button').waitFor({ state: 'attached' });
+  const firstInstructions = `Instructions for ${run} <script>not executable</script>`;
+  const firstConfiguration = await saveInstructions(firstInstructions);
+  assert.equal(firstConfiguration.provider, 'scripted');
+  assert.equal(firstConfiguration.model, 'scripted');
   await page.locator('#create-project').evaluate(form => { form.closest('details').open = true; });
   await page.locator('#create-project input').fill('Scripted workflow');
   await page.locator('#create-project button').click();
@@ -36,7 +62,12 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Connected');
   const content = 'A browser message <img src=x onerror="window.injected=true">';
   await page.locator('#content').fill(content);
+  const firstAdmission = page.waitForResponse(response => new URL(response.url()).pathname === '/api/SendMessage');
   await page.locator('#send button').click();
+  const firstReceipt = (await (await firstAdmission).json()).receipt;
+  const firstScope = await selection(page);
+  const firstInputs = await gateway(page, 'GetTurnInputs', { ...firstScope, turnId: firstReceipt.turnId });
+  assert.deepEqual(firstInputs.configuration, firstConfiguration);
   await page.getByText(content, { exact: true }).waitFor();
   await completed();
   assert.equal(await page.locator('#messages .user').count(), 1);
@@ -51,6 +82,24 @@ try {
   await second.locator('#project').selectOption({ label: 'Scripted workflow' });
   await second.getByRole('button', { name: 'Durable conversation', exact: true }).click();
   await second.getByText(content, { exact: true }).waitFor();
+  // Both conversations share workspace configuration, but admitted turns keep
+  // their immutable input revision after configuration edits or conflicting saves.
+  await second.locator('#agent-configuration').evaluate(form => { form.closest('details').open = true; });
+  assert.equal(await second.locator('#agent-configuration [name="instructions"]').inputValue(), firstInstructions);
+  const nextInstructions = `New instructions for ${run}`;
+  const nextConfiguration = await saveInstructions(nextInstructions);
+  assert.notEqual(nextConfiguration.revisionId, firstConfiguration.revisionId);
+  const retainedInputs = await gateway(page, 'GetTurnInputs', { ...firstScope, turnId: firstReceipt.turnId });
+  assert.deepEqual(retainedInputs.configuration, firstConfiguration);
+  await second.locator('#agent-configuration [name="instructions"]').fill('Stale configuration must not overwrite accepted instructions');
+  const conflict = second.waitForResponse(response => new URL(response.url()).pathname === '/api/UpdateAgentConfiguration');
+  await second.locator('#agent-configuration button').click();
+  assert.notEqual((await conflict).status(), 200);
+  await second.locator('#error').waitFor({ state: 'visible' });
+  assert.equal(await second.locator('#pending').isVisible(), false);
+  assert.deepEqual((await gateway(page, 'GetAgentConfiguration', { workspaceId: firstScope.workspaceId })).configuration, nextConfiguration);
+  await second.locator('#refresh').click();
+  await second.waitForFunction(expected => document.querySelector('#agent-configuration [name="instructions"]').value === expected, nextInstructions);
   await page.locator('#toggle-watch').click();
   await second.locator('#content').fill('Written from the second tab');
   await second.locator('#send button').click();
@@ -78,6 +127,21 @@ try {
   await page.locator('#create-conversation button').click();
   await page.waitForFunction(() => document.querySelector('#title').textContent === 'Isolated conversation');
   assert.equal(await page.getByText(content, { exact: true }).count(), 0);
+  const isolatedScope = await selection(page);
+  const isolatedAdmission = page.waitForResponse(response => new URL(response.url()).pathname === '/api/SendMessage');
+  await page.locator('#content').fill('Only the isolated conversation can see this');
+  await page.locator('#send button').click();
+  const isolatedReceipt = (await (await isolatedAdmission).json()).receipt;
+  await page.getByText('Only the isolated conversation can see this', { exact: true }).waitFor();
+  await completed();
+  const isolatedInputs = await gateway(page, 'GetTurnInputs', { ...isolatedScope, turnId: isolatedReceipt.turnId });
+  assert.deepEqual(isolatedInputs.configuration, nextConfiguration);
+  const firstSessions = (await gateway(page, 'ListConversationSessions', firstScope)).sessions;
+  const isolatedSessions = (await gateway(page, 'ListConversationSessions', isolatedScope)).sessions;
+  assert.ok(firstSessions.length && isolatedSessions.length);
+  assert.notEqual(firstSessions[0].id, isolatedSessions[0].id);
+  assert.ok(firstSessions.every(session => session.conversationId === firstScope.conversationId));
+  assert.ok(isolatedSessions.every(session => session.conversationId === isolatedScope.conversationId));
   await page.getByRole('button', { name: 'Durable conversation', exact: true }).click();
   await page.getByText(content, { exact: true }).waitFor();
   // More than sixteen messages exercise the stable older-history boundary.
@@ -90,6 +154,32 @@ try {
   await page.locator('#older').click();
   await page.locator('#history .message').first().waitFor();
   await page.getByText(content, { exact: true }).waitFor();
+  // An accepted idle replacement survives a lost HTTP response. Retrying the
+  // retained command fences exactly that generation; the next message wakes a
+  // new generation while the old conversation history remains available.
+  await page.locator('#session-state').evaluate(element => { element.closest('details').open = true; });
+  await page.locator('#refresh-session').click();
+  await page.waitForFunction(() => document.querySelector('#session-state').textContent.includes('generation'));
+  const beforeReplacement = (await gateway(page, 'ListConversationSessions', firstScope)).sessions[0];
+  await page.route('**/api/ReplaceConversationSession', async route => { await route.fetch(); await route.abort('failed'); }, { times: 1 });
+  await page.locator('#replace-session').click();
+  await page.locator('#error').waitFor({ state: 'visible' });
+  await page.locator('#pending').waitFor({ state: 'visible' });
+  await page.reload();
+  await page.locator('#pending').waitFor({ state: 'visible' });
+  await page.locator('#retry').click();
+  await page.locator('#pending').waitFor({ state: 'hidden' });
+  const replaced = (await gateway(page, 'ListConversationSessions', firstScope)).sessions;
+  assert.equal(replaced[0].generation, beforeReplacement.generation);
+  assert.equal(replaced[0].state, 'replaced');
+  await page.locator('#content').fill('Wake the replacement session');
+  await page.locator('#send button').click();
+  await page.getByText('Wake the replacement session', { exact: true }).waitFor();
+  await completed();
+  const awakened = (await gateway(page, 'ListConversationSessions', firstScope)).sessions;
+  assert.equal(BigInt(awakened[0].generation), BigInt(beforeReplacement.generation) + 1n);
+  assert.equal(awakened[0].id, beforeReplacement.id);
+  assert.equal(awakened[1].state, 'replaced');
   // Inject the canonical typed-expiry frame at the browser boundary; the real
   // retention/expiry behavior is exercised by the cumulative PostgreSQL gate.
   await page.route('**/watch?**', route => route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'event: fault\ndata: {"code":"FailedPrecondition","reason":"ERROR_REASON_WATCH_CURSOR_EXPIRED"}\n\n' }), { times: 1 });
@@ -112,5 +202,5 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   if (evidence) { await mkdir(evidence, { recursive: true }); await page.screenshot({ path: `${evidence}/console.png`, fullPage: true }); }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['validation-correction', 'create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
+  console.log(JSON.stringify({ outcome: 'passed', workspace: run, checks: ['validation-correction', 'create/select', 'scripted-response', 'text-only-content', 'refresh', 'two-tabs', 'disconnect-replay', 'ambiguous-command-reload-retry', 'conversation-isolation', 'configuration-editor', 'immutable-turn-inputs', 'stale-configuration-conflict', 'session-isolation', 'session-replacement-retry', 'session-generation-wakeup', 'older-history', 'typed-cursor-expiry-fixture', 'slow-browser-replay-fixture', 'mobile-layout'] }));
 } finally { await browser.close(); }

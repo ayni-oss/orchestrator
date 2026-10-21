@@ -1,4 +1,4 @@
-# M1 durable workflow architecture
+# Durable workflow architecture
 
 The M1 runtime extends the clean PostgreSQL workflow authority with authenticated durable delivery and one retained scripted executor. PostgreSQL decides admission, ownership, report acceptance, and visible conversation state. JetStream retains transport copies; no broker ACK independently changes application authority.
 
@@ -19,18 +19,43 @@ flowchart LR
     H[HTTP probes] --> C
     C -->|runtime role| P[(PostgreSQL 17.6\nauthority)]
     C -->|command + decision bytes| J[(Authenticated\nJetStream)]
-    J -->|command delivery| E[Scripted executor]
+    J -->|command delivery| E[Scripted supervisor]
     E -->|signed claim + report| J
-    E -->|retained exact bytes| L[(SQLite ledger PVC)]
+    E -->|retained exact bytes| L[(Supervisor ledger PVC)]
+    E -->|scoped v1 request + result| S[Isolated conversation session]
+    S -->|exact request + result| SL[(Session ledger PVC)]
     J -->|report delivery| C
     J -->|targeted decision| E
 ```
 
-The Kubernetes Service exposes HTTP only. Workflow gRPC binds to `127.0.0.1:50051` in the control-plane Pod. The executor has no listener, database credential, or Kubernetes API token.
+The Kubernetes Service exposes HTTP only. Workflow gRPC binds to `127.0.0.1:50051` in the control-plane Pod. The scripted supervisor has no listener or database credential. Its Kubernetes
+service account can provision Pods, PVCs and scoped bearer Secrets only in the
+dedicated session namespace. Session workers expose an authenticated internal
+HTTP listener and mount only their own ledger and bearer Secret; they have no
+broker/database credentials or Kubernetes API token.
+
+## Configuration and session execution
+
+The [conversation execution contract](conversation-execution.md) consolidates M2
+configuration, isolation and recovery decisions. Workspace configuration has one
+immutable revision ID covering instructions, desired provider/model, budgets and
+idle policy. Admission freezes that revision; eligibility freezes bounded
+conversation-only context references and a digest. All interfaces stay v1.
+
+A trusted scripted supervisor owns broker claims and signed reports. It provisions
+conversation-scoped Kubernetes workers with separate retained result ledgers.
+The session workers have no PostgreSQL credential, broker credential or Kubernetes
+API token. Session generation comes from PostgreSQL; replacement fences the old
+generation only after admitted work and report handoffs have settled. Paid
+provider calls remain disabled.
 
 ## Canonical private-v1 surface
 
 `ProjectService` supports `CreateWorkspace`, `CreateProject`, `ListWorkspaces`, and `ListProjects`. `ProjectConversationService` supports `CreateConversation`, `SendMessage`, `GetConversationSnapshot`, and `ListConversationHistory`. `ListConversations` provides scoped bounded discovery. `WatchConversation` streams an atomic snapshot boundary or replays accepted updates strictly after a scoped cursor.
+
+`ProjectService` also supports `GetAgentConfiguration`, `UpdateAgentConfiguration`,
+`GetTurnInputs` and bounded `GetTurnContextInputs`. `ProjectConversationService`
+exposes `ListConversationSessions` and idempotent `ReplaceConversationSession`.
 
 There is no compatibility adapter for removed RPCs, SQLite workflow, browser/BFF path, or custom-client workflow listener.
 
@@ -38,13 +63,18 @@ There is no compatibility adapter for removed RPCs, SQLite workflow, browser/BFF
 
 Repository-owned forward migrations live in `backend/servers/control-plane/crates/workflow-postgres/migrations`:
 
-1. version 1 creates hierarchy, receipts, FIFO turns, activity/update projections, dispatch intents, exact command outbox bytes, snapshots, and history;
-2. version 2 adds immutable signed-report receipts and exact targeted-decision bytes;
-3. version 3 adds bounded transport quarantine;
-4. version 4 adds retained watch watermarks;
-5. version 5 records broker storage sequences for targeted ACK reconciliation;
-6. version 6 retains detached wrong-scope and conflicting-report rejection decisions;
-7. version 7 records conservative broker capacity observations.
+1. migration 1 creates hierarchy, receipts, FIFO turns, activity/update projections, dispatch intents, exact command outbox bytes, snapshots, and history;
+2. migration 2 adds immutable signed-report receipts and exact targeted-decision bytes;
+3. migration 3 adds bounded transport quarantine;
+4. migration 4 adds retained watch watermarks;
+5. migration 5 records broker storage sequences for targeted ACK reconciliation;
+6. migration 6 retains detached wrong-scope and conflicting-report rejection decisions;
+7. migration 7 records conservative broker capacity observations;
+8. migration 8 freezes immutable workspace configuration and turn input revisions;
+9. migration 9 retains conversation session generations and replacement receipts.
+
+These ordinals are installation history within the v1 interface, not parallel
+schema interfaces.
 
 Startup takes a transaction-scoped advisory lock, validates contiguous history and every checksum, applies missing migrations, installs explicit runtime grants, and verifies a deterministic catalog manifest. The migration and runtime credentials are separate. Runtime has only the table/column/sequence/function privileges required by current transactions.
 

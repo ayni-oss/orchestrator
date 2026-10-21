@@ -39,10 +39,22 @@ cleanup_release() {
     echo "Helm is required to uninstall the local release" >&2
     return 1
   }
+  local session_namespace owner
+  session_namespace="${namespace}-sessions"
+  owner="$(kubectl --context "$context" get namespace "$session_namespace" \
+    --ignore-not-found -o jsonpath='{.metadata.labels.build\.ayni/parent-namespace}')"
+  if [[ -n "$owner" && "$owner" != "$namespace" ]]; then
+    echo "refusing to stop sessions in a namespace owned by another release" >&2
+    return 1
+  fi
   helm uninstall "$DEV_RELEASE_NAME" \
     --kube-context "$context" \
     --namespace "$namespace" \
     --ignore-not-found
+  if [[ "$owner" == "$namespace" ]]; then
+    kubectl --context "$context" --namespace "$session_namespace" delete pod \
+      --selector app.kubernetes.io/name=ayni-conversation-session --ignore-not-found --wait=true
+  fi
 }
 
 command="${1:-help}"
@@ -116,6 +128,16 @@ case "$command" in
     fi
     echo "permanently deleting local namespace $namespace, including PostgreSQL, JetStream, and executor data" >&2
     cleanup_release
+    session_namespace="${namespace}-sessions"
+    session_owner="$(kubectl --context "$context" get namespace "$session_namespace" \
+      --ignore-not-found -o jsonpath='{.metadata.labels.build\.ayni/parent-namespace}')"
+    if [[ -n "$session_owner" && "$session_owner" != "$namespace" ]]; then
+      echo "refusing to purge sessions owned by another release" >&2
+      exit 1
+    fi
+    if [[ "$session_owner" == "$namespace" ]]; then
+      kubectl --context "$context" delete namespace "$session_namespace" --wait=true
+    fi
     kubectl --context "$context" delete namespace "$namespace" --wait=true
     ;;
   render)

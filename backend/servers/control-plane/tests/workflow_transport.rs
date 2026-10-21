@@ -258,6 +258,7 @@ fn valid_command() -> (
             input_message_id: format!("message:{}", Uuid::now_v7()),
             input_content: "maximum body fixture".into(),
             context: Vec::new(),
+            ..Default::default()
         },
     )
 }

@@ -109,6 +109,43 @@ export interface ListConversationsResponse {
   nextAfterId: string;
 }
 
+/** A generation fences stale executors; it is not an interface version. */
+export interface ConversationSession {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  generation: string;
+  state: string;
+  idleTimeoutSeconds: string;
+}
+
+export interface ListConversationSessionsRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+}
+
+export interface ListConversationSessionsResponse {
+  sessions: ConversationSession[];
+}
+
+/**
+ * Replacement is allowed only after accepted work and handoffs have settled.
+ * Ambiguous retries retain both the idempotency key and expected generation.
+ */
+export interface ReplaceConversationSessionRequest {
+  idempotencyKey: string;
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  expectedGeneration: string;
+}
+
+export interface ReplaceConversationSessionResponse {
+  session?: ConversationSession | undefined;
+}
+
 function createBaseCreateConversationRequest(): CreateConversationRequest {
   return { idempotencyKey: "", workspaceId: "", projectId: "", title: "" };
 }
@@ -1508,6 +1545,601 @@ export const ListConversationsResponse: MessageFns<ListConversationsResponse> = 
   },
 };
 
+function createBaseConversationSession(): ConversationSession {
+  return {
+    id: "",
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    generation: "0",
+    state: "",
+    idleTimeoutSeconds: "0",
+  };
+}
+
+export const ConversationSession: MessageFns<ConversationSession> = {
+  encode(message: ConversationSession, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(26).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(34).string(message.conversationId);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(40).uint64(message.generation);
+    }
+    if (message.state !== "") {
+      writer.uint32(50).string(message.state);
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      writer.uint32(56).uint64(message.idleTimeoutSeconds);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConversationSession {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConversationSession();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.idleTimeoutSeconds = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConversationSession {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      idleTimeoutSeconds: isSet(object.idleTimeoutSeconds)
+        ? globalThis.String(object.idleTimeoutSeconds)
+        : isSet(object.idle_timeout_seconds)
+        ? globalThis.String(object.idle_timeout_seconds)
+        : "0",
+    };
+  },
+
+  toJSON(message: ConversationSession): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConversationSession>): ConversationSession {
+    return ConversationSession.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConversationSession>): ConversationSession {
+    const message = createBaseConversationSession();
+    message.id = object.id ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.generation = object.generation ?? "0";
+    message.state = object.state ?? "";
+    message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    return message;
+  },
+};
+
+function createBaseListConversationSessionsRequest(): ListConversationSessionsRequest {
+  return { workspaceId: "", projectId: "", conversationId: "" };
+}
+
+export const ListConversationSessionsRequest: MessageFns<ListConversationSessionsRequest> = {
+  encode(message: ListConversationSessionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListConversationSessionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListConversationSessionsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListConversationSessionsRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListConversationSessionsRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListConversationSessionsRequest>): ListConversationSessionsRequest {
+    return ListConversationSessionsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListConversationSessionsRequest>): ListConversationSessionsRequest {
+    const message = createBaseListConversationSessionsRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    return message;
+  },
+};
+
+function createBaseListConversationSessionsResponse(): ListConversationSessionsResponse {
+  return { sessions: [] };
+}
+
+export const ListConversationSessionsResponse: MessageFns<ListConversationSessionsResponse> = {
+  encode(message: ListConversationSessionsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.sessions) {
+      ConversationSession.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListConversationSessionsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListConversationSessionsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.sessions.push(ConversationSession.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListConversationSessionsResponse {
+    return {
+      sessions: globalThis.Array.isArray(object?.sessions)
+        ? object.sessions.map((e: any) => ConversationSession.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ListConversationSessionsResponse): unknown {
+    const obj: any = {};
+    if (message.sessions?.length) {
+      obj.sessions = message.sessions.map((e) => ConversationSession.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListConversationSessionsResponse>): ListConversationSessionsResponse {
+    return ListConversationSessionsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListConversationSessionsResponse>): ListConversationSessionsResponse {
+    const message = createBaseListConversationSessionsResponse();
+    message.sessions = object.sessions?.map((e) => ConversationSession.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseReplaceConversationSessionRequest(): ReplaceConversationSessionRequest {
+  return { idempotencyKey: "", workspaceId: "", projectId: "", conversationId: "", expectedGeneration: "0" };
+}
+
+export const ReplaceConversationSessionRequest: MessageFns<ReplaceConversationSessionRequest> = {
+  encode(message: ReplaceConversationSessionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(26).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(34).string(message.conversationId);
+    }
+    if (message.expectedGeneration !== "0") {
+      writer.uint32(40).uint64(message.expectedGeneration);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReplaceConversationSessionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReplaceConversationSessionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.expectedGeneration = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ReplaceConversationSessionRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      expectedGeneration: isSet(object.expectedGeneration)
+        ? globalThis.String(object.expectedGeneration)
+        : isSet(object.expected_generation)
+        ? globalThis.String(object.expected_generation)
+        : "0",
+    };
+  },
+
+  toJSON(message: ReplaceConversationSessionRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.expectedGeneration !== "0") {
+      obj.expectedGeneration = message.expectedGeneration;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ReplaceConversationSessionRequest>): ReplaceConversationSessionRequest {
+    return ReplaceConversationSessionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ReplaceConversationSessionRequest>): ReplaceConversationSessionRequest {
+    const message = createBaseReplaceConversationSessionRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.expectedGeneration = object.expectedGeneration ?? "0";
+    return message;
+  },
+};
+
+function createBaseReplaceConversationSessionResponse(): ReplaceConversationSessionResponse {
+  return { session: undefined };
+}
+
+export const ReplaceConversationSessionResponse: MessageFns<ReplaceConversationSessionResponse> = {
+  encode(message: ReplaceConversationSessionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.session !== undefined) {
+      ConversationSession.encode(message.session, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReplaceConversationSessionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReplaceConversationSessionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.session = ConversationSession.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ReplaceConversationSessionResponse {
+    return { session: isSet(object.session) ? ConversationSession.fromJSON(object.session) : undefined };
+  },
+
+  toJSON(message: ReplaceConversationSessionResponse): unknown {
+    const obj: any = {};
+    if (message.session !== undefined) {
+      obj.session = ConversationSession.toJSON(message.session);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ReplaceConversationSessionResponse>): ReplaceConversationSessionResponse {
+    return ReplaceConversationSessionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ReplaceConversationSessionResponse>): ReplaceConversationSessionResponse {
+    const message = createBaseReplaceConversationSessionResponse();
+    message.session = (object.session !== undefined && object.session !== null)
+      ? ConversationSession.fromPartial(object.session)
+      : undefined;
+    return message;
+  },
+};
+
 /** M1 exposes only the durable conversation path on the trusted operator listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
@@ -1577,6 +2209,32 @@ export const ProjectConversationServiceService = {
       Buffer.from(ListConversationsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListConversationsResponse => ListConversationsResponse.decode(value),
   },
+  listConversationSessions: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListConversationSessions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListConversationSessionsRequest): Buffer =>
+      Buffer.from(ListConversationSessionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListConversationSessionsRequest =>
+      ListConversationSessionsRequest.decode(value),
+    responseSerialize: (value: ListConversationSessionsResponse): Buffer =>
+      Buffer.from(ListConversationSessionsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListConversationSessionsResponse =>
+      ListConversationSessionsResponse.decode(value),
+  },
+  replaceConversationSession: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ReplaceConversationSession" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ReplaceConversationSessionRequest): Buffer =>
+      Buffer.from(ReplaceConversationSessionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ReplaceConversationSessionRequest =>
+      ReplaceConversationSessionRequest.decode(value),
+    responseSerialize: (value: ReplaceConversationSessionResponse): Buffer =>
+      Buffer.from(ReplaceConversationSessionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ReplaceConversationSessionResponse =>
+      ReplaceConversationSessionResponse.decode(value),
+  },
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
@@ -1586,6 +2244,8 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   listConversationHistory: handleUnaryCall<ListConversationHistoryRequest, ListConversationHistoryResponse>;
   watchConversation: handleServerStreamingCall<WatchConversationRequest, WatchConversationResponse>;
   listConversations: handleUnaryCall<ListConversationsRequest, ListConversationsResponse>;
+  listConversationSessions: handleUnaryCall<ListConversationSessionsRequest, ListConversationSessionsResponse>;
+  replaceConversationSession: handleUnaryCall<ReplaceConversationSessionRequest, ReplaceConversationSessionResponse>;
 }
 
 export interface ProjectConversationServiceClient extends Client {
@@ -1672,6 +2332,36 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListConversationsResponse) => void,
+  ): ClientUnaryCall;
+  listConversationSessions(
+    request: ListConversationSessionsRequest,
+    callback: (error: ServiceError | null, response: ListConversationSessionsResponse) => void,
+  ): ClientUnaryCall;
+  listConversationSessions(
+    request: ListConversationSessionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListConversationSessionsResponse) => void,
+  ): ClientUnaryCall;
+  listConversationSessions(
+    request: ListConversationSessionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListConversationSessionsResponse) => void,
+  ): ClientUnaryCall;
+  replaceConversationSession(
+    request: ReplaceConversationSessionRequest,
+    callback: (error: ServiceError | null, response: ReplaceConversationSessionResponse) => void,
+  ): ClientUnaryCall;
+  replaceConversationSession(
+    request: ReplaceConversationSessionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ReplaceConversationSessionResponse) => void,
+  ): ClientUnaryCall;
+  replaceConversationSession(
+    request: ReplaceConversationSessionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ReplaceConversationSessionResponse) => void,
   ): ClientUnaryCall;
 }
 

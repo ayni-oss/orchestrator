@@ -2,25 +2,37 @@
 
 The canonical package is `ayni.orchestrator.v1`. M1 records the intentional breaking baseline `workflow-m1-private-v1` in `BASELINE`.
 
-## Slice 2 production surface
+## Canonical production surface
 
 The trusted-loopback control-plane listener registers only:
 
 - `ProjectService.CreateWorkspace`;
 - `ProjectService.CreateProject`;
 - `ProjectService.ListWorkspaces` and `ProjectService.ListProjects` (bounded local discovery);
+- `ProjectService.GetAgentConfiguration`, `UpdateAgentConfiguration`, `GetTurnInputs` and `GetTurnContextInputs` (immutable shared configuration and scoped frozen inputs);
 - `ProjectConversationService.CreateConversation`;
 - `ProjectConversationService.SendMessage`;
 - `ProjectConversationService.GetConversationSnapshot`;
 - `ProjectConversationService.ListConversationHistory`;
 - `ProjectConversationService.WatchConversation`, with atomic snapshots and durable replay;
-- `ProjectConversationService.ListConversations` (bounded project-scoped discovery).
+- `ProjectConversationService.ListConversations` (bounded project-scoped discovery);
+- `ProjectConversationService.ListConversationSessions` and `ReplaceConversationSession` (scoped generations and idle replacement).
 
 `workflow.proto` defines server-issued command receipts, scheduling/dispatch/execution/presentation states, messages, turns, activities, bounded terminal summaries, snapshots, history records, updates, and watch frames. Removed workflow RPCs have no compatibility adapter.
 
 The listener binds to pod loopback. Canonical sources and generated bindings do not imply a public endpoint, custom-client contract, published browser API, or published SDK. The local contributor gateway adapts an allowlist of canonical RPCs through Rust ProtoJSON and SSE.
 
 ## Generation and compatibility
+
+All Orchestrator-owned interfaces remain v1 until alpha merges. Evolve this
+canonical package and `ayni.orchestrator.events.v1` in place; do not introduce
+parallel v2/v3 packages, event schemas or retained formats for new milestones.
+Configuration revision IDs and executor generations identify immutable input or
+ownership, not a protocol version. SQL migration ordinals and dependency pins
+also retain their separate meaning. See the
+[conversation execution contract](../docs/technical/architecture/conversation-execution.md)
+for the consolidated policy and M2 boundaries.
+
 
 Do not edit generated files. From the repository root:
 

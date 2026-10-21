@@ -145,6 +145,36 @@ async fn rpc(
             v1::ListWorkspacesRequest
         ),
         "ListProjects" => forward!(console.projects(), list_projects, v1::ListProjectsRequest),
+        "GetAgentConfiguration" => forward!(
+            console.projects(),
+            get_agent_configuration,
+            v1::GetAgentConfigurationRequest
+        ),
+        "UpdateAgentConfiguration" => forward!(
+            console.projects(),
+            update_agent_configuration,
+            v1::UpdateAgentConfigurationRequest
+        ),
+        "GetTurnContextInputs" => forward!(
+            console.projects(),
+            get_turn_context_inputs,
+            v1::GetTurnContextInputsRequest
+        ),
+        "GetTurnInputs" => forward!(
+            console.projects(),
+            get_turn_inputs,
+            v1::GetTurnInputsRequest
+        ),
+        "ListConversationSessions" => forward!(
+            console.conversations(),
+            list_conversation_sessions,
+            v1::ListConversationSessionsRequest
+        ),
+        "ReplaceConversationSession" => forward!(
+            console.conversations(),
+            replace_conversation_session,
+            v1::ReplaceConversationSessionRequest
+        ),
         "CreateConversation" => forward!(
             console.conversations(),
             create_conversation,

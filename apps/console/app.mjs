@@ -23,6 +23,8 @@ let discoveryGeneration = 0;
 let discoveryBusy = false;
 let chain = Promise.resolve();
 let queuedFrames = 0;
+let configuration;
+let currentSession;
 
 function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
 function clearError() { $('error').hidden = true; }
@@ -35,13 +37,15 @@ async function api(method, body) {
 function scopeBody() { return { workspaceId: scope.workspaceId, projectId: scope.projectId, conversationId: scope.conversationId }; }
 function controls() {
   for (const form of document.querySelectorAll('form')) {
-    const unavailable = !!pending || sending || discoveryBusy || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'send' && !scope.conversationId);
+    const unavailable = !!pending || sending || discoveryBusy || (form.id === 'agent-configuration' && (!configuration || configuration.workspaceId !== scope.workspaceId)) || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'send' && !scope.conversationId);
     for (const input of form.elements) input.disabled = unavailable;
   }
   $('pending').hidden = !pending;
   $('retry').disabled = sending;
   $('pending-description').textContent = pending ? `${pending.method}: retry uses the original content, scope, and command key.` : '';
   $('toggle-watch').disabled = !scope.conversationId;
+  $('refresh-session').disabled = !scope.conversationId || sending;
+  $('replace-session').disabled = !currentSession || !!pending || sending || discoveryBusy;
 }
 async function submit(method, body) {
   if (pending || sending) return;
@@ -59,6 +63,10 @@ async function retry() {
     $('receipt').textContent = result.receipt?.commandId || 'Accepted';
     if (command.method === 'SendMessage') {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';
+    } else if (command.method === 'UpdateAgentConfiguration') {
+      if (command.body.configuration.workspaceId === scope.workspaceId) await loadConfiguration();
+    } else if (command.method === 'ReplaceConversationSession') {
+      if (scopeKey(command.body) === scopeKey(scope)) await loadSession();
     } else {
       if (result.workspace) scope = { workspaceId: result.workspace.id };
       if (result.project) scope = { workspaceId: result.project.workspaceId, projectId: result.project.id };
@@ -67,7 +75,7 @@ async function retry() {
     }
   } catch (error) {
     // Canonical validation/scope/conflict rejections did not admit this command.
-    if (['InvalidArgument', 'NotFound', 'AlreadyExists'].includes(error.code)) { pending = null; store('pending', null); }
+    if (['InvalidArgument', 'NotFound', 'AlreadyExists', 'Aborted', 'FailedPrecondition'].includes(error.code)) { pending = null; store('pending', null); }
     showError(error);
   }
   finally { sending = false; controls(); }
@@ -107,6 +115,7 @@ async function loadDiscovery() {
   // A saved selection may be beyond the first page. Load only until it is found.
   while (scope.workspaceId && !$('workspace').querySelector(`option[value="${CSS.escape(scope.workspaceId)}"]`) && workspaceAfter) { $('workspace').lastElementChild.remove(); await workspacePage(workspaceAfter); }
   $('workspace').value = scope.workspaceId || '';
+  await loadConfiguration();
   if (scope.workspaceId) {
     await projectPage();
     while (scope.projectId && !$('project').querySelector(`option[value="${CSS.escape(scope.projectId)}"]`) && projectAfter) { $('project').lastElementChild.remove(); await projectPage(projectAfter); }
@@ -118,6 +127,28 @@ async function loadDiscovery() {
   }
   controls();
   } finally { discoveryBusy = false; controls(); for (const id of ['workspace', 'project', 'refresh']) $(id).disabled = false; }
+}
+async function loadConfiguration() {
+  configuration = undefined;
+  const workspaceId = scope.workspaceId;
+  $('configuration-status').textContent = workspaceId ? 'Loading configuration…' : 'Choose a workspace.';
+  $('agent-configuration').reset(); controls();
+  if (!workspaceId) return;
+  const result = await api('GetAgentConfiguration', { workspaceId });
+  if (scope.workspaceId !== workspaceId) return;
+  configuration = result.configuration;
+  for (const key of ['instructions', 'provider', 'model', 'maxInputTokens', 'maxOutputTokens', 'maxTotalTokens', 'idleTimeoutSeconds']) $('agent-configuration').elements.namedItem(key).value = configuration[key] || '';
+  $('configuration-status').textContent = `Revision ${configuration.revisionId} · interface v1`;
+  controls();
+}
+async function loadSession() {
+  const selected = scopeBody();
+  if (!selected.conversationId) return;
+  const result = await api('ListConversationSessions', selected);
+  if (scopeKey(selected) !== scopeKey(scope)) return;
+  currentSession = result.sessions?.[0];
+  $('session-state').textContent = currentSession ? `${currentSession.state} · generation ${currentSession.generation} · ${currentSession.id}` : 'Session starts with the first eligible message.';
+  controls();
 }
 function renderSnapshot(value) {
   if (snapshot && !newerOrEqual(value.conversationRevision, snapshot.conversationRevision)) return;
@@ -185,12 +216,20 @@ function openWatch(version) {
 async function selectConversation(id) {
   closeWatch(); generation++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
   scope.conversationId = id || ''; store('selection', scope);
+  currentSession = undefined; $('session-state').textContent = 'No session.';
   $('messages').replaceChildren(); $('history').replaceChildren(); $('activity').replaceChildren(); historyBefore = '0'; historySnapshotId = ''; historyHasMore = true; historyIds = new Set();
   $('title').textContent = id ? 'Opening conversation…' : 'A place to work things through.';
   $('turn-state').textContent = 'No conversation selected.'; $('older').hidden = true; $('connection').textContent = id ? 'Connecting…' : 'Choose a conversation'; $('toggle-watch').textContent = 'Disconnect';
   for (const button of $('conversations').children) button.setAttribute('aria-current', String(button.dataset.id === id));
-  showEmpty(); controls(); openWatch(generation);
+  showEmpty(); controls(); openWatch(generation); if (id) await loadSession();
 }
+$('agent-configuration').onsubmit = event => {
+  event.preventDefault();
+  const proposed = Object.fromEntries(new FormData(event.target));
+  submit('UpdateAgentConfiguration', { expectedRevisionId: configuration.revisionId, configuration: { ...proposed, workspaceId: scope.workspaceId } });
+};
+$('refresh-session').onclick = () => loadSession().catch(showError);
+$('replace-session').onclick = () => submit('ReplaceConversationSession', { ...scopeBody(), expectedGeneration: currentSession.generation });
 $('create-workspace').onsubmit = event => { event.preventDefault(); submit('CreateWorkspace', Object.fromEntries(new FormData(event.target))); };
 $('create-project').onsubmit = event => { event.preventDefault(); submit('CreateProject', { ...Object.fromEntries(new FormData(event.target)), workspaceId: scope.workspaceId }); };
 $('create-conversation').onsubmit = event => { event.preventDefault(); submit('CreateConversation', { ...Object.fromEntries(new FormData(event.target)), workspaceId: scope.workspaceId, projectId: scope.projectId }); };
