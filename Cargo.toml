@@ -71,7 +71,7 @@ opentelemetry-otlp = { version = "=0.33.1", default-features = false, features =
 tracing-opentelemetry = { version = "=0.34.0", default-features = false }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
-uuid = { version = "=1.26.1", features = ["serde", "v7"] }
+uuid = { version = "=1.26.1", features = ["serde", "v4", "v7"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -86,6 +86,79 @@ export interface ListProjectsResponse {
   nextAfterId: string;
 }
 
+/**
+ * Interface v1; revision_id identifies one immutable snapshot, not an API version.
+ * The same snapshot binds instructions, desired provider/model, budget and idle policy.
+ */
+export interface AgentConfiguration {
+  workspaceId: string;
+  revisionId: string;
+  instructions: string;
+  provider: string;
+  model: string;
+  maxInputTokens: string;
+  maxOutputTokens: string;
+  maxTotalTokens: string;
+  idleTimeoutSeconds: string;
+}
+
+export interface GetAgentConfigurationRequest {
+  workspaceId: string;
+  /** Empty selects the current revision. */
+  revisionId: string;
+}
+
+export interface GetAgentConfigurationResponse {
+  configuration?: AgentConfiguration | undefined;
+}
+
+export interface UpdateAgentConfigurationRequest {
+  idempotencyKey: string;
+  expectedRevisionId: string;
+  /** revision_id must be empty; the server assigns the immutable identity. */
+  configuration?: AgentConfiguration | undefined;
+}
+
+export interface UpdateAgentConfigurationResponse {
+  configuration?: AgentConfiguration | undefined;
+}
+
+export interface GetTurnInputsRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  turnId: string;
+}
+
+export interface GetTurnInputsResponse {
+  turnId: string;
+  configuration?: AgentConfiguration | undefined;
+}
+
+export interface GetTurnContextInputsRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  turnId: string;
+  afterOrdinal: string;
+  limit: number;
+}
+
+export interface ContextInputRecord {
+  messageId: string;
+  sequence: string;
+  role: string;
+  content: string;
+}
+
+export interface GetTurnContextInputsResponse {
+  manifestId: string;
+  digest: string;
+  recordCount: string;
+  records: ContextInputRecord[];
+  nextAfterOrdinal: string;
+}
+
 function createBaseWorkspace(): Workspace {
   return { id: "", displayName: "", createdAt: undefined, updatedAt: undefined, resourceVersion: "0" };
 }
@@ -1206,6 +1279,1244 @@ export const ListProjectsResponse: MessageFns<ListProjectsResponse> = {
   },
 };
 
+function createBaseAgentConfiguration(): AgentConfiguration {
+  return {
+    workspaceId: "",
+    revisionId: "",
+    instructions: "",
+    provider: "",
+    model: "",
+    maxInputTokens: "0",
+    maxOutputTokens: "0",
+    maxTotalTokens: "0",
+    idleTimeoutSeconds: "0",
+  };
+}
+
+export const AgentConfiguration: MessageFns<AgentConfiguration> = {
+  encode(message: AgentConfiguration, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.revisionId !== "") {
+      writer.uint32(18).string(message.revisionId);
+    }
+    if (message.instructions !== "") {
+      writer.uint32(26).string(message.instructions);
+    }
+    if (message.provider !== "") {
+      writer.uint32(34).string(message.provider);
+    }
+    if (message.model !== "") {
+      writer.uint32(42).string(message.model);
+    }
+    if (message.maxInputTokens !== "0") {
+      writer.uint32(48).uint64(message.maxInputTokens);
+    }
+    if (message.maxOutputTokens !== "0") {
+      writer.uint32(56).uint64(message.maxOutputTokens);
+    }
+    if (message.maxTotalTokens !== "0") {
+      writer.uint32(64).uint64(message.maxTotalTokens);
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      writer.uint32(72).uint64(message.idleTimeoutSeconds);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentConfiguration {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentConfiguration();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.revisionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.instructions = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.provider = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.maxInputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.maxOutputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.maxTotalTokens = reader.uint64().toString();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.idleTimeoutSeconds = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentConfiguration {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      revisionId: isSet(object.revisionId)
+        ? globalThis.String(object.revisionId)
+        : isSet(object.revision_id)
+        ? globalThis.String(object.revision_id)
+        : "",
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      maxInputTokens: isSet(object.maxInputTokens)
+        ? globalThis.String(object.maxInputTokens)
+        : isSet(object.max_input_tokens)
+        ? globalThis.String(object.max_input_tokens)
+        : "0",
+      maxOutputTokens: isSet(object.maxOutputTokens)
+        ? globalThis.String(object.maxOutputTokens)
+        : isSet(object.max_output_tokens)
+        ? globalThis.String(object.max_output_tokens)
+        : "0",
+      maxTotalTokens: isSet(object.maxTotalTokens)
+        ? globalThis.String(object.maxTotalTokens)
+        : isSet(object.max_total_tokens)
+        ? globalThis.String(object.max_total_tokens)
+        : "0",
+      idleTimeoutSeconds: isSet(object.idleTimeoutSeconds)
+        ? globalThis.String(object.idleTimeoutSeconds)
+        : isSet(object.idle_timeout_seconds)
+        ? globalThis.String(object.idle_timeout_seconds)
+        : "0",
+    };
+  },
+
+  toJSON(message: AgentConfiguration): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.revisionId !== "") {
+      obj.revisionId = message.revisionId;
+    }
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.provider !== "") {
+      obj.provider = message.provider;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.maxInputTokens !== "0") {
+      obj.maxInputTokens = message.maxInputTokens;
+    }
+    if (message.maxOutputTokens !== "0") {
+      obj.maxOutputTokens = message.maxOutputTokens;
+    }
+    if (message.maxTotalTokens !== "0") {
+      obj.maxTotalTokens = message.maxTotalTokens;
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentConfiguration>): AgentConfiguration {
+    return AgentConfiguration.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentConfiguration>): AgentConfiguration {
+    const message = createBaseAgentConfiguration();
+    message.workspaceId = object.workspaceId ?? "";
+    message.revisionId = object.revisionId ?? "";
+    message.instructions = object.instructions ?? "";
+    message.provider = object.provider ?? "";
+    message.model = object.model ?? "";
+    message.maxInputTokens = object.maxInputTokens ?? "0";
+    message.maxOutputTokens = object.maxOutputTokens ?? "0";
+    message.maxTotalTokens = object.maxTotalTokens ?? "0";
+    message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    return message;
+  },
+};
+
+function createBaseGetAgentConfigurationRequest(): GetAgentConfigurationRequest {
+  return { workspaceId: "", revisionId: "" };
+}
+
+export const GetAgentConfigurationRequest: MessageFns<GetAgentConfigurationRequest> = {
+  encode(message: GetAgentConfigurationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.revisionId !== "") {
+      writer.uint32(18).string(message.revisionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAgentConfigurationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetAgentConfigurationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.revisionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetAgentConfigurationRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      revisionId: isSet(object.revisionId)
+        ? globalThis.String(object.revisionId)
+        : isSet(object.revision_id)
+        ? globalThis.String(object.revision_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetAgentConfigurationRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.revisionId !== "") {
+      obj.revisionId = message.revisionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetAgentConfigurationRequest>): GetAgentConfigurationRequest {
+    return GetAgentConfigurationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetAgentConfigurationRequest>): GetAgentConfigurationRequest {
+    const message = createBaseGetAgentConfigurationRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.revisionId = object.revisionId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetAgentConfigurationResponse(): GetAgentConfigurationResponse {
+  return { configuration: undefined };
+}
+
+export const GetAgentConfigurationResponse: MessageFns<GetAgentConfigurationResponse> = {
+  encode(message: GetAgentConfigurationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.configuration !== undefined) {
+      AgentConfiguration.encode(message.configuration, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetAgentConfigurationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetAgentConfigurationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.configuration = AgentConfiguration.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetAgentConfigurationResponse {
+    return {
+      configuration: isSet(object.configuration) ? AgentConfiguration.fromJSON(object.configuration) : undefined,
+    };
+  },
+
+  toJSON(message: GetAgentConfigurationResponse): unknown {
+    const obj: any = {};
+    if (message.configuration !== undefined) {
+      obj.configuration = AgentConfiguration.toJSON(message.configuration);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetAgentConfigurationResponse>): GetAgentConfigurationResponse {
+    return GetAgentConfigurationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetAgentConfigurationResponse>): GetAgentConfigurationResponse {
+    const message = createBaseGetAgentConfigurationResponse();
+    message.configuration = (object.configuration !== undefined && object.configuration !== null)
+      ? AgentConfiguration.fromPartial(object.configuration)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateAgentConfigurationRequest(): UpdateAgentConfigurationRequest {
+  return { idempotencyKey: "", expectedRevisionId: "", configuration: undefined };
+}
+
+export const UpdateAgentConfigurationRequest: MessageFns<UpdateAgentConfigurationRequest> = {
+  encode(message: UpdateAgentConfigurationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.idempotencyKey !== "") {
+      writer.uint32(10).string(message.idempotencyKey);
+    }
+    if (message.expectedRevisionId !== "") {
+      writer.uint32(18).string(message.expectedRevisionId);
+    }
+    if (message.configuration !== undefined) {
+      AgentConfiguration.encode(message.configuration, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateAgentConfigurationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateAgentConfigurationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.expectedRevisionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.configuration = AgentConfiguration.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UpdateAgentConfigurationRequest {
+    return {
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      expectedRevisionId: isSet(object.expectedRevisionId)
+        ? globalThis.String(object.expectedRevisionId)
+        : isSet(object.expected_revision_id)
+        ? globalThis.String(object.expected_revision_id)
+        : "",
+      configuration: isSet(object.configuration) ? AgentConfiguration.fromJSON(object.configuration) : undefined,
+    };
+  },
+
+  toJSON(message: UpdateAgentConfigurationRequest): unknown {
+    const obj: any = {};
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.expectedRevisionId !== "") {
+      obj.expectedRevisionId = message.expectedRevisionId;
+    }
+    if (message.configuration !== undefined) {
+      obj.configuration = AgentConfiguration.toJSON(message.configuration);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<UpdateAgentConfigurationRequest>): UpdateAgentConfigurationRequest {
+    return UpdateAgentConfigurationRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<UpdateAgentConfigurationRequest>): UpdateAgentConfigurationRequest {
+    const message = createBaseUpdateAgentConfigurationRequest();
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.expectedRevisionId = object.expectedRevisionId ?? "";
+    message.configuration = (object.configuration !== undefined && object.configuration !== null)
+      ? AgentConfiguration.fromPartial(object.configuration)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateAgentConfigurationResponse(): UpdateAgentConfigurationResponse {
+  return { configuration: undefined };
+}
+
+export const UpdateAgentConfigurationResponse: MessageFns<UpdateAgentConfigurationResponse> = {
+  encode(message: UpdateAgentConfigurationResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.configuration !== undefined) {
+      AgentConfiguration.encode(message.configuration, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateAgentConfigurationResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateAgentConfigurationResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.configuration = AgentConfiguration.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): UpdateAgentConfigurationResponse {
+    return {
+      configuration: isSet(object.configuration) ? AgentConfiguration.fromJSON(object.configuration) : undefined,
+    };
+  },
+
+  toJSON(message: UpdateAgentConfigurationResponse): unknown {
+    const obj: any = {};
+    if (message.configuration !== undefined) {
+      obj.configuration = AgentConfiguration.toJSON(message.configuration);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<UpdateAgentConfigurationResponse>): UpdateAgentConfigurationResponse {
+    return UpdateAgentConfigurationResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<UpdateAgentConfigurationResponse>): UpdateAgentConfigurationResponse {
+    const message = createBaseUpdateAgentConfigurationResponse();
+    message.configuration = (object.configuration !== undefined && object.configuration !== null)
+      ? AgentConfiguration.fromPartial(object.configuration)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetTurnInputsRequest(): GetTurnInputsRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", turnId: "" };
+}
+
+export const GetTurnInputsRequest: MessageFns<GetTurnInputsRequest> = {
+  encode(message: GetTurnInputsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.turnId !== "") {
+      writer.uint32(34).string(message.turnId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTurnInputsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTurnInputsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTurnInputsRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetTurnInputsRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTurnInputsRequest>): GetTurnInputsRequest {
+    return GetTurnInputsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTurnInputsRequest>): GetTurnInputsRequest {
+    const message = createBaseGetTurnInputsRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.turnId = object.turnId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTurnInputsResponse(): GetTurnInputsResponse {
+  return { turnId: "", configuration: undefined };
+}
+
+export const GetTurnInputsResponse: MessageFns<GetTurnInputsResponse> = {
+  encode(message: GetTurnInputsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.turnId !== "") {
+      writer.uint32(10).string(message.turnId);
+    }
+    if (message.configuration !== undefined) {
+      AgentConfiguration.encode(message.configuration, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTurnInputsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTurnInputsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.configuration = AgentConfiguration.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTurnInputsResponse {
+    return {
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      configuration: isSet(object.configuration) ? AgentConfiguration.fromJSON(object.configuration) : undefined,
+    };
+  },
+
+  toJSON(message: GetTurnInputsResponse): unknown {
+    const obj: any = {};
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.configuration !== undefined) {
+      obj.configuration = AgentConfiguration.toJSON(message.configuration);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTurnInputsResponse>): GetTurnInputsResponse {
+    return GetTurnInputsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTurnInputsResponse>): GetTurnInputsResponse {
+    const message = createBaseGetTurnInputsResponse();
+    message.turnId = object.turnId ?? "";
+    message.configuration = (object.configuration !== undefined && object.configuration !== null)
+      ? AgentConfiguration.fromPartial(object.configuration)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetTurnContextInputsRequest(): GetTurnContextInputsRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", turnId: "", afterOrdinal: "0", limit: 0 };
+}
+
+export const GetTurnContextInputsRequest: MessageFns<GetTurnContextInputsRequest> = {
+  encode(message: GetTurnContextInputsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.turnId !== "") {
+      writer.uint32(34).string(message.turnId);
+    }
+    if (message.afterOrdinal !== "0") {
+      writer.uint32(40).uint64(message.afterOrdinal);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(48).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTurnContextInputsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTurnContextInputsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.turnId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.afterOrdinal = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTurnContextInputsRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      turnId: isSet(object.turnId)
+        ? globalThis.String(object.turnId)
+        : isSet(object.turn_id)
+        ? globalThis.String(object.turn_id)
+        : "",
+      afterOrdinal: isSet(object.afterOrdinal)
+        ? globalThis.String(object.afterOrdinal)
+        : isSet(object.after_ordinal)
+        ? globalThis.String(object.after_ordinal)
+        : "0",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: GetTurnContextInputsRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.turnId !== "") {
+      obj.turnId = message.turnId;
+    }
+    if (message.afterOrdinal !== "0") {
+      obj.afterOrdinal = message.afterOrdinal;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTurnContextInputsRequest>): GetTurnContextInputsRequest {
+    return GetTurnContextInputsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTurnContextInputsRequest>): GetTurnContextInputsRequest {
+    const message = createBaseGetTurnContextInputsRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.turnId = object.turnId ?? "";
+    message.afterOrdinal = object.afterOrdinal ?? "0";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseContextInputRecord(): ContextInputRecord {
+  return { messageId: "", sequence: "0", role: "", content: "" };
+}
+
+export const ContextInputRecord: MessageFns<ContextInputRecord> = {
+  encode(message: ContextInputRecord, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.messageId !== "") {
+      writer.uint32(10).string(message.messageId);
+    }
+    if (message.sequence !== "0") {
+      writer.uint32(16).uint64(message.sequence);
+    }
+    if (message.role !== "") {
+      writer.uint32(26).string(message.role);
+    }
+    if (message.content !== "") {
+      writer.uint32(34).string(message.content);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ContextInputRecord {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseContextInputRecord();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.messageId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.sequence = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.role = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.content = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ContextInputRecord {
+    return {
+      messageId: isSet(object.messageId)
+        ? globalThis.String(object.messageId)
+        : isSet(object.message_id)
+        ? globalThis.String(object.message_id)
+        : "",
+      sequence: isSet(object.sequence) ? globalThis.String(object.sequence) : "0",
+      role: isSet(object.role) ? globalThis.String(object.role) : "",
+      content: isSet(object.content) ? globalThis.String(object.content) : "",
+    };
+  },
+
+  toJSON(message: ContextInputRecord): unknown {
+    const obj: any = {};
+    if (message.messageId !== "") {
+      obj.messageId = message.messageId;
+    }
+    if (message.sequence !== "0") {
+      obj.sequence = message.sequence;
+    }
+    if (message.role !== "") {
+      obj.role = message.role;
+    }
+    if (message.content !== "") {
+      obj.content = message.content;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ContextInputRecord>): ContextInputRecord {
+    return ContextInputRecord.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ContextInputRecord>): ContextInputRecord {
+    const message = createBaseContextInputRecord();
+    message.messageId = object.messageId ?? "";
+    message.sequence = object.sequence ?? "0";
+    message.role = object.role ?? "";
+    message.content = object.content ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTurnContextInputsResponse(): GetTurnContextInputsResponse {
+  return { manifestId: "", digest: "", recordCount: "0", records: [], nextAfterOrdinal: "0" };
+}
+
+export const GetTurnContextInputsResponse: MessageFns<GetTurnContextInputsResponse> = {
+  encode(message: GetTurnContextInputsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.manifestId !== "") {
+      writer.uint32(10).string(message.manifestId);
+    }
+    if (message.digest !== "") {
+      writer.uint32(18).string(message.digest);
+    }
+    if (message.recordCount !== "0") {
+      writer.uint32(24).uint64(message.recordCount);
+    }
+    for (const v of message.records) {
+      ContextInputRecord.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.nextAfterOrdinal !== "0") {
+      writer.uint32(40).uint64(message.nextAfterOrdinal);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTurnContextInputsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTurnContextInputsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.manifestId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.digest = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.recordCount = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.records.push(ContextInputRecord.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.nextAfterOrdinal = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTurnContextInputsResponse {
+    return {
+      manifestId: isSet(object.manifestId)
+        ? globalThis.String(object.manifestId)
+        : isSet(object.manifest_id)
+        ? globalThis.String(object.manifest_id)
+        : "",
+      digest: isSet(object.digest) ? globalThis.String(object.digest) : "",
+      recordCount: isSet(object.recordCount)
+        ? globalThis.String(object.recordCount)
+        : isSet(object.record_count)
+        ? globalThis.String(object.record_count)
+        : "0",
+      records: globalThis.Array.isArray(object?.records)
+        ? object.records.map((e: any) => ContextInputRecord.fromJSON(e))
+        : [],
+      nextAfterOrdinal: isSet(object.nextAfterOrdinal)
+        ? globalThis.String(object.nextAfterOrdinal)
+        : isSet(object.next_after_ordinal)
+        ? globalThis.String(object.next_after_ordinal)
+        : "0",
+    };
+  },
+
+  toJSON(message: GetTurnContextInputsResponse): unknown {
+    const obj: any = {};
+    if (message.manifestId !== "") {
+      obj.manifestId = message.manifestId;
+    }
+    if (message.digest !== "") {
+      obj.digest = message.digest;
+    }
+    if (message.recordCount !== "0") {
+      obj.recordCount = message.recordCount;
+    }
+    if (message.records?.length) {
+      obj.records = message.records.map((e) => ContextInputRecord.toJSON(e));
+    }
+    if (message.nextAfterOrdinal !== "0") {
+      obj.nextAfterOrdinal = message.nextAfterOrdinal;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTurnContextInputsResponse>): GetTurnContextInputsResponse {
+    return GetTurnContextInputsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTurnContextInputsResponse>): GetTurnContextInputsResponse {
+    const message = createBaseGetTurnContextInputsResponse();
+    message.manifestId = object.manifestId ?? "";
+    message.digest = object.digest ?? "";
+    message.recordCount = object.recordCount ?? "0";
+    message.records = object.records?.map((e) => ContextInputRecord.fromPartial(e)) || [];
+    message.nextAfterOrdinal = object.nextAfterOrdinal ?? "0";
+    return message;
+  },
+};
+
 /** Minimal hierarchy commands and bounded discovery on the trusted operator listener. */
 export type ProjectServiceService = typeof ProjectServiceService;
 export const ProjectServiceService = {
@@ -1251,6 +2562,51 @@ export const ProjectServiceService = {
       Buffer.from(ListProjectsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListProjectsResponse => ListProjectsResponse.decode(value),
   },
+  getAgentConfiguration: {
+    path: "/ayni.orchestrator.v1.ProjectService/GetAgentConfiguration" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetAgentConfigurationRequest): Buffer =>
+      Buffer.from(GetAgentConfigurationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetAgentConfigurationRequest => GetAgentConfigurationRequest.decode(value),
+    responseSerialize: (value: GetAgentConfigurationResponse): Buffer =>
+      Buffer.from(GetAgentConfigurationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetAgentConfigurationResponse => GetAgentConfigurationResponse.decode(value),
+  },
+  updateAgentConfiguration: {
+    path: "/ayni.orchestrator.v1.ProjectService/UpdateAgentConfiguration" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateAgentConfigurationRequest): Buffer =>
+      Buffer.from(UpdateAgentConfigurationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateAgentConfigurationRequest =>
+      UpdateAgentConfigurationRequest.decode(value),
+    responseSerialize: (value: UpdateAgentConfigurationResponse): Buffer =>
+      Buffer.from(UpdateAgentConfigurationResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateAgentConfigurationResponse =>
+      UpdateAgentConfigurationResponse.decode(value),
+  },
+  getTurnInputs: {
+    path: "/ayni.orchestrator.v1.ProjectService/GetTurnInputs" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetTurnInputsRequest): Buffer => Buffer.from(GetTurnInputsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetTurnInputsRequest => GetTurnInputsRequest.decode(value),
+    responseSerialize: (value: GetTurnInputsResponse): Buffer =>
+      Buffer.from(GetTurnInputsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetTurnInputsResponse => GetTurnInputsResponse.decode(value),
+  },
+  getTurnContextInputs: {
+    path: "/ayni.orchestrator.v1.ProjectService/GetTurnContextInputs" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetTurnContextInputsRequest): Buffer =>
+      Buffer.from(GetTurnContextInputsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetTurnContextInputsRequest => GetTurnContextInputsRequest.decode(value),
+    responseSerialize: (value: GetTurnContextInputsResponse): Buffer =>
+      Buffer.from(GetTurnContextInputsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetTurnContextInputsResponse => GetTurnContextInputsResponse.decode(value),
+  },
 } as const;
 
 export interface ProjectServiceServer extends UntypedServiceImplementation {
@@ -1258,6 +2614,10 @@ export interface ProjectServiceServer extends UntypedServiceImplementation {
   createProject: handleUnaryCall<CreateProjectRequest, CreateProjectResponse>;
   listWorkspaces: handleUnaryCall<ListWorkspacesRequest, ListWorkspacesResponse>;
   listProjects: handleUnaryCall<ListProjectsRequest, ListProjectsResponse>;
+  getAgentConfiguration: handleUnaryCall<GetAgentConfigurationRequest, GetAgentConfigurationResponse>;
+  updateAgentConfiguration: handleUnaryCall<UpdateAgentConfigurationRequest, UpdateAgentConfigurationResponse>;
+  getTurnInputs: handleUnaryCall<GetTurnInputsRequest, GetTurnInputsResponse>;
+  getTurnContextInputs: handleUnaryCall<GetTurnContextInputsRequest, GetTurnContextInputsResponse>;
 }
 
 export interface ProjectServiceClient extends Client {
@@ -1320,6 +2680,66 @@ export interface ProjectServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListProjectsResponse) => void,
+  ): ClientUnaryCall;
+  getAgentConfiguration(
+    request: GetAgentConfigurationRequest,
+    callback: (error: ServiceError | null, response: GetAgentConfigurationResponse) => void,
+  ): ClientUnaryCall;
+  getAgentConfiguration(
+    request: GetAgentConfigurationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetAgentConfigurationResponse) => void,
+  ): ClientUnaryCall;
+  getAgentConfiguration(
+    request: GetAgentConfigurationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetAgentConfigurationResponse) => void,
+  ): ClientUnaryCall;
+  updateAgentConfiguration(
+    request: UpdateAgentConfigurationRequest,
+    callback: (error: ServiceError | null, response: UpdateAgentConfigurationResponse) => void,
+  ): ClientUnaryCall;
+  updateAgentConfiguration(
+    request: UpdateAgentConfigurationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateAgentConfigurationResponse) => void,
+  ): ClientUnaryCall;
+  updateAgentConfiguration(
+    request: UpdateAgentConfigurationRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateAgentConfigurationResponse) => void,
+  ): ClientUnaryCall;
+  getTurnInputs(
+    request: GetTurnInputsRequest,
+    callback: (error: ServiceError | null, response: GetTurnInputsResponse) => void,
+  ): ClientUnaryCall;
+  getTurnInputs(
+    request: GetTurnInputsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetTurnInputsResponse) => void,
+  ): ClientUnaryCall;
+  getTurnInputs(
+    request: GetTurnInputsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetTurnInputsResponse) => void,
+  ): ClientUnaryCall;
+  getTurnContextInputs(
+    request: GetTurnContextInputsRequest,
+    callback: (error: ServiceError | null, response: GetTurnContextInputsResponse) => void,
+  ): ClientUnaryCall;
+  getTurnContextInputs(
+    request: GetTurnContextInputsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetTurnContextInputsResponse) => void,
+  ): ClientUnaryCall;
+  getTurnContextInputs(
+    request: GetTurnContextInputsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetTurnContextInputsResponse) => void,
   ): ClientUnaryCall;
 }
 

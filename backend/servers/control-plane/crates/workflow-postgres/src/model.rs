@@ -313,3 +313,24 @@ pub struct OutboxRecord {
     pub subject: String,
     pub event_bytes: Vec<u8>,
 }
+
+/// One immutable complete workspace configuration, identified within interface v1.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentConfiguration {
+    pub workspace_id: String,
+    pub revision_id: String,
+    pub instructions: String,
+    pub provider: String,
+    pub model: String,
+    pub max_input_tokens: u64,
+    pub max_output_tokens: u64,
+    pub max_total_tokens: u64,
+    pub idle_timeout_seconds: u64,
+}
+
+/// Exact admission-time configuration; execution remains separately bound to the turn.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TurnInputs {
+    pub turn_id: String,
+    pub configuration: AgentConfiguration,
+}

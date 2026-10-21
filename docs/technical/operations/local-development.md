@@ -1,6 +1,7 @@
 # Local development
 
-The supported M1 Slice 3 stack runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted executor on Docker Desktop Kubernetes. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
+The supported stack builds on M1 Slice 3 and runs one control plane, PostgreSQL 17.6, an isolated authenticated NATS/JetStream server, and one retained scripted supervisor on Docker Desktop Kubernetes. The supervisor
+provisions isolated scripted workers in a dedicated session namespace. PostgreSQL is the workflow authority; JetStream is durable transport, and broker storage never implies executor ownership.
 
 ## Prerequisites
 
@@ -41,7 +42,7 @@ The pinned broker provisions three file-backed, `discard=new` streams:
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through version 7, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 9, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -58,8 +59,10 @@ Use Disconnect/Reconnect to exercise observation without cancelling admitted wor
 Refresh reloads the selected conversation from authoritative state. Open another
 tab to inspect the same conversation or select a different one.
 
-A failed command remains in that tab's pending panel. Retry sends its original
-key and exact content; do not clear browser storage to retry an ambiguous command.
+An ambiguous command remains in that tab's pending panel. Retry sends its
+original key and exact content; do not clear browser storage to retry it. A
+canonical capacity rejection confirms non-admission, clears pending state and
+allows a new submission after capacity is available.
 The gateway rejects foreign origins and hostnames, so use the printed numeric
 loopback URL. Stop with Ctrl-C. After a control-plane Pod restart, rerun the console
 command to forward the replacement Pod. `dev/ctl console 3001` selects another port.
@@ -74,14 +77,65 @@ pnpm console:acceptance
 The scenario creates a separate workspace and retains its accepted data. It checks
 scripted responses, refresh, two tabs, reconnect, a lost command response followed
 by reload/retry, conversation isolation, older history, content escaping and mobile
-layout. Browser-boundary fixtures additionally check typed cursor expiry and a
+layout. It also verifies configuration edits, frozen turn inputs, stale-tab
+conflicts, separate session identities and replacement retry/wake-up. A browser
+fixture verifies that a canonical capacity rejection clears pending state before
+legitimate resubmission; the PostgreSQL gate proves actual capacity behavior.
+Browser-boundary fixtures additionally check typed cursor expiry and a
 bounded slow-reader replay burst; real retention/backpressure is covered by the
 cumulative PostgreSQL gate. `CONSOLE_URL=http://127.0.0.1:3001` selects another local console port;
 `CONSOLE_EVIDENCE_DIRECTORY=/absolute/path` additionally saves a screenshot.
 
 The console is a trusted local contributor surface using the scripted executor;
-provider configuration and real agent sessions arrive in M2. See [console architecture](../architecture/contributor-console.md)
+shared configuration and isolated scripted session controls are available now.
+Paid provider calls and bounded tools remain later M2 scopes. See [console architecture](../architecture/contributor-console.md)
 for the transport decision, bounds, security and recovery semantics.
+
+## Shared configuration and session controls
+
+Open **Shared agent configuration** after selecting a workspace. Save workspace
+instructions, provider/model, token limits and idle timeout. These settings apply
+to subsequently admitted messages in every conversation in that workspace.
+Already admitted turns retain their original configuration revision, including
+queued turns. Configuration edits from a stale tab are rejected; refresh the
+resources and review the current instructions before saving again.
+
+`scripted`/`scripted` is the default provider/model. Selecting OpenAI requires an
+explicit model and records desired configuration only. Execution remains scripted;
+no provider credential or paid call is enabled. The fixed interface version is
+v1; displayed configuration revision IDs identify immutable content.
+
+Open **Session** in a conversation's activity panel and select **Refresh session**.
+The first eligible message creates a scoped session. Different conversations use
+separate retained ledgers and workload generations. After work and report
+handoffs settle, **Replace idle session** fences that generation. The next
+eligible message starts the next generation. An active session cannot be replaced
+through this control; restore its retained executor and ledger instead.
+
+The replacement button uses the server's advisory `can_replace` readiness flag.
+While the panel shows finishing accepted work, select **Refresh session** after
+the remaining outbox handoffs settle. The replacement command rechecks readiness
+transactionally, so a stale enabled button cannot bypass active-work protection.
+
+Context manifests retain at most 10,000 message references. Admission reserves
+space for possible predecessor responses before accepting a new input. A capacity
+rejection requires available room, an explicit new conversation or reviewed
+context policy; the runtime does not silently discard older inputs.
+
+Idle expiry preserves retained evidence. Restart within a valid generation
+adopts its retained identity and storage. Work after expiry or replacement starts
+the next generation with separate storage. Replacing a generation preserves accepted
+conversation history; it does not authorize deleting ledger volumes or retrying
+uncertain future provider calls. See [session authority](../architecture/conversation-execution.md#isolated-session-authority)
+for the full lifecycle contract.
+
+The supervisor provisions workers in `<workflow-namespace>-sessions`, for example
+`ayni-orchestrator-dev-sessions`. The parent namespace must be at most 54
+characters. Each generation has a distinct 512 MiB result-ledger PVC and immutable
+bearer Secret. A worker mounts neither broker/database credentials nor a Kubernetes
+API token. Its request listener checks the bearer and complete parent scope.
+NetworkPolicy declares supervisor-only ingress and denied worker egress;
+enforcement depends on the local cluster network plugin.
 
 ## Happy-path diagnostic
 
@@ -148,7 +202,18 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migration version 7, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 9, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+
+After browser acceptance creates at least two conversations, inspect the deployed
+session boundary without reading Secret data:
+
+```sh
+python3 scripts/ci/check-session-topology.py --context docker-desktop --namespace ayni-orchestrator-dev
+```
+
+The check verifies retained namespace ownership, full worker scope, distinct
+per-generation PVCs, token mount boundaries and supervisor RBAC. It does not
+establish NetworkPolicy enforcement by the cluster network plugin.
 
 ## Cleanup
 
@@ -156,7 +221,9 @@ The PostgreSQL gate covers migration version 7, signed claim/terminal acceptance
 dev/ctl cleanup
 ```
 
-Cleanup removes the Helm release while preserving PostgreSQL, JetStream, executor-ledger PVCs, and immutable Secrets. A later deploy reuses them. Do not roll back while a command/report/decision handoff is unresolved; repair forward or intentionally reset the disposable namespace.
+Cleanup stops the Helm release and supervisor, then removes owned session Pods.
+It preserves PostgreSQL, JetStream, supervisor/session ledger PVCs, immutable
+Secrets and the owned session namespace. A later deploy reuses them. Do not roll back while a command/report/decision handoff is unresolved; repair forward or intentionally reset the disposable namespace.
 
 Permanent deletion requires the exact local namespace:
 
@@ -164,4 +231,5 @@ Permanent deletion requires the exact local namespace:
 dev/ctl purge ayni-orchestrator-dev
 ```
 
-The purge command refuses absent, unlabelled, or non-local namespaces. It deletes the namespace, all Secrets, and all three retained stores.
+The purge command refuses absent, unlabelled, or non-local namespaces. It deletes the exact parent namespace and its ownership-labelled session
+namespace, including all Secrets and retained workflow/session stores.

@@ -17,10 +17,26 @@ python3 - <<'PY'
 from pathlib import Path
 import re
 
+# Alpha has one owned interface generation. Inspect every namespace, not only
+# files compiled by the workflow server; external google protobufs are excluded.
+owned = Path("proto/ayni")
+for source_path in owned.rglob("*.proto"):
+    source = source_path.read_text()
+    packages = re.findall(r"^\s*package\s+([\w.]+)\s*;", source, re.M)
+    if len(packages) != 1 or not packages[0].startswith("ayni."):
+        raise SystemExit(f"missing or unexpected owned package in {source_path}")
+    version_parts = [part for part in packages[0].split(".") if re.fullmatch(r"v[0-9]+", part)]
+    path_versions = [part for part in source_path.parts if re.fullmatch(r"v[0-9]+", part)]
+    if version_parts != ["v1"] or path_versions != ["v1"]:
+        raise SystemExit(f"alpha owned interfaces must remain v1: {source_path}: {packages[0]}")
+for directory in owned.rglob("*"):
+    if directory.is_dir() and re.fullmatch(r"v[0-9]+", directory.name) and directory.name != "v1":
+        raise SystemExit(f"parallel owned interface directory is forbidden during alpha: {directory}")
+
 root = Path("proto/ayni/orchestrator/v1")
 expected = {
     "projects.proto": {
-        "ProjectService": ["CreateWorkspace", "CreateProject", "ListWorkspaces", "ListProjects"],
+        "ProjectService": ["CreateWorkspace", "CreateProject", "ListWorkspaces", "ListProjects", "GetAgentConfiguration", "UpdateAgentConfiguration", "GetTurnInputs", "GetTurnContextInputs"],
     },
     "project_conversations.proto": {
         "ProjectConversationService": [
@@ -29,7 +45,7 @@ expected = {
             "GetConversationSnapshot",
             "ListConversationHistory",
             "WatchConversation",
-            "ListConversations",
+            "ListConversations", "ListConversationSessions", "ReplaceConversationSession",
         ],
     },
 }

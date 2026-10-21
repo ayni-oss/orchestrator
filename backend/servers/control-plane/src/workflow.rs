@@ -87,6 +87,116 @@ pub async fn serve(
 
 #[tonic::async_trait]
 impl v1::project_service_server::ProjectService for WorkflowGrpc {
+    async fn get_turn_context_inputs(
+        &self,
+        request: Request<v1::GetTurnContextInputsRequest>,
+    ) -> Result<Response<v1::GetTurnContextInputsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let page = self
+            .store
+            .get_turn_context_inputs(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+                &value.turn_id,
+                value.after_ordinal,
+                value.limit,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::GetTurnContextInputsResponse {
+            manifest_id: page.manifest.id,
+            digest: page.manifest.digest,
+            record_count: page.manifest.record_count,
+            records: page
+                .records
+                .into_iter()
+                .map(|r| v1::ContextInputRecord {
+                    message_id: r.message_id,
+                    sequence: r.sequence,
+                    role: r.role,
+                    content: r.content,
+                })
+                .collect(),
+            next_after_ordinal: page.next_after_ordinal,
+        }))
+    }
+
+    async fn get_agent_configuration(
+        &self,
+        request: Request<v1::GetAgentConfigurationRequest>,
+    ) -> Result<Response<v1::GetAgentConfigurationResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let result = self
+            .store
+            .get_agent_configuration(&value.workspace_id, &value.revision_id)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::GetAgentConfigurationResponse {
+            configuration: Some(agent_configuration(result)),
+        }))
+    }
+    async fn update_agent_configuration(
+        &self,
+        request: Request<v1::UpdateAgentConfigurationRequest>,
+    ) -> Result<Response<v1::UpdateAgentConfigurationResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let proposed = value.configuration.ok_or_else(|| {
+            context.status(
+                Code::InvalidArgument,
+                v1::ErrorReason::InvalidInput,
+                "configuration is required",
+            )
+        })?;
+        let proposed = model::AgentConfiguration {
+            workspace_id: proposed.workspace_id,
+            revision_id: proposed.revision_id,
+            instructions: proposed.instructions,
+            provider: proposed.provider,
+            model: proposed.model,
+            max_input_tokens: proposed.max_input_tokens,
+            max_output_tokens: proposed.max_output_tokens,
+            max_total_tokens: proposed.max_total_tokens,
+            idle_timeout_seconds: proposed.idle_timeout_seconds,
+        };
+        let result = self
+            .store
+            .update_agent_configuration(
+                &value.idempotency_key,
+                &value.expected_revision_id,
+                &proposed,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::UpdateAgentConfigurationResponse {
+            configuration: Some(agent_configuration(result)),
+        }))
+    }
+    async fn get_turn_inputs(
+        &self,
+        request: Request<v1::GetTurnInputsRequest>,
+    ) -> Result<Response<v1::GetTurnInputsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let result = self
+            .store
+            .get_turn_inputs(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+                &value.turn_id,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::GetTurnInputsResponse {
+            turn_id: result.turn_id,
+            configuration: Some(agent_configuration(result.configuration)),
+        }))
+    }
+
     async fn list_workspaces(
         &self,
         request: Request<v1::ListWorkspacesRequest>,
@@ -167,6 +277,48 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn list_conversation_sessions(
+        &self,
+        request: Request<v1::ListConversationSessionsRequest>,
+    ) -> Result<Response<v1::ListConversationSessionsResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let sessions = self
+            .store
+            .conversation_sessions(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ListConversationSessionsResponse {
+            sessions: sessions.into_iter().map(session).collect(),
+        }))
+    }
+
+    async fn replace_conversation_session(
+        &self,
+        request: Request<v1::ReplaceConversationSessionRequest>,
+    ) -> Result<Response<v1::ReplaceConversationSessionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let replaced = self
+            .store
+            .replace_idle_session(
+                &value.workspace_id,
+                &value.project_id,
+                &value.conversation_id,
+                value.expected_generation,
+                &value.idempotency_key,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ReplaceConversationSessionResponse {
+            session: Some(session(replaced)),
+        }))
+    }
+
     async fn list_conversations(
         &self,
         request: Request<v1::ListConversationsRequest>,
@@ -431,6 +583,11 @@ impl RequestContext {
                 v1::ErrorReason::FailedPrecondition,
                 "retained workflow state is invalid",
             ),
+            StoreError::ConfigurationRevisionConflict => self.status(
+                Code::Aborted,
+                v1::ErrorReason::FailedPrecondition,
+                "configuration revision changed",
+            ),
             StoreError::Database(_) => self.status(
                 Code::Unavailable,
                 v1::ErrorReason::Internal,
@@ -493,6 +650,21 @@ fn project(value: model::Project) -> v1::Project {
         resource_version: value.resource_version,
         workspace_id: value.workspace_id,
         goal: value.goal,
+    }
+}
+
+fn session(
+    value: ayni_orchestrator_workflow_postgres::store::sessions::Session,
+) -> v1::ConversationSession {
+    v1::ConversationSession {
+        id: value.id,
+        workspace_id: value.workspace_id,
+        project_id: value.project_id,
+        conversation_id: value.conversation_id,
+        generation: value.generation,
+        state: value.state,
+        idle_timeout_seconds: value.idle_timeout_seconds,
+        can_replace: value.can_replace,
     }
 }
 
@@ -616,6 +788,8 @@ fn activity(value: model::Activity) -> v1::Activity {
             "dispatch" => v1::ActivityStage::Dispatch,
             "execution" => v1::ActivityStage::Execution,
             "terminal" => v1::ActivityStage::Terminal,
+            "provisioning" => v1::ActivityStage::Provisioning,
+            "agent_wakeup" => v1::ActivityStage::AgentWakeup,
             _ => v1::ActivityStage::Unspecified,
         } as i32,
         presentation_state: presentation(value.presentation_state),
@@ -686,6 +860,7 @@ fn waiting_on(value: &str) -> i32 {
         "predecessor" => v1::WaitingOn::Predecessor,
         "delivery" => v1::WaitingOn::Delivery,
         "executor" => v1::WaitingOn::Executor,
+        "provisioning" => v1::WaitingOn::Provisioning,
         _ => v1::WaitingOn::Unspecified,
     }) as i32
 }
@@ -733,88 +908,18 @@ fn update(value: ConversationUpdate) -> Result<v1::ConversationUpdate, StoreErro
 }
 
 #[cfg(test)]
-mod observation_status_tests {
-    use super::*;
+mod observation_status_tests;
 
-    #[test]
-    fn accepted_receipt_handoff_meets_owned_latency_bound() {
-        let context = RequestContext::new(&Request::new(()));
-        let mut samples = Vec::new();
-        for index in 0..105 {
-            // Bounded persistence fake yields an already-committed receipt. The
-            // owned adapter converts it and hands the response to Tonic directly.
-            let accepted = model::CommandReceipt {
-                command_id: "bounded-command".into(),
-                kind: ReceiptKind::SendMessage,
-                workspace_id: "bounded-workspace".into(),
-                project_id: "bounded-project".into(),
-                conversation_id: "bounded-conversation".into(),
-                message_id: "bounded-message".into(),
-                turn_id: "bounded-turn".into(),
-                accepted_at: model::Timestamp {
-                    seconds: 0,
-                    nanos: 0,
-                },
-                conversation_revision: 1,
-                resume_cursor: "bounded-cursor".into(),
-                presentation_state: PresentationState::Accepted,
-            };
-            let committed = std::time::Instant::now();
-            let response = context.response(v1::SendMessageResponse {
-                receipt: Some(receipt(accepted)),
-            });
-            assert_eq!(
-                response
-                    .get_ref()
-                    .receipt
-                    .as_ref()
-                    .map(|value| value.conversation_revision),
-                Some(1)
-            );
-            if index >= 5 {
-                samples.push(committed.elapsed());
-            }
-        }
-        samples.sort();
-        assert_eq!(samples.len(), 100);
-        assert!(samples[94] <= std::time::Duration::from_millis(50));
-        println!(
-            "owned-receipt-handoff: samples=100 p95-us={} max-us={}",
-            samples[94].as_micros(),
-            samples[99].as_micros()
-        );
-    }
-
-    #[test]
-    fn cursor_expiry_and_backpressure_keep_machine_readable_reasons() {
-        let context = RequestContext::new(&Request::new(()));
-        for (error, code, reason) in [
-            (
-                StoreError::WatchCursorExpired,
-                Code::FailedPrecondition,
-                v1::ErrorReason::WatchCursorExpired,
-            ),
-            (
-                StoreError::Capacity("watch_buffer"),
-                Code::ResourceExhausted,
-                v1::ErrorReason::BoundExceeded,
-            ),
-        ] {
-            let status = context.store(&error);
-            assert_eq!(status.code(), code);
-            let rich = RichStatus::decode(status.details()).unwrap_or_default();
-            let details = rich
-                .details
-                .first()
-                .and_then(|detail| v1::ErrorDetail::decode(detail.value.as_slice()).ok());
-            assert_eq!(
-                details.as_ref().map(|detail| detail.reason),
-                Some(reason as i32)
-            );
-            assert_eq!(
-                details.and_then(|detail| detail.request_id),
-                Some(context.request_id.clone())
-            );
-        }
+fn agent_configuration(value: model::AgentConfiguration) -> v1::AgentConfiguration {
+    v1::AgentConfiguration {
+        workspace_id: value.workspace_id,
+        revision_id: value.revision_id,
+        instructions: value.instructions,
+        provider: value.provider,
+        model: value.model,
+        max_input_tokens: value.max_input_tokens,
+        max_output_tokens: value.max_output_tokens,
+        max_total_tokens: value.max_total_tokens,
+        idle_timeout_seconds: value.idle_timeout_seconds,
     }
 }

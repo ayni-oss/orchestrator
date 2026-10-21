@@ -11,6 +11,10 @@ service ProjectService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc GetAgentConfiguration(GetAgentConfigurationRequest) returns (GetAgentConfigurationResponse);
+  rpc UpdateAgentConfiguration(UpdateAgentConfigurationRequest) returns (UpdateAgentConfigurationResponse);
+  rpc GetTurnInputs(GetTurnInputsRequest) returns (GetTurnInputsResponse);
+  rpc GetTurnContextInputs(GetTurnContextInputsRequest) returns (GetTurnContextInputsResponse);
 }
 
 message Workspace {
@@ -83,4 +87,67 @@ message ListProjectsRequest {
 message ListProjectsResponse {
   repeated Project projects = 1;
   string next_after_id = 2;
+}
+
+// Interface v1; revision_id identifies one immutable snapshot, not an API version.
+// The same snapshot binds instructions, desired provider/model, budget and idle policy.
+message AgentConfiguration {
+  string workspace_id = 1;
+  string revision_id = 2;
+  string instructions = 3;
+  string provider = 4;
+  string model = 5;
+  uint64 max_input_tokens = 6;
+  uint64 max_output_tokens = 7;
+  uint64 max_total_tokens = 8;
+  uint64 idle_timeout_seconds = 9;
+}
+message GetAgentConfigurationRequest {
+  string workspace_id = 1;
+  // Empty selects the current revision.
+  string revision_id = 2;
+}
+message GetAgentConfigurationResponse {
+  AgentConfiguration configuration = 1;
+}
+message UpdateAgentConfigurationRequest {
+  string idempotency_key = 1;
+  string expected_revision_id = 2;
+  // revision_id must be empty; the server assigns the immutable identity.
+  AgentConfiguration configuration = 3;
+}
+message UpdateAgentConfigurationResponse {
+  AgentConfiguration configuration = 1;
+}
+message GetTurnInputsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string turn_id = 4;
+}
+message GetTurnInputsResponse {
+  string turn_id = 1;
+  AgentConfiguration configuration = 2;
+}
+
+message GetTurnContextInputsRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string turn_id = 4;
+  uint64 after_ordinal = 5;
+  uint32 limit = 6;
+}
+message ContextInputRecord {
+  string message_id = 1;
+  uint64 sequence = 2;
+  string role = 3;
+  string content = 4;
+}
+message GetTurnContextInputsResponse {
+  string manifest_id = 1;
+  string digest = 2;
+  uint64 record_count = 3;
+  repeated ContextInputRecord records = 4;
+  uint64 next_after_ordinal = 5;
 }

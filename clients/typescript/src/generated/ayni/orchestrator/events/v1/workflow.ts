@@ -111,11 +111,21 @@ export interface ConversationContextRecord {
   content: string;
 }
 
+/** Application-issued workload identity; generations are fencing counters, not API versions. */
+export interface SessionExecutionScope {
+  sessionId: string;
+  generation: string;
+  idleTimeoutSeconds: string;
+}
+
 export interface ConversationTurnRequested {
   binding?: ConversationTurnBinding | undefined;
   inputMessageId: string;
   inputContent: string;
   context: ConversationContextRecord[];
+  session?: SessionExecutionScope | undefined;
+  frozenConfiguration?: AgentExecutionConfiguration | undefined;
+  contextManifest?: ConversationContextManifest | undefined;
 }
 
 export interface ConversationTurnReport {
@@ -150,6 +160,26 @@ export interface ConversationReportDecision {
   projectId: string;
   conversationId: string;
   turnId: string;
+}
+
+/** Exact immutable admission inputs; desired provider is not execution authority. */
+export interface AgentExecutionConfiguration {
+  revisionId: string;
+  instructions: string;
+  provider: string;
+  model: string;
+  maxInputTokens: string;
+  maxOutputTokens: string;
+  maxTotalTokens: string;
+  idleTimeoutSeconds: string;
+}
+
+/** Immutable eligibility-time history reference. Inline records may be only a tail. */
+export interface ConversationContextManifest {
+  id: string;
+  digest: string;
+  recordCount: string;
+  inlineComplete: boolean;
 }
 
 function createBaseConversationTurnBinding(): ConversationTurnBinding {
@@ -537,8 +567,125 @@ export const ConversationContextRecord: MessageFns<ConversationContextRecord> = 
   },
 };
 
+function createBaseSessionExecutionScope(): SessionExecutionScope {
+  return { sessionId: "", generation: "0", idleTimeoutSeconds: "0" };
+}
+
+export const SessionExecutionScope: MessageFns<SessionExecutionScope> = {
+  encode(message: SessionExecutionScope, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sessionId !== "") {
+      writer.uint32(10).string(message.sessionId);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(16).uint64(message.generation);
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      writer.uint32(24).uint64(message.idleTimeoutSeconds);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SessionExecutionScope {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSessionExecutionScope();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.sessionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.idleTimeoutSeconds = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): SessionExecutionScope {
+    return {
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      idleTimeoutSeconds: isSet(object.idleTimeoutSeconds)
+        ? globalThis.String(object.idleTimeoutSeconds)
+        : isSet(object.idle_timeout_seconds)
+        ? globalThis.String(object.idle_timeout_seconds)
+        : "0",
+    };
+  },
+
+  toJSON(message: SessionExecutionScope): unknown {
+    const obj: any = {};
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SessionExecutionScope>): SessionExecutionScope {
+    return SessionExecutionScope.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SessionExecutionScope>): SessionExecutionScope {
+    const message = createBaseSessionExecutionScope();
+    message.sessionId = object.sessionId ?? "";
+    message.generation = object.generation ?? "0";
+    message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    return message;
+  },
+};
+
 function createBaseConversationTurnRequested(): ConversationTurnRequested {
-  return { binding: undefined, inputMessageId: "", inputContent: "", context: [] };
+  return {
+    binding: undefined,
+    inputMessageId: "",
+    inputContent: "",
+    context: [],
+    session: undefined,
+    frozenConfiguration: undefined,
+    contextManifest: undefined,
+  };
 }
 
 export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = {
@@ -554,6 +701,15 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
     }
     for (const v of message.context) {
       ConversationContextRecord.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.session !== undefined) {
+      SessionExecutionScope.encode(message.session, writer.uint32(42).fork()).join();
+    }
+    if (message.frozenConfiguration !== undefined) {
+      AgentExecutionConfiguration.encode(message.frozenConfiguration, writer.uint32(50).fork()).join();
+    }
+    if (message.contextManifest !== undefined) {
+      ConversationContextManifest.encode(message.contextManifest, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -603,6 +759,30 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
             message.context.push(ConversationContextRecord.decode(reader, reader.uint32()));
             continue;
           }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.session = SessionExecutionScope.decode(reader, reader.uint32());
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.frozenConfiguration = AgentExecutionConfiguration.decode(reader, reader.uint32());
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.contextManifest = ConversationContextManifest.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -631,6 +811,17 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
       context: globalThis.Array.isArray(object?.context)
         ? object.context.map((e: any) => ConversationContextRecord.fromJSON(e))
         : [],
+      session: isSet(object.session) ? SessionExecutionScope.fromJSON(object.session) : undefined,
+      frozenConfiguration: isSet(object.frozenConfiguration)
+        ? AgentExecutionConfiguration.fromJSON(object.frozenConfiguration)
+        : isSet(object.frozen_configuration)
+        ? AgentExecutionConfiguration.fromJSON(object.frozen_configuration)
+        : undefined,
+      contextManifest: isSet(object.contextManifest)
+        ? ConversationContextManifest.fromJSON(object.contextManifest)
+        : isSet(object.context_manifest)
+        ? ConversationContextManifest.fromJSON(object.context_manifest)
+        : undefined,
     };
   },
 
@@ -648,6 +839,15 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
     if (message.context?.length) {
       obj.context = message.context.map((e) => ConversationContextRecord.toJSON(e));
     }
+    if (message.session !== undefined) {
+      obj.session = SessionExecutionScope.toJSON(message.session);
+    }
+    if (message.frozenConfiguration !== undefined) {
+      obj.frozenConfiguration = AgentExecutionConfiguration.toJSON(message.frozenConfiguration);
+    }
+    if (message.contextManifest !== undefined) {
+      obj.contextManifest = ConversationContextManifest.toJSON(message.contextManifest);
+    }
     return obj;
   },
 
@@ -662,6 +862,15 @@ export const ConversationTurnRequested: MessageFns<ConversationTurnRequested> = 
     message.inputMessageId = object.inputMessageId ?? "";
     message.inputContent = object.inputContent ?? "";
     message.context = object.context?.map((e) => ConversationContextRecord.fromPartial(e)) || [];
+    message.session = (object.session !== undefined && object.session !== null)
+      ? SessionExecutionScope.fromPartial(object.session)
+      : undefined;
+    message.frozenConfiguration = (object.frozenConfiguration !== undefined && object.frozenConfiguration !== null)
+      ? AgentExecutionConfiguration.fromPartial(object.frozenConfiguration)
+      : undefined;
+    message.contextManifest = (object.contextManifest !== undefined && object.contextManifest !== null)
+      ? ConversationContextManifest.fromPartial(object.contextManifest)
+      : undefined;
     return message;
   },
 };
@@ -1239,6 +1448,341 @@ export const ConversationReportDecision: MessageFns<ConversationReportDecision> 
     message.projectId = object.projectId ?? "";
     message.conversationId = object.conversationId ?? "";
     message.turnId = object.turnId ?? "";
+    return message;
+  },
+};
+
+function createBaseAgentExecutionConfiguration(): AgentExecutionConfiguration {
+  return {
+    revisionId: "",
+    instructions: "",
+    provider: "",
+    model: "",
+    maxInputTokens: "0",
+    maxOutputTokens: "0",
+    maxTotalTokens: "0",
+    idleTimeoutSeconds: "0",
+  };
+}
+
+export const AgentExecutionConfiguration: MessageFns<AgentExecutionConfiguration> = {
+  encode(message: AgentExecutionConfiguration, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.revisionId !== "") {
+      writer.uint32(10).string(message.revisionId);
+    }
+    if (message.instructions !== "") {
+      writer.uint32(18).string(message.instructions);
+    }
+    if (message.provider !== "") {
+      writer.uint32(26).string(message.provider);
+    }
+    if (message.model !== "") {
+      writer.uint32(34).string(message.model);
+    }
+    if (message.maxInputTokens !== "0") {
+      writer.uint32(40).uint64(message.maxInputTokens);
+    }
+    if (message.maxOutputTokens !== "0") {
+      writer.uint32(48).uint64(message.maxOutputTokens);
+    }
+    if (message.maxTotalTokens !== "0") {
+      writer.uint32(56).uint64(message.maxTotalTokens);
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      writer.uint32(64).uint64(message.idleTimeoutSeconds);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentExecutionConfiguration {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentExecutionConfiguration();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.revisionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.instructions = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.provider = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.maxInputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.maxOutputTokens = reader.uint64().toString();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.maxTotalTokens = reader.uint64().toString();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.idleTimeoutSeconds = reader.uint64().toString();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentExecutionConfiguration {
+    return {
+      revisionId: isSet(object.revisionId)
+        ? globalThis.String(object.revisionId)
+        : isSet(object.revision_id)
+        ? globalThis.String(object.revision_id)
+        : "",
+      instructions: isSet(object.instructions) ? globalThis.String(object.instructions) : "",
+      provider: isSet(object.provider) ? globalThis.String(object.provider) : "",
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      maxInputTokens: isSet(object.maxInputTokens)
+        ? globalThis.String(object.maxInputTokens)
+        : isSet(object.max_input_tokens)
+        ? globalThis.String(object.max_input_tokens)
+        : "0",
+      maxOutputTokens: isSet(object.maxOutputTokens)
+        ? globalThis.String(object.maxOutputTokens)
+        : isSet(object.max_output_tokens)
+        ? globalThis.String(object.max_output_tokens)
+        : "0",
+      maxTotalTokens: isSet(object.maxTotalTokens)
+        ? globalThis.String(object.maxTotalTokens)
+        : isSet(object.max_total_tokens)
+        ? globalThis.String(object.max_total_tokens)
+        : "0",
+      idleTimeoutSeconds: isSet(object.idleTimeoutSeconds)
+        ? globalThis.String(object.idleTimeoutSeconds)
+        : isSet(object.idle_timeout_seconds)
+        ? globalThis.String(object.idle_timeout_seconds)
+        : "0",
+    };
+  },
+
+  toJSON(message: AgentExecutionConfiguration): unknown {
+    const obj: any = {};
+    if (message.revisionId !== "") {
+      obj.revisionId = message.revisionId;
+    }
+    if (message.instructions !== "") {
+      obj.instructions = message.instructions;
+    }
+    if (message.provider !== "") {
+      obj.provider = message.provider;
+    }
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.maxInputTokens !== "0") {
+      obj.maxInputTokens = message.maxInputTokens;
+    }
+    if (message.maxOutputTokens !== "0") {
+      obj.maxOutputTokens = message.maxOutputTokens;
+    }
+    if (message.maxTotalTokens !== "0") {
+      obj.maxTotalTokens = message.maxTotalTokens;
+    }
+    if (message.idleTimeoutSeconds !== "0") {
+      obj.idleTimeoutSeconds = message.idleTimeoutSeconds;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentExecutionConfiguration>): AgentExecutionConfiguration {
+    return AgentExecutionConfiguration.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentExecutionConfiguration>): AgentExecutionConfiguration {
+    const message = createBaseAgentExecutionConfiguration();
+    message.revisionId = object.revisionId ?? "";
+    message.instructions = object.instructions ?? "";
+    message.provider = object.provider ?? "";
+    message.model = object.model ?? "";
+    message.maxInputTokens = object.maxInputTokens ?? "0";
+    message.maxOutputTokens = object.maxOutputTokens ?? "0";
+    message.maxTotalTokens = object.maxTotalTokens ?? "0";
+    message.idleTimeoutSeconds = object.idleTimeoutSeconds ?? "0";
+    return message;
+  },
+};
+
+function createBaseConversationContextManifest(): ConversationContextManifest {
+  return { id: "", digest: "", recordCount: "0", inlineComplete: false };
+}
+
+export const ConversationContextManifest: MessageFns<ConversationContextManifest> = {
+  encode(message: ConversationContextManifest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.digest !== "") {
+      writer.uint32(18).string(message.digest);
+    }
+    if (message.recordCount !== "0") {
+      writer.uint32(24).uint64(message.recordCount);
+    }
+    if (message.inlineComplete !== false) {
+      writer.uint32(32).bool(message.inlineComplete);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConversationContextManifest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseConversationContextManifest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.digest = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.recordCount = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.inlineComplete = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ConversationContextManifest {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      digest: isSet(object.digest) ? globalThis.String(object.digest) : "",
+      recordCount: isSet(object.recordCount)
+        ? globalThis.String(object.recordCount)
+        : isSet(object.record_count)
+        ? globalThis.String(object.record_count)
+        : "0",
+      inlineComplete: isSet(object.inlineComplete)
+        ? globalThis.Boolean(object.inlineComplete)
+        : isSet(object.inline_complete)
+        ? globalThis.Boolean(object.inline_complete)
+        : false,
+    };
+  },
+
+  toJSON(message: ConversationContextManifest): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.digest !== "") {
+      obj.digest = message.digest;
+    }
+    if (message.recordCount !== "0") {
+      obj.recordCount = message.recordCount;
+    }
+    if (message.inlineComplete !== false) {
+      obj.inlineComplete = message.inlineComplete;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ConversationContextManifest>): ConversationContextManifest {
+    return ConversationContextManifest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ConversationContextManifest>): ConversationContextManifest {
+    const message = createBaseConversationContextManifest();
+    message.id = object.id ?? "";
+    message.digest = object.digest ?? "";
+    message.recordCount = object.recordCount ?? "0";
+    message.inlineComplete = object.inlineComplete ?? false;
     return message;
   },
 };

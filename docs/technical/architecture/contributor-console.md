@@ -2,7 +2,8 @@
 
 The local contributor console exercises the canonical workflow with the retained
 scripted executor. It is maintained through M2, where real isolated sessions and
-provider conversations will use the same surface.
+provider conversations will use the same surface. Shared configuration and
+scripted session inspection/replacement use canonical v1 methods.
 
 ## Access and authority
 
@@ -48,6 +49,24 @@ cursorless because a cursor alone is insufficient to rebuild browser state.
 Alternatives and protocol references: [SSE and EventSource](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)
 and [gRPC-Web's supported transports](https://github.com/grpc/grpc-web#streaming-support).
 
+## Shared configuration and sessions
+
+The workspace configuration editor reads and updates the canonical immutable
+configuration snapshot. Updates carry the displayed expected revision and the
+same retained idempotency key on retry. A stale edit fails without changing the
+current configuration. Desired provider/model settings are visible while actual
+execution remains scripted. Existing admitted turns keep their frozen inputs.
+
+The conversation session panel lists scoped retained generations and exposes
+idle replacement. A replacement command binds the exact expected generation.
+The advisory `can_replace` flag enables the button after active turns and
+outbox handoffs settle; the command rechecks this boundary transactionally.
+Refresh the panel while it displays finishing accepted work. An ambiguous retry
+reuses the original command.
+
+The next eligible message wakes a new generation. Session controls and
+configuration edits retain the gateway's existing authority and credential boundary.
+
 ## Discovery, history and retries
 
 `ListWorkspaces`, `ListProjects` and `ListConversations` are canonical read-only
@@ -65,7 +84,10 @@ resets that local pagination boundary on the next attempt.
 Before a mutation, the browser retains its exact method, scope, content and random
 idempotency key in tab-local session storage. Only one unresolved mutation is
 allowed per tab. Network failures retain that command and expose an explicit retry;
-retry and reload never generate a new key for it. Successful receipts clear it. Definitive validation, missing-parent or idempotency-conflict rejections clear the local retry so the user can correct the request; ambiguous transport failures retain it.
+retry and reload never generate a new key for it. Successful receipts clear it. Definitive validation, missing-parent, idempotency-conflict and canonical
+`RESOURCE_EXHAUSTED` with `ERROR_REASON_BOUND_EXCEEDED` rejections clear the local
+retry so the user can correct or resubmit the request. An untyped capacity error
+or ambiguous transport failure retains it.
 No automatic new-key resubmission follows an ambiguous outcome. Browser storage
 is a convenience for retries, not authority; clearing it can lose the local retry
 handle. Transcripts and replay cursors are not persisted in browser storage.

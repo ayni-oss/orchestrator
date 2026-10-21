@@ -1,5 +1,7 @@
 mod acceptance;
 mod capacity;
+mod configuration;
+mod context_manifest;
 mod delivery;
 mod delivery_failure;
 mod discovery;
@@ -9,6 +11,7 @@ mod quarantine;
 pub use quarantine::{QuarantinedEvent, TransportHealth};
 pub mod observation;
 mod operational;
+pub mod sessions;
 mod support;
 
 use self::support::{
@@ -39,6 +42,8 @@ pub enum StoreError {
     NotFound,
     #[error("IDEMPOTENCY_CONFLICT")]
     IdempotencyConflict,
+    #[error("CONFIGURATION_REVISION_CONFLICT")]
+    ConfigurationRevisionConflict,
     #[error("workflow capacity is exhausted: {0}")]
     Capacity(&'static str),
     #[error("WATCH_CURSOR_EXPIRED")]
@@ -112,6 +117,7 @@ impl WorkflowStore {
                     &[&workspace_id, &display_name, &command_id],
                 )
                 .await?;
+            configuration::initialize(&transaction, &workspace_id).await?;
             receipt_and_resource(&transaction, &command_id).await?
         } else {
             replay_receipt(
@@ -397,6 +403,7 @@ impl WorkflowStore {
         if nonterminal >= MAX_NONTERMINAL_TURNS {
             return Err(StoreError::Capacity("turn_queue"));
         }
+        context_manifest::reserve_admission(&transaction, conversation_id, nonterminal).await?;
         capacity::reserve_admission(&transaction).await?;
         let current_revision: i64 = conversation_row.get(0);
         let turn_sequence: i64 = conversation_row.get(1);

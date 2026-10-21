@@ -389,6 +389,8 @@ pub(super) async fn record_message_admission(
     message: MessageAdmission<'_>,
 ) -> Result<CommandReceipt, StoreError> {
     let context_revision = record_message_and_turn(transaction, &message).await?;
+    super::configuration::freeze_turn_inputs(transaction, message.workspace_id, message.turn_id)
+        .await?;
     let waiting_on = if message.eligible {
         "delivery"
     } else {
@@ -548,8 +550,20 @@ pub(super) async fn materialize_command(
     transaction: &Transaction<'_>,
     command: CommandMaterialization<'_>,
 ) -> Result<(), StoreError> {
+    let session = super::sessions::bind_turn(transaction, command.turn_id).await?;
+    let executor_generation = session
+        .as_ref()
+        .map_or(command.executor_generation, |scope| scope.generation);
     let event_id = new_id();
     let context = command_context(transaction, command.conversation_id, command.turn_id).await?;
+    let frozen_configuration =
+        super::configuration::execution_inputs(transaction, command.turn_id).await?;
+    let context_manifest = super::context_manifest::freeze_if_configured(
+        transaction,
+        &command,
+        frozen_configuration.is_some(),
+    )
+    .await?;
     let produced_at: String = transaction
         .query_one(
             "SELECT to_char(accepted_at AT TIME ZONE 'UTC', \
@@ -566,7 +580,7 @@ pub(super) async fn materialize_command(
             conversation_id: command.conversation_id.to_owned(),
             turn_id: command.turn_id.to_owned(),
             assignment_id: command.assignment_id.to_owned(),
-            executor_generation: command.executor_generation,
+            executor_generation,
             execution_binding_revision: EXECUTION_BINDING.to_owned(),
             context_revision: unsigned(command.context_revision)?,
             command_event_id: event_id.clone(),
@@ -575,6 +589,9 @@ pub(super) async fn materialize_command(
         input_message_id: command.input_message_id.to_owned(),
         input_content: command.input_content.to_owned(),
         context,
+        frozen_configuration,
+        context_manifest,
+        session,
     };
     let identity = EventIdentity {
         source: APPLICATION_SOURCE.to_owned(),
@@ -584,22 +601,8 @@ pub(super) async fn materialize_command(
         produced_at,
         traceparent: traceparent(),
     };
-    let bytes = loop {
-        match encode_command(&identity, &metadata, &payload) {
-            Ok(bytes) => break bytes,
-            Err(ayni_orchestrator_events::ContractError::Oversized) => {
-                let Some(oldest) = payload
-                    .context
-                    .iter()
-                    .position(|record| record.message_id != command.input_message_id)
-                else {
-                    return Err(StoreError::Capacity("command"));
-                };
-                payload.context.remove(oldest);
-            }
-            Err(_) => return Err(StoreError::CorruptState),
-        }
-    };
+    let bytes =
+        encode_materialized_command(&identity, &metadata, &mut payload, command.input_message_id)?;
     let dispatch_changed = transaction
         .execute(
             "INSERT INTO workflow_dispatch_intents \
@@ -844,4 +847,32 @@ pub(super) fn timestamp(seconds: i64, nanos: i64) -> Result<Timestamp, StoreErro
 
 pub(super) fn unsigned(value: i64) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::CorruptState)
+}
+
+fn encode_materialized_command(
+    identity: &EventIdentity,
+    metadata: &WorkflowEventMetadata,
+    payload: &mut ConversationTurnRequested,
+    input_message_id: &str,
+) -> Result<Vec<u8>, StoreError> {
+    loop {
+        if let Some(manifest) = payload.context_manifest.as_mut() {
+            manifest.inline_complete = manifest.record_count
+                == u64::try_from(payload.context.len()).map_err(|_| StoreError::CorruptState)?;
+        }
+        match encode_command(identity, metadata, payload) {
+            Ok(bytes) => return Ok(bytes),
+            Err(ayni_orchestrator_events::ContractError::Oversized) => {
+                let Some(oldest) = payload
+                    .context
+                    .iter()
+                    .position(|record| record.message_id != input_message_id)
+                else {
+                    return Err(StoreError::Capacity("command"));
+                };
+                payload.context.remove(oldest);
+            }
+            Err(_) => return Err(StoreError::CorruptState),
+        }
+    }
 }

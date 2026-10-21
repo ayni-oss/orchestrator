@@ -7,7 +7,7 @@
 
 Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The current runnable foundation is **M1 runtime Slice 3**, with a local contributor conversation console. It provides:
+The runtime builds on **M1 runtime Slice 3**, with a local contributor conversation console, shared agent configuration and isolated scripted sessions. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
 - repository-owned forward migrations under an advisory lock;
@@ -19,12 +19,14 @@ The current runnable foundation is **M1 runtime Slice 3**, with a local contribu
 - accepted scripted responses, FIFO successor promotion, snapshots, and stable bounded history;
 - resumable notification-backed watches with durable replay and typed cursor expiry;
 - bounded consumer quarantine, replay retention cleanup, and operational metrics;
+- immutable workspace instructions, provider/model settings and token budgets frozen at message admission;
+- conversation-scoped session generations, retained result ledgers, idle expiry and replacement;
 - a canonical private-v1 gRPC API on a trusted pod-loopback listener; and
 - a Docker Desktop Helm stack with separated database/broker identities and retained storage.
 
 This is a clean replacement, not a compatibility migration. The prior SQLite workflow, browser/BFF, runtime workers, legacy development fixtures, and custom-client workflow path are not part of the current runtime.
 
-The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exercises the scripted stack; real providers and shared-environment release enter later milestones.
+The cumulative M1 acceptance evidence is recorded in the delivery PR. The local contributor console exercises shared configuration and isolated scripted execution. Configuring OpenAI does not enable paid calls; real provider execution and bounded tools remain the subsequent M2 scopes. All Orchestrator interfaces stay v1 until alpha merges.
 
 ## Start locally
 

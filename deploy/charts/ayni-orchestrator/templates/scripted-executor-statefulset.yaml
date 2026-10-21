@@ -19,7 +19,8 @@ spec:
         app.kubernetes.io/part-of: ayni-orchestrator
         orchestrator.ayni.dev/jetstream-client: "true"
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: conversation-session-supervisor
+      automountServiceAccountToken: true
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
@@ -34,6 +35,10 @@ spec:
           image: {{ required "images.scriptedExecutor is required" .Values.images.scriptedExecutor | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           env:
+            - name: ORCHESTRATOR_SESSION_NAMESPACE
+              value: {{ printf "%s-sessions" .Release.Namespace | quote }}
+            - name: ORCHESTRATOR_SESSION_IMAGE
+              value: {{ required "images.scriptedExecutor is required" .Values.images.scriptedExecutor | quote }}
             - name: ORCHESTRATOR_EXECUTOR_BROKER_URL
               value: {{ .Values.workflowJetstream.url | quote }}
             - name: ORCHESTRATOR_EXECUTOR_BROKER_USERNAME

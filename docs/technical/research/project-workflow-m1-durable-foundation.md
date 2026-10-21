@@ -847,6 +847,13 @@ and its own retained evidence.
 
 ## M2 handoff
 
+The [conversation execution contract](../architecture/conversation-execution.md)
+consolidates the M2 entry decisions from this handoff and the refactor research.
+All Orchestrator-owned interfaces remain v1 until alpha merges. Configuration
+revision IDs, ordering revisions, session generations and SQL migration ordinals
+identify data or installation steps; they do not introduce interface versions.
+
+
 M2 may add shared agent configuration, workspace instructions, isolated sessions,
 one real provider adapter, and richer preparation/model/tool activity. It must use
 rather than replace these M1 guarantees:

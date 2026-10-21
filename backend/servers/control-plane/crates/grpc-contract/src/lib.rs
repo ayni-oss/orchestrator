@@ -53,6 +53,8 @@ mod tests {
                         "GetConversationSnapshot",
                         "ListConversationHistory",
                         "ListConversations",
+                        "ListConversationSessions",
+                        "ReplaceConversationSession",
                         "SendMessage",
                         "WatchConversation",
                     ]),
@@ -63,7 +65,11 @@ mod tests {
                         "CreateProject",
                         "CreateWorkspace",
                         "ListWorkspaces",
-                        "ListProjects"
+                        "ListProjects",
+                        "GetAgentConfiguration",
+                        "UpdateAgentConfiguration",
+                        "GetTurnInputs",
+                        "GetTurnContextInputs"
                     ]),
                 ),
             ])

@@ -4,6 +4,9 @@
 //! acknowledges a `JetStream` delivery. Execution starts only after the targeted
 //! application acceptance is durable in the same retained ledger.
 
+mod session_supervisor;
+mod session_worker;
+
 use async_nats::{ConnectOptions, HeaderMap, jetstream};
 use ayni_orchestrator_events::{
     EventIdentity,
@@ -42,6 +45,9 @@ type RuntimeResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 
 #[tokio::main]
 async fn main() -> RuntimeResult {
+    if env::args().nth(1).as_deref() == Some("session-worker") {
+        return session_worker::run().await.map_err(Into::into);
+    }
     let configuration = Configuration::from_environment()?;
     let mut ledger = Ledger::open(
         &configuration.ledger_path,
@@ -70,7 +76,7 @@ async fn main() -> RuntimeResult {
                 return Ok(());
             }
         };
-        if let Err(error) = run_connected(&context, &configuration, &mut ledger).await {
+        if let Err(error) = Box::pin(run_connected(&context, &configuration, &mut ledger)).await {
             eprintln!("scripted executor transport pending recovery: {error}");
             if wait_or_shutdown().await? {
                 return Ok(());
@@ -111,12 +117,14 @@ async fn run_connected(
     let acknowledged_floor = decision_consumer.info().await?.ack_floor.consumer_sequence;
     for pending in ledger.pending_decision_acknowledgements()? {
         if pending.consumer_sequence <= acknowledged_floor {
+            session_supervisor::mark_decided(configuration, &pending.report_id)?;
             ledger.reconcile_decision_ack_floor(
                 &pending.report_source,
                 &pending.report_id,
                 &decision_consumer_name,
                 acknowledged_floor,
             )?;
+            let _ = session_supervisor::acknowledge(configuration, &pending.report_id).await;
         }
     }
     maintain_ledger(configuration, ledger)?;
@@ -132,6 +140,7 @@ async fn run_connected(
         tokio::select! {
             _ = maintenance.tick() => {
                 maintain_ledger(configuration, ledger)?;
+                let _ = session_supervisor::cleanup(configuration).await;
                 replay_quarantine(context, configuration, ledger).await?;
                 publish_pending_reports(context, ledger.pending_reports()?).await?;
                 commands_paused=false;
@@ -299,7 +308,11 @@ async fn handle_decision(
         Err(error) => return Err(error.into()),
     }
     message.double_ack().await?;
+    session_supervisor::mark_decided(configuration, &payload.report_id)?;
     ledger.acknowledge_decision(&payload.report_source, &payload.report_id)?;
+    if matches!(payload.turn_state.as_str(), "completed" | "failed") {
+        let _ = session_supervisor::acknowledge(configuration, &payload.report_id).await;
+    }
     execute_ready(context, configuration, ledger, Some(received)).await?;
     write_health(configuration, ledger)
 }
@@ -312,6 +325,11 @@ async fn execute_ready(
 ) -> RuntimeResult {
     for command in ledger.executable_commands()? {
         let (identity, metadata, payload) = decode_command(&command.exact_bytes)?;
+        let response_content = if payload.session.is_some() {
+            session_supervisor::execute(configuration, &command.exact_bytes).await?
+        } else {
+            SCRIPTED_RESPONSE.to_owned()
+        };
         let binding = payload
             .binding
             .ok_or_else(|| io::Error::other("retained command omitted binding"))?;
@@ -333,12 +351,13 @@ async fn execute_ready(
             executor_instance_id: configuration.instance_id.clone(),
             signing_public_key: Vec::new(),
             signing_key_digest: signing_key_digest(&public_key),
-            response_content: SCRIPTED_RESPONSE.to_owned(),
+            response_content,
             failure_reason: String::new(),
             signature: Vec::new(),
         };
         sign_report(&report_identity, &mut report, &configuration.seed)?;
         let exact_bytes = encode_report(&report_identity, &metadata, &report)?;
+        session_supervisor::bind_report(configuration, &identity.id, &report_identity.id)?;
         ledger.retain_terminal_report(
             &command.source,
             &command.id,
@@ -574,7 +593,12 @@ async fn replay_quarantine(
                     event.consumer_sequence,
                 )?;
                 // This delivery was ACKed only after the original quarantine commit.
+                session_supervisor::mark_decided(configuration, &payload.report_id)?;
                 ledger.acknowledge_decision(&payload.report_source, &payload.report_id)?;
+                if matches!(payload.turn_state.as_str(), "completed" | "failed") {
+                    let _ =
+                        session_supervisor::acknowledge(configuration, &payload.report_id).await;
+                }
                 execute_ready(context, configuration, ledger, None).await?;
             }
             ConsumerRole::ApplicationReport => {

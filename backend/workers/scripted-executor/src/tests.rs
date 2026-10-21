@@ -105,6 +105,7 @@ fn command_fixture_with_input(
         input_message_id: "message:018f0f7b-6a4d-7a11-8d77-717273747576".into(),
         input_content: input_content.into(),
         context: vec![],
+        ..Default::default()
     };
     let bytes =
         encode_command(&identity, &event_metadata(), &payload).map_err(|_| LedgerError::Invalid)?;
@@ -697,6 +698,7 @@ fn command_claim_reserves_terminal_record_and_bounded_report_bytes() -> Result<(
         input_message_id: "message:018f0f7b-6a4d-7a11-8d77-d7d8d9dadbdc".into(),
         input_content: "second independent command".into(),
         context: vec![],
+        ..Default::default()
     };
     second.bytes = encode_command(&second.identity, &event_metadata(), &second_payload)
         .map_err(|_| LedgerError::Invalid)?;
