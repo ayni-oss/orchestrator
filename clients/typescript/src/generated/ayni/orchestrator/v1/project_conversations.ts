@@ -3673,7 +3673,7 @@ export const AcknowledgeProviderUncertaintyResponse: MessageFns<AcknowledgeProvi
   },
 };
 
-/** M1 exposes only the durable conversation path on the trusted operator listener. */
+/** Scoped conversation execution and operator plan review on the trusted listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
   createPlan: {

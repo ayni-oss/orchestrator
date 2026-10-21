@@ -28,6 +28,7 @@ export async function exercisePlans({ page, context, endpoint, gateway, scope })
   await page.locator('#pending').waitFor({ state: 'visible' });
   await page.locator('#error').waitFor({ state: 'visible' });
   await page.reload(); await page.locator('#pending').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.querySelector('#connection').textContent === 'Connected');
   assert.equal(await field(page, 'title').inputValue(), title);
   await page.locator('#retry').click(); await page.locator('#pending').waitFor({ state: 'hidden' });
   await page.locator('#plan-review h3').waitFor();
@@ -57,7 +58,9 @@ export async function exercisePlans({ page, context, endpoint, gateway, scope })
   assert.equal(await field(other, 'title').inputValue(), 'Unsaved competing revision');
   // Unsaved local edits persist across reconnect and reload, independently of reviewed versions.
   await other.locator('#toggle-watch').click(); await other.locator('#toggle-watch').click();
-  await other.reload(); await openEditor(other);
+  await other.reload();
+  await other.waitForFunction(() => document.querySelector('#connection').textContent === 'Connected');
+  await openEditor(other);
   assert.equal(await field(other, 'title').inputValue(), 'Unsaved competing revision');
   const versions = await gateway(page, 'ListPlanVersions', { ...scope, planId, limit: 1 });
   assert.equal(versions.versions[0].ordinal, '2');

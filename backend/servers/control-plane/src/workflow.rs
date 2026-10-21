@@ -40,7 +40,7 @@ impl WorkflowGrpc {
     }
 }
 
-/// Serve the trusted-loopback M1 workflow API.
+/// Serve the trusted-loopback workflow API.
 ///
 /// # Errors
 /// Returns an I/O error when the listener or reflection service fails.
