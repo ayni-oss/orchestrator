@@ -194,7 +194,8 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
             .state,
         "queued"
     );
-    let uid = key();
+    // Kubernetes Pod identity is independent of our UUIDv7 resource IDs.
+    let uid = "3c828c6e-53ed-4e39-bd68-c1198e69467c".to_owned();
     let observe = S::Observe {
         attempt_id: first.attempt_id.clone(),
         generation: 1,

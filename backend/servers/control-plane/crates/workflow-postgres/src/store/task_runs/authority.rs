@@ -23,7 +23,12 @@ impl WorkflowStore {
             } => {
                 let run = by_id(&tx, attempt_id).await?;
                 require_current(&run, *generation)?;
-                support::validate_id(pod_uid, "pod_uid")?;
+                // Kubernetes owns Pod UIDs; they are not our UUIDv7 resource IDs.
+                let uid = uuid::Uuid::parse_str(pod_uid)
+                    .map_err(|_| StoreError::InvalidInput("pod_uid"))?;
+                if uid.to_string() != *pod_uid {
+                    return Err(StoreError::InvalidInput("pod_uid"));
+                }
                 if !run.pod_uid.is_empty() && run.pod_uid != *pod_uid {
                     return Err(StoreError::TaskExecutionConflict);
                 }

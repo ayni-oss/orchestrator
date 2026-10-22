@@ -75,6 +75,10 @@ impl Stream for WatchStream {
         if self.terminated {
             return Poll::Ready(None);
         }
+        // The producer retains its sender until after publishing its terminal
+        // error. Poll the channel first so observing closure also observes that
+        // error, even if the producer finishes during this poll.
+        let received = self.receiver.poll_recv(context);
         let terminal = self
             .terminal
             .lock()
@@ -84,7 +88,10 @@ impl Stream for WatchStream {
             self.terminated = true;
             return Poll::Ready(Some(Err(error)));
         }
-        self.receiver.poll_recv(context).map(|value| value.map(Ok))
+        if matches!(received, Poll::Ready(None)) {
+            self.terminated = true;
+        }
+        received.map(|value| value.map(Ok))
     }
 }
 
