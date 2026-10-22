@@ -9,8 +9,8 @@ case "$namespace" in
   ayni-orchestrator-acceptance-*) ;;
   *) echo 'acceptance requires an isolated ayni-orchestrator-acceptance-* namespace' >&2; exit 2 ;;
 esac
-if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only ) ]]; then
-  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only]' >&2
+if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only && "$2" != --tasks-only ) ]]; then
+  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only|--tasks-only]' >&2
   exit 2
 fi
 readonly evidence="$1"
@@ -147,6 +147,11 @@ pod="$(control_pod)"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-plans \
   > "$evidence/plans-before-restart.json"
+if [[ "$profile" != --plans-only ]]; then
+kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
+  /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-execution \
+  > "$evidence/execution-before-restart.json"
+fi
 if [[ "$profile" == full ]]; then
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane --   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-pending   > "$evidence/pending-before-restart.json"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
@@ -159,6 +164,11 @@ pod="$(control_pod)"
 kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-plans-stdin \
   < "$evidence/plans-before-restart.json" > "$evidence/plans-broker-unavailable.json"
+if [[ "$profile" != --plans-only ]]; then
+kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+  /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-execution-stdin \
+  < "$evidence/execution-before-restart.json" > "$evidence/execution-broker-unavailable.txt"
+fi
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status "$scaled_down" --timeout=3m >> "$evidence/broker-outage.txt"
 scaled_down=
@@ -186,6 +196,11 @@ for workload in deployment/control-plane statefulset/scripted-executor statefuls
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-plans-stdin \
     < "$evidence/plans-before-restart.json" > "$evidence/plans-replay-$name.json"
+  if [[ "$profile" != --plans-only ]]; then
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-execution-stdin \
+    < "$evidence/execution-before-restart.json" > "$evidence/execution-replay-$name.txt"
+  fi
 done
 pvc_identity > "$evidence/pvc-after.json"
 cmp "$evidence/pvc-before.json" "$evidence/pvc-after.json"

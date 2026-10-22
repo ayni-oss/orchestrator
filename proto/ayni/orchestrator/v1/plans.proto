@@ -223,3 +223,47 @@ message GetTaskRequest {
 message GetTaskResponse {
   AdmittedTask task = 1;
 }
+
+// Operator-attested Git object evidence, produced by workflow-prepare-task.
+// Runtime selection does not assert Ayni runtime compatibility; PR 3 verifies it.
+message TaskExecutionInputs {
+  string repository = 1;
+  string source_ref = 2;
+  string source_commit = 3;
+  string lock_digest = 4;
+  string runtime_image = 5;
+  uint32 max_seconds = 6;
+  uint32 max_tokens = 7;
+}
+message TaskExecutionPreparation {
+  string command_id = 1;
+  string task_id = 2;
+  // Empty for a retained blocked preparation. Otherwise one frozen prepared attempt.
+  string attempt_id = 3;
+  TaskExecutionInputs inputs = 4;
+  repeated string blockers = 5;
+  string configuration_revision_id = 6;
+  uint64 conversation_revision = 7;
+  string resume_cursor = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+message PrepareTaskExecutionRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string idempotency_key = 5;
+  TaskExecutionInputs inputs = 6;
+}
+message PrepareTaskExecutionResponse {
+  TaskExecutionPreparation preparation = 1;
+}
+message GetTaskExecutionRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+}
+message GetTaskExecutionResponse {
+  TaskExecutionPreparation preparation = 1;
+}

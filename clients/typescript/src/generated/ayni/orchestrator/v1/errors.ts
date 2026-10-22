@@ -24,6 +24,7 @@ export enum ErrorReason {
   ERROR_REASON_PLAN_ALREADY_APPROVED = 36,
   ERROR_REASON_PLAN_DIGEST_MISMATCH = 37,
   ERROR_REASON_PLAN_UNRESOLVED_SCOPE = 38,
+  ERROR_REASON_TASK_ALREADY_PREPARED = 39,
   UNRECOGNIZED = -1,
 }
 
@@ -74,6 +75,9 @@ export function errorReasonFromJSON(object: any): ErrorReason {
     case 38:
     case "ERROR_REASON_PLAN_UNRESOLVED_SCOPE":
       return ErrorReason.ERROR_REASON_PLAN_UNRESOLVED_SCOPE;
+    case 39:
+    case "ERROR_REASON_TASK_ALREADY_PREPARED":
+      return ErrorReason.ERROR_REASON_TASK_ALREADY_PREPARED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -113,6 +117,8 @@ export function errorReasonToJSON(object: ErrorReason): string {
       return "ERROR_REASON_PLAN_DIGEST_MISMATCH";
     case ErrorReason.ERROR_REASON_PLAN_UNRESOLVED_SCOPE:
       return "ERROR_REASON_PLAN_UNRESOLVED_SCOPE";
+    case ErrorReason.ERROR_REASON_TASK_ALREADY_PREPARED:
+      return "ERROR_REASON_TASK_ALREADY_PREPARED";
     case ErrorReason.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

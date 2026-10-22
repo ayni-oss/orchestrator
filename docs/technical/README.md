@@ -32,3 +32,6 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 [Documentation authoring](contributing/documentation.md) defines the audience boundary. The [roadmap](../../ROADMAP.md) tracks later slices.
 
 - [Contributor console](architecture/contributor-console.md): local browser transport, discovery, and retry boundaries.
+
+- [Task execution preparation](architecture/task-execution.md): trusted operator evidence and frozen attempts.
+- [M4 delivery plan](research/project-workflow-m4-delivery-plan.md): six staged execution, quality and publication scopes.

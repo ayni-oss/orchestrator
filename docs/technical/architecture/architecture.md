@@ -77,7 +77,10 @@ Repository-owned forward migrations live in `backend/servers/control-plane/crate
 9. migration 9 retains conversation session generations and replacement receipts;
 10. migration 10 retains provider reservations, result evidence and cancellation receipts;
 11. migration 11 retains exact-call uncertainty acknowledgement receipts;
-12. migration 12 retains conversation-owned plans, immutable versions and exact write receipts.
+12. migration 12 retains conversation-owned plans, immutable versions and exact write receipts;
+13. migration 13 retains structured agent proposals and provenance;
+14. migration 14 retains exact-version approval and atomic task admission;
+15. migration 15 retains task preparation receipts and immutable execution attempts.
 
 These ordinals are installation history within the v1 interface, not parallel
 schema interfaces.
@@ -123,3 +126,5 @@ A bounded maintenance pass runs every minute. It compacts expired watch deltas a
 ## Local browser access
 
 The [contributor console](contributor-console.md) forwards an allowlisted local JSON/SSE surface to canonical pod-loopback gRPC. It owns no workflow authority or credentials.
+
+See [task execution preparation](task-execution.md) for the trusted operator input-verification and attempt boundary.

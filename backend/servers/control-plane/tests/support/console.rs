@@ -179,6 +179,16 @@ async fn admission(app: &axum::Router, scope: &Value, version: &Value) -> Result
         call(app, "GetTask", task_read.clone()).await?.1["task"],
         *task
     );
+    assert_eq!(
+        call(app, "GetTaskExecution", task_read.clone()).await?.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(app, "PrepareTaskExecution", task_read.clone())
+            .await?
+            .0,
+        StatusCode::NOT_FOUND
+    );
     task_read["conversationId"] = json!(Uuid::now_v7().to_string());
     assert_eq!(
         call(app, "GetTask", task_read).await?.0,

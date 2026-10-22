@@ -5,6 +5,7 @@ mod context_manifest;
 mod delivery;
 mod delivery_failure;
 mod discovery;
+mod execution;
 mod plans;
 pub mod provider_calls;
 pub use delivery::DecisionAcknowledgement;
@@ -46,6 +47,8 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("CONFIGURATION_REVISION_CONFLICT")]
     ConfigurationRevisionConflict,
+    #[error("TASK_ALREADY_PREPARED")]
+    TaskAlreadyPrepared,
     #[error("PLAN_VERSION_CONFLICT")]
     PlanVersionConflict,
     #[error("PLAN_ALREADY_APPROVED")]
