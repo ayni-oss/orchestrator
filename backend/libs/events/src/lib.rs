@@ -237,4 +237,5 @@ pub mod operation_decisions;
 
 pub mod lifecycle;
 
+pub mod plan_proposals;
 pub mod workflow;

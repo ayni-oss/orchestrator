@@ -91,6 +91,7 @@ async fn disabled_profile(mode: &'static str) -> (ExecutionResult, usize, usize)
             String::new()
         },
         provider_call: None,
+        plan_proposal: None,
     };
     let admissions = Arc::new(AtomicUsize::new(0));
     let sends = Arc::new(AtomicUsize::new(0));

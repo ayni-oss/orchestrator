@@ -1,3 +1,4 @@
+pub(super) mod proposals;
 mod reads;
 use super::{StoreError, WorkflowStore, observation, support};
 use crate::plans::{self, PlanContent, PlanScope, PlanWriteReceipt, WrittenPlan};

@@ -187,6 +187,7 @@ impl WorkflowStore {
                 decision.turn_state = "failed";
             }
         }
+        let outcome = prepare_outcome(&transaction, binding, &parsed, kind, &mut decision).await?;
         let receipt = insert_decision(
             &transaction,
             exact_report_bytes,
@@ -196,12 +197,61 @@ impl WorkflowStore {
         )
         .await?;
         if decision.accepted {
-            apply_accepted_outcome(&transaction, binding, &parsed.report, kind).await?;
+            if let Some(proposal) = outcome.proposal {
+                super::plans::proposals::retain(&transaction, binding, &proposal).await?;
+            }
+            apply_accepted_outcome(&transaction, binding, &outcome.report, outcome.kind).await?;
         }
         transaction.commit().await?;
         driver.abort();
         Ok(receipt)
     }
+}
+
+struct PreparedOutcome {
+    report: ConversationTurnReport,
+    kind: ConversationTurnReportKind,
+    proposal: Option<super::plans::proposals::PreparedProposal>,
+}
+
+async fn prepare_outcome(
+    transaction: &Transaction<'_>,
+    binding: &ConversationTurnBinding,
+    parsed: &ParsedReport,
+    kind: ConversationTurnReportKind,
+    decision: &mut Decision<'_>,
+) -> Result<PreparedOutcome, StoreError> {
+    let mut outcome = parsed.report.clone();
+    let mut outcome_kind = kind;
+    let proposal = if decision.accepted
+        && !super::provider_calls::cancellation_requested(transaction, &binding.turn_id).await?
+    {
+        match super::plans::proposals::prepare(
+            transaction,
+            binding,
+            &parsed.report,
+            &parsed.identity,
+            &parsed.digest,
+        )
+        .await?
+        {
+            Ok(proposal) => proposal,
+            Err(reason) => {
+                outcome.response_content.clear();
+                outcome.failure_reason = reason.into();
+                outcome_kind = ConversationTurnReportKind::Failed;
+                decision.turn_state = "failed";
+                None
+            }
+        }
+    } else {
+        None
+    };
+    Ok(PreparedOutcome {
+        report: outcome,
+        kind: outcome_kind,
+        proposal,
+    })
 }
 
 async fn apply_accepted_outcome(

@@ -1,7 +1,9 @@
 use super::{StoreError, WorkflowStore, validate_scope};
 use crate::{
     model::Timestamp,
-    plans::{self, PlanScope, PlanSummary, PlanVersion, VersionPage, VersionSummary},
+    plans::{
+        self, AgentPlanProvenance, PlanScope, PlanSummary, PlanVersion, VersionPage, VersionSummary,
+    },
     store::support,
 };
 use tokio_postgres::{GenericClient, Row};
@@ -40,7 +42,21 @@ pub(super) async fn version(
         content,
         author: row.get(9),
         created_at: stamp(&row, 10)?,
+        provenance: provenance(client, &row.get::<_, String>(0)).await?,
     })
+}
+
+async fn provenance(
+    client: &(impl GenericClient + Sync),
+    version: &str,
+) -> Result<Option<AgentPlanProvenance>, StoreError> {
+    client.query_opt("SELECT source_turn_id,configuration_revision_id,context_digest,provider_call_id,provider_response_id,assignment_id,executor_generation,report_source,report_id,report_digest,invocation_id,assumptions,evidence FROM workflow_plan_proposals WHERE version_id=$1", &[&version]).await?.map(|row| Ok(AgentPlanProvenance {
+        source_turn_id: row.get(0), configuration_revision_id: row.get(1),
+        context_digest: row.get(2), provider_call_id: row.get(3), provider_response_id: row.get(4),
+        assignment_id: row.get(5), executor_generation: support::unsigned(row.get(6))?,
+        report_source: row.get(7), report_id: row.get(8), report_digest: row.get(9),
+        invocation_id: row.get(10), assumptions: row.get(11), evidence: row.get(12),
+    })).transpose()
 }
 
 fn stamp(row: &Row, at: usize) -> Result<Timestamp, StoreError> {

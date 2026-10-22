@@ -64,6 +64,14 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     $('plan-review').append(heading);
     paragraph($('plan-review'), 'Origin', `Project ${value.projectId} · conversation ${value.conversationId}`);
     paragraph($('plan-review'), 'Retained version', `${value.id}\n${value.contentDigest}\nAuthor: ${value.author}`);
+    if (value.provenance) {
+      const p = value.provenance;
+      paragraph($('plan-review'), 'Assumptions', p.assumptions);
+      paragraph($('plan-review'), 'Declared evidence · unverified', p.evidence);
+      paragraph($('plan-review'), 'Proposal origin', `Turn ${p.sourceTurnId}\nConfiguration ${p.configurationRevisionId}\nContext ${p.contextDigest}`);
+      paragraph($('plan-review'), 'Retained provider result', `Call ${p.providerCallId}\nResponse ${p.providerResponseId}\nInvocation ${p.invocationId}`);
+      paragraph($('plan-review'), 'Authenticated producer', `Assignment ${p.assignmentId} · generation ${p.executorGeneration}\n${p.reportSource}\nReport ${p.reportId}\n${p.reportDigest}`);
+    }
     for (const [name,label] of [['objective','Objective'],['scope','Included scope'],['outOfScope','Excluded scope'],['constraints','Constraints'],['unresolvedQuestions','Unresolved questions']]) paragraph($('plan-review'),label,value.content[name]);
     for (const task of value.content.tasks || []) {
       const article = document.createElement('article'); article.className = 'plan-task';

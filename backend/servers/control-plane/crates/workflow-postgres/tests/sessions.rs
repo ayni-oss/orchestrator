@@ -288,6 +288,7 @@ fn report(
         failure_reason: String::new(),
         signature: Vec::new(),
         provider_call: None,
+        plan_proposal: None,
     };
     sign_report(&identity, &mut report, &seed)?;
     Ok(encode_report(&identity, metadata, &report)?)

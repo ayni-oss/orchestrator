@@ -114,7 +114,7 @@ pub(super) async fn prepare(
             .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         if count >= 50000
             || retained
-                + i64::try_from(prepared.bytes.len() + loop_json.len() + json.len() + 64 * 1024)
+                + i64::try_from(prepared.bytes.len() + loop_json.len() + json.len() + 256 * 1024)
                     .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?
                 > MAX_RETAINED_BYTES
         {
@@ -314,21 +314,24 @@ pub(super) async fn send(
     if let Some(result) = replay {
         return Ok(axum::Json(result));
     }
-    let (evidence, response_content, failure_reason) = if send_allowed {
+    let (evidence, response_content, failure_reason, plan_proposal) = if send_allowed {
         let mut authorized_input = input.clone();
         authorized_input.allowed = allow_new_requests;
         perform_request(&state, &authorized_input, &request, evidence).await
     } else {
-        (evidence, String::new(), String::new())
+        (evidence, String::new(), String::new(), None)
     };
     retain_result(
         &state,
         &input,
         request.len(),
         &evidence,
-        command_digest,
-        response_content,
-        failure_reason,
+        RetainedOutcome {
+            command_digest,
+            response_content,
+            failure_reason,
+            plan_proposal,
+        },
     )
 }
 
@@ -421,9 +424,17 @@ async fn perform_request(
     input: &SendInput,
     request: &[u8],
     mut evidence: ProviderCallEvidence,
-) -> (ProviderCallEvidence, String, String) {
-    if let Ok((content, reason)) = tools::execute(state, input, request, &mut evidence).await {
-        (evidence, content, reason)
+) -> (
+    ProviderCallEvidence,
+    String,
+    String,
+    Option<ayni_orchestrator_events::v1::PlanProposal>,
+) {
+    let mut proposal = None;
+    if let Ok((content, reason)) =
+        tools::execute(state, input, request, &mut evidence, &mut proposal).await
+    {
+        (evidence, content, reason, proposal)
     } else {
         evidence.state = "uncertain".into();
         // Earlier completed exchanges do not establish usage for a later
@@ -431,23 +442,34 @@ async fn perform_request(
         evidence.input_tokens = None;
         evidence.output_tokens = None;
         evidence.total_tokens = None;
-        (evidence, String::new(), String::new())
+        (evidence, String::new(), String::new(), None)
     }
 }
 
 mod tools;
 use tools::ProviderLoop;
 
+struct RetainedOutcome {
+    command_digest: String,
+    response_content: String,
+    failure_reason: String,
+    plan_proposal: Option<ayni_orchestrator_events::v1::PlanProposal>,
+}
+
 fn retain_result(
     state: &WorkerState,
     input: &SendInput,
     request_len: usize,
     evidence: &ProviderCallEvidence,
-    command_digest: String,
-    response_content: String,
-    failure_reason: String,
+    outcome: RetainedOutcome,
 ) -> Result<axum::Json<ExecutionResult>, StatusCode> {
-    let result = ExecutionResult {
+    let RetainedOutcome {
+        command_digest,
+        response_content,
+        failure_reason,
+        plan_proposal,
+    } = outcome;
+    let mut result = ExecutionResult {
         command_id: input.command_id.clone(),
         command_digest,
         response_content,
@@ -462,8 +484,8 @@ fn retain_result(
             .into()
         },
         provider_call: Some(evidence.clone()),
+        plan_proposal,
     };
-    let json = serde_json::to_string(&result).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     let mut connection = state
         .connection
         .lock()
@@ -471,6 +493,24 @@ fn retain_result(
     let tx = connection
         .transaction()
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    // Serialize cancellation with terminal retention; no late draft escapes a
+    // cancellation that committed while the provider response was being validated.
+    let cancelled: bool = tx
+        .query_row(
+            "SELECT cancelled FROM provider_calls WHERE command_id=?1",
+            [&input.command_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let mut evidence = evidence.clone();
+    if cancelled && evidence.state != "uncertain" {
+        evidence.state = "cancelled".into();
+        result.response_content.clear();
+        result.failure_reason = "cancelled".into();
+        result.plan_proposal = None;
+        result.provider_call = Some(evidence.clone());
+    }
+    let json = serde_json::to_string(&result).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     tx.execute(
         "UPDATE provider_calls SET state=?2,evidence=?3,settled=?4 WHERE command_id=?1",
         params![

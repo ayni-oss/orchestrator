@@ -32,7 +32,7 @@ use validation::{
 };
 
 const CLAIM_REPORT_RESERVATION_BYTES: usize = 24 * 1024;
-const TERMINAL_REPORT_RESERVATION_BYTES: usize = 40 * 1024;
+const TERMINAL_REPORT_RESERVATION_BYTES: usize = 160 * 1024;
 const RESOLVED_METADATA_RETENTION_SECONDS: u64 = 8 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug)]

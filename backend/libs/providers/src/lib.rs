@@ -1,6 +1,7 @@
 //! Provider boundary shared by research and coding workers.
 use rig_core::providers::openai;
 
+mod plan_proposals;
 pub mod responses;
 
 /// Construct the only enabled completion provider. Credentials never appear in errors.

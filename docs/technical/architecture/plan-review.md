@@ -2,7 +2,7 @@
 
 The first M3 slice retains operator-authored plans in their originating conversation.
 It implements review and revision from the [M3 contract](plans-and-approval.md).
-Structured agent proposals, approval and admitted tasks remain later slices.
+[Structured agent proposals](agent-proposals.md) extend this review path; approval and admitted tasks remain later slices.
 
 ## Content and identity
 

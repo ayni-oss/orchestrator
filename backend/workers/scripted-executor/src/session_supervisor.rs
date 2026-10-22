@@ -732,6 +732,7 @@ async fn execute_provider_with_runtime(
         response_content: String::new(),
         failure_reason: reason.into(),
         provider_call: None,
+        plan_proposal: None,
     };
     let mut records = Vec::new();
     let mut after = 0;
@@ -782,7 +783,7 @@ async fn execute_provider_with_runtime(
     ) {
         return Ok(failure("provider_input_limit"));
     }
-    let prepared: Preparation = bounded_json(prepared.error_for_status()?, 64 * 1024).await?;
+    let prepared: Preparation = bounded_json(prepared.error_for_status()?, 256 * 1024).await?;
     if let Some(result) = prepared.result {
         return validate_result(result, &identity.id, &command_digest);
     }
@@ -808,7 +809,7 @@ async fn execute_provider_with_runtime(
     let mut stopped = false;
     loop {
         tokio::select! {
-            response=&mut send=>{let response:ExecutionResult=bounded_json(response?.error_for_status()?,64*1024).await?;if disabled_without_call {return Ok(failure("provider_credentials_unavailable"));} return validate_result(response,&identity.id,&command_digest);}
+            response=&mut send=>{let response:ExecutionResult=bounded_json(response?.error_for_status()?,256*1024).await?;if disabled_without_call {return Ok(failure("provider_credentials_unavailable"));} return validate_result(response,&identity.id,&command_digest);}
             _=interval.tick(),if !stopped=>{
                 let cancellation=authority(http,json!({"command_bytes":command_bytes,"action":"poll"}),runtime).await;
                 if cancellation.as_ref().map_or(true, |state|state.cancellation_requested) {
@@ -850,6 +851,17 @@ fn validate_result(
     if result.command_id != command_id
         || result.command_digest != command_digest
         || result.response_content.len() > 16384
+        || result.plan_proposal.as_ref().is_some_and(|proposal| {
+            !result.failure_reason.is_empty()
+                || result
+                    .provider_call
+                    .as_ref()
+                    .is_none_or(|call| call.state != "completed")
+                || ayni_orchestrator_events::plan_proposals::validate_proposal(
+                    &proposal.proposal_json,
+                )
+                .is_err()
+        })
     {
         return Err(io::Error::other("session result binding mismatch").into());
     }

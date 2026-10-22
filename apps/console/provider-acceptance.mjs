@@ -221,7 +221,10 @@ try {
   const sendingSession = (await gateway('ListConversationSessions', scope)).sessions[0];
   const sendingWorker = workerIdentity(sendingSession);
   stopWorker(sendingWorker);
-  const recoveredCalls = await waitFor(calls, values => values.some(call => call.turnId === restartTurn.turnId && call.state === 'uncertain'), 'sending continuation recovers as uncertain');
+  // Duplicate admission marks the call uncertain before its signed recovery report
+  // carries the retained first response and tool evidence. Wait for that report's
+  // response identity before assessing the recovered invocation metadata.
+  const recoveredCalls = await waitFor(calls, values => values.some(call => call.turnId === restartTurn.turnId && call.state === 'uncertain' && call.responseId), 'signed sending-continuation recovery evidence');
   const recovered = recoveredCalls.find(call => call.turnId === restartTurn.turnId);
   assert.equal(recovered.totalTokens, undefined, 'the second external outcome keeps cumulative usage unknown');
   assert.equal(recovered.toolInvocations.length, 1, 'the first retained tool result survives worker loss');
@@ -238,11 +241,52 @@ try {
   await page.getByText(/The external outcome is unknown/).waitFor();
   assert.equal((await stats()).calls, requestCount, 'recovered sending intent never resends the continuation');
   assert.equal((await snapshot()).recentMessages.filter(message => message.role === 'MESSAGE_ROLE_ASSISTANT').length, 0);
+  // M3 proposals extend this same provider/session acceptance topology.
+  const proposalConversation = (await gateway('CreateConversation', { workspaceId: workspace.id, projectId: project.id, title: 'Agent proposal review', idempotencyKey: key() })).conversation;
+  scope = { ...scope, conversationId: proposalConversation.id };
+  const beforeProposal = (await stats()).calls;
+  const proposed = await send('fixture:proposal');
+  const proposedSnapshot = await terminal(proposed.turnId);
+  assert.equal(proposedSnapshot.plans.length, 1);
+  const plan = proposedSnapshot.plans[0];
+  const version = (await gateway('GetPlanVersion', { ...scope, planId: plan.id })).version;
+  assert.equal(version.author, 'agent');
+  assert.equal(version.provenance.sourceTurnId, proposed.turnId);
+  assert.equal(version.provenance.providerResponseId, (await calls()).find(value => value.turnId === proposed.turnId).responseId);
+  assert.ok(version.provenance.assumptions.length && version.provenance.evidence.length);
+  assert.equal((await stats()).calls, beforeProposal + 1, 'proposal is a terminal structured result with no continuation');
+  await page.evaluate(scope => sessionStorage.setItem('selection', JSON.stringify(scope)), scope);
+  await page.reload();
+  await page.locator(`[data-plan-id="${plan.id}"]`).click();
+  await page.getByText('Declared evidence · unverified', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.proposalInjected), undefined);
+  assert.match(await page.locator('#plan-review').innerText(), /The user wants a reviewable proposal/);
+  assert.equal((await gateway('GetPlanVersion', { ...scope, planId: plan.id })).version.id, version.id);
+  assert.equal((await stats()).calls, beforeProposal + 1, 'reconnect preserves one accepted version without another call');
+  const foreignStatus = await page.evaluate(async body => (await fetch('/api/GetPlanVersion', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body) })).status, { ...uncertainScope, planId: plan.id });
+  assert.equal(foreignStatus, 404, 'another conversation cannot read the proposal');
+  for (const mode of ['proposal-malformed', 'proposal-scope', 'proposal-mixed']) {
+    const conversation = (await gateway('CreateConversation', { workspaceId: workspace.id, projectId: project.id, title: `Bounded ${mode}`, idempotencyKey: key() })).conversation;
+    scope = { ...scope, conversationId: conversation.id };
+    const priorCalls = (await stats()).calls;
+    const receipt = await send(`fixture:${mode}`);
+    const value = await terminal(receipt.turnId);
+    assert.equal(value.recentTerminalTurns.find(turn => turn.id === receipt.turnId).presentationState, 'PRESENTATION_STATE_FAILED');
+    assert.equal((value.plans || []).length, 0, 'invalid proposals never become versions');
+    assert.equal((await stats()).calls, priorCalls + 1, 'invalid proposals never trigger another request');
+  }
+  const proposalCancellation = (await gateway('CreateConversation', { workspaceId: workspace.id, projectId: project.id, title: 'Cancelled proposal', idempotencyKey: key() })).conversation;
+  scope = { ...scope, conversationId: proposalCancellation.id };
+  const cancelledProposal = await send('fixture:proposal-delay');
+  await waitFor(calls, values => values.some(value => value.turnId === cancelledProposal.turnId && value.state === 'sending'), 'proposal sending boundary');
+  await gateway('CancelTurn', { ...scope, turnId: cancelledProposal.turnId, idempotencyKey: key() });
+  await waitFor(calls, values => values.some(value => value.turnId === cancelledProposal.turnId && value.cancellationRequested && ['uncertain', 'cancelled', 'completed'].includes(value.state)), 'cancelled proposal outcome');
+  assert.equal(((await snapshot()).plans || []).length, 0, 'cancelled generation cannot write a proposal');
   scope = uncertainScope;
   assert.deepEqual(errors, []);
   if (process.env.CONSOLE_EVIDENCE_DIRECTORY) {
     await mkdir(process.env.CONSOLE_EVIDENCE_DIRECTORY, { recursive: true });
     await page.screenshot({ path: `${process.env.CONSOLE_EVIDENCE_DIRECTORY}/provider-console.png`, fullPage: true });
   }
-  console.log(JSON.stringify({ outcome: 'passed', scope, checks: ['scripted-to-openai-cutover', 'responses-request-profile', 'retained-response-usage', 'reload-no-resend', 'unknown-usage-reservation', 'uncertainty-no-resend', 'queued-cancellation-no-call', 'in-flight-cancellation', 'cancellation-receipt-replay', 'exactly-once-visible-results', 'three-scoped-read-tools', 'tool-usage-accounting', 'tool-replay-no-resend', 'foreign-tool-scope-rejected', 'tool-invocation-limit', 'tool-argument-limit', 'unknown-tool-rejected', 'uncertainty-acknowledgement-consent', 'uncertainty-acknowledgement-receipt-replay', 'uncertainty-evidence-preserved', 'completed-tool-worker-adoption', 'continuation-sending-worker-loss', 'retained-pvc-identity', 'continuation-no-resend'], calls: (await stats()).calls - before.calls }));
+  console.log(JSON.stringify({ outcome: 'passed', scope, checks: ['scripted-to-openai-cutover', 'responses-request-profile', 'retained-response-usage', 'reload-no-resend', 'unknown-usage-reservation', 'uncertainty-no-resend', 'queued-cancellation-no-call', 'in-flight-cancellation', 'cancellation-receipt-replay', 'exactly-once-visible-results', 'three-scoped-read-tools', 'tool-usage-accounting', 'tool-replay-no-resend', 'foreign-tool-scope-rejected', 'tool-invocation-limit', 'tool-argument-limit', 'unknown-tool-rejected', 'uncertainty-acknowledgement-consent', 'uncertainty-acknowledgement-receipt-replay', 'uncertainty-evidence-preserved', 'completed-tool-worker-adoption', 'continuation-sending-worker-loss', 'retained-pvc-identity', 'continuation-no-resend', 'agent-proposal-version', 'agent-proposal-provenance', 'proposal-review-reconnect', 'proposal-escaping', 'proposal-cross-conversation-read-rejection', 'malformed-proposal-rejection', 'proposal-scope-spoof-rejection', 'mixed-proposal-rejection', 'cancelled-proposal-no-version'], calls: (await stats()).calls - before.calls }));
 } finally { await browser.close(); }

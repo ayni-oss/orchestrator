@@ -13,6 +13,7 @@ const scope = {
   conversationId: process.env.AYNI_SMOKE_CONVERSATION_ID,
 };
 for (const value of Object.values(scope)) assert.match(value || '', /^[0-9a-f-]{36}$/i, 'supply an existing, isolated live-smoke scope');
+const proposalSmoke = process.env.AYNI_SMOKE_PLAN_PROPOSAL === '1';
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
@@ -38,7 +39,7 @@ try {
   console.log(JSON.stringify({ phase: 'admission', scope, idempotencyKey, totalTokenLimit: config.maxTotalTokens }));
   // Do not retry SendMessage, even after a lost response. Its key above permits
   // deliberate receipt recovery without introducing a fresh paid attempt.
-  const admitted = (await api('SendMessage', { ...scope, idempotencyKey, content: 'Use read_workspace_instructions, read_project_status and read_conversation_history once each, then reply with only: Smoke complete.' })).receipt;
+  const admitted = (await api('SendMessage', { ...scope, idempotencyKey, content: proposalSmoke ? 'We have discussed the scope: a tiny documentation-only change to clarify a README. The constraint is no code or repository access. Call propose_plan exactly once as your sole function call and terminal result. Include one short task with key docs, objective clarify README, scope documentation, acceptance criterion clear wording, no repository or source claim, execution limit awaiting approval, no unresolved inputs. State the assumption that the operator will review the text and evidence that this conversation supplied the scope. No approval or execution.' : 'Use read_workspace_instructions, read_project_status and read_conversation_history once each, then reply with only: Smoke complete.' })).receipt;
   const until = Date.now() + 180000;
   let final;
   let accepted = false;
@@ -50,13 +51,25 @@ try {
     if (terminal) {
       assert.equal(terminal.presentationState, 'PRESENTATION_STATE_COMPLETED', `turn ${admitted.turnId} failed: ${terminal.safeFailureReason || 'inspect retained evidence'}`);
       assert.equal(final?.state, 'completed');
-      assert.deepEqual([...new Set((final.toolInvocations || []).map(tool => tool.name))].sort(), ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].sort(), 'the live model must execute all three scoped reads for this smoke');
+      if (!proposalSmoke) assert.deepEqual([...new Set((final.toolInvocations || []).map(tool => tool.name))].sort(), ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].sort(), 'the live model must execute all three scoped reads for this smoke');
+      let proposalVersion;
+      if (proposalSmoke) {
+        assert.equal((state.plans || []).length, (initial.plans || []).length + 1, 'one proposed plan is retained');
+        const previous = new Set((initial.plans || []).map(plan => plan.id));
+        const created = state.plans.find(plan => !previous.has(plan.id));
+        proposalVersion = (await api('GetPlanVersion', { ...scope, planId: created.id })).version;
+        assert.equal(proposalVersion.author, 'agent');
+        assert.equal(proposalVersion.provenance.sourceTurnId, admitted.turnId);
+        assert.equal(proposalVersion.provenance.providerResponseId, final.responseId);
+        assert.ok(proposalVersion.content.tasks.length > 0);
+      }
       const after = await calls();
       assert.equal(after.length, before.length + 1, 'one retained provider request lifecycle');
       await page.reload();
       assert.equal((await calls()).length, after.length, 'reconnect creates no new request lifecycle');
+      if (proposalVersion) assert.deepEqual((await api('GetPlanVersion', { ...scope, planId: proposalVersion.planId })).version, proposalVersion, 'reconnect returns identical proposal and provenance');
       accepted = true;
-      console.log(JSON.stringify({ outcome: 'passed', scope, turnId: admitted.turnId, callId: final.callId, state: final.state, reportedModel: final.reportedModel, inputTokens: final.inputTokens, outputTokens: final.outputTokens, totalTokens: final.totalTokens }));
+      console.log(JSON.stringify({ outcome: 'passed', scope, turnId: admitted.turnId, callId: final.callId, state: final.state, reportedModel: final.reportedModel, inputTokens: final.inputTokens, outputTokens: final.outputTokens, totalTokens: final.totalTokens, proposalVersion }));
       break;
     }
     await new Promise(resolve => setTimeout(resolve, 500));

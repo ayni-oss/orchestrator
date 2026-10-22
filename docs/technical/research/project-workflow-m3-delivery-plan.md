@@ -1,6 +1,6 @@
 # M3 delivery plan
 
-Date: 2026-10-21. Status: staged implementation plan. PR #238 combines this contract with the first durable-review slice; later slices remain planned.
+Date: 2026-10-21. Status: staged implementation plan. PR #238 combines this contract with the first durable-review slice; the second slice adds structured agent proposals; approval/admission and final cumulative acceptance remain planned.
 
 ## What this decides
 

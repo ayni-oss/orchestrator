@@ -1,6 +1,6 @@
 # Plans and approval
 
-Date: 2026-10-21. Status: M3 implementation contract; operator-authored review is implemented in the first slice. Agent proposals and approval/admission remain planned.
+Date: 2026-10-21. Status: M3 implementation contract; operator-authored review and agent proposals are implemented. Approval/admission remain planned.
 
 | Term | Meaning |
 | --- | --- |
@@ -22,7 +22,7 @@ Date: 2026-10-21. Status: M3 implementation contract; operator-authored review i
 M2 provides durable conversations, isolated sessions and bounded provider execution.
 M3 must turn that discussion into authorized work without losing its origin or changing reviewed scope.
 
-The [durable plan review reference](plan-review.md) specifies the first slice’s exact content, limits, API and transaction semantics.
+The [durable plan review reference](plan-review.md) specifies the first slice’s exact content, limits, API and transaction semantics. The [agent proposal reference](agent-proposals.md) specifies the structured provider handoff and retained provenance.
 
 ## How it works today
 

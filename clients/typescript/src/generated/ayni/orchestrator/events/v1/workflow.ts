@@ -140,7 +140,11 @@ export interface ConversationTurnReport {
   /** Closed safe classification code. Never raw executor or provider diagnostics. */
   failureReason: string;
   signature: Buffer;
-  providerCall?: ProviderCallEvidence | undefined;
+  providerCall?:
+    | ProviderCallEvidence
+    | undefined;
+  /** Bounded structured draft; never approval or execution authority. */
+  planProposal?: PlanProposal | undefined;
 }
 
 export interface ConversationReportDecision {
@@ -223,6 +227,12 @@ export interface ToolInvocationEvidence {
   inputDigest: string;
   outputDigest: string;
   state: string;
+}
+
+/** Origin is always derived from the signed turn binding, never model-supplied IDs. */
+export interface PlanProposal {
+  invocationId: string;
+  proposalJson: Buffer;
 }
 
 function createBaseConversationTurnBinding(): ConversationTurnBinding {
@@ -953,6 +963,7 @@ function createBaseConversationTurnReport(): ConversationTurnReport {
     failureReason: "",
     signature: Buffer.alloc(0),
     providerCall: undefined,
+    planProposal: undefined,
   };
 }
 
@@ -987,6 +998,9 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
     }
     if (message.providerCall !== undefined) {
       ProviderCallEvidence.encode(message.providerCall, writer.uint32(82).fork()).join();
+    }
+    if (message.planProposal !== undefined) {
+      PlanProposal.encode(message.planProposal, writer.uint32(90).fork()).join();
     }
     return writer;
   },
@@ -1084,6 +1098,14 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
             message.providerCall = ProviderCallEvidence.decode(reader, reader.uint32());
             continue;
           }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.planProposal = PlanProposal.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1136,6 +1158,11 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
         : isSet(object.provider_call)
         ? ProviderCallEvidence.fromJSON(object.provider_call)
         : undefined,
+      planProposal: isSet(object.planProposal)
+        ? PlanProposal.fromJSON(object.planProposal)
+        : isSet(object.plan_proposal)
+        ? PlanProposal.fromJSON(object.plan_proposal)
+        : undefined,
     };
   },
 
@@ -1171,6 +1198,9 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
     if (message.providerCall !== undefined) {
       obj.providerCall = ProviderCallEvidence.toJSON(message.providerCall);
     }
+    if (message.planProposal !== undefined) {
+      obj.planProposal = PlanProposal.toJSON(message.planProposal);
+    }
     return obj;
   },
 
@@ -1192,6 +1222,9 @@ export const ConversationTurnReport: MessageFns<ConversationTurnReport> = {
     message.signature = object.signature ?? Buffer.alloc(0);
     message.providerCall = (object.providerCall !== undefined && object.providerCall !== null)
       ? ProviderCallEvidence.fromPartial(object.providerCall)
+      : undefined;
+    message.planProposal = (object.planProposal !== undefined && object.planProposal !== null)
+      ? PlanProposal.fromPartial(object.planProposal)
       : undefined;
     return message;
   },
@@ -2567,6 +2600,99 @@ export const ToolInvocationEvidence: MessageFns<ToolInvocationEvidence> = {
     message.inputDigest = object.inputDigest ?? "";
     message.outputDigest = object.outputDigest ?? "";
     message.state = object.state ?? "";
+    return message;
+  },
+};
+
+function createBasePlanProposal(): PlanProposal {
+  return { invocationId: "", proposalJson: Buffer.alloc(0) };
+}
+
+export const PlanProposal: MessageFns<PlanProposal> = {
+  encode(message: PlanProposal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.invocationId !== "") {
+      writer.uint32(10).string(message.invocationId);
+    }
+    if (message.proposalJson.length !== 0) {
+      writer.uint32(18).bytes(message.proposalJson);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlanProposal {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePlanProposal();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.invocationId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.proposalJson = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): PlanProposal {
+    return {
+      invocationId: isSet(object.invocationId)
+        ? globalThis.String(object.invocationId)
+        : isSet(object.invocation_id)
+        ? globalThis.String(object.invocation_id)
+        : "",
+      proposalJson: isSet(object.proposalJson)
+        ? Buffer.from(bytesFromBase64(object.proposalJson))
+        : isSet(object.proposal_json)
+        ? Buffer.from(bytesFromBase64(object.proposal_json))
+        : Buffer.alloc(0),
+    };
+  },
+
+  toJSON(message: PlanProposal): unknown {
+    const obj: any = {};
+    if (message.invocationId !== "") {
+      obj.invocationId = message.invocationId;
+    }
+    if (message.proposalJson.length !== 0) {
+      obj.proposalJson = base64FromBytes(message.proposalJson);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<PlanProposal>): PlanProposal {
+    return PlanProposal.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<PlanProposal>): PlanProposal {
+    const message = createBasePlanProposal();
+    message.invocationId = object.invocationId ?? "";
+    message.proposalJson = object.proposalJson ?? Buffer.alloc(0);
     return message;
   },
 };

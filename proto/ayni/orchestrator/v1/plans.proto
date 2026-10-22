@@ -46,6 +46,7 @@ message PlanVersion {
   PlanContent content = 9;
   string author = 10;
   google.protobuf.Timestamp created_at = 11;
+  AgentPlanProvenance provenance = 12;
 }
 message PlanWriteReceipt {
   string command_id = 1;
@@ -119,4 +120,22 @@ message PlanVersionSummary {
 message ListPlanVersionsResponse {
   repeated PlanVersionSummary versions = 1;
   uint64 next_before_ordinal = 2;
+}
+
+// Application-derived origin and provider-declared assumptions/evidence.
+// Evidence references are declarations, not verified repository/source facts.
+message AgentPlanProvenance {
+  string source_turn_id = 1;
+  string configuration_revision_id = 2;
+  string context_digest = 3;
+  string provider_call_id = 4;
+  string provider_response_id = 5;
+  string assignment_id = 6;
+  uint64 executor_generation = 7;
+  string report_source = 8;
+  string report_id = 9;
+  string report_digest = 10;
+  string invocation_id = 11;
+  repeated string assumptions = 12;
+  repeated string evidence = 13;
 }
