@@ -265,7 +265,7 @@ try {
   assert.equal((await stats()).calls, beforeProposal + 1, 'reconnect preserves one accepted version without another call');
   // A provider proposal becomes admissible only after operator review resolves scope.
   const proposalTasks = await gateway('ListTasks', scope);
-  assert.equal(proposalTasks.tasks.length, 0, 'model proposal grants no task authority');
+  assert.equal((proposalTasks.tasks || []).length, 0, 'model proposal grants no task authority');
   const resolvedContent = structuredClone(version.content);
   resolvedContent.unresolvedQuestions = [];
   const reviewed = (await gateway('RevisePlan', { ...scope, planId: plan.id, expectedVersionId: version.id, content: resolvedContent, idempotencyKey: key() })).version;

@@ -40,6 +40,11 @@ dev/ctl console
 pnpm console:acceptance
 ```
 
+The client warms one conversation/session before taking 100 scripted samples;
+fresh-session provisioning is excluded from these warmed latency gates.
+Exact receipt/watch replay and aggregate message/turn counts are checked after
+every sample and after retained restarts.
+
 The existing acceptance command saves source revision/diff/manifest, workload
 image IDs, original protobuf response bytes and original watch updates. During
 the broker outage it creates and revises a two-task plan, approves the reviewed

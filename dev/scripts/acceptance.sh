@@ -34,7 +34,7 @@ cleanup() {
 trap cleanup EXIT
 
 git -C "$DEV_REPOSITORY_ROOT" rev-parse HEAD > "$evidence/source-revision.txt"
-git -C "$DEV_REPOSITORY_ROOT" diff --no-ext-diff --binary > "$evidence/source-diff.patch"
+git -C "$DEV_REPOSITORY_ROOT" diff --no-ext-diff --binary HEAD > "$evidence/source-diff.patch"
 git -C "$DEV_REPOSITORY_ROOT" ls-files --cached --others --exclude-standard -z | python3 -c '
 import hashlib,json,pathlib,sys
 root=pathlib.Path(sys.argv[1])
