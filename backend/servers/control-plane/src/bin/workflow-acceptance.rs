@@ -275,7 +275,12 @@ async fn measure_all(projects: &mut ProjectServiceClient<Channel>, client: &mut 
     // per sample would include Kubernetes session provisioning in every turn.
     let scope = create_scope(projects, client).await?;
     for index in 0..SAMPLES + WARMUP {
-        let sample = measure(client, scope.clone()).await?;
+        let frame_timeout = if index < WARMUP {
+            Duration::from_secs(120)
+        } else {
+            Duration::from_secs(15)
+        };
+        let sample = measure(client, scope.clone(), frame_timeout).await?;
         verify_sample(client, &sample, index + 1, sample.final_revision).await?;
         if index >= WARMUP {
             samples.push(sample);
@@ -448,7 +453,7 @@ async fn create_scope(
     })
 }
 
-async fn measure(client: &mut Client, scope: Scope) -> Result<Sample> {
+async fn measure(client: &mut Client, scope: Scope, frame_timeout: Duration) -> Result<Sample> {
     let mut watch = client
         .watch_conversation(scope.watch(None))
         .await?
@@ -472,7 +477,7 @@ async fn measure(client: &mut Client, scope: Scope) -> Result<Sample> {
     let mut activity_us = None;
     let terminal_us;
     loop {
-        let frame = next_frame(&mut watch).await?;
+        let frame = next_frame_with_timeout(&mut watch, frame_timeout).await?;
         let Frame::Update(update) = frame else {
             return Err("resume unexpectedly emitted snapshot".into());
         };
@@ -523,7 +528,14 @@ fn validate_update(
 }
 
 async fn next_frame(watch: &mut Streaming<WatchConversationResponse>) -> Result<Frame> {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    next_frame_with_timeout(watch, Duration::from_secs(15)).await
+}
+
+async fn next_frame_with_timeout(
+    watch: &mut Streaming<WatchConversationResponse>,
+    frame_timeout: Duration,
+) -> Result<Frame> {
+    let deadline = Instant::now() + frame_timeout;
     loop {
         let response = timeout_at(deadline, watch.message())
             .await??
