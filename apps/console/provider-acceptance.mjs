@@ -263,6 +263,34 @@ try {
   assert.match(await page.locator('#plan-review').innerText(), /The user wants a reviewable proposal/);
   assert.equal((await gateway('GetPlanVersion', { ...scope, planId: plan.id })).version.id, version.id);
   assert.equal((await stats()).calls, beforeProposal + 1, 'reconnect preserves one accepted version without another call');
+  // A provider proposal becomes admissible only after operator review resolves scope.
+  const proposalTasks = await gateway('ListTasks', scope);
+  assert.equal((proposalTasks.tasks || []).length, 0, 'model proposal grants no task authority');
+  const resolvedContent = structuredClone(version.content);
+  resolvedContent.unresolvedQuestions = [];
+  const reviewed = (await gateway('RevisePlan', { ...scope, planId: plan.id, expectedVersionId: version.id, content: resolvedContent, idempotencyKey: key() })).version;
+  await page.locator(`[data-plan-id="${plan.id}"]`).click();
+  await page.waitForFunction(id => document.querySelector('#plan-approval-basis')?.textContent.includes(id), reviewed.id);
+  await page.locator('#plan-approve-consent').check();
+  const approving = page.waitForResponse(response => response.url().endsWith('/api/ApprovePlan'));
+  await page.locator('#plan-approve').click();
+  const approvalResponse = await approving;
+  assert.equal(approvalResponse.status(), 200);
+  const admitted = await approvalResponse.json();
+  assert.equal(admitted.approval.versionId, reviewed.id);
+  assert.equal(admitted.approval.contentDigest, reviewed.contentDigest);
+  assert.equal(admitted.tasks.length, version.content.tasks.length);
+  for (const [index, task] of admitted.tasks.entries()) {
+    assert.equal(task.conversationId, proposalConversation.id);
+    assert.equal(task.projectId, project.id);
+    assert.equal(task.versionId, reviewed.id);
+    assert.equal(task.state, 'awaiting_execution');
+    assert.deepEqual(task.specification, version.content.tasks[index]);
+  }
+  await page.reload();
+  assert.deepEqual(await gateway('GetPlanApproval', { ...scope, planId: plan.id }), admitted);
+  assert.deepEqual((await gateway('GetPlanVersion', { ...scope, planId: plan.id, versionId: version.id })).version, version, 'approval preserves original agent provenance');
+  assert.equal((await stats()).calls, beforeProposal + 1, 'review and approval create no provider calls');
   const foreignStatus = await page.evaluate(async body => (await fetch('/api/GetPlanVersion', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body) })).status, { ...uncertainScope, planId: plan.id });
   assert.equal(foreignStatus, 404, 'another conversation cannot read the proposal');
   for (const mode of ['proposal-malformed', 'proposal-scope', 'proposal-mixed']) {
@@ -288,5 +316,5 @@ try {
     await mkdir(process.env.CONSOLE_EVIDENCE_DIRECTORY, { recursive: true });
     await page.screenshot({ path: `${process.env.CONSOLE_EVIDENCE_DIRECTORY}/provider-console.png`, fullPage: true });
   }
-  console.log(JSON.stringify({ outcome: 'passed', scope, checks: ['scripted-to-openai-cutover', 'responses-request-profile', 'retained-response-usage', 'reload-no-resend', 'unknown-usage-reservation', 'uncertainty-no-resend', 'queued-cancellation-no-call', 'in-flight-cancellation', 'cancellation-receipt-replay', 'exactly-once-visible-results', 'three-scoped-read-tools', 'tool-usage-accounting', 'tool-replay-no-resend', 'foreign-tool-scope-rejected', 'tool-invocation-limit', 'tool-argument-limit', 'unknown-tool-rejected', 'uncertainty-acknowledgement-consent', 'uncertainty-acknowledgement-receipt-replay', 'uncertainty-evidence-preserved', 'completed-tool-worker-adoption', 'continuation-sending-worker-loss', 'retained-pvc-identity', 'continuation-no-resend', 'agent-proposal-version', 'agent-proposal-provenance', 'proposal-review-reconnect', 'proposal-escaping', 'proposal-cross-conversation-read-rejection', 'malformed-proposal-rejection', 'proposal-scope-spoof-rejection', 'mixed-proposal-rejection', 'cancelled-proposal-no-version'], calls: (await stats()).calls - before.calls }));
+  console.log(JSON.stringify({ outcome: 'passed', scope, checks: ['scripted-to-openai-cutover', 'responses-request-profile', 'retained-response-usage', 'reload-no-resend', 'unknown-usage-reservation', 'uncertainty-no-resend', 'queued-cancellation-no-call', 'in-flight-cancellation', 'cancellation-receipt-replay', 'exactly-once-visible-results', 'three-scoped-read-tools', 'tool-usage-accounting', 'tool-replay-no-resend', 'foreign-tool-scope-rejected', 'tool-invocation-limit', 'tool-argument-limit', 'unknown-tool-rejected', 'uncertainty-acknowledgement-consent', 'uncertainty-acknowledgement-receipt-replay', 'uncertainty-evidence-preserved', 'completed-tool-worker-adoption', 'continuation-sending-worker-loss', 'retained-pvc-identity', 'continuation-no-resend', 'agent-proposal-version', 'agent-proposal-provenance', 'operator-reviewed-proposal-admission', 'approved-proposal-origin-reload', 'approval-no-provider-call', 'proposal-review-reconnect', 'proposal-escaping', 'proposal-cross-conversation-read-rejection', 'malformed-proposal-rejection', 'proposal-scope-spoof-rejection', 'mixed-proposal-rejection', 'cancelled-proposal-no-version'], calls: (await stats()).calls - before.calls }));
 } finally { await browser.close(); }

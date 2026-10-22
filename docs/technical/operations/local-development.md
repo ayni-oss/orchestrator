@@ -119,7 +119,8 @@ is dispatched. A follow-up requires a new plan.
 
 The cumulative browser acceptance includes structured task editing, lost-response
 replay, two-tab revision and approval conflicts, exact approval retry, draft preservation, history, task pagination and scope checks.
-See [plan review](../architecture/plan-review.md) and [task admission](../architecture/task-admission.md) for limits and retained-state rules.
+See [M3 acceptance](plan-acceptance.md) for cumulative outage/restart gates,
+[plan review](../architecture/plan-review.md) and [task admission](../architecture/task-admission.md) for limits and retained-state rules.
 
 ## Shared configuration and session controls
 

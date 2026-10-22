@@ -78,5 +78,5 @@ retry, task pagination, scoped reads and immutable-origin display.
 
 M4 must verify and freeze execution inputs under the task's retained authority.
 M6 routes questions/failures to the originating conversation. M7 can use accepted
-outcomes for factual project continuity. Final cumulative M3 deployment and
-interruption acceptance remains the fourth delivery slice.
+outcomes for factual project continuity. The [M3 acceptance matrix](../operations/plan-acceptance.md) defines cumulative
+deployment, interruption and retained-state recovery gates for the fourth slice.

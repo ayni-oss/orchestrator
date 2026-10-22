@@ -15,13 +15,16 @@ use tokio::time::{Instant, timeout_at};
 use tonic::{Code, Streaming, transport::Channel};
 use uuid::Uuid;
 
+#[path = "workflow_acceptance/plans.rs"]
+mod plans;
+
 type Result<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 type Client = ProjectConversationServiceClient<Channel>;
 const CONTENT: &str = "Exercise the deterministic durable workflow acceptance path.";
 const SAMPLES: usize = 100;
 const WARMUP: usize = 10;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Scope {
     workspace: String,
     project: String,
@@ -133,6 +136,8 @@ async fn run() -> Result {
     let mut client = Client::new(channel.clone());
     let mut projects = ProjectServiceClient::new(channel.clone());
     match mode {
+        "--prepare-plans" => return plans::prepare(&mut projects, &mut client).await,
+        "--verify-plans-stdin" => return plans::verify_stdin(&mut client).await,
         "--queue-capacity" => return queue_capacity(&mut projects, &mut client).await,
         "--prepare-pending" => return prepare_pending(&mut projects, &mut client).await,
         "--verify-pending-stdin" => return verify_pending(&mut client).await,
@@ -248,8 +253,14 @@ async fn expect_unavailable(client: &mut Client) -> Result {
 
 async fn verify_previous(client: &mut Client) -> Result {
     let report: Evidence = serde_json::from_reader(io::stdin().lock())?;
+    let final_revision = report
+        .samples
+        .last()
+        .ok_or("missing samples")?
+        .final_revision;
+    let turns = report.warmup_samples + report.measured_samples;
     for sample in report.samples {
-        verify_sample(client, &sample).await?;
+        verify_sample(client, &sample, turns, final_revision).await?;
     }
     println!(
         "{{\"restart_replay\":\"passed\",\"samples\":{}}}",
@@ -260,10 +271,17 @@ async fn verify_previous(client: &mut Client) -> Result {
 
 async fn measure_all(projects: &mut ProjectServiceClient<Channel>, client: &mut Client) -> Result {
     let mut samples = Vec::with_capacity(SAMPLES);
+    // Warm the same conversation/session used for measurement. A fresh scope
+    // per sample would include Kubernetes session provisioning in every turn.
+    let scope = create_scope(projects, client).await?;
     for index in 0..SAMPLES + WARMUP {
-        let scope = create_scope(projects, client).await?;
-        let sample = measure(client, scope).await?;
-        verify_sample(client, &sample).await?;
+        let frame_timeout = if index < WARMUP {
+            Duration::from_secs(120)
+        } else {
+            Duration::from_secs(15)
+        };
+        let sample = measure(client, scope.clone(), frame_timeout).await?;
+        verify_sample(client, &sample, index + 1, sample.final_revision).await?;
         if index >= WARMUP {
             samples.push(sample);
         }
@@ -435,7 +453,7 @@ async fn create_scope(
     })
 }
 
-async fn measure(client: &mut Client, scope: Scope) -> Result<Sample> {
+async fn measure(client: &mut Client, scope: Scope, frame_timeout: Duration) -> Result<Sample> {
     let mut watch = client
         .watch_conversation(scope.watch(None))
         .await?
@@ -459,7 +477,7 @@ async fn measure(client: &mut Client, scope: Scope) -> Result<Sample> {
     let mut activity_us = None;
     let terminal_us;
     loop {
-        let frame = next_frame(&mut watch).await?;
+        let frame = next_frame_with_timeout(&mut watch, frame_timeout).await?;
         let Frame::Update(update) = frame else {
             return Err("resume unexpectedly emitted snapshot".into());
         };
@@ -510,7 +528,14 @@ fn validate_update(
 }
 
 async fn next_frame(watch: &mut Streaming<WatchConversationResponse>) -> Result<Frame> {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    next_frame_with_timeout(watch, Duration::from_secs(15)).await
+}
+
+async fn next_frame_with_timeout(
+    watch: &mut Streaming<WatchConversationResponse>,
+    frame_timeout: Duration,
+) -> Result<Frame> {
+    let deadline = Instant::now() + frame_timeout;
     loop {
         let response = timeout_at(deadline, watch.message())
             .await??
@@ -548,7 +573,12 @@ async fn replay_every_cursor(client: &mut Client, sample: &Sample) -> Result {
     Ok(())
 }
 
-async fn verify_sample(client: &mut Client, sample: &Sample) -> Result {
+async fn verify_sample(
+    client: &mut Client,
+    sample: &Sample,
+    expected_turns: usize,
+    expected_revision: u64,
+) -> Result {
     replay_every_cursor(client, sample).await?;
     let replay: CommandReceipt = client
         .send_message(sample.scope.send(&sample.idempotency_key))
@@ -588,14 +618,14 @@ async fn verify_sample(client: &mut Client, sample: &Sample) -> Result {
         return Err("changed request returned wrong conflict status".into());
     }
     let after = snapshot(client, &sample.scope).await?;
-    if after.conversation_revision != sample.final_revision
-        || before.conversation_revision != sample.final_revision
+    let expected_turns = u64::try_from(expected_turns)?;
+    if after.conversation_revision != expected_revision
+        || before.conversation_revision != expected_revision
         || !after.nonterminal_turns.is_empty()
-        || after.recent_terminal_turns.len() != 1
-        || after
-            .history_counts
-            .as_ref()
-            .is_none_or(|counts| counts.messages != 2 || counts.turns != 1)
+        || after.recent_terminal_turns.is_empty()
+        || after.history_counts.as_ref().is_none_or(|counts| {
+            counts.messages != expected_turns * 2 || counts.turns != expected_turns
+        })
     {
         return Err("terminal snapshot/replay changed authoritative state".into());
     }
