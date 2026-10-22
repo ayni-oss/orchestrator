@@ -22,7 +22,8 @@ Durable-workflow local Docker Desktop development:
   prepare-task submit-start FROZEN_START_JSON
                                 Verify source evidence or authorize task preparation
   scenario                      Run the message-to-scripted-response diagnostic
-  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only]
+  quality-runtime               Build/load the local managed task-quality fixture
+  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only|--quality-only]
                                 Run cumulative gates or scoped plan/task recovery
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
@@ -84,6 +85,9 @@ case "$command" in
       exit 2
     fi
     "$scripts/check.sh" "$@"
+    ;;
+  quality-runtime)
+    "$scripts/quality-runtime.sh" "$@"
     ;;
   prepare-task)
     "$scripts/prepare-task.sh" "$@"

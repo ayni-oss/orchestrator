@@ -9,12 +9,21 @@ case "$namespace" in
   ayni-orchestrator-acceptance-*) ;;
   *) echo 'acceptance requires an isolated ayni-orchestrator-acceptance-* namespace' >&2; exit 2 ;;
 esac
-if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only && "$2" != --tasks-only && "$2" != --coding-only ) ]]; then
-  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only|--tasks-only|--coding-only]' >&2
+if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only && "$2" != --tasks-only && "$2" != --coding-only && "$2" != --quality-only ) ]]; then
+  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only|--tasks-only|--coding-only|--quality-only]' >&2
   exit 2
 fi
 readonly evidence="$1"
 readonly profile="${2:-full}"
+quality_runtime="${AYNI_ORCHESTRATOR_QUALITY_RUNTIME_IMAGE:-}"
+if [[ "$profile" == --quality-only ]]; then
+  if [[ -z "$quality_runtime" && -f "$DEV_REPOSITORY_ROOT/.ayni/task-quality-runtime.json" ]]; then
+    quality_runtime="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["runtime_image"])' "$DEV_REPOSITORY_ROOT/.ayni/task-quality-runtime.json")"
+  fi
+  [[ "$quality_runtime" =~ ^docker.io/local/ayni-task-quality@sha256:[a-f0-9]{64}$ ]] || {
+    echo 'quality acceptance needs the local digest from dev/ctl quality-runtime' >&2; exit 2;
+  }
+fi
 if [[ -e "$evidence" ]]; then
   echo 'refusing to overwrite existing acceptance evidence' >&2
   exit 2
@@ -153,10 +162,21 @@ kubectl --context "$context" --namespace "$namespace" exec "$pod" --container co
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-execution \
   > "$evidence/execution-before-restart.json"
 fi
-if [[ "$profile" == --coding-only ]]; then
+if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-task-run \
   > "$evidence/task-run.json"
+if [[ "$profile" == --quality-only ]]; then
+  printf '%s\n' "$quality_runtime" > "$evidence/quality-runtime-image.txt"
+  kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
+    env "ORCHESTRATOR_TASK_QUALITY_RUNTIME_IMAGE=$quality_runtime" \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-task-quality-run \
+    > "$evidence/task-quality-run.json"
+  kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
+    env "ORCHESTRATOR_TASK_QUALITY_RUNTIME_IMAGE=$quality_runtime" \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-task-quality-failed-run \
+    > "$evidence/task-quality-failed-run.json"
+fi
 # Separate real worker cancellation and Pod-loss cases retain their own immutable origin.
 for scenario in cancellation pod-loss; do
   kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
@@ -211,7 +231,7 @@ if [[ "$profile" != --plans-only ]]; then
 kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-execution-stdin \
   < "$evidence/execution-before-restart.json" > "$evidence/execution-broker-unavailable.txt"
-if [[ "$profile" == --coding-only ]]; then
+if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
 kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-run-stdin \
   < "$evidence/task-run.json" > "$evidence/task-run-broker-unavailable.txt"
@@ -248,16 +268,24 @@ for workload in deployment/control-plane deployment/task-supervisor statefulset/
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-execution-stdin \
     < "$evidence/execution-before-restart.json" > "$evidence/execution-replay-$name.txt"
-  if [[ "$profile" == --coding-only ]]; then
+  if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-run-stdin \
     < "$evidence/task-run.json" > "$evidence/task-run-replay-$name.txt"
+  if [[ "$profile" == --quality-only ]]; then
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-quality-run-stdin \
+    < "$evidence/task-quality-run.json" > "$evidence/task-quality-replay-$name.txt"
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-quality-failed-run-stdin \
+    < "$evidence/task-quality-failed-run.json" > "$evidence/task-quality-failed-replay-$name.txt"
+  fi
   fi
   fi
 done
 pvc_identity > "$evidence/pvc-after.json"
 cmp "$pvc_expected" "$evidence/pvc-after.json"
-if [[ "$profile" == --coding-only ]]; then
+if [[ "$profile" == --coding-only || "$profile" == --quality-only ]]; then
 kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-after.json"
 cmp "$evidence/task-pvc-before.json" "$evidence/task-pvc-after.json"
 fi

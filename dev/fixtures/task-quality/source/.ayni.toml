@@ -1,0 +1,19 @@
+[checks]
+test = true
+coverage = false
+size = true
+complexity = false
+deps = false
+mutation = false
+
+[languages]
+enabled = ["rust"]
+
+[concurrency]
+amount = 1
+
+[rust]
+roots = ["."]
+
+[rust.size]
+"*.rs" = { warn = 100, fail = 200 }

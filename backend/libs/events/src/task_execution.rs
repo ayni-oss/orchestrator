@@ -83,6 +83,8 @@ pub struct TaskRun {
     pub deadline_seconds: i64,
     pub provider_state: String,
     pub outcome: Option<TaskOutcome>,
+    #[serde(default)]
+    pub quality: Option<crate::task_quality::QualityOutcome>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
@@ -103,8 +105,15 @@ pub enum SupervisorRequest {
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WorkerRequest {
     Input,
-    Sending { request_digest: String },
-    Report { outcome: TaskOutcome },
+    Sending {
+        request_digest: String,
+    },
+    Report {
+        outcome: TaskOutcome,
+    },
+    QualityReport {
+        outcome: crate::task_quality::QualityOutcome,
+    },
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct WorkerResponse {

@@ -58,6 +58,26 @@ pub(super) async fn get(
     let hash = ayni_orchestrator_events::task_execution::digest(outcome.patch.as_bytes());
     Ok(context.response(v1::GetTaskAttemptResponse {
         attempt: Some(v1::TaskAttempt {
+            execution_outcome: outcome.state,
+            quality: r.quality.map(|q| v1::TaskQualityOutcome {
+                state: q.state,
+                safe_reason: q.safe_reason,
+                snapshot_digest: q.snapshot_digest,
+                lock_digest: q.lock_digest,
+                runtime_image: q.runtime_image,
+                runtime_platform: q.runtime_platform,
+                runtime_metadata_digest: q.runtime_metadata_digest,
+                executor_digest: q.executor_digest,
+                exit_code: q.exit_code,
+                artifact_digest: q.artifact_digest,
+                artifact: q.artifact,
+                expected_targets: q.expected_targets,
+                completed_targets: q.completed_targets,
+                contract_digest: q.contract_digest,
+                lock_fingerprint: q.lock_fingerprint,
+                source_fingerprint: q.source_fingerprint,
+                validation_input_digest: q.validation_input_digest,
+            }),
             attempt_id: r.command.attempt_id,
             task_id: r.command.task_id,
             state: r.state,

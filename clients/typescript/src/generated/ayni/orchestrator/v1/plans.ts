@@ -368,10 +368,33 @@ export interface TaskAttempt {
   sourceCommit: string;
   runtimeImage: string;
   configurationRevisionId: string;
+  quality?: TaskQualityOutcome | undefined;
+  executionOutcome: string;
 }
 
 export interface GetTaskAttemptResponse {
   attempt?: TaskAttempt | undefined;
+}
+
+/** Retained Ayni evidence is independent of the coding outcome and publication. */
+export interface TaskQualityOutcome {
+  state: string;
+  safeReason: string;
+  snapshotDigest: string;
+  lockDigest: string;
+  runtimeImage: string;
+  runtimePlatform: string;
+  runtimeMetadataDigest: string;
+  executorDigest: string;
+  exitCode?: number | undefined;
+  artifactDigest: string;
+  artifact: string;
+  expectedTargets: string;
+  completedTargets: string;
+  contractDigest: string;
+  lockFingerprint: string;
+  sourceFingerprint: string;
+  validationInputDigest: string;
 }
 
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
@@ -6436,6 +6459,8 @@ function createBaseTaskAttempt(): TaskAttempt {
     sourceCommit: "",
     runtimeImage: "",
     configurationRevisionId: "",
+    quality: undefined,
+    executionOutcome: "",
   };
 }
 
@@ -6476,6 +6501,12 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     }
     if (message.configurationRevisionId !== "") {
       writer.uint32(98).string(message.configurationRevisionId);
+    }
+    if (message.quality !== undefined) {
+      TaskQualityOutcome.encode(message.quality, writer.uint32(106).fork()).join();
+    }
+    if (message.executionOutcome !== "") {
+      writer.uint32(114).string(message.executionOutcome);
     }
     return writer;
   },
@@ -6589,6 +6620,22 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
             message.configurationRevisionId = reader.string();
             continue;
           }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.quality = TaskQualityOutcome.decode(reader, reader.uint32());
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.executionOutcome = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -6651,6 +6698,12 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
         : isSet(object.configuration_revision_id)
         ? globalThis.String(object.configuration_revision_id)
         : "",
+      quality: isSet(object.quality) ? TaskQualityOutcome.fromJSON(object.quality) : undefined,
+      executionOutcome: isSet(object.executionOutcome)
+        ? globalThis.String(object.executionOutcome)
+        : isSet(object.execution_outcome)
+        ? globalThis.String(object.execution_outcome)
+        : "",
     };
   },
 
@@ -6692,6 +6745,12 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     if (message.configurationRevisionId !== "") {
       obj.configurationRevisionId = message.configurationRevisionId;
     }
+    if (message.quality !== undefined) {
+      obj.quality = TaskQualityOutcome.toJSON(message.quality);
+    }
+    if (message.executionOutcome !== "") {
+      obj.executionOutcome = message.executionOutcome;
+    }
     return obj;
   },
 
@@ -6712,6 +6771,10 @@ export const TaskAttempt: MessageFns<TaskAttempt> = {
     message.sourceCommit = object.sourceCommit ?? "";
     message.runtimeImage = object.runtimeImage ?? "";
     message.configurationRevisionId = object.configurationRevisionId ?? "";
+    message.quality = (object.quality !== undefined && object.quality !== null)
+      ? TaskQualityOutcome.fromPartial(object.quality)
+      : undefined;
+    message.executionOutcome = object.executionOutcome ?? "";
     return message;
   },
 };
@@ -6781,6 +6844,409 @@ export const GetTaskAttemptResponse: MessageFns<GetTaskAttemptResponse> = {
     message.attempt = (object.attempt !== undefined && object.attempt !== null)
       ? TaskAttempt.fromPartial(object.attempt)
       : undefined;
+    return message;
+  },
+};
+
+function createBaseTaskQualityOutcome(): TaskQualityOutcome {
+  return {
+    state: "",
+    safeReason: "",
+    snapshotDigest: "",
+    lockDigest: "",
+    runtimeImage: "",
+    runtimePlatform: "",
+    runtimeMetadataDigest: "",
+    executorDigest: "",
+    exitCode: undefined,
+    artifactDigest: "",
+    artifact: "",
+    expectedTargets: "0",
+    completedTargets: "0",
+    contractDigest: "",
+    lockFingerprint: "",
+    sourceFingerprint: "",
+    validationInputDigest: "",
+  };
+}
+
+export const TaskQualityOutcome: MessageFns<TaskQualityOutcome> = {
+  encode(message: TaskQualityOutcome, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.state !== "") {
+      writer.uint32(10).string(message.state);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(18).string(message.safeReason);
+    }
+    if (message.snapshotDigest !== "") {
+      writer.uint32(26).string(message.snapshotDigest);
+    }
+    if (message.lockDigest !== "") {
+      writer.uint32(34).string(message.lockDigest);
+    }
+    if (message.runtimeImage !== "") {
+      writer.uint32(42).string(message.runtimeImage);
+    }
+    if (message.runtimePlatform !== "") {
+      writer.uint32(50).string(message.runtimePlatform);
+    }
+    if (message.runtimeMetadataDigest !== "") {
+      writer.uint32(58).string(message.runtimeMetadataDigest);
+    }
+    if (message.executorDigest !== "") {
+      writer.uint32(66).string(message.executorDigest);
+    }
+    if (message.exitCode !== undefined) {
+      writer.uint32(72).int32(message.exitCode);
+    }
+    if (message.artifactDigest !== "") {
+      writer.uint32(82).string(message.artifactDigest);
+    }
+    if (message.artifact !== "") {
+      writer.uint32(90).string(message.artifact);
+    }
+    if (message.expectedTargets !== "0") {
+      writer.uint32(96).uint64(message.expectedTargets);
+    }
+    if (message.completedTargets !== "0") {
+      writer.uint32(104).uint64(message.completedTargets);
+    }
+    if (message.contractDigest !== "") {
+      writer.uint32(114).string(message.contractDigest);
+    }
+    if (message.lockFingerprint !== "") {
+      writer.uint32(122).string(message.lockFingerprint);
+    }
+    if (message.sourceFingerprint !== "") {
+      writer.uint32(130).string(message.sourceFingerprint);
+    }
+    if (message.validationInputDigest !== "") {
+      writer.uint32(138).string(message.validationInputDigest);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskQualityOutcome {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskQualityOutcome();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.snapshotDigest = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.lockDigest = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.runtimeImage = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.runtimePlatform = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.runtimeMetadataDigest = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.executorDigest = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 72) {
+              break;
+            }
+
+            message.exitCode = reader.int32();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.artifactDigest = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.artifact = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.expectedTargets = reader.uint64().toString();
+            continue;
+          }
+          case 13: {
+            if (tag !== 104) {
+              break;
+            }
+
+            message.completedTargets = reader.uint64().toString();
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.contractDigest = reader.string();
+            continue;
+          }
+          case 15: {
+            if (tag !== 122) {
+              break;
+            }
+
+            message.lockFingerprint = reader.string();
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.sourceFingerprint = reader.string();
+            continue;
+          }
+          case 17: {
+            if (tag !== 138) {
+              break;
+            }
+
+            message.validationInputDigest = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskQualityOutcome {
+    return {
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      snapshotDigest: isSet(object.snapshotDigest)
+        ? globalThis.String(object.snapshotDigest)
+        : isSet(object.snapshot_digest)
+        ? globalThis.String(object.snapshot_digest)
+        : "",
+      lockDigest: isSet(object.lockDigest)
+        ? globalThis.String(object.lockDigest)
+        : isSet(object.lock_digest)
+        ? globalThis.String(object.lock_digest)
+        : "",
+      runtimeImage: isSet(object.runtimeImage)
+        ? globalThis.String(object.runtimeImage)
+        : isSet(object.runtime_image)
+        ? globalThis.String(object.runtime_image)
+        : "",
+      runtimePlatform: isSet(object.runtimePlatform)
+        ? globalThis.String(object.runtimePlatform)
+        : isSet(object.runtime_platform)
+        ? globalThis.String(object.runtime_platform)
+        : "",
+      runtimeMetadataDigest: isSet(object.runtimeMetadataDigest)
+        ? globalThis.String(object.runtimeMetadataDigest)
+        : isSet(object.runtime_metadata_digest)
+        ? globalThis.String(object.runtime_metadata_digest)
+        : "",
+      executorDigest: isSet(object.executorDigest)
+        ? globalThis.String(object.executorDigest)
+        : isSet(object.executor_digest)
+        ? globalThis.String(object.executor_digest)
+        : "",
+      exitCode: isSet(object.exitCode)
+        ? globalThis.Number(object.exitCode)
+        : isSet(object.exit_code)
+        ? globalThis.Number(object.exit_code)
+        : undefined,
+      artifactDigest: isSet(object.artifactDigest)
+        ? globalThis.String(object.artifactDigest)
+        : isSet(object.artifact_digest)
+        ? globalThis.String(object.artifact_digest)
+        : "",
+      artifact: isSet(object.artifact) ? globalThis.String(object.artifact) : "",
+      expectedTargets: isSet(object.expectedTargets)
+        ? globalThis.String(object.expectedTargets)
+        : isSet(object.expected_targets)
+        ? globalThis.String(object.expected_targets)
+        : "0",
+      completedTargets: isSet(object.completedTargets)
+        ? globalThis.String(object.completedTargets)
+        : isSet(object.completed_targets)
+        ? globalThis.String(object.completed_targets)
+        : "0",
+      contractDigest: isSet(object.contractDigest)
+        ? globalThis.String(object.contractDigest)
+        : isSet(object.contract_digest)
+        ? globalThis.String(object.contract_digest)
+        : "",
+      lockFingerprint: isSet(object.lockFingerprint)
+        ? globalThis.String(object.lockFingerprint)
+        : isSet(object.lock_fingerprint)
+        ? globalThis.String(object.lock_fingerprint)
+        : "",
+      sourceFingerprint: isSet(object.sourceFingerprint)
+        ? globalThis.String(object.sourceFingerprint)
+        : isSet(object.source_fingerprint)
+        ? globalThis.String(object.source_fingerprint)
+        : "",
+      validationInputDigest: isSet(object.validationInputDigest)
+        ? globalThis.String(object.validationInputDigest)
+        : isSet(object.validation_input_digest)
+        ? globalThis.String(object.validation_input_digest)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskQualityOutcome): unknown {
+    const obj: any = {};
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.snapshotDigest !== "") {
+      obj.snapshotDigest = message.snapshotDigest;
+    }
+    if (message.lockDigest !== "") {
+      obj.lockDigest = message.lockDigest;
+    }
+    if (message.runtimeImage !== "") {
+      obj.runtimeImage = message.runtimeImage;
+    }
+    if (message.runtimePlatform !== "") {
+      obj.runtimePlatform = message.runtimePlatform;
+    }
+    if (message.runtimeMetadataDigest !== "") {
+      obj.runtimeMetadataDigest = message.runtimeMetadataDigest;
+    }
+    if (message.executorDigest !== "") {
+      obj.executorDigest = message.executorDigest;
+    }
+    if (message.exitCode !== undefined) {
+      obj.exitCode = Math.round(message.exitCode);
+    }
+    if (message.artifactDigest !== "") {
+      obj.artifactDigest = message.artifactDigest;
+    }
+    if (message.artifact !== "") {
+      obj.artifact = message.artifact;
+    }
+    if (message.expectedTargets !== "0") {
+      obj.expectedTargets = message.expectedTargets;
+    }
+    if (message.completedTargets !== "0") {
+      obj.completedTargets = message.completedTargets;
+    }
+    if (message.contractDigest !== "") {
+      obj.contractDigest = message.contractDigest;
+    }
+    if (message.lockFingerprint !== "") {
+      obj.lockFingerprint = message.lockFingerprint;
+    }
+    if (message.sourceFingerprint !== "") {
+      obj.sourceFingerprint = message.sourceFingerprint;
+    }
+    if (message.validationInputDigest !== "") {
+      obj.validationInputDigest = message.validationInputDigest;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskQualityOutcome>): TaskQualityOutcome {
+    return TaskQualityOutcome.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskQualityOutcome>): TaskQualityOutcome {
+    const message = createBaseTaskQualityOutcome();
+    message.state = object.state ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.snapshotDigest = object.snapshotDigest ?? "";
+    message.lockDigest = object.lockDigest ?? "";
+    message.runtimeImage = object.runtimeImage ?? "";
+    message.runtimePlatform = object.runtimePlatform ?? "";
+    message.runtimeMetadataDigest = object.runtimeMetadataDigest ?? "";
+    message.executorDigest = object.executorDigest ?? "";
+    message.exitCode = object.exitCode ?? undefined;
+    message.artifactDigest = object.artifactDigest ?? "";
+    message.artifact = object.artifact ?? "";
+    message.expectedTargets = object.expectedTargets ?? "0";
+    message.completedTargets = object.completedTargets ?? "0";
+    message.contractDigest = object.contractDigest ?? "";
+    message.lockFingerprint = object.lockFingerprint ?? "";
+    message.sourceFingerprint = object.sourceFingerprint ?? "";
+    message.validationInputDigest = object.validationInputDigest ?? "";
     return message;
   },
 };

@@ -14,7 +14,7 @@ pub struct RunReceipt {
     pub conversation_revision: u64,
     pub resume_cursor: String,
 }
-const SELECT_RUN: &str = "SELECT command,state,generation,pod_uid,COALESCE(workflow_ts_seconds(deadline_at),0),provider_state,outcome FROM workflow_task_runs";
+const SELECT_RUN: &str = "SELECT command,state,generation,pod_uid,COALESCE(workflow_ts_seconds(deadline_at),0),provider_state,outcome,(SELECT outcome FROM workflow_task_quality q WHERE q.attempt_id=workflow_task_runs.attempt_id) FROM workflow_task_runs";
 async fn lock(tx: &Transaction<'_>) -> Result<(), StoreError> {
     tx.query_one(
         "SELECT pg_advisory_xact_lock($1)",
@@ -31,6 +31,10 @@ fn run_row(row: &Row) -> Result<TaskRun, StoreError> {
         pod_uid: row.get(3),
         deadline_seconds: row.get(4),
         provider_state: row.get(5),
+        quality: row
+            .get::<_, Option<Vec<u8>>>(7)
+            .map(|b| decode(&b))
+            .transpose()?,
         outcome: row
             .get::<_, Option<Vec<u8>>>(6)
             .map(|b| decode(&b))

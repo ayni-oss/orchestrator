@@ -318,7 +318,30 @@ message TaskAttempt {
   string source_commit = 10;
   string runtime_image = 11;
   string configuration_revision_id = 12;
+  TaskQualityOutcome quality = 13;
+  string execution_outcome = 14;
 }
 message GetTaskAttemptResponse {
   TaskAttempt attempt = 1;
+}
+
+// Retained Ayni evidence is independent of the coding outcome and publication.
+message TaskQualityOutcome {
+  string state = 1;
+  string safe_reason = 2;
+  string snapshot_digest = 3;
+  string lock_digest = 4;
+  string runtime_image = 5;
+  string runtime_platform = 6;
+  string runtime_metadata_digest = 7;
+  string executor_digest = 8;
+  optional int32 exit_code = 9;
+  string artifact_digest = 10;
+  string artifact = 11;
+  uint64 expected_targets = 12;
+  uint64 completed_targets = 13;
+  string contract_digest = 14;
+  string lock_fingerprint = 15;
+  string source_fingerprint = 16;
+  string validation_input_digest = 17;
 }
