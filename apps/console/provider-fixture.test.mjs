@@ -26,7 +26,7 @@ test('Responses fixture validates isolation profile and exposes missing usage an
   assert.equal(JSON.stringify(stats).includes('provider-fixture-key'), false);
 });
 
-test('Responses fixture advertises only scoped reads and validates tool continuations', async t => {
+test('Responses fixture validates scoped reads and validates tool continuations', async t => {
   const fixtureProcess = spawn(globalThis.process.execPath, [new URL('../../dev/fixtures/provider/server.mjs', import.meta.url).pathname], { env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => fixtureProcess.kill('SIGTERM'));
   const [ready] = await Promise.race([once(fixtureProcess.stdout, 'data'), once(fixtureProcess, 'exit').then(([code]) => { throw new Error(`fixture exited: ${code}`); })]);
@@ -63,4 +63,29 @@ test('Responses fixture advertises only scoped reads and validates tool continua
   assert.ok(Buffer.byteLength(oversized.output[0].arguments) > 4096);
   const unknown = await (await send(request('fixture:tool-unknown'))).json();
   assert.equal(unknown.output[0].name, 'shell');
+});
+
+
+test('Responses fixture emits bounded plan proposals and deterministic malformed/scope attacks', async t => {
+  const fixtureProcess = spawn(globalThis.process.execPath, [new URL('../../dev/fixtures/provider/server.mjs', import.meta.url).pathname], { env: { ...globalThis.process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => fixtureProcess.kill('SIGTERM'));
+  const [ready] = await Promise.race([once(fixtureProcess.stdout, 'data'), once(fixtureProcess, 'exit').then(([code]) => { throw new Error(`fixture exited: ${code}`); })]);
+  const endpoint = `http://127.0.0.1:${JSON.parse(ready).port}`;
+  const tools = ['read_workspace_instructions', 'read_project_status', 'read_conversation_history'].map(name => ({ type: 'function', name, strict: true, parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } }));
+  tools.push({ type: 'function', name: 'propose_plan', strict: true, parameters: { type: 'object', properties: { content: { type: 'object' }, assumptions: { type: 'array' }, evidence: { type: 'array' } }, required: ['content', 'assumptions', 'evidence'], additionalProperties: false } });
+  const send = mode => fetch(`${endpoint}/v1/responses`, { method: 'POST', headers: { authorization: 'Bearer provider-fixture-key', 'content-type': 'application/json' }, body: JSON.stringify({ model: 'fixture-model', input: [{ role: 'user', content: `fixture:${mode}` }], tools, max_output_tokens: 2048, store: false, background: false, stream: false, truncation: 'disabled' }) });
+  const valid = await (await send('proposal')).json();
+  assert.equal(valid.output.length, 1);
+  assert.equal(valid.output[0].name, 'propose_plan');
+  const args = JSON.parse(valid.output[0].arguments);
+  assert.ok(Buffer.byteLength(valid.output[0].arguments) < 40960);
+  assert.ok(args.assumptions.length && args.evidence.length);
+  assert.ok(args.content.unresolved_questions.length);
+  assert.equal(args.content.tasks[0].repository, 'declared/example');
+  assert.equal(args.conversation_id, undefined, 'valid proposal cannot select scope');
+  const malformed = JSON.parse((await (await send('proposal-malformed')).json()).output[0].arguments);
+  assert.equal(malformed.content.tasks[0].key, 'invalid task key');
+  const foreign = JSON.parse((await (await send('proposal-scope')).json()).output[0].arguments);
+  assert.equal(foreign.conversation_id, 'another-conversation');
+  assert.equal((await (await send('proposal-mixed')).json()).output.length, 2);
 });

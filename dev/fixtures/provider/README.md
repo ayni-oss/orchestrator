@@ -97,3 +97,26 @@ continuation response for 30 seconds. The scenario waits until that continuation
 was received, deletes its exact worker Pod, and requires an uncertain outcome
 with the same retained PVC and tool evidence. Reconnect must not resend the
 continuation. No database, broker, session volume or retained history is deleted.
+
+
+## Agent plan proposals
+
+`fixture:proposal` returns a terminal `propose_plan` call with bounded content,
+assumptions, unresolved questions and declared evidence. `fixture:proposal-malformed`
+uses an invalid task key, `fixture:proposal-scope` adds an unauthorized conversation
+selector, and `fixture:proposal-mixed` combines a proposal with a read call. Each
+invalid response must fail visibly without creating a plan or another paid call.
+`fixture:proposal-delay` provides the cancellation boundary.
+
+The existing provider acceptance script now checks immutable version provenance,
+review after reload, escaped content, scope rejection and cancelled proposals.
+The same server accepts the scoped-read request profile with the additional
+strict proposal capability. It never contacts a real provider.
+
+For a separate bounded live proposal smoke, run the existing live script with
+`AYNI_SMOKE_PLAN_PROPOSAL=1` in addition to its documented scope and paid-smoke
+opt-in variables. It requests one tiny terminal proposal, verifies its originating
+turn/provider result and confirms the same version after reload. Use a fresh idle
+conversation in the explicitly enabled live workspace; credentials stay mounted
+in that workspace's isolated session. See the
+[proposal contract](../../../docs/technical/architecture/agent-proposals.md).

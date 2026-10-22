@@ -131,7 +131,7 @@ impl WorkflowStore {
             records: u64::try_from(records).map_err(|_| StoreError::CorruptState)?,
             bytes: u64::try_from(bytes).map_err(|_| StoreError::CorruptState)?,
             unsupported: u64::try_from(unsupported).map_err(|_| StoreError::CorruptState)?,
-            full: records >= MAX_RECORDS || bytes + 32768 + 512 > MAX_BYTES,
+            full: records >= MAX_RECORDS || bytes + 128 * 1024 + 512 > MAX_BYTES,
         })
     }
 }

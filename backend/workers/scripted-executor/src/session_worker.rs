@@ -34,6 +34,8 @@ pub struct ExecutionResult {
     pub failure_reason: String,
     #[serde(default)]
     pub provider_call: Option<ayni_orchestrator_events::v1::ProviderCallEvidence>,
+    #[serde(default)]
+    pub plan_proposal: Option<ayni_orchestrator_events::v1::PlanProposal>,
 }
 
 struct WorkerState {
@@ -281,6 +283,7 @@ async fn execute(
             response_content: RESPONSE.to_owned(),
             failure_reason: String::new(),
             provider_call: None,
+            plan_proposal: None,
         };
         let json = serde_json::to_string(&result).map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
         tx.execute("INSERT INTO results(command_id,digest,request,result,retained_bytes) VALUES(?1,?2,?3,?4,?5)",params![identity.id,digest,body.as_ref(),json,bytes]).map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;

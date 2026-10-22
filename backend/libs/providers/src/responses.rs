@@ -47,17 +47,19 @@ pub struct FunctionCall {
     pub arguments: String,
 }
 
-/// The complete initial capability catalog. Parameters cannot select another scope.
+/// Scoped reads and terminal draft proposals. Parameters cannot select another scope.
 #[must_use]
 pub fn scoped_tools() -> Value {
-    Value::Array([
+    let mut tools = [
         ("read_workspace_instructions", "Read this turn's frozen workspace instructions."),
         ("read_project_status", "Read the originating project's retained factual status snapshot."),
         ("read_conversation_history", "Read accepted originating-conversation history through the frozen eligibility boundary."),
     ].into_iter().map(|(name, description)| json!({
         "type":"function","name":name,"description":description,"strict":true,
         "parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}
-    })).collect())
+    })).collect::<Vec<_>>();
+    tools.push(crate::plan_proposals::tool());
+    Value::Array(tools)
 }
 
 /// Safe classifications deliberately omit raw provider diagnostics and request data.
@@ -342,7 +344,16 @@ fn response_content(
                     arguments: output
                         .get("arguments")
                         .and_then(Value::as_str)
-                        .filter(|value| value.len() <= 4096)
+                        .filter(|value| {
+                            value.len()
+                                <= if output.get("name").and_then(Value::as_str)
+                                    == Some("propose_plan")
+                                {
+                                    40960
+                                } else {
+                                    4096
+                                }
+                        })
                         .ok_or("provider_tool_rejected")?
                         .to_owned(),
                 };
@@ -379,7 +390,7 @@ fn response_content(
 mod tests {
     use super::*;
     #[test]
-    fn request_is_client_managed_and_exposes_only_scoped_reads() {
+    fn request_is_client_managed_and_exposes_only_scoped_reads_and_draft_proposals() {
         let request = prepare(
             "explicit-model",
             "frozen instructions",
@@ -387,9 +398,9 @@ mod tests {
                 role: "user".into(),
                 content: "hello".into(),
             }],
-            2048,
+            8192,
             512,
-            2560,
+            8704,
         )
         .unwrap();
         let body: Value = serde_json::from_slice(&request.bytes).unwrap();

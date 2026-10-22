@@ -4,6 +4,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 ## Current implementation
 
+- [Agent plan proposals](architecture/agent-proposals.md): bounded terminal provider proposals, authenticated provenance and retained review.
 - [Durable plan review](architecture/plan-review.md): operator-authored immutable versions, scoped review/history, exact retries and console editing.
 
 - [Architecture](architecture/architecture.md): authority, transactions, API surface, projections, and failure boundaries.
@@ -17,7 +18,7 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 
 ## Binding research
 
-- [Plans and approval](architecture/plans-and-approval.md): M3 implementation contract for immutable versions, explicit approval, task admission and retained project/conversation origin; agent proposals and approval/admission remain planned.
+- [Plans and approval](architecture/plans-and-approval.md): M3 implementation contract for immutable versions, explicit approval, task admission and retained project/conversation origin; agent proposals are implemented; approval/admission remain planned.
 - [M3 delivery plan](research/project-workflow-m3-delivery-plan.md): four cumulative PRs, contract completion gates and failure/recovery acceptance.
 - [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): full milestone contract and later-slice handoffs.
 - [M1 acceptance evidence](research/project-workflow-m1-acceptance-evidence.md): executable gates, reproduction, and coverage limits.

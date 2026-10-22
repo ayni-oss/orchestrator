@@ -59,6 +59,8 @@ message ConversationTurnReport {
   string failure_reason = 8;
   bytes signature = 9;
   ProviderCallEvidence provider_call = 10;
+  // Bounded structured draft; never approval or execution authority.
+  PlanProposal plan_proposal = 11;
 }
 
 enum ConversationReportDecisionKind {
@@ -145,4 +147,10 @@ message ToolInvocationEvidence {
   string input_digest = 3;
   string output_digest = 4;
   string state = 5;
+}
+
+// Origin is always derived from the signed turn binding, never model-supplied IDs.
+message PlanProposal {
+  string invocation_id = 1;
+  bytes proposal_json = 2;
 }

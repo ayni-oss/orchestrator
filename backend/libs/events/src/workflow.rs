@@ -31,7 +31,7 @@ pub const REPORT_SCHEMA: &str = "ayni://orchestrator/schemas/conversation-turn-r
 pub const DECISION_SCHEMA: &str = "ayni://orchestrator/schemas/conversation-report-decision/v1";
 pub const MAX_COMMAND_BYTES: usize = 256 * 1024;
 pub const MAX_CLAIM_BYTES: usize = 16 * 1024;
-pub const MAX_REPORT_BYTES: usize = 32 * 1024;
+pub const MAX_REPORT_BYTES: usize = 128 * 1024;
 pub const MAX_DECISION_BYTES: usize = 16 * 1024;
 pub const MAX_CONTENT_BYTES: usize = 16 * 1024;
 
@@ -715,6 +715,7 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
         ConversationTurnReportKind::Unspecified => false,
     };
     validate_provider_evidence(payload, binding, kind)?;
+    validate_proposal_envelope(payload, binding, kind)?;
     if !sequence_valid
         || !outcome_valid
         || uuid::Uuid::parse_str(&payload.executor_instance_id).is_err()
@@ -723,6 +724,24 @@ fn validate_report(payload: &ConversationTurnReport, signed: bool) -> Result<(),
         || (!signed && !payload.signature.is_empty())
     {
         return Err(ContractError::Invalid("conversation report"));
+    }
+    Ok(())
+}
+
+fn validate_proposal_envelope(
+    payload: &ConversationTurnReport,
+    binding: &ConversationTurnBinding,
+    kind: ConversationTurnReportKind,
+) -> Result<(), ContractError> {
+    if let Some(proposal) = &payload.plan_proposal
+        && (kind != ConversationTurnReportKind::Completed
+            || binding.execution_binding_revision != "openai-responses-v1"
+            || payload.provider_call.is_none()
+            || !simple_identifier(&proposal.invocation_id)
+            || proposal.proposal_json.is_empty()
+            || proposal.proposal_json.len() > crate::plan_proposals::MAX_PROPOSAL_BYTES)
+    {
+        return Err(ContractError::Invalid("plan proposal envelope"));
     }
     Ok(())
 }
@@ -864,6 +883,8 @@ fn report_failure_reason(value: &str) -> bool {
             | "provider_budget_exhausted"
             | "provider_usage_unknown"
             | "provider_credentials_unavailable"
+            | "invalid_plan_proposal"
+            | "plan_capacity"
             | "cancelled"
     )
 }
@@ -878,6 +899,8 @@ fn decision_rejection_reason(value: &str) -> bool {
             | "invalid_signature"
             | "event_conflict"
             | "terminal_conflict"
+            | "invalid_plan_proposal"
+            | "plan_capacity"
     )
 }
 

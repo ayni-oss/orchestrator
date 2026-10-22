@@ -107,8 +107,9 @@ and bounded assessment without sharing private working context.
 M3 admits tasks in an awaiting-execution state; it does not dispatch coding work.
 One plan admits one approved task set. Follow-up work requires a new linked plan
 until later confirmed recovery defines replacement of admitted work. PR #238 combines
-the contract with the first operator-authored durable-review slice. Agent proposals,
-approval/admission and final M3 acceptance remain later slices; each delivery PR
+the contract with the first operator-authored durable-review slice. The second
+slice adds [structured agent proposals](docs/technical/architecture/agent-proposals.md)
+and retained provenance. Approval/admission and final M3 acceptance remain later slices; each delivery PR
 owns its acceptance evidence and status changes.
 
 ### Validation at every milestone

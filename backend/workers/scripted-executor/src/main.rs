@@ -261,6 +261,7 @@ fn claim_bytes(
         failure_reason: String::new(),
         signature: Vec::new(),
         provider_call: None,
+        plan_proposal: None,
     };
     sign_report(&identity, &mut report, &configuration.seed)?;
     Ok(encode_report(&identity, metadata, &report)?)
@@ -336,6 +337,7 @@ async fn execute_ready(
                 response_content: SCRIPTED_RESPONSE.to_owned(),
                 failure_reason: String::new(),
                 provider_call: None,
+                plan_proposal: None,
             }
         };
         let binding = payload
@@ -366,6 +368,7 @@ async fn execute_ready(
             response_content: result.response_content,
             failure_reason: result.failure_reason,
             provider_call: result.provider_call,
+            plan_proposal: result.plan_proposal,
             signature: Vec::new(),
         };
         sign_report(&report_identity, &mut report, &configuration.seed)?;

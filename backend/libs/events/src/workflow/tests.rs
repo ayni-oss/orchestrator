@@ -84,6 +84,7 @@ fn report_signature_bytes_are_stable_and_signature_is_excluded() -> Result<(), C
         signing_key_digest: signing_key_digest(&public_key),
         signature: vec![],
         provider_call: None,
+        plan_proposal: None,
         ..Default::default()
     };
     let expected = report_signing_bytes(&identity, &payload)?;
@@ -416,4 +417,68 @@ fn tool_projection_rejects_untrusted_names_duplicate_ids_and_unbounded_batches()
         })
         .collect::<Vec<_>>();
     assert!(!tool_invocations_valid(&tools));
+}
+
+#[test]
+fn proposal_invocation_and_exact_bytes_are_covered_by_terminal_signature()
+-> Result<(), ContractError> {
+    let executor_id = uuid::Uuid::now_v7().to_string();
+    let identity = executor_identity(&executor_id);
+    let signing_seed = [19; 32];
+    let key = SigningKey::from_bytes(&signing_seed)
+        .verifying_key()
+        .to_bytes();
+    let mut binding = binding(&uuid::Uuid::now_v7().to_string());
+    binding.command_digest = format!("sha256:{}", "a".repeat(64));
+    binding.execution_binding_revision = "openai-responses-v1".into();
+    let call = crate::v1::ProviderCallEvidence {
+        call_id: binding.command_event_id.clone(),
+        provider: "openai".into(),
+        model: "explicit-model".into(),
+        configuration_revision_id: uuid::Uuid::now_v7().to_string(),
+        context_digest: format!("sha256:{}", "b".repeat(64)),
+        request_digest: format!("sha256:{}", "c".repeat(64)),
+        response_id: "response-identity".into(),
+        reported_model: "explicit-model".into(),
+        reserved_input_tokens: 8192,
+        reserved_output_tokens: 4096,
+        reserved_total_tokens: 12288,
+        state: "completed".into(),
+        ..Default::default()
+    };
+    let mut report = ConversationTurnReport {
+        binding: Some(binding),
+        kind: ConversationTurnReportKind::Completed.into(),
+        report_sequence: 2,
+        executor_instance_id: executor_id,
+        signing_key_digest: signing_key_digest(&key),
+        response_content: "Draft retained for review".into(),
+        provider_call: Some(call),
+        plan_proposal: Some(crate::v1::PlanProposal {
+            invocation_id: "proposal_call".into(),
+            proposal_json: vec![b'a'; 40960],
+        }),
+        ..Default::default()
+    };
+    sign_report(&identity, &mut report, &signing_seed)?;
+    let bytes = encode_report(&identity, &metadata(), &report)?;
+    assert!(bytes.len() > 32 * 1024);
+    assert!(bytes.len() < MAX_REPORT_BYTES);
+    let (_, _, retained) = decode_report(&bytes)?;
+    verify_report_signature(&identity, &retained, Some(&key))?;
+    let mut changed = retained.clone();
+    changed
+        .plan_proposal
+        .as_mut()
+        .ok_or(ContractError::Invalid("fixture proposal"))?
+        .proposal_json[0] = b'b';
+    assert!(verify_report_signature(&identity, &changed, Some(&key)).is_err());
+    changed = retained;
+    changed
+        .plan_proposal
+        .as_mut()
+        .ok_or(ContractError::Invalid("fixture proposal"))?
+        .invocation_id = "other".into();
+    assert!(verify_report_signature(&identity, &changed, Some(&key)).is_err());
+    Ok(())
 }

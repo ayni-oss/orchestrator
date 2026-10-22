@@ -399,6 +399,7 @@ async fn complete_turn(
             failure_reason: String::new(),
             signature: Vec::new(),
             provider_call: None,
+            plan_proposal: None,
         };
         sign_report(&identity, &mut report, &seed)?;
         let exact = encode_report(&identity, &metadata, &report)?;

@@ -54,6 +54,7 @@ export interface PlanVersion {
   content?: PlanContent | undefined;
   author: string;
   createdAt?: Date | undefined;
+  provenance?: AgentPlanProvenance | undefined;
 }
 
 export interface PlanWriteReceipt {
@@ -139,6 +140,26 @@ export interface PlanVersionSummary {
 export interface ListPlanVersionsResponse {
   versions: PlanVersionSummary[];
   nextBeforeOrdinal: string;
+}
+
+/**
+ * Application-derived origin and provider-declared assumptions/evidence.
+ * Evidence references are declarations, not verified repository/source facts.
+ */
+export interface AgentPlanProvenance {
+  sourceTurnId: string;
+  configurationRevisionId: string;
+  contextDigest: string;
+  providerCallId: string;
+  providerResponseId: string;
+  assignmentId: string;
+  executorGeneration: string;
+  reportSource: string;
+  reportId: string;
+  reportDigest: string;
+  invocationId: string;
+  assumptions: string[];
+  evidence: string[];
 }
 
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
@@ -772,6 +793,7 @@ function createBasePlanVersion(): PlanVersion {
     content: undefined,
     author: "",
     createdAt: undefined,
+    provenance: undefined,
   };
 }
 
@@ -809,6 +831,9 @@ export const PlanVersion: MessageFns<PlanVersion> = {
     }
     if (message.createdAt !== undefined) {
       Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(90).fork()).join();
+    }
+    if (message.provenance !== undefined) {
+      AgentPlanProvenance.encode(message.provenance, writer.uint32(98).fork()).join();
     }
     return writer;
   },
@@ -914,6 +939,14 @@ export const PlanVersion: MessageFns<PlanVersion> = {
             message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.provenance = AgentPlanProvenance.decode(reader, reader.uint32());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -967,6 +1000,7 @@ export const PlanVersion: MessageFns<PlanVersion> = {
         : isSet(object.created_at)
         ? fromJsonTimestamp(object.created_at)
         : undefined,
+      provenance: isSet(object.provenance) ? AgentPlanProvenance.fromJSON(object.provenance) : undefined,
     };
   },
 
@@ -1005,6 +1039,9 @@ export const PlanVersion: MessageFns<PlanVersion> = {
     if (message.createdAt !== undefined) {
       obj.createdAt = message.createdAt.toISOString();
     }
+    if (message.provenance !== undefined) {
+      obj.provenance = AgentPlanProvenance.toJSON(message.provenance);
+    }
     return obj;
   },
 
@@ -1026,6 +1063,9 @@ export const PlanVersion: MessageFns<PlanVersion> = {
       : undefined;
     message.author = object.author ?? "";
     message.createdAt = object.createdAt ?? undefined;
+    message.provenance = (object.provenance !== undefined && object.provenance !== null)
+      ? AgentPlanProvenance.fromPartial(object.provenance)
+      : undefined;
     return message;
   },
 };
@@ -2539,6 +2579,329 @@ export const ListPlanVersionsResponse: MessageFns<ListPlanVersionsResponse> = {
     const message = createBaseListPlanVersionsResponse();
     message.versions = object.versions?.map((e) => PlanVersionSummary.fromPartial(e)) || [];
     message.nextBeforeOrdinal = object.nextBeforeOrdinal ?? "0";
+    return message;
+  },
+};
+
+function createBaseAgentPlanProvenance(): AgentPlanProvenance {
+  return {
+    sourceTurnId: "",
+    configurationRevisionId: "",
+    contextDigest: "",
+    providerCallId: "",
+    providerResponseId: "",
+    assignmentId: "",
+    executorGeneration: "0",
+    reportSource: "",
+    reportId: "",
+    reportDigest: "",
+    invocationId: "",
+    assumptions: [],
+    evidence: [],
+  };
+}
+
+export const AgentPlanProvenance: MessageFns<AgentPlanProvenance> = {
+  encode(message: AgentPlanProvenance, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sourceTurnId !== "") {
+      writer.uint32(10).string(message.sourceTurnId);
+    }
+    if (message.configurationRevisionId !== "") {
+      writer.uint32(18).string(message.configurationRevisionId);
+    }
+    if (message.contextDigest !== "") {
+      writer.uint32(26).string(message.contextDigest);
+    }
+    if (message.providerCallId !== "") {
+      writer.uint32(34).string(message.providerCallId);
+    }
+    if (message.providerResponseId !== "") {
+      writer.uint32(42).string(message.providerResponseId);
+    }
+    if (message.assignmentId !== "") {
+      writer.uint32(50).string(message.assignmentId);
+    }
+    if (message.executorGeneration !== "0") {
+      writer.uint32(56).uint64(message.executorGeneration);
+    }
+    if (message.reportSource !== "") {
+      writer.uint32(66).string(message.reportSource);
+    }
+    if (message.reportId !== "") {
+      writer.uint32(74).string(message.reportId);
+    }
+    if (message.reportDigest !== "") {
+      writer.uint32(82).string(message.reportDigest);
+    }
+    if (message.invocationId !== "") {
+      writer.uint32(90).string(message.invocationId);
+    }
+    for (const v of message.assumptions) {
+      writer.uint32(98).string(v!);
+    }
+    for (const v of message.evidence) {
+      writer.uint32(106).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AgentPlanProvenance {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAgentPlanProvenance();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.sourceTurnId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.configurationRevisionId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.contextDigest = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.providerCallId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.providerResponseId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.assignmentId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.executorGeneration = reader.uint64().toString();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.reportSource = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.reportId = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.reportDigest = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.invocationId = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.assumptions.push(reader.string());
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.evidence.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AgentPlanProvenance {
+    return {
+      sourceTurnId: isSet(object.sourceTurnId)
+        ? globalThis.String(object.sourceTurnId)
+        : isSet(object.source_turn_id)
+        ? globalThis.String(object.source_turn_id)
+        : "",
+      configurationRevisionId: isSet(object.configurationRevisionId)
+        ? globalThis.String(object.configurationRevisionId)
+        : isSet(object.configuration_revision_id)
+        ? globalThis.String(object.configuration_revision_id)
+        : "",
+      contextDigest: isSet(object.contextDigest)
+        ? globalThis.String(object.contextDigest)
+        : isSet(object.context_digest)
+        ? globalThis.String(object.context_digest)
+        : "",
+      providerCallId: isSet(object.providerCallId)
+        ? globalThis.String(object.providerCallId)
+        : isSet(object.provider_call_id)
+        ? globalThis.String(object.provider_call_id)
+        : "",
+      providerResponseId: isSet(object.providerResponseId)
+        ? globalThis.String(object.providerResponseId)
+        : isSet(object.provider_response_id)
+        ? globalThis.String(object.provider_response_id)
+        : "",
+      assignmentId: isSet(object.assignmentId)
+        ? globalThis.String(object.assignmentId)
+        : isSet(object.assignment_id)
+        ? globalThis.String(object.assignment_id)
+        : "",
+      executorGeneration: isSet(object.executorGeneration)
+        ? globalThis.String(object.executorGeneration)
+        : isSet(object.executor_generation)
+        ? globalThis.String(object.executor_generation)
+        : "0",
+      reportSource: isSet(object.reportSource)
+        ? globalThis.String(object.reportSource)
+        : isSet(object.report_source)
+        ? globalThis.String(object.report_source)
+        : "",
+      reportId: isSet(object.reportId)
+        ? globalThis.String(object.reportId)
+        : isSet(object.report_id)
+        ? globalThis.String(object.report_id)
+        : "",
+      reportDigest: isSet(object.reportDigest)
+        ? globalThis.String(object.reportDigest)
+        : isSet(object.report_digest)
+        ? globalThis.String(object.report_digest)
+        : "",
+      invocationId: isSet(object.invocationId)
+        ? globalThis.String(object.invocationId)
+        : isSet(object.invocation_id)
+        ? globalThis.String(object.invocation_id)
+        : "",
+      assumptions: globalThis.Array.isArray(object?.assumptions)
+        ? object.assumptions.map((e: any) => globalThis.String(e))
+        : [],
+      evidence: globalThis.Array.isArray(object?.evidence)
+        ? object.evidence.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: AgentPlanProvenance): unknown {
+    const obj: any = {};
+    if (message.sourceTurnId !== "") {
+      obj.sourceTurnId = message.sourceTurnId;
+    }
+    if (message.configurationRevisionId !== "") {
+      obj.configurationRevisionId = message.configurationRevisionId;
+    }
+    if (message.contextDigest !== "") {
+      obj.contextDigest = message.contextDigest;
+    }
+    if (message.providerCallId !== "") {
+      obj.providerCallId = message.providerCallId;
+    }
+    if (message.providerResponseId !== "") {
+      obj.providerResponseId = message.providerResponseId;
+    }
+    if (message.assignmentId !== "") {
+      obj.assignmentId = message.assignmentId;
+    }
+    if (message.executorGeneration !== "0") {
+      obj.executorGeneration = message.executorGeneration;
+    }
+    if (message.reportSource !== "") {
+      obj.reportSource = message.reportSource;
+    }
+    if (message.reportId !== "") {
+      obj.reportId = message.reportId;
+    }
+    if (message.reportDigest !== "") {
+      obj.reportDigest = message.reportDigest;
+    }
+    if (message.invocationId !== "") {
+      obj.invocationId = message.invocationId;
+    }
+    if (message.assumptions?.length) {
+      obj.assumptions = message.assumptions;
+    }
+    if (message.evidence?.length) {
+      obj.evidence = message.evidence;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AgentPlanProvenance>): AgentPlanProvenance {
+    return AgentPlanProvenance.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AgentPlanProvenance>): AgentPlanProvenance {
+    const message = createBaseAgentPlanProvenance();
+    message.sourceTurnId = object.sourceTurnId ?? "";
+    message.configurationRevisionId = object.configurationRevisionId ?? "";
+    message.contextDigest = object.contextDigest ?? "";
+    message.providerCallId = object.providerCallId ?? "";
+    message.providerResponseId = object.providerResponseId ?? "";
+    message.assignmentId = object.assignmentId ?? "";
+    message.executorGeneration = object.executorGeneration ?? "0";
+    message.reportSource = object.reportSource ?? "";
+    message.reportId = object.reportId ?? "";
+    message.reportDigest = object.reportDigest ?? "";
+    message.invocationId = object.invocationId ?? "";
+    message.assumptions = object.assumptions?.map((e) => e) || [];
+    message.evidence = object.evidence?.map((e) => e) || [];
     return message;
   },
 };

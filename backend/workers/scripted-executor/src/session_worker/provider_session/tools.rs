@@ -95,7 +95,7 @@ fn checkpoint(state: &WorkerState, command_id: &str, execution: &ProviderLoop) -
     let connection = state.connection.lock().map_err(|_| ())?;
     let retained = retained_bytes(&connection, command_id)?;
     // Preserve room for the bounded terminal result and its application handoff.
-    if retained.saturating_add(i64::try_from(json.len() + 64 * 1024).map_err(|_| ())?)
+    if retained.saturating_add(i64::try_from(json.len() + 256 * 1024).map_err(|_| ())?)
         > MAX_RETAINED_BYTES
     {
         return Err(());
@@ -173,6 +173,7 @@ pub(super) async fn execute(
     input: &SendInput,
     request: &[u8],
     evidence: &mut ProviderCallEvidence,
+    proposal: &mut Option<ayni_orchestrator_events::v1::PlanProposal>,
 ) -> Result<(String, String), ()> {
     let json: Option<String> = state
         .connection
@@ -221,12 +222,19 @@ pub(super) async fn execute(
             evidence.state = "completed".into();
             return Ok((response.content, String::new()));
         }
-        if !input.allowed {
-            return Ok(fail(evidence, "provider_interrupted"));
-        }
         if cancelled(state, &input.command_id) {
             evidence.state = "cancelled".into();
             return Ok((String::new(), "cancelled".into()));
+        }
+        if response
+            .tool_calls
+            .iter()
+            .any(|call| call.name == "propose_plan")
+        {
+            return Ok(propose(&response, evidence, proposal));
+        }
+        if !input.allowed {
+            return Ok(fail(evidence, "provider_interrupted"));
         }
         // Unknown usage retains the reservation and blocks another paid call.
         if execution.usage.input_tokens.is_none()
@@ -260,6 +268,40 @@ pub(super) async fn execute(
         }
         checkpoint(state, &input.command_id, &execution)?;
     }
+}
+
+fn propose(
+    response: &ResponseEvidence,
+    evidence: &mut ProviderCallEvidence,
+    proposal: &mut Option<ayni_orchestrator_events::v1::PlanProposal>,
+) -> (String, String) {
+    let [call] = response.tool_calls.as_slice() else {
+        return fail(evidence, "invalid_plan_proposal");
+    };
+    if call.call_id.is_empty()
+        || call.call_id.len() > 128
+        || !call
+            .call_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        || ayni_orchestrator_events::plan_proposals::validate_proposal(call.arguments.as_bytes())
+            .is_err()
+    {
+        return fail(evidence, "invalid_plan_proposal");
+    }
+    *proposal = Some(ayni_orchestrator_events::v1::PlanProposal {
+        invocation_id: call.call_id.clone(),
+        proposal_json: call.arguments.as_bytes().to_vec(),
+    });
+    evidence.state = "completed".into();
+    (
+        if response.content.trim().is_empty() {
+            "A plan proposal is ready for review.".into()
+        } else {
+            response.content.clone()
+        },
+        String::new(),
+    )
 }
 
 async fn advance_exchange(

@@ -59,6 +59,25 @@ pub struct PlanVersion {
     pub content: PlanContent,
     pub author: String,
     pub created_at: Timestamp,
+    pub provenance: Option<AgentPlanProvenance>,
+}
+
+/// Immutable server-bound source identity; evidence strings are agent declarations.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentPlanProvenance {
+    pub source_turn_id: String,
+    pub configuration_revision_id: String,
+    pub context_digest: String,
+    pub provider_call_id: String,
+    pub provider_response_id: String,
+    pub assignment_id: String,
+    pub executor_generation: u64,
+    pub report_source: String,
+    pub report_id: String,
+    pub report_digest: String,
+    pub invocation_id: String,
+    pub assumptions: Vec<String>,
+    pub evidence: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

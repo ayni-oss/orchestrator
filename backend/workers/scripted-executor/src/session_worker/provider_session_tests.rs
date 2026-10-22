@@ -140,9 +140,9 @@ fn command(state: &WorkerState) -> PrepareInput {
             instructions: "frozen instructions".into(),
             provider: "openai".into(),
             model: "fixture-model".into(),
-            max_input_tokens: 2048,
+            max_input_tokens: 8192,
             max_output_tokens: 512,
-            max_total_tokens: 2560,
+            max_total_tokens: 8704,
             idle_timeout_seconds: 30,
         }),
         context_manifest: Some(ConversationContextManifest {
@@ -496,3 +496,6 @@ async fn credentials_appearing_after_worker_start_are_loaded_before_preparation(
 
 #[path = "provider_session/tool_tests.rs"]
 mod tool_tests;
+
+#[path = "provider_session/proposal_tests.rs"]
+mod proposal_tests;

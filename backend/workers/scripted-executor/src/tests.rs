@@ -687,7 +687,7 @@ fn command_claim_reserves_terminal_record_and_bounded_report_bytes() -> Result<(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )?;
     assert_eq!(claim_bytes + claim_reserved, 24 * 1024);
-    assert_eq!(terminal_bytes, 40 * 1024);
+    assert_eq!(terminal_bytes, 160 * 1024);
     assert_eq!(terminal_records, 1);
 
     let mut second = command_fixture(1, "018f0f7b-6a4d-7a11-8d77-a7a8a9aaabac")?;
@@ -734,7 +734,7 @@ fn command_claim_reserves_terminal_record_and_bounded_report_bytes() -> Result<(
             params![terminal.identity.source, terminal.identity.id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
-    assert_eq!(terminal_event_bytes + terminal_margin, 40 * 1024);
+    assert_eq!(terminal_event_bytes + terminal_margin, 160 * 1024);
     assert_eq!(reserved_record, 0);
     Ok(())
 }
