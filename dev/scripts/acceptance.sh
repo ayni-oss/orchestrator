@@ -131,12 +131,20 @@ scaled_down=statefulset/workflow-jetstream
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=0 > "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" wait --for=delete "pod/$jetstream_pod" --timeout=2m >> "$evidence/broker-outage.txt"
 pod="$(control_pod)"
+# Review and approve while delivery is unavailable: PostgreSQL alone authorizes M3.
+kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
+  /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-plans \
+  > "$evidence/plans-before-restart.json"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane --   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-pending   > "$evidence/pending-before-restart.json"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --queue-capacity \
   > "$evidence/queue-capacity.json"
 kubectl --context "$context" --namespace "$namespace" rollout restart deployment/control-plane >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status deployment/control-plane --timeout=3m >> "$evidence/broker-outage.txt"
+pod="$(control_pod)"
+kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+  /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-plans-stdin \
+  < "$evidence/plans-before-restart.json" > "$evidence/plans-broker-unavailable.json"
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status "$scaled_down" --timeout=3m >> "$evidence/broker-outage.txt"
 scaled_down=
@@ -156,6 +164,9 @@ for workload in deployment/control-plane statefulset/scripted-executor statefuls
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-stdin \
     < "$evidence/client-latency.json" > "$evidence/replay-$name.json"
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-plans-stdin \
+    < "$evidence/plans-before-restart.json" > "$evidence/plans-replay-$name.json"
 done
 status=passed
 printf 'client latency and retained-state restart gates passed; evidence=%s\n' "$evidence"

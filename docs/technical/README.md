@@ -13,13 +13,14 @@ The runtime combines the M1 durable foundation with shared immutable agent confi
 - [Conversation execution](architecture/conversation-execution.md): consolidated M2 contract, alpha v1 policy, frozen configuration, isolated sessions, provider uncertainty and tool authority.
 - [Code organization](architecture/code-organization.md): production ownership and dependency direction.
 - [Local development](operations/local-development.md): Docker Desktop deployment, diagnostics, validation, restart, and cleanup.
+- [Plan acceptance](operations/plan-acceptance.md): cumulative M3 approval, proposal, outage and retained-origin recovery gates.
 - [Conversation acceptance](operations/conversation-acceptance.md): cumulative M2 recovery gates and evidence limits.
 - [Operations](operations/operations.md): startup, probes, schema changes, credentials, backup, and failure handling.
 - [Protocol tooling](../../proto/README.md): canonical protobuf generation and compatibility policy.
 
 ## Binding research
 
-- [Plans and approval](architecture/plans-and-approval.md): M3 implementation contract for immutable versions, explicit approval, task admission and retained project/conversation origin; review, agent proposals and approval/admission are implemented; cumulative M3 acceptance remains planned.
+- [Plans and approval](architecture/plans-and-approval.md): M3 implementation contract for immutable versions, explicit approval, task admission and retained project/conversation origin; review, agent proposals and approval/admission are implemented; cumulative M3 gates are defined with deployed evidence required in the final delivery PR.
 - [M3 delivery plan](research/project-workflow-m3-delivery-plan.md): four cumulative PRs, contract completion gates and failure/recovery acceptance.
 - [M1 durable foundation](research/project-workflow-m1-durable-foundation.md): full milestone contract and later-slice handoffs.
 - [M1 acceptance evidence](research/project-workflow-m1-acceptance-evidence.md): executable gates, reproduction, and coverage limits.

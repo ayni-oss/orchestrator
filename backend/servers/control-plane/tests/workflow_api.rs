@@ -1,3 +1,6 @@
+#[path = "support/plan_acceptance.rs"]
+mod plan_acceptance;
+
 #[path = "support/console.rs"]
 mod console;
 
@@ -370,4 +373,27 @@ fn request<T>(message: T, request_id: &str) -> Request<T> {
         request.metadata_mut().insert("x-request-id", value);
     }
     request
+}
+
+#[tokio::test]
+#[ignore = "requires the disposable PostgreSQL gate"]
+async fn plan_acceptance_client_recovers_exact_evidence_after_listener_restart() -> TestResult {
+    let database_url = env::var(TEST_URL_VARIABLE)?;
+    let (address, shutdown, server) = start_server(&database_url)?;
+    connect(address).await?;
+    let retained = plan_acceptance::run(format!("http://{address}"), None)
+        .await
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    shutdown.send(true)?;
+    server.await??;
+    let (address, shutdown, server) = start_server(&database_url)?;
+    connect(address).await?;
+    let verified = plan_acceptance::run(format!("http://{address}"), Some(retained))
+        .await
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let result: serde_json::Value = serde_json::from_slice(&verified)?;
+    assert_eq!(result["plan_admission_recovery"], "passed");
+    shutdown.send(true)?;
+    server.await??;
+    Ok(())
 }

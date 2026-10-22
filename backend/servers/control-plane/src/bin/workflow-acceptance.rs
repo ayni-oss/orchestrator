@@ -15,6 +15,9 @@ use tokio::time::{Instant, timeout_at};
 use tonic::{Code, Streaming, transport::Channel};
 use uuid::Uuid;
 
+#[path = "workflow_acceptance/plans.rs"]
+mod plans;
+
 type Result<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 type Client = ProjectConversationServiceClient<Channel>;
 const CONTENT: &str = "Exercise the deterministic durable workflow acceptance path.";
@@ -133,6 +136,8 @@ async fn run() -> Result {
     let mut client = Client::new(channel.clone());
     let mut projects = ProjectServiceClient::new(channel.clone());
     match mode {
+        "--prepare-plans" => return plans::prepare(&mut projects, &mut client).await,
+        "--verify-plans-stdin" => return plans::verify_stdin(&mut client).await,
         "--queue-capacity" => return queue_capacity(&mut projects, &mut client).await,
         "--prepare-pending" => return prepare_pending(&mut projects, &mut client).await,
         "--verify-pending-stdin" => return verify_pending(&mut client).await,
