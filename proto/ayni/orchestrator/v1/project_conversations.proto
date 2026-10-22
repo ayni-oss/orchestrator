@@ -7,6 +7,9 @@ import "ayni/orchestrator/v1/workflow.proto";
 
 // Scoped conversation execution and operator plan review on the trusted listener.
 service ProjectConversationService {
+  rpc StartTaskExecution(StartTaskExecutionRequest) returns (StartTaskExecutionResponse);
+  rpc CancelTaskExecution(CancelTaskExecutionRequest) returns (CancelTaskExecutionResponse);
+  rpc GetTaskAttempt(GetTaskAttemptRequest) returns (GetTaskAttemptResponse);
   rpc PrepareTaskExecution(PrepareTaskExecutionRequest) returns (PrepareTaskExecutionResponse);
   rpc GetTaskExecution(GetTaskExecutionRequest) returns (GetTaskExecutionResponse);
   rpc ApprovePlan(ApprovePlanRequest) returns (ApprovePlanResponse);

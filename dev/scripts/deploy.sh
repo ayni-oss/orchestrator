@@ -25,6 +25,8 @@ namespace="$(dev_namespace)"
 "$dev_directory/scripts/configure-development-secrets.sh"
 dev_build_chart_dependencies
 dev_check_capacity 8
+task_fixture="${AYNI_ORCHESTRATOR_TASK_FIXTURE:-false}"
+[[ "$task_fixture" == true || "$task_fixture" == false ]] || { echo 'AYNI_ORCHESTRATOR_TASK_FIXTURE must be true or false' >&2; exit 2; }
 control_plane_image_ref="$(dev_build_image control-plane)"
 executor_image_ref="$(dev_build_image scripted-executor)"
 dev_load_image "$control_plane_image_ref"
@@ -34,6 +36,7 @@ echo "renderer=$(helm version --short 2>/dev/null)"
 helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-values \
   --kube-context "$context" \
   --namespace "$namespace" \
+  --set "ayni-orchestrator.taskExecution.fixtureEnabled=$task_fixture" \
   --set-string "ayni-orchestrator.images.controlPlane=$control_plane_image_ref" \
   --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image_ref" \
   --wait \
@@ -43,7 +46,8 @@ for workload in \
   statefulset/workflow-postgres \
   statefulset/workflow-jetstream \
   statefulset/scripted-executor \
-  deployment/control-plane; do
+  deployment/control-plane \
+  deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status \
     "$workload" --timeout=5m
 done

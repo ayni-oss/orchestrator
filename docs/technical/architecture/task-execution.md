@@ -98,7 +98,7 @@ The deployed preparation scenario uses synthetic source/image identities and
 asserts no coding dispatch. It does not establish real image compatibility or
 remote Git permissions; the separate local Git fixture verifies actual objects.
 
-PR 2 must consume the prepared attempt without replacing its frozen inputs and
+The [isolated execution contract](isolated-task-execution.md) defines PR 2. It must consume the prepared attempt without replacing its frozen inputs and
 establish worker ownership/fencing before coding. PR 3 must verify Ayni runtime
 compatibility and retain final evidence independently of agent-writable storage.
 PR 4 owns publication authority and ambiguous external-action recovery.

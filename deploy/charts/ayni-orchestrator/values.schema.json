@@ -2,75 +2,138 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["enabled", "images", "workflowPostgres", "workflowJetstream", "scriptedExecutor", "controlPlane", "providers"],
+  "required": [
+    "enabled",
+    "images",
+    "workflowPostgres",
+    "workflowJetstream",
+    "scriptedExecutor",
+    "controlPlane",
+    "providers"
+  ],
   "properties": {
-    "global": { "type": "object" },
-    "enabled": { "type": "boolean" },
+    "global": {
+      "type": "object"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
     "images": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["controlPlane", "scriptedExecutor", "pullPolicy"],
-      "properties": {
-        "controlPlane": { "type": "string", "minLength": 1 },
-        "providers": {
-      "type": "object",
-      "additionalProperties": false,
       "required": [
-        "openai",
-        "sessionAuthoritySecretName"
+        "controlPlane",
+        "scriptedExecutor",
+        "pullPolicy"
       ],
       "properties": {
-        "sessionAuthoritySecretName": {
+        "controlPlane": {
           "type": "string",
           "minLength": 1
         },
-        "openai": {
+        "providers": {
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "enabled",
-            "baseUrl",
-            "fixtureEgress"
+            "openai",
+            "sessionAuthoritySecretName"
           ],
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "baseUrl": {
+            "sessionAuthoritySecretName": {
               "type": "string",
-              "pattern": "^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$"
+              "minLength": 1
             },
-            "fixtureEgress": {
-              "type": "boolean"
+            "openai": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "baseUrl",
+                "fixtureEgress"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "pattern": "^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$"
+                },
+                "fixtureEgress": {
+                  "type": "boolean"
+                }
+              }
             }
           }
+        },
+        "scriptedExecutor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
         }
-      }
-    },
-    "scriptedExecutor": { "type": "string", "minLength": 1 },
-        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
       }
     },
     "workflowPostgres": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["migratorSecretName", "runtimeSecretName", "runtimeRoleName"],
+      "required": [
+        "migratorSecretName",
+        "runtimeSecretName",
+        "runtimeRoleName"
+      ],
       "properties": {
-        "migratorSecretName": { "type": "string", "minLength": 1 },
-        "runtimeSecretName": { "type": "string", "minLength": 1 },
-        "runtimeRoleName": { "type": "string", "pattern": "^[a-z_][a-z0-9_]{0,62}$" }
+        "migratorSecretName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSecretName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeRoleName": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$"
+        }
       }
     },
     "workflowJetstream": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "username", "applicationSecretName", "executorUsername", "executorSecretName"],
+      "required": [
+        "url",
+        "username",
+        "applicationSecretName",
+        "executorUsername",
+        "executorSecretName"
+      ],
       "properties": {
-        "url": { "type": "string", "pattern": "^nats://" },
-        "username": { "type": "string", "pattern": "^[a-z0-9-]{1,128}$" },
-        "applicationSecretName": { "type": "string", "minLength": 1 },
-        "executorUsername": { "type": "string", "pattern": "^[a-z0-9-]{1,128}$" },
-        "executorSecretName": { "type": "string", "minLength": 1 }
+        "url": {
+          "type": "string",
+          "pattern": "^nats://"
+        },
+        "username": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]{1,128}$"
+        },
+        "applicationSecretName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executorUsername": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]{1,128}$"
+        },
+        "executorSecretName": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "providers": {
@@ -111,21 +174,63 @@
     "scriptedExecutor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["storage", "resources"],
+      "required": [
+        "storage",
+        "resources"
+      ],
       "properties": {
-        "storage": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" },
-        "resources": { "$ref": "#/$defs/resources" }
+        "storage": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        }
       }
     },
     "controlPlane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["replicaCount", "httpPort", "trustedGrpcPort", "resources"],
+      "required": [
+        "replicaCount",
+        "httpPort",
+        "trustedGrpcPort",
+        "resources"
+      ],
       "properties": {
-        "replicaCount": { "type": "integer", "minimum": 1 },
-        "httpPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "trustedGrpcPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "resources": { "$ref": "#/$defs/resources" }
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "httpPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "trustedGrpcPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        }
+      }
+    },
+    "taskExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "fixtureEnabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "fixtureEnabled": {
+          "type": "boolean"
+        }
       }
     }
   },
@@ -133,19 +238,42 @@
     "resources": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["requests", "limits"],
+      "required": [
+        "requests",
+        "limits"
+      ],
       "properties": {
         "requests": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["cpu", "memory"],
-          "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
+          "required": [
+            "cpu",
+            "memory"
+          ],
+          "properties": {
+            "cpu": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            }
+          }
         },
         "limits": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["cpu", "memory"],
-          "properties": { "cpu": { "type": "string" }, "memory": { "type": "string" } }
+          "required": [
+            "cpu",
+            "memory"
+          ],
+          "properties": {
+            "cpu": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            }
+          }
         }
       }
     }

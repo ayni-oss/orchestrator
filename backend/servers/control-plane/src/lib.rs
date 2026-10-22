@@ -6,6 +6,7 @@ pub mod console;
 pub mod health;
 pub mod maintenance;
 pub mod session_authority;
+pub mod task_authority;
 pub mod workflow;
 
 pub use configuration::{Configuration, ConfigurationError};

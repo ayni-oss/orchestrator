@@ -52,3 +52,8 @@ controlPlane:
     limits:
       cpu: 500m
       memory: 256Mi
+
+taskExecution:
+  enabled: true
+  # Deterministic coding is strictly an acceptance fixture, disabled by default.
+  fixtureEnabled: false

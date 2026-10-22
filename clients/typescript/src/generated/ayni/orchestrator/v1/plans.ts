@@ -312,6 +312,68 @@ export interface GetTaskExecutionResponse {
   preparation?: TaskExecutionPreparation | undefined;
 }
 
+export interface StartTaskExecutionRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+  attemptId: string;
+  idempotencyKey: string;
+  /** Git pack containing the exact commit and its snapshot objects, maximum 8 MiB. */
+  sourcePack: Buffer;
+}
+
+export interface CancelTaskExecutionRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+  attemptId: string;
+  idempotencyKey: string;
+}
+
+export interface TaskExecutionCommandReceipt {
+  commandId: string;
+  attemptId: string;
+  conversationRevision: string;
+  resumeCursor: string;
+}
+
+export interface StartTaskExecutionResponse {
+  receipt?: TaskExecutionCommandReceipt | undefined;
+}
+
+export interface CancelTaskExecutionResponse {
+  receipt?: TaskExecutionCommandReceipt | undefined;
+}
+
+export interface GetTaskAttemptRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+  attemptId: string;
+}
+
+export interface TaskAttempt {
+  attemptId: string;
+  taskId: string;
+  state: string;
+  generation: string;
+  podUid: string;
+  providerState: string;
+  patch: string;
+  safeReason: string;
+  patchDigest: string;
+  sourceCommit: string;
+  runtimeImage: string;
+  configurationRevisionId: string;
+}
+
+export interface GetTaskAttemptResponse {
+  attempt?: TaskAttempt | undefined;
+}
+
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
   return {
     key: "",
@@ -5561,6 +5623,1175 @@ export const GetTaskExecutionResponse: MessageFns<GetTaskExecutionResponse> = {
     return message;
   },
 };
+
+function createBaseStartTaskExecutionRequest(): StartTaskExecutionRequest {
+  return {
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    taskId: "",
+    attemptId: "",
+    idempotencyKey: "",
+    sourcePack: Buffer.alloc(0),
+  };
+}
+
+export const StartTaskExecutionRequest: MessageFns<StartTaskExecutionRequest> = {
+  encode(message: StartTaskExecutionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(42).string(message.attemptId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(50).string(message.idempotencyKey);
+    }
+    if (message.sourcePack.length !== 0) {
+      writer.uint32(58).bytes(message.sourcePack);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartTaskExecutionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartTaskExecutionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.sourcePack = Buffer.from(reader.bytes());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartTaskExecutionRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      sourcePack: isSet(object.sourcePack)
+        ? Buffer.from(bytesFromBase64(object.sourcePack))
+        : isSet(object.source_pack)
+        ? Buffer.from(bytesFromBase64(object.source_pack))
+        : Buffer.alloc(0),
+    };
+  },
+
+  toJSON(message: StartTaskExecutionRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.sourcePack.length !== 0) {
+      obj.sourcePack = base64FromBytes(message.sourcePack);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartTaskExecutionRequest>): StartTaskExecutionRequest {
+    return StartTaskExecutionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartTaskExecutionRequest>): StartTaskExecutionRequest {
+    const message = createBaseStartTaskExecutionRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.sourcePack = object.sourcePack ?? Buffer.alloc(0);
+    return message;
+  },
+};
+
+function createBaseCancelTaskExecutionRequest(): CancelTaskExecutionRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", taskId: "", attemptId: "", idempotencyKey: "" };
+}
+
+export const CancelTaskExecutionRequest: MessageFns<CancelTaskExecutionRequest> = {
+  encode(message: CancelTaskExecutionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(42).string(message.attemptId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(50).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelTaskExecutionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelTaskExecutionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelTaskExecutionRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+    };
+  },
+
+  toJSON(message: CancelTaskExecutionRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelTaskExecutionRequest>): CancelTaskExecutionRequest {
+    return CancelTaskExecutionRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelTaskExecutionRequest>): CancelTaskExecutionRequest {
+    const message = createBaseCancelTaskExecutionRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseTaskExecutionCommandReceipt(): TaskExecutionCommandReceipt {
+  return { commandId: "", attemptId: "", conversationRevision: "0", resumeCursor: "" };
+}
+
+export const TaskExecutionCommandReceipt: MessageFns<TaskExecutionCommandReceipt> = {
+  encode(message: TaskExecutionCommandReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.commandId !== "") {
+      writer.uint32(10).string(message.commandId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(18).string(message.attemptId);
+    }
+    if (message.conversationRevision !== "0") {
+      writer.uint32(24).uint64(message.conversationRevision);
+    }
+    if (message.resumeCursor !== "") {
+      writer.uint32(34).string(message.resumeCursor);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskExecutionCommandReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskExecutionCommandReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.conversationRevision = reader.uint64().toString();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.resumeCursor = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskExecutionCommandReceipt {
+    return {
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      conversationRevision: isSet(object.conversationRevision)
+        ? globalThis.String(object.conversationRevision)
+        : isSet(object.conversation_revision)
+        ? globalThis.String(object.conversation_revision)
+        : "0",
+      resumeCursor: isSet(object.resumeCursor)
+        ? globalThis.String(object.resumeCursor)
+        : isSet(object.resume_cursor)
+        ? globalThis.String(object.resume_cursor)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskExecutionCommandReceipt): unknown {
+    const obj: any = {};
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.conversationRevision !== "0") {
+      obj.conversationRevision = message.conversationRevision;
+    }
+    if (message.resumeCursor !== "") {
+      obj.resumeCursor = message.resumeCursor;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskExecutionCommandReceipt>): TaskExecutionCommandReceipt {
+    return TaskExecutionCommandReceipt.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskExecutionCommandReceipt>): TaskExecutionCommandReceipt {
+    const message = createBaseTaskExecutionCommandReceipt();
+    message.commandId = object.commandId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    message.conversationRevision = object.conversationRevision ?? "0";
+    message.resumeCursor = object.resumeCursor ?? "";
+    return message;
+  },
+};
+
+function createBaseStartTaskExecutionResponse(): StartTaskExecutionResponse {
+  return { receipt: undefined };
+}
+
+export const StartTaskExecutionResponse: MessageFns<StartTaskExecutionResponse> = {
+  encode(message: StartTaskExecutionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      TaskExecutionCommandReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StartTaskExecutionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseStartTaskExecutionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.receipt = TaskExecutionCommandReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): StartTaskExecutionResponse {
+    return { receipt: isSet(object.receipt) ? TaskExecutionCommandReceipt.fromJSON(object.receipt) : undefined };
+  },
+
+  toJSON(message: StartTaskExecutionResponse): unknown {
+    const obj: any = {};
+    if (message.receipt !== undefined) {
+      obj.receipt = TaskExecutionCommandReceipt.toJSON(message.receipt);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<StartTaskExecutionResponse>): StartTaskExecutionResponse {
+    return StartTaskExecutionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<StartTaskExecutionResponse>): StartTaskExecutionResponse {
+    const message = createBaseStartTaskExecutionResponse();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? TaskExecutionCommandReceipt.fromPartial(object.receipt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCancelTaskExecutionResponse(): CancelTaskExecutionResponse {
+  return { receipt: undefined };
+}
+
+export const CancelTaskExecutionResponse: MessageFns<CancelTaskExecutionResponse> = {
+  encode(message: CancelTaskExecutionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.receipt !== undefined) {
+      TaskExecutionCommandReceipt.encode(message.receipt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelTaskExecutionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCancelTaskExecutionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.receipt = TaskExecutionCommandReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): CancelTaskExecutionResponse {
+    return { receipt: isSet(object.receipt) ? TaskExecutionCommandReceipt.fromJSON(object.receipt) : undefined };
+  },
+
+  toJSON(message: CancelTaskExecutionResponse): unknown {
+    const obj: any = {};
+    if (message.receipt !== undefined) {
+      obj.receipt = TaskExecutionCommandReceipt.toJSON(message.receipt);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelTaskExecutionResponse>): CancelTaskExecutionResponse {
+    return CancelTaskExecutionResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelTaskExecutionResponse>): CancelTaskExecutionResponse {
+    const message = createBaseCancelTaskExecutionResponse();
+    message.receipt = (object.receipt !== undefined && object.receipt !== null)
+      ? TaskExecutionCommandReceipt.fromPartial(object.receipt)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseGetTaskAttemptRequest(): GetTaskAttemptRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", taskId: "", attemptId: "" };
+}
+
+export const GetTaskAttemptRequest: MessageFns<GetTaskAttemptRequest> = {
+  encode(message: GetTaskAttemptRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    if (message.attemptId !== "") {
+      writer.uint32(42).string(message.attemptId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTaskAttemptRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTaskAttemptRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTaskAttemptRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetTaskAttemptRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTaskAttemptRequest>): GetTaskAttemptRequest {
+    return GetTaskAttemptRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTaskAttemptRequest>): GetTaskAttemptRequest {
+    const message = createBaseGetTaskAttemptRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.attemptId = object.attemptId ?? "";
+    return message;
+  },
+};
+
+function createBaseTaskAttempt(): TaskAttempt {
+  return {
+    attemptId: "",
+    taskId: "",
+    state: "",
+    generation: "0",
+    podUid: "",
+    providerState: "",
+    patch: "",
+    safeReason: "",
+    patchDigest: "",
+    sourceCommit: "",
+    runtimeImage: "",
+    configurationRevisionId: "",
+  };
+}
+
+export const TaskAttempt: MessageFns<TaskAttempt> = {
+  encode(message: TaskAttempt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attemptId !== "") {
+      writer.uint32(10).string(message.attemptId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(18).string(message.taskId);
+    }
+    if (message.state !== "") {
+      writer.uint32(26).string(message.state);
+    }
+    if (message.generation !== "0") {
+      writer.uint32(32).uint64(message.generation);
+    }
+    if (message.podUid !== "") {
+      writer.uint32(42).string(message.podUid);
+    }
+    if (message.providerState !== "") {
+      writer.uint32(50).string(message.providerState);
+    }
+    if (message.patch !== "") {
+      writer.uint32(58).string(message.patch);
+    }
+    if (message.safeReason !== "") {
+      writer.uint32(66).string(message.safeReason);
+    }
+    if (message.patchDigest !== "") {
+      writer.uint32(74).string(message.patchDigest);
+    }
+    if (message.sourceCommit !== "") {
+      writer.uint32(82).string(message.sourceCommit);
+    }
+    if (message.runtimeImage !== "") {
+      writer.uint32(90).string(message.runtimeImage);
+    }
+    if (message.configurationRevisionId !== "") {
+      writer.uint32(98).string(message.configurationRevisionId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaskAttempt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaskAttempt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attemptId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.generation = reader.uint64().toString();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.podUid = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.providerState = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.patch = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.safeReason = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.patchDigest = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.sourceCommit = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.runtimeImage = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.configurationRevisionId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TaskAttempt {
+    return {
+      attemptId: isSet(object.attemptId)
+        ? globalThis.String(object.attemptId)
+        : isSet(object.attempt_id)
+        ? globalThis.String(object.attempt_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      generation: isSet(object.generation) ? globalThis.String(object.generation) : "0",
+      podUid: isSet(object.podUid)
+        ? globalThis.String(object.podUid)
+        : isSet(object.pod_uid)
+        ? globalThis.String(object.pod_uid)
+        : "",
+      providerState: isSet(object.providerState)
+        ? globalThis.String(object.providerState)
+        : isSet(object.provider_state)
+        ? globalThis.String(object.provider_state)
+        : "",
+      patch: isSet(object.patch) ? globalThis.String(object.patch) : "",
+      safeReason: isSet(object.safeReason)
+        ? globalThis.String(object.safeReason)
+        : isSet(object.safe_reason)
+        ? globalThis.String(object.safe_reason)
+        : "",
+      patchDigest: isSet(object.patchDigest)
+        ? globalThis.String(object.patchDigest)
+        : isSet(object.patch_digest)
+        ? globalThis.String(object.patch_digest)
+        : "",
+      sourceCommit: isSet(object.sourceCommit)
+        ? globalThis.String(object.sourceCommit)
+        : isSet(object.source_commit)
+        ? globalThis.String(object.source_commit)
+        : "",
+      runtimeImage: isSet(object.runtimeImage)
+        ? globalThis.String(object.runtimeImage)
+        : isSet(object.runtime_image)
+        ? globalThis.String(object.runtime_image)
+        : "",
+      configurationRevisionId: isSet(object.configurationRevisionId)
+        ? globalThis.String(object.configurationRevisionId)
+        : isSet(object.configuration_revision_id)
+        ? globalThis.String(object.configuration_revision_id)
+        : "",
+    };
+  },
+
+  toJSON(message: TaskAttempt): unknown {
+    const obj: any = {};
+    if (message.attemptId !== "") {
+      obj.attemptId = message.attemptId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.generation !== "0") {
+      obj.generation = message.generation;
+    }
+    if (message.podUid !== "") {
+      obj.podUid = message.podUid;
+    }
+    if (message.providerState !== "") {
+      obj.providerState = message.providerState;
+    }
+    if (message.patch !== "") {
+      obj.patch = message.patch;
+    }
+    if (message.safeReason !== "") {
+      obj.safeReason = message.safeReason;
+    }
+    if (message.patchDigest !== "") {
+      obj.patchDigest = message.patchDigest;
+    }
+    if (message.sourceCommit !== "") {
+      obj.sourceCommit = message.sourceCommit;
+    }
+    if (message.runtimeImage !== "") {
+      obj.runtimeImage = message.runtimeImage;
+    }
+    if (message.configurationRevisionId !== "") {
+      obj.configurationRevisionId = message.configurationRevisionId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<TaskAttempt>): TaskAttempt {
+    return TaskAttempt.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<TaskAttempt>): TaskAttempt {
+    const message = createBaseTaskAttempt();
+    message.attemptId = object.attemptId ?? "";
+    message.taskId = object.taskId ?? "";
+    message.state = object.state ?? "";
+    message.generation = object.generation ?? "0";
+    message.podUid = object.podUid ?? "";
+    message.providerState = object.providerState ?? "";
+    message.patch = object.patch ?? "";
+    message.safeReason = object.safeReason ?? "";
+    message.patchDigest = object.patchDigest ?? "";
+    message.sourceCommit = object.sourceCommit ?? "";
+    message.runtimeImage = object.runtimeImage ?? "";
+    message.configurationRevisionId = object.configurationRevisionId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTaskAttemptResponse(): GetTaskAttemptResponse {
+  return { attempt: undefined };
+}
+
+export const GetTaskAttemptResponse: MessageFns<GetTaskAttemptResponse> = {
+  encode(message: GetTaskAttemptResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.attempt !== undefined) {
+      TaskAttempt.encode(message.attempt, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTaskAttemptResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTaskAttemptResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.attempt = TaskAttempt.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTaskAttemptResponse {
+    return { attempt: isSet(object.attempt) ? TaskAttempt.fromJSON(object.attempt) : undefined };
+  },
+
+  toJSON(message: GetTaskAttemptResponse): unknown {
+    const obj: any = {};
+    if (message.attempt !== undefined) {
+      obj.attempt = TaskAttempt.toJSON(message.attempt);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTaskAttemptResponse>): GetTaskAttemptResponse {
+    return GetTaskAttemptResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTaskAttemptResponse>): GetTaskAttemptResponse {
+    const message = createBaseGetTaskAttemptResponse();
+    message.attempt = (object.attempt !== undefined && object.attempt !== null)
+      ? TaskAttempt.fromPartial(object.attempt)
+      : undefined;
+    return message;
+  },
+};
+
+function bytesFromBase64(b64: string): Uint8Array {
+  return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  return globalThis.Buffer.from(arr).toString("base64");
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

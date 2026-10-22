@@ -28,9 +28,11 @@ async fn main() -> ExitCode {
 }
 async fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if !matches!(args.first().map(String::as_str), Some("verify" | "submit"))
-        || (args[0] == "verify" && args.len() != 5)
-        || (args[0] == "submit" && args.len() != 3)
+    if !matches!(
+        args.first().map(String::as_str),
+        Some("verify" | "submit" | "start" | "submit-start")
+    ) || (matches!(args[0].as_str(), "verify" | "start") && args.len() != 5)
+        || (matches!(args[0].as_str(), "submit" | "submit-start") && args.len() != 3)
     {
         return Err(io::Error::other("usage: workflow-prepare-task verify LOOPBACK_ADDR CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON | submit LOOPBACK_ADDR FROZEN_REQUEST_JSON").into());
     }
@@ -44,12 +46,82 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .connect()
         .await?;
     let mut client = ProjectConversationServiceClient::new(channel);
-    if args[0] == "submit" {
-        let request = read_request(Path::new(&args[2]))?;
-        let result = client.prepare_task_execution(request).await?.into_inner();
-        println!("{}", serde_json::to_string_pretty(&result)?);
-        return Ok(());
+    match args[0].as_str() {
+        "submit-start" => submit_start(&mut client, &args).await,
+        "start" => stage_start(&mut client, &args).await,
+        "submit" => submit_preparation(&mut client, &args).await,
+        _ => verify_preparation(&mut client, &args).await,
     }
+}
+
+type Client = ProjectConversationServiceClient<tonic::transport::Channel>;
+async fn submit_start(client: &mut Client, args: &[String]) -> Result<(), Box<dyn Error>> {
+    let mut bytes = Vec::new();
+    std::fs::File::open(&args[2])?
+        .take(12 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > 12 * 1024 * 1024 {
+        return Err(io::Error::other("start request exceeds 12 MiB").into());
+    }
+    let request: v1::StartTaskExecutionRequest = serde_json::from_slice(&bytes)?;
+    let response = client.start_task_execution(request).await?.into_inner();
+    println!("{}", serde_json::to_string_pretty(&response)?);
+    Ok(())
+}
+async fn stage_start(client: &mut Client, args: &[String]) -> Result<(), Box<dyn Error>> {
+    let original = read_request(Path::new(&args[3]))?;
+    let preparation = client
+        .get_task_execution(v1::GetTaskExecutionRequest {
+            workspace_id: original.workspace_id.clone(),
+            project_id: original.project_id.clone(),
+            conversation_id: original.conversation_id.clone(),
+            task_id: original.task_id.clone(),
+        })
+        .await?
+        .into_inner()
+        .preparation
+        .ok_or("task preparation missing")?;
+    if preparation.attempt_id.is_empty() || preparation.inputs != original.inputs {
+        return Err(io::Error::other("frozen task preparation differs").into());
+    }
+    let inputs = preparation.inputs.ok_or("prepared inputs missing")?;
+    let (commit, lock) = git::verify(
+        Path::new(&args[2]),
+        &inputs.repository,
+        &inputs.source_commit,
+    )?;
+    if commit != inputs.source_commit || lock != inputs.lock_digest {
+        return Err(io::Error::other("frozen source differs").into());
+    }
+    let pack = git::snapshot_pack(Path::new(&args[2]), &inputs.source_commit)?;
+    let request = v1::StartTaskExecutionRequest {
+        workspace_id: original.workspace_id,
+        project_id: original.project_id,
+        conversation_id: original.conversation_id,
+        task_id: original.task_id,
+        idempotency_key: format!("start-{}", preparation.attempt_id),
+        attempt_id: preparation.attempt_id,
+        source_pack: pack,
+    };
+    let bytes = serde_json::to_vec(&request)?;
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&args[4])?;
+    output.write_all(&bytes)?;
+    output.sync_all()?;
+    println!(
+        "Frozen start request written. Submit this same file with submit-start; retain it for exact retries."
+    );
+    Ok(())
+}
+async fn submit_preparation(client: &mut Client, args: &[String]) -> Result<(), Box<dyn Error>> {
+    let request = read_request(Path::new(&args[2]))?;
+    let result = client.prepare_task_execution(request).await?.into_inner();
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
+}
+async fn verify_preparation(client: &mut Client, args: &[String]) -> Result<(), Box<dyn Error>> {
     let mut request = read_request(Path::new(&args[3]))?;
     let task = client
         .get_task(v1::GetTaskRequest {
@@ -97,6 +169,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
 fn read_request(path: &Path) -> Result<v1::PrepareTaskExecutionRequest, Box<dyn Error>> {
     let mut bytes = Vec::new();
     std::fs::File::open(path)?

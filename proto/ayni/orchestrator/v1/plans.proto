@@ -267,3 +267,58 @@ message GetTaskExecutionRequest {
 message GetTaskExecutionResponse {
   TaskExecutionPreparation preparation = 1;
 }
+
+message StartTaskExecutionRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+  string idempotency_key = 6;
+  // Git pack containing the exact commit and its snapshot objects, maximum 8 MiB.
+  bytes source_pack = 7;
+}
+message CancelTaskExecutionRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+  string idempotency_key = 6;
+}
+message TaskExecutionCommandReceipt {
+  string command_id = 1;
+  string attempt_id = 2;
+  uint64 conversation_revision = 3;
+  string resume_cursor = 4;
+}
+message StartTaskExecutionResponse {
+  TaskExecutionCommandReceipt receipt = 1;
+}
+message CancelTaskExecutionResponse {
+  TaskExecutionCommandReceipt receipt = 1;
+}
+message GetTaskAttemptRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+}
+message TaskAttempt {
+  string attempt_id = 1;
+  string task_id = 2;
+  string state = 3;
+  uint64 generation = 4;
+  string pod_uid = 5;
+  string provider_state = 6;
+  string patch = 7;
+  string safe_reason = 8;
+  string patch_digest = 9;
+  string source_commit = 10;
+  string runtime_image = 11;
+  string configuration_revision_id = 12;
+}
+message GetTaskAttemptResponse {
+  TaskAttempt attempt = 1;
+}

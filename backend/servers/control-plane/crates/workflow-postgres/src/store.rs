@@ -8,6 +8,7 @@ mod discovery;
 mod execution;
 mod plans;
 pub mod provider_calls;
+pub mod task_runs;
 pub use delivery::DecisionAcknowledgement;
 mod ordered_reports;
 mod quarantine;
@@ -47,6 +48,8 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("CONFIGURATION_REVISION_CONFLICT")]
     ConfigurationRevisionConflict,
+    #[error("TASK_EXECUTION_CONFLICT")]
+    TaskExecutionConflict,
     #[error("TASK_ALREADY_PREPARED")]
     TaskAlreadyPrepared,
     #[error("PLAN_VERSION_CONFLICT")]

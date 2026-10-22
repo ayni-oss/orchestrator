@@ -42,6 +42,16 @@ task, no coding dispatch and at most 32 preparation receipts per task. Unresolve
 approved inputs remain blockers. Changing reviewed work requires a linked follow-up
 plan; later recovery cannot silently rewrite an attempt.
 
+## Second-slice decisions
+
+The [isolated execution contract](../architecture/isolated-task-execution.md) defines
+the durable serial task queue, authenticated supervisor/worker handoff, retained
+Git snapshot, one bounded OpenAI file-proposal pass and cancellation fencing.
+Conversation broker envelopes remain conversation-specific. Task desired state is
+polled from PostgreSQL through the existing supervisor authority pattern, with
+exact operator receipts and worker result acceptance. No paid request is retried
+after an ambiguous sending window. Initial context/file bounds fail explicitly.
+
 ## Scope boundaries and risks
 
 M4 starts with serial task execution and isolated attempts. Dependency scheduling

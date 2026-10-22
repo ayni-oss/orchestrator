@@ -32,6 +32,7 @@ enum ErrorReason {
   ERROR_REASON_PLAN_DIGEST_MISMATCH = 37;
   ERROR_REASON_PLAN_UNRESOLVED_SCOPE = 38;
   ERROR_REASON_TASK_ALREADY_PREPARED = 39;
+  ERROR_REASON_TASK_EXECUTION_CONFLICT = 40;
 }
 
 // ErrorDetail is packed into the standard rich gRPC status details list.

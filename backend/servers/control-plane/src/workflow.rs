@@ -1,5 +1,6 @@
 mod plans;
 mod projections;
+mod tasks;
 use projections::{
     agent_configuration, conversation, history_record, project, receipt, session, snapshot,
     timestamp, update, valid_request_id, workspace,
@@ -23,7 +24,7 @@ use tokio::sync::watch;
 use tokio_stream::{Stream, StreamExt as _};
 use tonic::{Code, Request, Response, Status, transport::Server};
 
-const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+const MAX_REQUEST_BYTES: usize = 9 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 3 * 1024 * 1024;
 type ConversationStream =
     Pin<Box<dyn Stream<Item = Result<v1::WatchConversationResponse, Status>> + Send + 'static>>;
@@ -283,6 +284,24 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn start_task_execution(
+        &self,
+        request: Request<v1::StartTaskExecutionRequest>,
+    ) -> Result<Response<v1::StartTaskExecutionResponse>, Status> {
+        tasks::start(&self.store, request).await
+    }
+    async fn cancel_task_execution(
+        &self,
+        request: Request<v1::CancelTaskExecutionRequest>,
+    ) -> Result<Response<v1::CancelTaskExecutionResponse>, Status> {
+        tasks::cancel(&self.store, request).await
+    }
+    async fn get_task_attempt(
+        &self,
+        request: Request<v1::GetTaskAttemptRequest>,
+    ) -> Result<Response<v1::GetTaskAttemptResponse>, Status> {
+        tasks::get(&self.store, request).await
+    }
     async fn prepare_task_execution(
         &self,
         request: Request<v1::PrepareTaskExecutionRequest>,

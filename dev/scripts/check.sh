@@ -18,7 +18,8 @@ for workload in \
   statefulset/workflow-postgres \
   statefulset/workflow-jetstream \
   statefulset/scripted-executor \
-  deployment/control-plane; do
+  deployment/control-plane \
+  deployment/task-supervisor; do
   kubectl --context "$context" --namespace "$namespace" rollout status \
     "$workload" --timeout=2m
 done

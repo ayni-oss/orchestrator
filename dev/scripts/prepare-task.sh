@@ -5,7 +5,7 @@ source "$dev_directory/lib/common.sh"
 context="$(dev_context)"
 namespace="$(dev_namespace)"
 mode="${1:-}"
-if [[ ( "$mode" != verify || $# -ne 4 ) && ( "$mode" != submit || $# -ne 2 ) ]]; then
+if [[ ( ( "$mode" != verify && "$mode" != start ) || $# -ne 4 ) && ( ( "$mode" != submit && "$mode" != submit-start ) || $# -ne 2 ) ]]; then
   echo 'usage: dev/ctl prepare-task verify CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON | submit FROZEN_REQUEST_JSON' >&2
   exit 2
 fi

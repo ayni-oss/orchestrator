@@ -128,7 +128,10 @@ defines six sequential PRs:
 | 6: Cumulative M4 acceptance | Deployed interruption, restart, fencing, cancellation and cleanup close the milestone. |
 
 The [execution preparation contract](docs/technical/architecture/task-execution.md)
-owns the first-slice authority and frozen-input boundary. Each runtime PR extends
+owns the first-slice authority and frozen-input boundary. PR #242 delivers that
+preparation boundary. The [isolated execution contract](docs/technical/architecture/isolated-task-execution.md)
+defines the second slice: a durable serial task queue, isolated retained checkouts,
+bounded coding, cancellation fencing and exact result acceptance. Each runtime PR extends
 the cumulative acceptance harness immediately. M4 begins with serial execution
 and isolated attempts; dependency scheduling and concurrent tasks remain M5,
 conversational recovery remains M6. Automatic quality-repair loops require explicit
