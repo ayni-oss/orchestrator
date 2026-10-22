@@ -49,6 +49,10 @@ mod tests {
                 (
                     "ProjectConversationService",
                     BTreeSet::from([
+                        "ApprovePlan",
+                        "GetPlanApproval",
+                        "ListTasks",
+                        "GetTask",
                         "CreatePlan",
                         "RevisePlan",
                         "GetPlanVersion",

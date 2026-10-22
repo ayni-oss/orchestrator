@@ -40,6 +40,8 @@ export interface PlanSummary {
   currentOrdinal: string;
   title: string;
   followsPlanId: string;
+  /** Empty until the one authoritative approval commits. */
+  approvalId: string;
 }
 
 export interface PlanVersion {
@@ -160,6 +162,103 @@ export interface AgentPlanProvenance {
   invocationId: string;
   assumptions: string[];
   evidence: string[];
+}
+
+/**
+ * The retained authorization of an exact immutable version. The trusted operator
+ * identity is server-derived; model/provider calls cannot supply it.
+ */
+export interface PlanApprovalReceipt {
+  id: string;
+  commandId: string;
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  planId: string;
+  versionId: string;
+  contentDigest: string;
+  operator: string;
+  requestDigest: string;
+  createdAt?: Date | undefined;
+  conversationRevision: string;
+  resumeCursor: string;
+  taskIds: string[];
+}
+
+/**
+ * Frozen reviewed specification and origin. Admission never dispatches coding
+ * work. Declared repository/source references remain unverified in this slice.
+ */
+export interface AdmittedTask {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  planId: string;
+  versionId: string;
+  contentDigest: string;
+  approvalId: string;
+  proposedTaskKey: string;
+  specification?: PlanTaskSpecification | undefined;
+  state: string;
+  executionBlockers: string[];
+  createdAt?: Date | undefined;
+}
+
+export interface ApprovePlanRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  idempotencyKey: string;
+  planId: string;
+  expectedVersionId: string;
+  contentDigest: string;
+}
+
+export interface ApprovePlanResponse {
+  approval?:
+    | PlanApprovalReceipt
+    | undefined;
+  /** Complete ordered set, bounded by the 32-task plan limit. */
+  tasks: AdmittedTask[];
+}
+
+export interface GetPlanApprovalRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  planId: string;
+}
+
+export interface GetPlanApprovalResponse {
+  /** Absent for a scoped plan that has not been approved. */
+  approval?: PlanApprovalReceipt | undefined;
+  tasks: AdmittedTask[];
+}
+
+/** Live scoped ID-keyset pagination; limit defaults to 20, maximum 32. */
+export interface ListTasksRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  afterId: string;
+  limit: number;
+}
+
+export interface ListTasksResponse {
+  tasks: AdmittedTask[];
+  nextAfterId: string;
+}
+
+export interface GetTaskRequest {
+  workspaceId: string;
+  projectId: string;
+  conversationId: string;
+  taskId: string;
+}
+
+export interface GetTaskResponse {
+  task?: AdmittedTask | undefined;
 }
 
 function createBasePlanTaskSpecification(): PlanTaskSpecification {
@@ -576,6 +675,7 @@ function createBasePlanSummary(): PlanSummary {
     currentOrdinal: "0",
     title: "",
     followsPlanId: "",
+    approvalId: "",
   };
 }
 
@@ -604,6 +704,9 @@ export const PlanSummary: MessageFns<PlanSummary> = {
     }
     if (message.followsPlanId !== "") {
       writer.uint32(66).string(message.followsPlanId);
+    }
+    if (message.approvalId !== "") {
+      writer.uint32(74).string(message.approvalId);
     }
     return writer;
   },
@@ -685,6 +788,14 @@ export const PlanSummary: MessageFns<PlanSummary> = {
             message.followsPlanId = reader.string();
             continue;
           }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.approvalId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -731,6 +842,11 @@ export const PlanSummary: MessageFns<PlanSummary> = {
         : isSet(object.follows_plan_id)
         ? globalThis.String(object.follows_plan_id)
         : "",
+      approvalId: isSet(object.approvalId)
+        ? globalThis.String(object.approvalId)
+        : isSet(object.approval_id)
+        ? globalThis.String(object.approval_id)
+        : "",
     };
   },
 
@@ -760,6 +876,9 @@ export const PlanSummary: MessageFns<PlanSummary> = {
     if (message.followsPlanId !== "") {
       obj.followsPlanId = message.followsPlanId;
     }
+    if (message.approvalId !== "") {
+      obj.approvalId = message.approvalId;
+    }
     return obj;
   },
 
@@ -776,6 +895,7 @@ export const PlanSummary: MessageFns<PlanSummary> = {
     message.currentOrdinal = object.currentOrdinal ?? "0";
     message.title = object.title ?? "";
     message.followsPlanId = object.followsPlanId ?? "";
+    message.approvalId = object.approvalId ?? "";
     return message;
   },
 };
@@ -2902,6 +3022,1611 @@ export const AgentPlanProvenance: MessageFns<AgentPlanProvenance> = {
     message.invocationId = object.invocationId ?? "";
     message.assumptions = object.assumptions?.map((e) => e) || [];
     message.evidence = object.evidence?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBasePlanApprovalReceipt(): PlanApprovalReceipt {
+  return {
+    id: "",
+    commandId: "",
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    planId: "",
+    versionId: "",
+    contentDigest: "",
+    operator: "",
+    requestDigest: "",
+    createdAt: undefined,
+    conversationRevision: "0",
+    resumeCursor: "",
+    taskIds: [],
+  };
+}
+
+export const PlanApprovalReceipt: MessageFns<PlanApprovalReceipt> = {
+  encode(message: PlanApprovalReceipt, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.commandId !== "") {
+      writer.uint32(18).string(message.commandId);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(26).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(34).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(42).string(message.conversationId);
+    }
+    if (message.planId !== "") {
+      writer.uint32(50).string(message.planId);
+    }
+    if (message.versionId !== "") {
+      writer.uint32(58).string(message.versionId);
+    }
+    if (message.contentDigest !== "") {
+      writer.uint32(66).string(message.contentDigest);
+    }
+    if (message.operator !== "") {
+      writer.uint32(74).string(message.operator);
+    }
+    if (message.requestDigest !== "") {
+      writer.uint32(82).string(message.requestDigest);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(90).fork()).join();
+    }
+    if (message.conversationRevision !== "0") {
+      writer.uint32(96).uint64(message.conversationRevision);
+    }
+    if (message.resumeCursor !== "") {
+      writer.uint32(106).string(message.resumeCursor);
+    }
+    for (const v of message.taskIds) {
+      writer.uint32(114).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PlanApprovalReceipt {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePlanApprovalReceipt();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.commandId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.planId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.versionId = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.contentDigest = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.operator = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.requestDigest = reader.string();
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 12: {
+            if (tag !== 96) {
+              break;
+            }
+
+            message.conversationRevision = reader.uint64().toString();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.resumeCursor = reader.string();
+            continue;
+          }
+          case 14: {
+            if (tag !== 114) {
+              break;
+            }
+
+            message.taskIds.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): PlanApprovalReceipt {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      commandId: isSet(object.commandId)
+        ? globalThis.String(object.commandId)
+        : isSet(object.command_id)
+        ? globalThis.String(object.command_id)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      planId: isSet(object.planId)
+        ? globalThis.String(object.planId)
+        : isSet(object.plan_id)
+        ? globalThis.String(object.plan_id)
+        : "",
+      versionId: isSet(object.versionId)
+        ? globalThis.String(object.versionId)
+        : isSet(object.version_id)
+        ? globalThis.String(object.version_id)
+        : "",
+      contentDigest: isSet(object.contentDigest)
+        ? globalThis.String(object.contentDigest)
+        : isSet(object.content_digest)
+        ? globalThis.String(object.content_digest)
+        : "",
+      operator: isSet(object.operator) ? globalThis.String(object.operator) : "",
+      requestDigest: isSet(object.requestDigest)
+        ? globalThis.String(object.requestDigest)
+        : isSet(object.request_digest)
+        ? globalThis.String(object.request_digest)
+        : "",
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+      conversationRevision: isSet(object.conversationRevision)
+        ? globalThis.String(object.conversationRevision)
+        : isSet(object.conversation_revision)
+        ? globalThis.String(object.conversation_revision)
+        : "0",
+      resumeCursor: isSet(object.resumeCursor)
+        ? globalThis.String(object.resumeCursor)
+        : isSet(object.resume_cursor)
+        ? globalThis.String(object.resume_cursor)
+        : "",
+      taskIds: globalThis.Array.isArray(object?.taskIds)
+        ? object.taskIds.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.task_ids)
+        ? object.task_ids.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: PlanApprovalReceipt): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.commandId !== "") {
+      obj.commandId = message.commandId;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.versionId !== "") {
+      obj.versionId = message.versionId;
+    }
+    if (message.contentDigest !== "") {
+      obj.contentDigest = message.contentDigest;
+    }
+    if (message.operator !== "") {
+      obj.operator = message.operator;
+    }
+    if (message.requestDigest !== "") {
+      obj.requestDigest = message.requestDigest;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    if (message.conversationRevision !== "0") {
+      obj.conversationRevision = message.conversationRevision;
+    }
+    if (message.resumeCursor !== "") {
+      obj.resumeCursor = message.resumeCursor;
+    }
+    if (message.taskIds?.length) {
+      obj.taskIds = message.taskIds;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<PlanApprovalReceipt>): PlanApprovalReceipt {
+    return PlanApprovalReceipt.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<PlanApprovalReceipt>): PlanApprovalReceipt {
+    const message = createBasePlanApprovalReceipt();
+    message.id = object.id ?? "";
+    message.commandId = object.commandId ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.planId = object.planId ?? "";
+    message.versionId = object.versionId ?? "";
+    message.contentDigest = object.contentDigest ?? "";
+    message.operator = object.operator ?? "";
+    message.requestDigest = object.requestDigest ?? "";
+    message.createdAt = object.createdAt ?? undefined;
+    message.conversationRevision = object.conversationRevision ?? "0";
+    message.resumeCursor = object.resumeCursor ?? "";
+    message.taskIds = object.taskIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseAdmittedTask(): AdmittedTask {
+  return {
+    id: "",
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    planId: "",
+    versionId: "",
+    contentDigest: "",
+    approvalId: "",
+    proposedTaskKey: "",
+    specification: undefined,
+    state: "",
+    executionBlockers: [],
+    createdAt: undefined,
+  };
+}
+
+export const AdmittedTask: MessageFns<AdmittedTask> = {
+  encode(message: AdmittedTask, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(18).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(26).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(34).string(message.conversationId);
+    }
+    if (message.planId !== "") {
+      writer.uint32(42).string(message.planId);
+    }
+    if (message.versionId !== "") {
+      writer.uint32(50).string(message.versionId);
+    }
+    if (message.contentDigest !== "") {
+      writer.uint32(58).string(message.contentDigest);
+    }
+    if (message.approvalId !== "") {
+      writer.uint32(66).string(message.approvalId);
+    }
+    if (message.proposedTaskKey !== "") {
+      writer.uint32(74).string(message.proposedTaskKey);
+    }
+    if (message.specification !== undefined) {
+      PlanTaskSpecification.encode(message.specification, writer.uint32(82).fork()).join();
+    }
+    if (message.state !== "") {
+      writer.uint32(90).string(message.state);
+    }
+    for (const v of message.executionBlockers) {
+      writer.uint32(98).string(v!);
+    }
+    if (message.createdAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.createdAt), writer.uint32(106).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AdmittedTask {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAdmittedTask();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.planId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.versionId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.contentDigest = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.approvalId = reader.string();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.proposedTaskKey = reader.string();
+            continue;
+          }
+          case 10: {
+            if (tag !== 82) {
+              break;
+            }
+
+            message.specification = PlanTaskSpecification.decode(reader, reader.uint32());
+            continue;
+          }
+          case 11: {
+            if (tag !== 90) {
+              break;
+            }
+
+            message.state = reader.string();
+            continue;
+          }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.executionBlockers.push(reader.string());
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.createdAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): AdmittedTask {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      planId: isSet(object.planId)
+        ? globalThis.String(object.planId)
+        : isSet(object.plan_id)
+        ? globalThis.String(object.plan_id)
+        : "",
+      versionId: isSet(object.versionId)
+        ? globalThis.String(object.versionId)
+        : isSet(object.version_id)
+        ? globalThis.String(object.version_id)
+        : "",
+      contentDigest: isSet(object.contentDigest)
+        ? globalThis.String(object.contentDigest)
+        : isSet(object.content_digest)
+        ? globalThis.String(object.content_digest)
+        : "",
+      approvalId: isSet(object.approvalId)
+        ? globalThis.String(object.approvalId)
+        : isSet(object.approval_id)
+        ? globalThis.String(object.approval_id)
+        : "",
+      proposedTaskKey: isSet(object.proposedTaskKey)
+        ? globalThis.String(object.proposedTaskKey)
+        : isSet(object.proposed_task_key)
+        ? globalThis.String(object.proposed_task_key)
+        : "",
+      specification: isSet(object.specification) ? PlanTaskSpecification.fromJSON(object.specification) : undefined,
+      state: isSet(object.state) ? globalThis.String(object.state) : "",
+      executionBlockers: globalThis.Array.isArray(object?.executionBlockers)
+        ? object.executionBlockers.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.execution_blockers)
+        ? object.execution_blockers.map((e: any) => globalThis.String(e))
+        : [],
+      createdAt: isSet(object.createdAt)
+        ? fromJsonTimestamp(object.createdAt)
+        : isSet(object.created_at)
+        ? fromJsonTimestamp(object.created_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: AdmittedTask): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.versionId !== "") {
+      obj.versionId = message.versionId;
+    }
+    if (message.contentDigest !== "") {
+      obj.contentDigest = message.contentDigest;
+    }
+    if (message.approvalId !== "") {
+      obj.approvalId = message.approvalId;
+    }
+    if (message.proposedTaskKey !== "") {
+      obj.proposedTaskKey = message.proposedTaskKey;
+    }
+    if (message.specification !== undefined) {
+      obj.specification = PlanTaskSpecification.toJSON(message.specification);
+    }
+    if (message.state !== "") {
+      obj.state = message.state;
+    }
+    if (message.executionBlockers?.length) {
+      obj.executionBlockers = message.executionBlockers;
+    }
+    if (message.createdAt !== undefined) {
+      obj.createdAt = message.createdAt.toISOString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<AdmittedTask>): AdmittedTask {
+    return AdmittedTask.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<AdmittedTask>): AdmittedTask {
+    const message = createBaseAdmittedTask();
+    message.id = object.id ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.planId = object.planId ?? "";
+    message.versionId = object.versionId ?? "";
+    message.contentDigest = object.contentDigest ?? "";
+    message.approvalId = object.approvalId ?? "";
+    message.proposedTaskKey = object.proposedTaskKey ?? "";
+    message.specification = (object.specification !== undefined && object.specification !== null)
+      ? PlanTaskSpecification.fromPartial(object.specification)
+      : undefined;
+    message.state = object.state ?? "";
+    message.executionBlockers = object.executionBlockers?.map((e) => e) || [];
+    message.createdAt = object.createdAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseApprovePlanRequest(): ApprovePlanRequest {
+  return {
+    workspaceId: "",
+    projectId: "",
+    conversationId: "",
+    idempotencyKey: "",
+    planId: "",
+    expectedVersionId: "",
+    contentDigest: "",
+  };
+}
+
+export const ApprovePlanRequest: MessageFns<ApprovePlanRequest> = {
+  encode(message: ApprovePlanRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(34).string(message.idempotencyKey);
+    }
+    if (message.planId !== "") {
+      writer.uint32(42).string(message.planId);
+    }
+    if (message.expectedVersionId !== "") {
+      writer.uint32(50).string(message.expectedVersionId);
+    }
+    if (message.contentDigest !== "") {
+      writer.uint32(58).string(message.contentDigest);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ApprovePlanRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseApprovePlanRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.planId = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.expectedVersionId = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.contentDigest = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ApprovePlanRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      planId: isSet(object.planId)
+        ? globalThis.String(object.planId)
+        : isSet(object.plan_id)
+        ? globalThis.String(object.plan_id)
+        : "",
+      expectedVersionId: isSet(object.expectedVersionId)
+        ? globalThis.String(object.expectedVersionId)
+        : isSet(object.expected_version_id)
+        ? globalThis.String(object.expected_version_id)
+        : "",
+      contentDigest: isSet(object.contentDigest)
+        ? globalThis.String(object.contentDigest)
+        : isSet(object.content_digest)
+        ? globalThis.String(object.content_digest)
+        : "",
+    };
+  },
+
+  toJSON(message: ApprovePlanRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    if (message.expectedVersionId !== "") {
+      obj.expectedVersionId = message.expectedVersionId;
+    }
+    if (message.contentDigest !== "") {
+      obj.contentDigest = message.contentDigest;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ApprovePlanRequest>): ApprovePlanRequest {
+    return ApprovePlanRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ApprovePlanRequest>): ApprovePlanRequest {
+    const message = createBaseApprovePlanRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.planId = object.planId ?? "";
+    message.expectedVersionId = object.expectedVersionId ?? "";
+    message.contentDigest = object.contentDigest ?? "";
+    return message;
+  },
+};
+
+function createBaseApprovePlanResponse(): ApprovePlanResponse {
+  return { approval: undefined, tasks: [] };
+}
+
+export const ApprovePlanResponse: MessageFns<ApprovePlanResponse> = {
+  encode(message: ApprovePlanResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.approval !== undefined) {
+      PlanApprovalReceipt.encode(message.approval, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.tasks) {
+      AdmittedTask.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ApprovePlanResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseApprovePlanResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.approval = PlanApprovalReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.tasks.push(AdmittedTask.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ApprovePlanResponse {
+    return {
+      approval: isSet(object.approval) ? PlanApprovalReceipt.fromJSON(object.approval) : undefined,
+      tasks: globalThis.Array.isArray(object?.tasks) ? object.tasks.map((e: any) => AdmittedTask.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ApprovePlanResponse): unknown {
+    const obj: any = {};
+    if (message.approval !== undefined) {
+      obj.approval = PlanApprovalReceipt.toJSON(message.approval);
+    }
+    if (message.tasks?.length) {
+      obj.tasks = message.tasks.map((e) => AdmittedTask.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ApprovePlanResponse>): ApprovePlanResponse {
+    return ApprovePlanResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ApprovePlanResponse>): ApprovePlanResponse {
+    const message = createBaseApprovePlanResponse();
+    message.approval = (object.approval !== undefined && object.approval !== null)
+      ? PlanApprovalReceipt.fromPartial(object.approval)
+      : undefined;
+    message.tasks = object.tasks?.map((e) => AdmittedTask.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetPlanApprovalRequest(): GetPlanApprovalRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", planId: "" };
+}
+
+export const GetPlanApprovalRequest: MessageFns<GetPlanApprovalRequest> = {
+  encode(message: GetPlanApprovalRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.planId !== "") {
+      writer.uint32(34).string(message.planId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetPlanApprovalRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetPlanApprovalRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.planId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetPlanApprovalRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      planId: isSet(object.planId)
+        ? globalThis.String(object.planId)
+        : isSet(object.plan_id)
+        ? globalThis.String(object.plan_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetPlanApprovalRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.planId !== "") {
+      obj.planId = message.planId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetPlanApprovalRequest>): GetPlanApprovalRequest {
+    return GetPlanApprovalRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetPlanApprovalRequest>): GetPlanApprovalRequest {
+    const message = createBaseGetPlanApprovalRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.planId = object.planId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetPlanApprovalResponse(): GetPlanApprovalResponse {
+  return { approval: undefined, tasks: [] };
+}
+
+export const GetPlanApprovalResponse: MessageFns<GetPlanApprovalResponse> = {
+  encode(message: GetPlanApprovalResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.approval !== undefined) {
+      PlanApprovalReceipt.encode(message.approval, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.tasks) {
+      AdmittedTask.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetPlanApprovalResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetPlanApprovalResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.approval = PlanApprovalReceipt.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.tasks.push(AdmittedTask.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetPlanApprovalResponse {
+    return {
+      approval: isSet(object.approval) ? PlanApprovalReceipt.fromJSON(object.approval) : undefined,
+      tasks: globalThis.Array.isArray(object?.tasks) ? object.tasks.map((e: any) => AdmittedTask.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: GetPlanApprovalResponse): unknown {
+    const obj: any = {};
+    if (message.approval !== undefined) {
+      obj.approval = PlanApprovalReceipt.toJSON(message.approval);
+    }
+    if (message.tasks?.length) {
+      obj.tasks = message.tasks.map((e) => AdmittedTask.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetPlanApprovalResponse>): GetPlanApprovalResponse {
+    return GetPlanApprovalResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetPlanApprovalResponse>): GetPlanApprovalResponse {
+    const message = createBaseGetPlanApprovalResponse();
+    message.approval = (object.approval !== undefined && object.approval !== null)
+      ? PlanApprovalReceipt.fromPartial(object.approval)
+      : undefined;
+    message.tasks = object.tasks?.map((e) => AdmittedTask.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseListTasksRequest(): ListTasksRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", afterId: "", limit: 0 };
+}
+
+export const ListTasksRequest: MessageFns<ListTasksRequest> = {
+  encode(message: ListTasksRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.afterId !== "") {
+      writer.uint32(34).string(message.afterId);
+    }
+    if (message.limit !== 0) {
+      writer.uint32(40).uint32(message.limit);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListTasksRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListTasksRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.afterId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.limit = reader.uint32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListTasksRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      afterId: isSet(object.afterId)
+        ? globalThis.String(object.afterId)
+        : isSet(object.after_id)
+        ? globalThis.String(object.after_id)
+        : "",
+      limit: isSet(object.limit) ? globalThis.Number(object.limit) : 0,
+    };
+  },
+
+  toJSON(message: ListTasksRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.afterId !== "") {
+      obj.afterId = message.afterId;
+    }
+    if (message.limit !== 0) {
+      obj.limit = Math.round(message.limit);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListTasksRequest>): ListTasksRequest {
+    return ListTasksRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListTasksRequest>): ListTasksRequest {
+    const message = createBaseListTasksRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.afterId = object.afterId ?? "";
+    message.limit = object.limit ?? 0;
+    return message;
+  },
+};
+
+function createBaseListTasksResponse(): ListTasksResponse {
+  return { tasks: [], nextAfterId: "" };
+}
+
+export const ListTasksResponse: MessageFns<ListTasksResponse> = {
+  encode(message: ListTasksResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.tasks) {
+      AdmittedTask.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.nextAfterId !== "") {
+      writer.uint32(18).string(message.nextAfterId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListTasksResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListTasksResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.tasks.push(AdmittedTask.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.nextAfterId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListTasksResponse {
+    return {
+      tasks: globalThis.Array.isArray(object?.tasks) ? object.tasks.map((e: any) => AdmittedTask.fromJSON(e)) : [],
+      nextAfterId: isSet(object.nextAfterId)
+        ? globalThis.String(object.nextAfterId)
+        : isSet(object.next_after_id)
+        ? globalThis.String(object.next_after_id)
+        : "",
+    };
+  },
+
+  toJSON(message: ListTasksResponse): unknown {
+    const obj: any = {};
+    if (message.tasks?.length) {
+      obj.tasks = message.tasks.map((e) => AdmittedTask.toJSON(e));
+    }
+    if (message.nextAfterId !== "") {
+      obj.nextAfterId = message.nextAfterId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListTasksResponse>): ListTasksResponse {
+    return ListTasksResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListTasksResponse>): ListTasksResponse {
+    const message = createBaseListTasksResponse();
+    message.tasks = object.tasks?.map((e) => AdmittedTask.fromPartial(e)) || [];
+    message.nextAfterId = object.nextAfterId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTaskRequest(): GetTaskRequest {
+  return { workspaceId: "", projectId: "", conversationId: "", taskId: "" };
+}
+
+export const GetTaskRequest: MessageFns<GetTaskRequest> = {
+  encode(message: GetTaskRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workspaceId !== "") {
+      writer.uint32(10).string(message.workspaceId);
+    }
+    if (message.projectId !== "") {
+      writer.uint32(18).string(message.projectId);
+    }
+    if (message.conversationId !== "") {
+      writer.uint32(26).string(message.conversationId);
+    }
+    if (message.taskId !== "") {
+      writer.uint32(34).string(message.taskId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTaskRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTaskRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.workspaceId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.projectId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.conversationId = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.taskId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTaskRequest {
+    return {
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      projectId: isSet(object.projectId)
+        ? globalThis.String(object.projectId)
+        : isSet(object.project_id)
+        ? globalThis.String(object.project_id)
+        : "",
+      conversationId: isSet(object.conversationId)
+        ? globalThis.String(object.conversationId)
+        : isSet(object.conversation_id)
+        ? globalThis.String(object.conversation_id)
+        : "",
+      taskId: isSet(object.taskId)
+        ? globalThis.String(object.taskId)
+        : isSet(object.task_id)
+        ? globalThis.String(object.task_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetTaskRequest): unknown {
+    const obj: any = {};
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.projectId !== "") {
+      obj.projectId = message.projectId;
+    }
+    if (message.conversationId !== "") {
+      obj.conversationId = message.conversationId;
+    }
+    if (message.taskId !== "") {
+      obj.taskId = message.taskId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTaskRequest>): GetTaskRequest {
+    return GetTaskRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTaskRequest>): GetTaskRequest {
+    const message = createBaseGetTaskRequest();
+    message.workspaceId = object.workspaceId ?? "";
+    message.projectId = object.projectId ?? "";
+    message.conversationId = object.conversationId ?? "";
+    message.taskId = object.taskId ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTaskResponse(): GetTaskResponse {
+  return { task: undefined };
+}
+
+export const GetTaskResponse: MessageFns<GetTaskResponse> = {
+  encode(message: GetTaskResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.task !== undefined) {
+      AdmittedTask.encode(message.task, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTaskResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTaskResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.task = AdmittedTask.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): GetTaskResponse {
+    return { task: isSet(object.task) ? AdmittedTask.fromJSON(object.task) : undefined };
+  },
+
+  toJSON(message: GetTaskResponse): unknown {
+    const obj: any = {};
+    if (message.task !== undefined) {
+      obj.task = AdmittedTask.toJSON(message.task);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<GetTaskResponse>): GetTaskResponse {
+    return GetTaskResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<GetTaskResponse>): GetTaskResponse {
+    const message = createBaseGetTaskResponse();
+    message.task = (object.task !== undefined && object.task !== null)
+      ? AdmittedTask.fromPartial(object.task)
+      : undefined;
     return message;
   },
 };

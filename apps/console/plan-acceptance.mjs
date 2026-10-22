@@ -77,7 +77,84 @@ export async function exercisePlans({ page, context, endpoint, gateway, scope })
   const snapshot = (await gateway(page, 'GetConversationSnapshot', scope)).snapshot;
   assert.equal(snapshot.plans[0].currentOrdinal, '2');
   const retained = (await gateway(page, 'GetPlanVersion', { ...scope, planId })).version;
+  await exerciseApproval({ page, other, gateway, scope, planId, version: retained, foreignConversationId: foreign.id });
   await other.close();
   console.log(JSON.stringify({ planReview: 'pass', cases: ['lost-response-reload-retry', 'scope-origin', 'structured-task-inputs', 'escaping', 'concurrent-revision', 'stale-edit-conflict', 'unsaved-draft-reconnect-reload', 'immutable-history-pagination', 'snapshot-head'], retained: { scope, planId, version: retained } }));
   return { scope, planId, version: retained };
+}
+
+
+async function exerciseApproval({ page, other, gateway, scope, planId, version, foreignConversationId }) {
+  await page.locator(`[data-plan-id="${planId}"]`).click();
+  await page.waitForFunction(id => document.querySelector('#plan-review').textContent.includes(id), version.id);
+  await page.locator('#plan-approve-consent').check();
+  assert.equal(await page.locator('#plan-approve').isDisabled(), true, 'unresolved scope blocks approval');
+  const content = structuredClone(version.content);
+  content.unresolvedQuestions = [];
+  content.tasks[0].acceptanceCriteria = ['Retained task origin is queryable after reload'];
+  content.tasks.push({ ...content.tasks[0], key: 'recover', objective: 'Recover the exact approval receipt', acceptanceCriteria: ['Same-key retry returns the original task identities'] });
+  const eligible = (await gateway(page, 'RevisePlan', { ...scope, planId, expectedVersionId: version.id, content, idempotencyKey: crypto.randomUUID() })).version;
+  await page.waitForFunction(id => document.querySelector('#plan-review-status').textContent.includes('newer version') && document.querySelector('#plan-review').textContent.includes(id), version.id);
+  assert.equal(await page.locator('#plan-approve').isDisabled(), true, 'streaming never approves a newer version implicitly');
+  await page.locator(`[data-plan-id="${planId}"]`).click();
+  await page.waitForFunction(id => document.querySelector('#plan-approval-basis').textContent.includes(id), eligible.id);
+  assert.equal(await page.locator('#plan-approve-consent').isChecked(), false, 'reviewing another version resets consent');
+  const otherApprovalRead = other.waitForResponse(response => response.url().endsWith('/api/GetPlanApproval'));
+  await other.locator(`[data-plan-id="${planId}"]`).click();
+  await otherApprovalRead;
+  await other.waitForFunction(id => document.querySelector('#plan-approval-basis').textContent.includes(id), eligible.id);
+  await other.locator('#plan-approve-consent').check();
+  // Keep this tab's reviewed version while the other tab commits approval.
+  await other.locator('#toggle-watch').click();
+  await page.locator('#plan-approve-consent').check();
+  let admitted;
+  await page.route('**/api/ApprovePlan', async route => {
+    const accepted = await route.fetch(); assert.equal(accepted.status(), 200);
+    admitted = await accepted.json(); await route.abort('failed');
+  }, { times: 1 });
+  await page.locator('#plan-approve').click();
+  await page.locator('#error').waitFor({ state: 'visible' });
+  await page.locator('#pending').waitFor({ state: 'visible' });
+  const pending = await page.evaluate(() => JSON.parse(sessionStorage.getItem('pending')));
+  assert.equal(pending.body.expectedVersionId, eligible.id);
+  assert.equal(pending.body.contentDigest, eligible.contentDigest);
+  const competing = other.waitForResponse(response => response.url().endsWith('/api/ApprovePlan'));
+  await other.locator('#plan-approve').click();
+  assert.equal((await competing).status(), 409, 'a second tab cannot admit another task set');
+  await other.locator('#pending').waitFor({ state: 'hidden' });
+  assert.equal(await other.locator('#plan-editor > label [name=title]').inputValue(), 'Unsaved competing revision');
+  await page.reload(); await page.locator('#pending').waitFor({ state: 'visible' });
+  assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('pending'))), pending);
+  const replay = page.waitForResponse(response => response.url().endsWith('/api/ApprovePlan'));
+  await page.locator('#retry').click();
+  const recovered = await (await replay).json();
+  assert.deepEqual(recovered, admitted);
+  await page.locator('#pending').waitFor({ state: 'hidden' });
+  await page.locator(`[data-plan-id="${planId}"]`).click();
+  await page.locator('#plan-admission [data-task-id]').first().waitFor();
+  assert.equal(await page.locator('#plan-admission [data-task-id]').count(), content.tasks.length);
+  const admissionText = await page.locator('#plan-admission').innerText();
+  assert.match(admissionText, /awaiting execution/);
+  assert.match(admissionText, /Immutable origin/);
+  assert.ok(admissionText.includes(scope.projectId) && admissionText.includes(scope.conversationId));
+  assert.ok(admissionText.includes(eligible.contentDigest));
+  assert.match(admissionText, /Verify source and execution budget/);
+  assert.equal(await page.locator('#plan-edit').isDisabled(), true);
+  assert.equal(await page.locator('#plan-approve').isDisabled(), true);
+  const first = await gateway(page, 'ListTasks', { ...scope, limit: 1 });
+  assert.equal(first.tasks.length, 1); assert.ok(first.nextAfterId);
+  const second = await gateway(page, 'ListTasks', { ...scope, afterId: first.nextAfterId, limit: 1 });
+  assert.equal(second.tasks.length, 1);
+  assert.notEqual(first.tasks[0].id, second.tasks[0].id);
+  assert.deepEqual(new Set([...first.tasks, ...second.tasks].map(task => task.id)), new Set(admitted.approval.taskIds));
+  const task = (await gateway(page, 'GetTask', { ...scope, taskId: first.tasks[0].id })).task;
+  assert.equal(task.approvalId, admitted.approval.id);
+  assert.equal(task.versionId, eligible.id); assert.equal(task.state, 'awaiting_execution');
+  const denied = await page.evaluate(async body => (await fetch('/api/GetTask', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Console-Request': '1' }, body: JSON.stringify(body) })).status, { ...scope, conversationId: foreignConversationId, taskId: task.id });
+  assert.equal(denied, 404);
+  const restored = await gateway(page, 'GetPlanApproval', { ...scope, planId });
+  assert.deepEqual(restored, admitted);
+  const snapshot = (await gateway(page, 'GetConversationSnapshot', scope)).snapshot;
+  assert.equal(snapshot.plans.find(plan => plan.id === planId).approvalId, admitted.approval.id);
+  console.log(JSON.stringify({ planAdmission: 'pass', cases: ['unresolved-scope-blocks', 'exact-reviewed-version', 'consent-reset-on-review', 'two-tab-approval-conflict', 'lost-response-reload-exact-retry', 'immutable-origin', 'awaiting-execution-blockers', 'bounded-task-pagination', 'scoped-task-read', 'snapshot-approval'], retained: { scope, planId, approval: admitted.approval, tasks: admitted.tasks } }));
 }

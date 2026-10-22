@@ -20,10 +20,14 @@
   <div id="error" role="alert" hidden></div>
   <section id="pending" hidden><strong>A command is awaiting confirmation.</strong><p id="pending-description"></p><button id="retry">Retry the same command</button></section>
   <section class="plans-panel" aria-label="Plans">
-    <h2>Plans</h2><p>Review scope and proposed tasks here. Approval and execution arrive in later slices.</p>
+    <h2>Plans</h2><p>Review an exact version and explicitly approve its task set for admission. Tasks await execution capability.</p>
     <div id="plan-list"></div><p id="plan-review-status" role="status">Select a retained plan to review.</p>
     <div id="plan-review"></div><div id="plan-history"></div><button id="plan-history-more" hidden>Load older plan versions</button>
     <button id="plan-edit" disabled>Edit current version</button>
+    <p id="plan-approval-basis"></p>
+    <label><input id="plan-approve-consent" type="checkbox"> I approve exactly the reviewed version, digest and complete proposed task set.</label>
+    <button id="plan-approve" disabled>Approve reviewed version and admit tasks</button>
+    <div id="plan-admission" aria-label="Admitted tasks"></div><div id="task-detail" aria-label="Task detail"></div>
     <details id="plan-editor-details"><summary>Write or revise a plan</summary><p id="plan-editing">New operator-authored draft.</p>
       <form id="plan-editor">
         <label>Plan title<input name="title" required maxlength="256"></label>

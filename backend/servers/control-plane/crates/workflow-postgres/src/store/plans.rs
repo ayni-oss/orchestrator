@@ -1,3 +1,4 @@
+mod approval;
 pub(super) mod proposals;
 mod reads;
 use super::{StoreError, WorkflowStore, observation, support};
@@ -158,6 +159,16 @@ async fn prepare_head(
         return Ok(1);
     }
     let head = reads::version(tx, scope, plan, "").await?;
+    if tx
+        .query_opt(
+            "SELECT 1 FROM workflow_plan_approvals WHERE plan_id=$1",
+            &[&plan],
+        )
+        .await?
+        .is_some()
+    {
+        return Err(StoreError::PlanAlreadyApproved);
+    }
     if head.id != expected {
         return Err(StoreError::PlanVersionConflict);
     }

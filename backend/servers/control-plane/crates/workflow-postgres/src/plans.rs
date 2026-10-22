@@ -1,4 +1,4 @@
-//! Immutable operator-authored plan content. No execution or approval authority.
+//! Immutable conversation-owned plan content and explicit operator admission.
 use crate::{StoreError, model::Timestamp};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -44,6 +44,7 @@ pub struct PlanSummary {
     pub current_ordinal: u64,
     pub title: String,
     pub follows_plan_id: String,
+    pub approval_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -218,4 +219,53 @@ mod tests {
         ));
         Ok(())
     }
+}
+
+/// The retained authorization of one exact immutable plan version.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanApprovalReceipt {
+    pub id: String,
+    pub command_id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub conversation_id: String,
+    pub plan_id: String,
+    pub version_id: String,
+    pub content_digest: String,
+    pub operator: String,
+    pub request_digest: String,
+    pub created_at: Timestamp,
+    pub conversation_revision: u64,
+    pub resume_cursor: String,
+    pub task_ids: Vec<String>,
+}
+
+/// An admitted specification; source declarations confer no execution authority.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdmittedTask {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub conversation_id: String,
+    pub plan_id: String,
+    pub version_id: String,
+    pub content_digest: String,
+    pub approval_id: String,
+    pub proposed_task_key: String,
+    pub specification: PlanTaskSpecification,
+    pub state: String,
+    pub execution_blockers: Vec<String>,
+    pub created_at: Timestamp,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ApprovedPlan {
+    pub approval: PlanApprovalReceipt,
+    pub tasks: Vec<AdmittedTask>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TaskPage {
+    pub tasks: Vec<AdmittedTask>,
+    pub next_after_id: String,
 }

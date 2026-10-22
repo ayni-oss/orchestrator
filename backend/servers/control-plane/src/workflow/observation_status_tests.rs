@@ -55,6 +55,21 @@ fn cursor_expiry_and_backpressure_keep_machine_readable_reasons() {
     let context = RequestContext::new(&Request::new(()));
     for (error, code, reason) in [
         (
+            StoreError::PlanAlreadyApproved,
+            Code::AlreadyExists,
+            v1::ErrorReason::PlanAlreadyApproved,
+        ),
+        (
+            StoreError::PlanDigestMismatch,
+            Code::FailedPrecondition,
+            v1::ErrorReason::PlanDigestMismatch,
+        ),
+        (
+            StoreError::PlanUnresolvedScope,
+            Code::FailedPrecondition,
+            v1::ErrorReason::PlanUnresolvedScope,
+        ),
+        (
             StoreError::WatchCursorExpired,
             Code::FailedPrecondition,
             v1::ErrorReason::WatchCursorExpired,

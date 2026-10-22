@@ -10,11 +10,27 @@ export function planCommand(scope, draft) {
     : { method: 'CreatePlan', body: { ...scope, content } };
 }
 
+// Approval always binds the immutable version the operator actually reviewed.
+export function approvalCommand(scope, version) {
+  if (scopeKey(scope) !== scopeKey(version)) throw new Error('The reviewed version belongs to another conversation.');
+  return { method: 'ApprovePlan', body: { ...scope, planId: version.planId, expectedVersionId: version.id, contentDigest: version.contentDigest } };
+}
+export function approvalBlocker(version, head, approval) {
+  if (!version) return 'Select a retained plan to review.';
+  if (approval || head?.approvalId) return 'Approved. The admitted task set is immutable and awaiting execution.';
+  if (head?.currentVersionId !== version.id) return 'A newer version exists. Your reviewed version and local draft remain unchanged. Select the plan to review its current version.';
+  if (version.content.unresolvedQuestions?.length) return 'Resolve scope and acceptance questions in a new version before approval.';
+  if (!version.content.tasks?.length || version.content.tasks.some(task => !task.acceptanceCriteria?.length)) return 'Approval requires proposed tasks with acceptance criteria.';
+  return '';
+}
+
 export function mountPlans({ getScope, api, submit, showError, saved, store, controls }) {
   let owner = '';
   let draft = { content: blank() };
   let reviewed;
   let heads = [];
+  let approval;
+  let approvalQuery = 0;
   let query = 0;
   let historyBefore = '0';
   let historyPlan = '';
@@ -59,6 +75,11 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
   }
   function showVersion(value) {
     reviewed = value;
+    approval = undefined;
+    approvalQuery++;
+    $('plan-approve-consent').checked = false;
+    $('plan-admission').replaceChildren();
+    $('task-detail').replaceChildren();
     $('plan-review').replaceChildren();
     const heading = document.createElement('h3'); heading.textContent = `${value.content.title} · version ${value.ordinal}`;
     $('plan-review').append(heading);
@@ -79,14 +100,15 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
       for (const [name,label] of [['scope','Included scope'],['outOfScope','Excluded scope'],['acceptanceCriteria','Acceptance criteria'],['repository','Declared repository · unverified'],['sourceRef','Declared source · unverified'],['executionLimits','Execution limits'],['unresolvedInputs','Unresolved inputs']]) paragraph(article,label,task[name]);
       $('plan-review').append(article);
     }
-    $('plan-review-status').textContent = 'Retained proposal. Approval and task admission are not available yet.';
-    controls();
+    reviewStatus();
   }
   async function open(planId, versionId = '') {
     const selected = { ...getScope() }; const ticket = ++query;
     const result = await api('GetPlanVersion', { ...selected, planId, versionId });
     if (ticket !== query || scopeKey(selected) !== owner) return;
     showVersion(result.version);
+    await loadApproval();
+    if (ticket !== query || scopeKey(selected) !== owner) return;
     if (historyPlan !== planId) { historyPlan = planId; historyBefore = '0'; $('plan-history').replaceChildren(); }
     await history(true);
   }
@@ -102,25 +124,76 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     }
     historyBefore = page.nextBeforeOrdinal || '0'; $('plan-history-more').hidden = historyBefore === '0';
   }
+  const head = () => heads.find(value => value.id === reviewed?.planId);
+  function reviewStatus() {
+    const blocker = approvalBlocker(reviewed, head(), approval);
+    $('plan-review-status').textContent = blocker || 'Review the exact version and task set, then explicitly approve admission.';
+    $('plan-approval-basis').textContent = reviewed ? `Version ${reviewed.id} · ${reviewed.contentDigest} · ${reviewed.content.tasks?.length || 0} proposed tasks` : '';
+    controls();
+  }
+  function renderTask(parent, task) {
+    paragraph(parent, `Task ${task.proposedTaskKey} · ${task.state.replaceAll('_', ' ')}`, task.id);
+    paragraph(parent, 'Immutable origin', `Workspace ${task.workspaceId}\nProject ${task.projectId}\nOriginating conversation ${task.conversationId}\nPlan ${task.planId}\nVersion ${task.versionId}\n${task.contentDigest}\nApproval ${task.approvalId}`);
+    paragraph(parent, 'Execution blockers', task.executionBlockers);
+    paragraph(parent, 'Frozen task objective', task.specification.objective);
+    for (const [name, label] of [['scope', 'Included scope'], ['outOfScope', 'Excluded scope'], ['acceptanceCriteria', 'Acceptance criteria'], ['repository', 'Declared repository · unverified'], ['sourceRef', 'Declared source · unverified'], ['executionLimits', 'Declared execution limits'], ['unresolvedInputs', 'Unresolved execution inputs']]) paragraph(parent, label, task.specification[name]);
+  }
+  function showApproval(result) {
+    approval = result.approval;
+    $('plan-admission').replaceChildren();
+    if (approval) {
+      paragraph($('plan-admission'), 'Approval receipt', `${approval.id}\nOperator ${approval.operator}\nCommand ${approval.commandId}\nVersion ${approval.versionId}\n${approval.contentDigest}\nApproved ${approval.createdAt}`);
+      paragraph($('plan-admission'), 'Admission', `${result.tasks.length} tasks admitted and awaiting execution. Coding work has not been dispatched.`);
+      for (const task of result.tasks) {
+        const article = document.createElement('article'); article.className = 'plan-task'; article.dataset.taskId = task.id;
+        renderTask(article, task);
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = `Refresh task ${task.proposedTaskKey}`;
+        button.onclick = async () => {
+          try {
+            const selected = { ...getScope() }; const ticket = query;
+            const response = await api('GetTask', { ...selected, taskId: task.id });
+            if (ticket !== query || scopeKey(selected) !== owner) return;
+            $('task-detail').replaceChildren(); renderTask($('task-detail'), response.task);
+          } catch (error) { showError(error); }
+        };
+        article.append(button); $('plan-admission').append(article);
+      }
+    }
+    reviewStatus();
+  }
+  async function loadApproval() {
+    if (!reviewed) return;
+    const selected = { ...getScope() }; const planId = reviewed.planId; const ticket = ++approvalQuery;
+    const result = await api('GetPlanApproval', { ...selected, planId });
+    if (ticket !== approvalQuery || scopeKey(selected) !== owner || reviewed?.planId !== planId) return;
+    showApproval(result);
+  }
   function update(plans = []) {
     heads = plans;
     $('plan-list').replaceChildren();
     for (const plan of heads) {
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = `${plan.title} · version ${plan.currentOrdinal}`; button.dataset.planId = plan.id;
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = `${plan.title} · version ${plan.currentOrdinal}${plan.approvalId ? ' · approved' : ''}`; button.dataset.planId = plan.id;
       button.onclick = () => open(plan.id).catch(showError); $('plan-list').append(button);
     }
-    if (reviewed && heads.find(h => h.id === reviewed.planId)?.currentVersionId !== reviewed.id) $('plan-review-status').textContent = 'A newer version exists. Your reviewed version and local draft remain unchanged. Select the plan to review its current version.';
+    reviewStatus();
+    if (reviewed && head()?.approvalId && head().approvalId !== approval?.id) loadApproval().catch(showError);
   }
   function select() {
     const next = scopeKey(getScope());
     if (next === owner) return;
-    owner = next; query++; reviewed = undefined; heads = []; historyPlan = ''; historyBefore = '0';
+    owner = next; query++; approvalQuery++; approval = undefined; reviewed = undefined; heads = []; historyPlan = ''; historyBefore = '0';
     draft = saved(planDraftKey(getScope())) || { content: blank() };
     $('plan-review').replaceChildren(); $('plan-history').replaceChildren(); $('plan-list').replaceChildren();
+    $('plan-admission').replaceChildren(); $('task-detail').replaceChildren(); $('plan-approve-consent').checked = false; $('plan-approval-basis').textContent = '';
     $('plan-history-more').hidden = true; $('plan-review-status').textContent = 'Select a retained plan to review.';
     renderEditor();
   }
   function accepted(command, result) {
+    if (command.method === 'ApprovePlan') {
+      if (scopeKey(command.body) === owner && reviewed?.planId === command.body.planId) { approvalQuery++; showApproval(result); }
+      if (scopeKey(command.body) === owner) api('ListPlans', getScope()).then(value => { if (scopeKey(command.body) === owner) update(value.plans); }).catch(showError);
+      return;
+    }
     // Only clear the draft belonging to the exact accepted command. Another scope may be open.
     const key = planDraftKey(command.body); store(key, null);
     if (scopeKey(command.body) !== owner) return;
@@ -140,6 +213,12 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     draft.content.tasks ||= []; draft.content.constraints ||= []; draft.content.unresolvedQuestions ||= [];
     persist(); renderEditor(); $('plan-editor-details').open = true;
   };
+  $('plan-approve-consent').onchange = controls;
+  $('plan-approve').onclick = () => {
+    if (!$('plan-approve-consent').checked || approvalBlocker(reviewed, head(), approval)) return;
+    const command = approvalCommand(getScope(), reviewed);
+    submit(command.method, command.body);
+  };
   $('plan-history-more').onclick = () => history().catch(showError);
-  return { select, update, accepted, canEdit: () => !!reviewed };
+  return { select, update, accepted, canEdit: () => !!reviewed && head()?.currentVersionId === reviewed.id && !approval && !head()?.approvalId, canApprove: () => !!reviewed && !approvalBlocker(reviewed, head(), approval) && $('plan-approve-consent').checked };
 }

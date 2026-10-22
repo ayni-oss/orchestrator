@@ -550,6 +550,7 @@ export enum ConversationUpdateKind {
   CONVERSATION_UPDATE_KIND_TERMINAL_OUTCOME_ACCEPTED = 5,
   CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED = 6,
   CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED = 7,
+  CONVERSATION_UPDATE_KIND_PLAN_APPROVED = 8,
   UNRECOGNIZED = -1,
 }
 
@@ -579,6 +580,9 @@ export function conversationUpdateKindFromJSON(object: any): ConversationUpdateK
     case 7:
     case "CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED":
       return ConversationUpdateKind.CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED;
+    case 8:
+    case "CONVERSATION_UPDATE_KIND_PLAN_APPROVED":
+      return ConversationUpdateKind.CONVERSATION_UPDATE_KIND_PLAN_APPROVED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -604,6 +608,8 @@ export function conversationUpdateKindToJSON(object: ConversationUpdateKind): st
       return "CONVERSATION_UPDATE_KIND_CONVERSATION_CREATED";
     case ConversationUpdateKind.CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED:
       return "CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED";
+    case ConversationUpdateKind.CONVERSATION_UPDATE_KIND_PLAN_APPROVED:
+      return "CONVERSATION_UPDATE_KIND_PLAN_APPROVED";
     case ConversationUpdateKind.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

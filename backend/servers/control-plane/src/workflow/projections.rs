@@ -255,6 +255,7 @@ pub(super) fn valid_request_id(value: &str) -> bool {
 
 pub(super) fn update(value: ConversationUpdate) -> Result<v1::ConversationUpdate, StoreError> {
     let kind = match (value.kind.as_str(), value.presentation_state) {
+        ("plan_approved", _) => v1::ConversationUpdateKind::PlanApproved,
         ("plan_version_created", _) => v1::ConversationUpdateKind::PlanVersionCreated,
         ("conversation_created", _) => v1::ConversationUpdateKind::ConversationCreated,
         ("message_admitted", _) => v1::ConversationUpdateKind::MessageAdmitted,

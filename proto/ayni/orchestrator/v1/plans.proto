@@ -33,6 +33,8 @@ message PlanSummary {
   uint64 current_ordinal = 6;
   string title = 7;
   string follows_plan_id = 8;
+  // Empty until the one authoritative approval commits.
+  string approval_id = 9;
 }
 message PlanVersion {
   string id = 1;
@@ -138,4 +140,86 @@ message AgentPlanProvenance {
   string invocation_id = 11;
   repeated string assumptions = 12;
   repeated string evidence = 13;
+}
+
+// The retained authorization of an exact immutable version. The trusted operator
+// identity is server-derived; model/provider calls cannot supply it.
+message PlanApprovalReceipt {
+  string id = 1;
+  string command_id = 2;
+  string workspace_id = 3;
+  string project_id = 4;
+  string conversation_id = 5;
+  string plan_id = 6;
+  string version_id = 7;
+  string content_digest = 8;
+  string operator = 9;
+  string request_digest = 10;
+  google.protobuf.Timestamp created_at = 11;
+  uint64 conversation_revision = 12;
+  string resume_cursor = 13;
+  repeated string task_ids = 14;
+}
+// Frozen reviewed specification and origin. Admission never dispatches coding
+// work. Declared repository/source references remain unverified in this slice.
+message AdmittedTask {
+  string id = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  string plan_id = 5;
+  string version_id = 6;
+  string content_digest = 7;
+  string approval_id = 8;
+  string proposed_task_key = 9;
+  PlanTaskSpecification specification = 10;
+  string state = 11;
+  repeated string execution_blockers = 12;
+  google.protobuf.Timestamp created_at = 13;
+}
+message ApprovePlanRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string idempotency_key = 4;
+  string plan_id = 5;
+  string expected_version_id = 6;
+  string content_digest = 7;
+}
+message ApprovePlanResponse {
+  PlanApprovalReceipt approval = 1;
+  // Complete ordered set, bounded by the 32-task plan limit.
+  repeated AdmittedTask tasks = 2;
+}
+message GetPlanApprovalRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string plan_id = 4;
+}
+message GetPlanApprovalResponse {
+  // Absent for a scoped plan that has not been approved.
+  PlanApprovalReceipt approval = 1;
+  repeated AdmittedTask tasks = 2;
+}
+// Live scoped ID-keyset pagination; limit defaults to 20, maximum 32.
+message ListTasksRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string after_id = 4;
+  uint32 limit = 5;
+}
+message ListTasksResponse {
+  repeated AdmittedTask tasks = 1;
+  string next_after_id = 2;
+}
+message GetTaskRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+}
+message GetTaskResponse {
+  AdmittedTask task = 1;
 }
