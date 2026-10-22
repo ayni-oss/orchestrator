@@ -17,7 +17,8 @@ Durable-workflow local Docker Desktop development:
   check [--expect-empty]        Check migrations, streams, and workload readiness
   console [PORT]                Open the local contributor gateway (default 3000)
   scenario                      Run the message-to-scripted-response diagnostic
-  acceptance ABSOLUTE_DIRECTORY Run warmed client gates and retained-state restarts
+  acceptance ABSOLUTE_DIRECTORY [--plans-only]
+                                Run cumulative gates or scoped M3 recovery
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
   purge NAMESPACE               Permanently delete the owned local namespace

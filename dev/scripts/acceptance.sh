@@ -9,11 +9,12 @@ case "$namespace" in
   ayni-orchestrator-acceptance-*) ;;
   *) echo 'acceptance requires an isolated ayni-orchestrator-acceptance-* namespace' >&2; exit 2 ;;
 esac
-if [[ $# -ne 1 || "$1" != /* ]]; then
-  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY' >&2
+if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only ) ]]; then
+  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only]' >&2
   exit 2
 fi
 readonly evidence="$1"
+readonly profile="${2:-full}"
 if [[ -e "$evidence" ]]; then
   echo 'refusing to overwrite existing acceptance evidence' >&2
   exit 2
@@ -28,8 +29,8 @@ cleanup() {
   if [[ -n "$scaled_down" ]]; then
     kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >/dev/null 2>&1 || true
   fi
-  printf '{"result":"%s","namespace":"%s","cleanup":"retained_namespace_and_all_authoritative_stores"}\n' \
-    "$status" "$namespace" > "$evidence/outcome.json"
+  printf '{"result":"%s","namespace":"%s","profile":"%s","cleanup":"retained_namespace_and_all_authoritative_stores"}\n' \
+    "$status" "$namespace" "$profile" > "$evidence/outcome.json"
 }
 trap cleanup EXIT
 
@@ -51,11 +52,20 @@ print(json.dumps([{ "pod":p["metadata"]["name"],"uid":p["metadata"]["uid"],
 for c in p.get("status",{}).get("containerStatuses",[])]} for p in pods["items"]],indent=2))
 ' > "$evidence/image-identities.json"
 
+pvc_identity() {
+  kubectl --context "$context" --namespace "$namespace" get pvc -o json | python3 -c '
+import json,sys
+print(json.dumps(sorted([(p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName",""))
+for p in json.load(sys.stdin)["items"]]),indent=2))'
+}
+pvc_identity > "$evidence/pvc-before.json"
+
 control_pod() {
   kubectl --context "$context" --namespace "$namespace" get pods \
     -l app.kubernetes.io/name=ayni-orchestrator-control-plane \
     --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}'
 }
+if [[ "$profile" == full ]]; then
 pod="$(control_pod)"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 \
@@ -124,6 +134,8 @@ kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --rep
 kubectl --context "$context" --namespace "$namespace" rollout status "$scaled_down" --timeout=3m >> "$evidence/postgres-outage.txt"
 scaled_down=
 
+fi
+
 # Accept FIFO work without a broker, restart the application before publication,
 # then restore delivery. Authority and exact receipt bytes must survive both.
 jetstream_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=workflow-jetstream -o jsonpath='{.items[0].metadata.name}')"
@@ -135,10 +147,12 @@ pod="$(control_pod)"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-plans \
   > "$evidence/plans-before-restart.json"
+if [[ "$profile" == full ]]; then
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane --   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-pending   > "$evidence/pending-before-restart.json"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --queue-capacity \
   > "$evidence/queue-capacity.json"
+fi
 kubectl --context "$context" --namespace "$namespace" rollout restart deployment/control-plane >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status deployment/control-plane --timeout=3m >> "$evidence/broker-outage.txt"
 pod="$(control_pod)"
@@ -148,8 +162,11 @@ kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status "$scaled_down" --timeout=3m >> "$evidence/broker-outage.txt"
 scaled_down=
+if [[ "$profile" == full ]]; then
 pod="$(control_pod)"
 kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane --   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-pending-stdin   < "$evidence/pending-before-restart.json" > "$evidence/pending-after-restart.json"
+
+fi
 
 # Restart each process/dependency with retained volumes, then prove the original
 # accepted receipt and response through canonical gRPC, without database repair.
@@ -161,13 +178,17 @@ for workload in deployment/control-plane statefulset/scripted-executor statefuls
     >> "$evidence/restart-$name.txt"
   "$dev_directory/scripts/check.sh" >> "$evidence/restart-$name.txt" 2>&1
   pod="$(control_pod)"
+  if [[ "$profile" == full ]]; then
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-stdin \
     < "$evidence/client-latency.json" > "$evidence/replay-$name.json"
+  fi
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-plans-stdin \
     < "$evidence/plans-before-restart.json" > "$evidence/plans-replay-$name.json"
 done
+pvc_identity > "$evidence/pvc-after.json"
+cmp "$evidence/pvc-before.json" "$evidence/pvc-after.json"
 status=passed
-printf 'client latency and retained-state restart gates passed; evidence=%s\n' "$evidence"
+printf 'acceptance profile=%s passed; evidence=%s\n' "$profile" "$evidence"
 printf '%s\n' 'This command proves the named gates only. The complete M1 fault/capacity matrix also requires the repository integration gates.'

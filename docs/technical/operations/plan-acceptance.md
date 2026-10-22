@@ -35,12 +35,17 @@ export AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-m3
 dev/ctl deploy
 dev/ctl check
 dev/ctl scenario
-dev/ctl acceptance /absolute/path/to/new-evidence-directory
+dev/ctl acceptance /absolute/path/to/new-evidence-directory --plans-only
 dev/ctl console
 pnpm console:acceptance
 ```
 
-The client warms one conversation/session before taking 100 scripted samples;
+The `--plans-only` profile runs M3 broker-outage and retained-restart correctness
+without claiming latency results. Omitting it runs the full inherited M1 profile
+as well; failed performance gates must be reported separately from M3 correctness.
+Both profiles compare original PVC names, UIDs and bound volume identities.
+
+The full client warms one conversation/session before taking 100 scripted samples;
 fresh-session provisioning is excluded from these warmed latency gates.
 Exact receipt/watch replay and aggregate message/turn counts are checked after
 every sample and after retained restarts.
