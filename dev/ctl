@@ -16,9 +16,12 @@ Durable-workflow local Docker Desktop development:
   deploy | redeploy | up        Build and install or upgrade the Slice 3 stack
   check [--expect-empty]        Check migrations, streams, and workload readiness
   console [PORT]                Open the local contributor gateway (default 3000)
+  prepare-task verify CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON
+  prepare-task submit FROZEN_REQUEST_JSON
+                                Verify source evidence or authorize task preparation
   scenario                      Run the message-to-scripted-response diagnostic
-  acceptance ABSOLUTE_DIRECTORY [--plans-only]
-                                Run cumulative gates or scoped M3 recovery
+  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only]
+                                Run cumulative gates or scoped plan/task recovery
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
   purge NAMESPACE               Permanently delete the owned local namespace
@@ -79,6 +82,9 @@ case "$command" in
       exit 2
     fi
     "$scripts/check.sh" "$@"
+    ;;
+  prepare-task)
+    "$scripts/prepare-task.sh" "$@"
     ;;
   console)
     [[ $# -le 1 ]] || { echo "usage: dev/ctl console [PORT]" >&2; exit 2; }

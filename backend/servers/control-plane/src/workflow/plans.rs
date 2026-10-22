@@ -205,3 +205,28 @@ pub(super) fn approved(v: model::ApprovedPlan) -> v1::ApprovePlanResponse {
         tasks: v.tasks.into_iter().map(task).collect(),
     }
 }
+
+pub(super) fn preparation(
+    v: ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation,
+) -> v1::TaskExecutionPreparation {
+    let i = v.inputs;
+    v1::TaskExecutionPreparation {
+        command_id: v.command_id,
+        task_id: v.task_id,
+        attempt_id: v.attempt_id,
+        inputs: Some(v1::TaskExecutionInputs {
+            repository: i.repository,
+            source_ref: i.source_ref,
+            source_commit: i.source_commit,
+            lock_digest: i.lock_digest,
+            runtime_image: i.runtime_image,
+            max_seconds: i.max_seconds,
+            max_tokens: i.max_tokens,
+        }),
+        blockers: v.blockers,
+        configuration_revision_id: v.configuration_revision_id,
+        conversation_revision: v.conversation_revision,
+        resume_cursor: v.resume_cursor,
+        created_at: Some(timestamp(v.created_at)),
+    }
+}

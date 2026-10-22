@@ -53,6 +53,8 @@ mod tests {
                         "GetPlanApproval",
                         "ListTasks",
                         "GetTask",
+                        "PrepareTaskExecution",
+                        "GetTaskExecution",
                         "CreatePlan",
                         "RevisePlan",
                         "GetPlanVersion",

@@ -153,7 +153,16 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
             const selected = { ...getScope() }; const ticket = query;
             const response = await api('GetTask', { ...selected, taskId: task.id });
             if (ticket !== query || scopeKey(selected) !== owner) return;
+            const execution = await api('GetTaskExecution', { ...selected, taskId: task.id });
+            if (ticket !== query || scopeKey(selected) !== owner) return;
             $('task-detail').replaceChildren(); renderTask($('task-detail'), response.task);
+            const preparation = execution.preparation;
+            if (preparation) {
+              paragraph($('task-detail'), 'Execution preparation', preparation.attemptId ? `Prepared attempt ${preparation.attemptId}. Coding work has not been dispatched.` : 'Blocked');
+              paragraph($('task-detail'), 'Preparation blockers', preparation.blockers);
+              paragraph($('task-detail'), 'Frozen execution inputs', JSON.stringify(preparation.inputs, null, 2));
+              paragraph($('task-detail'), 'Frozen configuration', preparation.configurationRevisionId);
+            }
           } catch (error) { showError(error); }
         };
         article.append(button); $('plan-admission').append(article);

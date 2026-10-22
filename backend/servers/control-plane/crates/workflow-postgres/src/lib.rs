@@ -7,6 +7,7 @@
 use tokio::task::JoinHandle;
 use tokio_postgres::{Client, Config, NoTls};
 
+pub mod execution;
 pub mod metrics;
 pub mod migrations;
 pub mod model;

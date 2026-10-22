@@ -118,9 +118,23 @@ pub fn router(console: Console) -> Router {
         .with_state(console)
 }
 
+macro_rules! forward {
+    ($body:expr, $client:expr, $method:ident, $request:ty) => {{
+        let value: $request = decode($body)?;
+        let mut request = tonic::Request::new(value);
+        request.set_timeout(Duration::from_secs(10));
+        let response = tokio::time::timeout(Duration::from_secs(12), $client.$method(request))
+            .await
+            .map_err(|_| {
+                ApiError::from(Status::deadline_exceeded("workflow request timed out"))
+            })??;
+        encode(response.into_inner()).map(Json)
+    }};
+}
+
 #[allow(
     clippy::too_many_lines,
-    reason = "the bounded RPC allowlist is kept together for auditability"
+    reason = "the conversation RPC allowlist is kept together for auditability"
 )]
 async fn rpc(
     State(console): State<Console>,
@@ -132,130 +146,187 @@ async fn rpc(
         .clone()
         .try_acquire_owned()
         .map_err(|_| ApiError::from(Status::resource_exhausted("console request limit")))?;
-    macro_rules! forward {
-        ($client:expr, $method:ident, $request:ty) => {{
-            let value: $request = decode(body)?;
-            let mut request = tonic::Request::new(value);
-            request.set_timeout(Duration::from_secs(10));
-            let response = tokio::time::timeout(Duration::from_secs(12), $client.$method(request))
-                .await
-                .map_err(|_| {
-                    ApiError::from(Status::deadline_exceeded("workflow request timed out"))
-                })??;
-            encode(response.into_inner()).map(Json)
-        }};
-    }
     match method.as_str() {
         "ApprovePlan" => forward!(
+            body,
             console.conversations(),
             approve_plan,
             v1::ApprovePlanRequest
         ),
         "GetPlanApproval" => forward!(
+            body,
             console.conversations(),
             get_plan_approval,
             v1::GetPlanApprovalRequest
         ),
-        "ListTasks" => forward!(console.conversations(), list_tasks, v1::ListTasksRequest),
-        "GetTask" => forward!(console.conversations(), get_task, v1::GetTaskRequest),
-        "CreatePlan" => forward!(console.conversations(), create_plan, v1::CreatePlanRequest),
-        "RevisePlan" => forward!(console.conversations(), revise_plan, v1::RevisePlanRequest),
+        "ListTasks" => forward!(
+            body,
+            console.conversations(),
+            list_tasks,
+            v1::ListTasksRequest
+        ),
+        "GetTaskExecution" => forward!(
+            body,
+            console.conversations(),
+            get_task_execution,
+            v1::GetTaskExecutionRequest
+        ),
+        "GetTask" => forward!(body, console.conversations(), get_task, v1::GetTaskRequest),
+        "CreatePlan" => forward!(
+            body,
+            console.conversations(),
+            create_plan,
+            v1::CreatePlanRequest
+        ),
+        "RevisePlan" => forward!(
+            body,
+            console.conversations(),
+            revise_plan,
+            v1::RevisePlanRequest
+        ),
         "GetPlanVersion" => forward!(
+            body,
             console.conversations(),
             get_plan_version,
             v1::GetPlanVersionRequest
         ),
-        "ListPlans" => forward!(console.conversations(), list_plans, v1::ListPlansRequest),
+        "ListPlans" => forward!(
+            body,
+            console.conversations(),
+            list_plans,
+            v1::ListPlansRequest
+        ),
         "ListPlanVersions" => forward!(
+            body,
             console.conversations(),
             list_plan_versions,
             v1::ListPlanVersionsRequest
         ),
-        "CreateWorkspace" => forward!(
-            console.projects(),
-            create_workspace,
-            v1::CreateWorkspaceRequest
-        ),
-        "CreateProject" => forward!(console.projects(), create_project, v1::CreateProjectRequest),
-        "ListWorkspaces" => forward!(
-            console.projects(),
-            list_workspaces,
-            v1::ListWorkspacesRequest
-        ),
-        "ListProjects" => forward!(console.projects(), list_projects, v1::ListProjectsRequest),
-        "GetAgentConfiguration" => forward!(
-            console.projects(),
-            get_agent_configuration,
-            v1::GetAgentConfigurationRequest
-        ),
-        "UpdateAgentConfiguration" => forward!(
-            console.projects(),
-            update_agent_configuration,
-            v1::UpdateAgentConfigurationRequest
-        ),
-        "GetTurnContextInputs" => forward!(
-            console.projects(),
-            get_turn_context_inputs,
-            v1::GetTurnContextInputsRequest
-        ),
-        "GetTurnInputs" => forward!(
-            console.projects(),
-            get_turn_inputs,
-            v1::GetTurnInputsRequest
-        ),
         "ListConversationSessions" => forward!(
+            body,
             console.conversations(),
             list_conversation_sessions,
             v1::ListConversationSessionsRequest
         ),
         "ReplaceConversationSession" => forward!(
+            body,
             console.conversations(),
             replace_conversation_session,
             v1::ReplaceConversationSessionRequest
         ),
         "CreateConversation" => forward!(
+            body,
             console.conversations(),
             create_conversation,
             v1::CreateConversationRequest
         ),
         "ListConversations" => forward!(
+            body,
             console.conversations(),
             list_conversations,
             v1::ListConversationsRequest
         ),
         "ListProviderCalls" => forward!(
+            body,
             console.conversations(),
             list_provider_calls,
             v1::ListProviderCallsRequest
         ),
         "AcknowledgeProviderUncertainty" => forward!(
+            body,
             console.conversations(),
             acknowledge_provider_uncertainty,
             v1::AcknowledgeProviderUncertaintyRequest
         ),
-        "CancelTurn" => forward!(console.conversations(), cancel_turn, v1::CancelTurnRequest),
+        "CancelTurn" => forward!(
+            body,
+            console.conversations(),
+            cancel_turn,
+            v1::CancelTurnRequest
+        ),
         "SendMessage" => forward!(
+            body,
             console.conversations(),
             send_message,
             v1::SendMessageRequest
         ),
         "GetConversationSnapshot" => forward!(
+            body,
             console.conversations(),
             get_conversation_snapshot,
             v1::GetConversationSnapshotRequest
         ),
         "ListConversationHistory" => forward!(
+            body,
             console.conversations(),
             list_conversation_history,
             v1::ListConversationHistoryRequest
+        ),
+        _ => project_rpc(&console, &method, body).await,
+    }
+}
+
+type EventStream = Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>;
+
+async fn project_rpc(
+    console: &Console,
+    method: &str,
+    body: Value,
+) -> Result<Json<Value>, ApiError> {
+    match method {
+        "CreateWorkspace" => forward!(
+            body,
+            console.projects(),
+            create_workspace,
+            v1::CreateWorkspaceRequest
+        ),
+        "CreateProject" => forward!(
+            body,
+            console.projects(),
+            create_project,
+            v1::CreateProjectRequest
+        ),
+        "ListWorkspaces" => forward!(
+            body,
+            console.projects(),
+            list_workspaces,
+            v1::ListWorkspacesRequest
+        ),
+        "ListProjects" => forward!(
+            body,
+            console.projects(),
+            list_projects,
+            v1::ListProjectsRequest
+        ),
+        "GetAgentConfiguration" => forward!(
+            body,
+            console.projects(),
+            get_agent_configuration,
+            v1::GetAgentConfigurationRequest
+        ),
+        "UpdateAgentConfiguration" => forward!(
+            body,
+            console.projects(),
+            update_agent_configuration,
+            v1::UpdateAgentConfigurationRequest
+        ),
+        "GetTurnContextInputs" => forward!(
+            body,
+            console.projects(),
+            get_turn_context_inputs,
+            v1::GetTurnContextInputsRequest
+        ),
+        "GetTurnInputs" => forward!(
+            body,
+            console.projects(),
+            get_turn_inputs,
+            v1::GetTurnInputsRequest
         ),
         _ => Err(ApiError::from(Status::unimplemented(
             "unknown console method",
         ))),
     }
 }
-
-type EventStream = Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>;
 
 async fn watch(
     State(console): State<Console>,

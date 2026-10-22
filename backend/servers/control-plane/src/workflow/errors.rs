@@ -76,6 +76,11 @@ impl RequestContext {
                 v1::ErrorReason::FailedPrecondition,
                 "retained workflow state is invalid",
             ),
+            StoreError::TaskAlreadyPrepared => self.status(
+                Code::AlreadyExists,
+                v1::ErrorReason::TaskAlreadyPrepared,
+                "task already has a prepared attempt; read its execution preparation",
+            ),
             StoreError::PlanAlreadyApproved => self.status(
                 Code::AlreadyExists,
                 v1::ErrorReason::PlanAlreadyApproved,

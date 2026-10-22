@@ -77,7 +77,8 @@ configuration, isolated sessions, one real provider, bounded read tools and expl
 uncertainty recovery share the signed acceptance boundary. Cumulative acceptance
 covers deterministic failure fixtures, deployed session interruption and a bounded
 live-provider smoke. The delivery PR owns the execution evidence. M3 plans and
-approval are the next implementation scope.
+approval are implemented through the four delivery slices below; M4 execution
+preparation is the next implementation scope.
 
 Every runtime PR extends the cumulative harness and exercises affected behavior on
 Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded
@@ -110,6 +111,29 @@ until later confirmed recovery defines replacement of admitted work. PR #238 com
 the contract with the first operator-authored durable-review slice. The second
 slice adds [structured agent proposals](docs/technical/architecture/agent-proposals.md)
 and retained provenance. The third slice adds [approval and task admission](docs/technical/architecture/task-admission.md): exact reviewed-version authorization, one retained receipt and the complete task set, with immutable origin and visible execution blockers. The fourth slice adds the [cumulative M3 acceptance gates](docs/technical/operations/plan-acceptance.md), including broker-outage approval and exact retained-state recovery through workload restarts. Milestone completion requires passing deployed evidence in the final delivery PR; each delivery PR owns its acceptance evidence and status changes.
+
+### M4 delivery scopes
+
+M3 delivery slices are implemented through PR #241. The
+[M4 delivery plan](docs/technical/research/project-workflow-m4-delivery-plan.md)
+defines six sequential PRs:
+
+| PR | Observable outcome |
+| --- | --- |
+| 1: Execution readiness and attempts | Trusted local source verification, frozen commit/lock/configuration, selected runtime and authorized budgets produce one prepared attempt or retained blockers, without dispatch. |
+| 2: Isolated coding execution | One task executes in isolation with durable ownership, fencing, cancellation and retained changes. |
+| 3: Ayni quality and retained evidence | Actual worker runtime verification and frozen validation produce separate quality outcomes and trustworthy artifacts. |
+| 4: Draft publication | Accepted changes produce one recoverable reviewable draft under separate publication authority. |
+| 5: Operator visibility and controls | Complete attempt, progress, evidence and execution/quality/publication views and bounded controls. |
+| 6: Cumulative M4 acceptance | Deployed interruption, restart, fencing, cancellation and cleanup close the milestone. |
+
+The [execution preparation contract](docs/technical/architecture/task-execution.md)
+owns the first-slice authority and frozen-input boundary. Each runtime PR extends
+the cumulative acceptance harness immediately. M4 begins with serial execution
+and isolated attempts; dependency scheduling and concurrent tasks remain M5,
+conversational recovery remains M6. Automatic quality-repair loops require explicit
+bounded authorization before implementation. Milestone completion requires deployed
+evidence in the final delivery PR.
 
 ### Validation at every milestone
 

@@ -15,6 +15,8 @@ use tokio::time::{Instant, timeout_at};
 use tonic::{Code, Streaming, transport::Channel};
 use uuid::Uuid;
 
+#[path = "workflow_acceptance/execution.rs"]
+mod execution;
 #[path = "workflow_acceptance/plans.rs"]
 mod plans;
 
@@ -136,6 +138,8 @@ async fn run() -> Result {
     let mut client = Client::new(channel.clone());
     let mut projects = ProjectServiceClient::new(channel.clone());
     match mode {
+        "--prepare-execution" => return execution::prepare(&mut projects, &mut client).await,
+        "--verify-execution-stdin" => return execution::verify_stdin(&mut client).await,
         "--prepare-plans" => return plans::prepare(&mut projects, &mut client).await,
         "--verify-plans-stdin" => return plans::verify_stdin(&mut client).await,
         "--queue-capacity" => return queue_capacity(&mut projects, &mut client).await,

@@ -283,6 +283,60 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn prepare_task_execution(
+        &self,
+        request: Request<v1::PrepareTaskExecutionRequest>,
+    ) -> Result<Response<v1::PrepareTaskExecutionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let scope = plans::scope(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+        );
+        let i = value
+            .inputs
+            .ok_or_else(|| context.store(&StoreError::InvalidInput("execution_inputs")))?;
+        let inputs = ayni_orchestrator_workflow_postgres::execution::ExecutionInputs {
+            repository: i.repository,
+            source_ref: i.source_ref,
+            source_commit: i.source_commit,
+            lock_digest: i.lock_digest,
+            runtime_image: i.runtime_image,
+            max_seconds: i.max_seconds,
+            max_tokens: i.max_tokens,
+        };
+        let result = self
+            .store
+            .prepare_task_execution(scope, &value.idempotency_key, &value.task_id, &inputs)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::PrepareTaskExecutionResponse {
+            preparation: Some(plans::preparation(result)),
+        }))
+    }
+
+    async fn get_task_execution(
+        &self,
+        request: Request<v1::GetTaskExecutionRequest>,
+    ) -> Result<Response<v1::GetTaskExecutionResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let scope = plans::scope(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+        );
+        let result = self
+            .store
+            .get_task_execution(scope, &value.task_id)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::GetTaskExecutionResponse {
+            preparation: result.map(plans::preparation),
+        }))
+    }
+
     async fn approve_plan(
         &self,
         request: Request<v1::ApprovePlanRequest>,

@@ -31,6 +31,7 @@ enum ErrorReason {
   ERROR_REASON_PLAN_ALREADY_APPROVED = 36;
   ERROR_REASON_PLAN_DIGEST_MISMATCH = 37;
   ERROR_REASON_PLAN_UNRESOLVED_SCOPE = 38;
+  ERROR_REASON_TASK_ALREADY_PREPARED = 39;
 }
 
 // ErrorDetail is packed into the standard rich gRPC status details list.
