@@ -53,6 +53,9 @@ async fn run() -> Result<(), io::Error> {
     .merge(ayni_orchestrator_control_plane::session_authority::router(
         store.clone(),
     )?);
+    let http = http.merge(ayni_orchestrator_control_plane::task_authority::router(
+        store.clone(),
+    )?);
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
     let signal_sender = shutdown_sender.clone();
     let signal_task = tokio::spawn(async move {

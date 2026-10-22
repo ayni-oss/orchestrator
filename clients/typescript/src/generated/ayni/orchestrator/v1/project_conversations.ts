@@ -23,12 +23,16 @@ import {
 import {
   ApprovePlanRequest,
   ApprovePlanResponse,
+  CancelTaskExecutionRequest,
+  CancelTaskExecutionResponse,
   CreatePlanRequest,
   CreatePlanResponse,
   GetPlanApprovalRequest,
   GetPlanApprovalResponse,
   GetPlanVersionRequest,
   GetPlanVersionResponse,
+  GetTaskAttemptRequest,
+  GetTaskAttemptResponse,
   GetTaskExecutionRequest,
   GetTaskExecutionResponse,
   GetTaskRequest,
@@ -43,6 +47,8 @@ import {
   PrepareTaskExecutionResponse,
   RevisePlanRequest,
   RevisePlanResponse,
+  StartTaskExecutionRequest,
+  StartTaskExecutionResponse,
 } from "./plans";
 import {
   CommandReceipt,
@@ -3688,6 +3694,39 @@ export const AcknowledgeProviderUncertaintyResponse: MessageFns<AcknowledgeProvi
 /** Scoped conversation execution and operator plan review on the trusted listener. */
 export type ProjectConversationServiceService = typeof ProjectConversationServiceService;
 export const ProjectConversationServiceService = {
+  startTaskExecution: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/StartTaskExecution" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: StartTaskExecutionRequest): Buffer =>
+      Buffer.from(StartTaskExecutionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): StartTaskExecutionRequest => StartTaskExecutionRequest.decode(value),
+    responseSerialize: (value: StartTaskExecutionResponse): Buffer =>
+      Buffer.from(StartTaskExecutionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StartTaskExecutionResponse => StartTaskExecutionResponse.decode(value),
+  },
+  cancelTaskExecution: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/CancelTaskExecution" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CancelTaskExecutionRequest): Buffer =>
+      Buffer.from(CancelTaskExecutionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CancelTaskExecutionRequest => CancelTaskExecutionRequest.decode(value),
+    responseSerialize: (value: CancelTaskExecutionResponse): Buffer =>
+      Buffer.from(CancelTaskExecutionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CancelTaskExecutionResponse => CancelTaskExecutionResponse.decode(value),
+  },
+  getTaskAttempt: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/GetTaskAttempt" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetTaskAttemptRequest): Buffer =>
+      Buffer.from(GetTaskAttemptRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetTaskAttemptRequest => GetTaskAttemptRequest.decode(value),
+    responseSerialize: (value: GetTaskAttemptResponse): Buffer =>
+      Buffer.from(GetTaskAttemptResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetTaskAttemptResponse => GetTaskAttemptResponse.decode(value),
+  },
   prepareTaskExecution: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/PrepareTaskExecution" as const,
     requestStream: false as const,
@@ -3925,6 +3964,9 @@ export const ProjectConversationServiceService = {
 } as const;
 
 export interface ProjectConversationServiceServer extends UntypedServiceImplementation {
+  startTaskExecution: handleUnaryCall<StartTaskExecutionRequest, StartTaskExecutionResponse>;
+  cancelTaskExecution: handleUnaryCall<CancelTaskExecutionRequest, CancelTaskExecutionResponse>;
+  getTaskAttempt: handleUnaryCall<GetTaskAttemptRequest, GetTaskAttemptResponse>;
   prepareTaskExecution: handleUnaryCall<PrepareTaskExecutionRequest, PrepareTaskExecutionResponse>;
   getTaskExecution: handleUnaryCall<GetTaskExecutionRequest, GetTaskExecutionResponse>;
   approvePlan: handleUnaryCall<ApprovePlanRequest, ApprovePlanResponse>;
@@ -3953,6 +3995,51 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
 }
 
 export interface ProjectConversationServiceClient extends Client {
+  startTaskExecution(
+    request: StartTaskExecutionRequest,
+    callback: (error: ServiceError | null, response: StartTaskExecutionResponse) => void,
+  ): ClientUnaryCall;
+  startTaskExecution(
+    request: StartTaskExecutionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StartTaskExecutionResponse) => void,
+  ): ClientUnaryCall;
+  startTaskExecution(
+    request: StartTaskExecutionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StartTaskExecutionResponse) => void,
+  ): ClientUnaryCall;
+  cancelTaskExecution(
+    request: CancelTaskExecutionRequest,
+    callback: (error: ServiceError | null, response: CancelTaskExecutionResponse) => void,
+  ): ClientUnaryCall;
+  cancelTaskExecution(
+    request: CancelTaskExecutionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CancelTaskExecutionResponse) => void,
+  ): ClientUnaryCall;
+  cancelTaskExecution(
+    request: CancelTaskExecutionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CancelTaskExecutionResponse) => void,
+  ): ClientUnaryCall;
+  getTaskAttempt(
+    request: GetTaskAttemptRequest,
+    callback: (error: ServiceError | null, response: GetTaskAttemptResponse) => void,
+  ): ClientUnaryCall;
+  getTaskAttempt(
+    request: GetTaskAttemptRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetTaskAttemptResponse) => void,
+  ): ClientUnaryCall;
+  getTaskAttempt(
+    request: GetTaskAttemptRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetTaskAttemptResponse) => void,
+  ): ClientUnaryCall;
   prepareTaskExecution(
     request: PrepareTaskExecutionRequest,
     callback: (error: ServiceError | null, response: PrepareTaskExecutionResponse) => void,

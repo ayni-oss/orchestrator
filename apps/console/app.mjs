@@ -53,6 +53,7 @@ function controls() {
   $('refresh-session').disabled = !scope.conversationId || sending;
   $('replace-session').disabled = !currentSession?.canReplace || !!pending || sending || discoveryBusy;
   $('refresh-provider-calls').disabled = !scope.conversationId || sending;
+  for (const button of document.querySelectorAll('[data-cancel-task]')) button.disabled = !!pending || sending || discoveryBusy;
   for (const button of document.querySelectorAll('[data-cancel-turn]')) button.disabled = !!pending || sending || discoveryBusy;
   for (const button of document.querySelectorAll('[data-acknowledge-call]')) button.disabled = !!pending || sending || discoveryBusy || !button.closest('article').querySelector('input[type=checkbox]')?.checked;
 }
@@ -70,7 +71,7 @@ async function retry() {
     const result = await api(command.method, command.body);
     pending = null; store('pending', null);
     $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || 'Accepted';
-    if (['CreatePlan', 'RevisePlan', 'ApprovePlan'].includes(command.method)) {
+    if (['CreatePlan', 'RevisePlan', 'ApprovePlan', 'CancelTaskExecution'].includes(command.method)) {
       plans.accepted(command, result);
     } else if (command.method === 'SendMessage') {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';

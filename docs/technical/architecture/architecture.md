@@ -80,7 +80,8 @@ Repository-owned forward migrations live in `backend/servers/control-plane/crate
 12. migration 12 retains conversation-owned plans, immutable versions and exact write receipts;
 13. migration 13 retains structured agent proposals and provenance;
 14. migration 14 retains exact-version approval and atomic task admission;
-15. migration 15 retains task preparation receipts and immutable execution attempts.
+15. migration 15 retains task preparation receipts and immutable execution attempts;
+16. migration 16 retains exact task dispatch commands, source snapshots, run authority and receipts.
 
 These ordinals are installation history within the v1 interface, not parallel
 schema interfaces.

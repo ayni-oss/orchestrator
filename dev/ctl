@@ -18,9 +18,11 @@ Durable-workflow local Docker Desktop development:
   console [PORT]                Open the local contributor gateway (default 3000)
   prepare-task verify CHECKOUT SELECTION_JSON FROZEN_REQUEST_JSON
   prepare-task submit FROZEN_REQUEST_JSON
+  prepare-task start CHECKOUT FROZEN_REQUEST_JSON FROZEN_START_JSON
+  prepare-task submit-start FROZEN_START_JSON
                                 Verify source evidence or authorize task preparation
   scenario                      Run the message-to-scripted-response diagnostic
-  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only]
+  acceptance ABSOLUTE_DIRECTORY [--plans-only|--tasks-only|--coding-only]
                                 Run cumulative gates or scoped plan/task recovery
   status                        Show the release, pods, and retained claims
   cleanup | down                Uninstall while preserving authoritative stores
@@ -57,7 +59,7 @@ cleanup_release() {
     --ignore-not-found
   if [[ "$owner" == "$namespace" ]]; then
     kubectl --context "$context" --namespace "$session_namespace" delete pod \
-      --selector app.kubernetes.io/name=ayni-conversation-session --ignore-not-found --wait=true
+      --selector 'app.kubernetes.io/name in (ayni-conversation-session,ayni-task-worker)' --ignore-not-found --wait=true
   fi
 }
 

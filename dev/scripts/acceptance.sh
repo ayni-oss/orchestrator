@@ -9,8 +9,8 @@ case "$namespace" in
   ayni-orchestrator-acceptance-*) ;;
   *) echo 'acceptance requires an isolated ayni-orchestrator-acceptance-* namespace' >&2; exit 2 ;;
 esac
-if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only && "$2" != --tasks-only ) ]]; then
-  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only|--tasks-only]' >&2
+if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || ( $# -eq 2 && "$2" != --plans-only && "$2" != --tasks-only && "$2" != --coding-only ) ]]; then
+  echo 'usage: dev/ctl acceptance ABSOLUTE_EVIDENCE_DIRECTORY [--plans-only|--tasks-only|--coding-only]' >&2
   exit 2
 fi
 readonly evidence="$1"
@@ -59,6 +59,7 @@ print(json.dumps(sorted([(p["metadata"]["name"],p["metadata"]["uid"],p["spec"].g
 for p in json.load(sys.stdin)["items"]]),indent=2))'
 }
 pvc_identity > "$evidence/pvc-before.json"
+pvc_expected="$evidence/pvc-before.json"
 
 control_pod() {
   kubectl --context "$context" --namespace "$namespace" get pods \
@@ -152,6 +153,48 @@ kubectl --context "$context" --namespace "$namespace" exec "$pod" --container co
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-execution \
   > "$evidence/execution-before-restart.json"
 fi
+if [[ "$profile" == --coding-only ]]; then
+kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
+  /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-task-run \
+  > "$evidence/task-run.json"
+# Separate real worker cancellation and Pod-loss cases retain their own immutable origin.
+for scenario in cancellation pod-loss; do
+  kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-task-run-pending \
+    > "$evidence/task-$scenario.json"
+  # The worker name is returned through the retained start receipt's protobuf identity.
+  # Query this scenario's scoped attempt via the client helper rather than decoding protobuf in shell.
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --task-name-stdin \
+    < "$evidence/task-$scenario.json" > "$evidence/task-$scenario-name.txt"
+  worker="$(cat "$evidence/task-$scenario-name.txt")"
+  [[ "$worker" =~ ^task-[a-f0-9]{32}$ ]] || { echo 'invalid retained task worker name' >&2; exit 1; }
+  for _ in $(seq 1 120); do
+    if kubectl --context "$context" --namespace "${namespace}-sessions" exec "$worker" --container coding -- \
+      test -f /workspace/task-result.txt >/dev/null 2>&1; then break; fi
+    sleep .5
+  done
+  kubectl --context "$context" --namespace "${namespace}-sessions" exec "$worker" --container coding -- \
+    cat /workspace/task-result.txt > "$evidence/task-$scenario-retained-source.txt"
+  if [[ "$scenario" == cancellation ]]; then
+    before_uid="$(kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o jsonpath='{.metadata.uid}')"
+    kubectl --context "$context" --namespace "$namespace" rollout restart deployment/task-supervisor > "$evidence/task-supervisor-active-restart.txt"
+    kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-supervisor --timeout=2m >> "$evidence/task-supervisor-active-restart.txt"
+    after_uid="$(kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o jsonpath='{.metadata.uid}')"
+    [[ "$before_uid" == "$after_uid" ]] || { echo 'supervisor restart replaced the active task' >&2; exit 1; }
+    mode=--cancel-task-run-stdin
+  else
+    kubectl --context "$context" --namespace "${namespace}-sessions" delete pod "$worker" --wait=true --timeout=60s > "$evidence/task-pod-loss-stop.txt"
+    mode=--verify-interrupted-task-stdin
+  fi
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 "$mode" \
+    < "$evidence/task-$scenario.json" > "$evidence/task-$scenario-result.txt"
+done
+kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-before.json"
+pvc_identity > "$evidence/pvc-after-task-provisioning.json"
+pvc_expected="$evidence/pvc-after-task-provisioning.json"
+fi
 if [[ "$profile" == full ]]; then
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane --   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --prepare-pending   > "$evidence/pending-before-restart.json"
 kubectl --context "$context" --namespace "$namespace" exec "$pod" --container control-plane -- \
@@ -168,6 +211,11 @@ if [[ "$profile" != --plans-only ]]; then
 kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
   /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-execution-stdin \
   < "$evidence/execution-before-restart.json" > "$evidence/execution-broker-unavailable.txt"
+if [[ "$profile" == --coding-only ]]; then
+kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+  /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-run-stdin \
+  < "$evidence/task-run.json" > "$evidence/task-run-broker-unavailable.txt"
+fi
 fi
 kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >> "$evidence/broker-outage.txt"
 kubectl --context "$context" --namespace "$namespace" rollout status "$scaled_down" --timeout=3m >> "$evidence/broker-outage.txt"
@@ -180,7 +228,7 @@ fi
 
 # Restart each process/dependency with retained volumes, then prove the original
 # accepted receipt and response through canonical gRPC, without database repair.
-for workload in deployment/control-plane statefulset/scripted-executor statefulset/workflow-jetstream statefulset/workflow-postgres; do
+for workload in deployment/control-plane deployment/task-supervisor statefulset/scripted-executor statefulset/workflow-jetstream statefulset/workflow-postgres; do
   name="${workload#*/}"
   kubectl --context "$context" --namespace "$namespace" rollout restart "$workload" \
     > "$evidence/restart-$name.txt"
@@ -200,10 +248,19 @@ for workload in deployment/control-plane statefulset/scripted-executor statefuls
   kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
     /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-execution-stdin \
     < "$evidence/execution-before-restart.json" > "$evidence/execution-replay-$name.txt"
+  if [[ "$profile" == --coding-only ]]; then
+  kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+    /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-run-stdin \
+    < "$evidence/task-run.json" > "$evidence/task-run-replay-$name.txt"
+  fi
   fi
 done
 pvc_identity > "$evidence/pvc-after.json"
-cmp "$evidence/pvc-before.json" "$evidence/pvc-after.json"
+cmp "$pvc_expected" "$evidence/pvc-after.json"
+if [[ "$profile" == --coding-only ]]; then
+kubectl --context "$context" --namespace "${namespace}-sessions" get pvc -o json | python3 -c 'import json,sys; print(json.dumps(sorted((p["metadata"]["name"],p["metadata"]["uid"],p["spec"].get("volumeName","")) for p in json.load(sys.stdin)["items"])))' > "$evidence/task-pvc-after.json"
+cmp "$evidence/task-pvc-before.json" "$evidence/task-pvc-after.json"
+fi
 status=passed
 printf 'acceptance profile=%s passed; evidence=%s\n' "$profile" "$evidence"
 printf '%s\n' 'This command proves the named gates only. The complete M1 fault/capacity matrix also requires the repository integration gates.'

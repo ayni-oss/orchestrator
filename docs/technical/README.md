@@ -35,3 +35,5 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 
 - [Task execution preparation](architecture/task-execution.md): trusted operator evidence and frozen attempts.
 - [M4 delivery plan](research/project-workflow-m4-delivery-plan.md): six staged execution, quality and publication scopes.
+
+- [Isolated task execution](architecture/isolated-task-execution.md): durable serial dispatch, bounded coding and cancellation fencing.

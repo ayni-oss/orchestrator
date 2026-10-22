@@ -134,7 +134,7 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
   function renderTask(parent, task) {
     paragraph(parent, `Task ${task.proposedTaskKey} · ${task.state.replaceAll('_', ' ')}`, task.id);
     paragraph(parent, 'Immutable origin', `Workspace ${task.workspaceId}\nProject ${task.projectId}\nOriginating conversation ${task.conversationId}\nPlan ${task.planId}\nVersion ${task.versionId}\n${task.contentDigest}\nApproval ${task.approvalId}`);
-    paragraph(parent, 'Execution blockers', task.executionBlockers);
+    paragraph(parent, 'Prerequisites recorded at admission', task.executionBlockers);
     paragraph(parent, 'Frozen task objective', task.specification.objective);
     for (const [name, label] of [['scope', 'Included scope'], ['outOfScope', 'Excluded scope'], ['acceptanceCriteria', 'Acceptance criteria'], ['repository', 'Declared repository · unverified'], ['sourceRef', 'Declared source · unverified'], ['executionLimits', 'Declared execution limits'], ['unresolvedInputs', 'Unresolved execution inputs']]) paragraph(parent, label, task.specification[name]);
   }
@@ -158,10 +158,27 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
             $('task-detail').replaceChildren(); renderTask($('task-detail'), response.task);
             const preparation = execution.preparation;
             if (preparation) {
-              paragraph($('task-detail'), 'Execution preparation', preparation.attemptId ? `Prepared attempt ${preparation.attemptId}. Coding work has not been dispatched.` : 'Blocked');
+              paragraph($('task-detail'), 'Execution preparation', preparation.attemptId ? `Prepared attempt ${preparation.attemptId}.` : 'Blocked');
               paragraph($('task-detail'), 'Preparation blockers', preparation.blockers);
               paragraph($('task-detail'), 'Frozen execution inputs', JSON.stringify(preparation.inputs, null, 2));
               paragraph($('task-detail'), 'Frozen configuration', preparation.configurationRevisionId);
+              if (preparation.attemptId) {
+                let attempt;
+                try { attempt = (await api('GetTaskAttempt', { ...selected, taskId: task.id, attemptId: preparation.attemptId })).attempt; }
+                catch (error) { if (error.reason !== 'ERROR_REASON_RESOURCE_NOT_FOUND') throw error; }
+                if (ticket !== query || scopeKey(selected) !== owner) return;
+                paragraph($('task-detail'), 'Execution state', attempt?.state || 'Prepared; not started');
+                if (attempt) {
+                  paragraph($('task-detail'), 'Worker generation and provider state', `${attempt.generation} · ${attempt.providerState}`);
+                  paragraph($('task-detail'), 'Retained patch', attempt.patch || 'No accepted changes yet');
+                  if (attempt.safeReason) paragraph($('task-detail'), 'Execution outcome', attempt.safeReason);
+                  if (['queued', 'claimed', 'reporting'].includes(attempt.state)) {
+                    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel task execution'; cancel.dataset.cancelTask = task.id;
+                    cancel.onclick = () => submit('CancelTaskExecution', { ...selected, taskId: task.id, attemptId: preparation.attemptId });
+                    $('task-detail').append(cancel); controls();
+                  }
+                }
+              }
             }
           } catch (error) { showError(error); }
         };
@@ -198,6 +215,7 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
     renderEditor();
   }
   function accepted(command, result) {
+    if (command.method === 'CancelTaskExecution') { if (scopeKey(command.body) === owner) paragraph($('task-detail'), 'Cancellation requested', 'The worker is fenced. Refresh the task to inspect its retained state.'); return; }
     if (command.method === 'ApprovePlan') {
       if (scopeKey(command.body) === owner && reviewed?.planId === command.body.planId) { approvalQuery++; showApproval(result); }
       if (scopeKey(command.body) === owner) api('ListPlans', getScope()).then(value => { if (scopeKey(command.body) === owner) update(value.plans); }).catch(showError);

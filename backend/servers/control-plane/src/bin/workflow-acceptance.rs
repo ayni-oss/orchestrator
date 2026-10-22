@@ -19,6 +19,8 @@ use uuid::Uuid;
 mod execution;
 #[path = "workflow_acceptance/plans.rs"]
 mod plans;
+#[path = "workflow_acceptance/task_runs.rs"]
+mod task_runs;
 
 type Result<T = ()> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 type Client = ProjectConversationServiceClient<Channel>;
@@ -138,6 +140,16 @@ async fn run() -> Result {
     let mut client = Client::new(channel.clone());
     let mut projects = ProjectServiceClient::new(channel.clone());
     match mode {
+        "--task-name-stdin" => return task_runs::name_stdin(),
+        "--prepare-task-run-pending" => {
+            return task_runs::prepare(&mut projects, &mut client, true).await;
+        }
+        "--cancel-task-run-stdin" => return task_runs::cancel_stdin(&mut client).await,
+        "--verify-interrupted-task-stdin" => {
+            return task_runs::interrupted_stdin(&mut client).await;
+        }
+        "--prepare-task-run" => return task_runs::prepare(&mut projects, &mut client, false).await,
+        "--verify-task-run-stdin" => return task_runs::verify_stdin(&mut client).await,
         "--prepare-execution" => return execution::prepare(&mut projects, &mut client).await,
         "--verify-execution-stdin" => return execution::verify_stdin(&mut client).await,
         "--prepare-plans" => return plans::prepare(&mut projects, &mut client).await,

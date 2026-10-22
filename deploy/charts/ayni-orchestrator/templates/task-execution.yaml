@@ -1,0 +1,119 @@
+{{- if and .Values.enabled .Values.taskExecution.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-supervisor
+  labels:
+    app.kubernetes.io/name: ayni-task-supervisor
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ayni-task-supervisor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ayni-task-supervisor
+    spec:
+      serviceAccountName: conversation-session-supervisor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: task-supervisor
+          image: {{ .Values.images.scriptedExecutor | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["/usr/local/bin/ayni-task-supervisor"]
+          env:
+            - name: ORCHESTRATOR_TASK_AUTHORITY_URL
+              value: http://control-plane.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.controlPlane.httpPort }}
+            - name: ORCHESTRATOR_SESSION_AUTHORITY_TOKEN_PATH
+              value: /var/run/ayni-authority/token
+            - name: ORCHESTRATOR_SESSION_NAMESPACE
+              value: {{ printf "%s-sessions" .Release.Namespace | quote }}
+            - name: ORCHESTRATOR_TASK_BOOTSTRAP_IMAGE
+              value: {{ .Values.images.scriptedExecutor | quote }}
+            - name: ORCHESTRATOR_TASK_FIXTURE_ENABLED
+              value: {{ .Values.taskExecution.fixtureEnabled | quote }}
+            - name: ORCHESTRATOR_OPENAI_ENABLED
+              value: {{ .Values.providers.openai.enabled | quote }}
+            - name: OPENAI_BASE_URL
+              value: {{ .Values.providers.openai.baseUrl | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: authority
+              mountPath: /var/run/ayni-authority
+              readOnly: true
+      volumes:
+        - name: authority
+          secret:
+            secretName: {{ .Values.providers.sessionAuthoritySecretName | quote }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: task-worker-isolation
+  namespace: {{ .Release.Namespace }}-sessions
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ayni-task-worker
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ayni-orchestrator-control-plane
+      ports:
+        - { protocol: TCP, port: {{ .Values.controlPlane.httpPort }} }
+    {{- if .Values.providers.openai.enabled }}
+    {{- if .Values.providers.openai.fixtureEgress }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: provider-fixture
+      ports:
+        - { protocol: TCP, port: 8080 }
+    {{- else }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4]
+      ports:
+        - { protocol: TCP, port: 443 }
+    {{- end }}
+    {{- end }}
+{{- end }}

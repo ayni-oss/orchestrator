@@ -1,6 +1,7 @@
 //! Provider boundary shared by research and coding workers.
 use rig_core::providers::openai;
 
+pub mod coding;
 mod plan_proposals;
 pub mod responses;
 

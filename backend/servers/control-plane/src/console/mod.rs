@@ -165,6 +165,18 @@ async fn rpc(
             list_tasks,
             v1::ListTasksRequest
         ),
+        "GetTaskAttempt" => forward!(
+            body,
+            console.conversations(),
+            get_task_attempt,
+            v1::GetTaskAttemptRequest
+        ),
+        "CancelTaskExecution" => forward!(
+            body,
+            console.conversations(),
+            cancel_task_execution,
+            v1::CancelTaskExecutionRequest
+        ),
         "GetTaskExecution" => forward!(
             body,
             console.conversations(),

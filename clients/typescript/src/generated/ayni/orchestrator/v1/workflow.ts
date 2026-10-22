@@ -552,6 +552,7 @@ export enum ConversationUpdateKind {
   CONVERSATION_UPDATE_KIND_PLAN_VERSION_CREATED = 7,
   CONVERSATION_UPDATE_KIND_PLAN_APPROVED = 8,
   CONVERSATION_UPDATE_KIND_TASK_EXECUTION_PREPARED = 9,
+  CONVERSATION_UPDATE_KIND_TASK_EXECUTION_CHANGED = 10,
   UNRECOGNIZED = -1,
 }
 
@@ -587,6 +588,9 @@ export function conversationUpdateKindFromJSON(object: any): ConversationUpdateK
     case 9:
     case "CONVERSATION_UPDATE_KIND_TASK_EXECUTION_PREPARED":
       return ConversationUpdateKind.CONVERSATION_UPDATE_KIND_TASK_EXECUTION_PREPARED;
+    case 10:
+    case "CONVERSATION_UPDATE_KIND_TASK_EXECUTION_CHANGED":
+      return ConversationUpdateKind.CONVERSATION_UPDATE_KIND_TASK_EXECUTION_CHANGED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -616,6 +620,8 @@ export function conversationUpdateKindToJSON(object: ConversationUpdateKind): st
       return "CONVERSATION_UPDATE_KIND_PLAN_APPROVED";
     case ConversationUpdateKind.CONVERSATION_UPDATE_KIND_TASK_EXECUTION_PREPARED:
       return "CONVERSATION_UPDATE_KIND_TASK_EXECUTION_PREPARED";
+    case ConversationUpdateKind.CONVERSATION_UPDATE_KIND_TASK_EXECUTION_CHANGED:
+      return "CONVERSATION_UPDATE_KIND_TASK_EXECUTION_CHANGED";
     case ConversationUpdateKind.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

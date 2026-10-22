@@ -4,6 +4,7 @@
 //! application decision is durable. It is deliberately synchronous; a future
 //! worker process must call it from a blocking boundary.
 
+pub mod task_files;
 use ayni_orchestrator_events::EventIdentity;
 use ayni_orchestrator_events::v1::{
     ConversationReportDecision, ConversationReportDecisionKind, ConversationTurnBinding,
