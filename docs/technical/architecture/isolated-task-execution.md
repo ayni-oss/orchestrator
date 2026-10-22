@@ -2,8 +2,9 @@
 
 An operator starts an exact prepared attempt with a bounded Git snapshot pack.
 One task runs at a time, in its own checkout and retained PVC. Accepted changes
-remain a patch and workspace for review; this slice performs no quality acceptance,
-Git push, publication, automatic repair or cross-task scheduling.
+remain a patch and workspace for review. The separate [quality boundary](task-quality.md)
+validates a frozen reconstruction and retains Ayni evidence. Git push, publication,
+automatic repair and cross-task scheduling belong to later slices.
 
 ## Durable dispatch and authority
 
@@ -46,10 +47,11 @@ are not enabled. The original lock blob must match the prepared digest. Submodul
 are unsupported and fail explicitly. Packs are bounded at 8 MiB.
 
 The coding container uses the operator's digest-pinned runtime image. It invokes
-the trusted worker directly, then runs Ayni's `env doctor` before a real provider
-call. This verifies the attached lock/image without preparing dependencies or
-executing project code. Dependency preparation and final quality commands belong
-to the separate credential-free validation boundary in PR 3. The worker never
+the trusted worker directly for bounded file proposals. Dependency preparation
+and final quality commands run through the separate credential-free
+[validation boundary](task-quality.md). Ayni's image entrypoint verifies the
+attached lock and protected runtime content there; `env doctor` is an engine-host
+image lifecycle diagnostic and is not used as in-container validation. The worker never
 uses a checkout-supplied command or shell tool.
 
 ## Bounded coding and paid-call recovery

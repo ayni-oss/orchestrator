@@ -41,9 +41,16 @@ async fn execute_inner(
         // Only explicit deterministic acceptance uses this branch; it claims no Ayni compatibility.
         let patch = task_files::apply(
             &worker.source,
-            &[FileChange {
-                path: "task-result.txt".into(),
-                content: "Task execution fixture completed.\n".into(),
+            &[if c.objective == "Task quality failure fixture" {
+                FileChange {
+                    path: "src/lib.rs".into(),
+                    content: "#[test]\nfn fails_quality() { assert_eq!(1, 2); }\n".into(),
+                }
+            } else {
+                FileChange {
+                    path: "task-result.txt".into(),
+                    content: "Task execution fixture completed.\n".into(),
+                }
             }],
         )
         .map_err(|_| "source_invalid")?;
@@ -59,18 +66,8 @@ async fn execute_inner(
     if c.provider != "openai" || env::var("ORCHESTRATOR_OPENAI_ENABLED").as_deref() != Ok("true") {
         return Err("provider_disabled");
     }
-    // Doctor verifies the selected image/lock; it does not execute project code or prepare dependencies.
-    let doctor = tokio::process::Command::new("/usr/local/bin/ayni")
-        .args(["env", "doctor"])
-        .current_dir(&worker.source)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await
-        .map_err(|_| "runtime_unavailable")?;
-    if !doctor.success() {
-        return Err("runtime_unavailable");
-    }
+    // Environment lifecycle doctor requires an external engine. Actual Ayni
+    // runtime verification happens only in the credential-free quality stages.
     let evidence = if let Some(e) = ledger.response().map_err(|_| "execution_interrupted")? {
         e
     } else {

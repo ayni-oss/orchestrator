@@ -11,6 +11,12 @@ struct Evidence {
     scope: Scope,
     request: Vec<u8>,
     receipt: Vec<u8>,
+    #[serde(default)]
+    quality: bool,
+    #[serde(default)]
+    quality_failed: bool,
+    #[serde(default)]
+    quality_digest: String,
 }
 const PACK: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -20,39 +26,59 @@ const META: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../dev/fixtures/task-source/source.json"
 ));
+pub async fn prepare_quality(
+    projects: &mut ProjectServiceClient<Channel>,
+    client: &mut Client,
+) -> Result {
+    prepare_inner(projects, client, Profile::QualityPassed).await
+}
+pub async fn prepare_quality_failed(
+    projects: &mut ProjectServiceClient<Channel>,
+    client: &mut Client,
+) -> Result {
+    prepare_inner(projects, client, Profile::QualityFailed).await
+}
 pub async fn prepare(
     projects: &mut ProjectServiceClient<Channel>,
     client: &mut Client,
     pending: bool,
 ) -> Result {
+    prepare_inner(
+        projects,
+        client,
+        if pending {
+            Profile::Pending
+        } else {
+            Profile::Coding
+        },
+    )
+    .await
+}
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Profile {
+    Coding,
+    Pending,
+    QualityPassed,
+    QualityFailed,
+}
+async fn prepare_inner(
+    projects: &mut ProjectServiceClient<Channel>,
+    client: &mut Client,
+    profile: Profile,
+) -> Result {
+    let pending = profile == Profile::Pending;
+    let quality = matches!(profile, Profile::QualityPassed | Profile::QualityFailed);
+    let quality_failed = profile == Profile::QualityFailed;
     let scope = create_scope(projects, client).await?;
-    let metadata: serde_json::Value = serde_json::from_str(META)?;
+    let (meta, pack) = source_fixture(quality);
+    let metadata: serde_json::Value = serde_json::from_str(meta)?;
     let created = client
         .create_plan(v1::CreatePlanRequest {
             workspace_id: scope.workspace.clone(),
             project_id: scope.project.clone(),
             conversation_id: scope.conversation.clone(),
             idempotency_key: Uuid::now_v7().to_string(),
-            content: Some(v1::PlanContent {
-                title: "Isolated coding fixture".into(),
-                objective: "Retain isolated task changes".into(),
-                scope: "Task execution acceptance".into(),
-                tasks: vec![v1::PlanTaskSpecification {
-                    key: "coding".into(),
-                    objective: if pending {
-                        "Task cancellation fixture"
-                    } else {
-                        "Produce the deterministic fixture file"
-                    }
-                    .into(),
-                    scope: "Only this checkout".into(),
-                    acceptance_criteria: vec!["Retained patch survives restart".into()],
-                    repository: "https://example.invalid/task-source.git".into(),
-                    source_ref: "refs/heads/main".into(),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }),
+            content: Some(plan_content(profile)),
             ..Default::default()
         })
         .await?
@@ -90,7 +116,11 @@ pub async fn prepare(
                     .as_str()
                     .ok_or("lock missing")?
                     .into(),
-                runtime_image: format!("example.invalid/fixture@sha256:{}", "c".repeat(64)),
+                runtime_image: if quality {
+                    std::env::var("ORCHESTRATOR_TASK_QUALITY_RUNTIME_IMAGE")?
+                } else {
+                    format!("example.invalid/fixture@sha256:{}", "c".repeat(64))
+                },
                 max_seconds: 300,
                 max_tokens: 10000,
             }),
@@ -106,21 +136,50 @@ pub async fn prepare(
         task_id: task.id.clone(),
         attempt_id: prepared.attempt_id,
         idempotency_key: Uuid::now_v7().to_string(),
-        source_pack: PACK.to_vec(),
+        source_pack: pack.to_vec(),
     };
     let receipt = client
         .start_task_execution(request.clone())
         .await?
         .into_inner();
-    let evidence = Evidence {
+    let mut evidence = Evidence {
         scope,
         request: request.encode_to_vec(),
         receipt: receipt.encode_to_vec(),
+        quality,
+        quality_failed,
+        quality_digest: String::new(),
     };
     if !pending {
-        verify(client, &evidence).await?;
+        let attempt = verify(client, &evidence).await?;
+        if let Some(quality) = attempt.quality {
+            evidence.quality_digest =
+                ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec());
+        }
     }
     println!("{}", serde_json::to_string(&evidence)?);
+    Ok(())
+}
+pub async fn verify_quality_stdin(client: &mut Client) -> Result {
+    let evidence = stdin_evidence()?;
+    if !evidence.quality {
+        return Err("quality acceptance evidence required".into());
+    }
+    verify(client, &evidence).await?;
+    println!(
+        "task-quality: actual-worker-runtime=pass managed-evidence=pass frozen-inputs=pass complete-accounting=pass retained-after-restart=pass coding-fixture=true"
+    );
+    Ok(())
+}
+pub async fn verify_quality_failed_stdin(client: &mut Client) -> Result {
+    let evidence = stdin_evidence()?;
+    if !evidence.quality || !evidence.quality_failed {
+        return Err("failed quality acceptance evidence required".into());
+    }
+    verify(client, &evidence).await?;
+    println!(
+        "task-quality-failure: coding-completed=pass quality-failed=pass complete-accounting=pass retained-after-restart=pass coding-fixture=true"
+    );
     Ok(())
 }
 pub async fn verify_stdin(client: &mut Client) -> Result {
@@ -136,7 +195,7 @@ pub async fn verify_stdin(client: &mut Client) -> Result {
     );
     Ok(())
 }
-async fn verify(client: &mut Client, evidence: &Evidence) -> Result {
+async fn verify(client: &mut Client, evidence: &Evidence) -> Result<v1::TaskAttempt> {
     let start = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
     let receipt = client
         .start_task_execution(start.clone())
@@ -177,17 +236,33 @@ async fn verify(client: &mut Client, evidence: &Evidence) -> Result {
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     let attempt = completed.ok_or("task completion deadline")?;
-    if !attempt.patch.contains("task-result.txt")
-        || !attempt.patch.contains("+Task execution fixture completed.")
+    let expected_patch = if evidence.quality_failed {
+        "src/lib.rs"
+    } else {
+        "task-result.txt"
+    };
+    if !attempt.patch.contains(expected_patch)
+        || (!evidence.quality_failed
+            && !attempt.patch.contains("+Task execution fixture completed."))
         || attempt.pod_uid.is_empty()
     {
         return Err("task did not retain isolated changes and workload identity".into());
     }
-    let metadata: serde_json::Value = serde_json::from_str(META)?;
+    let meta = if evidence.quality {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../dev/fixtures/task-quality/source.json"
+        ))
+    } else {
+        META
+    };
+    let metadata: serde_json::Value = serde_json::from_str(meta)?;
+    verify_quality_outcome(evidence, &attempt, &metadata)?;
     if Some(attempt.source_commit.as_str()) != metadata["source_commit"].as_str() {
         return Err("source commit changed".into());
     }
-    Ok(())
+    verify_retained_quality(evidence, &attempt)?;
+    Ok(attempt)
 }
 
 fn stdin_evidence() -> Result<Evidence> {
@@ -270,5 +345,96 @@ pub fn name_stdin() -> Result {
     let evidence = stdin_evidence()?;
     let start = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
     println!("task-{}", Uuid::parse_str(&start.attempt_id)?.simple());
+    Ok(())
+}
+
+const fn source_fixture(quality: bool) -> (&'static str, &'static [u8]) {
+    let meta = if quality {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../dev/fixtures/task-quality/source.json"
+        ))
+    } else {
+        META
+    };
+    let pack: &[u8] = if quality {
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../dev/fixtures/task-quality/source.pack"
+        ))
+    } else {
+        PACK
+    };
+    (meta, pack)
+}
+
+fn plan_content(profile: Profile) -> v1::PlanContent {
+    v1::PlanContent {
+        title: "Isolated coding fixture".into(),
+        objective: "Retain isolated task changes".into(),
+        scope: "Task execution acceptance".into(),
+        tasks: vec![v1::PlanTaskSpecification {
+            key: "coding".into(),
+            objective: if profile == Profile::QualityFailed {
+                "Task quality failure fixture"
+            } else if profile == Profile::Pending {
+                "Task cancellation fixture"
+            } else {
+                "Produce the deterministic fixture file"
+            }
+            .into(),
+            scope: "Only this checkout".into(),
+            acceptance_criteria: vec!["Retained patch survives restart".into()],
+            repository: "https://example.invalid/task-source.git".into(),
+            source_ref: "refs/heads/main".into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+fn verify_retained_quality(evidence: &Evidence, attempt: &v1::TaskAttempt) -> Result {
+    if !evidence.quality_digest.is_empty() {
+        let quality = attempt.quality.as_ref().ok_or("retained quality missing")?;
+        if ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec())
+            != evidence.quality_digest
+        {
+            return Err("retained quality evidence changed".into());
+        }
+    }
+    Ok(())
+}
+
+fn verify_quality_outcome(
+    evidence: &Evidence,
+    attempt: &v1::TaskAttempt,
+    metadata: &serde_json::Value,
+) -> Result {
+    if evidence.quality {
+        let quality = attempt.quality.as_ref().ok_or("quality outcome missing")?;
+        let expected_state = if evidence.quality_failed {
+            "failed"
+        } else {
+            "passed"
+        };
+        if attempt.execution_outcome != "completed"
+            || quality.state != expected_state
+            || (evidence.quality_failed && quality.safe_reason != "quality_failed")
+            || (evidence.quality_failed && quality.exit_code == Some(0))
+            || (!evidence.quality_failed && quality.exit_code != Some(0))
+            || quality.expected_targets == 0
+            || quality.expected_targets != quality.completed_targets
+            || quality.artifact_digest
+                != ayni_orchestrator_events::task_execution::digest(quality.artifact.as_bytes())
+            || Some(quality.lock_digest.as_str()) != metadata["lock_digest"].as_str()
+            || quality.runtime_image != attempt.runtime_image
+        {
+            return Err(format!(
+                "quality fixture did not pass managed validation: {} {}",
+                quality.state, quality.safe_reason
+            )
+            .into());
+        }
+    }
     Ok(())
 }

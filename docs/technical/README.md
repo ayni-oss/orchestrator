@@ -37,3 +37,5 @@ The [event-platform history](history/event-platform/index.md) is retained as dat
 - [M4 delivery plan](research/project-workflow-m4-delivery-plan.md): six staged execution, quality and publication scopes.
 
 - [Isolated task execution](architecture/isolated-task-execution.md): durable serial dispatch, bounded coding and cancellation fencing.
+
+- [Task quality](architecture/task-quality.md): frozen validation, managed Ayni execution and separate retained evidence.

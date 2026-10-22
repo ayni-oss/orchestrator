@@ -139,30 +139,50 @@ async fn run() -> Result {
     let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut client = Client::new(channel.clone());
     let mut projects = ProjectServiceClient::new(channel.clone());
+    dispatch(mode, &mut client, &mut projects).await
+}
+
+async fn dispatch(
+    mode: &str,
+    client: &mut Client,
+    projects: &mut ProjectServiceClient<Channel>,
+) -> Result {
     match mode {
+        "--prepare-task-quality-failed-run" => {
+            return task_runs::prepare_quality_failed(projects, client).await;
+        }
+        "--verify-task-quality-failed-run-stdin" => {
+            return task_runs::verify_quality_failed_stdin(client).await;
+        }
+        "--prepare-task-quality-run" => {
+            return task_runs::prepare_quality(projects, client).await;
+        }
+        "--verify-task-quality-run-stdin" => {
+            return task_runs::verify_quality_stdin(client).await;
+        }
         "--task-name-stdin" => return task_runs::name_stdin(),
         "--prepare-task-run-pending" => {
-            return task_runs::prepare(&mut projects, &mut client, true).await;
+            return task_runs::prepare(projects, client, true).await;
         }
-        "--cancel-task-run-stdin" => return task_runs::cancel_stdin(&mut client).await,
+        "--cancel-task-run-stdin" => return task_runs::cancel_stdin(client).await,
         "--verify-interrupted-task-stdin" => {
-            return task_runs::interrupted_stdin(&mut client).await;
+            return task_runs::interrupted_stdin(client).await;
         }
-        "--prepare-task-run" => return task_runs::prepare(&mut projects, &mut client, false).await,
-        "--verify-task-run-stdin" => return task_runs::verify_stdin(&mut client).await,
-        "--prepare-execution" => return execution::prepare(&mut projects, &mut client).await,
-        "--verify-execution-stdin" => return execution::verify_stdin(&mut client).await,
-        "--prepare-plans" => return plans::prepare(&mut projects, &mut client).await,
-        "--verify-plans-stdin" => return plans::verify_stdin(&mut client).await,
-        "--queue-capacity" => return queue_capacity(&mut projects, &mut client).await,
-        "--prepare-pending" => return prepare_pending(&mut projects, &mut client).await,
-        "--verify-pending-stdin" => return verify_pending(&mut client).await,
-        "--expect-unavailable-stdin" => return expect_unavailable(&mut client).await,
-        "--verify-stdin" => return verify_previous(&mut client).await,
+        "--prepare-task-run" => return task_runs::prepare(projects, client, false).await,
+        "--verify-task-run-stdin" => return task_runs::verify_stdin(client).await,
+        "--prepare-execution" => return execution::prepare(projects, client).await,
+        "--verify-execution-stdin" => return execution::verify_stdin(client).await,
+        "--prepare-plans" => return plans::prepare(projects, client).await,
+        "--verify-plans-stdin" => return plans::verify_stdin(client).await,
+        "--queue-capacity" => return queue_capacity(projects, client).await,
+        "--prepare-pending" => return prepare_pending(projects, client).await,
+        "--verify-pending-stdin" => return verify_pending(client).await,
+        "--expect-unavailable-stdin" => return expect_unavailable(client).await,
+        "--verify-stdin" => return verify_previous(client).await,
         "measure" => {}
         _ => return Err("unknown acceptance mode".into()),
     }
-    measure_all(&mut projects, &mut client).await
+    measure_all(projects, client).await
 }
 
 async fn prepare_pending(

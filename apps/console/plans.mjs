@@ -171,6 +171,9 @@ export function mountPlans({ getScope, api, submit, showError, saved, store, con
                 if (attempt) {
                   paragraph($('task-detail'), 'Worker generation and provider state', `${attempt.generation} · ${attempt.providerState}`);
                   paragraph($('task-detail'), 'Retained patch', attempt.patch || 'No accepted changes yet');
+                  paragraph($('task-detail'), 'Coding outcome', attempt.executionOutcome || 'Pending');
+                  paragraph($('task-detail'), 'Quality outcome', attempt.quality ? `${attempt.quality.state} · ${attempt.quality.safeReason || 'Ayni evidence retained'}` : 'Pending');
+                  if (attempt.quality) paragraph($('task-detail'), 'Quality evidence', JSON.stringify(attempt.quality, null, 2));
                   if (attempt.safeReason) paragraph($('task-detail'), 'Execution outcome', attempt.safeReason);
                   if (['queued', 'claimed', 'reporting'].includes(attempt.state)) {
                     const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel task execution'; cancel.dataset.cancelTask = task.id;

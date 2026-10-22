@@ -2,6 +2,7 @@
 use ayni_orchestrator_events::task_execution::{
     SupervisorRequest as S, TaskOutcome, WorkerRequest as W,
 };
+use ayni_orchestrator_events::task_quality::{QualityOutcome, snapshot_digest};
 use ayni_orchestrator_workflow_postgres::{
     StoreError, WorkflowStore, connect,
     execution::ExecutionInputs,
@@ -21,14 +22,7 @@ fn key() -> String {
     reason = "one ownership scenario keeps fencing and serial-slot ordering explicit"
 )]
 async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results() -> Result {
-    let admin = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
-    let runtime = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?;
-    migrate_for_runtime(
-        &admin,
-        &std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?,
-    )
-    .await?;
-    let store = WorkflowStore::new(runtime.clone());
+    let (admin, runtime, store) = store_fixture().await?;
     let workspace = store.create_workspace(&key(), "Task runs").await?.resource;
     let project = store
         .create_project(&key(), &workspace.id, "Task runs", "Serial coding")
@@ -153,33 +147,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
             .start_task_execution(scope, &p.task_id, &p.attempt_id, &key(), b"fixture-pack")
             .await?;
     }
-    let cancel_queued = key();
-    let cancelled = store
-        .cancel_task_execution(
-            scope,
-            &queued_cancel.task_id,
-            &queued_cancel.attempt_id,
-            &cancel_queued,
-        )
-        .await?;
-    assert_eq!(
-        store
-            .cancel_task_execution(
-                scope,
-                &queued_cancel.task_id,
-                &queued_cancel.attempt_id,
-                &cancel_queued
-            )
-            .await?,
-        cancelled
-    );
-    assert_eq!(
-        store
-            .get_task_run(scope, &queued_cancel.task_id, &queued_cancel.attempt_id)
-            .await?
-            .state,
-        "cancelled"
-    );
+    cancel_queued_task(&store, scope, queued_cancel).await?;
     let (one_claim, other_claim) = tokio::join!(
         store.task_supervisor(&S::Poll),
         store.task_supervisor(&S::Poll)
@@ -213,74 +181,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
             .map(|queued_cancel| &queued_cancel.source_commit),
         Some(&inputs.source_commit)
     );
-    let sending = W::Sending {
-        request_digest: format!("sha256:{}", "d".repeat(64)),
-    };
-    assert!(
-        store
-            .task_worker(&first.attempt_id, 1, &uid, &sending)
-            .await?
-            .authorized
-    );
-    assert!(
-        !store
-            .task_worker(&first.attempt_id, 1, &uid, &sending)
-            .await?
-            .authorized,
-        "first consumed paid-call permit cannot be replayed"
-    );
-    let cancel_key = key();
-    let cancel = store
-        .cancel_task_execution(scope, &first.task_id, &first.attempt_id, &cancel_key)
-        .await?;
-    assert_eq!(
-        store
-            .cancel_task_execution(scope, &first.task_id, &first.attempt_id, &cancel_key)
-            .await?,
-        cancel
-    );
-    let outcome = TaskOutcome {
-        state: "completed".into(),
-        patch: "diff --git a/a b/a\n".into(),
-        ..Default::default()
-    };
-    assert!(matches!(
-        store
-            .task_worker(
-                &first.attempt_id,
-                1,
-                &uid,
-                &W::Report {
-                    outcome: outcome.clone()
-                }
-            )
-            .await,
-        Err(StoreError::TaskExecutionConflict)
-    ));
-    let held = store
-        .task_supervisor(&S::Poll)
-        .await?
-        .ok_or("held slot missing")?;
-    assert_eq!(held.command.attempt_id, first.attempt_id);
-    assert_eq!(held.state, "cancelling");
-    assert_eq!(held.provider_state, "uncertain");
-    assert!(
-        store
-            .task_supervisor(&S::Stopped {
-                attempt_id: first.attempt_id.clone(),
-                generation: 1,
-                pod_uid: key()
-            })
-            .await
-            .is_err()
-    );
-    store
-        .task_supervisor(&S::Stopped {
-            attempt_id: first.attempt_id.clone(),
-            generation: 1,
-            pod_uid: uid,
-        })
-        .await?;
+    let outcome = cancel_active_call(&store, scope, first, &owned.command, &uid).await?;
     let next = store
         .task_supervisor(&S::Poll)
         .await?
@@ -330,6 +231,13 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
             .state,
         "reporting"
     );
+    let command = store
+        .get_task_run(scope, &second.task_id, &second.attempt_id)
+        .await?
+        .command;
+    let quality = failed_quality(&command, &outcome);
+    prove_quality_rollback(&store, second, &uid, &quality, &admin).await?;
+    verify_quality_receipts(&store, second, &uid, &quality).await?;
     store
         .task_supervisor(&S::Stopped {
             attempt_id: second.attempt_id.clone(),
@@ -343,6 +251,12 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
         .await?;
     assert_eq!(retained.state, "completed");
     assert_eq!(retained.outcome, Some(outcome));
+    assert_eq!(retained.quality, Some(quality.clone()));
+    assert_eq!(
+        quality.state, "failed",
+        "quality failure must preserve completed coding"
+    );
+    verify_quality_receipts(&reopened, second, &uid, &quality).await?;
     assert!(
         reopened
             .task_worker(&second.attempt_id, 1, &uid, &report)
@@ -444,7 +358,329 @@ async fn prove_rollback_deadline_and_immutable_inputs(
             .await
             .is_err()
     );
+    assert!(
+        runtime
+            .execute(
+                "UPDATE workflow_task_quality SET outcome=outcome WHERE attempt_id=$1",
+                &[&first.attempt_id]
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        runtime
+            .execute(
+                "DELETE FROM workflow_task_quality WHERE attempt_id=$1",
+                &[&first.attempt_id]
+            )
+            .await
+            .is_err()
+    );
     runtime_driver.abort();
     driver.abort();
     Ok(())
+}
+
+async fn verify_quality_receipts(
+    store: &WorkflowStore,
+    task: &ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation,
+    uid: &str,
+    quality: &QualityOutcome,
+) -> Result {
+    let report = W::QualityReport {
+        outcome: quality.clone(),
+    };
+    assert!(
+        store
+            .task_worker(&task.attempt_id, 1, uid, &report)
+            .await?
+            .authorized
+    );
+    assert!(
+        store
+            .task_worker(&task.attempt_id, 1, uid, &report)
+            .await?
+            .authorized
+    );
+    assert!(
+        store
+            .task_worker(&task.attempt_id, 2, uid, &report)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .task_worker(&task.attempt_id, 1, &key(), &report)
+            .await
+            .is_err()
+    );
+    let mut changed = quality.clone();
+    changed.snapshot_digest = format!("sha256:{}", "f".repeat(64));
+    assert!(
+        store
+            .task_worker(
+                &task.attempt_id,
+                1,
+                uid,
+                &W::QualityReport { outcome: changed }
+            )
+            .await
+            .is_err()
+    );
+    let mut changed = quality.clone();
+    changed.safe_reason = "runtime_unavailable".into();
+    assert!(
+        store
+            .task_worker(
+                &task.attempt_id,
+                1,
+                uid,
+                &W::QualityReport { outcome: changed }
+            )
+            .await
+            .is_err()
+    );
+    let invalid = QualityOutcome {
+        state: "passed".into(),
+        ..quality.clone()
+    };
+    assert!(
+        store
+            .task_worker(
+                &task.attempt_id,
+                1,
+                uid,
+                &W::QualityReport { outcome: invalid }
+            )
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+async fn prove_quality_rollback(
+    store: &WorkflowStore,
+    task: &ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation,
+    uid: &str,
+    quality: &QualityOutcome,
+    admin: &str,
+) -> Result {
+    assert!(
+        quality.validate(),
+        "rollback fixture must satisfy the current quality contract"
+    );
+    let (db, driver) = connect(admin).await?;
+    let before: i64 = db
+        .query_one("SELECT count(*) FROM workflow_updates", &[])
+        .await?
+        .get(0);
+    db.batch_execute("CREATE FUNCTION fixture_reject_quality() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$; CREATE TRIGGER fixture_reject_quality BEFORE INSERT ON workflow_task_quality FOR EACH ROW EXECUTE FUNCTION fixture_reject_quality()").await?;
+    let result = store
+        .task_worker(
+            &task.attempt_id,
+            1,
+            uid,
+            &W::QualityReport {
+                outcome: quality.clone(),
+            },
+        )
+        .await;
+    db.batch_execute("DROP TRIGGER fixture_reject_quality ON workflow_task_quality; DROP FUNCTION fixture_reject_quality()").await?;
+    assert!(matches!(result, Err(StoreError::Database(_))));
+    let after: i64 = db
+        .query_one("SELECT count(*) FROM workflow_updates", &[])
+        .await?
+        .get(0);
+    assert_eq!(before, after);
+    assert!(
+        !db.query_one(
+            "SELECT EXISTS(SELECT 1 FROM workflow_task_quality WHERE attempt_id=$1)",
+            &[&task.attempt_id]
+        )
+        .await?
+        .get::<_, bool>(0)
+    );
+    driver.abort();
+    Ok(())
+}
+
+fn failed_quality(
+    command: &ayni_orchestrator_events::task_execution::TaskCommand,
+    outcome: &TaskOutcome,
+) -> QualityOutcome {
+    let hash = format!("sha256:{}", "e".repeat(64));
+    let artifact = serde_json::json!({
+        "schema_version":"0.5.0", "invocation":{"command":"check","scope":{}}, "execution_mode":"managed",
+        "environment_lock_fingerprint":hash,"source_fingerprint":hash,"contract_digest":hash,
+        "prebuilt_runtime":{"metadata_digest":hash,"certificate":{"certificate":{"platform":"linux/arm64","lock_fingerprint":hash}}},
+        "tool_versions":[{"tool":"rust","version":"1.94.0"}],
+        "completion":{"scope":"repository","state":"complete","expected_targets":1,"completed_targets":1,"detected_targets":1,"skipped_targets":0,"issues":[]},
+        "aggregate":{"status":"fail","total_rows":1,"passing_rows":0,"failing_rows":1},"rows":[{"pass":false}]
+    }).to_string();
+    QualityOutcome {
+        state: "failed".into(),
+        safe_reason: "quality_failed".into(),
+        snapshot_digest: snapshot_digest(command, outcome),
+        lock_digest: command.lock_digest.clone(),
+        runtime_image: command.runtime_image.clone(),
+        runtime_platform: "linux/arm64".into(),
+        runtime_metadata_digest: hash.clone(),
+        executor_digest: hash.clone(),
+        contract_digest: hash.clone(),
+        lock_fingerprint: hash.clone(),
+        source_fingerprint: hash.clone(),
+        validation_input_digest: hash,
+        exit_code: Some(1),
+        artifact_digest: ayni_orchestrator_events::task_execution::digest(artifact.as_bytes()),
+        artifact,
+        expected_targets: 1,
+        completed_targets: 1,
+    }
+}
+
+async fn cancel_queued_task(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    queued_cancel: &ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation,
+) -> Result {
+    let cancel_queued = key();
+    let cancelled = store
+        .cancel_task_execution(
+            scope,
+            &queued_cancel.task_id,
+            &queued_cancel.attempt_id,
+            &cancel_queued,
+        )
+        .await?;
+    assert_eq!(
+        store
+            .cancel_task_execution(
+                scope,
+                &queued_cancel.task_id,
+                &queued_cancel.attempt_id,
+                &cancel_queued
+            )
+            .await?,
+        cancelled
+    );
+    assert_eq!(
+        store
+            .get_task_run(scope, &queued_cancel.task_id, &queued_cancel.attempt_id)
+            .await?
+            .state,
+        "cancelled"
+    );
+    Ok(())
+}
+
+async fn cancel_active_call(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    first: &ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation,
+    command: &ayni_orchestrator_events::task_execution::TaskCommand,
+    uid: &str,
+) -> std::result::Result<TaskOutcome, Box<dyn Error + Send + Sync>> {
+    let sending = W::Sending {
+        request_digest: format!("sha256:{}", "d".repeat(64)),
+    };
+    assert!(
+        store
+            .task_worker(&first.attempt_id, 1, uid, &sending)
+            .await?
+            .authorized
+    );
+    assert!(
+        !store
+            .task_worker(&first.attempt_id, 1, uid, &sending)
+            .await?
+            .authorized,
+        "first consumed paid-call permit cannot be replayed"
+    );
+    let cancel_key = key();
+    let cancel = store
+        .cancel_task_execution(scope, &first.task_id, &first.attempt_id, &cancel_key)
+        .await?;
+    assert_eq!(
+        store
+            .cancel_task_execution(scope, &first.task_id, &first.attempt_id, &cancel_key)
+            .await?,
+        cancel
+    );
+    let outcome = TaskOutcome {
+        state: "completed".into(),
+        patch: "diff --git a/a b/a\n".into(),
+        ..Default::default()
+    };
+    assert!(matches!(
+        store
+            .task_worker(
+                &first.attempt_id,
+                1,
+                uid,
+                &W::Report {
+                    outcome: outcome.clone()
+                }
+            )
+            .await,
+        Err(StoreError::TaskExecutionConflict)
+    ));
+    let stale_quality = QualityOutcome {
+        state: "blocked".into(),
+        safe_reason: "fixture_only".into(),
+        snapshot_digest: snapshot_digest(command, &outcome),
+        lock_digest: command.lock_digest.clone(),
+        runtime_image: command.runtime_image.clone(),
+        ..Default::default()
+    };
+    assert!(
+        store
+            .task_worker(
+                &first.attempt_id,
+                1,
+                uid,
+                &W::QualityReport {
+                    outcome: stale_quality
+                }
+            )
+            .await
+            .is_err()
+    );
+    let held = store
+        .task_supervisor(&S::Poll)
+        .await?
+        .ok_or("held slot missing")?;
+    assert_eq!(held.command.attempt_id, first.attempt_id);
+    assert_eq!(held.state, "cancelling");
+    assert_eq!(held.provider_state, "uncertain");
+    assert!(
+        store
+            .task_supervisor(&S::Stopped {
+                attempt_id: first.attempt_id.clone(),
+                generation: 1,
+                pod_uid: key()
+            })
+            .await
+            .is_err()
+    );
+    store
+        .task_supervisor(&S::Stopped {
+            attempt_id: first.attempt_id.clone(),
+            generation: 1,
+            pod_uid: uid.to_owned(),
+        })
+        .await?;
+    Ok(outcome)
+}
+
+async fn store_fixture()
+-> std::result::Result<(String, String, WorkflowStore), Box<dyn Error + Send + Sync>> {
+    let admin = std::env::var("AYNI_POSTGRES_FEASIBILITY_URL")?;
+    let runtime = std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_URL")?;
+    migrate_for_runtime(
+        &admin,
+        &std::env::var("AYNI_POSTGRES_RUNTIME_FEASIBILITY_ROLE")?,
+    )
+    .await?;
+    let store = WorkflowStore::new(runtime.clone());
+    Ok((admin, runtime, store))
 }

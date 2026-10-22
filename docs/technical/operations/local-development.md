@@ -46,7 +46,7 @@ the credentials or writing them to configuration files.
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 14, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 17, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -271,7 +271,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 14, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 17, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. Task-quality coverage additionally verifies immutable evidence retries, accepted snapshot/runtime identities, scoped reads and cancellation/deadline fencing. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:
@@ -283,6 +283,36 @@ python3 scripts/ci/check-session-topology.py --context docker-desktop --namespac
 The check verifies retained namespace ownership, full worker scope, distinct
 per-generation PVCs, token mount boundaries and supervisor RBAC. It does not
 establish NetworkPolicy enforcement by the cluster network plugin.
+
+## Managed task quality acceptance
+
+Build and load the dependency-free [managed fixture](../../../dev/fixtures/task-quality/README.md)
+using the pinned Ayni 0.15.0 CLI:
+
+```sh
+dev/ctl quality-runtime
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-quality \
+  AYNI_ORCHESTRATOR_TASK_FIXTURE=true dev/ctl deploy
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-quality \
+  dev/ctl acceptance /absolute/new/evidence-directory --quality-only
+```
+
+The runtime command records its local manifest digest in
+`.ayni/task-quality-runtime.json`; acceptance freezes that exact image. Set
+`AYNI_ORCHESTRATOR_QUALITY_RUNTIME_IMAGE` to the printed local digest to select it
+explicitly. Nothing is published to a registry. The selected context remains
+`docker-desktop` and the acceptance namespace must use the shown prefix.
+
+This profile includes the existing coding cancellation, Pod loss, supervisor
+adoption and retained-volume restart gates. It also runs actual Ayni dependency
+preparation and checks in the selected runtime, retains passing and failing
+quality evidence separately from successful scripted coding, and rereads each
+result after control-plane, supervisor, executor, broker and PostgreSQL restarts.
+The fixture has no external dependencies. Its unsigned certificate proves local
+lock/runtime consistency and protected content; it does not claim a trusted
+builder signature or real paid-provider execution. See the
+[quality contract](../architecture/task-quality.md) for evidence requirements and
+failure boundaries. Retained acceptance state is preserved for inspection.
 
 ## Cleanup
 

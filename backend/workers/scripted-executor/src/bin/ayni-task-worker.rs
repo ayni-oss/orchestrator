@@ -1,8 +1,16 @@
 //! Trusted file-proposal worker. Checkout source never supplies executable commands.
 #[path = "../task_worker/execute.rs"]
 mod execute;
+#[cfg(target_os = "linux")]
+#[path = "../task_worker/filesystem.rs"]
+mod filesystem;
 #[path = "../task_worker/ledger.rs"]
 mod ledger;
+#[cfg(target_os = "linux")]
+#[path = "../task_worker/network.rs"]
+mod network;
+#[path = "../task_worker/quality.rs"]
+mod quality;
 use ayni_orchestrator_events::task_execution::{TaskCommand, WorkerRequest, WorkerResponse};
 use ayni_orchestrator_scripted_executor::task_files;
 use std::{
@@ -42,14 +50,29 @@ impl Worker {
         Ok(serde_json::from_slice(&bytes)?)
     }
 }
-#[tokio::main]
-async fn main() -> ExitCode {
-    if run().await.is_ok() {
-        ExitCode::SUCCESS
-    } else {
-        eprintln!("task worker stopped; retained source and ledger require inspection");
-        ExitCode::FAILURE
+fn main() -> ExitCode {
+    let result = match env::args().nth(1).as_deref() {
+        Some("quality-child") => quality::child(&env::args().nth(2).unwrap_or_default()),
+        Some("quality-prepare") => quality::launch("prepare"),
+        Some("quality-run") => quality::launch("quality"),
+        Some("quality-seal") => quality::seal(),
+        _ => asynchronous(),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if env::args().nth(1).as_deref() == Some("quality-child") {
+                eprintln!("quality sandbox setup failed: {error}");
+            } else {
+                eprintln!("task worker stopped; retained source and ledger require inspection");
+            }
+            ExitCode::FAILURE
+        }
     }
+}
+#[tokio::main]
+async fn asynchronous() -> Result {
+    run().await
 }
 
 fn required(name: &str) -> Result<String> {
@@ -80,6 +103,12 @@ async fn run() -> Result {
     }
     let command: TaskCommand =
         serde_json::from_slice(&fs::read(worker.root.join("command.json"))?)?;
+    let stage = env::args().nth(1);
+    match stage.as_deref() {
+        Some("quality-freeze") => return quality::freeze(&worker, &command),
+        Some("quality-collect") => return quality::collect(&worker).await,
+        _ => {}
+    }
     let mut ledger = ledger::Ledger::open(&worker.root, &command)?;
     let outcome = if let Some(result) = ledger.outcome()? {
         result
@@ -114,6 +143,7 @@ async fn initialize(worker: &Worker) -> Result {
     }
     let response = input.ok_or("task input unavailable")?;
     let command = response.command.ok_or("task command missing")?;
+    fs::write(worker.root.join("source.pack"), &response.source_pack)?;
     let manifest = worker.root.join("command.json");
     if manifest.exists() {
         let old: TaskCommand = serde_json::from_slice(&fs::read(&manifest)?)?;

@@ -2,7 +2,10 @@ use super::{
     SELECT_RUN, StoreError, TaskRun, Transaction, WorkflowStore, encode, lock, origin, run_row,
     support, update,
 };
-use ayni_orchestrator_events::task_execution::{SupervisorRequest, WorkerRequest, WorkerResponse};
+use ayni_orchestrator_events::{
+    task_execution::{SupervisorRequest, WorkerRequest, WorkerResponse},
+    task_quality::{QualityOutcome, snapshot_digest},
+};
 impl WorkflowStore {
     /// Poll or reconcile one task using the trusted supervisor identity.
     /// # Errors
@@ -20,56 +23,12 @@ impl WorkflowStore {
                 attempt_id,
                 generation,
                 pod_uid,
-            } => {
-                let run = by_id(&tx, attempt_id).await?;
-                require_current(&run, *generation)?;
-                // Kubernetes owns Pod UIDs; they are not our UUIDv7 resource IDs.
-                let uid = uuid::Uuid::parse_str(pod_uid)
-                    .map_err(|_| StoreError::InvalidInput("pod_uid"))?;
-                if uid.to_string() != *pod_uid {
-                    return Err(StoreError::InvalidInput("pod_uid"));
-                }
-                if !run.pod_uid.is_empty() && run.pod_uid != *pod_uid {
-                    return Err(StoreError::TaskExecutionConflict);
-                }
-                tx.execute(
-                    "UPDATE workflow_task_runs SET pod_uid=$2 WHERE attempt_id=$1",
-                    &[&attempt_id, &pod_uid],
-                )
-                .await?;
-                Some(by_id(&tx, attempt_id).await?)
-            }
+            } => observe(&tx, attempt_id, *generation, pod_uid).await?,
             SupervisorRequest::Stopped {
                 attempt_id,
                 generation,
                 pod_uid,
-            } => {
-                let run = by_id(&tx, attempt_id).await?;
-                if run.command.generation != *generation || run.pod_uid != *pod_uid {
-                    return Err(StoreError::TaskExecutionConflict);
-                }
-                let state = match run.state.as_str() {
-                    "cancelling" => "cancelled",
-                    "reporting" => run
-                        .outcome
-                        .as_ref()
-                        .ok_or(StoreError::CorruptState)?
-                        .state
-                        .as_str(),
-                    "claimed" => "interrupted",
-                    _ => return Ok(Some(run)),
-                };
-                tx.execute("UPDATE workflow_task_runs SET state=$2,provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1",&[&attempt_id,&state]).await?;
-                update(
-                    &tx,
-                    origin(&run.command),
-                    &run.command.task_id,
-                    attempt_id,
-                    "task_execution_stopped",
-                )
-                .await?;
-                Some(by_id(&tx, attempt_id).await?)
-            }
+            } => stopped(&tx, attempt_id, *generation, pod_uid).await?,
         };
         tx.commit().await?;
         driver.abort();
@@ -113,6 +72,10 @@ impl WorkflowStore {
                 }
                 response.authorized=tx.execute("UPDATE workflow_task_runs SET provider_state='sending',request_digest=$2 WHERE attempt_id=$1 AND provider_state='not_started' AND deadline_at>clock_timestamp()",&[&attempt,&request_digest]).await?==1;
             }
+            WorkerRequest::QualityReport { outcome } => {
+                retain_quality_report(&tx, &run, attempt, outcome).await?;
+                response.authorized = true;
+            }
             WorkerRequest::Report { outcome } => {
                 retain_worker_report(&tx, &run, attempt, outcome).await?;
                 response.authorized = true;
@@ -144,7 +107,7 @@ fn require_current(run: &TaskRun, generation: u64) -> Result<(), StoreError> {
 async fn poll(tx: &Transaction<'_>) -> Result<Option<TaskRun>, StoreError> {
     if let Some(row)=tx.query_opt(&format!("{SELECT_RUN} WHERE state IN ('claimed','reporting','cancelling') LIMIT 1 FOR UPDATE"),&[]).await?{
   let run=run_row(&row)?;
-  if run.state=="claimed" {
+  if matches!(run.state.as_str(), "claimed" | "reporting") {
    let expired:bool=tx.query_one("SELECT deadline_at<=clock_timestamp() FROM workflow_task_runs WHERE attempt_id=$1",&[&run.command.attempt_id]).await?.get(0);
    if expired{tx.execute("UPDATE workflow_task_runs SET state='cancelling',generation=generation+1,provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1",&[&run.command.attempt_id]).await?;update(tx,origin(&run.command),&run.command.task_id,&run.command.attempt_id,"task_deadline_exceeded").await?;return Ok(Some(by_id(tx,&run.command.attempt_id).await?));}
   }
@@ -225,4 +188,123 @@ async fn retain_worker_report(
         .await?;
     }
     Ok(())
+}
+
+async fn retain_quality_report(
+    tx: &Transaction<'_>,
+    run: &TaskRun,
+    attempt: &str,
+    outcome: &QualityOutcome,
+) -> Result<(), StoreError> {
+    if !outcome.validate() || encode(outcome)?.len() > 131_072 {
+        return Err(StoreError::InvalidInput("task_quality"));
+    }
+    let coding = run
+        .outcome
+        .as_ref()
+        .filter(|v| v.state == "completed")
+        .ok_or(StoreError::TaskExecutionConflict)?;
+    if outcome.snapshot_digest != snapshot_digest(&run.command, coding)
+        || outcome.lock_digest != run.command.lock_digest
+        || outcome.runtime_image != run.command.runtime_image
+    {
+        return Err(StoreError::TaskExecutionConflict);
+    }
+    if let Some(retained) = &run.quality {
+        if retained != outcome {
+            return Err(StoreError::TaskExecutionConflict);
+        }
+        return Ok(());
+    }
+    if run.state != "reporting" {
+        return Err(StoreError::TaskExecutionConflict);
+    }
+    within_deadline(tx, attempt).await?;
+    tx.execute(
+        "INSERT INTO workflow_task_quality(attempt_id,outcome) VALUES($1,$2)",
+        &[&attempt, &encode(outcome)?],
+    )
+    .await?;
+    update(
+        tx,
+        origin(&run.command),
+        &run.command.task_id,
+        attempt,
+        "task_quality_retained",
+    )
+    .await?;
+    Ok(())
+}
+
+async fn observe(
+    tx: &Transaction<'_>,
+    attempt_id: &str,
+    generation: u64,
+    pod_uid: &str,
+) -> Result<Option<TaskRun>, StoreError> {
+    let run = by_id(tx, attempt_id).await?;
+    require_current(&run, generation)?;
+    // Kubernetes owns Pod UIDs; they are not our UUIDv7 resource IDs.
+    let uid = uuid::Uuid::parse_str(pod_uid).map_err(|_| StoreError::InvalidInput("pod_uid"))?;
+    if uid.to_string() != pod_uid {
+        return Err(StoreError::InvalidInput("pod_uid"));
+    }
+    if !run.pod_uid.is_empty() && run.pod_uid != pod_uid {
+        return Err(StoreError::TaskExecutionConflict);
+    }
+    tx.execute(
+        "UPDATE workflow_task_runs SET pod_uid=$2 WHERE attempt_id=$1",
+        &[&attempt_id, &pod_uid],
+    )
+    .await?;
+    Ok(Some(by_id(tx, attempt_id).await?))
+}
+
+async fn stopped(
+    tx: &Transaction<'_>,
+    attempt_id: &str,
+    generation: u64,
+    pod_uid: &str,
+) -> Result<Option<TaskRun>, StoreError> {
+    let run = by_id(tx, attempt_id).await?;
+    if run.command.generation != generation || run.pod_uid != pod_uid {
+        return Err(StoreError::TaskExecutionConflict);
+    }
+    let state = match run.state.as_str() {
+        "cancelling" => "cancelled",
+        "reporting" => run
+            .outcome
+            .as_ref()
+            .ok_or(StoreError::CorruptState)?
+            .state
+            .as_str(),
+        "claimed" => "interrupted",
+        _ => return Ok(Some(run)),
+    };
+    if run.outcome.as_ref().is_some_and(|v| v.state == "completed") && run.quality.is_none() {
+        let coding = run.outcome.as_ref().ok_or(StoreError::CorruptState)?;
+        let quality = QualityOutcome {
+            state: "interrupted".into(),
+            safe_reason: "quality_interrupted".into(),
+            snapshot_digest: snapshot_digest(&run.command, coding),
+            lock_digest: run.command.lock_digest.clone(),
+            runtime_image: run.command.runtime_image.clone(),
+            ..Default::default()
+        };
+        tx.execute(
+            "INSERT INTO workflow_task_quality(attempt_id,outcome) VALUES($1,$2)",
+            &[&attempt_id, &encode(&quality)?],
+        )
+        .await?;
+    }
+    tx.execute("UPDATE workflow_task_runs SET state=$2,provider_state=CASE WHEN provider_state='sending' THEN 'uncertain' ELSE provider_state END WHERE attempt_id=$1", &[&attempt_id,&state]).await?;
+    update(
+        tx,
+        origin(&run.command),
+        &run.command.task_id,
+        attempt_id,
+        "task_execution_stopped",
+    )
+    .await?;
+    Ok(Some(by_id(tx, attempt_id).await?))
 }

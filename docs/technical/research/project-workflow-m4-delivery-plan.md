@@ -52,6 +52,18 @@ polled from PostgreSQL through the existing supervisor authority pattern, with
 exact operator receipts and worker result acceptance. No paid request is retried
 after an ambiguous sending window. Initial context/file bounds fail explicitly.
 
+## Third-slice decisions
+
+The [task quality contract](../architecture/task-quality.md) defines a fresh
+reconstruction from the source pack and accepted patch, credential-free Ayni
+entrypoint preparation and repository-wide managed quality evidence. Source,
+lock, runtime, platform, executable and completion identities are retained with
+bounded artifact bytes. A failed quality check preserves coding completion and
+its patch. No automatic repair or publication is authorized by this stage.
+The cumulative local acceptance adds a real dependency-free managed Rust runtime
+alongside the explicitly scripted coding fixture, with retained pass/fail quality
+results verified after owner restarts.
+
 ## Scope boundaries and risks
 
 M4 starts with serial task execution and isolated attempts. Dependency scheduling
