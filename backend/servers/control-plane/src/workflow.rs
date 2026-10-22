@@ -283,6 +283,97 @@ impl v1::project_service_server::ProjectService for WorkflowGrpc {
 
 #[tonic::async_trait]
 impl v1::project_conversation_service_server::ProjectConversationService for WorkflowGrpc {
+    async fn approve_plan(
+        &self,
+        request: Request<v1::ApprovePlanRequest>,
+    ) -> Result<Response<v1::ApprovePlanResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let scope = plans::scope(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+        );
+        let result = self
+            .store
+            .approve_plan(
+                scope,
+                &value.idempotency_key,
+                &value.plan_id,
+                &value.expected_version_id,
+                &value.content_digest,
+            )
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(plans::approved(result)))
+    }
+
+    async fn get_plan_approval(
+        &self,
+        request: Request<v1::GetPlanApprovalRequest>,
+    ) -> Result<Response<v1::GetPlanApprovalResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let scope = plans::scope(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+        );
+        let result = self
+            .store
+            .get_plan_approval(scope, &value.plan_id)
+            .await
+            .map_err(|error| context.store(&error))?;
+        let result = result.map(plans::approved).unwrap_or_default();
+        Ok(context.response(v1::GetPlanApprovalResponse {
+            approval: result.approval,
+            tasks: result.tasks,
+        }))
+    }
+
+    async fn list_tasks(
+        &self,
+        request: Request<v1::ListTasksRequest>,
+    ) -> Result<Response<v1::ListTasksResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let scope = plans::scope(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+        );
+        let result = self
+            .store
+            .list_tasks(scope, &value.after_id, value.limit)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::ListTasksResponse {
+            tasks: result.tasks.into_iter().map(plans::task).collect(),
+            next_after_id: result.next_after_id,
+        }))
+    }
+
+    async fn get_task(
+        &self,
+        request: Request<v1::GetTaskRequest>,
+    ) -> Result<Response<v1::GetTaskResponse>, Status> {
+        let context = RequestContext::new(&request);
+        let value = request.into_inner();
+        let scope = plans::scope(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+        );
+        let result = self
+            .store
+            .get_task(scope, &value.task_id)
+            .await
+            .map_err(|error| context.store(&error))?;
+        Ok(context.response(v1::GetTaskResponse {
+            task: Some(plans::task(result)),
+        }))
+    }
+
     async fn create_plan(
         &self,
         request: Request<v1::CreatePlanRequest>,

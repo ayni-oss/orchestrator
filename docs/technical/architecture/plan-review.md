@@ -2,7 +2,7 @@
 
 The first M3 slice retains operator-authored plans in their originating conversation.
 It implements review and revision from the [M3 contract](plans-and-approval.md).
-[Structured agent proposals](agent-proposals.md) extend this review path; approval and admitted tasks remain later slices.
+[Structured agent proposals](agent-proposals.md) extend this review path; [approval and task admission](task-admission.md) bind explicit authorization to an exact reviewed version.
 
 ## Content and identity
 
@@ -21,7 +21,7 @@ Repository references are declarations, not verified evidence or execution permi
 Composite foreign keys bind the complete parent chain, predecessor and current
 version to the same plan. The runtime can update only the current-version pointer;
 it cannot update version content or delete plans, versions or receipts.
-Future task admission must copy the immutable origin and exact version reference.
+Task admission copies the immutable origin and exact version reference. Approved plans reject additional revisions.
 
 ## Canonical content and bounds
 
@@ -92,8 +92,8 @@ the console never rebases or resubmits it automatically.
 
 Pending writes use the console's existing exact-key retry panel across reloads.
 PostgreSQL owns accepted content; browser storage is only a local editing/retry
-convenience and can be lost if cleared. Plans do not authorize paid calls,
-repository access, approval or execution.
+convenience and can be lost if cleared. Plan writes do not authorize paid calls,
+repository access or execution. Explicit approval is a separate exact-version command.
 
 ## Validation
 

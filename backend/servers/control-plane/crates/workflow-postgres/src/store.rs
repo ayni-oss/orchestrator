@@ -48,6 +48,12 @@ pub enum StoreError {
     ConfigurationRevisionConflict,
     #[error("PLAN_VERSION_CONFLICT")]
     PlanVersionConflict,
+    #[error("PLAN_ALREADY_APPROVED")]
+    PlanAlreadyApproved,
+    #[error("PLAN_DIGEST_MISMATCH")]
+    PlanDigestMismatch,
+    #[error("PLAN_UNRESOLVED_SCOPE")]
+    PlanUnresolvedScope,
     #[error("workflow capacity is exhausted: {0}")]
     Capacity(&'static str),
     #[error("WATCH_CURSOR_EXPIRED")]

@@ -106,8 +106,9 @@ async fn plan_review(app: &axum::Router, scope: &Value) -> Result {
     let mut revise = read.clone();
     revise["idempotencyKey"] = json!(Uuid::now_v7().to_string());
     revise["expectedVersionId"] = created["version"]["id"].clone();
-    revise["content"] =
-        json!({"title":"Revised plan","objective":"Retain origin","scope":"Console"});
+    revise["content"] = json!({"title":"Revised plan","objective":"Retain origin","scope":"Console",
+            "tasks":[{"key":"console","objective":"Show admitted work","scope":"Console",
+                "acceptanceCriteria":["Origin is visible"],"unresolvedInputs":["Select runtime"]}]});
     let (status, updated) = call(app, "RevisePlan", revise.clone()).await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(updated["version"]["ordinal"], "2");
@@ -129,6 +130,79 @@ async fn plan_review(app: &axum::Router, scope: &Value) -> Result {
     );
     let (_, snapshot) = call(app, "GetConversationSnapshot", scope.clone()).await?;
     assert_eq!(snapshot["snapshot"]["plans"], plans["plans"]);
+    admission(app, scope, &updated["version"]).await
+}
+
+async fn admission(app: &axum::Router, scope: &Value, version: &Value) -> Result {
+    let mut read = scope.clone();
+    read["planId"] = version["planId"].clone();
+    let (status, before) = call(app, "GetPlanApproval", read.clone()).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(before.get("approval").is_none());
+    let mut approve = read.clone();
+    approve["idempotencyKey"] = json!(Uuid::now_v7().to_string());
+    approve["expectedVersionId"] = version["id"].clone();
+    approve["contentDigest"] = json!(format!("sha256:{}", "0".repeat(64)));
+    let (status, invalid) = call(app, "ApprovePlan", approve.clone()).await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(invalid["reason"], "ERROR_REASON_PLAN_DIGEST_MISMATCH");
+    approve["contentDigest"] = version["contentDigest"].clone();
+    let mut spoofed = approve.clone();
+    spoofed["operator"] = json!("model");
+    assert_eq!(
+        call(app, "ApprovePlan", spoofed).await?.0,
+        StatusCode::BAD_REQUEST
+    );
+    let (status, admitted) = call(app, "ApprovePlan", approve.clone()).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(call(app, "ApprovePlan", approve.clone()).await?.1, admitted);
+    assert_eq!(call(app, "GetPlanApproval", read).await?.1, admitted);
+    assert_eq!(admitted["approval"]["versionId"], version["id"]);
+    assert_eq!(
+        admitted["approval"]["contentDigest"],
+        version["contentDigest"]
+    );
+    let task = &admitted["tasks"][0];
+    assert_eq!(task["state"], "awaiting_execution");
+    assert_eq!(task["conversationId"], scope["conversationId"]);
+    assert_eq!(task["approvalId"], admitted["approval"]["id"]);
+    assert_eq!(task["specification"], version["content"]["tasks"][0]);
+    assert!(
+        !task["executionBlockers"]
+            .as_array()
+            .ok_or("blockers")?
+            .is_empty()
+    );
+    let mut task_read = scope.clone();
+    task_read["taskId"] = task["id"].clone();
+    assert_eq!(
+        call(app, "GetTask", task_read.clone()).await?.1["task"],
+        *task
+    );
+    task_read["conversationId"] = json!(Uuid::now_v7().to_string());
+    assert_eq!(
+        call(app, "GetTask", task_read).await?.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, tasks) = call(app, "ListTasks", scope.clone()).await?;
+    assert_eq!(tasks["tasks"], admitted["tasks"]);
+    let (_, snapshot) = call(app, "GetConversationSnapshot", scope.clone()).await?;
+    assert_eq!(
+        snapshot["snapshot"]["plans"][0]["approvalId"],
+        admitted["approval"]["id"]
+    );
+    approve["idempotencyKey"] = json!(Uuid::now_v7().to_string());
+    let (status, conflict) = call(app, "ApprovePlan", approve).await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(conflict["reason"], "ERROR_REASON_PLAN_ALREADY_APPROVED");
+    let mut revise = scope.clone();
+    revise["planId"] = version["planId"].clone();
+    revise["idempotencyKey"] = json!(Uuid::now_v7().to_string());
+    revise["expectedVersionId"] = version["id"].clone();
+    revise["content"] = version["content"].clone();
+    let (status, conflict) = call(app, "RevisePlan", revise).await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(conflict["reason"], "ERROR_REASON_PLAN_ALREADY_APPROVED");
     Ok(())
 }
 

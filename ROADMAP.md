@@ -109,8 +109,7 @@ One plan admits one approved task set. Follow-up work requires a new linked plan
 until later confirmed recovery defines replacement of admitted work. PR #238 combines
 the contract with the first operator-authored durable-review slice. The second
 slice adds [structured agent proposals](docs/technical/architecture/agent-proposals.md)
-and retained provenance. Approval/admission and final M3 acceptance remain later slices; each delivery PR
-owns its acceptance evidence and status changes.
+and retained provenance. The third slice adds [approval and task admission](docs/technical/architecture/task-admission.md): exact reviewed-version authorization, one retained receipt and the complete task set, with immutable origin and visible execution blockers. Final cumulative M3 acceptance remains the fourth slice; each delivery PR owns its acceptance evidence and status changes.
 
 ### Validation at every milestone
 

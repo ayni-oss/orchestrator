@@ -67,7 +67,7 @@ pub async fn summaries(
     client: &(impl GenericClient + Sync),
     conversation: &str,
 ) -> Result<Vec<PlanSummary>, StoreError> {
-    client.query("SELECT p.id,p.workspace_id,p.project_id,p.conversation_id,p.current_version_id,v.ordinal,v.title,COALESCE(p.follows_plan_id,'') FROM workflow_plans p JOIN workflow_plan_versions v ON v.id=p.current_version_id WHERE p.conversation_id=$1 ORDER BY p.id LIMIT 32", &[&conversation]).await?.into_iter().map(|r| Ok(PlanSummary { id:r.get(0),workspace_id:r.get(1),project_id:r.get(2),conversation_id:r.get(3),current_version_id:r.get(4),current_ordinal:support::unsigned(r.get(5))?,title:r.get(6),follows_plan_id:r.get(7) })).collect()
+    client.query("SELECT p.id,p.workspace_id,p.project_id,p.conversation_id,p.current_version_id,v.ordinal,v.title,COALESCE(p.follows_plan_id,''),COALESCE((SELECT a.id FROM workflow_plan_approvals a WHERE a.plan_id=p.id),'') FROM workflow_plans p JOIN workflow_plan_versions v ON v.id=p.current_version_id WHERE p.conversation_id=$1 ORDER BY p.id LIMIT 32", &[&conversation]).await?.into_iter().map(|r| Ok(PlanSummary { id:r.get(0),workspace_id:r.get(1),project_id:r.get(2),conversation_id:r.get(3),current_version_id:r.get(4),current_ordinal:support::unsigned(r.get(5))?,title:r.get(6),follows_plan_id:r.get(7),approval_id:r.get(8) })).collect()
 }
 
 impl WorkflowStore {

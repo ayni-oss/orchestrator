@@ -108,6 +108,7 @@ pub(super) fn summary(v: model::PlanSummary) -> v1::PlanSummary {
         current_ordinal: v.current_ordinal,
         title: v.title,
         follows_plan_id: v.follows_plan_id,
+        approval_id: v.approval_id,
     }
 }
 
@@ -147,5 +148,60 @@ pub(super) fn revised(v: model::WrittenPlan) -> v1::RevisePlanResponse {
     v1::RevisePlanResponse {
         version: result.version,
         receipt: result.receipt,
+    }
+}
+
+pub(super) fn approval(v: model::PlanApprovalReceipt) -> v1::PlanApprovalReceipt {
+    v1::PlanApprovalReceipt {
+        id: v.id,
+        command_id: v.command_id,
+        workspace_id: v.workspace_id,
+        project_id: v.project_id,
+        conversation_id: v.conversation_id,
+        plan_id: v.plan_id,
+        version_id: v.version_id,
+        content_digest: v.content_digest,
+        operator: v.operator,
+        request_digest: v.request_digest,
+        created_at: Some(timestamp(v.created_at)),
+        conversation_revision: v.conversation_revision,
+        resume_cursor: v.resume_cursor,
+        task_ids: v.task_ids,
+    }
+}
+
+pub(super) fn task(v: model::AdmittedTask) -> v1::AdmittedTask {
+    let t = v.specification;
+    v1::AdmittedTask {
+        id: v.id,
+        workspace_id: v.workspace_id,
+        project_id: v.project_id,
+        conversation_id: v.conversation_id,
+        plan_id: v.plan_id,
+        version_id: v.version_id,
+        content_digest: v.content_digest,
+        approval_id: v.approval_id,
+        proposed_task_key: v.proposed_task_key,
+        specification: Some(v1::PlanTaskSpecification {
+            key: t.key,
+            objective: t.objective,
+            scope: t.scope,
+            out_of_scope: t.out_of_scope,
+            acceptance_criteria: t.acceptance_criteria,
+            repository: t.repository,
+            source_ref: t.source_ref,
+            execution_limits: t.execution_limits,
+            unresolved_inputs: t.unresolved_inputs,
+        }),
+        state: v.state,
+        execution_blockers: v.execution_blockers,
+        created_at: Some(timestamp(v.created_at)),
+    }
+}
+
+pub(super) fn approved(v: model::ApprovedPlan) -> v1::ApprovePlanResponse {
+    v1::ApprovePlanResponse {
+        approval: Some(approval(v.approval)),
+        tasks: v.tasks.into_iter().map(task).collect(),
     }
 }

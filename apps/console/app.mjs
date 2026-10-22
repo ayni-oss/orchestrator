@@ -43,6 +43,8 @@ function controls() {
     const unavailable = !!pending || sending || discoveryBusy || (form.id === 'agent-configuration' && (!configuration || configuration.workspaceId !== scope.workspaceId)) || (form.id === 'create-project' && !scope.workspaceId) || (form.id === 'create-conversation' && !scope.projectId) || (form.id === 'send' && !scope.conversationId) || (form.id === 'plan-editor' && !scope.conversationId);
     for (const input of form.elements) input.disabled = unavailable;
   }
+  $('plan-approve').disabled = !plans.canApprove() || !!pending || sending || discoveryBusy;
+  $('plan-approve-consent').disabled = !!pending || sending || discoveryBusy;
   $('plan-edit').disabled = !plans.canEdit() || !!pending || sending || discoveryBusy;
   $('pending').hidden = !pending;
   $('retry').disabled = sending;
@@ -67,8 +69,8 @@ async function retry() {
     const command = pending;
     const result = await api(command.method, command.body);
     pending = null; store('pending', null);
-    $('receipt').textContent = result.receipt?.commandId || 'Accepted';
-    if (['CreatePlan', 'RevisePlan'].includes(command.method)) {
+    $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || 'Accepted';
+    if (['CreatePlan', 'RevisePlan', 'ApprovePlan'].includes(command.method)) {
       plans.accepted(command, result);
     } else if (command.method === 'SendMessage') {
       if (scopeKey(command.body) === scopeKey(scope)) $('content').value = '';

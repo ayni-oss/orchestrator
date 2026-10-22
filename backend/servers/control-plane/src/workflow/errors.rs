@@ -76,6 +76,21 @@ impl RequestContext {
                 v1::ErrorReason::FailedPrecondition,
                 "retained workflow state is invalid",
             ),
+            StoreError::PlanAlreadyApproved => self.status(
+                Code::AlreadyExists,
+                v1::ErrorReason::PlanAlreadyApproved,
+                "plan was already approved; read the retained approval",
+            ),
+            StoreError::PlanDigestMismatch => self.status(
+                Code::FailedPrecondition,
+                v1::ErrorReason::PlanDigestMismatch,
+                "reviewed plan digest does not match the exact version",
+            ),
+            StoreError::PlanUnresolvedScope => self.status(
+                Code::FailedPrecondition,
+                v1::ErrorReason::PlanUnresolvedScope,
+                "resolve scope questions and task acceptance criteria before approval",
+            ),
             StoreError::PlanVersionConflict => self.status(
                 Code::Aborted,
                 v1::ErrorReason::PlanVersionConflict,

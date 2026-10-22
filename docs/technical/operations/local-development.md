@@ -46,7 +46,7 @@ the credentials or writing them to configuration files.
 
 All use seven-day age limits, a two-minute duplicate window, one local replica, and a 260-KiB maximum stored message. The combined 512-MiB stream budget sits below the 1-GiB server budget on a retained 2-GiB PVC. The executor has a retained 512-MiB PVC and enforces a 192-MiB authority ledger plus a 64-MiB quarantine subquota within a 256-MiB combined logical cap.
 
-`dev/ctl check` verifies workload readiness, migration history through ordinal 13, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
+`dev/ctl check` verifies workload readiness, migration history through ordinal 14, the exact stream limits, retained storage, and executor-ledger initialization. `--expect-empty` additionally refuses a database that already contains a workspace.
 
 ## Contributor console
 
@@ -105,12 +105,21 @@ originating conversation. Repository/source references are visibly unverified.
 Select a plan to review its content and history. **Edit current version** copies
 that version into a local draft. Another tab can publish a newer version, but
 watch refresh never overwrites your draft; stale saves require fresh review.
-The retry panel preserves an ambiguous save across reloads. Approval and task
-admission are not available in this slice.
+The retry panel preserves ambiguous saves and approvals across reloads.
+
+Resolve scope questions and give every proposed task acceptance criteria before
+approval. Review the retained version and digest, check the explicit approval
+consent, then choose **Approve reviewed version and admit tasks**. A newer streamed
+version never changes what you reviewed; select the plan again and review it
+before approval. Approval freezes the plan and atomically admits its complete task
+set. The receipt and task detail retain workspace, project, originating conversation,
+version and digest. Tasks await execution capability; source verification, runtime
+selection and authorized execution budget remain visible blockers. No coding work
+is dispatched. A follow-up requires a new plan.
 
 The cumulative browser acceptance includes structured task editing, lost-response
-replay, two-tab revision conflicts, draft preservation, history and scope checks.
-See [plan review](../architecture/plan-review.md) for limits and retained-state rules.
+replay, two-tab revision and approval conflicts, exact approval retry, draft preservation, history, task pagination and scope checks.
+See [plan review](../architecture/plan-review.md) and [task admission](../architecture/task-admission.md) for limits and retained-state rules.
 
 ## Shared configuration and session controls
 
@@ -261,7 +270,7 @@ pnpm proto:check
 pnpm docs:check
 ```
 
-The PostgreSQL gate covers migrations through ordinal 13, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
+The PostgreSQL gate covers migrations through ordinal 14, frozen configuration, scoped context and session generations, signed claim/terminal acceptance, duplicate report decisions, accepted response insertion, and conversation-only FIFO context promotion in addition to the Slice 1 authority checks. The Helm gate validates pinned broker images, exact stream budgets, role ACL shape, Secret separation, and retained PVCs. `dev/ctl scenario` is the deployable Docker Desktop evidence.
 
 After browser acceptance creates at least two conversations, inspect the deployed
 session boundary without reading Secret data:

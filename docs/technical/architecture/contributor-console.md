@@ -95,6 +95,20 @@ evidence, unknown usage and the reservation; it does not resend the call.
 Tool activity lists allowlisted tool names, invocation IDs, states and digests.
 Arguments, read outputs, full prompts and model reasoning stay out of activity.
 
+## Plan review and task admission
+
+Plans retain immutable reviewed versions separately from local drafts. Streamed
+heads never rewrite reviewed content or unsaved edits. Approval requires explicit
+consent to the displayed version/digest and complete task set; unresolved scope
+questions and missing acceptance criteria block it. Approved task detail exposes
+immutable project/conversation origin and execution blockers while tasks await
+execution capability. No coding work is dispatched by approval.
+
+`ApprovePlan` uses the same retained exact-command retry panel as other commands.
+Snapshot plan heads carry the approval identity; scoped approval/task reads
+reconstruct the receipt and task set after reconnect without another mutation.
+See [plan review](plan-review.md) and [task admission](task-admission.md).
+
 ## Discovery, history and retries
 
 `ListWorkspaces`, `ListProjects` and `ListConversations` are canonical read-only

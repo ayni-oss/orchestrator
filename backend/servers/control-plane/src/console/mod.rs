@@ -146,6 +146,18 @@ async fn rpc(
         }};
     }
     match method.as_str() {
+        "ApprovePlan" => forward!(
+            console.conversations(),
+            approve_plan,
+            v1::ApprovePlanRequest
+        ),
+        "GetPlanApproval" => forward!(
+            console.conversations(),
+            get_plan_approval,
+            v1::GetPlanApprovalRequest
+        ),
+        "ListTasks" => forward!(console.conversations(), list_tasks, v1::ListTasksRequest),
+        "GetTask" => forward!(console.conversations(), get_task, v1::GetTaskRequest),
         "CreatePlan" => forward!(console.conversations(), create_plan, v1::CreatePlanRequest),
         "RevisePlan" => forward!(console.conversations(), revise_plan, v1::RevisePlanRequest),
         "GetPlanVersion" => forward!(
