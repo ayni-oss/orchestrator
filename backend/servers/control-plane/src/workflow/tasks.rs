@@ -119,3 +119,41 @@ fn receipt(r: RunReceipt) -> v1::TaskExecutionCommandReceipt {
         resume_cursor: r.resume_cursor,
     }
 }
+
+pub(super) async fn feedback(
+    store: &WorkflowStore,
+    request: Request<v1::ListTaskFeedbackRequest>,
+) -> Result<Response<v1::ListTaskFeedbackResponse>, Status> {
+    let context = RequestContext::new(&request);
+    let value = request.into_inner();
+    let page = store
+        .list_task_feedback(
+            &value.workspace_id,
+            &value.project_id,
+            &value.conversation_id,
+            &value.after_id,
+            value.limit,
+        )
+        .await
+        .map_err(|e| context.store(&e))?;
+    Ok(context.response(v1::ListTaskFeedbackResponse {
+        feedback: page
+            .feedback
+            .into_iter()
+            .map(|v| v1::TaskFeedback {
+                id: v.id,
+                workspace_id: v.workspace_id,
+                project_id: v.project_id,
+                conversation_id: v.conversation_id,
+                task_id: v.task_id,
+                attempt_id: v.attempt_id,
+                category: v.category,
+                state: "open".into(),
+                safe_reason: v.safe_reason,
+                summary: v.summary,
+                created_at: Some(super::timestamp(v.created_at)),
+            })
+            .collect(),
+        next_after_id: page.next_after_id,
+    }))
+}

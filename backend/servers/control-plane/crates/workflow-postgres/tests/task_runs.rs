@@ -49,7 +49,7 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
         title: "Execute tasks".into(),
         objective: "Retain changes".into(),
         scope: "One active worker".into(),
-        tasks: (0..4)
+        tasks: (0..8)
             .map(|n| PlanTaskSpecification {
                 key: format!("task{n}"),
                 objective: "One task".into(),
@@ -283,7 +283,9 @@ async fn serial_dispatch_fences_cancellation_and_recovers_exact_retained_results
             .is_err()
     );
     prove_rollback_deadline_and_immutable_inputs(&store, scope, deadline, first, &admin, &runtime)
-        .await
+        .await?;
+    prove_failed_and_interrupted_feedback(&store, scope, &preparations[4..]).await?;
+    prove_feedback_scope_pagination_and_retention(&store, scope, wrong, &runtime).await
 }
 async fn prove_rollback_deadline_and_immutable_inputs(
     store: &WorkflowStore,
@@ -500,6 +502,35 @@ async fn prove_quality_rollback(
         .await?
         .get::<_, bool>(0)
     );
+    db.batch_execute("CREATE FUNCTION fixture_reject_feedback() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$; CREATE TRIGGER fixture_reject_feedback BEFORE INSERT ON workflow_task_feedback FOR EACH ROW EXECUTE FUNCTION fixture_reject_feedback()").await?;
+    let failed_feedback = store
+        .task_worker(
+            &task.attempt_id,
+            1,
+            uid,
+            &W::QualityReport {
+                outcome: quality.clone(),
+            },
+        )
+        .await;
+    db.batch_execute("DROP TRIGGER fixture_reject_feedback ON workflow_task_feedback; DROP FUNCTION fixture_reject_feedback()").await?;
+    assert!(matches!(failed_feedback, Err(StoreError::Database(_))));
+    assert!(
+        !db.query_one(
+            "SELECT EXISTS(SELECT 1 FROM workflow_task_quality WHERE attempt_id=$1)",
+            &[&task.attempt_id]
+        )
+        .await?
+        .get::<_, bool>(0)
+    );
+    let after: i64 = db
+        .query_one("SELECT count(*) FROM workflow_updates", &[])
+        .await?
+        .get(0);
+    assert_eq!(
+        before, after,
+        "feedback failure rolls back quality and observation"
+    );
     driver.abort();
     Ok(())
 }
@@ -543,6 +574,9 @@ async fn cancel_queued_task(
     scope: PlanScope<'_>,
     queued_cancel: &ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation,
 ) -> Result {
+    let before = store
+        .list_task_feedback(scope.workspace, scope.project, scope.conversation, "", 32)
+        .await?;
     let cancel_queued = key();
     let cancelled = store
         .cancel_task_execution(
@@ -569,6 +603,12 @@ async fn cancel_queued_task(
             .await?
             .state,
         "cancelled"
+    );
+    assert_eq!(
+        before,
+        store
+            .list_task_feedback(scope.workspace, scope.project, scope.conversation, "", 32)
+            .await?
     );
     Ok(())
 }
@@ -683,4 +723,229 @@ async fn store_fixture()
     .await?;
     let store = WorkflowStore::new(runtime.clone());
     Ok((admin, runtime, store))
+}
+
+async fn prove_failed_and_interrupted_feedback(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    tasks: &[ayni_orchestrator_workflow_postgres::execution::TaskExecutionPreparation],
+) -> Result {
+    for (index, task) in tasks.iter().enumerate() {
+        store
+            .start_task_execution(
+                scope,
+                &task.task_id,
+                &task.attempt_id,
+                &key(),
+                b"fixture-pack",
+            )
+            .await?;
+        store.task_supervisor(&S::Poll).await?;
+        let uid = key();
+        store
+            .task_supervisor(&S::Observe {
+                attempt_id: task.attempt_id.clone(),
+                generation: 1,
+                pod_uid: uid.clone(),
+            })
+            .await?;
+        if index == 0 {
+            let report = W::Report {
+                outcome: TaskOutcome {
+                    state: "failed".into(),
+                    safe_reason: "source_context_limit".into(),
+                    ..Default::default()
+                },
+            };
+            store
+                .task_worker(&task.attempt_id, 1, &uid, &report)
+                .await?;
+            store
+                .task_worker(&task.attempt_id, 1, &uid, &report)
+                .await?;
+        }
+        if index >= 2 {
+            let outcome = TaskOutcome {
+                state: "completed".into(),
+                ..Default::default()
+            };
+            store
+                .task_worker(
+                    &task.attempt_id,
+                    1,
+                    &uid,
+                    &W::Report {
+                        outcome: outcome.clone(),
+                    },
+                )
+                .await?;
+            if index == 2 {
+                let command = store
+                    .get_task_run(scope, &task.task_id, &task.attempt_id)
+                    .await?
+                    .command;
+                let quality = QualityOutcome {
+                    state: "blocked".into(),
+                    safe_reason: "runtime_unavailable".into(),
+                    snapshot_digest: snapshot_digest(&command, &outcome),
+                    lock_digest: command.lock_digest,
+                    runtime_image: command.runtime_image,
+                    ..Default::default()
+                };
+                store
+                    .task_worker(
+                        &task.attempt_id,
+                        1,
+                        &uid,
+                        &W::QualityReport { outcome: quality },
+                    )
+                    .await?;
+            }
+        }
+        let stopped = S::Stopped {
+            attempt_id: task.attempt_id.clone(),
+            generation: 1,
+            pod_uid: uid,
+        };
+        store.task_supervisor(&stopped).await?;
+        store.task_supervisor(&stopped).await?;
+    }
+    Ok(())
+}
+
+async fn prove_feedback_scope_pagination_and_retention(
+    store: &WorkflowStore,
+    scope: PlanScope<'_>,
+    wrong: PlanScope<'_>,
+    runtime: &str,
+) -> Result {
+    let page = store
+        .list_task_feedback(scope.workspace, scope.project, scope.conversation, "", 32)
+        .await?;
+    assert_eq!(
+        page.feedback.len(),
+        7,
+        "execution and quality attention survive each accepted failure boundary"
+    );
+    let mut reasons: Vec<_> = page
+        .feedback
+        .iter()
+        .map(|v| v.safe_reason.as_str())
+        .collect();
+    reasons.sort_unstable();
+    assert_eq!(
+        reasons,
+        vec![
+            "execution_deadline_exceeded",
+            "execution_failed",
+            "execution_interrupted",
+            "provider_uncertain",
+            "quality_blocked",
+            "quality_failed",
+            "quality_interrupted"
+        ]
+    );
+    assert!(
+        page.feedback
+            .iter()
+            .all(|v| v.conversation_id == scope.conversation && !v.summary.is_empty())
+    );
+    assert_eq!(
+        page,
+        store
+            .list_task_feedback(scope.workspace, scope.project, "", "", 32)
+            .await?
+    );
+    assert!(
+        store
+            .list_task_feedback(wrong.workspace, wrong.project, wrong.conversation, "", 32)
+            .await?
+            .feedback
+            .is_empty()
+    );
+    let reopened = WorkflowStore::new(runtime.to_owned());
+    assert_eq!(
+        page,
+        reopened
+            .list_task_feedback(scope.workspace, scope.project, scope.conversation, "", 32)
+            .await?
+    );
+    let mut ids = Vec::new();
+    let mut after = String::new();
+    loop {
+        let part = store
+            .list_task_feedback(scope.workspace, scope.project, "", &after, 1)
+            .await?;
+        ids.extend(part.feedback.into_iter().map(|v| v.id));
+        if part.next_after_id.is_empty() {
+            break;
+        }
+        after = part.next_after_id;
+    }
+    assert_eq!(
+        ids,
+        page.feedback
+            .iter()
+            .map(|v| v.id.clone())
+            .collect::<Vec<_>>()
+    );
+    prove_feedback_read_bounds(store, scope).await?;
+    let (db, driver) = connect(runtime).await?;
+    assert!(
+        db.execute(
+            "UPDATE workflow_task_feedback SET safe_reason='execution_failed' WHERE id=$1",
+            &[&ids[0]]
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        db.execute("DELETE FROM workflow_task_feedback WHERE id=$1", &[&ids[0]])
+            .await
+            .is_err()
+    );
+    driver.abort();
+    Ok(())
+}
+
+async fn prove_feedback_read_bounds(store: &WorkflowStore, scope: PlanScope<'_>) -> Result {
+    assert!(matches!(
+        store
+            .list_task_feedback(scope.workspace, scope.project, "", "", 33)
+            .await,
+        Err(StoreError::InvalidInput("limit"))
+    ));
+    assert!(matches!(
+        store
+            .list_task_feedback(scope.workspace, scope.project, "", "invalid", 20)
+            .await,
+        Err(StoreError::InvalidInput("after_id"))
+    ));
+    assert!(matches!(
+        store
+            .list_task_feedback(scope.workspace, &key(), "", "", 20)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let other_workspace = store
+        .create_workspace(&key(), "Other workspace")
+        .await?
+        .resource;
+    assert!(matches!(
+        store
+            .list_task_feedback(&other_workspace.id, scope.project, "", "", 20)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    let another = store
+        .create_project(&key(), scope.workspace, "Other project", "Isolation")
+        .await?
+        .resource;
+    assert!(matches!(
+        store
+            .list_task_feedback(scope.workspace, &another.id, scope.conversation, "", 20)
+            .await,
+        Err(StoreError::NotFound)
+    ));
+    Ok(())
 }

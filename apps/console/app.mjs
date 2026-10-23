@@ -1,4 +1,5 @@
 import { mountTasks } from './tasks.mjs';
+import { mountFeedback } from './feedback.mjs';
 import { mountPlans } from './plans.mjs';
 import { newerOrEqual, describe, scopeKey, makeCommand, appendActivity, providerCallView } from './state.mjs';
 
@@ -30,6 +31,12 @@ let currentSession;
 let providerQuery = 0;
 const tasks = mountTasks({ getScope: scopeBody, api, submit, showError, saved, store, controls });
 const plans = mountPlans({ getScope: scopeBody, api, submit, showError, saved, store, controls, tasks });
+const feedback = mountFeedback({ getScope: scopeBody, api, showError, openTask: async (origin, taskId, fromProject) => {
+  if (fromProject || scope.conversationId !== origin.conversationId) await selectConversation(origin.conversationId);
+  if (scopeKey(scope) !== scopeKey(origin)) return;
+  await tasks.open(taskId);
+  $(fromProject ? 'conversation-feedback' : 'task-detail').scrollIntoView({ block: 'start', behavior: 'smooth' });
+} });
 
 function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
 function clearError() { $('error').hidden = true; }
@@ -271,7 +278,7 @@ function openWatch(version) {
       if (version !== generation || current !== source) return;
       const frame = JSON.parse(event.data);
       if (frame.snapshot) {
-        renderSnapshot(frame.snapshot); await loadProviderCalls();
+        renderSnapshot(frame.snapshot); await Promise.all([loadProviderCalls(), feedback.refresh()]);
         if (version !== generation || current !== source) return;
         cursor = frame.snapshot.resumeCursor;
       }
@@ -280,7 +287,7 @@ function openWatch(version) {
         const result = await api('GetConversationSnapshot', scopeBody());
         if (version !== generation || current !== source) return;
         renderSnapshot(result.snapshot);
-        await loadProviderCalls();
+        await Promise.all([loadProviderCalls(), feedback.refresh()]);
         if (version !== generation || current !== source) return;
         activities = appendActivity(activities, frame.update);
         $('activity').replaceChildren(...activities.map(update => { const li = document.createElement('li'); li.textContent = `${describe(update.presentationState)} · ${update.safeReason || 'workflow update'}`; return li; }));
@@ -300,7 +307,7 @@ function openWatch(version) {
 async function selectConversation(id) {
   closeWatch(); generation++; providerQuery++; paused = false; cursor = ''; snapshot = null; activities = []; chain = Promise.resolve();
   scope.conversationId = id || ''; store('selection', scope);
-  plans.select(); tasks.select();
+  plans.select(); tasks.select(); feedback.select();
   currentSession = undefined; $('session-state').textContent = 'No session.';
   $('provider-call-status').textContent = 'No conversation selected.'; $('provider-calls').replaceChildren(); $('turn-controls').replaceChildren();
   $('messages').replaceChildren(); $('history').replaceChildren(); $('activity').replaceChildren(); historyBefore = '0'; historySnapshotId = ''; historyHasMore = true; historyIds = new Set();

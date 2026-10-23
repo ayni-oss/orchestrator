@@ -145,6 +145,20 @@ links must exactly match the recorded public GitHub repository and decimal PR
 number. The console reports the last recorded external state without implying a
 fresh GitHub read. See [draft publication](task-publication.md).
 
+## Task feedback and project attention
+
+`ListTaskFeedback` reads retained execution and quality problems for either the
+selected conversation or its project. The console displays system notices
+separately from assistant messages and opens each notice's originating
+conversation/task for evidence inspection. Reads use bounded pages and discard
+late responses after selection changes; reconnect and reload restore canonical
+feedback rather than trusting a browser copy.
+
+Notices remain open in this slice. The interface exposes no answer, dismiss,
+resolve or continue command, and reading a notice cannot authorize task execution.
+Publication reconciliation retains its existing task views. See the
+[task feedback contract](task-feedback.md) for scope, deduplication and retained-state rules.
+
 ## Discovery, history and retries
 
 `ListWorkspaces`, `ListProjects` and `ListConversations` are canonical read-only

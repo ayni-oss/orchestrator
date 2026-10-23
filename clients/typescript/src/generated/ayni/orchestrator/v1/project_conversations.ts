@@ -43,6 +43,8 @@ import {
   ListPlansResponse,
   ListPlanVersionsRequest,
   ListPlanVersionsResponse,
+  ListTaskFeedbackRequest,
+  ListTaskFeedbackResponse,
   ListTasksRequest,
   ListTasksResponse,
   PrepareTaskExecutionRequest,
@@ -3804,6 +3806,17 @@ export const ProjectConversationServiceService = {
     responseSerialize: (value: ListTasksResponse): Buffer => Buffer.from(ListTasksResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListTasksResponse => ListTasksResponse.decode(value),
   },
+  listTaskFeedback: {
+    path: "/ayni.orchestrator.v1.ProjectConversationService/ListTaskFeedback" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListTaskFeedbackRequest): Buffer =>
+      Buffer.from(ListTaskFeedbackRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListTaskFeedbackRequest => ListTaskFeedbackRequest.decode(value),
+    responseSerialize: (value: ListTaskFeedbackResponse): Buffer =>
+      Buffer.from(ListTaskFeedbackResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListTaskFeedbackResponse => ListTaskFeedbackResponse.decode(value),
+  },
   getTask: {
     path: "/ayni.orchestrator.v1.ProjectConversationService/GetTask" as const,
     requestStream: false as const,
@@ -4000,6 +4013,7 @@ export interface ProjectConversationServiceServer extends UntypedServiceImplemen
   approvePlan: handleUnaryCall<ApprovePlanRequest, ApprovePlanResponse>;
   getPlanApproval: handleUnaryCall<GetPlanApprovalRequest, GetPlanApprovalResponse>;
   listTasks: handleUnaryCall<ListTasksRequest, ListTasksResponse>;
+  listTaskFeedback: handleUnaryCall<ListTaskFeedbackRequest, ListTaskFeedbackResponse>;
   getTask: handleUnaryCall<GetTaskRequest, GetTaskResponse>;
   createPlan: handleUnaryCall<CreatePlanRequest, CreatePlanResponse>;
   revisePlan: handleUnaryCall<RevisePlanRequest, RevisePlanResponse>;
@@ -4172,6 +4186,21 @@ export interface ProjectConversationServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListTasksResponse) => void,
+  ): ClientUnaryCall;
+  listTaskFeedback(
+    request: ListTaskFeedbackRequest,
+    callback: (error: ServiceError | null, response: ListTaskFeedbackResponse) => void,
+  ): ClientUnaryCall;
+  listTaskFeedback(
+    request: ListTaskFeedbackRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListTaskFeedbackResponse) => void,
+  ): ClientUnaryCall;
+  listTaskFeedback(
+    request: ListTaskFeedbackRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListTaskFeedbackResponse) => void,
   ): ClientUnaryCall;
   getTask(
     request: GetTaskRequest,

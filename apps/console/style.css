@@ -374,3 +374,11 @@ h1 {
 .tasks-panel input[type=checkbox],#plan-approve-consent{width:auto}
 #task-publication-review{margin-top:16px}
 #task-publication-review dd{max-height:300px;overflow:auto}
+
+#conversation-feedback{margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #dde4d9}
+#conversation-feedback>p,#project-attention-status{font-size:12px;line-height:1.6}
+.task-feedback{margin:12px 0;padding:12px;border:1px solid #ebd3a4;border-radius:8px;background:#fff3dc;overflow-wrap:anywhere}
+.task-feedback h3{font-size:13px;margin:0 0 8px}
+.task-feedback p{white-space:pre-wrap;font-size:12px;line-height:1.6;margin:8px 0}
+.task-feedback button{margin-top:10px;font-size:12px}
+.task-feedback small{font-size:11px}

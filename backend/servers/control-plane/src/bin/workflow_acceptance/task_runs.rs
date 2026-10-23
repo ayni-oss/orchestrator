@@ -17,6 +17,8 @@ struct Evidence {
     quality_failed: bool,
     #[serde(default)]
     quality_digest: String,
+    #[serde(default)]
+    feedback: Vec<u8>,
 }
 const PACK: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -167,9 +169,11 @@ async fn prepare_inner(
         quality,
         quality_failed,
         quality_digest: String::new(),
+        feedback: Vec::new(),
     };
     if !pending {
         let attempt = verify(client, &evidence).await?;
+        evidence.feedback = feedback(client, &request, expected_feedback(&evidence)).await?;
         if let Some(quality) = attempt.quality {
             evidence.quality_digest =
                 ayni_orchestrator_events::task_execution::digest(&quality.encode_to_vec());
@@ -280,6 +284,15 @@ async fn verify(client: &mut Client, evidence: &Evidence) -> Result<v1::TaskAtte
         return Err("source commit changed".into());
     }
     verify_retained_quality(evidence, &attempt)?;
+    let retained = feedback(
+        client,
+        &v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?,
+        expected_feedback(evidence),
+    )
+    .await?;
+    if !evidence.feedback.is_empty() && retained != evidence.feedback {
+        return Err("retained task feedback changed after restart".into());
+    }
     Ok(attempt)
 }
 
@@ -360,6 +373,7 @@ pub async fn interrupted_stdin(client: &mut Client) -> Result {
     let evidence = stdin_evidence()?;
     let start = v1::StartTaskExecutionRequest::decode(evidence.request.as_slice())?;
     terminal(client, &start, "interrupted").await?;
+    let retained_feedback = feedback(client, &start, Some("execution_interrupted")).await?;
     if client
         .start_task_execution(start)
         .await?
@@ -370,7 +384,67 @@ pub async fn interrupted_stdin(client: &mut Client) -> Result {
         return Err("interrupted start replay changed".into());
     }
     println!("task-pod-loss: interrupted=pass no-automatic-retry=pass retained-storage=pass");
+    println!(
+        "task-feedback-sha256: {}",
+        ayni_orchestrator_events::task_execution::digest(&retained_feedback)
+    );
     Ok(())
+}
+
+const fn expected_feedback(evidence: &Evidence) -> Option<&'static str> {
+    if evidence.quality_failed {
+        Some("quality_failed")
+    } else if evidence.quality {
+        None
+    } else {
+        // The coding-only fixture intentionally cannot perform managed quality.
+        Some("quality_blocked")
+    }
+}
+
+async fn feedback(
+    client: &mut Client,
+    start: &v1::StartTaskExecutionRequest,
+    expected: Option<&str>,
+) -> Result<Vec<u8>> {
+    let request = v1::ListTaskFeedbackRequest {
+        workspace_id: start.workspace_id.clone(),
+        project_id: start.project_id.clone(),
+        conversation_id: start.conversation_id.clone(),
+        limit: 32,
+        ..Default::default()
+    };
+    let page = client
+        .list_task_feedback(request.clone())
+        .await?
+        .into_inner();
+    if let Some(reason) = expected {
+        if page.feedback.len() != 1
+            || page.feedback[0].safe_reason != reason
+            || page.feedback[0].task_id != start.task_id
+            || page.feedback[0].attempt_id != start.attempt_id
+            || page.feedback[0].conversation_id != start.conversation_id
+            || page.feedback[0].state != "open"
+        {
+            return Err("actionable feedback missing or duplicated at immutable origin".into());
+        }
+    } else if !page.feedback.is_empty() {
+        return Err("successful task created actionable feedback".into());
+    }
+    let project = client
+        .list_task_feedback(v1::ListTaskFeedbackRequest {
+            conversation_id: String::new(),
+            ..request.clone()
+        })
+        .await?
+        .into_inner();
+    if project != page {
+        return Err("project attention differs from originating conversation".into());
+    }
+    if client.list_task_feedback(request).await?.into_inner() != page {
+        return Err("repeated feedback read changed".into());
+    }
+    Ok(page.encode_to_vec())
 }
 async fn terminal(
     client: &mut Client,

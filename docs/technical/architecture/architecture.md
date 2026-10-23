@@ -81,10 +81,18 @@ Repository-owned forward migrations live in `backend/servers/control-plane/crate
 13. migration 13 retains structured agent proposals and provenance;
 14. migration 14 retains exact-version approval and atomic task admission;
 15. migration 15 retains task preparation receipts and immutable execution attempts;
-16. migration 16 retains exact task dispatch commands, source snapshots, run authority and receipts.
+16. migration 16 retains exact task dispatch commands, source snapshots, run authority and receipts;
+17. migration 17 retains managed task quality outcomes and evidence;
+18. migration 18 retains task publication authority and deterministic draft identity;
+19. migration 19 retains exact publication report history;
+20. migration 20 retains immutable execution/quality feedback under each task's originating scope.
 
 These ordinals are installation history within the v1 interface, not parallel
 schema interfaces.
+
+The [task feedback contract](task-feedback.md) defines bounded conversation and
+project attention reads. Accepted actionable outcomes retain notices in the same
+transaction; rejected stale reports cannot produce feedback or continuation authority.
 
 Startup takes a transaction-scoped advisory lock, validates contiguous history and every checksum, applies missing migrations, installs explicit runtime grants, and verifies a deterministic catalog manifest. The migration and runtime credentials are separate. Runtime has only the table/column/sequence/function privileges required by current transactions.
 

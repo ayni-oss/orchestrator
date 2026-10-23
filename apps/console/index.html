@@ -11,6 +11,7 @@
     <label for="project">Project</label><select id="project"><option value="">Choose a project</option></select>
     <details><summary>New project</summary><form id="create-project"><label>Name<input name="displayName" required maxlength="256" placeholder="A new project"></label><label>Goal<textarea name="goal" maxlength="16384" rows="2"></textarea></label><button type="submit">Create project</button></form></details>
   </nav>
+  <section aria-label="Project attention"><h2>Needs attention</h2><button id="project-attention-refresh" disabled>Refresh project attention</button><p id="project-attention-status" role="status">Choose a project.</p><div id="project-attention-list"></div><button id="project-attention-more" hidden>Load more attention items</button></section>
   <section class="conversation-nav"><div class="section-heading"><h2>Conversations</h2></div><div id="conversations"></div><button id="more-conversations" hidden>Load more conversations</button><details><summary>New conversation</summary><form id="create-conversation"><label>Title<input name="title" required maxlength="256" placeholder="What shall we explore?"></label><button type="submit">Create conversation</button></form></details></section>
   <footer><span class="dot"></span> Isolated conversations <small>Scripted or OpenAI execution</small></footer>
 </aside>
@@ -53,7 +54,10 @@
     <div id="task-publication-review" aria-label="Publication review"></div>
   </section>
   <div class="workspace-content">
-    <section class="chat" aria-label="Conversation"><button id="older" hidden>Load earlier history</button><div id="history"></div><div id="messages"><div class="empty"><span class="empty-icon">✳</span><h2>Start with a question.</h2><p>Messages, activity, and accepted responses will appear here.</p></div></div></section>
+    <section class="chat" aria-label="Conversation">
+      <section id="conversation-feedback" aria-label="Conversation task feedback"><h2>Task feedback</h2><p>Task issues return here. Inspect the saved evidence before deciding what to do next. Continuing a task is not available yet.</p><button id="conversation-feedback-refresh" disabled>Refresh task feedback</button><p id="conversation-feedback-status" role="status">Choose a conversation.</p><div id="conversation-feedback-list"></div><button id="conversation-feedback-more" hidden>Load more task feedback</button></section>
+      <button id="older" hidden>Load earlier history</button><div id="history"></div><div id="messages"><div class="empty"><span class="empty-icon">✳</span><h2>Start with a question.</h2><p>Messages, activity, and accepted responses will appear here.</p></div></div>
+    </section>
     <section class="activity-panel" aria-label="Activity"><h2>Activity</h2><p id="turn-state">No conversation selected.</p><ul id="turn-controls"></ul><ol id="activity"></ol><details open><summary>Provider calls and usage</summary><p id="provider-call-status" role="status">No conversation selected.</p><button id="refresh-provider-calls" disabled>Refresh provider calls</button><div id="provider-calls"></div></details><details><summary>Session</summary><p id="session-state">No session.</p><button id="refresh-session" disabled>Refresh session</button><button id="replace-session" disabled>Replace idle session</button></details><details><summary>Diagnostics</summary><dl><dt>Revision</dt><dd id="revision">—</dd><dt>Cursor</dt><dd id="cursor">—</dd><dt>Last receipt</dt><dd id="receipt">—</dd></dl></details></section>
   </div>
   <form id="send"><label class="sr-only" for="content">Message</label><textarea id="content" name="content" rows="3" required maxlength="16384" placeholder="Send a message to this conversation…" disabled></textarea><div><small>Accepted work continues while you disconnect.</small><button type="submit" disabled>Send message <span aria-hidden="true">↑</span></button></div></form>
