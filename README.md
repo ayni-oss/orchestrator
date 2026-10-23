@@ -7,7 +7,7 @@
 
 Ayni Orchestrator is rebuilding its project-conversation workflow on a durable PostgreSQL foundation.
 
-The runtime provides **M2 conversation execution and M3 plan review, agent proposals and task admission** on the M1 durable foundation, with a local contributor console, shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
+The runtime provides **conversation execution, plan approval and isolated task delivery through managed quality and draft publication** on the M1 durable foundation, with a local contributor console, shared agent configuration and isolated sessions supporting scripted or explicitly enabled OpenAI execution. It provides:
 
 - PostgreSQL 17.6 as the sole workflow authority;
 - conversation-owned operator and agent plans with immutable versions, scoped history, retained provenance, exact write receipts and console review;
@@ -46,7 +46,7 @@ dev/ctl console
 
 Open `http://127.0.0.1:3000` while the console command runs.
 
-See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
+See [task delivery acceptance](docs/technical/operations/task-acceptance.md) for the cumulative M4 gates and integration limits. See [local development](docs/technical/operations/local-development.md) for prerequisites, trusted diagnostics, validation, restart checks, and explicit cleanup.
 
 ## Documentation
 

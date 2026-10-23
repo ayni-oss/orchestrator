@@ -3,14 +3,20 @@ set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
 source "$dev_directory/lib/images.sh"
+source "$dev_directory/lib/m4-acceptance.sh"
 export HELM_NO_PLUGINS=1
 readonly context="$(dev_context)"
 readonly namespace="$(dev_namespace)"
-[[ $# -eq 1 && "$1" == /* && ! -e "$1" ]] || {
-  echo 'usage: dev/ctl acceptance ABSOLUTE_NEW_EVIDENCE_DIRECTORY --publication-only' >&2; exit 2;
+[[ ( $# -eq 1 || ( $# -eq 2 && "$2" == --m4 ) ) && "$1" == /* && ! -e "$1" ]] || {
+  echo 'usage: dev/ctl acceptance ABSOLUTE_NEW_EVIDENCE_DIRECTORY [--publication-only|--m4]' >&2; exit 2;
 }
 [[ "$namespace" == ayni-orchestrator-acceptance-* ]] || { echo 'isolated acceptance namespace required' >&2; exit 2; }
 readonly evidence="$1"
+readonly complete_m4="${2:-}"
+expected_creates=1
+expected_pulls=1
+profile=publication
+[[ "$complete_m4" != --m4 ]] || profile=m4
 mkdir -p "$evidence"
 status=failed
 fixture_forward_pid=
@@ -20,11 +26,12 @@ cleanup() {
   if [[ "$publisher_stopped" == true ]]; then
     kubectl --context "$context" --namespace "$namespace" scale deployment/task-publisher --replicas=1 >/dev/null 2>&1 || true
   fi
-  printf '{"result":"%s","profile":"publication","real_git":true,"github_protocol_fixture":true,"live_github_authentication":false,"cleanup":"retained_namespace_and_all_authoritative_stores"}\n' "$status" > "$evidence/outcome.json"
+  printf '{"result":"%s","profile":"%s","real_git":true,"github_protocol_fixture":true,"live_github_authentication":false,"cleanup":"retained_namespace_and_all_authoritative_stores"}\n' "$status" "$profile" > "$evidence/outcome.json"
 }
 trap cleanup EXIT
 # Run the existing complete task-quality recovery profile before extending it.
-"$dev_directory/scripts/acceptance.sh" "$evidence/quality" --quality-only
+AYNI_ORCHESTRATOR_TASK_FENCE_ACCEPTANCE=$([[ "$complete_m4" == --m4 ]] && echo true || echo false) \
+  "$dev_directory/scripts/acceptance.sh" "$evidence/quality" --quality-only
 quality_runtime="${AYNI_ORCHESTRATOR_QUALITY_RUNTIME_IMAGE:-}"
 if [[ -z "$quality_runtime" ]]; then
   quality_runtime="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["runtime_image"])' "$DEV_REPOSITORY_ROOT/.ayni/task-quality-runtime.json")"
@@ -55,10 +62,11 @@ bind_scope() {
   local workspace
   workspace="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["scope"]["workspace"])' "$1")"
   [[ "$workspace" =~ ^[a-f0-9-]{36}$ ]] || { echo 'invalid frozen fixture workspace' >&2; exit 1; }
-  helm upgrade "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
+  helm upgrade --install "$DEV_RELEASE_NAME" "$DEV_CHART" --reset-then-reuse-values \
     --kube-context "$context" --namespace "$namespace" \
     --set-string "ayni-orchestrator.images.controlPlane=$control_image" \
     --set-string "ayni-orchestrator.images.scriptedExecutor=$executor_image" \
+    --set ayni-orchestrator.taskExecution.fixtureEnabled=true \
     --set publicationFixture.enabled=true --set-string "publicationFixture.image=$fixture_image" \
     --set ayni-orchestrator.publication.enabled=true \
     --set-string "ayni-orchestrator.publication.workspaceId=$workspace" \
@@ -150,6 +158,8 @@ import json,sys
 assert json.load(open(sys.argv[1]))['safe_reason']=='publication_ref_conflict'
 PY
 
+if [[ "$complete_m4" == --m4 ]]; then m4_publication_faults; fi
+
 for workload in deployment/control-plane deployment/task-publisher deployment/publication-fixture deployment/task-supervisor statefulset/scripted-executor statefulset/workflow-jetstream statefulset/workflow-postgres; do
   name="${workload#*/}"
   kubectl --context "$context" --namespace "$namespace" rollout restart "$workload" > "$evidence/restart-$name.txt"
@@ -157,11 +167,20 @@ for workload in deployment/control-plane deployment/task-publisher deployment/pu
   command_stdin --verify-publication-stdin "$evidence/publication.json" > "$evidence/replay-$name.txt"
   command_stdin --verify-publication-cancelled-stdin "$evidence/cancel-publication.json" > "$evidence/cancel-replay-$name.txt"
   if [[ "$name" == publication-fixture ]]; then forward_fixture; fi
+  if [[ "$complete_m4" == --m4 ]]; then m4_verify_publications "$name"; fi
   fixture /fixture/state > "$evidence/fixture-after-$name.json"
-  python3 - "$evidence/fixture-after-$name.json" <<'PY'
+  python3 - "$evidence/fixture-after-$name.json" "$expected_creates" "$expected_pulls" <<'PY'
 import json,sys
-value=json.load(open(sys.argv[1]));assert value['create_calls']==1 and len(value['pulls'])==1
+value=json.load(open(sys.argv[1]));assert value['create_calls']==int(sys.argv[2]) and len(value['pulls'])==int(sys.argv[3])
 PY
 done
+if [[ "$complete_m4" == --m4 ]]; then
+  m4_retained_cleanup
+  python3 "$dev_directory/scripts/summarize-m4.py" "$evidence" "$DEV_REPOSITORY_ROOT"
+  python3 - "$evidence/cleanup-remote.json" "$expected_creates" "$expected_pulls" <<'PYVERIFY'
+import json,sys
+value=json.load(open(sys.argv[1]));assert value['create_calls']==int(sys.argv[2]) and len(value['pulls'])==int(sys.argv[3])
+PYVERIFY
+fi
 status=passed
 printf 'publication acceptance passed; real Git transport and GitHub protocol fixture; live GitHub authentication untested; evidence=%s\n' "$evidence"

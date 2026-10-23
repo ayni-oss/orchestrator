@@ -6,6 +6,9 @@ source "$dev_directory/lib/common.sh"
 if [[ $# -eq 2 && "$2" == --publication-only ]]; then
   exec "$dev_directory/scripts/publication-acceptance.sh" "$1"
 fi
+if [[ $# -eq 2 && "$2" == --m4 ]]; then
+  exec "$dev_directory/scripts/publication-acceptance.sh" "$1" --m4
+fi
 context="$(dev_context)"
 namespace="$(dev_namespace)"
 case "$namespace" in
@@ -35,8 +38,12 @@ mkdir -p "$evidence"
 # Evidence is append-only for this run. Retained state/PVCs are never removed.
 status=failed
 scaled_down=
+fence_supervisor_stopped=false
 metrics_forward_pid=
 cleanup() {
+  if [[ "$fence_supervisor_stopped" == true ]]; then
+    kubectl --context "$context" --namespace "$namespace" scale deployment/task-supervisor --replicas=1 >/dev/null 2>&1 || true
+  fi
   if [[ -n "$metrics_forward_pid" ]]; then kill "$metrics_forward_pid" 2>/dev/null || true; fi
   if [[ -n "$scaled_down" ]]; then
     kubectl --context "$context" --namespace "$namespace" scale "$scaled_down" --replicas=1 >/dev/null 2>&1 || true
@@ -205,6 +212,32 @@ for scenario in cancellation pod-loss; do
     kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-supervisor --timeout=2m >> "$evidence/task-supervisor-active-restart.txt"
     after_uid="$(kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o jsonpath='{.metadata.uid}')"
     [[ "$before_uid" == "$after_uid" ]] || { echo 'supervisor restart replaced the active task' >&2; exit 1; }
+    if [[ "${AYNI_ORCHESTRATOR_TASK_FENCE_ACCEPTANCE:-false}" == true ]]; then
+      supervisor_pod="$(kubectl --context "$context" --namespace "$namespace" get pod -l app.kubernetes.io/name=ayni-task-supervisor -o jsonpath='{.items[0].metadata.name}')"
+      [[ -n "$supervisor_pod" ]] || { echo 'supervisor Pod identity missing' >&2; exit 1; }
+      kubectl --context "$context" --namespace "$namespace" scale deployment/task-supervisor --replicas=0 > "$evidence/task-fence-supervisor-stop.txt"
+      fence_supervisor_stopped=true
+      kubectl --context "$context" --namespace "$namespace" wait --for=delete "pod/$supervisor_pod" --timeout=2m >> "$evidence/task-fence-supervisor-stop.txt"
+      kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-supervisor --timeout=2m >> "$evidence/task-fence-supervisor-stop.txt"
+      kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+        /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --cancel-task-run-pending-stdin \
+        < "$evidence/task-$scenario.json" > "$evidence/task-fence-cancel.txt"
+      # Keep the actual old worker alive after the fence so its delayed fixture
+      # result attempts acceptance. Its bounded report retries must fail.
+      for _ in $(seq 1 360); do
+        exit_code="$(kubectl --context "$context" --namespace "${namespace}-sessions" get pod "$worker" -o jsonpath='{.status.initContainerStatuses[?(@.name=="coding")].lastState.terminated.exitCode}')"
+        [[ -z "$exit_code" ]] || break
+        sleep .5
+      done
+      [[ "$exit_code" == 1 ]] || { echo 'stale coding worker did not reject its late result' >&2; exit 1; }
+      printf '%s\n' "$exit_code" > "$evidence/task-fence-worker-exit.txt"
+      kubectl --context "$context" --namespace "$namespace" exec -i "$pod" --container control-plane -- \
+        /usr/local/bin/workflow-acceptance --endpoint http://127.0.0.1:50051 --verify-task-fenced-stdin \
+        < "$evidence/task-$scenario.json" > "$evidence/task-fence-result.txt"
+      kubectl --context "$context" --namespace "$namespace" scale deployment/task-supervisor --replicas=1 > "$evidence/task-fence-supervisor-start.txt"
+      kubectl --context "$context" --namespace "$namespace" rollout status deployment/task-supervisor --timeout=2m >> "$evidence/task-fence-supervisor-start.txt"
+      fence_supervisor_stopped=false
+    fi
     mode=--cancel-task-run-stdin
   else
     kubectl --context "$context" --namespace "${namespace}-sessions" delete pod "$worker" --wait=true --timeout=60s > "$evidence/task-pod-loss-stop.txt"

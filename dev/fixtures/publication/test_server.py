@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Actual Git transport and retained GitHub response-loss fixture regression."""
 import http.client
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import socket
@@ -92,6 +93,53 @@ class PublicationFixtureTests(unittest.TestCase):
         self.assertEqual(recovered[0]["number"], 1)
         self.assertTrue(recovered[0]["merged"])
         self.assertEqual(self.request("/fixture/state")["create_calls"], 1)
+
+    def wait_paused(self, name):
+        for _ in range(100):
+            state = self.request("/fixture/state")
+            if state['waiting'][name]:
+                return state
+            time.sleep(.01)
+        self.fail(f"fixture did not pause at {name}")
+
+    def test_paused_lookup_keeps_controls_available_and_creates_no_pr(self):
+        self.request("/fixture/control", {"pause_list": True})
+        self.stop()
+        self.start()
+        with ThreadPoolExecutor() as executor:
+            read = executor.submit(self.request, "/repos/fixture/repo/pulls?state=all")
+            state = self.wait_paused('pause_list')
+            self.assertEqual(state['create_calls'], 0)
+            self.request("/fixture/control", {"pause_list": False})
+            self.assertEqual(read.result(timeout=3), [])
+
+    def test_paused_create_response_exposes_durable_identity_before_release(self):
+        commit = self.publish_branch()
+        self.request("/fixture/control", {"pause_create_response": True})
+        body = {"title": "feat(tasks): publish fixture", "body": "retained intent",
+                "head": "task/fixture", "base": "main", "draft": True,
+                "maintainer_can_modify": False}
+        with ThreadPoolExecutor() as executor:
+            create = executor.submit(self.request, "/repos/fixture/repo/pulls", body)
+            state = self.wait_paused('pause_create_response')
+            self.assertEqual(state['create_calls'], 1)
+            self.assertEqual(state['pulls'][0]['head']['sha'], commit)
+            self.request("/fixture/control", {"pause_create_response": False})
+            self.assertEqual(create.result(timeout=3)['number'], 1)
+
+    def test_rejected_create_records_attempt_without_remote_pr(self):
+        self.publish_branch()
+        self.request("/fixture/control", {"hold_create": True})
+        body = {"title": "feat(tasks): publish fixture", "body": "retained intent",
+                "head": "task/fixture", "base": "main", "draft": True,
+                "maintainer_can_modify": False}
+        with self.assertRaises(urllib.error.HTTPError) as rejected:
+            self.request("/repos/fixture/repo/pulls", body)
+        self.assertEqual(rejected.exception.code, 503)
+        rejected.exception.close()
+        self.request("/fixture/control", {"hold_create": False})
+        self.assertEqual(self.request("/fixture/state")['create_calls'], 1)
+        self.assertEqual(self.request("/fixture/state")['pulls'], [])
 
     def test_collision_control_preserves_existing_branch_and_main(self):
         original = self.request("/fixture/branch", {"branch": "task/collision", "value": "base"})

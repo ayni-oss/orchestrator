@@ -77,8 +77,8 @@ configuration, isolated sessions, one real provider, bounded read tools and expl
 uncertainty recovery share the signed acceptance boundary. Cumulative acceptance
 covers deterministic failure fixtures, deployed session interruption and a bounded
 live-provider smoke. The delivery PR owns the execution evidence. M3 plans and
-approval are implemented through the four delivery slices below; M4 execution
-preparation is the next implementation scope.
+approval are implemented through the four delivery slices below; M4 task delivery
+builds on that admitted-work boundary.
 
 Every runtime PR extends the cumulative harness and exercises affected behavior on
 Docker Desktop Kubernetes. PR 4 includes repeatable provider fixtures plus a bounded
@@ -140,12 +140,16 @@ defines the fourth slice: explicit publication authority, deterministic Git
 identity and retained draft recovery, delivered by PR #245.
 The [console task contract](docs/technical/architecture/contributor-console.md#task-observation-and-publication-controls)
 defines the fifth slice: bounded task inspection, separate outcome/evidence views,
-cancellation and explicit reviewed draft publication. Each runtime PR extends
-the cumulative acceptance harness immediately. M4 begins with serial execution
+cancellation and explicit reviewed draft publication, delivered by PR #246.
+The [task acceptance matrix](docs/technical/operations/task-acceptance.md) owns
+the sixth slice: deployed late-worker fencing, publisher loss around remote
+creation, retained uncertainty and cleanup/redeployment with exact evidence replay.
+Each runtime PR extends the cumulative acceptance harness immediately. M4 begins with serial execution
 and isolated attempts; dependency scheduling and concurrent tasks remain M5,
 conversational recovery remains M6. Automatic quality-repair loops require explicit
-bounded authorization before implementation. Milestone completion requires deployed
-evidence in the final delivery PR.
+bounded authorization before implementation. M4's six delivery slices are implemented. The final delivery PR records
+executed cumulative closure evidence; the local profile uses scripted coding, real managed
+quality and Git transport, and an explicit GitHub protocol fixture.
 
 ### Validation at every milestone
 
