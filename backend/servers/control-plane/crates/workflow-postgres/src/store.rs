@@ -10,6 +10,7 @@ mod plans;
 pub mod provider_calls;
 pub mod publications;
 pub mod task_feedback;
+pub mod task_recovery;
 pub mod task_runs;
 pub use delivery::DecisionAcknowledgement;
 mod ordered_reports;

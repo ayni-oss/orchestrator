@@ -92,3 +92,24 @@ Interrupted coding and failed quality require a new reviewed follow-up plan unti
 confirmed recovery is implemented in M6. Dependency scheduling and concurrent
 execution remain M5. Users retain merge authority; successful M4 acceptance ends
 at a reviewable draft.
+
+## Recovery review extension
+
+The cumulative coding and quality profiles also record a recovery proposal with frozen
+saved-work evidence and additional allowance, an operator question and its first answer
+when the attempt has feedback. They verify exact retries, reject another answer and a
+foreign-origin read, and preserve the attempt unchanged. Stored recovery bytes are
+compared after the existing control-plane and PostgreSQL restart gates. This proves
+review-record durability, not confirmed continuation or live provider recovery.
+See [recovery review](../architecture/task-recovery.md).
+
+Run the real gateway/browser recovery review against the coding profile's task evidence:
+
+```sh
+AYNI_ORCHESTRATOR_NAMESPACE=ayni-orchestrator-acceptance-review \
+  dev/scripts/task-console-acceptance.sh /absolute/coding/task-run.json /absolute/new-browser-evidence --recovery
+```
+
+The browser profile requires an already completed fixture attempt with actionable feedback.
+It checks saved-work review, explicit allowances, accepted response loss, exact retry
+after reload, operator questions/answers, retained attention and unchanged task execution.

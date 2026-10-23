@@ -52,6 +52,8 @@ mod tests {
                         "ApprovePlan",
                         "GetPlanApproval",
                         "ListTasks",
+                        "RecordTaskRecovery",
+                        "ListTaskRecovery",
                         "ListTaskFeedback",
                         "GetTask",
                         "PrepareTaskExecution",

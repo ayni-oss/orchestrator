@@ -425,3 +425,84 @@ message ListTaskFeedbackResponse {
   repeated TaskFeedback feedback = 1;
   string next_after_id = 2;
 }
+
+// Immutable local-operator review records. Recording or answering never executes work.
+message TaskRecoveryProposal {
+  string feedback_id = 1;
+  string explanation = 2;
+  // continue, repair_quality, or replace_attempt; all remain proposals only.
+  string action = 3;
+  uint32 additional_seconds = 4;
+  uint32 additional_tokens = 5;
+  string safe_reason = 6;
+  TaskSavedEvidence evidence = 7;
+}
+message TaskSavedEvidence {
+  string state = 1;
+  uint64 generation = 2;
+  bool provider_uncertain = 3;
+  string source_commit = 4;
+  string runtime_image = 5;
+  string configuration_revision_id = 6;
+  bool patch_available = 7;
+  string patch_digest = 8;
+  string outcome_digest = 9;
+  string quality_digest = 10;
+  string quality_state = 11;
+  string limitations = 12;
+}
+message TaskQuestion {
+  string text = 1;
+}
+message TaskAnswer {
+  string question_id = 1;
+  string text = 2;
+}
+message TaskRecoveryRecord {
+  string id = 1;
+  string workspace_id = 2;
+  string project_id = 3;
+  string conversation_id = 4;
+  string task_id = 5;
+  string attempt_id = 6;
+  string kind = 7;
+  string content_digest = 8;
+  google.protobuf.Timestamp created_at = 9;
+  // Current records come from the trusted local operator, never the coding worker.
+  string author = 10;
+  oneof content {
+    TaskRecoveryProposal proposal = 11;
+    TaskQuestion question = 12;
+    TaskAnswer answer = 13;
+  }
+}
+message RecordTaskRecoveryRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+  string idempotency_key = 6;
+  // Proposal evidence and safe_reason are server derived; supplied values are rejected.
+  oneof content {
+    TaskRecoveryProposal proposal = 7;
+    TaskQuestion question = 8;
+    TaskAnswer answer = 9;
+  }
+}
+message RecordTaskRecoveryResponse {
+  TaskRecoveryRecord record = 1;
+}
+message ListTaskRecoveryRequest {
+  string workspace_id = 1;
+  string project_id = 2;
+  string conversation_id = 3;
+  string task_id = 4;
+  string attempt_id = 5;
+  string after_id = 6;
+  uint32 limit = 7;
+}
+message ListTaskRecoveryResponse {
+  repeated TaskRecoveryRecord records = 1;
+  string next_after_id = 2;
+}

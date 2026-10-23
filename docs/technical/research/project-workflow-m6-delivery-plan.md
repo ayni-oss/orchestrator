@@ -111,6 +111,14 @@ No automatic repair loop is authorized by this plan.
 Any repair action must be part of an explicitly reviewed proposal with a bounded allowance.
 Long-term retention and reclamation policy remains M8; M6 reports the work actually available.
 
+### Second-slice boundary
+
+The [recovery review contract](../architecture/task-recovery.md) defines immutable
+operator proposals, server-frozen saved evidence and bounded additional allowances.
+Operator questions accept one retained answer. Neither recording nor answering starts
+work or resolves attention. Worker-originated questions and model-generated recovery
+proposals remain later M6 scope; the coding protocol cannot express them yet.
+
 ## Where the detail lives
 
 - [Roadmap](../../../ROADMAP.md#m6-delivery-scopes) records agreed milestone direction and prerequisites.

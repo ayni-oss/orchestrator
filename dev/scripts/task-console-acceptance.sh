@@ -2,8 +2,8 @@
 set -euo pipefail
 readonly dev_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$dev_directory/lib/common.sh"
-[[ $# -eq 2 && "$1" == /* && "$2" == /* && ! -e "$2" ]] || {
-  echo 'usage: task-console-acceptance.sh ABSOLUTE_TASK_EVIDENCE_JSON ABSOLUTE_NEW_EVIDENCE_DIRECTORY' >&2; exit 2;
+[[ ( $# -eq 2 || ( $# -eq 3 && "$3" == --recovery ) ) && "$1" == /* && "$2" == /* && ! -e "$2" ]] || {
+  echo 'usage: task-console-acceptance.sh ABSOLUTE_TASK_EVIDENCE_JSON ABSOLUTE_NEW_EVIDENCE_DIRECTORY [--recovery]' >&2; exit 2;
 }
 readonly selection="$1" evidence="$2" context="$(dev_context)" namespace="$(dev_namespace)"
 [[ "$namespace" == ayni-orchestrator-acceptance-* ]] || { echo 'isolated acceptance namespace required' >&2; exit 2; }
@@ -46,5 +46,7 @@ for attempt in range(100):
         if attempt==99: raise
         time.sleep(.1)
 PY
+profile=task-live-acceptance.mjs
+[[ "${3:-}" != --recovery ]] || profile=recovery-acceptance.mjs
 CONSOLE_URL="http://127.0.0.1:$port" TASK_CONSOLE_SELECTION_FILE="$selection" \
-  TASK_CONSOLE_EVIDENCE_DIRECTORY="$evidence" node apps/console/task-live-acceptance.mjs
+  TASK_CONSOLE_EVIDENCE_DIRECTORY="$evidence" node "apps/console/$profile"

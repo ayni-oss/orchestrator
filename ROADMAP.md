@@ -174,7 +174,11 @@ integration. The [task feedback contract](docs/technical/architecture/task-feedb
 defines the first-slice scope: immutable execution/quality notices and bounded
 conversation/project reads, with no recovery or resolution authority. Worker
 questions, publication attention resolution and automatic quality repair are not
-implemented by this slice. Each delivery PR owns its executed evidence and status.
+implemented by the first slice. The [recovery review contract](docs/technical/architecture/task-recovery.md)
+defines the second slice: immutable operator proposals with frozen saved-work evidence
+and additional allowance, plus operator question/answer records. Recording or answering
+authorizes no execution. Worker questions and model-generated recovery proposals remain
+later scope. Each delivery PR owns its executed evidence and status.
 
 Use explicit `docker-desktop` Kubernetes for runtime acceptance. Create owned
 test namespaces and clean them up after testing. Preserve stores within each

@@ -80,7 +80,7 @@ async function retry() {
     const command = pending;
     const result = await api(command.method, command.body);
     pending = null; store('pending', null);
-    $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || 'Accepted';
+    $('receipt').textContent = result.receipt?.commandId || result.approval?.commandId || result.record?.id || 'Accepted';
     if (tasks.accepted(command, result)) {
       // Task receipts share the exact pending-command recovery path.
     } else if (['CreatePlan', 'RevisePlan', 'ApprovePlan'].includes(command.method)) {

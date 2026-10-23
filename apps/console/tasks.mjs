@@ -1,3 +1,4 @@
+import { mountRecovery } from './recovery.mjs';
 import { scopeKey } from './state.mjs';
 
 const $ = id => document.getElementById(id);
@@ -26,9 +27,9 @@ export function taskGuidance(preparation, attempt) {
   if (attempt.publication?.state === 'cancelled') return 'Publication was cancelled. A branch pushed before cancellation may remain.';
   if (attempt.publication?.state === 'blocked') return 'Publication is blocked. Inspect the retained reason and remote branch state; this attempt does not authorize another draft.';
   if (attempt.publication?.state === 'draft') return 'The retained pull request is available for review. Its external state is the last recorded observation.';
-  if (['interrupted', 'failed', 'cancelled'].includes(attempt.state)) return 'Inspect the retained outcome and changes. Restarting or automatically repairing this attempt is unavailable; follow-up work requires a new reviewed plan.';
+  if (['interrupted', 'failed', 'cancelled'].includes(attempt.state)) return 'Inspect the retained outcome and changes. Review saved evidence and record a recovery proposal with an additional allowance. Continuation is not available yet.';
   if (attempt.state === 'completed' && !attempt.patch) return 'Coding completed without accepted changes. There is nothing to publish.';
-  if (attempt.quality && attempt.quality.state !== 'passed') return 'Quality did not pass. Coding results remain retained. Publication is unavailable; follow-up work requires a new reviewed plan.';
+  if (attempt.quality && attempt.quality.state !== 'passed') return 'Quality did not pass. Coding results remain retained. Publication is unavailable. Record a recovery proposal for review; it will not start repair.';
   if (taskActions(attempt).reviewPublication) return 'Review the accepted patch and passing quality evidence, then review and authorize a draft publication.';
   if (attempt.publication) return 'Publication is in progress under its separate authority. Coding and quality will not rerun.';
   if (attempt.state === 'queued') return 'Waiting for the serial coding slot. Only one coding task runs at a time.';
@@ -53,6 +54,7 @@ export function publicationCommand(scope, taskId, attempt, preview) {
 }
 
 export function mountTasks({ getScope, api, submit, showError, saved, store, controls }) {
+  const recovery = mountRecovery({ api, submit, showError, controls });
   let owner = '';
   let selectedId = '';
   let next = '';
@@ -177,6 +179,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
       }
       if (!current()) return;
       attempt = run;
+      recovery.select(run ? { ...scope, attemptId: run.attemptId } : undefined);
       if (preview && (!taskActions(run).reviewPublication || preview.request.expectedPatchDigest !== run.patchDigest || preview.request.expectedQualityDigest !== run.qualityDigest)) resetReview();
       render(taskResult.task, preparation, run);
       $('task-updated').textContent = `Last refreshed ${new Date().toLocaleTimeString()}`;
@@ -206,6 +209,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
     $('task-list-status').textContent = $('task-list').children.length ? 'Select a task to inspect its current attempt.' : 'No admitted tasks in this conversation. Approve a reviewed plan to admit work.';
   }
   async function open(id) {
+    recovery.select();
     detailQuery++; resetReview(); attempt = undefined; selectedId = id; store(selectionKey(), id);
     $('task-detail').replaceChildren(); $('task-status').textContent = 'Loading task…'; $('task-updated').textContent = '';
     for (const button of $('task-list').children) button.setAttribute('aria-current', String(button.dataset.inspectTask === id));
@@ -232,6 +236,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
   }
   function select() {
     const key = scopeKey(getScope()); if (key === owner) return;
+    recovery.select();
     owner = key; listQuery++; detailQuery++; clearTimeout(timer); resetReview(); attempt = undefined;
     selectedId = saved(selectionKey()) || ''; next = '';
     for (const id of ['task-list', 'task-detail']) $(id).replaceChildren();
@@ -241,6 +246,7 @@ export function mountTasks({ getScope, api, submit, showError, saved, store, con
     controls();
   }
   function accepted(command, result) {
+    if (command.method === 'RecordTaskRecovery') { recovery.accepted(command); return true; }
     if (!['CancelTaskExecution', 'StartTaskPublication', 'CancelTaskPublication'].includes(command.method)) return false;
     if (scopeKey(command.body) === owner && command.body.taskId === selectedId) {
       resetReview(); $('task-status').textContent = `Command accepted · ${result.receipt?.commandId || 'receipt retained'}. Refreshing current state…`;
